@@ -2,14 +2,92 @@
 <html>
 <head>
   <title>Homebrew God</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: white;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #ff3b3b;
+    }
+
+    button {
+      padding: 10px 15px;
+      margin: 5px 0;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    #mapViewer {
+      margin-top: 20px;
+      border: 2px solid #444;
+      min-height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #222;
+      overflow: auto;
+    }
+
+    #mapImage {
+      max-width: 100%;
+      display: none;
+    }
+
+    #noMapText {
+      color: #aaa;
+    }
+  </style>
 </head>
+
 <body>
   <h1>Homebrew God</h1>
   <p>The free homebrew D&D map tool begins here.</p>
 
-  <button>Upload Map</button>
+  <button id="uploadButton">Upload Map</button>
+
+  <input
+    type="file"
+    id="mapUpload"
+    accept="image/*"
+    style="display: none;"
+  >
 
   <h2>Map Viewer</h2>
-  <p>No map loaded yet.</p>
+
+  <div id="mapViewer">
+    <p id="noMapText">No map loaded yet.</p>
+    <img id="mapImage">
+  </div>
+
+  <script>
+    const uploadButton = document.getElementById("uploadButton");
+    const mapUpload = document.getElementById("mapUpload");
+    const mapImage = document.getElementById("mapImage");
+    const noMapText = document.getElementById("noMapText");
+
+    uploadButton.addEventListener("click", function () {
+      mapUpload.click();
+    });
+
+    mapUpload.addEventListener("change", function () {
+      const file = mapUpload.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      const imageURL = URL.createObjectURL(file);
+
+      mapImage.src = imageURL;
+      mapImage.style.display = "block";
+      noMapText.style.display = "none";
+    });
+  </script>
 </body>
 </html>
