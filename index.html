@@ -18,15 +18,32 @@
 
     button {
       padding: 10px 15px;
-      margin: 5px 0;
+      margin: 5px;
       cursor: pointer;
       font-size: 16px;
     }
 
+    #layout {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    #sidePanel {
+      width: 260px;
+      background: #1c1c1c;
+      padding: 15px;
+      border: 2px solid #333;
+    }
+
+    #mapArea {
+      flex: 1;
+    }
+
     #mapViewer {
-      margin-top: 20px;
+      margin-top: 10px;
       border: 2px solid #444;
-      min-height: 400px;
+      min-height: 500px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -42,6 +59,16 @@
     #noMapText {
       color: #aaa;
     }
+
+    .saved-map {
+      border-bottom: 1px solid #444;
+      padding: 10px 0;
+    }
+
+    .map-name {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
   </style>
 </head>
 
@@ -49,20 +76,31 @@
   <h1>Homebrew God</h1>
   <p>The free homebrew D&D map tool begins here.</p>
 
-  <button id="uploadButton">Upload Map</button>
+  <div id="layout">
+    <div id="sidePanel">
+      <button id="uploadButton">Upload Map</button>
 
-  <input
-    type="file"
-    id="mapUpload"
-    accept="image/*"
-    style="display: none;"
-  >
+      <input
+        type="file"
+        id="mapUpload"
+        accept="image/*"
+        style="display: none;"
+      >
 
-  <h2>Map Viewer</h2>
+      <h2>Saved Maps</h2>
+      <div id="savedMapsList">
+        No saved maps yet.
+      </div>
+    </div>
 
-  <div id="mapViewer">
-    <p id="noMapText">No map loaded yet.</p>
-    <img id="mapImage">
+    <div id="mapArea">
+      <h2>Map Viewer</h2>
+
+      <div id="mapViewer">
+        <p id="noMapText">No map loaded yet.</p>
+        <img id="mapImage">
+      </div>
+    </div>
   </div>
 
   <script>
@@ -70,6 +108,109 @@
     const mapUpload = document.getElementById("mapUpload");
     const mapImage = document.getElementById("mapImage");
     const noMapText = document.getElementById("noMapText");
+    const savedMapsList = document.getElementById("savedMapsList");
+
+    let database;
+
+    function openDatabase() {
+      const request = indexedDB.open("HomebrewGodDatabase", 1);
+
+      request.onupgradeneeded = function (event) {
+        database = event.target.result;
+
+        if (!database.objectStoreNames.contains("maps")) {
+          database.createObjectStore("maps", { keyPath: "id" });
+        }
+      };
+
+      request.onsuccess = function (event) {
+        database = event.target.result;
+        loadSavedMaps();
+      };
+
+      request.onerror = function () {
+        alert("Browser storage failed.");
+      };
+    }
+
+    function saveMap(map) {
+      const transaction = database.transaction(["maps"], "readwrite");
+      const store = transaction.objectStore("maps");
+
+      store.put(map);
+
+      transaction.oncomplete = function () {
+        loadSavedMaps();
+        showMap(map);
+      };
+    }
+
+    function loadSavedMaps() {
+      const transaction = database.transaction(["maps"], "readonly");
+      const store = transaction.objectStore("maps");
+      const request = store.getAll();
+
+      request.onsuccess = function () {
+        const maps = request.result;
+
+        savedMapsList.innerHTML = "";
+
+        if (maps.length === 0) {
+          savedMapsList.innerHTML = "No saved maps yet.";
+          return;
+        }
+
+        maps.forEach(function (map) {
+          const div = document.createElement("div");
+          div.className = "saved-map";
+
+          div.innerHTML = `
+            <div class="map-name">${map.name}</div>
+            <button onclick="openMap(${map.id})">Open</button>
+            <button onclick="deleteMap(${map.id})">Delete</button>
+          `;
+
+          savedMapsList.appendChild(div);
+        });
+      };
+    }
+
+    function openMap(id) {
+      const transaction = database.transaction(["maps"], "readonly");
+      const store = transaction.objectStore("maps");
+      const request = store.get(id);
+
+      request.onsuccess = function () {
+        showMap(request.result);
+      };
+    }
+
+    function deleteMap(id) {
+      const yesDelete = confirm("Delete this map?");
+
+      if (!yesDelete) {
+        return;
+      }
+
+      const transaction = database.transaction(["maps"], "readwrite");
+      const store = transaction.objectStore("maps");
+
+      store.delete(id);
+
+      transaction.oncomplete = function () {
+        loadSavedMaps();
+
+        mapImage.style.display = "none";
+        mapImage.src = "";
+        noMapText.style.display = "block";
+      };
+    }
+
+    function showMap(map) {
+      mapImage.src = map.imageData;
+      mapImage.style.display = "block";
+      noMapText.style.display = "none";
+    }
 
     uploadButton.addEventListener("click", function () {
       mapUpload.click();
@@ -82,12 +223,29 @@
         return;
       }
 
-      const imageURL = URL.createObjectURL(file);
+      const reader = new FileReader();
 
-      mapImage.src = imageURL;
-      mapImage.style.display = "block";
-      noMapText.style.display = "none";
+      reader.onload = function () {
+        let mapName = prompt("Name this map:", file.name);
+
+        if (!mapName) {
+          mapName = file.name;
+        }
+
+        const map = {
+          id: Date.now(),
+          name: mapName,
+          imageData: reader.result,
+          createdAt: new Date().toISOString()
+        };
+
+        saveMap(map);
+      };
+
+      reader.readAsDataURL(file);
     });
+
+    openDatabase();
   </script>
 </body>
 </html>
