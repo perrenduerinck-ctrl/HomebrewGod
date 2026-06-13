@@ -16,236 +16,427 @@
       color: #ff3b3b;
     }
 
+    input {
+      padding: 10px;
+      margin: 5px 0;
+      width: 260px;
+      font-size: 16px;
+      display: block;
+    }
+
     button {
       padding: 10px 15px;
-      margin: 5px;
+      margin: 5px 5px 5px 0;
       cursor: pointer;
       font-size: 16px;
     }
 
-    #layout {
-      display: flex;
-      gap: 20px;
-      align-items: flex-start;
-    }
-
-    #sidePanel {
-      width: 260px;
+    .box {
       background: #1c1c1c;
-      padding: 15px;
       border: 2px solid #333;
+      padding: 15px;
+      margin-top: 15px;
+      max-width: 700px;
     }
 
-    #mapArea {
-      flex: 1;
-    }
-
-    #mapViewer {
-      margin-top: 10px;
-      border: 2px solid #444;
-      min-height: 500px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #222;
-      overflow: auto;
-    }
-
-    #mapImage {
-      max-width: 100%;
+    .hidden {
       display: none;
     }
 
-    #noMapText {
+    .small {
       color: #aaa;
+      font-size: 14px;
+      word-break: break-all;
     }
 
-    .saved-map {
-      border-bottom: 1px solid #444;
-      padding: 10px 0;
-    }
-
-    .map-name {
+    #roomCodeText {
+      font-size: 28px;
+      color: #ff3b3b;
       font-weight: bold;
-      margin-bottom: 5px;
+    }
+
+    .player {
+      border-bottom: 1px solid #444;
+      padding: 8px 0;
     }
   </style>
 </head>
 
 <body>
   <h1>Homebrew God</h1>
-  <p>The free homebrew D&D map tool begins here.</p>
+  <p>Free D&D room tool. No D&D Beyond nonsense.</p>
 
-  <div id="layout">
-    <div id="sidePanel">
-      <button id="uploadButton">Upload Map</button>
+  <div id="authBox" class="box">
+    <h2>Start</h2>
 
-      <input
-        type="file"
-        id="mapUpload"
-        accept="image/*"
-        style="display: none;"
-      >
+    <h3>Guest Mode</h3>
+    <input id="guestNameInput" placeholder="Display name, like Big Fluffy">
+    <button id="guestButton">Continue as Guest</button>
 
-      <h2>Saved Maps</h2>
-      <div id="savedMapsList">
-        No saved maps yet.
-      </div>
-    </div>
+    <hr>
 
-    <div id="mapArea">
-      <h2>Map Viewer</h2>
+    <h3>Create Account</h3>
+    <input id="signupNameInput" placeholder="Display name">
+    <input id="signupEmailInput" placeholder="Email">
+    <input id="signupPasswordInput" type="password" placeholder="Password">
+    <button id="signupButton">Create Account</button>
 
-      <div id="mapViewer">
-        <p id="noMapText">No map loaded yet.</p>
-        <img id="mapImage">
-      </div>
-    </div>
+    <hr>
+
+    <h3>Log In</h3>
+    <input id="loginEmailInput" placeholder="Email">
+    <input id="loginPasswordInput" type="password" placeholder="Password">
+    <button id="loginButton">Log In</button>
   </div>
 
-  <script>
-    const uploadButton = document.getElementById("uploadButton");
-    const mapUpload = document.getElementById("mapUpload");
-    const mapImage = document.getElementById("mapImage");
-    const noMapText = document.getElementById("noMapText");
-    const savedMapsList = document.getElementById("savedMapsList");
+  <div id="appBox" class="box hidden">
+    <h2>You are signed in</h2>
+    <p><b>Name:</b> <span id="userNameText"></span></p>
+    <p><b>Type:</b> <span id="userTypeText"></span></p>
+    <p class="small"><b>User ID:</b> <span id="userIdText"></span></p>
 
-    let database;
+    <button id="logoutButton">Log Out</button>
+  </div>
 
-    function openDatabase() {
-      const request = indexedDB.open("HomebrewGodDatabase", 1);
+  <div id="roomControlsBox" class="box hidden">
+    <h2>Rooms</h2>
 
-      request.onupgradeneeded = function (event) {
-        database = event.target.result;
+    <h3>Create Room as DM</h3>
+    <input id="roomNameInput" placeholder="Room name, like Vampire Castle">
+    <button id="createRoomButton">Create Room</button>
 
-        if (!database.objectStoreNames.contains("maps")) {
-          database.createObjectStore("maps", { keyPath: "id" });
-        }
-      };
+    <hr>
 
-      request.onsuccess = function (event) {
-        database = event.target.result;
-        loadSavedMaps();
-      };
+    <h3>Join Room</h3>
+    <input id="joinRoomCodeInput" placeholder="Room code">
+    <button id="joinRoomButton">Join Room</button>
+  </div>
 
-      request.onerror = function () {
-        alert("Browser storage failed.");
-      };
+  <div id="currentRoomBox" class="box hidden">
+    <h2>Current Room</h2>
+    <p><b>Room Name:</b> <span id="currentRoomNameText"></span></p>
+    <p><b>Room Code:</b></p>
+    <p id="roomCodeText"></p>
+
+    <button id="copyRoomCodeButton">Copy Room Code</button>
+
+    <p><b>Your Role:</b> <span id="yourRoleText"></span></p>
+
+    <h3>Players</h3>
+    <div id="playersList">No players yet.</div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInAnonymously,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      signOut,
+      updateProfile
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      getDoc,
+      collection,
+      onSnapshot,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCT1IqS08HyXsP-o6pXJfYtz8p6BtM9Cb4",
+      authDomain: "homebrewgd.firebaseapp.com",
+      projectId: "homebrewgd",
+      storageBucket: "homebrewgd.firebasestorage.app",
+      messagingSenderId: "1067340395343",
+      appId: "1:1067340395343:web:03ad344ced2aaa16c48b3a",
+      measurementId: "G-HWJRCXHN8P"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const authBox = document.getElementById("authBox");
+    const appBox = document.getElementById("appBox");
+    const roomControlsBox = document.getElementById("roomControlsBox");
+    const currentRoomBox = document.getElementById("currentRoomBox");
+
+    const guestNameInput = document.getElementById("guestNameInput");
+    const guestButton = document.getElementById("guestButton");
+
+    const signupNameInput = document.getElementById("signupNameInput");
+    const signupEmailInput = document.getElementById("signupEmailInput");
+    const signupPasswordInput = document.getElementById("signupPasswordInput");
+    const signupButton = document.getElementById("signupButton");
+
+    const loginEmailInput = document.getElementById("loginEmailInput");
+    const loginPasswordInput = document.getElementById("loginPasswordInput");
+    const loginButton = document.getElementById("loginButton");
+
+    const logoutButton = document.getElementById("logoutButton");
+
+    const userNameText = document.getElementById("userNameText");
+    const userTypeText = document.getElementById("userTypeText");
+    const userIdText = document.getElementById("userIdText");
+
+    const roomNameInput = document.getElementById("roomNameInput");
+    const createRoomButton = document.getElementById("createRoomButton");
+
+    const joinRoomCodeInput = document.getElementById("joinRoomCodeInput");
+    const joinRoomButton = document.getElementById("joinRoomButton");
+
+    const currentRoomNameText = document.getElementById("currentRoomNameText");
+    const roomCodeText = document.getElementById("roomCodeText");
+    const copyRoomCodeButton = document.getElementById("copyRoomCodeButton");
+    const yourRoleText = document.getElementById("yourRoleText");
+    const playersList = document.getElementById("playersList");
+
+    let currentUser = null;
+    let currentRoomCode = null;
+    let stopListeningToRoom = null;
+    let stopListeningToPlayers = null;
+
+    function showLoggedOut() {
+      authBox.classList.remove("hidden");
+      appBox.classList.add("hidden");
+      roomControlsBox.classList.add("hidden");
+      currentRoomBox.classList.add("hidden");
     }
 
-    function saveMap(map) {
-      const transaction = database.transaction(["maps"], "readwrite");
-      const store = transaction.objectStore("maps");
+    function showLoggedIn(user) {
+      authBox.classList.add("hidden");
+      appBox.classList.remove("hidden");
+      roomControlsBox.classList.remove("hidden");
 
-      store.put(map);
-
-      transaction.oncomplete = function () {
-        loadSavedMaps();
-        showMap(map);
-      };
+      userNameText.textContent = user.displayName || "Unnamed";
+      userTypeText.textContent = user.isAnonymous ? "Guest" : "Account";
+      userIdText.textContent = user.uid;
     }
 
-    function loadSavedMaps() {
-      const transaction = database.transaction(["maps"], "readonly");
-      const store = transaction.objectStore("maps");
-      const request = store.getAll();
+    function makeRoomCode() {
+      const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+      const numbers = "23456789";
 
-      request.onsuccess = function () {
-        const maps = request.result;
+      let partOne = "";
+      let partTwo = "";
 
-        savedMapsList.innerHTML = "";
+      for (let i = 0; i < 3; i++) {
+        partOne += letters[Math.floor(Math.random() * letters.length)];
+      }
 
-        if (maps.length === 0) {
-          savedMapsList.innerHTML = "No saved maps yet.";
+      for (let i = 0; i < 3; i++) {
+        partTwo += numbers[Math.floor(Math.random() * numbers.length)];
+      }
+
+      return partOne + "-" + partTwo;
+    }
+
+    async function saveUserDoc(user) {
+      const userRef = doc(db, "users", user.uid);
+
+      await setDoc(userRef, {
+        uid: user.uid,
+        displayName: user.displayName || "Unnamed",
+        email: user.email || null,
+        isAnonymous: user.isAnonymous,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+
+    async function joinRoom(roomCode, role) {
+      const cleanCode = roomCode.trim().toUpperCase();
+      const roomRef = doc(db, "rooms", cleanCode);
+      const roomSnap = await getDoc(roomRef);
+
+      if (!roomSnap.exists()) {
+        alert("Room not found.");
+        return;
+      }
+
+      const playerRef = doc(db, "rooms", cleanCode, "players", currentUser.uid);
+
+      await setDoc(playerRef, {
+        uid: currentUser.uid,
+        displayName: currentUser.displayName || "Unnamed",
+        role: role,
+        joinedAt: serverTimestamp()
+      }, { merge: true });
+
+      openRoom(cleanCode);
+    }
+
+    function openRoom(roomCode) {
+      currentRoomCode = roomCode;
+
+      if (stopListeningToRoom) {
+        stopListeningToRoom();
+      }
+
+      if (stopListeningToPlayers) {
+        stopListeningToPlayers();
+      }
+
+      const roomRef = doc(db, "rooms", roomCode);
+
+      stopListeningToRoom = onSnapshot(roomRef, function (roomSnap) {
+        if (!roomSnap.exists()) {
+          alert("This room was deleted or does not exist.");
+          currentRoomBox.classList.add("hidden");
           return;
         }
 
-        maps.forEach(function (map) {
-          const div = document.createElement("div");
-          div.className = "saved-map";
+        const room = roomSnap.data();
 
-          div.innerHTML = `
-            <div class="map-name">${map.name}</div>
-            <button onclick="openMap(${map.id})">Open</button>
-            <button onclick="deleteMap(${map.id})">Delete</button>
-          `;
+        currentRoomBox.classList.remove("hidden");
+        currentRoomNameText.textContent = room.roomName || "Unnamed Room";
+        roomCodeText.textContent = roomCode;
 
-          savedMapsList.appendChild(div);
-        });
-      };
-    }
+        if (room.dmUid === currentUser.uid) {
+          yourRoleText.textContent = "DM";
+        } else {
+          yourRoleText.textContent = "Player";
+        }
+      });
 
-    function openMap(id) {
-      const transaction = database.transaction(["maps"], "readonly");
-      const store = transaction.objectStore("maps");
-      const request = store.get(id);
+      const playersRef = collection(db, "rooms", roomCode, "players");
 
-      request.onsuccess = function () {
-        showMap(request.result);
-      };
-    }
+      stopListeningToPlayers = onSnapshot(playersRef, function (playersSnap) {
+        playersList.innerHTML = "";
 
-    function deleteMap(id) {
-      const yesDelete = confirm("Delete this map?");
-
-      if (!yesDelete) {
-        return;
-      }
-
-      const transaction = database.transaction(["maps"], "readwrite");
-      const store = transaction.objectStore("maps");
-
-      store.delete(id);
-
-      transaction.oncomplete = function () {
-        loadSavedMaps();
-
-        mapImage.style.display = "none";
-        mapImage.src = "";
-        noMapText.style.display = "block";
-      };
-    }
-
-    function showMap(map) {
-      mapImage.src = map.imageData;
-      mapImage.style.display = "block";
-      noMapText.style.display = "none";
-    }
-
-    uploadButton.addEventListener("click", function () {
-      mapUpload.click();
-    });
-
-    mapUpload.addEventListener("change", function () {
-      const file = mapUpload.files[0];
-
-      if (!file) {
-        return;
-      }
-
-      const reader = new FileReader();
-
-      reader.onload = function () {
-        let mapName = prompt("Name this map:", file.name);
-
-        if (!mapName) {
-          mapName = file.name;
+        if (playersSnap.empty) {
+          playersList.textContent = "No players yet.";
+          return;
         }
 
-        const map = {
-          id: Date.now(),
-          name: mapName,
-          imageData: reader.result,
-          createdAt: new Date().toISOString()
-        };
+        playersSnap.forEach(function (playerDoc) {
+          const player = playerDoc.data();
 
-        saveMap(map);
-      };
+          const div = document.createElement("div");
+          div.className = "player";
+          div.textContent = player.displayName + " — " + player.role;
 
-      reader.readAsDataURL(file);
+          playersList.appendChild(div);
+        });
+      });
+    }
+
+    guestButton.addEventListener("click", async function () {
+      try {
+        const name = guestNameInput.value.trim() || "Guest";
+
+        const result = await signInAnonymously(auth);
+        await updateProfile(result.user, { displayName: name });
+        await saveUserDoc(result.user);
+      } catch (error) {
+        alert(error.message);
+      }
     });
 
-    openDatabase();
+    signupButton.addEventListener("click", async function () {
+      try {
+        const name = signupNameInput.value.trim();
+        const email = signupEmailInput.value.trim();
+        const password = signupPasswordInput.value;
+
+        if (!name || !email || !password) {
+          alert("Fill out display name, email, and password.");
+          return;
+        }
+
+        const result = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(result.user, { displayName: name });
+        await saveUserDoc(result.user);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    loginButton.addEventListener("click", async function () {
+      try {
+        const email = loginEmailInput.value.trim();
+        const password = loginPasswordInput.value;
+
+        if (!email || !password) {
+          alert("Enter email and password.");
+          return;
+        }
+
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        await saveUserDoc(result.user);
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    logoutButton.addEventListener("click", async function () {
+      await signOut(auth);
+    });
+
+    createRoomButton.addEventListener("click", async function () {
+      try {
+        const roomName = roomNameInput.value.trim() || "Unnamed Room";
+        const roomCode = makeRoomCode();
+
+        const roomRef = doc(db, "rooms", roomCode);
+
+        await setDoc(roomRef, {
+          roomCode: roomCode,
+          roomName: roomName,
+          dmUid: currentUser.uid,
+          dmName: currentUser.displayName || "Unnamed",
+          currentMap: null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+
+        await joinRoom(roomCode, "dm");
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    joinRoomButton.addEventListener("click", async function () {
+      try {
+        const roomCode = joinRoomCodeInput.value;
+
+        if (!roomCode.trim()) {
+          alert("Enter a room code.");
+          return;
+        }
+
+        await joinRoom(roomCode, "player");
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    copyRoomCodeButton.addEventListener("click", async function () {
+      if (!currentRoomCode) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(currentRoomCode);
+      alert("Room code copied.");
+    });
+
+    onAuthStateChanged(auth, async function (user) {
+      currentUser = user;
+
+      if (!user) {
+        showLoggedOut();
+        return;
+      }
+
+      await saveUserDoc(user);
+      showLoggedIn(user);
+    });
   </script>
 </body>
 </html>
