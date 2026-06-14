@@ -36,7 +36,7 @@
       border: 2px solid #333;
       padding: 15px;
       margin-top: 15px;
-      max-width: 700px;
+      max-width: 900px;
     }
 
     .hidden {
@@ -58,6 +58,31 @@
     .player {
       border-bottom: 1px solid #444;
       padding: 8px 0;
+    }
+
+    #sharedMapViewer {
+      margin-top: 10px;
+      border: 2px solid #444;
+      min-height: 450px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #222;
+      overflow: auto;
+    }
+
+    #sharedMapImage {
+      max-width: 100%;
+      display: none;
+    }
+
+    #noSharedMapText {
+      color: #aaa;
+    }
+
+    #mapUploadStatus {
+      color: #aaa;
+      margin-top: 8px;
     }
   </style>
 </head>
@@ -124,6 +149,25 @@
 
     <h3>Players</h3>
     <div id="playersList">No players yet.</div>
+
+    <div id="dmMapControls" class="hidden">
+      <hr>
+      <h3>DM Map Controls</h3>
+      <input id="roomMapUploadInput" type="file" accept="image/*">
+      <button id="uploadRoomMapButton">Upload Map To Room</button>
+      <button id="removeRoomMapButton">Remove Room Map</button>
+      <p id="mapUploadStatus"></p>
+    </div>
+
+    <hr>
+
+    <h3>Shared Map</h3>
+    <p><b>Map Name:</b> <span id="currentMapNameText">None</span></p>
+
+    <div id="sharedMapViewer">
+      <p id="noSharedMapText">No shared map loaded yet.</p>
+      <img id="sharedMapImage">
+    </div>
   </div>
 
   <script type="module">
@@ -144,6 +188,7 @@
       doc,
       setDoc,
       getDoc,
+      updateDoc,
       collection,
       onSnapshot,
       serverTimestamp
@@ -158,6 +203,9 @@
       appId: "1:1067340395343:web:03ad344ced2aaa16c48b3a",
       measurementId: "G-HWJRCXHN8P"
     };
+
+    const cloudName = "dkezxpnl6";
+    const uploadPreset = "homebrewgod_maps";
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -198,8 +246,19 @@
     const yourRoleText = document.getElementById("yourRoleText");
     const playersList = document.getElementById("playersList");
 
+    const dmMapControls = document.getElementById("dmMapControls");
+    const roomMapUploadInput = document.getElementById("roomMapUploadInput");
+    const uploadRoomMapButton = document.getElementById("uploadRoomMapButton");
+    const removeRoomMapButton = document.getElementById("removeRoomMapButton");
+    const mapUploadStatus = document.getElementById("mapUploadStatus");
+
+    const currentMapNameText = document.getElementById("currentMapNameText");
+    const sharedMapImage = document.getElementById("sharedMapImage");
+    const noSharedMapText = document.getElementById("noSharedMapText");
+
     let currentUser = null;
     let currentRoomCode = null;
+    let currentIsDM = false;
     let stopListeningToRoom = null;
     let stopListeningToPlayers = null;
 
@@ -260,12 +319,20 @@
         return;
       }
 
+      const roomData = roomSnap.data();
+
+      let finalRole = role;
+
+      if (roomData.dmUid === currentUser.uid) {
+        finalRole = "dm";
+      }
+
       const playerRef = doc(db, "rooms", cleanCode, "players", currentUser.uid);
 
       await setDoc(playerRef, {
         uid: currentUser.uid,
         displayName: currentUser.displayName || "Unnamed",
-        role: role,
+        role: finalRole,
         joinedAt: serverTimestamp()
       }, { merge: true });
 
@@ -298,11 +365,17 @@
         currentRoomNameText.textContent = room.roomName || "Unnamed Room";
         roomCodeText.textContent = roomCode;
 
-        if (room.dmUid === currentUser.uid) {
+        currentIsDM = room.dmUid === currentUser.uid;
+
+        if (currentIsDM) {
           yourRoleText.textContent = "DM";
+          dmMapControls.classList.remove("hidden");
         } else {
           yourRoleText.textContent = "Player";
+          dmMapControls.classList.add("hidden");
         }
+
+        showSharedMap(room.currentMap);
       });
 
       const playersRef = collection(db, "rooms", roomCode, "players");
@@ -325,6 +398,43 @@
           playersList.appendChild(div);
         });
       });
+    }
+
+    function showSharedMap(currentMap) {
+      if (!currentMap || !currentMap.url) {
+        currentMapNameText.textContent = "None";
+        sharedMapImage.src = "";
+        sharedMapImage.style.display = "none";
+        noSharedMapText.style.display = "block";
+        return;
+      }
+
+      currentMapNameText.textContent = currentMap.name || "Unnamed Map";
+      sharedMapImage.src = currentMap.url;
+      sharedMapImage.style.display = "block";
+      noSharedMapText.style.display = "none";
+    }
+
+    async function uploadMapToCloudinary(file) {
+      const formData = new FormData();
+
+      formData.append("file", file);
+      formData.append("upload_preset", uploadPreset);
+
+      const response = await fetch(
+        "https://api.cloudinary.com/v1_1/" + cloudName + "/image/upload",
+        {
+          method: "POST",
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error("Cloudinary upload failed: " + errorText);
+      }
+
+      return await response.json();
     }
 
     guestButton.addEventListener("click", async function () {
@@ -424,6 +534,81 @@
 
       await navigator.clipboard.writeText(currentRoomCode);
       alert("Room code copied.");
+    });
+
+    uploadRoomMapButton.addEventListener("click", async function () {
+      try {
+        if (!currentRoomCode) {
+          alert("Create or join a room first.");
+          return;
+        }
+
+        if (!currentIsDM) {
+          alert("Only the DM can upload the room map.");
+          return;
+        }
+
+        const file = roomMapUploadInput.files[0];
+
+        if (!file) {
+          alert("Choose a map image first.");
+          return;
+        }
+
+        mapUploadStatus.textContent = "Uploading map...";
+        uploadRoomMapButton.disabled = true;
+
+        const cloudinaryResult = await uploadMapToCloudinary(file);
+
+        const roomRef = doc(db, "rooms", currentRoomCode);
+
+        await updateDoc(roomRef, {
+          currentMap: {
+            name: file.name,
+            url: cloudinaryResult.secure_url,
+            publicId: cloudinaryResult.public_id
+          },
+          updatedAt: serverTimestamp()
+        });
+
+        mapUploadStatus.textContent = "Map uploaded and shared.";
+        roomMapUploadInput.value = "";
+      } catch (error) {
+        mapUploadStatus.textContent = "Upload failed.";
+        alert(error.message);
+      } finally {
+        uploadRoomMapButton.disabled = false;
+      }
+    });
+
+    removeRoomMapButton.addEventListener("click", async function () {
+      try {
+        if (!currentRoomCode) {
+          return;
+        }
+
+        if (!currentIsDM) {
+          alert("Only the DM can remove the room map.");
+          return;
+        }
+
+        const yesRemove = confirm("Remove the shared map from this room?");
+
+        if (!yesRemove) {
+          return;
+        }
+
+        const roomRef = doc(db, "rooms", currentRoomCode);
+
+        await updateDoc(roomRef, {
+          currentMap: null,
+          updatedAt: serverTimestamp()
+        });
+
+        mapUploadStatus.textContent = "Room map removed.";
+      } catch (error) {
+        alert(error.message);
+      }
     });
 
     onAuthStateChanged(auth, async function (user) {
