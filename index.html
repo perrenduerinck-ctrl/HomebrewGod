@@ -19,7 +19,7 @@
     input {
       padding: 10px;
       margin: 5px 0;
-      width: 260px;
+      width: 280px;
       font-size: 16px;
       display: block;
     }
@@ -36,7 +36,7 @@
       border: 2px solid #333;
       padding: 15px;
       margin-top: 15px;
-      max-width: 950px;
+      max-width: 1000px;
     }
 
     .hidden {
@@ -49,25 +49,23 @@
       word-break: break-all;
     }
 
-    #roomCodeText {
-      font-size: 28px;
-      color: #ff3b3b;
-      font-weight: bold;
-    }
-
+    .saved-room-row,
+    .saved-map-row,
     .player {
-      border-bottom: 1px solid #444;
-      padding: 8px 0;
-    }
-
-    .saved-map-row {
       border-bottom: 1px solid #444;
       padding: 10px 0;
     }
 
+    .saved-room-name,
     .saved-map-name {
       font-weight: bold;
       margin-bottom: 5px;
+    }
+
+    #roomCodeText {
+      font-size: 30px;
+      color: #ff3b3b;
+      font-weight: bold;
     }
 
     #sharedMapViewer {
@@ -90,7 +88,8 @@
       color: #aaa;
     }
 
-    #mapUploadStatus {
+    #mapUploadStatus,
+    #roomStatusText {
       color: #aaa;
       margin-top: 8px;
     }
@@ -136,6 +135,11 @@
   <div id="roomControlsBox" class="box hidden">
     <h2>Rooms</h2>
 
+    <h3>My Saved Rooms</h3>
+    <div id="myRoomsList">No saved rooms yet.</div>
+
+    <hr>
+
     <h3>Create Room as DM</h3>
     <input id="roomNameInput" placeholder="Room name, like Vampire Castle">
     <button id="createRoomButton">Create Room</button>
@@ -143,13 +147,17 @@
     <hr>
 
     <h3>Join Room</h3>
-    <input id="joinRoomCodeInput" placeholder="Room code">
+    <input id="joinRoomCodeInput" placeholder="Room code, like ABC-123">
     <button id="joinRoomButton">Join Room</button>
+
+    <p id="roomStatusText"></p>
   </div>
 
   <div id="currentRoomBox" class="box hidden">
     <h2>Current Room</h2>
+
     <p><b>Room Name:</b> <span id="currentRoomNameText"></span></p>
+
     <p><b>Room Code:</b></p>
     <p id="roomCodeText"></p>
 
@@ -160,17 +168,22 @@
     <h3>Players</h3>
     <div id="playersList">No players yet.</div>
 
-    <div id="dmMapControls" class="hidden">
-      <hr>
-      <h3>DM Map Controls</h3>
-      <input id="roomMapUploadInput" type="file" accept="image/*">
-      <button id="uploadRoomMapButton">Upload Map To Room</button>
-      <button id="removeRoomMapButton">Remove Current Map</button>
-      <p id="mapUploadStatus"></p>
+    <hr>
 
-      <h3>Saved Room Maps</h3>
-      <div id="roomMapsList">No maps saved yet.</div>
+    <div id="dmMapControls" class="hidden">
+      <h3>DM Map Controls</h3>
+
+      <input id="roomMapUploadInput" type="file" accept="image/*">
+
+      <button id="uploadRoomMapButton">Upload New Map</button>
+      <button id="removeRoomMapButton">Remove Current Map</button>
+      <button id="saveCurrentMapButton">Save Current Map To Library</button>
+
+      <p id="mapUploadStatus"></p>
     </div>
+
+    <h3>Saved Maps In This Room</h3>
+    <div id="roomMapsList">No maps saved in this room yet.</div>
 
     <hr>
 
@@ -249,11 +262,14 @@
     const userTypeText = document.getElementById("userTypeText");
     const userIdText = document.getElementById("userIdText");
 
+    const myRoomsList = document.getElementById("myRoomsList");
+
     const roomNameInput = document.getElementById("roomNameInput");
     const createRoomButton = document.getElementById("createRoomButton");
 
     const joinRoomCodeInput = document.getElementById("joinRoomCodeInput");
     const joinRoomButton = document.getElementById("joinRoomButton");
+    const roomStatusText = document.getElementById("roomStatusText");
 
     const currentRoomNameText = document.getElementById("currentRoomNameText");
     const roomCodeText = document.getElementById("roomCodeText");
@@ -265,7 +281,9 @@
     const roomMapUploadInput = document.getElementById("roomMapUploadInput");
     const uploadRoomMapButton = document.getElementById("uploadRoomMapButton");
     const removeRoomMapButton = document.getElementById("removeRoomMapButton");
+    const saveCurrentMapButton = document.getElementById("saveCurrentMapButton");
     const mapUploadStatus = document.getElementById("mapUploadStatus");
+
     const roomMapsList = document.getElementById("roomMapsList");
 
     const currentMapNameText = document.getElementById("currentMapNameText");
@@ -274,9 +292,11 @@
 
     let currentUser = null;
     let currentRoomCode = null;
+    let currentRoomData = null;
     let currentIsDM = false;
     let currentMapId = null;
 
+    let stopListeningToMyRooms = null;
     let stopListeningToRoom = null;
     let stopListeningToPlayers = null;
     let stopListeningToMaps = null;
@@ -286,6 +306,16 @@
       appBox.classList.add("hidden");
       roomControlsBox.classList.add("hidden");
       currentRoomBox.classList.add("hidden");
+
+      if (stopListeningToMyRooms) stopListeningToMyRooms();
+      if (stopListeningToRoom) stopListeningToRoom();
+      if (stopListeningToPlayers) stopListeningToPlayers();
+      if (stopListeningToMaps) stopListeningToMaps();
+
+      currentUser = null;
+      currentRoomCode = null;
+      currentRoomData = null;
+      currentIsDM = false;
     }
 
     function showLoggedIn(user) {
@@ -328,7 +358,84 @@
       }, { merge: true });
     }
 
-    async function joinRoom(roomCode, role) {
+    async function saveRoomToMyRooms(roomCode, roomName, role) {
+      if (!currentUser) {
+        return;
+      }
+
+      const myRoomRef = doc(db, "users", currentUser.uid, "rooms", roomCode);
+
+      await setDoc(myRoomRef, {
+        roomCode: roomCode,
+        roomName: roomName || "Unnamed Room",
+        role: role,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+
+    function listenToMyRooms() {
+      if (!currentUser) {
+        return;
+      }
+
+      if (stopListeningToMyRooms) {
+        stopListeningToMyRooms();
+      }
+
+      const myRoomsRef = collection(db, "users", currentUser.uid, "rooms");
+
+      stopListeningToMyRooms = onSnapshot(myRoomsRef, function (roomsSnap) {
+        myRoomsList.innerHTML = "";
+
+        if (roomsSnap.empty) {
+          myRoomsList.textContent = "No saved rooms yet. Create or join a room and it will appear here.";
+          return;
+        }
+
+        roomsSnap.forEach(function (roomDoc) {
+          const room = roomDoc.data();
+          const roomCode = roomDoc.id;
+
+          const div = document.createElement("div");
+          div.className = "saved-room-row";
+
+          const nameDiv = document.createElement("div");
+          nameDiv.className = "saved-room-name";
+          nameDiv.textContent = (room.roomName || "Unnamed Room") + " — " + roomCode;
+
+          const roleDiv = document.createElement("div");
+          roleDiv.className = "small";
+          roleDiv.textContent = "Role: " + (room.role || "player");
+
+          const openButton = document.createElement("button");
+          openButton.textContent = "Open Room";
+          openButton.addEventListener("click", function () {
+            openRoom(roomCode);
+          });
+
+          const removeButton = document.createElement("button");
+          removeButton.textContent = "Remove From My List";
+          removeButton.addEventListener("click", async function () {
+            const yesRemove = confirm("Remove this room from your saved list? The room itself will still exist.");
+            if (!yesRemove) return;
+
+            const myRoomRef = doc(db, "users", currentUser.uid, "rooms", roomCode);
+            await deleteDoc(myRoomRef);
+          });
+
+          div.appendChild(nameDiv);
+          div.appendChild(roleDiv);
+          div.appendChild(openButton);
+          div.appendChild(removeButton);
+
+          myRoomsList.appendChild(div);
+        });
+      }, function (error) {
+        myRoomsList.textContent = "Could not load saved rooms: " + error.message;
+      });
+    }
+
+    async function joinRoom(roomCode, wantedRole) {
       const cleanCode = roomCode.trim().toUpperCase();
       const roomRef = doc(db, "rooms", cleanCode);
       const roomSnap = await getDoc(roomRef);
@@ -340,7 +447,7 @@
 
       const roomData = roomSnap.data();
 
-      let finalRole = role;
+      let finalRole = wantedRole;
 
       if (roomData.dmUid === currentUser.uid) {
         finalRole = "dm";
@@ -355,27 +462,21 @@
         joinedAt: serverTimestamp()
       }, { merge: true });
 
+      await saveRoomToMyRooms(cleanCode, roomData.roomName || "Unnamed Room", finalRole);
+
       openRoom(cleanCode);
     }
 
     function openRoom(roomCode) {
       currentRoomCode = roomCode;
 
-      if (stopListeningToRoom) {
-        stopListeningToRoom();
-      }
-
-      if (stopListeningToPlayers) {
-        stopListeningToPlayers();
-      }
-
-      if (stopListeningToMaps) {
-        stopListeningToMaps();
-      }
+      if (stopListeningToRoom) stopListeningToRoom();
+      if (stopListeningToPlayers) stopListeningToPlayers();
+      if (stopListeningToMaps) stopListeningToMaps();
 
       const roomRef = doc(db, "rooms", roomCode);
 
-      stopListeningToRoom = onSnapshot(roomRef, function (roomSnap) {
+      stopListeningToRoom = onSnapshot(roomRef, async function (roomSnap) {
         if (!roomSnap.exists()) {
           alert("This room was deleted or does not exist.");
           currentRoomBox.classList.add("hidden");
@@ -383,6 +484,7 @@
         }
 
         const room = roomSnap.data();
+        currentRoomData = room;
 
         currentRoomBox.classList.remove("hidden");
         currentRoomNameText.textContent = room.roomName || "Unnamed Room";
@@ -398,7 +500,11 @@
           dmMapControls.classList.add("hidden");
         }
 
+        await saveRoomToMyRooms(roomCode, room.roomName || "Unnamed Room", currentIsDM ? "dm" : "player");
+
         showSharedMap(room.currentMap);
+      }, function (error) {
+        alert("Room listener failed: " + error.message);
       });
 
       const playersRef = collection(db, "rooms", roomCode, "players");
@@ -426,6 +532,8 @@
 
       stopListeningToMaps = onSnapshot(mapsRef, function (mapsSnap) {
         renderRoomMaps(mapsSnap);
+      }, function (error) {
+        roomMapsList.textContent = "Could not load saved maps: " + error.message;
       });
     }
 
@@ -450,7 +558,7 @@
       roomMapsList.innerHTML = "";
 
       if (mapsSnap.empty) {
-        roomMapsList.textContent = "No maps saved yet.";
+        roomMapsList.textContent = "No saved maps in this room yet. Upload a new map as DM.";
         return;
       }
 
@@ -465,21 +573,37 @@
         nameDiv.className = "saved-map-name";
         nameDiv.textContent = map.name || "Unnamed Map";
 
-        const useButton = document.createElement("button");
-        useButton.textContent = "Use Map";
-        useButton.addEventListener("click", function () {
-          useSavedMap(mapId);
-        });
-
-        const forgetButton = document.createElement("button");
-        forgetButton.textContent = "Forget From List";
-        forgetButton.addEventListener("click", function () {
-          forgetSavedMap(mapId);
-        });
+        const urlDiv = document.createElement("div");
+        urlDiv.className = "small";
+        urlDiv.textContent = map.url || "";
 
         div.appendChild(nameDiv);
-        div.appendChild(useButton);
-        div.appendChild(forgetButton);
+        div.appendChild(urlDiv);
+
+        const openLink = document.createElement("button");
+        openLink.textContent = "Open Image";
+        openLink.addEventListener("click", function () {
+          window.open(map.url, "_blank");
+        });
+
+        div.appendChild(openLink);
+
+        if (currentIsDM) {
+          const useButton = document.createElement("button");
+          useButton.textContent = "Use Map";
+          useButton.addEventListener("click", function () {
+            useSavedMap(mapId);
+          });
+
+          const forgetButton = document.createElement("button");
+          forgetButton.textContent = "Forget From List";
+          forgetButton.addEventListener("click", function () {
+            forgetSavedMap(mapId);
+          });
+
+          div.appendChild(useButton);
+          div.appendChild(forgetButton);
+        }
 
         roomMapsList.appendChild(div);
       });
@@ -507,6 +631,24 @@
       return await response.json();
     }
 
+    async function saveMapToRoomLibrary(mapData) {
+      if (!currentRoomCode || !currentIsDM) {
+        alert("Only the DM can save maps.");
+        return null;
+      }
+
+      const mapsRef = collection(db, "rooms", currentRoomCode, "maps");
+
+      const mapDocRef = await addDoc(mapsRef, {
+        name: mapData.name || "Unnamed Map",
+        url: mapData.url,
+        publicId: mapData.publicId || null,
+        createdAt: serverTimestamp()
+      });
+
+      return mapDocRef.id;
+    }
+
     async function useSavedMap(mapId) {
       try {
         if (!currentRoomCode || !currentIsDM) {
@@ -523,7 +665,6 @@
         }
 
         const map = mapSnap.data();
-
         const roomRef = doc(db, "rooms", currentRoomCode);
 
         await updateDoc(roomRef, {
@@ -639,7 +780,10 @@
           updatedAt: serverTimestamp()
         });
 
+        await saveRoomToMyRooms(roomCode, roomName, "dm");
         await joinRoom(roomCode, "dm");
+
+        roomStatusText.textContent = "Room created and saved.";
       } catch (error) {
         alert(error.message);
       }
@@ -655,6 +799,8 @@
         }
 
         await joinRoom(roomCode, "player");
+
+        roomStatusText.textContent = "Room joined and saved.";
       } catch (error) {
         alert(error.message);
       }
@@ -693,28 +839,27 @@
 
         const cloudinaryResult = await uploadMapToCloudinary(file);
 
-        const mapsRef = collection(db, "rooms", currentRoomCode, "maps");
-
-        const mapDocRef = await addDoc(mapsRef, {
+        const newMap = {
           name: file.name,
           url: cloudinaryResult.secure_url,
-          publicId: cloudinaryResult.public_id,
-          createdAt: serverTimestamp()
-        });
+          publicId: cloudinaryResult.public_id
+        };
+
+        const mapId = await saveMapToRoomLibrary(newMap);
 
         const roomRef = doc(db, "rooms", currentRoomCode);
 
         await updateDoc(roomRef, {
           currentMap: {
-            id: mapDocRef.id,
-            name: file.name,
-            url: cloudinaryResult.secure_url,
-            publicId: cloudinaryResult.public_id
+            id: mapId,
+            name: newMap.name,
+            url: newMap.url,
+            publicId: newMap.publicId
           },
           updatedAt: serverTimestamp()
         });
 
-        mapUploadStatus.textContent = "Map uploaded, saved, and shared.";
+        mapUploadStatus.textContent = "Map uploaded, saved to room library, and shared.";
         roomMapUploadInput.value = "";
       } catch (error) {
         mapUploadStatus.textContent = "Upload failed.";
@@ -735,7 +880,7 @@
           return;
         }
 
-        const yesRemove = confirm("Remove the current shared map? It will stay in Saved Room Maps.");
+        const yesRemove = confirm("Remove the current shared map? It will stay in Saved Maps if it was saved there.");
 
         if (!yesRemove) {
           return;
@@ -754,6 +899,44 @@
       }
     });
 
+    saveCurrentMapButton.addEventListener("click", async function () {
+      try {
+        if (!currentRoomCode || !currentIsDM) {
+          alert("Only the DM can save the current map.");
+          return;
+        }
+
+        if (!currentRoomData || !currentRoomData.currentMap || !currentRoomData.currentMap.url) {
+          alert("There is no current map to save.");
+          return;
+        }
+
+        const map = currentRoomData.currentMap;
+
+        const mapId = await saveMapToRoomLibrary({
+          name: map.name || "Recovered Current Map",
+          url: map.url,
+          publicId: map.publicId || null
+        });
+
+        const roomRef = doc(db, "rooms", currentRoomCode);
+
+        await updateDoc(roomRef, {
+          currentMap: {
+            id: mapId,
+            name: map.name || "Recovered Current Map",
+            url: map.url,
+            publicId: map.publicId || null
+          },
+          updatedAt: serverTimestamp()
+        });
+
+        mapUploadStatus.textContent = "Current map saved to room library.";
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
     onAuthStateChanged(auth, async function (user) {
       currentUser = user;
 
@@ -764,6 +947,7 @@
 
       await saveUserDoc(user);
       showLoggedIn(user);
+      listenToMyRooms();
     });
   </script>
 </body>
