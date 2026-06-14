@@ -40,7 +40,7 @@
     }
 
     .hidden {
-      display: none;
+      display: none !important;
     }
 
     .small {
@@ -65,10 +65,15 @@
       font-weight: bold;
     }
 
-    #sharedMapViewer {
+    .status {
+      color: #aaa;
+      margin-top: 8px;
+    }
+
+    #roomMapPreviewBox {
       margin-top: 10px;
       border: 2px solid #444;
-      min-height: 450px;
+      min-height: 250px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -76,98 +81,135 @@
       overflow: auto;
     }
 
-    #sharedMapImage {
+    #roomMapPreviewImage {
       max-width: 100%;
+      max-height: 350px;
       display: none;
     }
 
-    #noSharedMapText {
-      color: #aaa;
+    #battleMapScreen {
+      min-height: calc(100vh - 40px);
     }
 
-    .status {
+    #battleTopBar {
+      background: #1c1c1c;
+      border: 2px solid #333;
+      padding: 10px;
+      margin-bottom: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    #battleMapViewer {
+      border: 2px solid #444;
+      height: calc(100vh - 180px);
+      background: #222;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #battleMapImage {
+      max-width: 100%;
+      display: none;
+      transform-origin: center center;
+    }
+
+    #noBattleMapText,
+    #noRoomMapPreviewText {
       color: #aaa;
-      margin-top: 8px;
     }
   </style>
 </head>
 
 <body>
-  <h1>Homebrew God</h1>
-  <p>Free D&D room tool. No D&D Beyond nonsense.</p>
+  <div id="authScreen">
+    <h1>Homebrew God</h1>
+    <p>Free D&D room tool. No D&D Beyond nonsense.</p>
 
-  <div id="authBox" class="box">
-    <h2>Start</h2>
+    <div class="box">
+      <h2>Start</h2>
 
-    <h3>Guest Mode</h3>
-    <input id="guestNameInput" placeholder="Display name, like Big Fluffy">
-    <button id="guestButton">Continue as Guest</button>
+      <h3>Guest Mode</h3>
+      <input id="guestNameInput" placeholder="Display name, like Big Fluffy">
+      <button id="guestButton">Continue as Guest</button>
 
-    <hr>
+      <hr>
 
-    <h3>Create Account</h3>
-    <input id="signupNameInput" placeholder="Display name">
-    <input id="signupEmailInput" placeholder="Email">
-    <input id="signupPasswordInput" type="password" placeholder="Password">
-    <button id="signupButton">Create Account</button>
+      <h3>Create Account</h3>
+      <input id="signupNameInput" placeholder="Display name">
+      <input id="signupEmailInput" placeholder="Email">
+      <input id="signupPasswordInput" type="password" placeholder="Password">
+      <button id="signupButton">Create Account</button>
 
-    <hr>
+      <hr>
 
-    <h3>Log In</h3>
-    <input id="loginEmailInput" placeholder="Email">
-    <input id="loginPasswordInput" type="password" placeholder="Password">
-    <button id="loginButton">Log In</button>
+      <h3>Log In</h3>
+      <input id="loginEmailInput" placeholder="Email">
+      <input id="loginPasswordInput" type="password" placeholder="Password">
+      <button id="loginButton">Log In</button>
+    </div>
   </div>
 
-  <div id="appBox" class="box hidden">
-    <h2>You are signed in</h2>
-    <p><b>Name:</b> <span id="userNameText"></span></p>
-    <p><b>Type:</b> <span id="userTypeText"></span></p>
-    <p class="small"><b>User ID:</b> <span id="userIdText"></span></p>
-    <button id="logoutButton">Log Out</button>
+  <div id="lobbyScreen" class="hidden">
+    <h1>Homebrew God</h1>
+
+    <div class="box">
+      <h2>Lobby</h2>
+      <p><b>Name:</b> <span id="userNameText"></span></p>
+      <p><b>Type:</b> <span id="userTypeText"></span></p>
+      <p class="small"><b>User ID:</b> <span id="userIdText"></span></p>
+      <button id="logoutButton">Log Out</button>
+    </div>
+
+    <div class="box">
+      <h2>My Saved Rooms</h2>
+      <div id="myRoomsList">Loading saved rooms...</div>
+
+      <hr>
+
+      <h3>Create Room as DM</h3>
+      <input id="roomNameInput" placeholder="Room name, like Vampire Castle">
+      <button id="createRoomButton">Create Room</button>
+
+      <hr>
+
+      <h3>Join Room</h3>
+      <input id="joinRoomCodeInput" placeholder="Room code, like ABC-123">
+      <button id="joinRoomButton">Join Room</button>
+
+      <p id="roomStatusText" class="status"></p>
+    </div>
   </div>
 
-  <div id="roomControlsBox" class="box hidden">
-    <h2>Rooms</h2>
+  <div id="roomDashboardScreen" class="hidden">
+    <h1>Room Dashboard</h1>
 
-    <h3>My Saved Rooms</h3>
-    <div id="myRoomsList">Loading saved rooms...</div>
+    <div class="box">
+      <button id="backToLobbyButton">Back To Lobby</button>
+      <button id="openBattleMapButton">Open Battle Map</button>
 
-    <hr>
+      <h2>Current Room</h2>
+      <p><b>Room Name:</b> <span id="currentRoomNameText"></span></p>
 
-    <h3>Create Room as DM</h3>
-    <input id="roomNameInput" placeholder="Room name, like Vampire Castle">
-    <button id="createRoomButton">Create Room</button>
+      <p><b>Room Code:</b></p>
+      <p id="roomCodeText"></p>
 
-    <hr>
+      <button id="copyRoomCodeButton">Copy Room Code</button>
+      <button id="saveThisRoomButton">Save This Room To My Rooms</button>
 
-    <h3>Join Room</h3>
-    <input id="joinRoomCodeInput" placeholder="Room code, like ABC-123">
-    <button id="joinRoomButton">Join Room</button>
+      <p><b>Your Role:</b> <span id="yourRoleText"></span></p>
+    </div>
 
-    <p id="roomStatusText" class="status"></p>
-  </div>
+    <div class="box">
+      <h2>Players</h2>
+      <div id="playersList">No players yet.</div>
+    </div>
 
-  <div id="currentRoomBox" class="box hidden">
-    <h2>Current Room</h2>
-
-    <p><b>Room Name:</b> <span id="currentRoomNameText"></span></p>
-
-    <p><b>Room Code:</b></p>
-    <p id="roomCodeText"></p>
-
-    <button id="copyRoomCodeButton">Copy Room Code</button>
-    <button id="saveThisRoomButton">Save This Room To My Rooms</button>
-
-    <p><b>Your Role:</b> <span id="yourRoleText"></span></p>
-
-    <h3>Players</h3>
-    <div id="playersList">No players yet.</div>
-
-    <hr>
-
-    <div id="dmMapControls" class="hidden">
-      <h3>DM Map Controls</h3>
+    <div id="dmMapControls" class="box hidden">
+      <h2>DM Map Controls</h2>
 
       <input id="roomMapUploadInput" type="file" accept="image/*">
 
@@ -178,17 +220,44 @@
       <p id="mapUploadStatus" class="status"></p>
     </div>
 
-    <h3>Saved Maps In This Room</h3>
-    <div id="roomMapsList">No maps saved in this room yet.</div>
+    <div class="box">
+      <h2>Saved Maps In This Room</h2>
+      <div id="roomMapsList">No maps saved in this room yet.</div>
+    </div>
 
-    <hr>
+    <div class="box">
+      <h2>Current Map Preview</h2>
+      <p><b>Map Name:</b> <span id="currentMapNameText">None</span></p>
 
-    <h3>Shared Map</h3>
-    <p><b>Map Name:</b> <span id="currentMapNameText">None</span></p>
+      <div id="roomMapPreviewBox">
+        <p id="noRoomMapPreviewText">No shared map loaded yet.</p>
+        <img id="roomMapPreviewImage">
+      </div>
+    </div>
+  </div>
 
-    <div id="sharedMapViewer">
-      <p id="noSharedMapText">No shared map loaded yet.</p>
-      <img id="sharedMapImage">
+  <div id="battleMapScreen" class="hidden">
+    <div id="battleTopBar">
+      <button id="backToRoomButton">Back To Room Dashboard</button>
+
+      <button id="zoomOutButton">Zoom Out</button>
+      <button id="zoomResetButton">Reset Zoom</button>
+      <button id="zoomInButton">Zoom In</button>
+
+      <p>
+        <b>Room:</b> <span id="battleRoomNameText"></span>
+        |
+        <b>Code:</b> <span id="battleRoomCodeText"></span>
+        |
+        <b>Map:</b> <span id="battleMapNameText">None</span>
+        |
+        <b>Zoom:</b> <span id="battleZoomText">100%</span>
+      </p>
+    </div>
+
+    <div id="battleMapViewer">
+      <p id="noBattleMapText">No battle map loaded yet.</p>
+      <img id="battleMapImage">
     </div>
   </div>
 
@@ -235,10 +304,10 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const authBox = document.getElementById("authBox");
-    const appBox = document.getElementById("appBox");
-    const roomControlsBox = document.getElementById("roomControlsBox");
-    const currentRoomBox = document.getElementById("currentRoomBox");
+    const authScreen = document.getElementById("authScreen");
+    const lobbyScreen = document.getElementById("lobbyScreen");
+    const roomDashboardScreen = document.getElementById("roomDashboardScreen");
+    const battleMapScreen = document.getElementById("battleMapScreen");
 
     const guestNameInput = document.getElementById("guestNameInput");
     const guestButton = document.getElementById("guestButton");
@@ -267,6 +336,8 @@
     const joinRoomButton = document.getElementById("joinRoomButton");
     const roomStatusText = document.getElementById("roomStatusText");
 
+    const backToLobbyButton = document.getElementById("backToLobbyButton");
+    const openBattleMapButton = document.getElementById("openBattleMapButton");
     const currentRoomNameText = document.getElementById("currentRoomNameText");
     const roomCodeText = document.getElementById("roomCodeText");
     const copyRoomCodeButton = document.getElementById("copyRoomCodeButton");
@@ -284,8 +355,20 @@
     const roomMapsList = document.getElementById("roomMapsList");
 
     const currentMapNameText = document.getElementById("currentMapNameText");
-    const sharedMapImage = document.getElementById("sharedMapImage");
-    const noSharedMapText = document.getElementById("noSharedMapText");
+    const roomMapPreviewImage = document.getElementById("roomMapPreviewImage");
+    const noRoomMapPreviewText = document.getElementById("noRoomMapPreviewText");
+
+    const backToRoomButton = document.getElementById("backToRoomButton");
+    const zoomOutButton = document.getElementById("zoomOutButton");
+    const zoomResetButton = document.getElementById("zoomResetButton");
+    const zoomInButton = document.getElementById("zoomInButton");
+
+    const battleRoomNameText = document.getElementById("battleRoomNameText");
+    const battleRoomCodeText = document.getElementById("battleRoomCodeText");
+    const battleMapNameText = document.getElementById("battleMapNameText");
+    const battleZoomText = document.getElementById("battleZoomText");
+    const battleMapImage = document.getElementById("battleMapImage");
+    const noBattleMapText = document.getElementById("noBattleMapText");
 
     let currentUser = null;
     let currentRoomCode = null;
@@ -293,21 +376,42 @@
     let currentIsDM = false;
     let currentMapId = null;
     let latestMapsSnapshot = null;
+    let battleZoom = 1;
 
     let stopListeningToMyRooms = null;
     let stopListeningToRoom = null;
     let stopListeningToPlayers = null;
     let stopListeningToMaps = null;
 
+    function showScreen(screenName) {
+      authScreen.classList.add("hidden");
+      lobbyScreen.classList.add("hidden");
+      roomDashboardScreen.classList.add("hidden");
+      battleMapScreen.classList.add("hidden");
+
+      if (screenName === "auth") {
+        authScreen.classList.remove("hidden");
+      }
+
+      if (screenName === "lobby") {
+        lobbyScreen.classList.remove("hidden");
+      }
+
+      if (screenName === "room") {
+        roomDashboardScreen.classList.remove("hidden");
+      }
+
+      if (screenName === "battle") {
+        battleMapScreen.classList.remove("hidden");
+      }
+    }
+
     function normalizeRoomCode(code) {
       return code.trim().toUpperCase();
     }
 
     function showLoggedOut() {
-      authBox.classList.remove("hidden");
-      appBox.classList.add("hidden");
-      roomControlsBox.classList.add("hidden");
-      currentRoomBox.classList.add("hidden");
+      showScreen("auth");
 
       if (stopListeningToMyRooms) stopListeningToMyRooms();
       if (stopListeningToRoom) stopListeningToRoom();
@@ -322,13 +426,11 @@
     }
 
     function showLoggedIn(user) {
-      authBox.classList.add("hidden");
-      appBox.classList.remove("hidden");
-      roomControlsBox.classList.remove("hidden");
-
       userNameText.textContent = user.displayName || "Unnamed";
       userTypeText.textContent = user.isAnonymous ? "Guest" : "Account";
       userIdText.textContent = user.uid;
+
+      showScreen("lobby");
     }
 
     function makeRoomCode() {
@@ -488,17 +590,18 @@
       stopListeningToRoom = onSnapshot(roomRef, function (roomSnap) {
         if (!roomSnap.exists()) {
           alert("This room was deleted or does not exist.");
-          currentRoomBox.classList.add("hidden");
+          showScreen("lobby");
           return;
         }
 
         const room = roomSnap.data();
         currentRoomData = room;
 
-        currentRoomBox.classList.remove("hidden");
-
         currentRoomNameText.textContent = room.roomName || "Unnamed Room";
         roomCodeText.textContent = cleanCode;
+
+        battleRoomNameText.textContent = room.roomName || "Unnamed Room";
+        battleRoomCodeText.textContent = cleanCode;
 
         currentIsDM = room.dmUid === currentUser.uid;
 
@@ -550,23 +653,42 @@
       }, function (error) {
         roomMapsList.textContent = "Could not load saved maps: " + error.message;
       });
+
+      showScreen("room");
     }
 
     function showSharedMap(currentMap) {
       if (!currentMap || !currentMap.url) {
         currentMapId = null;
+
         currentMapNameText.textContent = "None";
-        sharedMapImage.src = "";
-        sharedMapImage.style.display = "none";
-        noSharedMapText.style.display = "block";
+        battleMapNameText.textContent = "None";
+
+        roomMapPreviewImage.src = "";
+        roomMapPreviewImage.style.display = "none";
+        noRoomMapPreviewText.style.display = "block";
+
+        battleMapImage.src = "";
+        battleMapImage.style.display = "none";
+        noBattleMapText.style.display = "block";
+
         return;
       }
 
       currentMapId = currentMap.id || null;
+
       currentMapNameText.textContent = currentMap.name || "Unnamed Map";
-      sharedMapImage.src = currentMap.url;
-      sharedMapImage.style.display = "block";
-      noSharedMapText.style.display = "none";
+      battleMapNameText.textContent = currentMap.name || "Unnamed Map";
+
+      roomMapPreviewImage.src = currentMap.url;
+      roomMapPreviewImage.style.display = "block";
+      noRoomMapPreviewText.style.display = "none";
+
+      battleMapImage.src = currentMap.url;
+      battleMapImage.style.display = "block";
+      noBattleMapText.style.display = "none";
+
+      applyBattleZoom();
     }
 
     function renderRoomMaps(mapsSnap) {
@@ -725,6 +847,11 @@
       }
     }
 
+    function applyBattleZoom() {
+      battleMapImage.style.transform = "scale(" + battleZoom + ")";
+      battleZoomText.textContent = Math.round(battleZoom * 100) + "%";
+    }
+
     guestButton.addEventListener("click", async function () {
       try {
         const name = guestNameInput.value.trim() || "Guest";
@@ -828,6 +955,49 @@
       } catch (error) {
         alert(error.message);
       }
+    });
+
+    backToLobbyButton.addEventListener("click", function () {
+      showScreen("lobby");
+    });
+
+    openBattleMapButton.addEventListener("click", function () {
+      if (!currentRoomCode) {
+        alert("Open a room first.");
+        return;
+      }
+
+      showScreen("battle");
+      applyBattleZoom();
+    });
+
+    backToRoomButton.addEventListener("click", function () {
+      showScreen("room");
+    });
+
+    zoomOutButton.addEventListener("click", function () {
+      battleZoom -= 0.25;
+
+      if (battleZoom < 0.25) {
+        battleZoom = 0.25;
+      }
+
+      applyBattleZoom();
+    });
+
+    zoomResetButton.addEventListener("click", function () {
+      battleZoom = 1;
+      applyBattleZoom();
+    });
+
+    zoomInButton.addEventListener("click", function () {
+      battleZoom += 0.25;
+
+      if (battleZoom > 4) {
+        battleZoom = 4;
+      }
+
+      applyBattleZoom();
     });
 
     copyRoomCodeButton.addEventListener("click", async function () {
