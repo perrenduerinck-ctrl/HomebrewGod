@@ -106,16 +106,21 @@
     </section>
 
     <section class="box">
-      <h2>Players</h2>
-      <div id="playersList">No players yet.</div>
+      <h2>Players In Room</h2>
+      <div id="playersList">No players in the room right now.</div>
     </section>
 
     <section id="dmMapControls" class="box hidden">
       <h2>DM Map Controls</h2>
 
+      <p class="small">
+        This upload saves the map into the room's Saved Maps list.
+        Use this for maps you actually want to keep.
+      </p>
+
       <input id="roomMapUploadInput" type="file" accept="image/*">
 
-      <button id="uploadRoomMapButton">Upload New Map</button>
+      <button id="uploadRoomMapButton">Upload New Map And Save It</button>
       <button id="removeRoomMapButton">Remove Current Map</button>
       <button id="saveCurrentMapButton">Save Current Map To Library</button>
 
@@ -159,6 +164,30 @@
         |
         <b>Zoom:</b> <span id="battleZoomText">100%</span>
       </p>
+
+      <!-- =====================================================
+           DM QUICK MAP UPDATE
+           This is for live map changes during the session.
+           Example: Crimbo builds a cannon, AI edits the map,
+           DM uploads the new version here.
+      ====================================================== -->
+      <div id="battleDmMapControls" class="hidden">
+        <hr>
+
+        <h3>DM Quick Map Update</h3>
+
+        <p class="small">
+          Use this during the session when the scene changes.
+          Example: Crimbo builds a cannon, AI makes a new map, upload it here.
+          This will update the current battle map for everyone.
+          It will not add the map to Saved Maps.
+        </p>
+
+        <input id="battleMapUploadInput" type="file" accept="image/*">
+        <button id="updateBattleMapButton">Update Current Map Without Saving</button>
+
+        <p id="battleMapUpdateStatus" class="status"></p>
+      </div>
     </section>
 
     <section id="battleMapViewer">
