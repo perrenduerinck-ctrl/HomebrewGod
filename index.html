@@ -19,6 +19,7 @@
   <main id="authScreen" class="screen">
     <h1>Homebrew God</h1>
     <p>Free D&D room tool. No D&D Beyond nonsense.</p>
+    <p class="status"><b>INDEX VERSION TEST:</b> Battle Map quick update HTML is installed.</p>
 
     <section class="box">
       <h2>Start</h2>
@@ -46,10 +47,10 @@
 
   <!-- =====================================================
        INDEX SECTION 3 — LOBBY SCREEN
-       Shows account info, saved rooms, create room, join room.
   ====================================================== -->
   <main id="lobbyScreen" class="screen hidden">
     <h1>Homebrew God</h1>
+    <p class="status"><b>INDEX VERSION TEST:</b> Battle Map quick update HTML is installed.</p>
 
     <section class="box">
       <h2>Lobby</h2>
@@ -83,10 +84,10 @@
 
   <!-- =====================================================
        INDEX SECTION 4 — ROOM DASHBOARD SCREEN
-       DM controls, player list, saved maps, current map preview.
   ====================================================== -->
   <main id="roomDashboardScreen" class="screen hidden">
     <h1>Room Dashboard</h1>
+    <p class="status"><b>INDEX VERSION TEST:</b> Battle Map quick update HTML is installed.</p>
 
     <section class="box">
       <button id="backToLobbyButton">Back To Lobby</button>
@@ -145,7 +146,6 @@
 
   <!-- =====================================================
        INDEX SECTION 5 — BATTLE MAP SCREEN
-       This is the dedicated map view. It can open in a new tab.
   ====================================================== -->
   <main id="battleMapScreen" class="screen hidden">
     <section id="battleTopBar">
@@ -165,27 +165,31 @@
         <b>Zoom:</b> <span id="battleZoomText">100%</span>
       </p>
 
+      <p class="status">
+        <b>INDEX VERSION TEST:</b> If you see this, the new index.html is live.
+      </p>
+
       <!-- =====================================================
            DM QUICK MAP UPDATE
-           This is for live map changes during the session.
-           It is NOT hidden here, so we can confirm it appears.
+           Forced visible on purpose.
+           This proves the HTML loaded before we touch app.js again.
       ====================================================== -->
-      <div id="battleDmMapControls">
-        <hr>
-
-        <h3>DM Quick Map Update</h3>
+      <div id="battleDmMapControls" class="box">
+        <h2>DM Quick Map Update</h2>
 
         <p class="small">
-          Use this during the session when the scene changes.
-          Example: Crimbo builds a cannon, AI makes a new map, upload it here.
-          This updates the current battle map for everyone.
-          It does not add the map to Saved Maps.
+          Upload a new AI-edited version of the battle map here.
+          Example: Crimbo builds a cannon, you make a new map image, then upload it here.
+          This is meant to update the current map without adding it to Saved Maps.
         </p>
 
         <input id="battleMapUploadInput" type="file" accept="image/*">
+
         <button id="updateBattleMapButton">Update Current Map Without Saving</button>
 
-        <p id="battleMapUpdateStatus" class="status"></p>
+        <p id="battleMapUpdateStatus" class="status">
+          Waiting for app.js to handle this button.
+        </p>
       </div>
     </section>
 
@@ -197,7 +201,6 @@
 
   <!-- =====================================================
        INDEX SECTION 6 — APP SCRIPT
-       All JavaScript goes in app.js.
   ====================================================== -->
   <script type="module" src="app.js"></script>
 </body>
