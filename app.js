@@ -121,6 +121,11 @@ const battleZoomText = document.getElementById("battleZoomText");
 const battleMapImage = document.getElementById("battleMapImage");
 const noBattleMapText = document.getElementById("noBattleMapText");
 
+const battleDmMapControls = document.getElementById("battleDmMapControls");
+const battleMapUploadInput = document.getElementById("battleMapUploadInput");
+const updateBattleMapButton = document.getElementById("updateBattleMapButton");
+const battleMapUpdateStatus = document.getElementById("battleMapUpdateStatus");
+
 
 // =====================================================
 // APP SECTION 4 — APP STATE
@@ -132,7 +137,7 @@ let currentRoomData = null;
 let currentIsDM = false;
 let currentMapId = null;
 let latestMapsSnapshot = null;
-let latestPlayersSnapshot = null;
+let latestActivePlayersSnapshot = null;
 let battleZoom = 1;
 
 let stopListeningToMyRooms = null;
@@ -140,13 +145,13 @@ let stopListeningToRoom = null;
 let stopListeningToPlayers = null;
 let stopListeningToMaps = null;
 
-let heartbeatTimer = null;
-let heartbeatRoomCode = null;
-let playersRerenderTimer = null;
+let activeSessionId = sessionStorage.getItem("homebrewGodSessionId");
+let activeSessionRoomCode = null;
 
-const HEARTBEAT_EVERY_MS = 5000;
-const ONLINE_TIMEOUT_MS = 20000;
-const PLAYER_LIST_RERENDER_MS = 5000;
+if (!activeSessionId) {
+  activeSessionId = crypto.randomUUID();
+  sessionStorage.setItem("homebrewGodSessionId", activeSessionId);
+}
 
 const startupParams = new URLSearchParams(window.location.search);
 const startupRoomCode = startupParams.get("room");
@@ -219,37 +224,7 @@ function clearRoomListeners() {
     stopListeningToMaps = null;
   }
 
-  latestPlayersSnapshot = null;
-}
-
-function getTimestampMillis(value) {
-  if (!value) {
-    return 0;
-  }
-
-  if (typeof value.toMillis === "function") {
-    return value.toMillis();
-  }
-
-  if (typeof value.seconds === "number") {
-    return value.seconds * 1000;
-  }
-
-  if (typeof value === "number") {
-    return value;
-  }
-
-  return 0;
-}
-
-function isPlayerOnline(player) {
-  const lastSeenMillis = getTimestampMillis(player.lastSeen);
-
-  if (!lastSeenMillis) {
-    return false;
-  }
-
-  return Date.now() - lastSeenMillis <= ONLINE_TIMEOUT_MS;
+  latestActivePlayersSnapshot = null;
 }
 
 function buildMapFromRoomFields(room) {
@@ -262,11 +237,30 @@ function buildMapFromRoomFields(room) {
       id: room.currentMapId || null,
       name: room.currentMapName || "Current Map",
       url: room.currentMapUrl,
-      publicId: room.currentMapPublicId || null
+      publicId: room.currentMapPublicId || null,
+      savedToLibrary: room.currentMapSavedToLibrary || false
     };
   }
 
   return null;
+}
+
+function setDmControlsVisible(isVisible) {
+  if (isVisible) {
+    dmMapControls.classList.remove("hidden");
+
+    if (battleDmMapControls) {
+      battleDmMapControls.classList.remove("hidden");
+    }
+
+    return;
+  }
+
+  dmMapControls.classList.add("hidden");
+
+  if (battleDmMapControls) {
+    battleDmMapControls.classList.add("hidden");
+  }
 }
 
 
@@ -286,7 +280,7 @@ async function saveUserDoc(user) {
   }, { merge: true });
 }
 
-function showLoggedOut() {
+async function showLoggedOut() {
   showScreen("auth");
 
   if (stopListeningToMyRooms) {
@@ -294,8 +288,8 @@ function showLoggedOut() {
     stopListeningToMyRooms = null;
   }
 
-  stopHeartbeat();
-  stopPlayersRerenderTimer();
+  await removeActivePlayerSession();
+
   clearRoomListeners();
 
   currentUser = null;
@@ -304,6 +298,7 @@ function showLoggedOut() {
   currentIsDM = false;
   currentMapId = null;
   latestMapsSnapshot = null;
+  latestActivePlayersSnapshot = null;
 }
 
 function showLoggedIn(user) {
@@ -363,7 +358,12 @@ loginButton.addEventListener("click", async function () {
 });
 
 logoutButton.addEventListener("click", async function () {
-  await signOut(auth);
+  try {
+    await removeActivePlayerSession();
+    await signOut(auth);
+  } catch (error) {
+    alert(error.message);
+  }
 });
 
 
@@ -473,20 +473,12 @@ async function createRoom() {
     currentMapName: null,
     currentMapId: null,
     currentMapPublicId: null,
+    currentMapSavedToLibrary: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
 
-  const playerRef = doc(db, "rooms", roomCode, "players", currentUser.uid);
-
-  await setDoc(playerRef, {
-    uid: currentUser.uid,
-    displayName: currentUser.displayName || "Unnamed",
-    role: "dm",
-    joinedAt: serverTimestamp(),
-    lastSeen: serverTimestamp()
-  }, { merge: true });
-
+  await savePlayerHistory(roomCode, "dm");
   await saveRoomToMyRooms(roomCode, roomName, "dm");
 
   openRoom(roomCode, "room");
@@ -518,16 +510,7 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
     finalRole = "dm";
   }
 
-  const playerRef = doc(db, "rooms", cleanCode, "players", currentUser.uid);
-
-  await setDoc(playerRef, {
-    uid: currentUser.uid,
-    displayName: currentUser.displayName || "Unnamed",
-    role: finalRole,
-    joinedAt: serverTimestamp(),
-    lastSeen: serverTimestamp()
-  }, { merge: true });
-
+  await savePlayerHistory(cleanCode, finalRole);
   await saveRoomToMyRooms(cleanCode, roomData.roomName || "Unnamed Room", finalRole);
 
   openRoom(cleanCode, screenToShow);
@@ -538,18 +521,16 @@ function openRoom(roomCode, screenToShow = "room") {
 
   currentRoomCode = cleanCode;
   latestMapsSnapshot = null;
-  latestPlayersSnapshot = null;
+  latestActivePlayersSnapshot = null;
 
-  stopHeartbeat();
-  stopPlayersRerenderTimer();
   clearRoomListeners();
 
   const roomRef = doc(db, "rooms", cleanCode);
 
-  stopListeningToRoom = onSnapshot(roomRef, function (roomSnap) {
+  stopListeningToRoom = onSnapshot(roomRef, async function (roomSnap) {
     if (!roomSnap.exists()) {
       alert("This room was deleted or does not exist.");
-      leaveCurrentRoomView();
+      await leaveCurrentRoomView();
       return;
     }
 
@@ -566,21 +547,22 @@ function openRoom(roomCode, screenToShow = "room") {
 
     if (currentIsDM) {
       yourRoleText.textContent = "DM";
-      dmMapControls.classList.remove("hidden");
+      setDmControlsVisible(true);
     } else {
       yourRoleText.textContent = "Player";
-      dmMapControls.classList.add("hidden");
+      setDmControlsVisible(false);
     }
 
-    startHeartbeat(cleanCode);
+    await setActivePlayerSession(cleanCode, currentIsDM ? "dm" : "player");
+
     showSharedMap(buildMapFromRoomFields(room));
 
     if (latestMapsSnapshot) {
       renderRoomMaps(latestMapsSnapshot);
     }
 
-    if (latestPlayersSnapshot) {
-      renderPlayers(latestPlayersSnapshot);
+    if (latestActivePlayersSnapshot) {
+      renderPlayers(latestActivePlayersSnapshot);
     }
   }, function (error) {
     alert("Room listener failed: " + error.message);
@@ -588,7 +570,6 @@ function openRoom(roomCode, screenToShow = "room") {
 
   listenToPlayers(cleanCode);
   listenToRoomMaps(cleanCode);
-  startPlayersRerenderTimer();
 
   if (screenToShow === "battle") {
     showScreen("battle");
@@ -598,9 +579,9 @@ function openRoom(roomCode, screenToShow = "room") {
   }
 }
 
-function leaveCurrentRoomView() {
-  stopHeartbeat();
-  stopPlayersRerenderTimer();
+async function leaveCurrentRoomView() {
+  await removeActivePlayerSession();
+
   clearRoomListeners();
 
   currentRoomCode = null;
@@ -608,10 +589,14 @@ function leaveCurrentRoomView() {
   currentIsDM = false;
   currentMapId = null;
   latestMapsSnapshot = null;
-  latestPlayersSnapshot = null;
+  latestActivePlayersSnapshot = null;
 
-  dmMapControls.classList.add("hidden");
+  setDmControlsVisible(false);
   mapUploadStatus.textContent = "";
+
+  if (battleMapUpdateStatus) {
+    battleMapUpdateStatus.textContent = "";
+  }
 
   showScreen("lobby");
 }
@@ -641,8 +626,8 @@ joinRoomButton.addEventListener("click", async function () {
   }
 });
 
-backToLobbyButton.addEventListener("click", function () {
-  leaveCurrentRoomView();
+backToLobbyButton.addEventListener("click", async function () {
+  await leaveCurrentRoomView();
 });
 
 copyRoomCodeButton.addEventListener("click", async function () {
@@ -675,79 +660,70 @@ saveThisRoomButton.addEventListener("click", async function () {
 
 
 // =====================================================
-// APP SECTION 9 — HEARTBEAT PRESENCE / PLAYERS LIST
+// APP SECTION 9 — ACTIVE ROOM PLAYERS
+// This shows who is currently in the room.
+// No online/offline labels.
 // =====================================================
 
-async function updatePlayerHeartbeat() {
-  if (!currentUser || !currentRoomCode) {
+async function savePlayerHistory(roomCode, role) {
+  if (!currentUser) {
     return;
   }
 
-  const playerRef = doc(db, "rooms", currentRoomCode, "players", currentUser.uid);
+  const playerRef = doc(db, "rooms", roomCode, "players", currentUser.uid);
 
   await setDoc(playerRef, {
     uid: currentUser.uid,
     displayName: currentUser.displayName || "Unnamed",
-    role: currentIsDM ? "dm" : "player",
-    lastSeen: serverTimestamp()
+    role: role || "player",
+    joinedAt: serverTimestamp()
   }, { merge: true });
 }
 
-function startHeartbeat(roomCode) {
+async function setActivePlayerSession(roomCode, role) {
   if (!currentUser || !roomCode) {
     return;
   }
 
-  if (heartbeatTimer && heartbeatRoomCode === roomCode) {
+  const cleanCode = normalizeRoomCode(roomCode);
+
+  if (activeSessionRoomCode && activeSessionRoomCode !== cleanCode) {
+    await removeActivePlayerSession();
+  }
+
+  activeSessionRoomCode = cleanCode;
+
+  const activePlayerRef = doc(db, "rooms", cleanCode, "activePlayers", activeSessionId);
+
+  await setDoc(activePlayerRef, {
+    sessionId: activeSessionId,
+    uid: currentUser.uid,
+    displayName: currentUser.displayName || "Unnamed",
+    role: role || "player",
+    joinedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+async function removeActivePlayerSession() {
+  if (!activeSessionRoomCode) {
     return;
   }
 
-  stopHeartbeat();
-
-  heartbeatRoomCode = roomCode;
-
-  updatePlayerHeartbeat().catch(function (error) {
-    console.warn("Heartbeat failed:", error);
-  });
-
-  heartbeatTimer = setInterval(function () {
-    updatePlayerHeartbeat().catch(function (error) {
-      console.warn("Heartbeat failed:", error);
-    });
-  }, HEARTBEAT_EVERY_MS);
-}
-
-function stopHeartbeat() {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
+  try {
+    const activePlayerRef = doc(db, "rooms", activeSessionRoomCode, "activePlayers", activeSessionId);
+    await deleteDoc(activePlayerRef);
+  } catch (error) {
+    console.warn("Could not remove active player session:", error);
   }
 
-  heartbeatRoomCode = null;
-}
-
-function startPlayersRerenderTimer() {
-  stopPlayersRerenderTimer();
-
-  playersRerenderTimer = setInterval(function () {
-    if (latestPlayersSnapshot) {
-      renderPlayers(latestPlayersSnapshot);
-    }
-  }, PLAYER_LIST_RERENDER_MS);
-}
-
-function stopPlayersRerenderTimer() {
-  if (playersRerenderTimer) {
-    clearInterval(playersRerenderTimer);
-    playersRerenderTimer = null;
-  }
+  activeSessionRoomCode = null;
 }
 
 function listenToPlayers(roomCode) {
-  const playersRef = collection(db, "rooms", roomCode, "players");
+  const activePlayersRef = collection(db, "rooms", roomCode, "activePlayers");
 
-  stopListeningToPlayers = onSnapshot(playersRef, function (playersSnap) {
-    latestPlayersSnapshot = playersSnap;
+  stopListeningToPlayers = onSnapshot(activePlayersRef, function (playersSnap) {
+    latestActivePlayersSnapshot = playersSnap;
     renderPlayers(playersSnap);
   }, function (error) {
     playersList.textContent = "Could not load players: " + error.message;
@@ -758,15 +734,37 @@ function renderPlayers(playersSnap) {
   playersList.innerHTML = "";
 
   if (playersSnap.empty) {
-    playersList.textContent = "No players yet.";
+    playersList.textContent = "No players in the room right now.";
     return;
   }
 
-  const players = [];
+  const playersByUid = new Map();
 
   playersSnap.forEach(function (playerDoc) {
-    players.push(playerDoc.data());
+    const player = playerDoc.data();
+
+    if (!player.uid) {
+      return;
+    }
+
+    const existingPlayer = playersByUid.get(player.uid);
+
+    if (!existingPlayer) {
+      playersByUid.set(player.uid, player);
+      return;
+    }
+
+    if (player.role === "dm") {
+      playersByUid.set(player.uid, player);
+    }
   });
+
+  const players = Array.from(playersByUid.values());
+
+  if (players.length === 0) {
+    playersList.textContent = "No players in the room right now.";
+    return;
+  }
 
   players.sort(function (a, b) {
     if (a.role === "dm" && b.role !== "dm") {
@@ -781,30 +779,21 @@ function renderPlayers(playersSnap) {
   });
 
   players.forEach(function (player) {
-    const online = isPlayerOnline(player);
-    const lastSeenMillis = getTimestampMillis(player.lastSeen);
-
     const div = document.createElement("div");
     div.className = "row";
 
     const title = document.createElement("div");
     title.className = "row-title";
-    title.textContent = (player.displayName || "Unnamed") + " — " + (player.role || "player").toUpperCase();
 
-    const status = document.createElement("div");
-    status.className = "small";
+    let label = (player.displayName || "Unnamed") + " — " + (player.role || "player").toUpperCase();
 
-    if (online) {
-      status.textContent = "🟢 Online";
-    } else if (lastSeenMillis) {
-      status.textContent = "⚫ Offline — last seen " + new Date(lastSeenMillis).toLocaleTimeString();
-    } else {
-      status.textContent = "⚫ Offline — no heartbeat yet";
+    if (currentUser && player.uid === currentUser.uid) {
+      label += " — YOU";
     }
 
-    div.appendChild(title);
-    div.appendChild(status);
+    title.textContent = label;
 
+    div.appendChild(title);
     playersList.appendChild(div);
   });
 }
@@ -939,6 +928,7 @@ async function setCurrentRoomMap(mapData) {
       currentMapName: null,
       currentMapId: null,
       currentMapPublicId: null,
+      currentMapSavedToLibrary: false,
       updatedAt: serverTimestamp()
     });
 
@@ -950,12 +940,14 @@ async function setCurrentRoomMap(mapData) {
       id: mapData.id || null,
       name: mapData.name || "Unnamed Map",
       url: mapData.url,
-      publicId: mapData.publicId || null
+      publicId: mapData.publicId || null,
+      savedToLibrary: mapData.savedToLibrary || false
     },
     currentMapUrl: mapData.url,
     currentMapName: mapData.name || "Unnamed Map",
     currentMapId: mapData.id || null,
     currentMapPublicId: mapData.publicId || null,
+    currentMapSavedToLibrary: mapData.savedToLibrary || false,
     updatedAt: serverTimestamp()
   });
 }
@@ -981,7 +973,8 @@ async function useSavedMap(mapId) {
       id: mapId,
       name: map.name || "Unnamed Map",
       url: map.url,
-      publicId: map.publicId || null
+      publicId: map.publicId || null,
+      savedToLibrary: true
     });
 
     mapUploadStatus.textContent = "Map switched.";
@@ -1040,8 +1033,14 @@ function showSharedMap(currentMap) {
 
   currentMapId = currentMap.id || null;
 
-  currentMapNameText.textContent = currentMap.name || "Unnamed Map";
-  battleMapNameText.textContent = currentMap.name || "Unnamed Map";
+  let mapLabel = currentMap.name || "Unnamed Map";
+
+  if (!currentMap.savedToLibrary) {
+    mapLabel += " (Current Only)";
+  }
+
+  currentMapNameText.textContent = mapLabel;
+  battleMapNameText.textContent = mapLabel;
 
   roomMapPreviewImage.src = currentMap.url;
   roomMapPreviewImage.style.display = "block";
@@ -1073,7 +1072,7 @@ uploadRoomMapButton.addEventListener("click", async function () {
       return;
     }
 
-    mapUploadStatus.textContent = "Uploading map...";
+    mapUploadStatus.textContent = "Uploading map and saving it...";
     uploadRoomMapButton.disabled = true;
 
     const cloudinaryResult = await uploadMapToCloudinary(file);
@@ -1090,7 +1089,8 @@ uploadRoomMapButton.addEventListener("click", async function () {
       id: mapId,
       name: newMap.name,
       url: newMap.url,
-      publicId: newMap.publicId
+      publicId: newMap.publicId,
+      savedToLibrary: true
     });
 
     mapUploadStatus.textContent = "Map uploaded, saved to this room, and shared.";
@@ -1142,7 +1142,7 @@ saveCurrentMapButton.addEventListener("click", async function () {
       return;
     }
 
-    if (currentMap.id) {
+    if (currentMap.id && currentMap.savedToLibrary) {
       alert("This current map is already saved in the room library.");
       return;
     }
@@ -1157,7 +1157,8 @@ saveCurrentMapButton.addEventListener("click", async function () {
       id: mapId,
       name: currentMap.name || "Recovered Current Map",
       url: currentMap.url,
-      publicId: currentMap.publicId || null
+      publicId: currentMap.publicId || null,
+      savedToLibrary: true
     });
 
     mapUploadStatus.textContent = "Current map saved to room library.";
@@ -1165,6 +1166,50 @@ saveCurrentMapButton.addEventListener("click", async function () {
     alert(error.message);
   }
 });
+
+if (updateBattleMapButton) {
+  updateBattleMapButton.addEventListener("click", async function () {
+    try {
+      if (!currentRoomCode) {
+        alert("Create or join a room first.");
+        return;
+      }
+
+      if (!currentIsDM) {
+        alert("Only the DM can update the battle map.");
+        return;
+      }
+
+      const file = battleMapUploadInput.files[0];
+
+      if (!file) {
+        alert("Choose the new battle map image first.");
+        return;
+      }
+
+      battleMapUpdateStatus.textContent = "Uploading current-only battle map...";
+      updateBattleMapButton.disabled = true;
+
+      const cloudinaryResult = await uploadMapToCloudinary(file);
+
+      await setCurrentRoomMap({
+        id: null,
+        name: file.name,
+        url: cloudinaryResult.secure_url,
+        publicId: cloudinaryResult.public_id,
+        savedToLibrary: false
+      });
+
+      battleMapUpdateStatus.textContent = "Battle map updated for everyone. Not saved to Saved Maps.";
+      battleMapUploadInput.value = "";
+    } catch (error) {
+      battleMapUpdateStatus.textContent = "Battle map update failed.";
+      alert(error.message);
+    } finally {
+      updateBattleMapButton.disabled = false;
+    }
+  });
+}
 
 
 // =====================================================
@@ -1219,8 +1264,8 @@ zoomInButton.addEventListener("click", function () {
   applyBattleZoom();
 });
 
-window.addEventListener("beforeunload", function () {
-  stopHeartbeat();
+window.addEventListener("pagehide", function () {
+  removeActivePlayerSession();
 });
 
 
@@ -1232,7 +1277,7 @@ onAuthStateChanged(auth, async function (user) {
   currentUser = user;
 
   if (!user) {
-    showLoggedOut();
+    await showLoggedOut();
     return;
   }
 
