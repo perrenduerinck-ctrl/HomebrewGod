@@ -1093,6 +1093,14 @@ uploadRoomMapButton.addEventListener("click", async function () {
       savedToLibrary: true
     });
 
+    showSharedMap({
+      id: mapId,
+      name: newMap.name,
+      url: newMap.url,
+      publicId: newMap.publicId,
+      savedToLibrary: true
+    });
+
     mapUploadStatus.textContent = "Map uploaded, saved to this room, and shared.";
     roomMapUploadInput.value = "";
   } catch (error) {
@@ -1121,6 +1129,7 @@ removeRoomMapButton.addEventListener("click", async function () {
     }
 
     await setCurrentRoomMap(null);
+    showSharedMap(null);
 
     mapUploadStatus.textContent = "Current map removed.";
   } catch (error) {
@@ -1161,6 +1170,14 @@ saveCurrentMapButton.addEventListener("click", async function () {
       savedToLibrary: true
     });
 
+    showSharedMap({
+      id: mapId,
+      name: currentMap.name || "Recovered Current Map",
+      url: currentMap.url,
+      publicId: currentMap.publicId || null,
+      savedToLibrary: true
+    });
+
     mapUploadStatus.textContent = "Current map saved to room library.";
   } catch (error) {
     alert(error.message);
@@ -1192,13 +1209,27 @@ if (updateBattleMapButton) {
 
       const cloudinaryResult = await uploadMapToCloudinary(file);
 
-      await setCurrentRoomMap({
+      const currentOnlyMap = {
         id: null,
         name: file.name,
         url: cloudinaryResult.secure_url,
         publicId: cloudinaryResult.public_id,
         savedToLibrary: false
-      });
+      };
+
+      await setCurrentRoomMap(currentOnlyMap);
+
+      currentRoomData = {
+        ...(currentRoomData || {}),
+        currentMap: currentOnlyMap,
+        currentMapUrl: currentOnlyMap.url,
+        currentMapName: currentOnlyMap.name,
+        currentMapId: null,
+        currentMapPublicId: currentOnlyMap.publicId,
+        currentMapSavedToLibrary: false
+      };
+
+      showSharedMap(currentOnlyMap);
 
       battleMapUpdateStatus.textContent = "Battle map updated for everyone. Not saved to Saved Maps.";
       battleMapUploadInput.value = "";
