@@ -145,7 +145,7 @@ let heartbeatRoomCode = null;
 let playersRerenderTimer = null;
 
 const HEARTBEAT_EVERY_MS = 5000;
-const ONLINE_TIMEOUT_MS = 30000;
+const ONLINE_TIMEOUT_MS = 20000;
 const PLAYER_LIST_RERENDER_MS = 5000;
 
 const startupParams = new URLSearchParams(window.location.search);
@@ -227,16 +227,16 @@ function getTimestampMillis(value) {
     return 0;
   }
 
-  if (typeof value === "number") {
-    return value;
-  }
-
   if (typeof value.toMillis === "function") {
     return value.toMillis();
   }
 
   if (typeof value.seconds === "number") {
     return value.seconds * 1000;
+  }
+
+  if (typeof value === "number") {
+    return value;
   }
 
   return 0;
@@ -484,7 +484,7 @@ async function createRoom() {
     displayName: currentUser.displayName || "Unnamed",
     role: "dm",
     joinedAt: serverTimestamp(),
-    lastSeen: Date.now()
+    lastSeen: serverTimestamp()
   }, { merge: true });
 
   await saveRoomToMyRooms(roomCode, roomName, "dm");
@@ -525,7 +525,7 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
     displayName: currentUser.displayName || "Unnamed",
     role: finalRole,
     joinedAt: serverTimestamp(),
-    lastSeen: Date.now()
+    lastSeen: serverTimestamp()
   }, { merge: true });
 
   await saveRoomToMyRooms(cleanCode, roomData.roomName || "Unnamed Room", finalRole);
@@ -689,7 +689,7 @@ async function updatePlayerHeartbeat() {
     uid: currentUser.uid,
     displayName: currentUser.displayName || "Unnamed",
     role: currentIsDM ? "dm" : "player",
-    lastSeen: Date.now()
+    lastSeen: serverTimestamp()
   }, { merge: true });
 }
 
@@ -765,7 +765,7 @@ function renderPlayers(playersSnap) {
   const players = [];
 
   playersSnap.forEach(function (playerDoc) {
-    players.push(playerDoc.data({ serverTimestamps: "estimate" }));
+    players.push(playerDoc.data());
   });
 
   players.sort(function (a, b) {
@@ -789,12 +789,7 @@ function renderPlayers(playersSnap) {
 
     const title = document.createElement("div");
     title.className = "row-title";
-
-    if (player.uid === currentUser.uid) {
-      title.textContent = (player.displayName || "Unnamed") + " — " + (player.role || "player").toUpperCase() + " — YOU";
-    } else {
-      title.textContent = (player.displayName || "Unnamed") + " — " + (player.role || "player").toUpperCase();
-    }
+    title.textContent = (player.displayName || "Unnamed") + " — " + (player.role || "player").toUpperCase();
 
     const status = document.createElement("div");
     status.className = "small";
