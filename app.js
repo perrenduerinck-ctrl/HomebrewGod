@@ -1204,26 +1204,60 @@ if (E.updateBattleMapButton) {
 // APP SECTION 12 — PUZZLE MAP SYSTEM V1
 // =====================================================
 
-ensurePuzzleMapPolishStyles();
+ensureBattleManagerPolishStyles();
+ensureBattleManagerPanel();
 ensurePuzzleDragListeners();
 
 let activePuzzleDrag = null;
 
-function ensurePuzzleMapPolishStyles() {
-  if (document.getElementById("puzzleMapPolishStyles")) {
+function ensureBattleManagerPolishStyles() {
+  if (document.getElementById("battleManagerPolishStyles")) {
     return;
   }
 
   const style = document.createElement("style");
-  style.id = "puzzleMapPolishStyles";
+  style.id = "battleManagerPolishStyles";
 
   style.textContent = `
+    #battleManagerBar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 8px 10px;
+      border: 1px solid #303040;
+      border-radius: 12px;
+      background: rgba(10, 10, 16, 0.72);
+    }
+
+    #battleManagerBar strong {
+      color: #ff6868;
+      margin-right: 6px;
+      font-size: 15px;
+    }
+
+    #battleManagerBar button {
+      width: auto !important;
+      margin: 0 !important;
+      padding: 7px 11px !important;
+      font-size: 14px !important;
+    }
+
+    #battleManagerStatus {
+      color: #b8b8c9;
+      font-size: 14px;
+      margin-left: 4px;
+    }
+
+    #battleDmMapControls,
     #puzzleMapControls {
       max-width: none !important;
       padding: 9px 10px !important;
       margin-top: 9px !important;
     }
 
+    #battleDmMapControls h2,
     #puzzleMapControls h2 {
       display: inline-block !important;
       font-size: 18px !important;
@@ -1231,10 +1265,12 @@ function ensurePuzzleMapPolishStyles() {
       vertical-align: middle !important;
     }
 
+    #battleDmMapControls .small,
     #puzzleMapControls .small {
       display: none !important;
     }
 
+    #battleDmMapControls input[type="file"],
     #puzzleMapControls input[type="file"] {
       display: inline-block !important;
       width: 260px !important;
@@ -1245,6 +1281,7 @@ function ensurePuzzleMapPolishStyles() {
       vertical-align: middle !important;
     }
 
+    #battleDmMapControls button,
     #puzzleMapControls button {
       display: inline-block !important;
       width: auto !important;
@@ -1254,6 +1291,7 @@ function ensurePuzzleMapPolishStyles() {
       vertical-align: middle !important;
     }
 
+    #battleMapUpdateStatus,
     #puzzleMapStatus {
       display: inline-block !important;
       margin: 0 0 0 4px !important;
@@ -1264,7 +1302,7 @@ function ensurePuzzleMapPolishStyles() {
     #puzzleMapBoard {
       gap: 0 !important;
       padding: 0 !important;
-      min-height: 520px !important;
+      min-height: 560px !important;
       background: #050508 !important;
       border-radius: 14px !important;
       overflow: auto !important;
@@ -1292,7 +1330,7 @@ function ensurePuzzleMapPolishStyles() {
     }
 
     .puzzle-tile-actions {
-      opacity: 0.25;
+      opacity: 0.18;
       transition: opacity 0.15s ease;
     }
 
@@ -1304,9 +1342,23 @@ function ensurePuzzleMapPolishStyles() {
       opacity: 0.82 !important;
       z-index: 9999 !important;
       box-shadow: 0 0 30px rgba(255,255,255,0.25) !important;
+      cursor: grabbing !important;
     }
 
     @media (max-width: 900px) {
+      #battleManagerBar,
+      #battleDmMapControls,
+      #puzzleMapControls {
+        display: block !important;
+      }
+
+      #battleManagerBar strong,
+      #battleManagerBar button,
+      #battleManagerStatus,
+      #battleDmMapControls h2,
+      #battleDmMapControls input[type="file"],
+      #battleDmMapControls button,
+      #battleMapUpdateStatus,
       #puzzleMapControls h2,
       #puzzleMapControls input[type="file"],
       #puzzleMapControls button,
@@ -1319,6 +1371,129 @@ function ensurePuzzleMapPolishStyles() {
   `;
 
   document.head.appendChild(style);
+}
+
+function ensureBattleManagerPanel() {
+  if (document.getElementById("battleManagerBar")) {
+    return;
+  }
+
+  const battleTopBar = document.getElementById("battleTopBar");
+
+  if (!battleTopBar) {
+    return;
+  }
+
+  const managerBar = document.createElement("div");
+  managerBar.id = "battleManagerBar";
+
+  const title = document.createElement("strong");
+  title.textContent = "Battle Manager";
+
+  const toggleQuickButton = document.createElement("button");
+  toggleQuickButton.id = "toggleQuickMapEditorButton";
+  toggleQuickButton.textContent = "Hide Quick Map";
+
+  const togglePuzzleButton = document.createElement("button");
+  togglePuzzleButton.id = "togglePuzzleEditorButton";
+  togglePuzzleButton.textContent = "Hide Puzzle Builder";
+
+  const toggleAllButton = document.createElement("button");
+  toggleAllButton.id = "toggleAllEditorsButton";
+  toggleAllButton.textContent = "Hide All Editors";
+
+  const status = document.createElement("span");
+  status.id = "battleManagerStatus";
+  status.textContent = "Editors open.";
+
+  managerBar.appendChild(title);
+  managerBar.appendChild(toggleQuickButton);
+  managerBar.appendChild(togglePuzzleButton);
+  managerBar.appendChild(toggleAllButton);
+  managerBar.appendChild(status);
+
+  const battleDm = E.battleDmMapControls;
+  const puzzle = E.puzzleMapControls;
+
+  if (battleDm && battleDm.parentNode === battleTopBar) {
+    battleTopBar.insertBefore(managerBar, battleDm);
+  } else {
+    battleTopBar.appendChild(managerBar);
+  }
+
+  toggleQuickButton.addEventListener("click", function () {
+    if (!battleDm) {
+      return;
+    }
+
+    battleDm.classList.toggle("hidden");
+    toggleQuickButton.textContent = battleDm.classList.contains("hidden") ? "Show Quick Map" : "Hide Quick Map";
+    updateBattleManagerStatus();
+  });
+
+  togglePuzzleButton.addEventListener("click", function () {
+    if (!puzzle) {
+      return;
+    }
+
+    puzzle.classList.toggle("hidden");
+    togglePuzzleButton.textContent = puzzle.classList.contains("hidden") ? "Show Puzzle Builder" : "Hide Puzzle Builder";
+    updateBattleManagerStatus();
+  });
+
+  toggleAllButton.addEventListener("click", function () {
+    const bothVisible =
+      battleDm && puzzle &&
+      !battleDm.classList.contains("hidden") &&
+      !puzzle.classList.contains("hidden");
+
+    if (battleDm) {
+      battleDm.classList.toggle("hidden", bothVisible);
+    }
+
+    if (puzzle) {
+      puzzle.classList.toggle("hidden", bothVisible);
+    }
+
+    toggleQuickButton.textContent = battleDm && battleDm.classList.contains("hidden") ? "Show Quick Map" : "Hide Quick Map";
+    togglePuzzleButton.textContent = puzzle && puzzle.classList.contains("hidden") ? "Show Puzzle Builder" : "Hide Puzzle Builder";
+    toggleAllButton.textContent = bothVisible ? "Show All Editors" : "Hide All Editors";
+
+    updateBattleManagerStatus();
+  });
+}
+
+function updateBattleManagerStatus() {
+  const status = document.getElementById("battleManagerStatus");
+  const toggleAllButton = document.getElementById("toggleAllEditorsButton");
+
+  if (!status) {
+    return;
+  }
+
+  const quickHidden = E.battleDmMapControls ? E.battleDmMapControls.classList.contains("hidden") : true;
+  const puzzleHidden = E.puzzleMapControls ? E.puzzleMapControls.classList.contains("hidden") : true;
+
+  if (quickHidden && puzzleHidden) {
+    status.textContent = "Editors hidden. More room for the map.";
+    if (toggleAllButton) {
+      toggleAllButton.textContent = "Show All Editors";
+    }
+    return;
+  }
+
+  if (!quickHidden && !puzzleHidden) {
+    status.textContent = "Editors open.";
+    if (toggleAllButton) {
+      toggleAllButton.textContent = "Hide All Editors";
+    }
+    return;
+  }
+
+  status.textContent = "One editor open.";
+  if (toggleAllButton) {
+    toggleAllButton.textContent = "Hide All Editors";
+  }
 }
 
 function ensurePuzzleDragListeners() {
@@ -1880,7 +2055,7 @@ function renderPuzzleBoard(room) {
     return;
   }
 
-  ensurePuzzleMapPolishStyles();
+  ensureBattleManagerPolishStyles();
 
   const tiles = getPuzzleTiles(room || {});
   const activeTile = getActivePuzzleTile(room || {});
@@ -2047,7 +2222,6 @@ if (E.centerPuzzleBoardButton) {
     centerPuzzleBoard();
   });
 }
-
 
 // =====================================================
 // APP SECTION 13 — BATTLE MAP SCREEN / NEW TAB
