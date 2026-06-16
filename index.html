@@ -19,7 +19,6 @@
   <main id="authScreen" class="screen">
     <h1>Homebrew God</h1>
     <p>Free D&D room tool. No D&D Beyond nonsense.</p>
-    <p class="status"><b>INDEX VERSION TEST:</b> Battle Map quick update HTML is installed.</p>
 
     <section class="box">
       <h2>Start</h2>
@@ -50,7 +49,7 @@
   ====================================================== -->
   <main id="lobbyScreen" class="screen hidden">
     <h1>Homebrew God</h1>
-    <p class="status"><b>INDEX VERSION TEST:</b> Battle Map quick update HTML is installed.</p>
+    <p>Your table. Your maps. Your chaos.</p>
 
     <section class="box">
       <h2>Lobby</h2>
@@ -87,7 +86,6 @@
   ====================================================== -->
   <main id="roomDashboardScreen" class="screen hidden">
     <h1>Room Dashboard</h1>
-    <p class="status"><b>INDEX VERSION TEST:</b> Battle Map quick update HTML is installed.</p>
 
     <section class="box">
       <button id="backToLobbyButton">Back To Lobby</button>
@@ -112,11 +110,11 @@
     </section>
 
     <section id="dmMapControls" class="box hidden">
-      <h2>DM Map Controls</h2>
+      <h2>DM Map Library</h2>
 
       <p class="small">
-        This upload saves the map into the room's Saved Maps list.
-        Use this for maps you actually want to keep.
+        Use this area for maps you want to keep in this room.
+        For quick AI edits during combat, use the Battle Map quick update instead.
       </p>
 
       <input id="roomMapUploadInput" type="file" accept="image/*">
@@ -149,13 +147,15 @@
   ====================================================== -->
   <main id="battleMapScreen" class="screen hidden">
     <section id="battleTopBar">
-      <button id="backToRoomButton">Back To Room Dashboard</button>
+      <div id="battleTopActions">
+        <button id="backToRoomButton">Back To Room Dashboard</button>
 
-      <button id="zoomOutButton">Zoom Out</button>
-      <button id="zoomResetButton">Reset Zoom</button>
-      <button id="zoomInButton">Zoom In</button>
+        <button id="zoomOutButton">Zoom Out</button>
+        <button id="zoomResetButton">Reset Zoom</button>
+        <button id="zoomInButton">Zoom In</button>
+      </div>
 
-      <p>
+      <p id="battleInfoLine">
         <b>Room:</b> <span id="battleRoomNameText"></span>
         |
         <b>Code:</b> <span id="battleRoomCodeText"></span>
@@ -165,31 +165,26 @@
         <b>Zoom:</b> <span id="battleZoomText">100%</span>
       </p>
 
-      <p class="status">
-        <b>INDEX VERSION TEST:</b> If you see this, the new index.html is live.
-      </p>
-
       <!-- =====================================================
            DM QUICK MAP UPDATE
-           Forced visible on purpose.
-           This proves the HTML loaded before we touch app.js again.
+           This is for live map changes during the session.
+           Example: Crimbo builds a cannon, AI edits the map,
+           DM uploads the new image here.
       ====================================================== -->
       <div id="battleDmMapControls" class="box">
         <h2>DM Quick Map Update</h2>
 
         <p class="small">
-          Upload a new AI-edited version of the battle map here.
-          Example: Crimbo builds a cannon, you make a new map image, then upload it here.
-          This is meant to update the current map without adding it to Saved Maps.
+          Use this when the scene changes mid-session.
+          Upload the newest AI-edited map here and everyone sees it live.
+          This does not add the image to Saved Maps.
         </p>
 
         <input id="battleMapUploadInput" type="file" accept="image/*">
 
         <button id="updateBattleMapButton">Update Current Map Without Saving</button>
 
-        <p id="battleMapUpdateStatus" class="status">
-          Waiting for app.js to handle this button.
-        </p>
+        <p id="battleMapUpdateStatus" class="status"></p>
       </div>
     </section>
 
