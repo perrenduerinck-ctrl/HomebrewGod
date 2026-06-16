@@ -167,9 +167,7 @@
 
       <!-- =====================================================
            DM QUICK MAP UPDATE
-           This is for live map changes during the session.
-           Example: Crimbo builds a cannon, AI edits the map,
-           DM uploads the new image here.
+           Updates the current single battle map without saving it.
       ====================================================== -->
       <div id="battleDmMapControls" class="box">
         <h2>DM Quick Map Update</h2>
@@ -186,11 +184,53 @@
 
         <p id="battleMapUpdateStatus" class="status"></p>
       </div>
+
+      <!-- =====================================================
+           PUZZLE MAP BUILDER
+           This is the next map system.
+           App.js will make these buttons work next.
+      ====================================================== -->
+      <div id="puzzleMapControls" class="box">
+        <h2>Puzzle Map Builder</h2>
+
+        <p class="small">
+          Build the world like map pieces. Upload a new AI-generated tile,
+          then place it north, south, east, or west of the current tile.
+        </p>
+
+        <input id="puzzleTileUploadInput" type="file" accept="image/*">
+
+        <button id="addTileNorthButton">Add North</button>
+        <button id="addTileSouthButton">Add South</button>
+        <button id="addTileEastButton">Add East</button>
+        <button id="addTileWestButton">Add West</button>
+
+        <button id="centerPuzzleBoardButton">Center Board</button>
+
+        <p id="puzzleMapStatus" class="status">
+          Puzzle map system ready for app.js.
+        </p>
+      </div>
     </section>
 
+    <!-- =====================================================
+         SINGLE MAP VIEWER
+         This is the current working system.
+    ====================================================== -->
     <section id="battleMapViewer">
       <p id="noBattleMapText">No battle map loaded yet.</p>
       <img id="battleMapImage" alt="Battle map">
+    </section>
+
+    <!-- =====================================================
+         PUZZLE MAP BOARD
+         This starts hidden later in app.js if needed.
+         For now, it is here so we can wire it up next.
+    ====================================================== -->
+    <section id="puzzleMapBoard" class="map-board hidden">
+      <div id="puzzleMapEmptyText" class="status">
+        No puzzle tiles yet. Use the Puzzle Map Builder to add tiles.
+      </div>
     </section>
   </main>
 
