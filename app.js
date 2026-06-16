@@ -1205,6 +1205,9 @@ if (E.updateBattleMapButton) {
 // =====================================================
 
 ensurePuzzleMapPolishStyles();
+ensurePuzzleDragListeners();
+
+let activePuzzleDrag = null;
 
 function ensurePuzzleMapPolishStyles() {
   if (document.getElementById("puzzleMapPolishStyles")) {
@@ -1265,6 +1268,7 @@ function ensurePuzzleMapPolishStyles() {
       background: #050508 !important;
       border-radius: 14px !important;
       overflow: auto !important;
+      touch-action: none !important;
     }
 
     #puzzleMapBoard .map-tile {
@@ -1272,6 +1276,7 @@ function ensurePuzzleMapPolishStyles() {
       border-radius: 0 !important;
       box-shadow: none !important;
       background: #000 !important;
+      user-select: none !important;
     }
 
     #puzzleMapBoard .map-tile.locked {
@@ -1282,6 +1287,23 @@ function ensurePuzzleMapPolishStyles() {
     #puzzleMapBoard .map-tile img {
       border-radius: 0 !important;
       object-fit: cover !important;
+      pointer-events: none !important;
+      user-select: none !important;
+    }
+
+    .puzzle-tile-actions {
+      opacity: 0.25;
+      transition: opacity 0.15s ease;
+    }
+
+    .map-tile:hover .puzzle-tile-actions {
+      opacity: 0.9;
+    }
+
+    .puzzle-dragging {
+      opacity: 0.82 !important;
+      z-index: 9999 !important;
+      box-shadow: 0 0 30px rgba(255,255,255,0.25) !important;
     }
 
     @media (max-width: 900px) {
@@ -1297,6 +1319,18 @@ function ensurePuzzleMapPolishStyles() {
   `;
 
   document.head.appendChild(style);
+}
+
+function ensurePuzzleDragListeners() {
+  if (window.homebrewGodPuzzleDragListenersReady) {
+    return;
+  }
+
+  window.homebrewGodPuzzleDragListenersReady = true;
+
+  document.addEventListener("pointermove", handlePuzzleTilePointerMove);
+  document.addEventListener("pointerup", handlePuzzleTilePointerUp);
+  document.addEventListener("pointercancel", cancelPuzzleTileDrag);
 }
 
 function makeTileKey(x, y) {
@@ -1385,8 +1419,12 @@ function getTargetPositionForDirection(direction) {
   };
 }
 
-function tileExistsAtPosition(tiles, x, y) {
+function tileExistsAtPosition(tiles, x, y, ignoreTileKey = null) {
   return tiles.some(function (tile) {
+    if (ignoreTileKey && tile.key === ignoreTileKey) {
+      return false;
+    }
+
     return tile.x === x && tile.y === y;
   });
 }
@@ -1647,6 +1685,176 @@ async function deletePuzzleTile(tileKey) {
   }
 }
 
+async function movePuzzleTileTo(tileKey, newX, newY) {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      return;
+    }
+
+    const oldTiles = getPuzzleTiles(currentRoomData || {});
+    const oldTile = oldTiles.find(function (tile) {
+      return tile.key === tileKey;
+    });
+
+    if (!oldTile) {
+      text(E.puzzleMapStatus, "Tile not found.");
+      renderPuzzleBoard(currentRoomData);
+      return;
+    }
+
+    if (oldTile.x === newX && oldTile.y === newY) {
+      text(E.puzzleMapStatus, "Tile stayed locked in place.");
+      renderPuzzleBoard(currentRoomData);
+      return;
+    }
+
+    if (tileExistsAtPosition(oldTiles, newX, newY, tileKey)) {
+      text(E.puzzleMapStatus, "That grid spot is already taken. Tile snapped back.");
+      renderPuzzleBoard(currentRoomData);
+      return;
+    }
+
+    const newKey = makeTileKey(newX, newY);
+
+    const movedTile = {
+      ...oldTile,
+      key: newKey,
+      x: newX,
+      y: newY,
+      movedAtMillis: Date.now()
+    };
+
+    const newTiles = oldTiles.map(function (tile) {
+      if (tile.key === tileKey) {
+        return movedTile;
+      }
+
+      return tile;
+    });
+
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      puzzleTiles: newTiles,
+      activePuzzleTileKey: movedTile.key,
+      puzzleViewMode: "board",
+      currentMap: puzzleTileToCurrentMap(movedTile),
+      currentMapUrl: movedTile.url,
+      currentMapName: movedTile.name,
+      currentMapId: movedTile.key,
+      currentMapPublicId: movedTile.publicId || null,
+      currentMapSavedToLibrary: false
+    };
+
+    await updateRoomWithPuzzleTiles(newTiles, movedTile, "board");
+
+    showSharedMap(puzzleTileToCurrentMap(movedTile));
+    renderPuzzleBoard(currentRoomData);
+
+    text(E.puzzleMapStatus, "Tile moved and locked at " + movedTile.key + ".");
+  } catch (error) {
+    alert(error.message);
+    renderPuzzleBoard(currentRoomData || {});
+  }
+}
+
+function startPuzzleTileDrag(event, tile, tileDiv) {
+  if (!currentIsDM) {
+    return;
+  }
+
+  if (event.pointerType === "mouse" && event.button !== 0) {
+    return;
+  }
+
+  if (event.target.closest("button")) {
+    return;
+  }
+
+  event.preventDefault();
+
+  activePuzzleDrag = {
+    tileKey: tile.key,
+    originalX: tile.x,
+    originalY: tile.y,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    lastClientX: event.clientX,
+    lastClientY: event.clientY,
+    tileWidth: Math.max(1, tileDiv.offsetWidth),
+    tileHeight: Math.max(1, tileDiv.offsetHeight),
+    tileDiv: tileDiv,
+    moved: false
+  };
+
+  tileDiv.classList.add("puzzle-dragging");
+  tileDiv.style.transition = "none";
+
+  text(E.puzzleMapStatus, "Dragging tile. Release near a grid spot to lock it.");
+}
+
+function handlePuzzleTilePointerMove(event) {
+  if (!activePuzzleDrag) {
+    return;
+  }
+
+  const drag = activePuzzleDrag;
+
+  drag.lastClientX = event.clientX;
+  drag.lastClientY = event.clientY;
+
+  const dx = drag.lastClientX - drag.startClientX;
+  const dy = drag.lastClientY - drag.startClientY;
+
+  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+    drag.moved = true;
+  }
+
+  drag.tileDiv.style.transform = "translate(" + dx + "px, " + dy + "px)";
+}
+
+async function handlePuzzleTilePointerUp(event) {
+  if (!activePuzzleDrag) {
+    return;
+  }
+
+  const drag = activePuzzleDrag;
+  activePuzzleDrag = null;
+
+  const dx = event.clientX - drag.startClientX;
+  const dy = event.clientY - drag.startClientY;
+
+  const movedCellsX = Math.round(dx / drag.tileWidth);
+  const movedCellsY = Math.round(dy / drag.tileHeight);
+
+  const targetX = drag.originalX + movedCellsX;
+  const targetY = drag.originalY + movedCellsY;
+
+  drag.tileDiv.classList.remove("puzzle-dragging");
+  drag.tileDiv.style.transform = "";
+  drag.tileDiv.style.transition = "";
+
+  if (!drag.moved || (movedCellsX === 0 && movedCellsY === 0)) {
+    await focusPuzzleTile(drag.tileKey);
+    return;
+  }
+
+  await movePuzzleTileTo(drag.tileKey, targetX, targetY);
+}
+
+function cancelPuzzleTileDrag() {
+  if (!activePuzzleDrag) {
+    return;
+  }
+
+  activePuzzleDrag.tileDiv.classList.remove("puzzle-dragging");
+  activePuzzleDrag.tileDiv.style.transform = "";
+  activePuzzleDrag.tileDiv.style.transition = "";
+
+  activePuzzleDrag = null;
+
+  renderPuzzleBoard(currentRoomData || {});
+}
+
 function centerPuzzleBoardNow() {
   if (!E.puzzleMapBoard) {
     return;
@@ -1750,7 +1958,7 @@ function renderPuzzleBoard(room) {
       tileDiv.className = "map-tile";
       tileDiv.style.position = "relative";
       tileDiv.style.height = "280px";
-      tileDiv.style.cursor = currentIsDM ? "pointer" : "default";
+      tileDiv.style.cursor = currentIsDM ? "grab" : "default";
       tileDiv.style.border = "0";
       tileDiv.style.borderRadius = "0";
       tileDiv.style.overflow = "hidden";
@@ -1768,17 +1976,17 @@ function renderPuzzleBoard(room) {
       tileDiv.appendChild(img);
 
       if (currentIsDM) {
-        tileDiv.addEventListener("click", function () {
-          focusPuzzleTile(tile.key);
+        tileDiv.addEventListener("pointerdown", function (event) {
+          startPuzzleTileDrag(event, tile, tileDiv);
         });
 
         const actions = document.createElement("div");
+        actions.className = "puzzle-tile-actions";
         actions.style.position = "absolute";
         actions.style.top = "6px";
         actions.style.right = "6px";
         actions.style.display = "flex";
         actions.style.gap = "4px";
-        actions.style.opacity = "0.85";
 
         const focusButton = document.createElement("button");
         focusButton.textContent = "Focus";
@@ -1839,6 +2047,7 @@ if (E.centerPuzzleBoardButton) {
     centerPuzzleBoard();
   });
 }
+
 
 // =====================================================
 // APP SECTION 13 — BATTLE MAP SCREEN / NEW TAB
