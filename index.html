@@ -142,62 +142,51 @@
     </section>
   </main>
 
-  <!-- =====================================================
-       INDEX SECTION 5 — BATTLE MAP SCREEN
-  ====================================================== -->
-  <main id="battleMapScreen" class="screen hidden">
-    <section id="battleTopBar">
-      <div id="battleTopActions">
-        <button id="backToRoomButton">Back To Room Dashboard</button>
+ <!-- =====================================================
+     INDEX SECTION 5 — BATTLE MAP SCREEN
+====================================================== -->
+<main id="battleMapScreen" class="screen hidden">
+  <section id="battleTopBar">
+    <div id="battleTopActions">
+      <button id="backToRoomButton">Back To Room Dashboard</button>
 
-        <button id="zoomOutButton">Zoom Out</button>
-        <button id="zoomResetButton">Reset Zoom</button>
-        <button id="zoomInButton">Zoom In</button>
-      </div>
+      <button id="zoomOutButton">Zoom Out</button>
+      <button id="zoomResetButton">Reset Zoom</button>
+      <button id="zoomInButton">Zoom In</button>
+    </div>
 
-      <p id="battleInfoLine">
-        <b>Room:</b> <span id="battleRoomNameText"></span>
-        |
-        <b>Code:</b> <span id="battleRoomCodeText"></span>
-        |
-        <b>Map:</b> <span id="battleMapNameText">None</span>
-        |
-        <b>Zoom:</b> <span id="battleZoomText">100%</span>
-      </p>
+    <p id="battleInfoLine">
+      <b>Room:</b> <span id="battleRoomNameText"></span>
+      |
+      <b>Code:</b> <span id="battleRoomCodeText"></span>
+      |
+      <b>Map:</b> <span id="battleMapNameText">None</span>
+      |
+      <b>Zoom:</b> <span id="battleZoomText">100%</span>
+    </p>
 
-      <!-- =====================================================
-           DM QUICK MAP UPDATE
-           Updates the current single battle map without saving it.
-      ====================================================== -->
-      <div id="battleDmMapControls" class="box">
-        <h2>DM Quick Map Update</h2>
+    <!-- =====================================================
+         COLLAPSIBLE DM QUICK MAP UPDATE
+    ====================================================== -->
+    <details id="battleDmMapControls" class="box battleEditorMenu">
+      <summary>DM Quick Map Update</summary>
 
-        <p class="small">
-          Use this when the scene changes mid-session.
-          Upload the newest AI-edited map here and everyone sees it live.
-          This does not add the image to Saved Maps.
-        </p>
-
+      <div class="battleEditorInner">
         <input id="battleMapUploadInput" type="file" accept="image/*">
 
         <button id="updateBattleMapButton">Update Current Map Without Saving</button>
 
         <p id="battleMapUpdateStatus" class="status"></p>
       </div>
+    </details>
 
-      <!-- =====================================================
-           PUZZLE MAP BUILDER
-           This is the next map system.
-           App.js will make these buttons work next.
-      ====================================================== -->
-      <div id="puzzleMapControls" class="box">
-        <h2>Puzzle Map Builder</h2>
+    <!-- =====================================================
+         COLLAPSIBLE PUZZLE MAP BUILDER
+    ====================================================== -->
+    <details id="puzzleMapControls" class="box battleEditorMenu">
+      <summary>Puzzle Map Builder</summary>
 
-        <p class="small">
-          Build the world like map pieces. Upload a new AI-generated tile,
-          then place it north, south, east, or west of the current tile.
-        </p>
-
+      <div class="battleEditorInner">
         <input id="puzzleTileUploadInput" type="file" accept="image/*">
 
         <button id="addTileNorthButton">Add North</button>
@@ -205,34 +194,32 @@
         <button id="addTileEastButton">Add East</button>
         <button id="addTileWestButton">Add West</button>
 
-        <button id="centerPuzzleBoardButton">Center Board</button>
+        <button id="centerPuzzleBoardButton">Center Board / Unfocus</button>
 
         <p id="puzzleMapStatus" class="status">
-          Puzzle map system ready for app.js.
+          Puzzle map system ready.
         </p>
       </div>
-    </section>
+    </details>
+  </section>
 
-    <!-- =====================================================
-         SINGLE MAP VIEWER
-         This is the current working system.
-    ====================================================== -->
-    <section id="battleMapViewer">
-      <p id="noBattleMapText">No battle map loaded yet.</p>
-      <img id="battleMapImage" alt="Battle map">
-    </section>
+  <!-- =====================================================
+       SINGLE MAP VIEWER
+  ====================================================== -->
+  <section id="battleMapViewer">
+    <p id="noBattleMapText">No battle map loaded yet.</p>
+    <img id="battleMapImage" alt="Battle map">
+  </section>
 
-    <!-- =====================================================
-         PUZZLE MAP BOARD
-         This starts hidden later in app.js if needed.
-         For now, it is here so we can wire it up next.
-    ====================================================== -->
-    <section id="puzzleMapBoard" class="map-board hidden">
-      <div id="puzzleMapEmptyText" class="status">
-        No puzzle tiles yet. Use the Puzzle Map Builder to add tiles.
-      </div>
-    </section>
-  </main>
+  <!-- =====================================================
+       PUZZLE MAP BOARD
+  ====================================================== -->
+  <section id="puzzleMapBoard" class="map-board hidden">
+    <div id="puzzleMapEmptyText" class="status">
+      No puzzle tiles yet. Open Puzzle Map Builder to add tiles.
+    </div>
+  </section>
+</main>
 
   <!-- =====================================================
        INDEX SECTION 6 — APP SCRIPT
