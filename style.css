@@ -9,10 +9,10 @@
 body {
   font-family: Arial, sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(255, 59, 59, 0.18), transparent 35%),
-    radial-gradient(circle at bottom right, rgba(120, 0, 255, 0.16), transparent 35%),
-    #0b0b0f;
-  color: white;
+    radial-gradient(circle at top left, rgba(255, 59, 59, 0.14), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(95, 36, 190, 0.16), transparent 36%),
+    #09090d;
+  color: #f5f5f7;
   margin: 0;
   padding: 20px;
   min-height: 100vh;
@@ -20,17 +20,20 @@ body {
 
 h1 {
   color: #ff3b3b;
-  margin-top: 0;
-  margin-bottom: 6px;
+  margin: 0 0 8px;
   font-size: 42px;
   letter-spacing: 1px;
-  text-shadow: 0 0 18px rgba(255, 59, 59, 0.35);
+  text-shadow: 0 0 18px rgba(255, 59, 59, 0.3);
 }
 
-h2,
+h2 {
+  margin: 0 0 10px;
+  font-size: 24px;
+}
+
 h3 {
-  margin-top: 0;
-  margin-bottom: 8px;
+  margin: 0 0 8px;
+  font-size: 18px;
 }
 
 p {
@@ -39,8 +42,8 @@ p {
 
 hr {
   border: none;
-  border-top: 1px solid #3b3b48;
-  margin: 18px 0;
+  border-top: 1px solid #363646;
+  margin: 16px 0;
 }
 
 input {
@@ -50,8 +53,8 @@ input {
   max-width: 100%;
   font-size: 16px;
   display: block;
-  background: #14141c;
-  color: white;
+  background: #13131b;
+  color: #ffffff;
   border: 1px solid #4b4b5d;
   border-radius: 8px;
   outline: none;
@@ -63,8 +66,8 @@ input:focus {
 }
 
 input[type="file"] {
-  background: #111118;
-  border: 1px dashed #66667a;
+  background: #101018;
+  border: 1px dashed #68687a;
 }
 
 button {
@@ -72,16 +75,21 @@ button {
   margin: 5px 5px 5px 0;
   cursor: pointer;
   font-size: 16px;
-  background: linear-gradient(180deg, #383845, #24242e);
-  color: white;
-  border: 1px solid #68687a;
+  background: linear-gradient(180deg, #363643, #24242e);
+  color: #ffffff;
+  border: 1px solid #666679;
   border-radius: 8px;
-  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.08s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 button:hover {
-  background: linear-gradient(180deg, #49495a, #30303c);
+  background: linear-gradient(180deg, #474758, #2f2f3b);
   border-color: #ff3b3b;
+  box-shadow: 0 0 14px rgba(255, 59, 59, 0.14);
 }
 
 button:active {
@@ -109,7 +117,7 @@ button:disabled {
 }
 
 .box {
-  background: rgba(24, 24, 34, 0.92);
+  background: rgba(22, 22, 31, 0.94);
   border: 1px solid #333344;
   border-radius: 14px;
   padding: 16px;
@@ -127,7 +135,7 @@ button:disabled {
 }
 
 .status {
-  color: #c9c9d8;
+  color: #c7c7d8;
   margin-top: 8px;
 }
 
@@ -171,9 +179,9 @@ button:disabled {
 }
 
 #dmMapControls {
-  border-color: rgba(255, 59, 59, 0.45);
+  border-color: rgba(255, 59, 59, 0.42);
   background:
-    linear-gradient(180deg, rgba(80, 20, 20, 0.35), rgba(24, 24, 34, 0.92));
+    linear-gradient(180deg, rgba(80, 20, 20, 0.26), rgba(22, 22, 31, 0.94));
 }
 
 
@@ -190,10 +198,10 @@ button:disabled {
   align-items: center;
   justify-content: center;
   background:
-    linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.03) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.03) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%),
     #15151d;
   background-size: 28px 28px;
   background-position: 0 0, 0 14px, 14px -14px, -14px 0;
@@ -223,10 +231,10 @@ button:disabled {
 }
 
 #battleTopBar {
-  background: rgba(18, 18, 26, 0.96);
+  background: rgba(18, 18, 26, 0.97);
   border: 1px solid #333344;
   border-radius: 14px;
-  padding: 12px;
+  padding: 10px;
   margin-bottom: 10px;
   position: sticky;
   top: 10px;
@@ -243,10 +251,11 @@ button:disabled {
 
 #battleTopActions button {
   margin: 0;
+  padding: 9px 13px;
 }
 
 #battleInfoLine {
-  margin: 10px 0 0;
+  margin: 9px 0 0;
   color: #d8d8e8;
   background: #101018;
   border: 1px solid #303040;
@@ -258,28 +267,71 @@ button:disabled {
   color: #ffffff;
 }
 
+
+/* =====================================================
+   STYLE SECTION 6 — COMPACT DM QUICK MAP UPDATE
+====================================================== */
+
 #battleDmMapControls {
   max-width: none;
-  margin-top: 12px;
+  margin-top: 9px;
+  padding: 9px 10px;
+  border-radius: 12px;
   background:
-    radial-gradient(circle at top left, rgba(255, 59, 59, 0.20), transparent 35%),
-    linear-gradient(180deg, rgba(38, 23, 30, 0.96), rgba(18, 18, 26, 0.96));
-  border-color: rgba(255, 59, 59, 0.55);
+    linear-gradient(180deg, rgba(70, 22, 28, 0.42), rgba(18, 18, 26, 0.96));
+  border-color: rgba(255, 59, 59, 0.42);
 }
 
 #battleDmMapControls h2 {
+  display: inline-block;
   color: #ff6868;
+  font-size: 18px;
+  margin: 0 12px 0 0;
+  vertical-align: middle;
+}
+
+#battleDmMapControls .small {
+  display: none;
+}
+
+#battleDmMapControls input[type="file"] {
+  display: inline-block;
+  width: 260px;
+  max-width: 100%;
+  margin: 0 8px 0 0;
+  padding: 7px 8px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+#battleDmMapControls button {
+  display: inline-block;
+  width: auto;
+  margin: 0 8px 0 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  vertical-align: middle;
 }
 
 #battleMapUpdateStatus {
-  min-height: 20px;
+  display: inline-block;
+  min-height: 0;
+  margin: 0;
+  font-size: 14px;
+  color: #b8b8c9;
+  vertical-align: middle;
 }
+
+
+/* =====================================================
+   STYLE SECTION 7 — BATTLE MAP VIEWER
+====================================================== */
 
 #battleMapViewer {
   border: 1px solid #444456;
   border-radius: 14px;
-  height: calc(100vh - 245px);
-  min-height: 420px;
+  height: calc(100vh - 185px);
+  min-height: 480px;
   background:
     radial-gradient(circle at center, rgba(255, 255, 255, 0.035), transparent 40%),
     #09090d;
@@ -288,7 +340,7 @@ button:disabled {
   align-items: center;
   justify-content: center;
   box-shadow:
-    inset 0 0 70px rgba(0, 0, 0, 0.8),
+    inset 0 0 70px rgba(0, 0, 0, 0.82),
     0 12px 35px rgba(0, 0, 0, 0.32);
 }
 
@@ -307,8 +359,7 @@ button:disabled {
 
 
 /* =====================================================
-   STYLE SECTION 6 — FUTURE PUZZLE MAP READY
-   These do nothing yet until we add the grid system.
+   STYLE SECTION 8 — FUTURE PUZZLE MAP READY
 ====================================================== */
 
 .map-board {
@@ -343,8 +394,32 @@ button:disabled {
 
 
 /* =====================================================
-   STYLE SECTION 7 — PHONE / SMALL SCREEN FIXES
+   STYLE SECTION 9 — PHONE / SMALL SCREEN FIXES
 ====================================================== */
+
+@media (max-width: 900px) {
+  #battleDmMapControls h2 {
+    display: block;
+    margin: 0 0 6px;
+  }
+
+  #battleDmMapControls input[type="file"] {
+    width: 100%;
+    display: block;
+    margin: 5px 0;
+  }
+
+  #battleDmMapControls button {
+    width: 100%;
+    display: block;
+    margin: 5px 0;
+  }
+
+  #battleMapUpdateStatus {
+    display: block;
+    margin-top: 5px;
+  }
+}
 
 @media (max-width: 700px) {
   body {
@@ -382,7 +457,7 @@ button:disabled {
   }
 
   #battleMapViewer {
-    height: calc(100vh - 360px);
+    height: calc(100vh - 335px);
     min-height: 300px;
   }
 
