@@ -3,7 +3,6 @@
 // =====================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-
 import {
   getAuth,
   onAuthStateChanged,
@@ -13,7 +12,6 @@ import {
   signOut,
   updateProfile
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-
 import {
   getFirestore,
   doc,
@@ -26,7 +24,6 @@ import {
   onSnapshot,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
 
 // =====================================================
 // APP SECTION 2 — FIREBASE / CLOUDINARY CONFIG
@@ -44,92 +41,91 @@ const firebaseConfig = {
 
 const cloudName = "dkezxpnl6";
 const uploadPreset = "homebrewgod_maps";
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-
 // =====================================================
-// APP SECTION 3 — PAGE ELEMENTS
+// APP SECTION 3 — PAGE ELEMENTS / STATE
 // =====================================================
 
-const authScreen = document.getElementById("authScreen");
-const lobbyScreen = document.getElementById("lobbyScreen");
-const roomDashboardScreen = document.getElementById("roomDashboardScreen");
-const battleMapScreen = document.getElementById("battleMapScreen");
+const $ = (id) => document.getElementById(id);
 
-const guestNameInput = document.getElementById("guestNameInput");
-const guestButton = document.getElementById("guestButton");
+const E = {
+  authScreen: $("authScreen"),
+  lobbyScreen: $("lobbyScreen"),
+  roomDashboardScreen: $("roomDashboardScreen"),
+  battleMapScreen: $("battleMapScreen"),
 
-const signupNameInput = document.getElementById("signupNameInput");
-const signupEmailInput = document.getElementById("signupEmailInput");
-const signupPasswordInput = document.getElementById("signupPasswordInput");
-const signupButton = document.getElementById("signupButton");
+  guestNameInput: $("guestNameInput"),
+  guestButton: $("guestButton"),
+  signupNameInput: $("signupNameInput"),
+  signupEmailInput: $("signupEmailInput"),
+  signupPasswordInput: $("signupPasswordInput"),
+  signupButton: $("signupButton"),
+  loginEmailInput: $("loginEmailInput"),
+  loginPasswordInput: $("loginPasswordInput"),
+  loginButton: $("loginButton"),
+  logoutButton: $("logoutButton"),
 
-const loginEmailInput = document.getElementById("loginEmailInput");
-const loginPasswordInput = document.getElementById("loginPasswordInput");
-const loginButton = document.getElementById("loginButton");
+  userNameText: $("userNameText"),
+  userTypeText: $("userTypeText"),
+  userIdText: $("userIdText"),
+  myRoomsList: $("myRoomsList"),
 
-const logoutButton = document.getElementById("logoutButton");
+  roomNameInput: $("roomNameInput"),
+  createRoomButton: $("createRoomButton"),
+  joinRoomCodeInput: $("joinRoomCodeInput"),
+  joinRoomButton: $("joinRoomButton"),
+  roomStatusText: $("roomStatusText"),
 
-const userNameText = document.getElementById("userNameText");
-const userTypeText = document.getElementById("userTypeText");
-const userIdText = document.getElementById("userIdText");
+  backToLobbyButton: $("backToLobbyButton"),
+  openBattleMapButton: $("openBattleMapButton"),
+  currentRoomNameText: $("currentRoomNameText"),
+  roomCodeText: $("roomCodeText"),
+  copyRoomCodeButton: $("copyRoomCodeButton"),
+  saveThisRoomButton: $("saveThisRoomButton"),
+  yourRoleText: $("yourRoleText"),
+  playersList: $("playersList"),
 
-const myRoomsList = document.getElementById("myRoomsList");
+  dmMapControls: $("dmMapControls"),
+  roomMapUploadInput: $("roomMapUploadInput"),
+  uploadRoomMapButton: $("uploadRoomMapButton"),
+  removeRoomMapButton: $("removeRoomMapButton"),
+  saveCurrentMapButton: $("saveCurrentMapButton"),
+  mapUploadStatus: $("mapUploadStatus"),
+  roomMapsList: $("roomMapsList"),
+  currentMapNameText: $("currentMapNameText"),
+  roomMapPreviewImage: $("roomMapPreviewImage"),
+  noRoomMapPreviewText: $("noRoomMapPreviewText"),
 
-const roomNameInput = document.getElementById("roomNameInput");
-const createRoomButton = document.getElementById("createRoomButton");
+  backToRoomButton: $("backToRoomButton"),
+  zoomOutButton: $("zoomOutButton"),
+  zoomResetButton: $("zoomResetButton"),
+  zoomInButton: $("zoomInButton"),
+  battleRoomNameText: $("battleRoomNameText"),
+  battleRoomCodeText: $("battleRoomCodeText"),
+  battleMapNameText: $("battleMapNameText"),
+  battleZoomText: $("battleZoomText"),
+  battleMapImage: $("battleMapImage"),
+  noBattleMapText: $("noBattleMapText"),
+  battleMapViewer: $("battleMapViewer"),
 
-const joinRoomCodeInput = document.getElementById("joinRoomCodeInput");
-const joinRoomButton = document.getElementById("joinRoomButton");
-const roomStatusText = document.getElementById("roomStatusText");
+  battleDmMapControls: $("battleDmMapControls"),
+  battleMapUploadInput: $("battleMapUploadInput"),
+  updateBattleMapButton: $("updateBattleMapButton"),
+  battleMapUpdateStatus: $("battleMapUpdateStatus"),
 
-const backToLobbyButton = document.getElementById("backToLobbyButton");
-const openBattleMapButton = document.getElementById("openBattleMapButton");
-
-const currentRoomNameText = document.getElementById("currentRoomNameText");
-const roomCodeText = document.getElementById("roomCodeText");
-const copyRoomCodeButton = document.getElementById("copyRoomCodeButton");
-const saveThisRoomButton = document.getElementById("saveThisRoomButton");
-const yourRoleText = document.getElementById("yourRoleText");
-const playersList = document.getElementById("playersList");
-
-const dmMapControls = document.getElementById("dmMapControls");
-const roomMapUploadInput = document.getElementById("roomMapUploadInput");
-const uploadRoomMapButton = document.getElementById("uploadRoomMapButton");
-const removeRoomMapButton = document.getElementById("removeRoomMapButton");
-const saveCurrentMapButton = document.getElementById("saveCurrentMapButton");
-const mapUploadStatus = document.getElementById("mapUploadStatus");
-
-const roomMapsList = document.getElementById("roomMapsList");
-
-const currentMapNameText = document.getElementById("currentMapNameText");
-const roomMapPreviewImage = document.getElementById("roomMapPreviewImage");
-const noRoomMapPreviewText = document.getElementById("noRoomMapPreviewText");
-
-const backToRoomButton = document.getElementById("backToRoomButton");
-const zoomOutButton = document.getElementById("zoomOutButton");
-const zoomResetButton = document.getElementById("zoomResetButton");
-const zoomInButton = document.getElementById("zoomInButton");
-
-const battleRoomNameText = document.getElementById("battleRoomNameText");
-const battleRoomCodeText = document.getElementById("battleRoomCodeText");
-const battleMapNameText = document.getElementById("battleMapNameText");
-const battleZoomText = document.getElementById("battleZoomText");
-const battleMapImage = document.getElementById("battleMapImage");
-const noBattleMapText = document.getElementById("noBattleMapText");
-
-const battleDmMapControls = document.getElementById("battleDmMapControls");
-const battleMapUploadInput = document.getElementById("battleMapUploadInput");
-const updateBattleMapButton = document.getElementById("updateBattleMapButton");
-const battleMapUpdateStatus = document.getElementById("battleMapUpdateStatus");
-
-
-// =====================================================
-// APP SECTION 4 — APP STATE
-// =====================================================
+  puzzleMapControls: $("puzzleMapControls"),
+  puzzleTileUploadInput: $("puzzleTileUploadInput"),
+  addTileNorthButton: $("addTileNorthButton"),
+  addTileSouthButton: $("addTileSouthButton"),
+  addTileEastButton: $("addTileEastButton"),
+  addTileWestButton: $("addTileWestButton"),
+  centerPuzzleBoardButton: $("centerPuzzleBoardButton"),
+  puzzleMapStatus: $("puzzleMapStatus"),
+  puzzleMapBoard: $("puzzleMapBoard")
+};
 
 let currentUser = null;
 let currentRoomCode = null;
@@ -139,12 +135,10 @@ let currentMapId = null;
 let latestMapsSnapshot = null;
 let latestActivePlayersSnapshot = null;
 let battleZoom = 1;
-
 let stopListeningToMyRooms = null;
 let stopListeningToRoom = null;
 let stopListeningToPlayers = null;
 let stopListeningToMaps = null;
-
 let activeSessionId = sessionStorage.getItem("homebrewGodSessionId");
 let activeSessionRoomCode = null;
 
@@ -158,32 +152,24 @@ const startupRoomCode = startupParams.get("room");
 const startupView = startupParams.get("view");
 let alreadyUsedStartupLink = false;
 
-
 // =====================================================
-// APP SECTION 5 — SCREEN / SMALL HELPERS
+// APP SECTION 4 — HELPERS
 // =====================================================
 
 function showScreen(screenName) {
-  authScreen.classList.add("hidden");
-  lobbyScreen.classList.add("hidden");
-  roomDashboardScreen.classList.add("hidden");
-  battleMapScreen.classList.add("hidden");
+  E.authScreen.classList.add("hidden");
+  E.lobbyScreen.classList.add("hidden");
+  E.roomDashboardScreen.classList.add("hidden");
+  E.battleMapScreen.classList.add("hidden");
 
-  if (screenName === "auth") {
-    authScreen.classList.remove("hidden");
-  }
+  if (screenName === "auth") E.authScreen.classList.remove("hidden");
+  if (screenName === "lobby") E.lobbyScreen.classList.remove("hidden");
+  if (screenName === "room") E.roomDashboardScreen.classList.remove("hidden");
+  if (screenName === "battle") E.battleMapScreen.classList.remove("hidden");
+}
 
-  if (screenName === "lobby") {
-    lobbyScreen.classList.remove("hidden");
-  }
-
-  if (screenName === "room") {
-    roomDashboardScreen.classList.remove("hidden");
-  }
-
-  if (screenName === "battle") {
-    battleMapScreen.classList.remove("hidden");
-  }
+function text(el, value) {
+  if (el) el.textContent = value;
 }
 
 function normalizeRoomCode(code) {
@@ -193,37 +179,23 @@ function normalizeRoomCode(code) {
 function makeRoomCode() {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   const numbers = "23456789";
+  let a = "";
+  let b = "";
 
-  let partOne = "";
-  let partTwo = "";
+  for (let i = 0; i < 3; i++) a += letters[Math.floor(Math.random() * letters.length)];
+  for (let i = 0; i < 3; i++) b += numbers[Math.floor(Math.random() * numbers.length)];
 
-  for (let i = 0; i < 3; i++) {
-    partOne += letters[Math.floor(Math.random() * letters.length)];
-  }
-
-  for (let i = 0; i < 3; i++) {
-    partTwo += numbers[Math.floor(Math.random() * numbers.length)];
-  }
-
-  return partOne + "-" + partTwo;
+  return a + "-" + b;
 }
 
 function clearRoomListeners() {
-  if (stopListeningToRoom) {
-    stopListeningToRoom();
-    stopListeningToRoom = null;
-  }
+  if (stopListeningToRoom) stopListeningToRoom();
+  if (stopListeningToPlayers) stopListeningToPlayers();
+  if (stopListeningToMaps) stopListeningToMaps();
 
-  if (stopListeningToPlayers) {
-    stopListeningToPlayers();
-    stopListeningToPlayers = null;
-  }
-
-  if (stopListeningToMaps) {
-    stopListeningToMaps();
-    stopListeningToMaps = null;
-  }
-
+  stopListeningToRoom = null;
+  stopListeningToPlayers = null;
+  stopListeningToMaps = null;
   latestActivePlayersSnapshot = null;
 }
 
@@ -231,19 +203,23 @@ function getSafeMapName(fileName) {
   return fileName || "Current Battle Map";
 }
 
-function makeFreshImageUrl(url) {
-  if (!url) {
-    return "";
-  }
+function freshUrl(url) {
+  if (!url) return "";
+  return url + (url.includes("?") ? "&" : "?") + "homebrewGodCacheBust=" + Date.now();
+}
 
-  const separator = url.includes("?") ? "&" : "?";
-  return url + separator + "homebrewGodCacheBust=" + Date.now();
+function setDmControlsVisible(isVisible) {
+  const controls = [E.dmMapControls, E.battleDmMapControls, E.puzzleMapControls];
+
+  controls.forEach((el) => {
+    if (!el) return;
+    if (isVisible) el.classList.remove("hidden");
+    else el.classList.add("hidden");
+  });
 }
 
 function buildMapFromRoomFields(room) {
-  if (!room) {
-    return null;
-  }
+  if (!room) return null;
 
   if (room.currentMap && room.currentMap.url) {
     return {
@@ -268,33 +244,12 @@ function buildMapFromRoomFields(room) {
   return null;
 }
 
-function setDmControlsVisible(isVisible) {
-  if (isVisible) {
-    dmMapControls.classList.remove("hidden");
-
-    if (battleDmMapControls) {
-      battleDmMapControls.classList.remove("hidden");
-    }
-
-    return;
-  }
-
-  dmMapControls.classList.add("hidden");
-
-  if (battleDmMapControls) {
-    battleDmMapControls.classList.add("hidden");
-  }
-}
-
-
 // =====================================================
-// APP SECTION 6 — AUTH / LOGIN SYSTEM
+// APP SECTION 5 — AUTH
 // =====================================================
 
 async function saveUserDoc(user) {
-  const userRef = doc(db, "users", user.uid);
-
-  await setDoc(userRef, {
+  await setDoc(doc(db, "users", user.uid), {
     uid: user.uid,
     displayName: user.displayName || "Unnamed",
     email: user.email || null,
@@ -312,7 +267,6 @@ async function showLoggedOut() {
   }
 
   await removeActivePlayerSession();
-
   clearRoomListeners();
 
   currentUser = null;
@@ -325,17 +279,15 @@ async function showLoggedOut() {
 }
 
 function showLoggedIn(user) {
-  userNameText.textContent = user.displayName || "Unnamed";
-  userTypeText.textContent = user.isAnonymous ? "Guest" : "Account";
-  userIdText.textContent = user.uid;
-
+  text(E.userNameText, user.displayName || "Unnamed");
+  text(E.userTypeText, user.isAnonymous ? "Guest" : "Account");
+  text(E.userIdText, user.uid);
   showScreen("lobby");
 }
 
-guestButton.addEventListener("click", async function () {
+E.guestButton.addEventListener("click", async function () {
   try {
-    const name = guestNameInput.value.trim() || "Guest";
-
+    const name = E.guestNameInput.value.trim() || "Guest";
     const result = await signInAnonymously(auth);
     await updateProfile(result.user, { displayName: name });
     await saveUserDoc(result.user);
@@ -344,11 +296,11 @@ guestButton.addEventListener("click", async function () {
   }
 });
 
-signupButton.addEventListener("click", async function () {
+E.signupButton.addEventListener("click", async function () {
   try {
-    const name = signupNameInput.value.trim();
-    const email = signupEmailInput.value.trim();
-    const password = signupPasswordInput.value;
+    const name = E.signupNameInput.value.trim();
+    const email = E.signupEmailInput.value.trim();
+    const password = E.signupPasswordInput.value;
 
     if (!name || !email || !password) {
       alert("Fill out display name, email, and password.");
@@ -363,10 +315,10 @@ signupButton.addEventListener("click", async function () {
   }
 });
 
-loginButton.addEventListener("click", async function () {
+E.loginButton.addEventListener("click", async function () {
   try {
-    const email = loginEmailInput.value.trim();
-    const password = loginPasswordInput.value;
+    const email = E.loginEmailInput.value.trim();
+    const password = E.loginPasswordInput.value;
 
     if (!email || !password) {
       alert("Enter email and password.");
@@ -380,7 +332,7 @@ loginButton.addEventListener("click", async function () {
   }
 });
 
-logoutButton.addEventListener("click", async function () {
+E.logoutButton.addEventListener("click", async function () {
   try {
     await removeActivePlayerSession();
     await signOut(auth);
@@ -389,20 +341,16 @@ logoutButton.addEventListener("click", async function () {
   }
 });
 
-
 // =====================================================
-// APP SECTION 7 — MY SAVED ROOMS
+// APP SECTION 6 — MY SAVED ROOMS
 // =====================================================
 
 async function saveRoomToMyRooms(roomCode, roomName, role) {
-  if (!currentUser) {
-    return;
-  }
+  if (!currentUser) return;
 
   const cleanCode = normalizeRoomCode(roomCode);
-  const myRoomRef = doc(db, "users", currentUser.uid, "rooms", cleanCode);
 
-  await setDoc(myRoomRef, {
+  await setDoc(doc(db, "users", currentUser.uid, "rooms", cleanCode), {
     roomCode: cleanCode,
     roomName: roomName || "Unnamed Room",
     role: role || "player",
@@ -411,25 +359,18 @@ async function saveRoomToMyRooms(roomCode, roomName, role) {
 }
 
 function listenToMyRooms() {
-  if (!currentUser) {
-    return;
-  }
+  if (!currentUser) return;
+  if (stopListeningToMyRooms) stopListeningToMyRooms();
 
-  if (stopListeningToMyRooms) {
-    stopListeningToMyRooms();
-  }
+  stopListeningToMyRooms = onSnapshot(collection(db, "users", currentUser.uid, "rooms"), function (snap) {
+    E.myRoomsList.innerHTML = "";
 
-  const myRoomsRef = collection(db, "users", currentUser.uid, "rooms");
-
-  stopListeningToMyRooms = onSnapshot(myRoomsRef, function (roomsSnap) {
-    myRoomsList.innerHTML = "";
-
-    if (roomsSnap.empty) {
-      myRoomsList.textContent = "No saved rooms yet. Create or join a room and it will appear here.";
+    if (snap.empty) {
+      E.myRoomsList.textContent = "No saved rooms yet. Create or join a room and it will appear here.";
       return;
     }
 
-    roomsSnap.forEach(function (roomDoc) {
+    snap.forEach(function (roomDoc) {
       const room = roomDoc.data();
       const roomCode = roomDoc.id;
 
@@ -446,21 +387,13 @@ function listenToMyRooms() {
 
       const openButton = document.createElement("button");
       openButton.textContent = "Open Room";
-      openButton.addEventListener("click", function () {
-        openRoom(roomCode, "room");
-      });
+      openButton.addEventListener("click", () => openRoom(roomCode, "room"));
 
       const removeButton = document.createElement("button");
       removeButton.textContent = "Remove From My List";
       removeButton.addEventListener("click", async function () {
-        const yesRemove = confirm("Remove this room from your saved list? The room itself will still exist.");
-
-        if (!yesRemove) {
-          return;
-        }
-
-        const myRoomRef = doc(db, "users", currentUser.uid, "rooms", roomCode);
-        await deleteDoc(myRoomRef);
+        if (!confirm("Remove this room from your saved list? The room itself will still exist.")) return;
+        await deleteDoc(doc(db, "users", currentUser.uid, "rooms", roomCode));
       });
 
       div.appendChild(title);
@@ -468,27 +401,24 @@ function listenToMyRooms() {
       div.appendChild(openButton);
       div.appendChild(removeButton);
 
-      myRoomsList.appendChild(div);
+      E.myRoomsList.appendChild(div);
     });
   }, function (error) {
-    myRoomsList.textContent = "Could not load saved rooms: " + error.message;
+    E.myRoomsList.textContent = "Could not load saved rooms: " + error.message;
   });
 }
 
-
 // =====================================================
-// APP SECTION 8 — ROOM CREATE / JOIN / OPEN
+// APP SECTION 7 — ROOM CREATE / JOIN / OPEN
 // =====================================================
 
 async function createRoom() {
-  const roomName = roomNameInput.value.trim() || "Unnamed Room";
+  const roomName = E.roomNameInput.value.trim() || "Unnamed Room";
   const roomCode = makeRoomCode();
 
-  const roomRef = doc(db, "rooms", roomCode);
-
-  await setDoc(roomRef, {
-    roomCode: roomCode,
-    roomName: roomName,
+  await setDoc(doc(db, "rooms", roomCode), {
+    roomCode,
+    roomName,
     dmUid: currentUser.uid,
     dmName: currentUser.displayName || "Unnamed",
     currentMap: null,
@@ -497,6 +427,8 @@ async function createRoom() {
     currentMapId: null,
     currentMapPublicId: null,
     currentMapSavedToLibrary: false,
+    puzzleTiles: [],
+    activePuzzleTileKey: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
@@ -505,8 +437,7 @@ async function createRoom() {
   await saveRoomToMyRooms(roomCode, roomName, "dm");
 
   openRoom(roomCode, "room");
-
-  roomStatusText.textContent = "Room created and saved to My Saved Rooms.";
+  text(E.roomStatusText, "Room created and saved to My Saved Rooms.");
 }
 
 async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") {
@@ -526,12 +457,7 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
   }
 
   const roomData = roomSnap.data();
-
-  let finalRole = wantedRole || "player";
-
-  if (roomData.dmUid === currentUser.uid) {
-    finalRole = "dm";
-  }
+  const finalRole = roomData.dmUid === currentUser.uid ? "dm" : wantedRole;
 
   await savePlayerHistory(cleanCode, finalRole);
   await saveRoomToMyRooms(cleanCode, roomData.roomName || "Unnamed Room", finalRole);
@@ -548,9 +474,7 @@ function openRoom(roomCode, screenToShow = "room") {
 
   clearRoomListeners();
 
-  const roomRef = doc(db, "rooms", cleanCode);
-
-  stopListeningToRoom = onSnapshot(roomRef, async function (roomSnap) {
+  stopListeningToRoom = onSnapshot(doc(db, "rooms", cleanCode), async function (roomSnap) {
     if (!roomSnap.exists()) {
       alert("This room was deleted or does not exist.");
       await leaveCurrentRoomView();
@@ -562,31 +486,21 @@ function openRoom(roomCode, screenToShow = "room") {
     currentRoomData = room;
     currentIsDM = room.dmUid === currentUser.uid;
 
-    currentRoomNameText.textContent = room.roomName || "Unnamed Room";
-    roomCodeText.textContent = cleanCode;
+    text(E.currentRoomNameText, room.roomName || "Unnamed Room");
+    text(E.roomCodeText, cleanCode);
+    text(E.battleRoomNameText, room.roomName || "Unnamed Room");
+    text(E.battleRoomCodeText, cleanCode);
+    text(E.yourRoleText, currentIsDM ? "DM" : "Player");
 
-    battleRoomNameText.textContent = room.roomName || "Unnamed Room";
-    battleRoomCodeText.textContent = cleanCode;
-
-    if (currentIsDM) {
-      yourRoleText.textContent = "DM";
-      setDmControlsVisible(true);
-    } else {
-      yourRoleText.textContent = "Player";
-      setDmControlsVisible(false);
-    }
+    setDmControlsVisible(currentIsDM);
 
     await setActivePlayerSession(cleanCode, currentIsDM ? "dm" : "player");
 
     showSharedMap(buildMapFromRoomFields(room));
+    renderPuzzleBoard(room);
 
-    if (latestMapsSnapshot) {
-      renderRoomMaps(latestMapsSnapshot);
-    }
-
-    if (latestActivePlayersSnapshot) {
-      renderPlayers(latestActivePlayersSnapshot);
-    }
+    if (latestMapsSnapshot) renderRoomMaps(latestMapsSnapshot);
+    if (latestActivePlayersSnapshot) renderPlayers(latestActivePlayersSnapshot);
   }, function (error) {
     alert("Room listener failed: " + error.message);
   });
@@ -615,16 +529,15 @@ async function leaveCurrentRoomView() {
   latestActivePlayersSnapshot = null;
 
   setDmControlsVisible(false);
-  mapUploadStatus.textContent = "";
 
-  if (battleMapUpdateStatus) {
-    battleMapUpdateStatus.textContent = "";
-  }
+  text(E.mapUploadStatus, "");
+  text(E.battleMapUpdateStatus, "");
+  text(E.puzzleMapStatus, "");
 
   showScreen("lobby");
 }
 
-createRoomButton.addEventListener("click", async function () {
+E.createRoomButton.addEventListener("click", async () => {
   try {
     await createRoom();
   } catch (error) {
@@ -632,37 +545,30 @@ createRoomButton.addEventListener("click", async function () {
   }
 });
 
-joinRoomButton.addEventListener("click", async function () {
+E.joinRoomButton.addEventListener("click", async () => {
   try {
-    const roomCode = joinRoomCodeInput.value;
-
-    if (!roomCode.trim()) {
+    if (!E.joinRoomCodeInput.value.trim()) {
       alert("Enter a room code.");
       return;
     }
 
-    await joinRoom(roomCode, "player", "room");
-
-    roomStatusText.textContent = "Room joined and saved to My Saved Rooms.";
+    await joinRoom(E.joinRoomCodeInput.value, "player", "room");
+    text(E.roomStatusText, "Room joined and saved to My Saved Rooms.");
   } catch (error) {
     alert(error.message);
   }
 });
 
-backToLobbyButton.addEventListener("click", async function () {
-  await leaveCurrentRoomView();
-});
+E.backToLobbyButton.addEventListener("click", leaveCurrentRoomView);
 
-copyRoomCodeButton.addEventListener("click", async function () {
-  if (!currentRoomCode) {
-    return;
-  }
+E.copyRoomCodeButton.addEventListener("click", async () => {
+  if (!currentRoomCode) return;
 
   await navigator.clipboard.writeText(currentRoomCode);
   alert("Room code copied.");
 });
 
-saveThisRoomButton.addEventListener("click", async function () {
+E.saveThisRoomButton.addEventListener("click", async () => {
   try {
     if (!currentRoomCode || !currentRoomData) {
       alert("Open a room first.");
@@ -683,17 +589,13 @@ saveThisRoomButton.addEventListener("click", async function () {
 
 
 // =====================================================
-// APP SECTION 9 — ACTIVE ROOM PLAYERS
+// APP SECTION 8 — ACTIVE ROOM PLAYERS
 // =====================================================
 
 async function savePlayerHistory(roomCode, role) {
-  if (!currentUser) {
-    return;
-  }
+  if (!currentUser) return;
 
-  const playerRef = doc(db, "rooms", roomCode, "players", currentUser.uid);
-
-  await setDoc(playerRef, {
+  await setDoc(doc(db, "rooms", roomCode, "players", currentUser.uid), {
     uid: currentUser.uid,
     displayName: currentUser.displayName || "Unnamed",
     role: role || "player",
@@ -702,9 +604,7 @@ async function savePlayerHistory(roomCode, role) {
 }
 
 async function setActivePlayerSession(roomCode, role) {
-  if (!currentUser || !roomCode) {
-    return;
-  }
+  if (!currentUser || !roomCode) return;
 
   const cleanCode = normalizeRoomCode(roomCode);
 
@@ -714,9 +614,7 @@ async function setActivePlayerSession(roomCode, role) {
 
   activeSessionRoomCode = cleanCode;
 
-  const activePlayerRef = doc(db, "rooms", cleanCode, "activePlayers", activeSessionId);
-
-  await setDoc(activePlayerRef, {
+  await setDoc(doc(db, "rooms", cleanCode, "activePlayers", activeSessionId), {
     sessionId: activeSessionId,
     uid: currentUser.uid,
     displayName: currentUser.displayName || "Unnamed",
@@ -726,13 +624,10 @@ async function setActivePlayerSession(roomCode, role) {
 }
 
 async function removeActivePlayerSession() {
-  if (!activeSessionRoomCode) {
-    return;
-  }
+  if (!activeSessionRoomCode) return;
 
   try {
-    const activePlayerRef = doc(db, "rooms", activeSessionRoomCode, "activePlayers", activeSessionId);
-    await deleteDoc(activePlayerRef);
+    await deleteDoc(doc(db, "rooms", activeSessionRoomCode, "activePlayers", activeSessionId));
   } catch (error) {
     console.warn("Could not remove active player session:", error);
   }
@@ -741,21 +636,23 @@ async function removeActivePlayerSession() {
 }
 
 function listenToPlayers(roomCode) {
-  const activePlayersRef = collection(db, "rooms", roomCode, "activePlayers");
-
-  stopListeningToPlayers = onSnapshot(activePlayersRef, function (playersSnap) {
-    latestActivePlayersSnapshot = playersSnap;
-    renderPlayers(playersSnap);
-  }, function (error) {
-    playersList.textContent = "Could not load players: " + error.message;
-  });
+  stopListeningToPlayers = onSnapshot(
+    collection(db, "rooms", roomCode, "activePlayers"),
+    function (playersSnap) {
+      latestActivePlayersSnapshot = playersSnap;
+      renderPlayers(playersSnap);
+    },
+    function (error) {
+      E.playersList.textContent = "Could not load players: " + error.message;
+    }
+  );
 }
 
 function renderPlayers(playersSnap) {
-  playersList.innerHTML = "";
+  E.playersList.innerHTML = "";
 
   if (playersSnap.empty) {
-    playersList.textContent = "No players in the room right now.";
+    E.playersList.textContent = "No players in the room right now.";
     return;
   }
 
@@ -764,18 +661,11 @@ function renderPlayers(playersSnap) {
   playersSnap.forEach(function (playerDoc) {
     const player = playerDoc.data();
 
-    if (!player.uid) {
-      return;
-    }
+    if (!player.uid) return;
 
     const existingPlayer = playersByUid.get(player.uid);
 
-    if (!existingPlayer) {
-      playersByUid.set(player.uid, player);
-      return;
-    }
-
-    if (player.role === "dm") {
+    if (!existingPlayer || player.role === "dm") {
       playersByUid.set(player.uid, player);
     }
   });
@@ -783,19 +673,13 @@ function renderPlayers(playersSnap) {
   const players = Array.from(playersByUid.values());
 
   if (players.length === 0) {
-    playersList.textContent = "No players in the room right now.";
+    E.playersList.textContent = "No players in the room right now.";
     return;
   }
 
   players.sort(function (a, b) {
-    if (a.role === "dm" && b.role !== "dm") {
-      return -1;
-    }
-
-    if (a.role !== "dm" && b.role === "dm") {
-      return 1;
-    }
-
+    if (a.role === "dm" && b.role !== "dm") return -1;
+    if (a.role !== "dm" && b.role === "dm") return 1;
     return String(a.displayName || "").localeCompare(String(b.displayName || ""));
   });
 
@@ -813,15 +697,14 @@ function renderPlayers(playersSnap) {
     }
 
     title.textContent = label;
-
     div.appendChild(title);
-    playersList.appendChild(div);
+    E.playersList.appendChild(div);
   });
 }
 
 
 // =====================================================
-// APP SECTION 10 — CLOUDINARY MAP UPLOAD
+// APP SECTION 9 — CLOUDINARY UPLOAD
 // =====================================================
 
 async function uploadMapToCloudinary(file) {
@@ -848,25 +731,27 @@ async function uploadMapToCloudinary(file) {
 
 
 // =====================================================
-// APP SECTION 11 — ROOM MAP LIBRARY
+// APP SECTION 10 — SAVED MAP LIBRARY
 // =====================================================
 
 function listenToRoomMaps(roomCode) {
-  const mapsRef = collection(db, "rooms", roomCode, "maps");
-
-  stopListeningToMaps = onSnapshot(mapsRef, function (mapsSnap) {
-    latestMapsSnapshot = mapsSnap;
-    renderRoomMaps(mapsSnap);
-  }, function (error) {
-    roomMapsList.textContent = "Could not load saved maps: " + error.message;
-  });
+  stopListeningToMaps = onSnapshot(
+    collection(db, "rooms", roomCode, "maps"),
+    function (mapsSnap) {
+      latestMapsSnapshot = mapsSnap;
+      renderRoomMaps(mapsSnap);
+    },
+    function (error) {
+      E.roomMapsList.textContent = "Could not load saved maps: " + error.message;
+    }
+  );
 }
 
 function renderRoomMaps(mapsSnap) {
-  roomMapsList.innerHTML = "";
+  E.roomMapsList.innerHTML = "";
 
   if (mapsSnap.empty) {
-    roomMapsList.textContent = "No saved maps in this room yet. Upload a new map as DM.";
+    E.roomMapsList.textContent = "No saved maps in this room yet. Upload a new map as DM.";
     return;
   }
 
@@ -912,7 +797,7 @@ function renderRoomMaps(mapsSnap) {
       div.appendChild(forgetButton);
     }
 
-    roomMapsList.appendChild(div);
+    E.roomMapsList.appendChild(div);
   });
 }
 
@@ -922,9 +807,7 @@ async function saveMapToRoomLibrary(mapData) {
     return null;
   }
 
-  const mapsRef = collection(db, "rooms", currentRoomCode, "maps");
-
-  const mapDocRef = await addDoc(mapsRef, {
+  const mapDocRef = await addDoc(collection(db, "rooms", currentRoomCode, "maps"), {
     name: mapData.name || "Unnamed Map",
     url: mapData.url,
     publicId: mapData.publicId || null,
@@ -980,8 +863,7 @@ async function useSavedMap(mapId) {
       return;
     }
 
-    const mapRef = doc(db, "rooms", currentRoomCode, "maps", mapId);
-    const mapSnap = await getDoc(mapRef);
+    const mapSnap = await getDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
 
     if (!mapSnap.exists()) {
       alert("Map not found.");
@@ -1001,7 +883,7 @@ async function useSavedMap(mapId) {
     await setCurrentRoomMap(selectedMap);
     showSharedMap(selectedMap);
 
-    mapUploadStatus.textContent = "Map switched.";
+    text(E.mapUploadStatus, "Map switched.");
   } catch (error) {
     alert(error.message);
   }
@@ -1014,15 +896,11 @@ async function forgetSavedMap(mapId) {
       return;
     }
 
-    const yesForget = confirm("Forget this map from the room list? This does not delete it from Cloudinary.");
-
-    if (!yesForget) {
+    if (!confirm("Forget this map from the room list? This does not delete it from Cloudinary.")) {
       return;
     }
 
-    const mapRef = doc(db, "rooms", currentRoomCode, "maps", mapId);
-
-    await deleteDoc(mapRef);
+    await deleteDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
 
     if (currentMapId === mapId) {
       await setCurrentRoomMap(null);
@@ -1035,7 +913,7 @@ async function forgetSavedMap(mapId) {
 
 
 // =====================================================
-// APP SECTION 12 — CURRENT MAP DISPLAY
+// APP SECTION 11 — CURRENT MAP DISPLAY / QUICK UPDATE
 // =====================================================
 
 function showSharedMap(currentMap) {
@@ -1044,24 +922,24 @@ function showSharedMap(currentMap) {
   if (!map) {
     currentMapId = null;
 
-    currentMapNameText.textContent = "None";
-    battleMapNameText.textContent = "None";
+    text(E.currentMapNameText, "None");
+    text(E.battleMapNameText, "None");
 
-    roomMapPreviewImage.onload = null;
-    roomMapPreviewImage.onerror = null;
-    roomMapPreviewImage.removeAttribute("src");
-    roomMapPreviewImage.style.display = "none";
+    E.roomMapPreviewImage.onload = null;
+    E.roomMapPreviewImage.onerror = null;
+    E.roomMapPreviewImage.removeAttribute("src");
+    E.roomMapPreviewImage.style.display = "none";
 
-    noRoomMapPreviewText.textContent = "No shared map loaded yet.";
-    noRoomMapPreviewText.style.display = "block";
+    text(E.noRoomMapPreviewText, "No shared map loaded yet.");
+    E.noRoomMapPreviewText.style.display = "block";
 
-    battleMapImage.onload = null;
-    battleMapImage.onerror = null;
-    battleMapImage.removeAttribute("src");
-    battleMapImage.style.display = "none";
+    E.battleMapImage.onload = null;
+    E.battleMapImage.onerror = null;
+    E.battleMapImage.removeAttribute("src");
+    E.battleMapImage.style.display = "none";
 
-    noBattleMapText.textContent = "No battle map loaded yet.";
-    noBattleMapText.style.display = "block";
+    text(E.noBattleMapText, "No battle map loaded yet.");
+    E.noBattleMapText.style.display = "block";
 
     return;
   }
@@ -1074,48 +952,48 @@ function showSharedMap(currentMap) {
     mapLabel += " (Current Only)";
   }
 
-  currentMapNameText.textContent = mapLabel;
-  battleMapNameText.textContent = mapLabel;
+  text(E.currentMapNameText, mapLabel);
+  text(E.battleMapNameText, mapLabel);
 
-  const freshUrl = makeFreshImageUrl(map.url);
+  const imageUrl = freshUrl(map.url);
 
-  noRoomMapPreviewText.textContent = "Loading map preview...";
-  noRoomMapPreviewText.style.display = "block";
-  roomMapPreviewImage.style.display = "none";
+  text(E.noRoomMapPreviewText, "Loading map preview...");
+  E.noRoomMapPreviewText.style.display = "block";
+  E.roomMapPreviewImage.style.display = "none";
 
-  roomMapPreviewImage.onload = function () {
-    noRoomMapPreviewText.style.display = "none";
-    roomMapPreviewImage.style.display = "block";
+  E.roomMapPreviewImage.onload = function () {
+    E.noRoomMapPreviewText.style.display = "none";
+    E.roomMapPreviewImage.style.display = "block";
   };
 
-  roomMapPreviewImage.onerror = function () {
-    roomMapPreviewImage.style.display = "none";
-    noRoomMapPreviewText.textContent = "Map preview failed to load.";
-    noRoomMapPreviewText.style.display = "block";
+  E.roomMapPreviewImage.onerror = function () {
+    E.roomMapPreviewImage.style.display = "none";
+    text(E.noRoomMapPreviewText, "Map preview failed to load.");
+    E.noRoomMapPreviewText.style.display = "block";
   };
 
-  roomMapPreviewImage.src = freshUrl;
+  E.roomMapPreviewImage.src = imageUrl;
 
-  noBattleMapText.textContent = "Loading battle map...";
-  noBattleMapText.style.display = "block";
-  battleMapImage.style.display = "none";
+  text(E.noBattleMapText, "Loading battle map...");
+  E.noBattleMapText.style.display = "block";
+  E.battleMapImage.style.display = "none";
 
-  battleMapImage.onload = function () {
-    noBattleMapText.style.display = "none";
-    battleMapImage.style.display = "block";
+  E.battleMapImage.onload = function () {
+    E.noBattleMapText.style.display = "none";
+    E.battleMapImage.style.display = "block";
     applyBattleZoom();
   };
 
-  battleMapImage.onerror = function () {
-    battleMapImage.style.display = "none";
-    noBattleMapText.textContent = "Battle map failed to load.";
-    noBattleMapText.style.display = "block";
+  E.battleMapImage.onerror = function () {
+    E.battleMapImage.style.display = "none";
+    text(E.noBattleMapText, "Battle map failed to load.");
+    E.noBattleMapText.style.display = "block";
   };
 
-  battleMapImage.src = freshUrl;
+  E.battleMapImage.src = imageUrl;
 }
 
-uploadRoomMapButton.addEventListener("click", async function () {
+E.uploadRoomMapButton.addEventListener("click", async function () {
   try {
     if (!currentRoomCode) {
       alert("Create or join a room first.");
@@ -1127,15 +1005,15 @@ uploadRoomMapButton.addEventListener("click", async function () {
       return;
     }
 
-    const file = roomMapUploadInput.files[0];
+    const file = E.roomMapUploadInput.files[0];
 
     if (!file) {
       alert("Choose a map image first.");
       return;
     }
 
-    mapUploadStatus.textContent = "Uploading map and saving it...";
-    uploadRoomMapButton.disabled = true;
+    text(E.mapUploadStatus, "Uploading map and saving it...");
+    E.uploadRoomMapButton.disabled = true;
 
     const cloudinaryResult = await uploadMapToCloudinary(file);
 
@@ -1169,30 +1047,26 @@ uploadRoomMapButton.addEventListener("click", async function () {
 
     showSharedMap(savedMap);
 
-    mapUploadStatus.textContent = "Map uploaded, saved to this room, and shared.";
-    roomMapUploadInput.value = "";
+    text(E.mapUploadStatus, "Map uploaded, saved to this room, and shared.");
+    E.roomMapUploadInput.value = "";
   } catch (error) {
-    mapUploadStatus.textContent = "Upload failed.";
+    text(E.mapUploadStatus, "Upload failed.");
     alert(error.message);
   } finally {
-    uploadRoomMapButton.disabled = false;
+    E.uploadRoomMapButton.disabled = false;
   }
 });
 
-removeRoomMapButton.addEventListener("click", async function () {
+E.removeRoomMapButton.addEventListener("click", async function () {
   try {
-    if (!currentRoomCode) {
-      return;
-    }
+    if (!currentRoomCode) return;
 
     if (!currentIsDM) {
       alert("Only the DM can remove the room map.");
       return;
     }
 
-    const yesRemove = confirm("Remove the current shared map? It will stay in Saved Maps if it was saved there.");
-
-    if (!yesRemove) {
+    if (!confirm("Remove the current shared map? It will stay in Saved Maps if it was saved there.")) {
       return;
     }
 
@@ -1209,14 +1083,13 @@ removeRoomMapButton.addEventListener("click", async function () {
     };
 
     showSharedMap(null);
-
-    mapUploadStatus.textContent = "Current map removed.";
+    text(E.mapUploadStatus, "Current map removed.");
   } catch (error) {
     alert(error.message);
   }
 });
 
-saveCurrentMapButton.addEventListener("click", async function () {
+E.saveCurrentMapButton.addEventListener("click", async function () {
   try {
     if (!currentRoomCode || !currentIsDM) {
       alert("Only the DM can save the current map.");
@@ -1262,15 +1135,14 @@ saveCurrentMapButton.addEventListener("click", async function () {
     };
 
     showSharedMap(savedMap);
-
-    mapUploadStatus.textContent = "Current map saved to room library.";
+    text(E.mapUploadStatus, "Current map saved to room library.");
   } catch (error) {
     alert(error.message);
   }
 });
 
-if (updateBattleMapButton) {
-  updateBattleMapButton.addEventListener("click", async function () {
+if (E.updateBattleMapButton) {
+  E.updateBattleMapButton.addEventListener("click", async function () {
     try {
       if (!currentRoomCode) {
         alert("Create or join a room first.");
@@ -1282,15 +1154,15 @@ if (updateBattleMapButton) {
         return;
       }
 
-      const file = battleMapUploadInput.files[0];
+      const file = E.battleMapUploadInput.files[0];
 
       if (!file) {
         alert("Choose the new battle map image first.");
         return;
       }
 
-      battleMapUpdateStatus.textContent = "Uploading current-only battle map...";
-      updateBattleMapButton.disabled = true;
+      text(E.battleMapUpdateStatus, "Uploading current-only battle map...");
+      E.updateBattleMapButton.disabled = true;
 
       const cloudinaryResult = await uploadMapToCloudinary(file);
 
@@ -1316,15 +1188,451 @@ if (updateBattleMapButton) {
 
       showSharedMap(currentOnlyMap);
 
-      battleMapUpdateStatus.textContent = "Battle map updated for everyone. Not saved to Saved Maps.";
-      battleMapUploadInput.value = "";
+      text(E.battleMapUpdateStatus, "Battle map updated for everyone. Not saved to Saved Maps.");
+      E.battleMapUploadInput.value = "";
     } catch (error) {
-      battleMapUpdateStatus.textContent = "Battle map update failed.";
+      text(E.battleMapUpdateStatus, "Battle map update failed.");
       alert(error.message);
     } finally {
-      updateBattleMapButton.disabled = false;
+      E.updateBattleMapButton.disabled = false;
     }
   });
+}
+
+
+// =====================================================
+// APP SECTION 12 — PUZZLE MAP SYSTEM V1
+// =====================================================
+
+function makeTileKey(x, y) {
+  return String(x) + "," + String(y);
+}
+
+function getPuzzleTiles(room) {
+  if (!room || !Array.isArray(room.puzzleTiles)) {
+    return [];
+  }
+
+  return room.puzzleTiles.filter(function (tile) {
+    return tile && tile.url && Number.isFinite(tile.x) && Number.isFinite(tile.y);
+  });
+}
+
+function getActivePuzzleTile(room) {
+  const tiles = getPuzzleTiles(room);
+
+  if (tiles.length === 0) {
+    return null;
+  }
+
+  const activeKey = room.activePuzzleTileKey || makeTileKey(0, 0);
+
+  return tiles.find((tile) => tile.key === activeKey) || tiles[0];
+}
+
+function puzzleTileToCurrentMap(tile) {
+  if (!tile) return null;
+
+  return {
+    id: tile.key || makeTileKey(tile.x, tile.y),
+    name: tile.name || "Puzzle Tile " + makeTileKey(tile.x, tile.y),
+    url: tile.url,
+    publicId: tile.publicId || null,
+    savedToLibrary: false
+  };
+}
+
+function getTargetPositionForDirection(direction) {
+  const tiles = getPuzzleTiles(currentRoomData || {});
+  const activeTile = getActivePuzzleTile(currentRoomData || {});
+
+  if (tiles.length === 0 || !activeTile) {
+    return { x: 0, y: 0 };
+  }
+
+  let x = activeTile.x;
+  let y = activeTile.y;
+
+  if (direction === "north") y -= 1;
+  if (direction === "south") y += 1;
+  if (direction === "east") x += 1;
+  if (direction === "west") x -= 1;
+
+  return { x, y };
+}
+
+function tileExistsAtPosition(tiles, x, y) {
+  return tiles.some((tile) => tile.x === x && tile.y === y);
+}
+
+function disablePuzzleButtons(isDisabled) {
+  [
+    E.addTileNorthButton,
+    E.addTileSouthButton,
+    E.addTileEastButton,
+    E.addTileWestButton,
+    E.centerPuzzleBoardButton
+  ].forEach(function (button) {
+    if (button) button.disabled = isDisabled;
+  });
+}
+
+async function updateRoomWithPuzzleTiles(newTiles, activeTile) {
+  if (!currentRoomCode || !currentIsDM) {
+    alert("Only the DM can change puzzle maps.");
+    return;
+  }
+
+  const currentMap = activeTile ? puzzleTileToCurrentMap(activeTile) : null;
+
+  const updateData = {
+    puzzleTiles: newTiles,
+    activePuzzleTileKey: activeTile ? activeTile.key : null,
+    updatedAt: serverTimestamp()
+  };
+
+  if (currentMap && currentMap.url) {
+    updateData.currentMap = {
+      id: currentMap.id,
+      name: currentMap.name,
+      url: currentMap.url,
+      publicId: currentMap.publicId || null,
+      savedToLibrary: false
+    };
+
+    updateData.currentMapUrl = currentMap.url;
+    updateData.currentMapName = currentMap.name;
+    updateData.currentMapId = currentMap.id;
+    updateData.currentMapPublicId = currentMap.publicId || null;
+    updateData.currentMapSavedToLibrary = false;
+  } else {
+    updateData.currentMap = null;
+    updateData.currentMapUrl = null;
+    updateData.currentMapName = null;
+    updateData.currentMapId = null;
+    updateData.currentMapPublicId = null;
+    updateData.currentMapSavedToLibrary = false;
+  }
+
+  await updateDoc(doc(db, "rooms", currentRoomCode), updateData);
+}
+
+async function addPuzzleTile(direction) {
+  try {
+    if (!currentRoomCode) {
+      alert("Open a room first.");
+      return;
+    }
+
+    if (!currentIsDM) {
+      alert("Only the DM can add puzzle tiles.");
+      return;
+    }
+
+    const file = E.puzzleTileUploadInput ? E.puzzleTileUploadInput.files[0] : null;
+
+    if (!file) {
+      alert("Choose a puzzle tile image first.");
+      return;
+    }
+
+    const oldTiles = getPuzzleTiles(currentRoomData || {});
+    const target = getTargetPositionForDirection(direction);
+
+    if (tileExistsAtPosition(oldTiles, target.x, target.y)) {
+      alert("That puzzle spot already has a tile. Focus another tile or delete the old one first.");
+      return;
+    }
+
+    text(
+      E.puzzleMapStatus,
+      oldTiles.length === 0
+        ? "Uploading first puzzle tile at center..."
+        : "Uploading puzzle tile " + direction + "..."
+    );
+
+    disablePuzzleButtons(true);
+
+    const cloudinaryResult = await uploadMapToCloudinary(file);
+    const key = makeTileKey(target.x, target.y);
+
+    const newTile = {
+      key,
+      x: target.x,
+      y: target.y,
+      name: getSafeMapName(file.name),
+      url: cloudinaryResult.secure_url,
+      publicId: cloudinaryResult.public_id,
+      locked: true,
+      createdAtMillis: Date.now()
+    };
+
+    const newTiles = oldTiles.concat(newTile);
+
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      puzzleTiles: newTiles,
+      activePuzzleTileKey: newTile.key,
+      currentMap: puzzleTileToCurrentMap(newTile),
+      currentMapUrl: newTile.url,
+      currentMapName: newTile.name,
+      currentMapId: newTile.key,
+      currentMapPublicId: newTile.publicId,
+      currentMapSavedToLibrary: false
+    };
+
+    await updateRoomWithPuzzleTiles(newTiles, newTile);
+
+    showSharedMap(puzzleTileToCurrentMap(newTile));
+    renderPuzzleBoard(currentRoomData);
+
+    E.puzzleTileUploadInput.value = "";
+
+    text(
+      E.puzzleMapStatus,
+      oldTiles.length === 0
+        ? "First puzzle tile placed at center 0,0."
+        : "Puzzle tile added " + direction + " at " + key + "."
+    );
+  } catch (error) {
+    text(E.puzzleMapStatus, "Puzzle tile upload failed.");
+    alert(error.message);
+  } finally {
+    disablePuzzleButtons(false);
+  }
+}
+
+async function focusPuzzleTile(tileKey) {
+  try {
+    if (!currentRoomCode || !currentIsDM) return;
+
+    const tiles = getPuzzleTiles(currentRoomData || {});
+    const tile = tiles.find((item) => item.key === tileKey);
+
+    if (!tile) {
+      alert("Puzzle tile not found.");
+      return;
+    }
+
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      activePuzzleTileKey: tile.key,
+      currentMap: puzzleTileToCurrentMap(tile),
+      currentMapUrl: tile.url,
+      currentMapName: tile.name,
+      currentMapId: tile.key,
+      currentMapPublicId: tile.publicId || null,
+      currentMapSavedToLibrary: false
+    };
+
+    await updateRoomWithPuzzleTiles(tiles, tile);
+
+    showSharedMap(puzzleTileToCurrentMap(tile));
+    renderPuzzleBoard(currentRoomData);
+    text(E.puzzleMapStatus, "Focused puzzle tile " + tile.key + ".");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function deletePuzzleTile(tileKey) {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      alert("Only the DM can delete puzzle tiles.");
+      return;
+    }
+
+    if (!confirm("Delete this puzzle tile from the board? This does not delete the image from Cloudinary.")) {
+      return;
+    }
+
+    const oldTiles = getPuzzleTiles(currentRoomData || {});
+    const newTiles = oldTiles.filter((tile) => tile.key !== tileKey);
+    const newActiveTile = newTiles.length > 0 ? newTiles[0] : null;
+
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      puzzleTiles: newTiles,
+      activePuzzleTileKey: newActiveTile ? newActiveTile.key : null,
+      currentMap: newActiveTile ? puzzleTileToCurrentMap(newActiveTile) : null,
+      currentMapUrl: newActiveTile ? newActiveTile.url : null,
+      currentMapName: newActiveTile ? newActiveTile.name : null,
+      currentMapId: newActiveTile ? newActiveTile.key : null,
+      currentMapPublicId: newActiveTile ? newActiveTile.publicId || null : null,
+      currentMapSavedToLibrary: false
+    };
+
+    await updateRoomWithPuzzleTiles(newTiles, newActiveTile);
+
+    showSharedMap(newActiveTile ? puzzleTileToCurrentMap(newActiveTile) : null);
+    renderPuzzleBoard(currentRoomData);
+    text(E.puzzleMapStatus, "Puzzle tile deleted.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+function centerPuzzleBoard() {
+  if (!E.puzzleMapBoard) return;
+
+  E.puzzleMapBoard.scrollLeft = Math.max(0, (E.puzzleMapBoard.scrollWidth - E.puzzleMapBoard.clientWidth) / 2);
+  E.puzzleMapBoard.scrollTop = Math.max(0, (E.puzzleMapBoard.scrollHeight - E.puzzleMapBoard.clientHeight) / 2);
+
+  text(E.puzzleMapStatus, "Puzzle board centered.");
+}
+
+function renderPuzzleBoard(room) {
+  if (!E.puzzleMapBoard) return;
+
+  const tiles = getPuzzleTiles(room || {});
+
+  E.puzzleMapBoard.innerHTML = "";
+
+  if (tiles.length === 0) {
+    E.puzzleMapBoard.classList.add("hidden");
+
+    if (E.battleMapViewer) {
+      E.battleMapViewer.classList.remove("hidden");
+    }
+
+    return;
+  }
+
+  if (E.battleMapViewer) {
+    E.battleMapViewer.classList.add("hidden");
+  }
+
+  E.puzzleMapBoard.classList.remove("hidden");
+
+  const minX = Math.min(...tiles.map((tile) => tile.x));
+  const maxX = Math.max(...tiles.map((tile) => tile.x));
+  const minY = Math.min(...tiles.map((tile) => tile.y));
+  const maxY = Math.max(...tiles.map((tile) => tile.y));
+
+  const columns = maxX - minX + 1;
+
+  E.puzzleMapBoard.style.gridTemplateColumns = "repeat(" + columns + ", minmax(260px, 380px))";
+  E.puzzleMapBoard.style.alignItems = "start";
+  E.puzzleMapBoard.style.justifyContent = "center";
+
+  const activeTile = getActivePuzzleTile(room || {});
+  const activeKey = activeTile ? activeTile.key : null;
+  const tileByPosition = new Map();
+
+  tiles.forEach((tile) => tileByPosition.set(makeTileKey(tile.x, tile.y), tile));
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const positionKey = makeTileKey(x, y);
+      const tile = tileByPosition.get(positionKey);
+
+      if (!tile) {
+        const emptyTile = document.createElement("div");
+        emptyTile.className = "map-tile";
+        emptyTile.style.height = "260px";
+        emptyTile.style.borderStyle = "dashed";
+        emptyTile.style.opacity = "0.35";
+        emptyTile.style.display = "flex";
+        emptyTile.style.alignItems = "center";
+        emptyTile.style.justifyContent = "center";
+        emptyTile.style.color = "#aaaabb";
+        emptyTile.textContent = positionKey;
+
+        E.puzzleMapBoard.appendChild(emptyTile);
+        continue;
+      }
+
+      const tileDiv = document.createElement("div");
+      tileDiv.className = "map-tile locked";
+      tileDiv.style.height = "260px";
+      tileDiv.style.cursor = currentIsDM ? "pointer" : "default";
+
+      if (tile.key === activeKey) {
+        tileDiv.style.outline = "3px solid #ff3b3b";
+        tileDiv.style.boxShadow = "0 0 24px rgba(255, 59, 59, 0.35)";
+      }
+
+      const img = document.createElement("img");
+      img.src = tile.url;
+      img.alt = tile.name || "Puzzle map tile";
+
+      const label = document.createElement("div");
+      label.textContent = (tile.name || "Puzzle Tile") + " — " + tile.key;
+      label.style.position = "absolute";
+      label.style.left = "0";
+      label.style.right = "0";
+      label.style.bottom = "0";
+      label.style.padding = "7px 9px";
+      label.style.fontSize = "13px";
+      label.style.background = "rgba(0, 0, 0, 0.72)";
+      label.style.color = "white";
+      label.style.whiteSpace = "nowrap";
+      label.style.overflow = "hidden";
+      label.style.textOverflow = "ellipsis";
+
+      tileDiv.appendChild(img);
+      tileDiv.appendChild(label);
+
+      if (currentIsDM) {
+        tileDiv.addEventListener("click", function () {
+          focusPuzzleTile(tile.key);
+        });
+
+        const actions = document.createElement("div");
+        actions.style.position = "absolute";
+        actions.style.top = "6px";
+        actions.style.right = "6px";
+        actions.style.display = "flex";
+        actions.style.gap = "4px";
+
+        const focusButton = document.createElement("button");
+        focusButton.textContent = "Focus";
+        focusButton.style.padding = "5px 7px";
+        focusButton.style.fontSize = "12px";
+        focusButton.style.margin = "0";
+        focusButton.addEventListener("click", function (event) {
+          event.stopPropagation();
+          focusPuzzleTile(tile.key);
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "X";
+        deleteButton.style.padding = "5px 7px";
+        deleteButton.style.fontSize = "12px";
+        deleteButton.style.margin = "0";
+        deleteButton.addEventListener("click", function (event) {
+          event.stopPropagation();
+          deletePuzzleTile(tile.key);
+        });
+
+        actions.appendChild(focusButton);
+        actions.appendChild(deleteButton);
+        tileDiv.appendChild(actions);
+      }
+
+      E.puzzleMapBoard.appendChild(tileDiv);
+    }
+  }
+}
+
+if (E.addTileNorthButton) {
+  E.addTileNorthButton.addEventListener("click", () => addPuzzleTile("north"));
+}
+
+if (E.addTileSouthButton) {
+  E.addTileSouthButton.addEventListener("click", () => addPuzzleTile("south"));
+}
+
+if (E.addTileEastButton) {
+  E.addTileEastButton.addEventListener("click", () => addPuzzleTile("east"));
+}
+
+if (E.addTileWestButton) {
+  E.addTileWestButton.addEventListener("click", () => addPuzzleTile("west"));
+}
+
+if (E.centerPuzzleBoardButton) {
+  E.centerPuzzleBoardButton.addEventListener("click", centerPuzzleBoard);
 }
 
 
@@ -1333,11 +1641,11 @@ if (updateBattleMapButton) {
 // =====================================================
 
 function applyBattleZoom() {
-  battleMapImage.style.transform = "scale(" + battleZoom + ")";
-  battleZoomText.textContent = Math.round(battleZoom * 100) + "%";
+  E.battleMapImage.style.transform = "scale(" + battleZoom + ")";
+  text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
 }
 
-openBattleMapButton.addEventListener("click", function () {
+E.openBattleMapButton.addEventListener("click", function () {
   if (!currentRoomCode) {
     alert("Open a room first.");
     return;
@@ -1351,11 +1659,11 @@ openBattleMapButton.addEventListener("click", function () {
   window.open(battleUrl.toString(), "_blank");
 });
 
-backToRoomButton.addEventListener("click", function () {
+E.backToRoomButton.addEventListener("click", function () {
   showScreen("room");
 });
 
-zoomOutButton.addEventListener("click", function () {
+E.zoomOutButton.addEventListener("click", function () {
   battleZoom -= 0.25;
 
   if (battleZoom < 0.25) {
@@ -1365,12 +1673,12 @@ zoomOutButton.addEventListener("click", function () {
   applyBattleZoom();
 });
 
-zoomResetButton.addEventListener("click", function () {
+E.zoomResetButton.addEventListener("click", function () {
   battleZoom = 1;
   applyBattleZoom();
 });
 
-zoomInButton.addEventListener("click", function () {
+E.zoomInButton.addEventListener("click", function () {
   battleZoom += 0.25;
 
   if (battleZoom > 4) {
