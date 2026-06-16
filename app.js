@@ -160,7 +160,7 @@ let alreadyUsedStartupLink = false;
 
 
 // =====================================================
-// APP SECTION 5 — SCREEN / HELPER FUNCTIONS
+// APP SECTION 5 — SCREEN / SMALL HELPERS
 // =====================================================
 
 function showScreen(screenName) {
@@ -227,18 +227,41 @@ function clearRoomListeners() {
   latestActivePlayersSnapshot = null;
 }
 
+function getSafeMapName(fileName) {
+  return fileName || "Current Battle Map";
+}
+
+function makeFreshImageUrl(url) {
+  if (!url) {
+    return "";
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return url + separator + "homebrewGodCacheBust=" + Date.now();
+}
+
 function buildMapFromRoomFields(room) {
+  if (!room) {
+    return null;
+  }
+
   if (room.currentMap && room.currentMap.url) {
-    return room.currentMap;
+    return {
+      id: room.currentMap.id || null,
+      name: room.currentMap.name || room.currentMapName || "Current Battle Map",
+      url: room.currentMap.url,
+      publicId: room.currentMap.publicId || room.currentMapPublicId || null,
+      savedToLibrary: room.currentMap.savedToLibrary === true
+    };
   }
 
   if (room.currentMapUrl) {
     return {
       id: room.currentMapId || null,
-      name: room.currentMapName || "Current Map",
+      name: room.currentMapName || "Current Battle Map",
       url: room.currentMapUrl,
       publicId: room.currentMapPublicId || null,
-      savedToLibrary: room.currentMapSavedToLibrary || false
+      savedToLibrary: room.currentMapSavedToLibrary === true
     };
   }
 
@@ -661,8 +684,6 @@ saveThisRoomButton.addEventListener("click", async function () {
 
 // =====================================================
 // APP SECTION 9 — ACTIVE ROOM PLAYERS
-// This shows who is currently in the room.
-// No online/offline labels.
 // =====================================================
 
 async function savePlayerHistory(roomCode, role) {
@@ -938,16 +959,16 @@ async function setCurrentRoomMap(mapData) {
   await updateDoc(roomRef, {
     currentMap: {
       id: mapData.id || null,
-      name: mapData.name || "Unnamed Map",
+      name: mapData.name || "Current Battle Map",
       url: mapData.url,
       publicId: mapData.publicId || null,
-      savedToLibrary: mapData.savedToLibrary || false
+      savedToLibrary: mapData.savedToLibrary === true
     },
     currentMapUrl: mapData.url,
-    currentMapName: mapData.name || "Unnamed Map",
+    currentMapName: mapData.name || "Current Battle Map",
     currentMapId: mapData.id || null,
     currentMapPublicId: mapData.publicId || null,
-    currentMapSavedToLibrary: mapData.savedToLibrary || false,
+    currentMapSavedToLibrary: mapData.savedToLibrary === true,
     updatedAt: serverTimestamp()
   });
 }
@@ -969,13 +990,16 @@ async function useSavedMap(mapId) {
 
     const map = mapSnap.data();
 
-    await setCurrentRoomMap({
+    const selectedMap = {
       id: mapId,
       name: map.name || "Unnamed Map",
       url: map.url,
       publicId: map.publicId || null,
       savedToLibrary: true
-    });
+    };
+
+    await setCurrentRoomMap(selectedMap);
+    showSharedMap(selectedMap);
 
     mapUploadStatus.textContent = "Map switched.";
   } catch (error) {
@@ -1002,6 +1026,7 @@ async function forgetSavedMap(mapId) {
 
     if (currentMapId === mapId) {
       await setCurrentRoomMap(null);
+      showSharedMap(null);
     }
   } catch (error) {
     alert(error.message);
@@ -1014,43 +1039,80 @@ async function forgetSavedMap(mapId) {
 // =====================================================
 
 function showSharedMap(currentMap) {
-  if (!currentMap || !currentMap.url) {
+  const map = currentMap && currentMap.url ? currentMap : null;
+
+  if (!map) {
     currentMapId = null;
 
     currentMapNameText.textContent = "None";
     battleMapNameText.textContent = "None";
 
-    roomMapPreviewImage.src = "";
+    roomMapPreviewImage.onload = null;
+    roomMapPreviewImage.onerror = null;
+    roomMapPreviewImage.removeAttribute("src");
     roomMapPreviewImage.style.display = "none";
+
+    noRoomMapPreviewText.textContent = "No shared map loaded yet.";
     noRoomMapPreviewText.style.display = "block";
 
-    battleMapImage.src = "";
+    battleMapImage.onload = null;
+    battleMapImage.onerror = null;
+    battleMapImage.removeAttribute("src");
     battleMapImage.style.display = "none";
+
+    noBattleMapText.textContent = "No battle map loaded yet.";
     noBattleMapText.style.display = "block";
 
     return;
   }
 
-  currentMapId = currentMap.id || null;
+  currentMapId = map.id || null;
 
-  let mapLabel = currentMap.name || "Unnamed Map";
+  let mapLabel = map.name || "Current Battle Map";
 
-  if (!currentMap.savedToLibrary) {
+  if (map.savedToLibrary !== true) {
     mapLabel += " (Current Only)";
   }
 
   currentMapNameText.textContent = mapLabel;
   battleMapNameText.textContent = mapLabel;
 
-  roomMapPreviewImage.src = currentMap.url;
-  roomMapPreviewImage.style.display = "block";
-  noRoomMapPreviewText.style.display = "none";
+  const freshUrl = makeFreshImageUrl(map.url);
 
-  battleMapImage.src = currentMap.url;
-  battleMapImage.style.display = "block";
-  noBattleMapText.style.display = "none";
+  noRoomMapPreviewText.textContent = "Loading map preview...";
+  noRoomMapPreviewText.style.display = "block";
+  roomMapPreviewImage.style.display = "none";
 
-  applyBattleZoom();
+  roomMapPreviewImage.onload = function () {
+    noRoomMapPreviewText.style.display = "none";
+    roomMapPreviewImage.style.display = "block";
+  };
+
+  roomMapPreviewImage.onerror = function () {
+    roomMapPreviewImage.style.display = "none";
+    noRoomMapPreviewText.textContent = "Map preview failed to load.";
+    noRoomMapPreviewText.style.display = "block";
+  };
+
+  roomMapPreviewImage.src = freshUrl;
+
+  noBattleMapText.textContent = "Loading battle map...";
+  noBattleMapText.style.display = "block";
+  battleMapImage.style.display = "none";
+
+  battleMapImage.onload = function () {
+    noBattleMapText.style.display = "none";
+    battleMapImage.style.display = "block";
+    applyBattleZoom();
+  };
+
+  battleMapImage.onerror = function () {
+    battleMapImage.style.display = "none";
+    noBattleMapText.textContent = "Battle map failed to load.";
+    noBattleMapText.style.display = "block";
+  };
+
+  battleMapImage.src = freshUrl;
 }
 
 uploadRoomMapButton.addEventListener("click", async function () {
@@ -1078,28 +1140,34 @@ uploadRoomMapButton.addEventListener("click", async function () {
     const cloudinaryResult = await uploadMapToCloudinary(file);
 
     const newMap = {
-      name: file.name,
+      name: getSafeMapName(file.name),
       url: cloudinaryResult.secure_url,
       publicId: cloudinaryResult.public_id
     };
 
     const mapId = await saveMapToRoomLibrary(newMap);
 
-    await setCurrentRoomMap({
+    const savedMap = {
       id: mapId,
       name: newMap.name,
       url: newMap.url,
       publicId: newMap.publicId,
       savedToLibrary: true
-    });
+    };
 
-    showSharedMap({
-      id: mapId,
-      name: newMap.name,
-      url: newMap.url,
-      publicId: newMap.publicId,
-      savedToLibrary: true
-    });
+    await setCurrentRoomMap(savedMap);
+
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      currentMap: savedMap,
+      currentMapUrl: savedMap.url,
+      currentMapName: savedMap.name,
+      currentMapId: savedMap.id,
+      currentMapPublicId: savedMap.publicId,
+      currentMapSavedToLibrary: true
+    };
+
+    showSharedMap(savedMap);
 
     mapUploadStatus.textContent = "Map uploaded, saved to this room, and shared.";
     roomMapUploadInput.value = "";
@@ -1129,6 +1197,17 @@ removeRoomMapButton.addEventListener("click", async function () {
     }
 
     await setCurrentRoomMap(null);
+
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      currentMap: null,
+      currentMapUrl: null,
+      currentMapName: null,
+      currentMapId: null,
+      currentMapPublicId: null,
+      currentMapSavedToLibrary: false
+    };
+
     showSharedMap(null);
 
     mapUploadStatus.textContent = "Current map removed.";
@@ -1151,7 +1230,7 @@ saveCurrentMapButton.addEventListener("click", async function () {
       return;
     }
 
-    if (currentMap.id && currentMap.savedToLibrary) {
+    if (currentMap.id && currentMap.savedToLibrary === true) {
       alert("This current map is already saved in the room library.");
       return;
     }
@@ -1162,21 +1241,27 @@ saveCurrentMapButton.addEventListener("click", async function () {
       publicId: currentMap.publicId || null
     });
 
-    await setCurrentRoomMap({
+    const savedMap = {
       id: mapId,
       name: currentMap.name || "Recovered Current Map",
       url: currentMap.url,
       publicId: currentMap.publicId || null,
       savedToLibrary: true
-    });
+    };
 
-    showSharedMap({
-      id: mapId,
-      name: currentMap.name || "Recovered Current Map",
-      url: currentMap.url,
-      publicId: currentMap.publicId || null,
-      savedToLibrary: true
-    });
+    await setCurrentRoomMap(savedMap);
+
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      currentMap: savedMap,
+      currentMapUrl: savedMap.url,
+      currentMapName: savedMap.name,
+      currentMapId: savedMap.id,
+      currentMapPublicId: savedMap.publicId,
+      currentMapSavedToLibrary: true
+    };
+
+    showSharedMap(savedMap);
 
     mapUploadStatus.textContent = "Current map saved to room library.";
   } catch (error) {
@@ -1211,7 +1296,7 @@ if (updateBattleMapButton) {
 
       const currentOnlyMap = {
         id: null,
-        name: file.name,
+        name: getSafeMapName(file.name),
         url: cloudinaryResult.secure_url,
         publicId: cloudinaryResult.public_id,
         savedToLibrary: false
