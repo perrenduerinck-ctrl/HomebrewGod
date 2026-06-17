@@ -1,50 +1,99 @@
 /* =====================================================
-   STYLE SECTION 1 — BASE PAGE
+   HOME BREW GOD — FULL STYLE REMAKE
+   Blue / Purple Godly Theme
+====================================================== */
+
+
+/* =====================================================
+   STYLE SECTION 1 — ROOT / GLOBAL COLORS
+====================================================== */
+
+:root {
+  --bg-main: #070916;
+  --bg-panel: #101528;
+  --bg-panel-2: #151b33;
+  --bg-panel-3: #1b2140;
+  --bg-input: #0d1224;
+  --bg-viewer: #05070f;
+
+  --text-main: #f5f7ff;
+  --text-soft: #b9c2ef;
+  --text-dim: #8d97c8;
+
+  --blue: #58a6ff;
+  --blue-soft: #78bcff;
+  --purple: #9d6bff;
+  --purple-soft: #b48cff;
+  --pink-glow: #d76dff;
+
+  --border: rgba(112, 136, 255, 0.28);
+  --border-strong: rgba(140, 112, 255, 0.5);
+
+  --danger: #ff5a7a;
+  --danger-soft: rgba(255, 90, 122, 0.18);
+  --success: #67e8a5;
+
+  --shadow-main: 0 10px 35px rgba(0, 0, 0, 0.35);
+  --shadow-glow: 0 0 25px rgba(110, 130, 255, 0.18);
+}
+
+
+/* =====================================================
+   STYLE SECTION 2 — BASE PAGE
 ====================================================== */
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background:
+    radial-gradient(circle at top left, rgba(90, 120, 255, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(180, 90, 255, 0.10), transparent 30%),
+    linear-gradient(180deg, #060813 0%, #090c18 50%, #05070f 100%);
+}
+
 body {
   font-family: Arial, sans-serif;
-  background:
-    radial-gradient(circle at top left, rgba(255, 59, 59, 0.14), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(95, 36, 190, 0.16), transparent 36%),
-    #09090d;
-  color: #f5f5f7;
+  color: var(--text-main);
   margin: 0;
   padding: 20px;
   min-height: 100vh;
+  background: transparent;
 }
 
 h1 {
-  color: #ff3b3b;
-  margin: 0 0 8px;
-  font-size: 42px;
-  letter-spacing: 1px;
-  text-shadow: 0 0 18px rgba(255, 59, 59, 0.3);
+  margin-top: 0;
+  color: #ffffff;
+  text-shadow: 0 0 18px rgba(130, 160, 255, 0.22);
 }
 
-h2 {
-  margin: 0 0 10px;
-  font-size: 24px;
-}
-
+h2,
 h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
+  color: #eef3ff;
+  margin-top: 0;
+  margin-bottom: 8px;
 }
 
 p {
-  line-height: 1.4;
+  color: var(--text-soft);
+}
+
+b,
+strong {
+  color: #ffffff;
 }
 
 hr {
   border: none;
-  border-top: 1px solid #363646;
-  margin: 16px 0;
+  border-top: 1px solid rgba(120, 135, 210, 0.22);
+  margin: 18px 0;
 }
+
+
+/* =====================================================
+   STYLE SECTION 3 — INPUTS / BUTTONS
+====================================================== */
 
 input {
   padding: 11px 12px;
@@ -53,21 +102,21 @@ input {
   max-width: 100%;
   font-size: 16px;
   display: block;
-  background: #13131b;
-  color: #ffffff;
-  border: 1px solid #4b4b5d;
-  border-radius: 8px;
+  color: var(--text-main);
+  background: linear-gradient(180deg, rgba(19, 26, 49, 0.95), rgba(12, 17, 33, 0.96));
+  border: 1px solid rgba(116, 138, 255, 0.22);
+  border-radius: 12px;
   outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 input:focus {
-  border-color: #ff3b3b;
-  box-shadow: 0 0 0 3px rgba(255, 59, 59, 0.18);
+  border-color: rgba(115, 171, 255, 0.72);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.14);
 }
 
-input[type="file"] {
-  background: #101018;
-  border: 1px dashed #68687a;
+input::placeholder {
+  color: #91a0db;
 }
 
 button {
@@ -75,41 +124,49 @@ button {
   margin: 5px 5px 5px 0;
   cursor: pointer;
   font-size: 16px;
-  background: linear-gradient(180deg, #363643, #24242e);
   color: #ffffff;
-  border: 1px solid #666679;
-  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(91, 113, 255, 0.28), rgba(126, 87, 255, 0.14)),
+    linear-gradient(180deg, #22294c, #161c35);
+  border: 1px solid rgba(130, 148, 255, 0.34);
+  border-radius: 12px;
   transition:
-    transform 0.08s ease,
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    transform 0.15s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.20);
 }
 
 button:hover {
-  background: linear-gradient(180deg, #474758, #2f2f3b);
-  border-color: #ff3b3b;
-  box-shadow: 0 0 14px rgba(255, 59, 59, 0.14);
+  transform: translateY(-1px);
+  border-color: rgba(150, 170, 255, 0.62);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.22),
+    0 0 18px rgba(107, 121, 255, 0.15);
+  background:
+    linear-gradient(180deg, rgba(110, 135, 255, 0.34), rgba(153, 95, 255, 0.18)),
+    linear-gradient(180deg, #28305a, #1a2140);
 }
 
 button:active {
-  transform: translateY(1px);
+  transform: translateY(0);
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 
 /* =====================================================
-   STYLE SECTION 2 — SHARED LAYOUT
+   STYLE SECTION 4 — SHARED LAYOUT
 ====================================================== */
 
 .screen {
   display: block;
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 .hidden {
@@ -117,30 +174,30 @@ button:disabled {
 }
 
 .box {
-  background: rgba(22, 22, 31, 0.94);
-  border: 1px solid #333344;
-  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(18, 24, 44, 0.96), rgba(12, 16, 31, 0.98));
+  border: 1px solid var(--border);
+  border-radius: 18px;
   padding: 16px;
   margin-top: 15px;
   max-width: 1000px;
-  box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow-main), var(--shadow-glow);
+  backdrop-filter: blur(4px);
 }
 
 .small {
-  color: #b8b8c9;
+  color: var(--text-dim);
   font-size: 14px;
   word-break: break-word;
 }
 
 .status {
-  color: #c7c7d8;
+  color: var(--text-soft);
   margin-top: 8px;
 }
 
 .row {
-  border-bottom: 1px solid #363646;
+  border-bottom: 1px solid rgba(123, 137, 213, 0.18);
   padding: 12px 0;
 }
 
@@ -150,26 +207,30 @@ button:disabled {
 
 .row-title {
   font-weight: bold;
-  margin-bottom: 6px;
-  color: #ffffff;
+  margin-bottom: 5px;
+  color: #f7f9ff;
 }
 
 
 /* =====================================================
-   STYLE SECTION 3 — ROOM DASHBOARD
+   STYLE SECTION 5 — AUTH / LOBBY / ROOM PANELS
 ====================================================== */
 
+#authScreen h1,
+#lobbyScreen h1,
+#roomDashboardScreen h1,
+#battleMapScreen h1 {
+  margin-bottom: 10px;
+}
+
 #roomCodeText {
-  display: inline-block;
-  font-size: 34px;
-  color: #ff3b3b;
+  font-size: 30px;
+  color: #ffffff;
   font-weight: bold;
-  letter-spacing: 2px;
-  background: #101018;
-  border: 1px solid #3a3a4a;
-  border-radius: 10px;
-  padding: 8px 14px;
-  margin: 4px 0 10px;
+  letter-spacing: 1px;
+  text-shadow:
+    0 0 10px rgba(88, 166, 255, 0.18),
+    0 0 18px rgba(157, 107, 255, 0.18);
 }
 
 #playersList,
@@ -178,261 +239,362 @@ button:disabled {
   margin-top: 8px;
 }
 
-#dmMapControls {
-  border-color: rgba(255, 59, 59, 0.42);
-  background:
-    linear-gradient(180deg, rgba(80, 20, 20, 0.26), rgba(22, 22, 31, 0.94));
+#playersList .row,
+#myRoomsList .row,
+#roomMapsList .row {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 12px;
+  border-radius: 14px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(108, 122, 220, 0.14);
 }
 
 
 /* =====================================================
-   STYLE SECTION 4 — ROOM MAP PREVIEW
+   STYLE SECTION 6 — ROOM DASHBOARD DM MAP CONTROLS
+====================================================== */
+
+#dmMapControls {
+  border-color: rgba(132, 112, 255, 0.35);
+  background:
+    linear-gradient(180deg, rgba(24, 20, 42, 0.98), rgba(16, 13, 29, 0.98));
+}
+
+
+/* =====================================================
+   STYLE SECTION 7 — CURRENT MAP PREVIEW
 ====================================================== */
 
 #roomMapPreviewBox {
   margin-top: 10px;
-  border: 1px solid #444456;
-  border-radius: 14px;
-  min-height: 260px;
+  border: 1px solid rgba(120, 130, 220, 0.25);
+  border-radius: 18px;
+  min-height: 250px;
   display: flex;
   align-items: center;
   justify-content: center;
   background:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.035) 75%),
-    #15151d;
-  background-size: 28px 28px;
-  background-position: 0 0, 0 14px, 14px -14px, -14px 0;
+    radial-gradient(circle at center, rgba(83, 103, 255, 0.06), transparent 50%),
+    linear-gradient(180deg, rgba(11, 15, 29, 0.98), rgba(5, 8, 16, 0.98));
   overflow: auto;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.28);
 }
 
 #roomMapPreviewImage {
   max-width: 100%;
-  max-height: 380px;
+  max-height: 350px;
   display: none;
   border-radius: 10px;
-  box-shadow: 0 0 28px rgba(0, 0, 0, 0.45);
 }
 
 #noRoomMapPreviewText {
-  color: #aaaabb;
+  color: var(--text-dim);
 }
 
 
 /* =====================================================
-   STYLE SECTION 5 — BATTLE MAP SCREEN
+   STYLE SECTION 8 — BATTLE MAP SCREEN FRAME
 ====================================================== */
 
 #battleMapScreen {
-  max-width: none;
   min-height: calc(100vh - 40px);
 }
 
 #battleTopBar {
-  background: rgba(18, 18, 26, 0.97);
-  border: 1px solid #333344;
-  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(14, 18, 34, 0.96), rgba(10, 14, 26, 0.98));
+  border: 1px solid rgba(112, 128, 230, 0.28);
+  border-radius: 20px;
   padding: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   position: sticky;
-  top: 10px;
+  top: 0;
   z-index: 10;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-main), var(--shadow-glow);
+  backdrop-filter: blur(6px);
 }
 
 #battleTopActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 #battleTopActions button {
   margin: 0;
-  padding: 9px 13px;
 }
 
-#battleInfoLine {
-  margin: 9px 0 0;
-  color: #d8d8e8;
-  background: #101018;
-  border: 1px solid #303040;
-  border-radius: 10px;
-  padding: 8px 10px;
+#battleInfoLine,
+#battleTopBar p {
+  margin: 0 0 10px 0;
+  padding: 12px 14px;
+  color: #e8eeff;
+  background: linear-gradient(180deg, rgba(7, 10, 24, 0.85), rgba(5, 8, 18, 0.92));
+  border: 1px solid rgba(109, 128, 230, 0.20);
+  border-radius: 14px;
 }
-
-#battleInfoLine b {
-  color: #ffffff;
-}
-
-
-/* =====================================================
-   STYLE SECTION 6 — COMPACT DM QUICK MAP UPDATE
-====================================================== */
-
-#battleDmMapControls {
-  max-width: none;
-  margin-top: 9px;
-  padding: 9px 10px;
-  border-radius: 12px;
-  background:
-    linear-gradient(180deg, rgba(70, 22, 28, 0.42), rgba(18, 18, 26, 0.96));
-  border-color: rgba(255, 59, 59, 0.42);
-}
-
-#battleDmMapControls h2 {
-  display: inline-block;
-  color: #ff6868;
-  font-size: 18px;
-  margin: 0 12px 0 0;
-  vertical-align: middle;
-}
-
-#battleDmMapControls .small {
-  display: none;
-}
-
-#battleDmMapControls input[type="file"] {
-  display: inline-block;
-  width: 260px;
-  max-width: 100%;
-  margin: 0 8px 0 0;
-  padding: 7px 8px;
-  font-size: 14px;
-  vertical-align: middle;
-}
-
-#battleDmMapControls button {
-  display: inline-block;
-  width: auto;
-  margin: 0 8px 0 0;
-  padding: 8px 12px;
-  font-size: 14px;
-  vertical-align: middle;
-}
-
-#battleMapUpdateStatus {
-  display: inline-block;
-  min-height: 0;
-  margin: 0;
-  font-size: 14px;
-  color: #b8b8c9;
-  vertical-align: middle;
-}
-
-
-/* =====================================================
-   STYLE SECTION 7 — BATTLE MAP VIEWER
-====================================================== */
 
 #battleMapViewer {
-  border: 1px solid #444456;
-  border-radius: 14px;
-  height: calc(100vh - 185px);
-  min-height: 480px;
+  border: 1px solid rgba(113, 128, 230, 0.24);
+  border-radius: 18px;
+  height: calc(100vh - 190px);
   background:
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.035), transparent 40%),
-    #09090d;
+    radial-gradient(circle at center, rgba(90, 110, 255, 0.05), transparent 40%),
+    linear-gradient(180deg, #05070e, #020409);
   overflow: auto;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow:
-    inset 0 0 70px rgba(0, 0, 0, 0.82),
-    0 12px 35px rgba(0, 0, 0, 0.32);
+    inset 0 0 30px rgba(0, 0, 0, 0.35),
+    0 8px 30px rgba(0, 0, 0, 0.22);
 }
 
 #battleMapImage {
   max-width: 100%;
   display: none;
   transform-origin: center center;
-  border-radius: 8px;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
 }
 
 #noBattleMapText {
-  color: #aaaabb;
-  font-size: 20px;
+  color: var(--text-dim);
 }
 
 
 /* =====================================================
-   STYLE SECTION 8 — FUTURE PUZZLE MAP READY
+   STYLE SECTION 9 — COLLAPSIBLE BATTLE EDIT MENUS
 ====================================================== */
 
-.map-board {
+.battleEditorMenu {
+  max-width: none !important;
+  margin-top: 10px !important;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid rgba(110, 128, 235, 0.26);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(18, 21, 39, 0.96), rgba(11, 14, 27, 0.98));
+}
+
+.battleEditorMenu summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #eef2ff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background:
+    linear-gradient(90deg, rgba(63, 101, 255, 0.16), rgba(143, 81, 255, 0.12));
+  border-bottom: 1px solid rgba(120, 136, 235, 0.16);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.battleEditorMenu summary:hover {
+  background:
+    linear-gradient(90deg, rgba(77, 120, 255, 0.22), rgba(154, 95, 255, 0.17));
+}
+
+.battleEditorMenu summary::-webkit-details-marker {
+  display: none;
+}
+
+.battleEditorMenu summary::after {
+  content: "▾";
+  font-size: 18px;
+  color: var(--blue-soft);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.battleEditorMenu:not([open]) summary::after {
+  transform: rotate(-90deg);
+  color: var(--purple-soft);
+}
+
+.battleEditorMenu[open] summary {
+  box-shadow: inset 0 -1px 0 rgba(120, 136, 235, 0.12);
+}
+
+.battleEditorInner {
+  padding: 14px 16px 16px 16px;
+}
+
+.battleEditorInner input,
+.battleEditorInner button {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.battleEditorInner input[type="file"] {
+  width: 280px;
+  margin-right: 8px;
+}
+
+.battleEditorInner .status {
+  display: inline-block;
+  margin: 8px 0 0 6px;
+  vertical-align: middle;
+}
+
+
+/* =====================================================
+   STYLE SECTION 10 — SPECIAL COLORS FOR BATTLE MENUS
+====================================================== */
+
+#battleDmMapControls {
+  border-color: rgba(255, 90, 122, 0.28);
+  box-shadow:
+    0 8px 26px rgba(0, 0, 0, 0.20),
+    0 0 18px rgba(255, 90, 122, 0.06);
+}
+
+#battleDmMapControls summary {
+  color: #ff859c;
+  background:
+    linear-gradient(90deg, rgba(255, 80, 112, 0.14), rgba(110, 85, 255, 0.12));
+}
+
+#battleDmMapControls summary::after {
+  color: #ff8faa;
+}
+
+#puzzleMapControls {
+  border-color: rgba(120, 135, 255, 0.30);
+  box-shadow:
+    0 8px 26px rgba(0, 0, 0, 0.20),
+    0 0 18px rgba(120, 135, 255, 0.08);
+}
+
+#puzzleMapControls summary {
+  color: #d7ddff;
+  background:
+    linear-gradient(90deg, rgba(74, 108, 255, 0.18), rgba(146, 93, 255, 0.14));
+}
+
+
+/* =====================================================
+   STYLE SECTION 11 — PUZZLE MAP BOARD
+====================================================== */
+
+.map-board,
+#puzzleMapBoard {
+  margin-top: 12px;
   display: grid;
-  gap: 8px;
-  background: #07070a;
-  border: 1px solid #444456;
-  border-radius: 14px;
-  padding: 12px;
+  gap: 0;
+  justify-content: center;
+  align-content: start;
+  min-height: 520px;
+  padding: 0;
   overflow: auto;
+  border: 1px solid rgba(110, 130, 235, 0.20);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(5, 8, 15, 0.98), rgba(2, 4, 9, 1));
+  box-shadow:
+    inset 0 0 24px rgba(0, 0, 0, 0.35),
+    0 8px 24px rgba(0, 0, 0, 0.20);
+}
+
+#puzzleMapEmptyText {
+  padding: 20px;
+  color: var(--text-dim);
 }
 
 .map-tile {
   position: relative;
-  background: #111118;
-  border: 1px solid #3f3f50;
-  border-radius: 10px;
   overflow: hidden;
-}
-
-.map-tile.locked {
-  border-color: #ff3b3b;
-  box-shadow: 0 0 18px rgba(255, 59, 59, 0.25);
+  background: #000;
 }
 
 .map-tile img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   display: block;
+  object-fit: cover;
 }
 
 
 /* =====================================================
-   STYLE SECTION 9 — PHONE / SMALL SCREEN FIXES
+   STYLE SECTION 12 — TOKEN / TILE MINI BUTTONS
+   (Future-safe for puzzle tile buttons too)
+====================================================== */
+
+.puzzle-tile-actions button,
+.map-tile button {
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+
+
+/* =====================================================
+   STYLE SECTION 13 — FILE INPUT CLEANUP
+====================================================== */
+
+input[type="file"] {
+  padding: 10px;
+  background:
+    linear-gradient(180deg, rgba(11, 15, 28, 1), rgba(7, 10, 19, 1));
+  border-style: dashed;
+  border-color: rgba(126, 145, 250, 0.30);
+}
+
+
+/* =====================================================
+   STYLE SECTION 14 — LINKS / SMALL UI HELPERS
+====================================================== */
+
+a {
+  color: var(--blue-soft);
+}
+
+a:hover {
+  color: #b9cdff;
+}
+
+
+/* =====================================================
+   STYLE SECTION 15 — RESPONSIVE / SMALL SCREENS
 ====================================================== */
 
 @media (max-width: 900px) {
-  #battleDmMapControls h2 {
-    display: block;
-    margin: 0 0 6px;
+  body {
+    padding: 12px;
   }
 
-  #battleDmMapControls input[type="file"] {
+  .box {
+    padding: 14px;
+  }
+
+  #battleTopActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  #battleTopActions button {
     width: 100%;
-    display: block;
-    margin: 5px 0;
   }
 
-  #battleDmMapControls button {
+  .battleEditorInner input,
+  .battleEditorInner button,
+  .battleEditorInner .status {
+    display: block;
     width: 100%;
-    display: block;
-    margin: 5px 0;
+    margin: 6px 0;
   }
 
-  #battleMapUpdateStatus {
-    display: block;
-    margin-top: 5px;
+  #battleMapViewer {
+    height: calc(100vh - 280px);
   }
 }
 
 @media (max-width: 700px) {
   body {
     padding: 10px;
-  }
-
-  h1 {
-    font-size: 32px;
-  }
-
-  .box {
-    padding: 12px;
-    border-radius: 12px;
   }
 
   button {
@@ -453,15 +615,15 @@ button:disabled {
   }
 
   #battleTopActions {
-    display: block;
+    grid-template-columns: 1fr;
   }
 
   #battleMapViewer {
-    height: calc(100vh - 335px);
-    min-height: 300px;
+    height: calc(100vh - 320px);
   }
 
-  #battleInfoLine {
-    font-size: 14px;
+  .battleEditorMenu summary {
+    font-size: 16px;
+    padding: 12px 14px;
   }
 }
