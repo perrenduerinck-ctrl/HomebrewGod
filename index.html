@@ -208,22 +208,59 @@
           </summary>
 
           <div class="battleEditorInner">
-            <input id="tokenNameInput" type="text" placeholder="Token name, like Velmir">
 
-            <select id="tokenTypeSelect">
-              <option value="player">Player</option>
-              <option value="enemy">Enemy</option>
-              <option value="npc">NPC</option>
-              <option value="object">Object</option>
-            </select>
+            <div class="battleEditorGroup">
+              <h3>Token Scale</h3>
 
-            <input id="tokenImageUploadInput" type="file" accept="image/*">
+              <p class="small">
+                Set Medium to match one normal map square. Small and Medium use this size.
+                Large is 2x, Huge is 3x, Gargantuan is 4x.
+              </p>
 
-            <button id="addTokenButton">Add Token</button>
+              <input
+                id="tokenMediumSizeInput"
+                type="number"
+                min="24"
+                max="240"
+                step="4"
+                value="64"
+                placeholder="Medium token size"
+              >
 
-            <p id="tokenBuilderStatus" class="status">
-              Token system ready. App.js wiring comes next.
-            </p>
+              <button id="saveTokenScaleButton">Save Medium Size</button>
+            </div>
+
+            <hr>
+
+            <div class="battleEditorGroup">
+              <h3>Add Token</h3>
+
+              <input id="tokenNameInput" type="text" placeholder="Token name, like Velmir">
+
+              <select id="tokenTypeSelect">
+                <option value="player">Player</option>
+                <option value="enemy">Enemy</option>
+                <option value="npc">NPC</option>
+                <option value="object">Object</option>
+              </select>
+
+              <select id="tokenSizeSelect">
+                <option value="tiny">Tiny</option>
+                <option value="small">Small</option>
+                <option value="medium" selected>Medium</option>
+                <option value="large">Large</option>
+                <option value="huge">Huge</option>
+                <option value="gargantuan">Gargantuan</option>
+              </select>
+
+              <input id="tokenImageUploadInput" type="file" accept="image/*">
+
+              <button id="addTokenButton">Add Token</button>
+
+              <p id="tokenBuilderStatus" class="status">
+                Token system ready.
+              </p>
+            </div>
           </div>
         </details>
       </div>
