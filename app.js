@@ -25,6 +25,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
+import { createTokenSystem } from "./tokens.js";
 // =====================================================
 // APP SECTION 2 — FIREBASE / CLOUDINARY CONFIG
 // =====================================================
@@ -110,6 +111,9 @@ const E = {
   battleMapImage: $("battleMapImage"),
   noBattleMapText: $("noBattleMapText"),
   battleMapViewer: $("battleMapViewer"),
+  battleMapSurface: $("battleMapSurface"),
+
+  battleManagerBar: $("battleManagerBar"),
 
   battleDmMapControls: $("battleDmMapControls"),
   battleMapUploadInput: $("battleMapUploadInput"),
@@ -124,7 +128,15 @@ const E = {
   addTileWestButton: $("addTileWestButton"),
   centerPuzzleBoardButton: $("centerPuzzleBoardButton"),
   puzzleMapStatus: $("puzzleMapStatus"),
-  puzzleMapBoard: $("puzzleMapBoard")
+  puzzleMapBoard: $("puzzleMapBoard"),
+
+  tokenBuilderControls: $("tokenBuilderControls"),
+  tokenNameInput: $("tokenNameInput"),
+  tokenTypeSelect: $("tokenTypeSelect"),
+  tokenImageUploadInput: $("tokenImageUploadInput"),
+  addTokenButton: $("addTokenButton"),
+  tokenBuilderStatus: $("tokenBuilderStatus"),
+  tokenLayer: $("tokenLayer")
 };
 
 let currentUser = null;
@@ -135,6 +147,7 @@ let currentMapId = null;
 let latestMapsSnapshot = null;
 let latestActivePlayersSnapshot = null;
 let battleZoom = 1;
+let tokenSystem = null;
 let stopListeningToMyRooms = null;
 let stopListeningToRoom = null;
 let stopListeningToPlayers = null;
@@ -2101,6 +2114,42 @@ if (E.addTileWestButton) {
 if (E.centerPuzzleBoardButton) {
   E.centerPuzzleBoardButton.addEventListener("click", function () {
     centerPuzzleBoard();
+  });
+}
+
+// =====================================================
+// TOKEN SYSTEM CONNECTION
+// =====================================================
+
+if (!tokenSystem) {
+  tokenSystem = createTokenSystem({
+    db,
+    doc,
+    updateDoc,
+    serverTimestamp,
+
+    uploadImage: uploadMapToCloudinary,
+
+    getCurrentRoomCode: function () {
+      return currentRoomCode;
+    },
+
+    getCurrentRoomData: function () {
+      return currentRoomData;
+    },
+
+    setCurrentRoomData: function (newRoomData) {
+      currentRoomData = newRoomData;
+    },
+
+    getCurrentIsDM: function () {
+      return currentIsDM;
+    },
+
+    getPuzzleTiles,
+    getActivePuzzleTile,
+    getPuzzleViewMode,
+    buildMapFromRoomFields
   });
 }
 
