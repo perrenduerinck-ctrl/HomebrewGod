@@ -213,21 +213,52 @@
               <h3>Token Scale</h3>
 
               <p class="small">
-                Set Medium to match one normal map square. Small and Medium use this size.
-                Large is 2x, Huge is 3x, Gargantuan is 4x.
+                Drag the slider until the Medium preview matches one normal map square.
+                Small and Medium use the same base. Large is 2x, Huge is 3x, Gargantuan is 4x.
               </p>
+
+              <label class="small" for="tokenMediumSizeInput">
+                Medium Base Size:
+                <b><span id="tokenMediumSizeValue">64</span>px</b>
+              </label>
 
               <input
                 id="tokenMediumSizeInput"
-                type="number"
+                type="range"
                 min="24"
-                max="240"
+                max="180"
                 step="4"
                 value="64"
-                placeholder="Medium token size"
               >
 
               <button id="saveTokenScaleButton">Save Medium Size</button>
+
+              <div id="tokenScalePreview" aria-label="Token size preview">
+                <div class="tokenScalePreviewItem">
+                  <div id="tokenPreviewTiny" class="tokenScaleDot">T</div>
+                  <span>Tiny</span>
+                </div>
+
+                <div class="tokenScalePreviewItem">
+                  <div id="tokenPreviewMedium" class="tokenScaleDot">M</div>
+                  <span>Medium</span>
+                </div>
+
+                <div class="tokenScalePreviewItem">
+                  <div id="tokenPreviewLarge" class="tokenScaleDot">L</div>
+                  <span>Large</span>
+                </div>
+
+                <div class="tokenScalePreviewItem">
+                  <div id="tokenPreviewHuge" class="tokenScaleDot">H</div>
+                  <span>Huge</span>
+                </div>
+
+                <div class="tokenScalePreviewItem">
+                  <div id="tokenPreviewGargantuan" class="tokenScaleDot">G</div>
+                  <span>Gargantuan</span>
+                </div>
+              </div>
             </div>
 
             <hr>
@@ -237,14 +268,18 @@
 
               <input id="tokenNameInput" type="text" placeholder="Token name, like Velmir">
 
-              <select id="tokenTypeSelect">
+              <p class="small">Token Type</p>
+
+              <select id="tokenTypeSelect" size="4">
                 <option value="player">Player</option>
-                <option value="enemy">Enemy</option>
+                <option value="enemy" selected>Monster / Enemy</option>
                 <option value="npc">NPC</option>
                 <option value="object">Object</option>
               </select>
 
-              <select id="tokenSizeSelect">
+              <p class="small">Creature Size</p>
+
+              <select id="tokenSizeSelect" size="6">
                 <option value="tiny">Tiny</option>
                 <option value="small">Small</option>
                 <option value="medium" selected>Medium</option>
