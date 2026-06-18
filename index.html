@@ -166,71 +166,84 @@
     </p>
 
     <!-- =====================================================
-         COLLAPSIBLE DM QUICK MAP UPDATE
+         COLLAPSIBLE BATTLE MANAGER
     ====================================================== -->
-    <details id="battleDmMapControls" class="box battleEditorMenu">
+    <details id="battleManagerBar" class="box battleEditorMenu" open>
       <summary>
-        <span>DM Quick Map Update</span>
+        <span>Battle Manager</span>
       </summary>
 
-      <div class="battleEditorInner">
-        <input id="battleMapUploadInput" type="file" accept="image/*">
+      <div id="battleManagerInner" class="battleEditorInner">
 
-        <button id="updateBattleMapButton">Update Current Map Without Saving</button>
+        <!-- =====================================================
+             COMBINED PUZZLE / MAP BUILDER
+        ====================================================== -->
+        <details id="puzzleMapControls" class="battleEditorMenu" open>
+          <summary>
+            <span>Puzzle Map Builder</span>
+          </summary>
 
-        <p id="battleMapUpdateStatus" class="status"></p>
-      </div>
-    </details>
+          <div class="battleEditorInner">
 
-    <!-- =====================================================
-         COLLAPSIBLE PUZZLE MAP BUILDER
-    ====================================================== -->
-    <details id="puzzleMapControls" class="box battleEditorMenu">
-      <summary>
-        <span>Puzzle Map Builder</span>
-      </summary>
+            <!-- Current map quick update is now part of Puzzle Map Builder -->
+            <div id="battleDmMapControls" class="battleEditorGroup">
+              <h3>Quick Current Map Update</h3>
 
-      <div class="battleEditorInner">
-        <input id="puzzleTileUploadInput" type="file" accept="image/*">
+              <input id="battleMapUploadInput" type="file" accept="image/*">
 
-        <button id="addTileNorthButton">Add North</button>
-        <button id="addTileSouthButton">Add South</button>
-        <button id="addTileEastButton">Add East</button>
-        <button id="addTileWestButton">Add West</button>
+              <button id="updateBattleMapButton">Update Current Map Without Saving</button>
 
-        <button id="centerPuzzleBoardButton">Center Board / Unfocus</button>
+              <p id="battleMapUpdateStatus" class="status"></p>
+            </div>
 
-        <p id="puzzleMapStatus" class="status">
-          Puzzle map system ready.
-        </p>
-      </div>
-    </details>
+            <hr>
 
-    <!-- =====================================================
-         COLLAPSIBLE TOKEN BUILDER
-    ====================================================== -->
-    <details id="tokenBuilderControls" class="box battleEditorMenu">
-      <summary>
-        <span>Token Builder</span>
-      </summary>
+            <div class="battleEditorGroup">
+              <h3>Puzzle Tile Tools</h3>
 
-      <div class="battleEditorInner">
-        <input id="tokenNameInput" type="text" placeholder="Token name, like Velmir">
+              <input id="puzzleTileUploadInput" type="file" accept="image/*">
 
-        <select id="tokenTypeSelect">
-          <option value="player">Player</option>
-          <option value="enemy">Enemy</option>
-          <option value="npc">NPC</option>
-          <option value="object">Object</option>
-        </select>
+              <button id="addTileNorthButton">Add North</button>
+              <button id="addTileSouthButton">Add South</button>
+              <button id="addTileEastButton">Add East</button>
+              <button id="addTileWestButton">Add West</button>
 
-        <input id="tokenImageUploadInput" type="file" accept="image/*">
+              <button id="centerPuzzleBoardButton">Center Board / Unfocus</button>
 
-        <button id="addTokenButton">Add Token</button>
+              <p id="puzzleMapStatus" class="status">
+                Puzzle map system ready.
+              </p>
+            </div>
+          </div>
+        </details>
 
-        <p id="tokenBuilderStatus" class="status">
-          Token system ready.
-        </p>
+        <!-- =====================================================
+             COLLAPSIBLE TOKEN BUILDER
+        ====================================================== -->
+        <details id="tokenBuilderControls" class="battleEditorMenu" open>
+          <summary>
+            <span>Token Builder</span>
+          </summary>
+
+          <div class="battleEditorInner">
+            <input id="tokenNameInput" type="text" placeholder="Token name, like Velmir">
+
+            <select id="tokenTypeSelect">
+              <option value="player">Player</option>
+              <option value="enemy">Enemy</option>
+              <option value="npc">NPC</option>
+              <option value="object">Object</option>
+            </select>
+
+            <input id="tokenImageUploadInput" type="file" accept="image/*">
+
+            <button id="addTokenButton">Add Token</button>
+
+            <p id="tokenBuilderStatus" class="status">
+              Token system ready. App.js wiring comes next.
+            </p>
+          </div>
+        </details>
       </div>
     </details>
   </section>
