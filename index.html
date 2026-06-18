@@ -176,7 +176,7 @@
       <div id="battleManagerInner" class="battleEditorInner">
 
         <!-- =====================================================
-             COMBINED PUZZLE / MAP BUILDER
+             COLLAPSIBLE PUZZLE MAP BUILDER
         ====================================================== -->
         <details id="puzzleMapControls" class="battleEditorMenu" open>
           <summary>
@@ -184,36 +184,18 @@
           </summary>
 
           <div class="battleEditorInner">
+            <input id="puzzleTileUploadInput" type="file" accept="image/*">
 
-            <!-- Current map quick update is now part of Puzzle Map Builder -->
-            <div id="battleDmMapControls" class="battleEditorGroup">
-              <h3>Quick Current Map Update</h3>
+            <button id="addTileNorthButton">Add North</button>
+            <button id="addTileSouthButton">Add South</button>
+            <button id="addTileEastButton">Add East</button>
+            <button id="addTileWestButton">Add West</button>
 
-              <input id="battleMapUploadInput" type="file" accept="image/*">
+            <button id="centerPuzzleBoardButton">Center Board / Unfocus</button>
 
-              <button id="updateBattleMapButton">Update Current Map Without Saving</button>
-
-              <p id="battleMapUpdateStatus" class="status"></p>
-            </div>
-
-            <hr>
-
-            <div class="battleEditorGroup">
-              <h3>Puzzle Tile Tools</h3>
-
-              <input id="puzzleTileUploadInput" type="file" accept="image/*">
-
-              <button id="addTileNorthButton">Add North</button>
-              <button id="addTileSouthButton">Add South</button>
-              <button id="addTileEastButton">Add East</button>
-              <button id="addTileWestButton">Add West</button>
-
-              <button id="centerPuzzleBoardButton">Center Board / Unfocus</button>
-
-              <p id="puzzleMapStatus" class="status">
-                Puzzle map system ready.
-              </p>
-            </div>
+            <p id="puzzleMapStatus" class="status">
+              Puzzle map system ready.
+            </p>
           </div>
         </details>
 
