@@ -205,23 +205,61 @@
         </p>
       </div>
     </details>
+
+    <!-- =====================================================
+         COLLAPSIBLE TOKEN BUILDER
+    ====================================================== -->
+    <details id="tokenBuilderControls" class="box battleEditorMenu">
+      <summary>
+        <span>Token Builder</span>
+      </summary>
+
+      <div class="battleEditorInner">
+        <input id="tokenNameInput" type="text" placeholder="Token name, like Velmir">
+
+        <select id="tokenTypeSelect">
+          <option value="player">Player</option>
+          <option value="enemy">Enemy</option>
+          <option value="npc">NPC</option>
+          <option value="object">Object</option>
+        </select>
+
+        <input id="tokenImageUploadInput" type="file" accept="image/*">
+
+        <button id="addTokenButton">Add Token</button>
+
+        <p id="tokenBuilderStatus" class="status">
+          Token system ready.
+        </p>
+      </div>
+    </details>
   </section>
 
   <!-- =====================================================
-       SINGLE MAP VIEWER
+       MAP SURFACE / TOKEN LAYER WRAPPER
   ====================================================== -->
-  <section id="battleMapViewer">
-    <p id="noBattleMapText">No battle map loaded yet.</p>
-    <img id="battleMapImage" alt="Battle map">
-  </section>
+  <section id="battleMapSurface">
+    <!-- =====================================================
+         SINGLE MAP VIEWER
+    ====================================================== -->
+    <section id="battleMapViewer">
+      <p id="noBattleMapText">No battle map loaded yet.</p>
+      <img id="battleMapImage" alt="Battle map">
+    </section>
 
-  <!-- =====================================================
-       PUZZLE MAP BOARD
-  ====================================================== -->
-  <section id="puzzleMapBoard" class="map-board hidden">
-    <div id="puzzleMapEmptyText" class="status">
-      No puzzle tiles yet. Open Puzzle Map Builder to add tiles.
-    </div>
+    <!-- =====================================================
+         PUZZLE MAP BOARD
+    ====================================================== -->
+    <section id="puzzleMapBoard" class="map-board hidden">
+      <div id="puzzleMapEmptyText" class="status">
+        No puzzle tiles yet. Open Puzzle Map Builder to add tiles.
+      </div>
+    </section>
+
+    <!-- =====================================================
+         TOKEN LAYER
+    ====================================================== -->
+    <div id="tokenLayer" aria-label="Battle map token layer"></div>
   </section>
 </main>
   
