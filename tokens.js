@@ -1,6 +1,5 @@
 // =====================================================
-// TOKENS.JS — HOMEBREW GOD TOKEN SYSTEM V1.6
-// D&D creature sizes + map-based white scale preview
+// TOKENS SECTION 1 — TOKEN SYSTEM EXPORT / DEPENDENCIES
 // =====================================================
 
 export function createTokenSystem(options) {
@@ -35,6 +34,11 @@ export function createTokenSystem(options) {
   let activeTokenDrag = null;
   let lastRenderedRoom = null;
   let scalePreviewHideTimer = null;
+
+
+// =====================================================
+// TOKENS SECTION 2 — DOM ELEMENTS / REFRESH
+// =====================================================
 
   const $ = (id) => document.getElementById(id);
 
@@ -90,6 +94,11 @@ export function createTokenSystem(options) {
     T.puzzleMapBoard = $("puzzleMapBoard");
   }
 
+
+// =====================================================
+// TOKENS SECTION 3 — STATUS / BASIC HELPERS
+// =====================================================
+
   function setStatus(message) {
     refreshElements();
 
@@ -97,6 +106,54 @@ export function createTokenSystem(options) {
       T.tokenBuilderStatus.textContent = message || "";
     }
   }
+
+  function clampPercent(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return 50;
+    }
+
+    return Math.max(0, Math.min(100, number));
+  }
+
+  function clampMediumSize(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return 64;
+    }
+
+    return Math.max(24, Math.min(240, Math.round(number)));
+  }
+
+  function normalizeSizeCategory(sizeCategory) {
+    const clean = String(sizeCategory || "").toLowerCase();
+
+    if (SIZE_MULTIPLIERS[clean]) {
+      return clean;
+    }
+
+    return "medium";
+  }
+
+  function sizeCategoryLabel(sizeCategory) {
+    const clean = normalizeSizeCategory(sizeCategory);
+
+    if (clean === "tiny") return "Tiny";
+    if (clean === "small") return "Small";
+    if (clean === "medium") return "Medium";
+    if (clean === "large") return "Large";
+    if (clean === "huge") return "Huge";
+    if (clean === "gargantuan") return "Gargantuan";
+
+    return "Medium";
+  }
+
+
+// =====================================================
+// TOKENS SECTION 4 — TOKEN STYLES
+// =====================================================
 
   function ensureStyles() {
     if (document.getElementById("homebrewGodTokenStyles")) {
@@ -345,6 +402,11 @@ export function createTokenSystem(options) {
     document.head.appendChild(style);
   }
 
+
+// =====================================================
+// TOKENS SECTION 5 — CONTROL CONNECTIONS
+// =====================================================
+
   function ensureListeners() {
     if (!window.homebrewGodTokenListenersReady) {
       window.homebrewGodTokenListenersReady = true;
@@ -384,35 +446,10 @@ export function createTokenSystem(options) {
     }
   }
 
-  function clampPercent(value) {
-    const number = Number(value);
 
-    if (!Number.isFinite(number)) {
-      return 50;
-    }
-
-    return Math.max(0, Math.min(100, number));
-  }
-
-  function clampMediumSize(value) {
-    const number = Number(value);
-
-    if (!Number.isFinite(number)) {
-      return 64;
-    }
-
-    return Math.max(24, Math.min(240, Math.round(number)));
-  }
-
-  function normalizeSizeCategory(sizeCategory) {
-    const clean = String(sizeCategory || "").toLowerCase();
-
-    if (SIZE_MULTIPLIERS[clean]) {
-      return clean;
-    }
-
-    return "medium";
-  }
+// =====================================================
+// TOKENS SECTION 6 — SIZE / SCALE LOGIC
+// =====================================================
 
   function getMediumSize(room) {
     const direct = room && Number(room.tokenMediumSize);
@@ -437,48 +474,6 @@ export function createTokenSystem(options) {
     return Math.round(mediumSize * multiplier);
   }
 
-  function getRoomTokens(room) {
-    if (!room || !Array.isArray(room.tokens)) {
-      return [];
-    }
-
-    return room.tokens
-      .filter(function (token) {
-        return token && token.id;
-      })
-      .map(function (token) {
-        const cleanType = ["player", "enemy", "npc", "object"].includes(String(token.type))
-          ? String(token.type)
-          : "object";
-
-        const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
-
-        return {
-          ...token,
-          type: cleanType,
-          x: clampPercent(token.x),
-          y: clampPercent(token.y),
-          sizeCategory: cleanSizeCategory,
-          creatureSize: cleanSizeCategory,
-          mapMode: token.mapMode || "single",
-          tileKey: token.tileKey || null
-        };
-      });
-  }
-
-  function sizeCategoryLabel(sizeCategory) {
-    const clean = normalizeSizeCategory(sizeCategory);
-
-    if (clean === "tiny") return "Tiny";
-    if (clean === "small") return "Small";
-    if (clean === "medium") return "Medium";
-    if (clean === "large") return "Large";
-    if (clean === "huge") return "Huge";
-    if (clean === "gargantuan") return "Gargantuan";
-
-    return "Medium";
-  }
-
   function updateScaleControlsFromRoom(room) {
     refreshElements();
 
@@ -501,114 +496,10 @@ export function createTokenSystem(options) {
     }
   }
 
-  function getCurrentTokenTarget(room) {
-    const safeRoom = room || {};
-    const tiles = deps.getPuzzleTiles ? deps.getPuzzleTiles(safeRoom) : [];
-    const viewMode = deps.getPuzzleViewMode ? deps.getPuzzleViewMode(safeRoom) : "board";
-    const activeTile = deps.getActivePuzzleTile ? deps.getActivePuzzleTile(safeRoom) : null;
 
-    if (tiles.length > 0) {
-      if (viewMode === "focus" && activeTile) {
-        return {
-          mapMode: "puzzle",
-          tileKey: activeTile.key
-        };
-      }
-
-      return {
-        mapMode: "puzzle",
-        tileKey: null
-      };
-    }
-
-    const currentMap = deps.buildMapFromRoomFields
-      ? deps.buildMapFromRoomFields(safeRoom)
-      : null;
-
-    if (currentMap && currentMap.url) {
-      return {
-        mapMode: "single",
-        tileKey: null
-      };
-    }
-
-    return {
-      mapMode: null,
-      tileKey: null
-    };
-  }
-
-  function tokenMatchesCurrentView(token, room) {
-    const target = getCurrentTokenTarget(room);
-
-    if (!target.mapMode) {
-      return false;
-    }
-
-    if ((token.mapMode || "single") !== target.mapMode) {
-      return false;
-    }
-
-    if (target.mapMode === "puzzle") {
-      if (target.tileKey) {
-        return token.tileKey === target.tileKey;
-      }
-
-      return !token.tileKey;
-    }
-
-    return target.mapMode === "single";
-  }
-
-  function getTokenContainerForCurrentView() {
-    refreshElements();
-
-    if (T.puzzleMapBoard && !T.puzzleMapBoard.classList.contains("hidden")) {
-      return T.puzzleMapBoard;
-    }
-
-    if (T.battleMapViewer && !T.battleMapViewer.classList.contains("hidden")) {
-      return T.battleMapViewer;
-    }
-
-    return T.battleMapSurface || T.battleMapViewer || T.puzzleMapBoard || null;
-  }
-
-  function prepareTokenLayer() {
-    refreshElements();
-
-    if (!T.tokenLayer) {
-      console.warn("Homebrew God tokens: tokenLayer was not found.");
-      return null;
-    }
-
-    const container = getTokenContainerForCurrentView();
-
-    if (!container) {
-      console.warn("Homebrew God tokens: no map container found.");
-      return null;
-    }
-
-    const computedPosition = window.getComputedStyle(container).position;
-
-    if (computedPosition === "static") {
-      container.style.position = "relative";
-    }
-
-    if (T.tokenLayer.parentNode !== container) {
-      container.appendChild(T.tokenLayer);
-    }
-
-    T.tokenLayer.style.position = "absolute";
-    T.tokenLayer.style.left = "0";
-    T.tokenLayer.style.top = "0";
-    T.tokenLayer.style.width = "100%";
-    T.tokenLayer.style.height = "100%";
-    T.tokenLayer.style.pointerEvents = "none";
-    T.tokenLayer.style.zIndex = "40";
-
-    return T.tokenLayer;
-  }
+// =====================================================
+// TOKENS SECTION 7 — MAP SCALE PREVIEW
+// =====================================================
 
   function removeMapScalePreview() {
     refreshElements();
@@ -679,6 +570,160 @@ export function createTokenSystem(options) {
     }, 900);
   }
 
+
+
+// =====================================================
+// TOKENS SECTION 8 — ROOM TOKEN DATA
+// =====================================================
+
+  function getRoomTokens(room) {
+    if (!room || !Array.isArray(room.tokens)) {
+      return [];
+    }
+
+    return room.tokens
+      .filter(function (token) {
+        return token && token.id;
+      })
+      .map(function (token) {
+        const cleanType = ["player", "enemy", "npc", "object"].includes(String(token.type))
+          ? String(token.type)
+          : "object";
+
+        const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
+
+        return {
+          ...token,
+          type: cleanType,
+          x: clampPercent(token.x),
+          y: clampPercent(token.y),
+          sizeCategory: cleanSizeCategory,
+          creatureSize: cleanSizeCategory,
+          mapMode: token.mapMode || "single",
+          tileKey: token.tileKey || null
+        };
+      });
+  }
+
+  function getCurrentTokenTarget(room) {
+    const safeRoom = room || {};
+    const tiles = deps.getPuzzleTiles ? deps.getPuzzleTiles(safeRoom) : [];
+    const viewMode = deps.getPuzzleViewMode ? deps.getPuzzleViewMode(safeRoom) : "board";
+    const activeTile = deps.getActivePuzzleTile ? deps.getActivePuzzleTile(safeRoom) : null;
+
+    if (tiles.length > 0) {
+      if (viewMode === "focus" && activeTile) {
+        return {
+          mapMode: "puzzle",
+          tileKey: activeTile.key
+        };
+      }
+
+      return {
+        mapMode: "puzzle",
+        tileKey: null
+      };
+    }
+
+    const currentMap = deps.buildMapFromRoomFields
+      ? deps.buildMapFromRoomFields(safeRoom)
+      : null;
+
+    if (currentMap && currentMap.url) {
+      return {
+        mapMode: "single",
+        tileKey: null
+      };
+    }
+
+    return {
+      mapMode: null,
+      tileKey: null
+    };
+  }
+
+  function tokenMatchesCurrentView(token, room) {
+    const target = getCurrentTokenTarget(room);
+
+    if (!target.mapMode) {
+      return false;
+    }
+
+    if ((token.mapMode || "single") !== target.mapMode) {
+      return false;
+    }
+
+    if (target.mapMode === "puzzle") {
+      if (target.tileKey) {
+        return token.tileKey === target.tileKey;
+      }
+
+      return !token.tileKey;
+    }
+
+    return target.mapMode === "single";
+  }
+
+
+// =====================================================
+// TOKENS SECTION 9 — TOKEN LAYER / MAP CONTAINER
+// =====================================================
+
+  function getTokenContainerForCurrentView() {
+    refreshElements();
+
+    if (T.puzzleMapBoard && !T.puzzleMapBoard.classList.contains("hidden")) {
+      return T.puzzleMapBoard;
+    }
+
+    if (T.battleMapViewer && !T.battleMapViewer.classList.contains("hidden")) {
+      return T.battleMapViewer;
+    }
+
+    return T.battleMapSurface || T.battleMapViewer || T.puzzleMapBoard || null;
+  }
+
+  function prepareTokenLayer() {
+    refreshElements();
+
+    if (!T.tokenLayer) {
+      console.warn("Homebrew God tokens: tokenLayer was not found.");
+      return null;
+    }
+
+    const container = getTokenContainerForCurrentView();
+
+    if (!container) {
+      console.warn("Homebrew God tokens: no map container found.");
+      return null;
+    }
+
+    const computedPosition = window.getComputedStyle(container).position;
+
+    if (computedPosition === "static") {
+      container.style.position = "relative";
+    }
+
+    if (T.tokenLayer.parentNode !== container) {
+      container.appendChild(T.tokenLayer);
+    }
+
+    T.tokenLayer.style.position = "absolute";
+    T.tokenLayer.style.left = "0";
+    T.tokenLayer.style.top = "0";
+    T.tokenLayer.style.width = "100%";
+    T.tokenLayer.style.height = "100%";
+    T.tokenLayer.style.pointerEvents = "none";
+    T.tokenLayer.style.zIndex = "40";
+
+    return T.tokenLayer;
+  }
+
+
+// =====================================================
+// TOKENS SECTION 10 — TOKEN RENDERING
+// =====================================================
+
   function positionTokenElement(tokenEl, token, room) {
     const size = getTokenPixelSize(token, room || {});
     const x = clampPercent(token.x);
@@ -695,7 +740,7 @@ export function createTokenSystem(options) {
     ensureStyles();
     connectControls();
 
-    const safeRoom = room || deps.getCurrentRoomData?.() || {};
+    const safeRoom = room || (deps.getCurrentRoomData ? deps.getCurrentRoomData() : {}) || {};
     lastRenderedRoom = safeRoom;
 
     updateScaleControlsFromRoom(safeRoom);
@@ -782,6 +827,11 @@ export function createTokenSystem(options) {
     });
   }
 
+
+// =====================================================
+// TOKENS SECTION 11 — SCALE SAVE
+// =====================================================
+
   async function saveTokenScale() {
     try {
       refreshElements();
@@ -834,6 +884,11 @@ export function createTokenSystem(options) {
       alert(error.message);
     }
   }
+
+
+// =====================================================
+// TOKENS SECTION 12 — ADD / DELETE TOKEN
+// =====================================================
 
   async function addToken() {
     try {
@@ -1002,6 +1057,13 @@ export function createTokenSystem(options) {
     }
   }
 
+
+// =====================================================
+// TOKENS SECTION 13 — TOKEN DRAGGING
+// No Firebase saving while dragging.
+// Saves once when the token is released.
+// =====================================================
+
   async function saveTokenPosition(tokenId, x, y) {
     const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
     const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : null;
@@ -1077,12 +1139,19 @@ export function createTokenSystem(options) {
 
     event.preventDefault();
 
+    try {
+      tokenEl.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // Some browsers do not need pointer capture here.
+    }
+
     const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : {};
     const tokenPixelSize = getTokenPixelSize(token, roomData || {});
 
     activeTokenDrag = {
       tokenId: token.id,
       tokenEl: tokenEl,
+      pointerId: event.pointerId,
       size: tokenPixelSize,
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -1091,8 +1160,7 @@ export function createTokenSystem(options) {
       currentX: clampPercent(token.x),
       currentY: clampPercent(token.y),
       rectWidth: Math.max(1, rect.width),
-      rectHeight: Math.max(1, rect.height),
-      lastSaveAt: 0
+      rectHeight: Math.max(1, rect.height)
     };
 
     tokenEl.classList.add("hg-token-dragging");
@@ -1100,25 +1168,9 @@ export function createTokenSystem(options) {
   }
 
   function queueTokenPositionSave() {
-    if (!activeTokenDrag) {
-      return;
-    }
-
-    const now = Date.now();
-
-    if (now - activeTokenDrag.lastSaveAt < 350) {
-      return;
-    }
-
-    activeTokenDrag.lastSaveAt = now;
-
-    saveTokenPosition(
-      activeTokenDrag.tokenId,
-      activeTokenDrag.currentX,
-      activeTokenDrag.currentY
-    ).catch(function (error) {
-      console.warn("Token position save failed:", error);
-    });
+    // Intentionally disabled.
+    // Saving to Firebase during drag causes room snapshots and map redraw flicker.
+    // Token position saves once on pointerup instead.
   }
 
   function handleTokenPointerMove(event) {
@@ -1147,8 +1199,6 @@ export function createTokenSystem(options) {
     };
 
     positionTokenElement(drag.tokenEl, fakeTokenForPosition, fakeRoomForPosition);
-
-    queueTokenPositionSave();
   }
 
   async function handleTokenPointerUp() {
@@ -1162,6 +1212,14 @@ export function createTokenSystem(options) {
     drag.tokenEl.classList.remove("hg-token-dragging");
 
     try {
+      if (drag.pointerId !== undefined && drag.pointerId !== null) {
+        try {
+          drag.tokenEl.releasePointerCapture(drag.pointerId);
+        } catch (error) {
+          // Safe to ignore.
+        }
+      }
+
       await saveTokenPosition(drag.tokenId, drag.currentX, drag.currentY);
       render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
       setStatus("Token position saved.");
@@ -1182,6 +1240,11 @@ export function createTokenSystem(options) {
 
     render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
   }
+
+
+// =====================================================
+// TOKENS SECTION 14 — INIT / PUBLIC API
+// =====================================================
 
   function init() {
     refreshElements();
