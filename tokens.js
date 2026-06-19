@@ -1,5 +1,6 @@
 // =====================================================
-// TOKENS.JS — HOMEBREW GOD TOKEN SYSTEM V1
+// TOKENS.JS — HOMEBREW GOD TOKEN SYSTEM V1.5
+// D&D creature sizes + medium scale slider
 // =====================================================
 
 export function createTokenSystem(options) {
@@ -22,6 +23,15 @@ export function createTokenSystem(options) {
     buildMapFromRoomFields: options.buildMapFromRoomFields
   };
 
+  const SIZE_MULTIPLIERS = {
+    tiny: 0.5,
+    small: 1,
+    medium: 1,
+    large: 2,
+    huge: 3,
+    gargantuan: 4
+  };
+
   let activeTokenDrag = null;
   let lastRenderedRoom = null;
 
@@ -29,11 +39,24 @@ export function createTokenSystem(options) {
 
   const T = {
     tokenBuilderControls: null,
+
+    tokenMediumSizeInput: null,
+    tokenMediumSizeValue: null,
+    saveTokenScaleButton: null,
+
+    tokenPreviewTiny: null,
+    tokenPreviewMedium: null,
+    tokenPreviewLarge: null,
+    tokenPreviewHuge: null,
+    tokenPreviewGargantuan: null,
+
     tokenNameInput: null,
     tokenTypeSelect: null,
+    tokenSizeSelect: null,
     tokenImageUploadInput: null,
     addTokenButton: null,
     tokenBuilderStatus: null,
+
     tokenLayer: null,
     battleMapSurface: null,
     battleMapViewer: null,
@@ -42,11 +65,24 @@ export function createTokenSystem(options) {
 
   function refreshElements() {
     T.tokenBuilderControls = $("tokenBuilderControls");
+
+    T.tokenMediumSizeInput = $("tokenMediumSizeInput");
+    T.tokenMediumSizeValue = $("tokenMediumSizeValue");
+    T.saveTokenScaleButton = $("saveTokenScaleButton");
+
+    T.tokenPreviewTiny = $("tokenPreviewTiny");
+    T.tokenPreviewMedium = $("tokenPreviewMedium");
+    T.tokenPreviewLarge = $("tokenPreviewLarge");
+    T.tokenPreviewHuge = $("tokenPreviewHuge");
+    T.tokenPreviewGargantuan = $("tokenPreviewGargantuan");
+
     T.tokenNameInput = $("tokenNameInput");
     T.tokenTypeSelect = $("tokenTypeSelect");
+    T.tokenSizeSelect = $("tokenSizeSelect");
     T.tokenImageUploadInput = $("tokenImageUploadInput");
     T.addTokenButton = $("addTokenButton");
     T.tokenBuilderStatus = $("tokenBuilderStatus");
+
     T.tokenLayer = $("tokenLayer");
     T.battleMapSurface = $("battleMapSurface");
     T.battleMapViewer = $("battleMapViewer");
@@ -70,15 +106,76 @@ export function createTokenSystem(options) {
     style.id = "homebrewGodTokenStyles";
 
     style.textContent = `
-      #tokenTypeSelect {
-        padding: 11px 12px;
-        margin: 6px 8px 6px 0;
-        font-size: 16px;
+      #tokenMediumSizeInput {
+        width: min(520px, 100%) !important;
+        display: block !important;
+        margin: 10px 0 !important;
+        accent-color: #9d6bff;
+      }
+
+      #tokenScalePreview {
+        margin-top: 12px;
+        padding: 12px;
+        min-height: 170px;
+        display: flex;
+        gap: 16px;
+        align-items: flex-end;
+        overflow: auto;
+        border: 1px solid rgba(116, 138, 255, 0.22);
+        border-radius: 14px;
+        background:
+          radial-gradient(circle at top left, rgba(88, 166, 255, 0.10), transparent 38%),
+          linear-gradient(180deg, rgba(8, 12, 25, 0.95), rgba(4, 6, 14, 0.98));
+      }
+
+      .tokenScalePreviewItem {
+        min-width: 74px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 7px;
+        color: #b9c2ef;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .tokenScaleDot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        color: white;
+        font-weight: bold;
+        background:
+          radial-gradient(circle at 35% 30%, rgba(255,255,255,0.32), transparent 24%),
+          linear-gradient(135deg, #58a6ff, #9d6bff);
+        border: 2px solid rgba(235, 240, 255, 0.90);
+        box-shadow:
+          0 0 0 2px rgba(0, 0, 0, 0.55),
+          0 0 18px rgba(130, 115, 255, 0.42);
+      }
+
+      #tokenTypeSelect,
+      #tokenSizeSelect {
+        display: inline-block;
+        width: 220px;
+        max-width: 100%;
+        min-height: 124px;
+        padding: 8px;
+        margin: 6px 10px 10px 0;
+        font-size: 15px;
         color: #f5f7ff;
         background: linear-gradient(180deg, rgba(19, 26, 49, 0.95), rgba(12, 17, 33, 0.96));
         border: 1px solid rgba(116, 138, 255, 0.22);
         border-radius: 12px;
         outline: none;
+      }
+
+      #tokenTypeSelect option,
+      #tokenSizeSelect option {
+        padding: 7px;
+        border-radius: 8px;
       }
 
       #tokenLayer {
@@ -171,6 +268,29 @@ export function createTokenSystem(options) {
         pointer-events: none;
       }
 
+      .hg-token-size-badge {
+        position: absolute;
+        left: 50%;
+        bottom: 100%;
+        transform: translateX(-50%);
+        margin-bottom: 4px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(9, 12, 28, 0.82);
+        color: #dfe6ff;
+        border: 1px solid rgba(150, 170, 255, 0.28);
+        font-size: 10px;
+        line-height: 1.1;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+
+      .hg-token:hover .hg-token-size-badge {
+        opacity: 1;
+      }
+
       .hg-token-delete {
         position: absolute;
         right: -8px;
@@ -195,10 +315,15 @@ export function createTokenSystem(options) {
       }
 
       @media (max-width: 900px) {
-        #tokenTypeSelect {
+        #tokenTypeSelect,
+        #tokenSizeSelect {
           display: block;
           width: 100%;
-          margin: 6px 0;
+          margin: 6px 0 10px 0;
+        }
+
+        #tokenScalePreview {
+          min-height: 150px;
         }
       }
     `;
@@ -207,27 +332,35 @@ export function createTokenSystem(options) {
   }
 
   function ensureListeners() {
-    document.addEventListener("pointermove", handleTokenPointerMove);
-    document.addEventListener("pointerup", handleTokenPointerUp);
-    document.addEventListener("pointercancel", cancelTokenDrag);
+    if (!window.homebrewGodTokenListenersReady) {
+      window.homebrewGodTokenListenersReady = true;
+
+      document.addEventListener("pointermove", handleTokenPointerMove);
+      document.addEventListener("pointerup", handleTokenPointerUp);
+      document.addEventListener("pointercancel", cancelTokenDrag);
+    }
   }
 
-  function connectButton() {
+  function connectControls() {
     refreshElements();
 
-    if (!T.addTokenButton) {
-      console.warn("Homebrew God tokens: addTokenButton was not found.");
-      return;
+    if (T.addTokenButton && T.addTokenButton.dataset.homebrewGodTokensConnected !== "yes") {
+      T.addTokenButton.dataset.homebrewGodTokensConnected = "yes";
+      T.addTokenButton.addEventListener("click", addToken);
     }
 
-    if (T.addTokenButton.dataset.homebrewGodTokensConnected === "yes") {
-      return;
+    if (T.saveTokenScaleButton && T.saveTokenScaleButton.dataset.homebrewGodScaleConnected !== "yes") {
+      T.saveTokenScaleButton.dataset.homebrewGodScaleConnected = "yes";
+      T.saveTokenScaleButton.addEventListener("click", saveTokenScale);
     }
 
-    T.addTokenButton.dataset.homebrewGodTokensConnected = "yes";
-    T.addTokenButton.addEventListener("click", addToken);
+    if (T.tokenMediumSizeInput && T.tokenMediumSizeInput.dataset.homebrewGodPreviewConnected !== "yes") {
+      T.tokenMediumSizeInput.dataset.homebrewGodPreviewConnected = "yes";
 
-    setStatus("Token system connected.");
+      T.tokenMediumSizeInput.addEventListener("input", function () {
+        updateScalePreview(Number(T.tokenMediumSizeInput.value));
+      });
+    }
   }
 
   function clampPercent(value) {
@@ -238,6 +371,49 @@ export function createTokenSystem(options) {
     }
 
     return Math.max(0, Math.min(100, number));
+  }
+
+  function clampMediumSize(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+      return 64;
+    }
+
+    return Math.max(24, Math.min(240, Math.round(number)));
+  }
+
+  function normalizeSizeCategory(sizeCategory) {
+    const clean = String(sizeCategory || "").toLowerCase();
+
+    if (SIZE_MULTIPLIERS[clean]) {
+      return clean;
+    }
+
+    return "medium";
+  }
+
+  function getMediumSize(room) {
+    const direct = room && Number(room.tokenMediumSize);
+    const nested = room && room.tokenScale && Number(room.tokenScale.mediumSize);
+
+    if (Number.isFinite(direct)) {
+      return clampMediumSize(direct);
+    }
+
+    if (Number.isFinite(nested)) {
+      return clampMediumSize(nested);
+    }
+
+    return 64;
+  }
+
+  function getTokenPixelSize(token, room) {
+    const mediumSize = getMediumSize(room || {});
+    const sizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
+    const multiplier = SIZE_MULTIPLIERS[sizeCategory] || 1;
+
+    return Math.round(mediumSize * multiplier);
   }
 
   function getRoomTokens(room) {
@@ -254,20 +430,78 @@ export function createTokenSystem(options) {
           ? String(token.type)
           : "object";
 
-        const cleanSize = Number.isFinite(Number(token.size))
-          ? Number(token.size)
-          : 64;
+        const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
 
         return {
           ...token,
           type: cleanType,
           x: clampPercent(token.x),
           y: clampPercent(token.y),
-          size: Math.max(32, Math.min(160, cleanSize)),
+          sizeCategory: cleanSizeCategory,
+          creatureSize: cleanSizeCategory,
           mapMode: token.mapMode || "single",
           tileKey: token.tileKey || null
         };
       });
+  }
+
+  function sizeCategoryLabel(sizeCategory) {
+    const clean = normalizeSizeCategory(sizeCategory);
+
+    if (clean === "tiny") return "Tiny";
+    if (clean === "small") return "Small";
+    if (clean === "medium") return "Medium";
+    if (clean === "large") return "Large";
+    if (clean === "huge") return "Huge";
+    if (clean === "gargantuan") return "Gargantuan";
+
+    return "Medium";
+  }
+
+  function updateScaleControlsFromRoom(room) {
+    refreshElements();
+
+    const mediumSize = getMediumSize(room || {});
+
+    if (T.tokenMediumSizeInput) {
+      T.tokenMediumSizeInput.value = String(mediumSize);
+    }
+
+    updateScalePreview(mediumSize);
+  }
+
+  function updateScalePreview(mediumSizeValue) {
+    refreshElements();
+
+    const mediumSize = clampMediumSize(mediumSizeValue);
+
+    if (T.tokenMediumSizeValue) {
+      T.tokenMediumSizeValue.textContent = String(mediumSize);
+    }
+
+    const previewMax = 132;
+    const previewScale = Math.min(1, previewMax / Math.max(1, mediumSize * 4));
+
+    setPreviewDot(T.tokenPreviewTiny, "tiny", mediumSize, previewScale);
+    setPreviewDot(T.tokenPreviewMedium, "medium", mediumSize, previewScale);
+    setPreviewDot(T.tokenPreviewLarge, "large", mediumSize, previewScale);
+    setPreviewDot(T.tokenPreviewHuge, "huge", mediumSize, previewScale);
+    setPreviewDot(T.tokenPreviewGargantuan, "gargantuan", mediumSize, previewScale);
+  }
+
+  function setPreviewDot(el, sizeCategory, mediumSize, previewScale) {
+    if (!el) {
+      return;
+    }
+
+    const multiplier = SIZE_MULTIPLIERS[sizeCategory] || 1;
+    const actualSize = Math.round(mediumSize * multiplier);
+    const visualSize = Math.max(18, Math.round(actualSize * previewScale));
+
+    el.style.width = visualSize + "px";
+    el.style.height = visualSize + "px";
+    el.style.fontSize = Math.max(10, Math.min(22, Math.round(visualSize / 3))) + "px";
+    el.title = sizeCategoryLabel(sizeCategory) + " = " + actualSize + "px";
   }
 
   function getCurrentTokenTarget(room) {
@@ -379,8 +613,8 @@ export function createTokenSystem(options) {
     return T.tokenLayer;
   }
 
-  function positionTokenElement(tokenEl, token) {
-    const size = Number.isFinite(Number(token.size)) ? Number(token.size) : 64;
+  function positionTokenElement(tokenEl, token, room) {
+    const size = getTokenPixelSize(token, room || {});
     const x = clampPercent(token.x);
     const y = clampPercent(token.y);
 
@@ -393,9 +627,12 @@ export function createTokenSystem(options) {
   function render(room) {
     refreshElements();
     ensureStyles();
+    connectControls();
 
     const safeRoom = room || deps.getCurrentRoomData?.() || {};
     lastRenderedRoom = safeRoom;
+
+    updateScaleControlsFromRoom(safeRoom);
 
     if (activeTokenDrag) {
       return;
@@ -421,7 +658,7 @@ export function createTokenSystem(options) {
       tokenEl.dataset.tokenId = token.id;
       tokenEl.title = token.name || "Token";
 
-      positionTokenElement(tokenEl, token);
+      positionTokenElement(tokenEl, token, safeRoom);
 
       if (token.imageUrl) {
         const img = document.createElement("img");
@@ -434,6 +671,11 @@ export function createTokenSystem(options) {
         fallback.textContent = String(token.name || "?").trim().charAt(0).toUpperCase() || "?";
         tokenEl.appendChild(fallback);
       }
+
+      const sizeBadge = document.createElement("div");
+      sizeBadge.className = "hg-token-size-badge";
+      sizeBadge.textContent = sizeCategoryLabel(token.sizeCategory);
+      tokenEl.appendChild(sizeBadge);
 
       const label = document.createElement("div");
       label.className = "hg-token-label";
@@ -461,6 +703,58 @@ export function createTokenSystem(options) {
 
       layer.appendChild(tokenEl);
     });
+  }
+
+  async function saveTokenScale() {
+    try {
+      refreshElements();
+
+      const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
+      const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : null;
+      const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
+
+      if (!roomCode) {
+        alert("Open a room first.");
+        return;
+      }
+
+      if (!isDM) {
+        alert("Only the DM can change token scale.");
+        return;
+      }
+
+      const mediumSize = clampMediumSize(T.tokenMediumSizeInput ? T.tokenMediumSizeInput.value : 64);
+
+      const newRoomData = {
+        ...(roomData || {}),
+        tokenMediumSize: mediumSize,
+        tokenScale: {
+          ...((roomData && roomData.tokenScale) || {}),
+          mediumSize: mediumSize,
+          updatedAtMillis: Date.now()
+        }
+      };
+
+      if (deps.setCurrentRoomData) {
+        deps.setCurrentRoomData(newRoomData);
+      }
+
+      await deps.updateDoc(deps.doc(deps.db, "rooms", roomCode), {
+        tokenMediumSize: mediumSize,
+        tokenScale: {
+          mediumSize: mediumSize,
+          updatedAtMillis: Date.now()
+        },
+        updatedAt: deps.serverTimestamp()
+      });
+
+      updateScalePreview(mediumSize);
+      render(newRoomData);
+      setStatus("Medium token size saved at " + mediumSize + "px.");
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    }
   }
 
   async function addToken() {
@@ -503,6 +797,10 @@ export function createTokenSystem(options) {
         ? T.tokenTypeSelect.value
         : "object";
 
+      const sizeCategory = T.tokenSizeSelect && T.tokenSizeSelect.value
+        ? normalizeSizeCategory(T.tokenSizeSelect.value)
+        : "medium";
+
       if (!deps.uploadImage) {
         alert("Token uploader is not connected.");
         return;
@@ -516,6 +814,7 @@ export function createTokenSystem(options) {
 
       const cloudinaryResult = await deps.uploadImage(file);
       const oldTokens = getRoomTokens(roomData || {});
+      const mediumSize = getMediumSize(roomData || {});
 
       const newToken = {
         id: crypto.randomUUID(),
@@ -527,7 +826,18 @@ export function createTokenSystem(options) {
         y: 50,
         mapMode: target.mapMode,
         tileKey: target.tileKey,
-        size: 64,
+        sizeCategory: sizeCategory,
+        creatureSize: sizeCategory,
+        size: Math.round(mediumSize * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
+        sheetId: null,
+        display: {
+          name: true,
+          hpBar: false,
+          hpText: false,
+          ac: false,
+          conditions: true,
+          initiative: false
+        },
         createdAtMillis: Date.now()
       };
 
@@ -557,7 +867,7 @@ export function createTokenSystem(options) {
         T.tokenImageUploadInput.value = "";
       }
 
-      setStatus("Token added. Drag it around the map.");
+      setStatus(sizeCategoryLabel(sizeCategory) + " token added.");
     } catch (error) {
       console.error(error);
       setStatus("Token upload failed.");
@@ -688,10 +998,13 @@ export function createTokenSystem(options) {
 
     event.preventDefault();
 
+    const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : {};
+    const tokenPixelSize = getTokenPixelSize(token, roomData || {});
+
     activeTokenDrag = {
       tokenId: token.id,
       tokenEl: tokenEl,
-      size: token.size || 64,
+      size: tokenPixelSize,
       startClientX: event.clientX,
       startClientY: event.clientY,
       startX: clampPercent(token.x),
@@ -744,11 +1057,17 @@ export function createTokenSystem(options) {
     drag.currentX = clampPercent(drag.startX + dxPercent);
     drag.currentY = clampPercent(drag.startY + dyPercent);
 
-    positionTokenElement(drag.tokenEl, {
+    const fakeTokenForPosition = {
       x: drag.currentX,
       y: drag.currentY,
-      size: drag.size
-    });
+      sizeCategory: "medium"
+    };
+
+    const fakeRoomForPosition = {
+      tokenMediumSize: drag.size
+    };
+
+    positionTokenElement(drag.tokenEl, fakeTokenForPosition, fakeRoomForPosition);
 
     queueTokenPositionSave();
   }
@@ -789,18 +1108,23 @@ export function createTokenSystem(options) {
     refreshElements();
     ensureStyles();
     ensureListeners();
-    connectButton();
+    connectControls();
 
     window.HomebrewGodTokens = api;
 
-    render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : {});
+    const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : {};
+    updateScaleControlsFromRoom(roomData || {});
+    render(roomData || {});
+
+    setStatus("Token system connected.");
   }
 
   const api = {
     init,
     render,
     addToken,
-    deleteToken
+    deleteToken,
+    saveTokenScale
   };
 
   init();
