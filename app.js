@@ -1213,18 +1213,44 @@ if (E.updateBattleMapButton) {
 }
 
 // =====================================================
-// APP SECTION 12 — PUZZLE MAP SYSTEM V1
-// Ready for external tokens.js
+// APP SECTION 12 — PUZZLE MAP / BATTLE MANAGER SYSTEM
+// Split into 12A–12J for easier future edits
+// =====================================================
+
+
+// =====================================================
+// APP SECTION 12A — BATTLE MANAGER DOM / SETUP
 // =====================================================
 
 E.battleManagerBar = $("battleManagerBar");
-E.battleMapSurface = $("battleMapSurface");
+E.battleManagerInner = $("battleManagerInner");
+
+E.puzzleMapControls = $("puzzleMapControls");
+E.puzzleTileUploadInput = $("puzzleTileUploadInput");
+E.addTileNorthButton = $("addTileNorthButton");
+E.addTileSouthButton = $("addTileSouthButton");
+E.addTileEastButton = $("addTileEastButton");
+E.addTileWestButton = $("addTileWestButton");
+E.centerPuzzleBoardButton = $("centerPuzzleBoardButton");
+E.puzzleMapStatus = $("puzzleMapStatus");
+
+E.tokenBuilderControls = $("tokenBuilderControls");
 E.tokenLayer = $("tokenLayer");
 
-ensureBattleManagerPolishStyles();
-ensurePuzzleDragListeners();
+E.battleMapSurface = $("battleMapSurface");
+E.puzzleMapBoard = $("puzzleMapBoard");
+E.puzzleMapEmptyText = $("puzzleMapEmptyText");
 
 let activePuzzleDrag = null;
+
+ensureBattleManagerPolishStyles();
+syncBattleManagerVisibility();
+ensurePuzzleDragListeners();
+
+
+// =====================================================
+// APP SECTION 12B — BATTLE MANAGER POLISH STYLES
+// =====================================================
 
 function ensureBattleManagerPolishStyles() {
   if (document.getElementById("battleManagerPolishStyles")) {
@@ -1235,98 +1261,171 @@ function ensureBattleManagerPolishStyles() {
   style.id = "battleManagerPolishStyles";
 
   style.textContent = `
-    #battleManagerBar {
-      display: block !important;
-      max-width: none !important;
-      padding: 0 !important;
-      margin-top: 10px !important;
-      overflow: hidden !important;
+    #battleMapSurface {
+      position: relative;
     }
 
-    #battleManagerBar > summary {
-      display: flex !important;
-      align-items: center !important;
-      justify-content: space-between !important;
-      cursor: pointer !important;
+    #battleManagerBar {
+      max-width: none !important;
     }
 
     #battleManagerInner {
-      display: block !important;
-      padding: 12px !important;
+      display: grid;
+      gap: 10px;
     }
 
-    #battleManagerInner > .battleEditorMenu {
+    #puzzleMapControls,
+    #tokenBuilderControls {
       max-width: none !important;
-      margin-top: 10px !important;
     }
 
-    #puzzleMapControls {
-      max-width: none !important;
+    #puzzleMapControls .battleEditorInner,
+    #tokenBuilderControls .battleEditorInner {
+      padding: 10px 12px 12px 12px !important;
+    }
+
+    #puzzleMapControls input[type="file"] {
+      width: 260px !important;
+      max-width: 100% !important;
+      margin-right: 8px !important;
+    }
+
+    #puzzleMapControls button {
+      width: auto !important;
+      margin: 4px 4px 4px 0 !important;
+      padding: 8px 11px !important;
+      font-size: 14px !important;
+    }
+
+    #puzzleMapStatus {
+      display: inline-block !important;
+      margin: 6px 0 0 4px !important;
+      vertical-align: middle !important;
     }
 
     #puzzleMapBoard {
-      gap: 0 !important;
-      padding: 0 !important;
-      min-height: 560px !important;
-      background: #050508 !important;
-      border-radius: 14px !important;
-      overflow: auto !important;
-      touch-action: none !important;
-    }
-
-    #puzzleMapBoard .map-tile {
-      border: 0 !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      background: #000 !important;
-      user-select: none !important;
-    }
-
-    #puzzleMapBoard .map-tile.locked {
-      border: 0 !important;
-      box-shadow: none !important;
-    }
-
-    #puzzleMapBoard .map-tile img {
-      border-radius: 0 !important;
-      object-fit: cover !important;
-      pointer-events: none !important;
-      user-select: none !important;
-    }
-
-    .puzzle-tile-actions {
-      opacity: 0.18;
-      transition: opacity 0.15s ease;
-    }
-
-    .map-tile:hover .puzzle-tile-actions {
-      opacity: 0.9;
-    }
-
-    .puzzle-dragging {
-      opacity: 0.82 !important;
-      z-index: 9999 !important;
-      box-shadow: 0 0 30px rgba(255,255,255,0.25) !important;
-      cursor: grabbing !important;
-    }
-
-    #battleMapSurface {
       position: relative;
+      isolation: isolate;
+    }
+
+    #puzzleMapBoard.hidden {
+      display: none !important;
     }
 
     #tokenLayer {
       position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
       pointer-events: none;
       z-index: 40;
     }
 
+    .map-tile {
+      width: 320px;
+      height: 320px;
+      position: relative;
+      overflow: hidden;
+      background: #03040a;
+      border: 1px solid rgba(120, 145, 255, 0.18);
+      user-select: none;
+      touch-action: none;
+    }
+
+    .map-tile img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .map-tile.is-active {
+      outline: 3px solid rgba(88, 166, 255, 0.95);
+      outline-offset: -3px;
+      z-index: 3;
+      box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, 0.22),
+        0 0 24px rgba(88, 166, 255, 0.42);
+    }
+
+    .map-tile.puzzle-dragging {
+      opacity: 0.72;
+      z-index: 20;
+      box-shadow:
+        0 0 0 3px rgba(255, 255, 255, 0.20),
+        0 0 30px rgba(157, 107, 255, 0.48);
+    }
+
+    .puzzle-tile-actions {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      opacity: 0;
+      transition: opacity 0.16s ease;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .map-tile:hover .puzzle-tile-actions,
+    .map-tile.is-active .puzzle-tile-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .puzzle-tile-actions button {
+      width: auto !important;
+      padding: 5px 8px !important;
+      font-size: 12px !important;
+      border-radius: 10px !important;
+      margin: 0 !important;
+      background: rgba(6, 9, 18, 0.88) !important;
+      border-color: rgba(130, 160, 255, 0.38) !important;
+    }
+
+    .puzzle-tile-label {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      max-width: calc(100% - 16px);
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: white;
+      background: rgba(0, 0, 0, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .puzzle-grid-empty-cell {
+      width: 320px;
+      height: 320px;
+      border: 1px dashed rgba(120, 145, 255, 0.10);
+      background:
+        linear-gradient(135deg, rgba(90, 120, 255, 0.035), rgba(157, 107, 255, 0.025));
+    }
+
     @media (max-width: 900px) {
-      #battleManagerInner,
-      #puzzleMapControls {
+      .map-tile,
+      .puzzle-grid-empty-cell {
+        width: 240px;
+        height: 240px;
+      }
+
+      #puzzleMapControls input[type="file"],
+      #puzzleMapControls button,
+      #puzzleMapStatus {
         display: block !important;
+        width: 100% !important;
+        margin: 6px 0 !important;
       }
     }
   `;
@@ -1335,36 +1434,228 @@ function ensureBattleManagerPolishStyles() {
 }
 
 function syncBattleManagerVisibility() {
-  if (!E.battleManagerBar) {
-    E.battleManagerBar = $("battleManagerBar");
+  const showDmTools = !!currentIsDM;
+
+  if (E.battleManagerBar) {
+    E.battleManagerBar.classList.toggle("hidden", !showDmTools);
   }
 
-  if (!E.battleManagerBar) {
+  if (E.puzzleMapControls) {
+    E.puzzleMapControls.classList.toggle("hidden", !showDmTools);
+  }
+
+  if (E.tokenBuilderControls) {
+    E.tokenBuilderControls.classList.toggle("hidden", !showDmTools);
+  }
+}
+
+function disablePuzzleButtons(disabled) {
+  [
+    E.addTileNorthButton,
+    E.addTileSouthButton,
+    E.addTileEastButton,
+    E.addTileWestButton,
+    E.centerPuzzleBoardButton
+  ].forEach(function (button) {
+    if (button) {
+      button.disabled = !!disabled;
+    }
+  });
+}
+
+
+// =====================================================
+// APP SECTION 12C — PUZZLE MAP DATA HELPERS
+// =====================================================
+
+function makeTileKey(x, y) {
+  return String(x) + "," + String(y);
+}
+
+function parseTileKey(key) {
+  const parts = String(key || "0,0").split(",");
+
+  return {
+    x: Number(parts[0]) || 0,
+    y: Number(parts[1]) || 0
+  };
+}
+
+function getPuzzleTiles(room) {
+  if (!room || !Array.isArray(room.puzzleTiles)) {
+    return [];
+  }
+
+  return room.puzzleTiles
+    .filter(function (tile) {
+      return tile && tile.url && tile.key;
+    })
+    .map(function (tile) {
+      const parsed = parseTileKey(tile.key);
+
+      const x = Number.isFinite(Number(tile.x)) ? Number(tile.x) : parsed.x;
+      const y = Number.isFinite(Number(tile.y)) ? Number(tile.y) : parsed.y;
+
+      return {
+        ...tile,
+        x,
+        y,
+        key: makeTileKey(x, y),
+        name: tile.name || "Puzzle Tile",
+        locked: tile.locked !== false
+      };
+    });
+}
+
+function getPuzzleViewMode(room) {
+  if (!room || room.puzzleViewMode !== "focus") {
+    return "board";
+  }
+
+  return "focus";
+}
+
+function getActivePuzzleTile(room) {
+  const tiles = getPuzzleTiles(room || {});
+
+  if (tiles.length === 0) {
+    return null;
+  }
+
+  const activeKey = room && room.activePuzzleTileKey;
+
+  const activeTile = tiles.find(function (tile) {
+    return tile.key === activeKey;
+  });
+
+  return activeTile || tiles[0];
+}
+
+function puzzleTileToCurrentMap(tile) {
+  if (!tile) {
+    return null;
+  }
+
+  return {
+    id: tile.key,
+    name: tile.name || "Puzzle Tile",
+    url: tile.url,
+    publicId: tile.publicId || null,
+    savedToLibrary: false,
+    puzzleTileKey: tile.key
+  };
+}
+
+function getPuzzleBounds(tiles) {
+  if (!tiles.length) {
+    return {
+      minX: 0,
+      maxX: 0,
+      minY: 0,
+      maxY: 0
+    };
+  }
+
+  let minX = tiles[0].x;
+  let maxX = tiles[0].x;
+  let minY = tiles[0].y;
+  let maxY = tiles[0].y;
+
+  tiles.forEach(function (tile) {
+    minX = Math.min(minX, tile.x);
+    maxX = Math.max(maxX, tile.x);
+    minY = Math.min(minY, tile.y);
+    maxY = Math.max(maxY, tile.y);
+  });
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY
+  };
+}
+
+function tileExistsAtPosition(tiles, x, y, exceptKey) {
+  const key = makeTileKey(x, y);
+
+  return tiles.some(function (tile) {
+    return tile.key === key && tile.key !== exceptKey;
+  });
+}
+
+async function updateRoomWithPuzzleTiles(tiles, activeTile, viewMode) {
+  if (!currentRoomCode) {
     return;
   }
 
-  if (currentIsDM) {
-    E.battleManagerBar.classList.remove("hidden");
-  } else {
-    E.battleManagerBar.classList.add("hidden");
+  const safeActiveTile = activeTile || null;
+  const safeViewMode = viewMode === "focus" ? "focus" : "board";
+  const activeMap = safeActiveTile ? puzzleTileToCurrentMap(safeActiveTile) : null;
+
+  await updateDoc(doc(db, "rooms", currentRoomCode), {
+    puzzleTiles: tiles,
+    activePuzzleTileKey: safeActiveTile ? safeActiveTile.key : null,
+    puzzleViewMode: safeViewMode,
+
+    currentMap: activeMap,
+    currentMapUrl: activeMap ? activeMap.url : null,
+    currentMapName: activeMap ? activeMap.name : null,
+    currentMapId: activeMap ? activeMap.id : null,
+    currentMapPublicId: activeMap ? activeMap.publicId : null,
+    currentMapSavedToLibrary: false,
+
+    updatedAt: serverTimestamp()
+  });
+}
+
+
+// =====================================================
+// APP SECTION 12D — PUZZLE MAP VIEW MODE / TOKEN NOTIFY
+// =====================================================
+
+function showPuzzleBoardView() {
+  if (E.puzzleMapBoard) {
+    show(E.puzzleMapBoard);
+  }
+
+  if (E.battleMapViewer) {
+    hide(E.battleMapViewer);
+  }
+}
+
+function showSingleBattleMapView() {
+  if (E.puzzleMapBoard) {
+    hide(E.puzzleMapBoard);
+  }
+
+  if (E.battleMapViewer) {
+    show(E.battleMapViewer);
   }
 }
 
 function keepTokenLayerReadyForExternalFile() {
-  if (!E.battleMapSurface) {
-    E.battleMapSurface = $("battleMapSurface");
-  }
-
   if (!E.tokenLayer) {
-    E.tokenLayer = $("tokenLayer");
-  }
-
-  if (!E.battleMapSurface || !E.tokenLayer) {
     return;
   }
 
-  if (E.tokenLayer.parentNode !== E.battleMapSurface) {
-    E.battleMapSurface.appendChild(E.tokenLayer);
+  const targetContainer =
+    E.puzzleMapBoard && !E.puzzleMapBoard.classList.contains("hidden")
+      ? E.puzzleMapBoard
+      : E.battleMapViewer || E.battleMapSurface;
+
+  if (!targetContainer) {
+    return;
+  }
+
+  const computedPosition = window.getComputedStyle(targetContainer).position;
+
+  if (computedPosition === "static") {
+    targetContainer.style.position = "relative";
+  }
+
+  if (E.tokenLayer.parentNode !== targetContainer) {
+    targetContainer.appendChild(E.tokenLayer);
   }
 }
 
@@ -1375,7 +1666,7 @@ function notifyExternalTokenSystem(room) {
     window.HomebrewGodTokens &&
     typeof window.HomebrewGodTokens.render === "function"
   ) {
-    window.HomebrewGodTokens.render(room || {}, {
+    window.HomebrewGodTokens.render(room || currentRoomData || {}, {
       roomCode: currentRoomCode,
       roomData: currentRoomData,
       isDM: currentIsDM
@@ -1383,201 +1674,209 @@ function notifyExternalTokenSystem(room) {
   }
 }
 
-function ensurePuzzleDragListeners() {
-  if (window.homebrewGodPuzzleDragListenersReady) {
+
+// =====================================================
+// APP SECTION 12E — PUZZLE BOARD RENDERING
+// =====================================================
+
+function renderPuzzleBoard(room) {
+  const safeRoom = room || {};
+  const tiles = getPuzzleTiles(safeRoom);
+  const viewMode = getPuzzleViewMode(safeRoom);
+  const activeTile = getActivePuzzleTile(safeRoom);
+
+  syncBattleManagerVisibility();
+
+  if (!E.puzzleMapBoard) {
+    notifyExternalTokenSystem(safeRoom);
     return;
   }
 
-  window.homebrewGodPuzzleDragListenersReady = true;
+  if (tiles.length === 0) {
+    E.puzzleMapBoard.innerHTML = "";
 
-  document.addEventListener("pointermove", handlePuzzleTilePointerMove);
-  document.addEventListener("pointerup", handlePuzzleTilePointerUp);
-  document.addEventListener("pointercancel", cancelPuzzleTileDrag);
-}
+    if (E.puzzleMapEmptyText) {
+      E.puzzleMapBoard.appendChild(E.puzzleMapEmptyText);
+      text(E.puzzleMapEmptyText, "No puzzle tiles yet. Open Puzzle Map Builder to add tiles.");
+    }
 
-function makeTileKey(x, y) {
-  return String(x) + "," + String(y);
-}
-
-function getPuzzleTiles(room) {
-  if (!room || !Array.isArray(room.puzzleTiles)) {
-    return [];
+    showSingleBattleMapView();
+    notifyExternalTokenSystem(safeRoom);
+    return;
   }
 
-  return room.puzzleTiles.filter(function (tile) {
-    return tile && tile.url && Number.isFinite(tile.x) && Number.isFinite(tile.y);
+  if (viewMode === "focus" && activeTile) {
+    showSingleBattleMapView();
+    showSharedMap(puzzleTileToCurrentMap(activeTile));
+    notifyExternalTokenSystem(safeRoom);
+    return;
+  }
+
+  showPuzzleBoardView();
+
+  E.puzzleMapBoard.innerHTML = "";
+
+  const bounds = getPuzzleBounds(tiles);
+  const tileLookup = new Map();
+
+  tiles.forEach(function (tile) {
+    tileLookup.set(makeTileKey(tile.x, tile.y), tile);
   });
+
+  E.puzzleMapBoard.style.gridTemplateColumns =
+    "repeat(" + (bounds.maxX - bounds.minX + 1) + ", auto)";
+
+  E.puzzleMapBoard.style.gridTemplateRows =
+    "repeat(" + (bounds.maxY - bounds.minY + 1) + ", auto)";
+
+  for (let y = bounds.minY; y <= bounds.maxY; y++) {
+    for (let x = bounds.minX; x <= bounds.maxX; x++) {
+      const key = makeTileKey(x, y);
+      const tile = tileLookup.get(key);
+
+      if (!tile) {
+        const emptyCell = document.createElement("div");
+        emptyCell.className = "puzzle-grid-empty-cell";
+        emptyCell.title = "Empty grid spot " + key;
+        E.puzzleMapBoard.appendChild(emptyCell);
+        continue;
+      }
+
+      E.puzzleMapBoard.appendChild(createPuzzleTileElement(tile, activeTile));
+    }
+  }
+
+  keepTokenLayerReadyForExternalFile();
+  notifyExternalTokenSystem(safeRoom);
 }
 
-function getActivePuzzleTile(room) {
-  const tiles = getPuzzleTiles(room);
+function createPuzzleTileElement(tile, activeTile) {
+  const tileDiv = document.createElement("div");
+  tileDiv.className = "map-tile";
+
+  if (activeTile && activeTile.key === tile.key) {
+    tileDiv.classList.add("is-active");
+  }
+
+  tileDiv.dataset.tileKey = tile.key;
+  tileDiv.dataset.tileX = String(tile.x);
+  tileDiv.dataset.tileY = String(tile.y);
+  tileDiv.title = tile.name + " — " + tile.key;
+
+  const img = document.createElement("img");
+  img.src = tile.url;
+  img.alt = tile.name || "Puzzle tile";
+  tileDiv.appendChild(img);
+
+  const actions = document.createElement("div");
+  actions.className = "puzzle-tile-actions";
+
+  const focusButton = document.createElement("button");
+  focusButton.type = "button";
+  focusButton.textContent = "Focus";
+  focusButton.addEventListener("click", function (event) {
+    event.stopPropagation();
+    focusPuzzleTile(tile.key);
+  });
+  actions.appendChild(focusButton);
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", function (event) {
+    event.stopPropagation();
+    deletePuzzleTile(tile.key);
+  });
+  actions.appendChild(deleteButton);
+
+  tileDiv.appendChild(actions);
+
+  const label = document.createElement("div");
+  label.className = "puzzle-tile-label";
+  label.textContent = tile.name + " / " + tile.key;
+  tileDiv.appendChild(label);
+
+  tileDiv.addEventListener("pointerdown", function (event) {
+    startPuzzleTileDrag(event, tile, tileDiv);
+  });
+
+  return tileDiv;
+}
+
+function centerPuzzleBoardNow() {
+  if (!E.puzzleMapBoard) {
+    return;
+  }
+
+  E.puzzleMapBoard.scrollLeft =
+    Math.max(0, (E.puzzleMapBoard.scrollWidth - E.puzzleMapBoard.clientWidth) / 2);
+
+  E.puzzleMapBoard.scrollTop =
+    Math.max(0, (E.puzzleMapBoard.scrollHeight - E.puzzleMapBoard.clientHeight) / 2);
+}
+
+
+// =====================================================
+// APP SECTION 12F — PUZZLE TILE ADDING / UPLOAD
+// =====================================================
+
+function getTargetPositionForNewTile(direction) {
+  const tiles = getPuzzleTiles(currentRoomData || {});
 
   if (tiles.length === 0) {
-    return null;
-  }
-
-  const activeKey = room.activePuzzleTileKey || makeTileKey(0, 0);
-
-  return tiles.find(function (tile) {
-    return tile.key === activeKey;
-  }) || tiles[0];
-}
-
-function getPuzzleViewMode(room) {
-  if (room && room.puzzleViewMode === "focus") {
-    return "focus";
-  }
-
-  return "board";
-}
-
-function puzzleTileToCurrentMap(tile) {
-  if (!tile) {
-    return null;
-  }
-
-  return {
-    id: tile.key || makeTileKey(tile.x, tile.y),
-    name: tile.name || "Puzzle Tile " + makeTileKey(tile.x, tile.y),
-    url: tile.url,
-    publicId: tile.publicId || null,
-    savedToLibrary: false
-  };
-}
-
-function getTargetPositionForDirection(direction) {
-  const tiles = getPuzzleTiles(currentRoomData || {});
-  const activeTile = getActivePuzzleTile(currentRoomData || {});
-
-  if (tiles.length === 0 || !activeTile) {
     return {
       x: 0,
       y: 0
     };
   }
 
+  const activeTile = getActivePuzzleTile(currentRoomData || {}) || tiles[0];
+
   let x = activeTile.x;
   let y = activeTile.y;
 
-  if (direction === "north") {
-    y -= 1;
-  }
-
-  if (direction === "south") {
-    y += 1;
-  }
-
-  if (direction === "east") {
-    x += 1;
-  }
-
-  if (direction === "west") {
-    x -= 1;
-  }
+  if (direction === "north") y -= 1;
+  if (direction === "south") y += 1;
+  if (direction === "east") x += 1;
+  if (direction === "west") x -= 1;
 
   return {
-    x: x,
-    y: y
+    x,
+    y
   };
-}
-
-function tileExistsAtPosition(tiles, x, y, ignoreTileKey = null) {
-  return tiles.some(function (tile) {
-    if (ignoreTileKey && tile.key === ignoreTileKey) {
-      return false;
-    }
-
-    return tile.x === x && tile.y === y;
-  });
-}
-
-function disablePuzzleButtons(isDisabled) {
-  [
-    E.addTileNorthButton,
-    E.addTileSouthButton,
-    E.addTileEastButton,
-    E.addTileWestButton,
-    E.centerPuzzleBoardButton
-  ].forEach(function (button) {
-    if (button) {
-      button.disabled = isDisabled;
-    }
-  });
-}
-
-async function updateRoomWithPuzzleTiles(newTiles, activeTile, viewMode = "board") {
-  if (!currentRoomCode || !currentIsDM) {
-    alert("Only the DM can change puzzle maps.");
-    return;
-  }
-
-  const currentMap = activeTile ? puzzleTileToCurrentMap(activeTile) : null;
-
-  const updateData = {
-    puzzleTiles: newTiles,
-    activePuzzleTileKey: activeTile ? activeTile.key : null,
-    puzzleViewMode: viewMode,
-    updatedAt: serverTimestamp()
-  };
-
-  if (currentMap && currentMap.url) {
-    updateData.currentMap = {
-      id: currentMap.id,
-      name: currentMap.name,
-      url: currentMap.url,
-      publicId: currentMap.publicId || null,
-      savedToLibrary: false
-    };
-
-    updateData.currentMapUrl = currentMap.url;
-    updateData.currentMapName = currentMap.name;
-    updateData.currentMapId = currentMap.id;
-    updateData.currentMapPublicId = currentMap.publicId || null;
-    updateData.currentMapSavedToLibrary = false;
-  } else {
-    updateData.currentMap = null;
-    updateData.currentMapUrl = null;
-    updateData.currentMapName = null;
-    updateData.currentMapId = null;
-    updateData.currentMapPublicId = null;
-    updateData.currentMapSavedToLibrary = false;
-  }
-
-  await updateDoc(doc(db, "rooms", currentRoomCode), updateData);
 }
 
 async function addPuzzleTile(direction) {
   try {
     if (!currentRoomCode) {
-      alert("Open a room first.");
+      alert("Create or join a room first.");
       return;
     }
 
     if (!currentIsDM) {
-      alert("Only the DM can add puzzle tiles.");
+      alert("Only the DM can add puzzle map tiles.");
       return;
     }
 
-    const file = E.puzzleTileUploadInput ? E.puzzleTileUploadInput.files[0] : null;
-
-    if (!file) {
+    if (!E.puzzleTileUploadInput || !E.puzzleTileUploadInput.files[0]) {
       alert("Choose a puzzle tile image first.");
       return;
     }
 
+    const file = E.puzzleTileUploadInput.files[0];
     const oldTiles = getPuzzleTiles(currentRoomData || {});
-    const target = getTargetPositionForDirection(direction);
+    const target = getTargetPositionForNewTile(direction);
 
-    if (tileExistsAtPosition(oldTiles, target.x, target.y)) {
-      alert("That puzzle spot already has a tile. Focus another tile or delete the old one first.");
+    if (tileExistsAtPosition(oldTiles, target.x, target.y, null)) {
+      alert("That puzzle grid spot is already taken. Focus another tile or move one first.");
       return;
     }
 
     text(
       E.puzzleMapStatus,
       oldTiles.length === 0
-        ? "Uploading first puzzle tile at center..."
-        : "Uploading puzzle tile " + direction + "..."
+        ? "Uploading first puzzle tile."
+        : "Uploading puzzle tile " + direction + "."
     );
 
     disablePuzzleButtons(true);
@@ -1586,7 +1885,7 @@ async function addPuzzleTile(direction) {
     const key = makeTileKey(target.x, target.y);
 
     const newTile = {
-      key: key,
+      key,
       x: target.x,
       y: target.y,
       name: getSafeMapName(file.name),
@@ -1613,10 +1912,15 @@ async function addPuzzleTile(direction) {
 
     await updateRoomWithPuzzleTiles(newTiles, newTile, "board");
 
-    showSharedMap(puzzleTileToCurrentMap(newTile));
     renderPuzzleBoard(currentRoomData);
 
-    E.puzzleTileUploadInput.value = "";
+    if (E.puzzleTileUploadInput) {
+      E.puzzleTileUploadInput.value = "";
+    }
+
+    setTimeout(function () {
+      centerPuzzleBoardNow();
+    }, 80);
 
     text(
       E.puzzleMapStatus,
@@ -1631,6 +1935,11 @@ async function addPuzzleTile(direction) {
     disablePuzzleButtons(false);
   }
 }
+
+
+// =====================================================
+// APP SECTION 12G — PUZZLE TILE FOCUS / DELETE
+// =====================================================
 
 async function focusPuzzleTile(tileKey) {
   try {
@@ -1663,6 +1972,7 @@ async function focusPuzzleTile(tileKey) {
 
     await updateRoomWithPuzzleTiles(tiles, tile, "focus");
 
+    showSingleBattleMapView();
     showSharedMap(puzzleTileToCurrentMap(tile));
     renderPuzzleBoard(currentRoomData);
 
@@ -1690,6 +2000,7 @@ async function showFullPuzzleBoard() {
 
     await updateDoc(doc(db, "rooms", currentRoomCode), {
       puzzleViewMode: "board",
+      activePuzzleTileKey: activeTile ? activeTile.key : null,
       updatedAt: serverTimestamp()
     });
 
@@ -1738,7 +2049,10 @@ async function deletePuzzleTile(tileKey) {
 
     await updateRoomWithPuzzleTiles(newTiles, newActiveTile, "board");
 
-    showSharedMap(newActiveTile ? puzzleTileToCurrentMap(newActiveTile) : null);
+    if (newActiveTile) {
+      showSharedMap(puzzleTileToCurrentMap(newActiveTile));
+    }
+
     renderPuzzleBoard(currentRoomData);
 
     text(E.puzzleMapStatus, "Puzzle tile deleted.");
@@ -1746,6 +2060,11 @@ async function deletePuzzleTile(tileKey) {
     alert(error.message);
   }
 }
+
+
+// =====================================================
+// APP SECTION 12H — PUZZLE TILE DRAGGING / GRID LOCK
+// =====================================================
 
 async function movePuzzleTileTo(tileKey, newX, newY) {
   try {
@@ -1787,11 +2106,7 @@ async function movePuzzleTileTo(tileKey, newX, newY) {
     };
 
     const newTiles = oldTiles.map(function (tile) {
-      if (tile.key === tileKey) {
-        return movedTile;
-      }
-
-      return tile;
+      return tile.key === tileKey ? movedTile : tile;
     });
 
     currentRoomData = {
@@ -1809,7 +2124,6 @@ async function movePuzzleTileTo(tileKey, newX, newY) {
 
     await updateRoomWithPuzzleTiles(newTiles, movedTile, "board");
 
-    showSharedMap(puzzleTileToCurrentMap(movedTile));
     renderPuzzleBoard(currentRoomData);
 
     text(E.puzzleMapStatus, "Tile moved and locked at " + movedTile.key + ".");
@@ -1834,6 +2148,12 @@ function startPuzzleTileDrag(event, tile, tileDiv) {
 
   event.preventDefault();
 
+  try {
+    tileDiv.setPointerCapture(event.pointerId);
+  } catch (error) {
+    // Safe to ignore.
+  }
+
   activePuzzleDrag = {
     tileKey: tile.key,
     originalX: tile.x,
@@ -1844,37 +2164,34 @@ function startPuzzleTileDrag(event, tile, tileDiv) {
     lastClientY: event.clientY,
     tileWidth: Math.max(1, tileDiv.offsetWidth),
     tileHeight: Math.max(1, tileDiv.offsetHeight),
-    tileDiv: tileDiv,
+    pointerId: event.pointerId,
+    tileDiv,
     moved: false
   };
 
   tileDiv.classList.add("puzzle-dragging");
-  tileDiv.style.transition = "none";
-
-  text(E.puzzleMapStatus, "Dragging tile. Release near a grid spot to lock it.");
+  text(E.puzzleMapStatus, "Dragging tile. Release to lock it to the grid.");
 }
 
-function handlePuzzleTilePointerMove(event) {
+function handlePuzzlePointerMove(event) {
   if (!activePuzzleDrag) {
     return;
   }
 
-  const drag = activePuzzleDrag;
+  event.preventDefault();
 
+  const drag = activePuzzleDrag;
   drag.lastClientX = event.clientX;
   drag.lastClientY = event.clientY;
+  drag.moved = true;
 
-  const dx = drag.lastClientX - drag.startClientX;
-  const dy = drag.lastClientY - drag.startClientY;
-
-  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-    drag.moved = true;
-  }
+  const dx = event.clientX - drag.startClientX;
+  const dy = event.clientY - drag.startClientY;
 
   drag.tileDiv.style.transform = "translate(" + dx + "px, " + dy + "px)";
 }
 
-async function handlePuzzleTilePointerUp(event) {
+async function handlePuzzlePointerUp(event) {
   if (!activePuzzleDrag) {
     return;
   }
@@ -1882,210 +2199,62 @@ async function handlePuzzleTilePointerUp(event) {
   const drag = activePuzzleDrag;
   activePuzzleDrag = null;
 
-  const dx = event.clientX - drag.startClientX;
-  const dy = event.clientY - drag.startClientY;
-
-  const movedCellsX = Math.round(dx / drag.tileWidth);
-  const movedCellsY = Math.round(dy / drag.tileHeight);
-
-  const targetX = drag.originalX + movedCellsX;
-  const targetY = drag.originalY + movedCellsY;
-
   drag.tileDiv.classList.remove("puzzle-dragging");
   drag.tileDiv.style.transform = "";
-  drag.tileDiv.style.transition = "";
 
-  if (!drag.moved || (movedCellsX === 0 && movedCellsY === 0)) {
-    await focusPuzzleTile(drag.tileKey);
-    return;
+  try {
+    if (drag.pointerId !== undefined && drag.pointerId !== null) {
+      try {
+        drag.tileDiv.releasePointerCapture(drag.pointerId);
+      } catch (error) {
+        // Safe to ignore.
+      }
+    }
+
+    const dx = drag.lastClientX - drag.startClientX;
+    const dy = drag.lastClientY - drag.startClientY;
+
+    const gridDx = Math.round(dx / drag.tileWidth);
+    const gridDy = Math.round(dy / drag.tileHeight);
+
+    const newX = drag.originalX + gridDx;
+    const newY = drag.originalY + gridDy;
+
+    await movePuzzleTileTo(drag.tileKey, newX, newY);
+  } catch (error) {
+    alert(error.message);
+    renderPuzzleBoard(currentRoomData || {});
   }
-
-  await movePuzzleTileTo(drag.tileKey, targetX, targetY);
 }
 
-function cancelPuzzleTileDrag() {
+function cancelPuzzleDrag() {
   if (!activePuzzleDrag) {
     return;
   }
 
   activePuzzleDrag.tileDiv.classList.remove("puzzle-dragging");
   activePuzzleDrag.tileDiv.style.transform = "";
-  activePuzzleDrag.tileDiv.style.transition = "";
-
   activePuzzleDrag = null;
 
   renderPuzzleBoard(currentRoomData || {});
 }
 
-function centerPuzzleBoardNow() {
-  if (!E.puzzleMapBoard) {
+function ensurePuzzleDragListeners() {
+  if (window.homebrewGodPuzzleDragListenersReady) {
     return;
   }
 
-  E.puzzleMapBoard.scrollLeft = Math.max(0, (E.puzzleMapBoard.scrollWidth - E.puzzleMapBoard.clientWidth) / 2);
-  E.puzzleMapBoard.scrollTop = Math.max(0, (E.puzzleMapBoard.scrollHeight - E.puzzleMapBoard.clientHeight) / 2);
+  window.homebrewGodPuzzleDragListenersReady = true;
 
-  text(E.puzzleMapStatus, "Puzzle board centered.");
+  document.addEventListener("pointermove", handlePuzzlePointerMove);
+  document.addEventListener("pointerup", handlePuzzlePointerUp);
+  document.addEventListener("pointercancel", cancelPuzzleDrag);
 }
 
-async function centerPuzzleBoard() {
-  if (getPuzzleViewMode(currentRoomData || {}) === "focus") {
-    await showFullPuzzleBoard();
-    return;
-  }
 
-  centerPuzzleBoardNow();
-}
-
-function renderPuzzleBoard(room) {
-  if (!E.puzzleMapBoard) {
-    return;
-  }
-
-  ensureBattleManagerPolishStyles();
-  syncBattleManagerVisibility();
-  keepTokenLayerReadyForExternalFile();
-
-  const tiles = getPuzzleTiles(room || {});
-  const activeTile = getActivePuzzleTile(room || {});
-  const viewMode = getPuzzleViewMode(room || {});
-
-  E.puzzleMapBoard.innerHTML = "";
-
-  if (tiles.length === 0) {
-    E.puzzleMapBoard.classList.add("hidden");
-
-    if (E.battleMapViewer) {
-      E.battleMapViewer.classList.remove("hidden");
-    }
-
-    notifyExternalTokenSystem(room || {});
-    return;
-  }
-
-  if (viewMode === "focus" && activeTile) {
-    E.puzzleMapBoard.classList.add("hidden");
-
-    if (E.battleMapViewer) {
-      E.battleMapViewer.classList.remove("hidden");
-    }
-
-    showSharedMap(puzzleTileToCurrentMap(activeTile));
-
-    if (currentIsDM) {
-      text(E.puzzleMapStatus, "Focused on tile " + activeTile.key + ". Press Center Board to return.");
-    }
-
-    notifyExternalTokenSystem(room || {});
-    return;
-  }
-
-  if (E.battleMapViewer) {
-    E.battleMapViewer.classList.add("hidden");
-  }
-
-  E.puzzleMapBoard.classList.remove("hidden");
-
-  const minX = Math.min(...tiles.map(function (tile) { return tile.x; }));
-  const maxX = Math.max(...tiles.map(function (tile) { return tile.x; }));
-  const minY = Math.min(...tiles.map(function (tile) { return tile.y; }));
-  const maxY = Math.max(...tiles.map(function (tile) { return tile.y; }));
-
-  const columns = maxX - minX + 1;
-
-  E.puzzleMapBoard.style.gridTemplateColumns = "repeat(" + columns + ", minmax(280px, 420px))";
-  E.puzzleMapBoard.style.alignItems = "start";
-  E.puzzleMapBoard.style.justifyContent = "center";
-
-  const tileByPosition = new Map();
-
-  tiles.forEach(function (tile) {
-    tileByPosition.set(makeTileKey(tile.x, tile.y), tile);
-  });
-
-  for (let y = minY; y <= maxY; y++) {
-    for (let x = minX; x <= maxX; x++) {
-      const positionKey = makeTileKey(x, y);
-      const tile = tileByPosition.get(positionKey);
-
-      if (!tile) {
-        const emptyTile = document.createElement("div");
-        emptyTile.className = "map-tile";
-        emptyTile.style.height = "280px";
-        emptyTile.style.border = "0";
-        emptyTile.style.opacity = "0.18";
-        emptyTile.style.background = "#08080c";
-
-        E.puzzleMapBoard.appendChild(emptyTile);
-        continue;
-      }
-
-      const tileDiv = document.createElement("div");
-      tileDiv.className = "map-tile";
-      tileDiv.style.position = "relative";
-      tileDiv.style.height = "280px";
-      tileDiv.style.cursor = currentIsDM ? "grab" : "default";
-      tileDiv.style.border = "0";
-      tileDiv.style.borderRadius = "0";
-      tileDiv.style.overflow = "hidden";
-      tileDiv.style.outline = "none";
-      tileDiv.style.boxShadow = "none";
-
-      const img = document.createElement("img");
-      img.src = tile.url;
-      img.alt = tile.name || "Puzzle map tile";
-      img.style.width = "100%";
-      img.style.height = "100%";
-      img.style.objectFit = "cover";
-      img.style.display = "block";
-
-      tileDiv.appendChild(img);
-
-      if (currentIsDM) {
-        tileDiv.addEventListener("pointerdown", function (event) {
-          startPuzzleTileDrag(event, tile, tileDiv);
-        });
-
-        const actions = document.createElement("div");
-        actions.className = "puzzle-tile-actions";
-        actions.style.position = "absolute";
-        actions.style.top = "6px";
-        actions.style.right = "6px";
-        actions.style.display = "flex";
-        actions.style.gap = "4px";
-
-        const focusButton = document.createElement("button");
-        focusButton.textContent = "Focus";
-        focusButton.style.padding = "5px 7px";
-        focusButton.style.fontSize = "12px";
-        focusButton.style.margin = "0";
-        focusButton.addEventListener("click", function (event) {
-          event.stopPropagation();
-          focusPuzzleTile(tile.key);
-        });
-
-        const deleteButton = document.createElement("button");
-        deleteButton.textContent = "X";
-        deleteButton.style.padding = "5px 7px";
-        deleteButton.style.fontSize = "12px";
-        deleteButton.style.margin = "0";
-        deleteButton.addEventListener("click", function (event) {
-          event.stopPropagation();
-          deletePuzzleTile(tile.key);
-        });
-
-        actions.appendChild(focusButton);
-        actions.appendChild(deleteButton);
-        tileDiv.appendChild(actions);
-      }
-
-      E.puzzleMapBoard.appendChild(tileDiv);
-    }
-  }
-
-  keepTokenLayerReadyForExternalFile();
-  notifyExternalTokenSystem(room || {});
-}
+// =====================================================
+// APP SECTION 12I — PUZZLE BUTTON LISTENERS
+// =====================================================
 
 if (E.addTileNorthButton) {
   E.addTileNorthButton.addEventListener("click", function () {
@@ -2113,19 +2282,24 @@ if (E.addTileWestButton) {
 
 if (E.centerPuzzleBoardButton) {
   E.centerPuzzleBoardButton.addEventListener("click", function () {
-    centerPuzzleBoard();
+    showFullPuzzleBoard();
   });
 }
 
+
 // =====================================================
-// TOKEN SYSTEM CONNECTION
+// APP SECTION 12J — TOKEN SYSTEM CONNECTION
 // =====================================================
 
 if (!tokenSystem) {
   tokenSystem = createTokenSystem({
     db,
     doc,
+    collection,
+    addDoc,
     updateDoc,
+    deleteDoc,
+    onSnapshot,
     serverTimestamp,
 
     uploadImage: uploadMapToCloudinary,
