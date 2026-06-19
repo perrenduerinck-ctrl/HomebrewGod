@@ -178,12 +178,12 @@
         <!-- =====================================================
              COLLAPSIBLE PUZZLE MAP BUILDER
         ====================================================== -->
-        <details id="puzzleMapControls" class="battleEditorMenu" open>
+        <details id="puzzleMapControls" class="battleEditorMenu">
           <summary>
             <span>Puzzle Map Builder</span>
           </summary>
 
-          <div class="battleEditorInner">
+          <div class="battleEditorInner compactEditorInner">
             <input id="puzzleTileUploadInput" type="file" accept="image/*">
 
             <button id="addTileNorthButton">Add North</button>
@@ -207,33 +207,37 @@
             <span>Token Builder</span>
           </summary>
 
-          <div class="battleEditorInner">
+          <div class="battleEditorInner compactEditorInner">
 
-            <div class="battleEditorGroup">
+            <!-- =====================================================
+                 COMPACT TOKEN SCALE
+            ====================================================== -->
+            <div class="battleEditorGroup tokenCompactGroup">
               <h3>Token Scale</h3>
 
-              <p class="small">
-                Drag the slider until the Medium preview matches one normal map square.
-                Small and Medium use the same base. Large is 2x, Huge is 3x, Gargantuan is 4x.
+              <div class="tokenScaleCompactRow">
+                <label class="small" for="tokenMediumSizeInput">
+                  Medium:
+                  <b><span id="tokenMediumSizeValue">64</span>px</b>
+                </label>
+
+                <input
+                  id="tokenMediumSizeInput"
+                  type="range"
+                  min="24"
+                  max="180"
+                  step="4"
+                  value="64"
+                >
+
+                <button id="saveTokenScaleButton">Save Size</button>
+              </div>
+
+              <p class="small tokenScaleHint">
+                Medium = 1 square. Large 2x, Huge 3x, Gargantuan 4x.
               </p>
 
-              <label class="small" for="tokenMediumSizeInput">
-                Medium Base Size:
-                <b><span id="tokenMediumSizeValue">64</span>px</b>
-              </label>
-
-              <input
-                id="tokenMediumSizeInput"
-                type="range"
-                min="24"
-                max="180"
-                step="4"
-                value="64"
-              >
-
-              <button id="saveTokenScaleButton">Save Medium Size</button>
-
-              <div id="tokenScalePreview" aria-label="Token size preview">
+              <div id="tokenScalePreview" class="tokenScalePreviewCompact" aria-label="Token size preview">
                 <div class="tokenScalePreviewItem">
                   <div id="tokenPreviewTiny" class="tokenScaleDot">T</div>
                   <span>Tiny</span>
@@ -263,34 +267,35 @@
 
             <hr>
 
-            <div class="battleEditorGroup">
+            <!-- =====================================================
+                 COMPACT ADD TOKEN
+            ====================================================== -->
+            <div class="battleEditorGroup tokenCompactGroup">
               <h3>Add Token</h3>
 
-              <input id="tokenNameInput" type="text" placeholder="Token name, like Velmir">
+              <div class="tokenAddCompactRow">
+                <input id="tokenNameInput" type="text" placeholder="Token name">
 
-              <p class="small">Token Type</p>
+                <select id="tokenTypeSelect">
+                  <option value="player">Player</option>
+                  <option value="enemy" selected>Monster / Enemy</option>
+                  <option value="npc">NPC</option>
+                  <option value="object">Object</option>
+                </select>
 
-              <select id="tokenTypeSelect" size="4">
-                <option value="player">Player</option>
-                <option value="enemy" selected>Monster / Enemy</option>
-                <option value="npc">NPC</option>
-                <option value="object">Object</option>
-              </select>
+                <select id="tokenSizeSelect">
+                  <option value="tiny">Tiny</option>
+                  <option value="small">Small</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="large">Large</option>
+                  <option value="huge">Huge</option>
+                  <option value="gargantuan">Gargantuan</option>
+                </select>
 
-              <p class="small">Creature Size</p>
+                <input id="tokenImageUploadInput" type="file" accept="image/*">
 
-              <select id="tokenSizeSelect" size="6">
-                <option value="tiny">Tiny</option>
-                <option value="small">Small</option>
-                <option value="medium" selected>Medium</option>
-                <option value="large">Large</option>
-                <option value="huge">Huge</option>
-                <option value="gargantuan">Gargantuan</option>
-              </select>
-
-              <input id="tokenImageUploadInput" type="file" accept="image/*">
-
-              <button id="addTokenButton">Add Token</button>
+                <button id="addTokenButton">Add Token</button>
+              </div>
 
               <p id="tokenBuilderStatus" class="status">
                 Token system ready.
