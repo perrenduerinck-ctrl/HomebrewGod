@@ -1,6 +1,6 @@
 // =====================================================
-// TOKENS.JS — HOMEBREW GOD TOKEN SYSTEM V1.5
-// D&D creature sizes + medium scale slider
+// TOKENS.JS — HOMEBREW GOD TOKEN SYSTEM V1.6
+// D&D creature sizes + map-based white scale preview
 // =====================================================
 
 export function createTokenSystem(options) {
@@ -34,6 +34,7 @@ export function createTokenSystem(options) {
 
   let activeTokenDrag = null;
   let lastRenderedRoom = null;
+  let scalePreviewHideTimer = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -107,75 +108,52 @@ export function createTokenSystem(options) {
 
     style.textContent = `
       #tokenMediumSizeInput {
-        width: min(520px, 100%) !important;
-        display: block !important;
-        margin: 10px 0 !important;
+        width: min(360px, 100%) !important;
+        display: inline-block !important;
+        margin: 6px 8px !important;
         accent-color: #9d6bff;
+        vertical-align: middle;
+      }
+
+      .tokenScaleCompactRow,
+      .tokenAddCompactRow {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .tokenScaleHint {
+        margin: 6px 0 0 0 !important;
+        padding: 8px 10px !important;
       }
 
       #tokenScalePreview {
-        margin-top: 12px;
-        padding: 12px;
-        min-height: 170px;
-        display: flex;
-        gap: 16px;
-        align-items: flex-end;
-        overflow: auto;
-        border: 1px solid rgba(116, 138, 255, 0.22);
-        border-radius: 14px;
-        background:
-          radial-gradient(circle at top left, rgba(88, 166, 255, 0.10), transparent 38%),
-          linear-gradient(180deg, rgba(8, 12, 25, 0.95), rgba(4, 6, 14, 0.98));
-      }
-
-      .tokenScalePreviewItem {
-        min-width: 74px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 7px;
-        color: #b9c2ef;
-        font-size: 12px;
-        text-align: center;
-      }
-
-      .tokenScaleDot {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 999px;
-        color: white;
-        font-weight: bold;
-        background:
-          radial-gradient(circle at 35% 30%, rgba(255,255,255,0.32), transparent 24%),
-          linear-gradient(135deg, #58a6ff, #9d6bff);
-        border: 2px solid rgba(235, 240, 255, 0.90);
-        box-shadow:
-          0 0 0 2px rgba(0, 0, 0, 0.55),
-          0 0 18px rgba(130, 115, 255, 0.42);
+        display: none !important;
       }
 
       #tokenTypeSelect,
       #tokenSizeSelect {
-        display: inline-block;
-        width: 220px;
-        max-width: 100%;
-        min-height: 124px;
-        padding: 8px;
-        margin: 6px 10px 10px 0;
-        font-size: 15px;
-        color: #f5f7ff;
-        background: linear-gradient(180deg, rgba(19, 26, 49, 0.95), rgba(12, 17, 33, 0.96));
-        border: 1px solid rgba(116, 138, 255, 0.22);
-        border-radius: 12px;
-        outline: none;
+        display: inline-block !important;
+        width: 170px !important;
+        max-width: 100% !important;
+        min-height: auto !important;
+        height: auto !important;
+        padding: 10px 12px !important;
+        margin: 6px 4px !important;
+        font-size: 15px !important;
+        color: #f5f7ff !important;
+        background: linear-gradient(180deg, rgba(19, 26, 49, 0.95), rgba(12, 17, 33, 0.96)) !important;
+        border: 1px solid rgba(116, 138, 255, 0.22) !important;
+        border-radius: 12px !important;
+        outline: none !important;
+        vertical-align: middle !important;
       }
 
       #tokenTypeSelect option,
       #tokenSizeSelect option {
-        padding: 7px;
-        border-radius: 8px;
+        color: #ffffff;
+        background: #101528;
       }
 
       #tokenLayer {
@@ -185,6 +163,40 @@ export function createTokenSystem(options) {
         height: 100%;
         pointer-events: none;
         z-index: 40;
+      }
+
+      .hg-map-scale-preview {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        border-radius: 999px;
+        border: 3px solid rgba(255, 255, 255, 0.96);
+        background: rgba(255, 255, 255, 0.10);
+        box-shadow:
+          0 0 0 2px rgba(0, 0, 0, 0.72),
+          0 0 26px rgba(255, 255, 255, 0.70),
+          inset 0 0 20px rgba(255, 255, 255, 0.16);
+        pointer-events: none;
+        z-index: 9998;
+        transform: translate(-50%, -50%);
+      }
+
+      .hg-map-scale-label {
+        position: absolute;
+        left: 50%;
+        top: calc(50% + var(--preview-radius, 32px) + 8px);
+        transform: translateX(-50%);
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.78);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.62);
+        font-size: 12px;
+        font-weight: bold;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 9999;
+        box-shadow: 0 0 14px rgba(255, 255, 255, 0.24);
       }
 
       .hg-token {
@@ -315,15 +327,17 @@ export function createTokenSystem(options) {
       }
 
       @media (max-width: 900px) {
-        #tokenTypeSelect,
-        #tokenSizeSelect {
+        .tokenScaleCompactRow,
+        .tokenAddCompactRow {
           display: block;
-          width: 100%;
-          margin: 6px 0 10px 0;
         }
 
-        #tokenScalePreview {
-          min-height: 150px;
+        #tokenMediumSizeInput,
+        #tokenTypeSelect,
+        #tokenSizeSelect {
+          display: block !important;
+          width: 100% !important;
+          margin: 6px 0 !important;
         }
       }
     `;
@@ -358,7 +372,14 @@ export function createTokenSystem(options) {
       T.tokenMediumSizeInput.dataset.homebrewGodPreviewConnected = "yes";
 
       T.tokenMediumSizeInput.addEventListener("input", function () {
-        updateScalePreview(Number(T.tokenMediumSizeInput.value));
+        const mediumSize = clampMediumSize(T.tokenMediumSizeInput.value);
+        updateScaleNumber(mediumSize);
+        showMapScalePreview(mediumSize, "Medium");
+      });
+
+      T.tokenMediumSizeInput.addEventListener("change", function () {
+        const mediumSize = clampMediumSize(T.tokenMediumSizeInput.value);
+        showMapScalePreview(mediumSize, "Medium");
       });
     }
   }
@@ -467,10 +488,10 @@ export function createTokenSystem(options) {
       T.tokenMediumSizeInput.value = String(mediumSize);
     }
 
-    updateScalePreview(mediumSize);
+    updateScaleNumber(mediumSize);
   }
 
-  function updateScalePreview(mediumSizeValue) {
+  function updateScaleNumber(mediumSizeValue) {
     refreshElements();
 
     const mediumSize = clampMediumSize(mediumSizeValue);
@@ -478,30 +499,6 @@ export function createTokenSystem(options) {
     if (T.tokenMediumSizeValue) {
       T.tokenMediumSizeValue.textContent = String(mediumSize);
     }
-
-    const previewMax = 132;
-    const previewScale = Math.min(1, previewMax / Math.max(1, mediumSize * 4));
-
-    setPreviewDot(T.tokenPreviewTiny, "tiny", mediumSize, previewScale);
-    setPreviewDot(T.tokenPreviewMedium, "medium", mediumSize, previewScale);
-    setPreviewDot(T.tokenPreviewLarge, "large", mediumSize, previewScale);
-    setPreviewDot(T.tokenPreviewHuge, "huge", mediumSize, previewScale);
-    setPreviewDot(T.tokenPreviewGargantuan, "gargantuan", mediumSize, previewScale);
-  }
-
-  function setPreviewDot(el, sizeCategory, mediumSize, previewScale) {
-    if (!el) {
-      return;
-    }
-
-    const multiplier = SIZE_MULTIPLIERS[sizeCategory] || 1;
-    const actualSize = Math.round(mediumSize * multiplier);
-    const visualSize = Math.max(18, Math.round(actualSize * previewScale));
-
-    el.style.width = visualSize + "px";
-    el.style.height = visualSize + "px";
-    el.style.fontSize = Math.max(10, Math.min(22, Math.round(visualSize / 3))) + "px";
-    el.title = sizeCategoryLabel(sizeCategory) + " = " + actualSize + "px";
   }
 
   function getCurrentTokenTarget(room) {
@@ -613,6 +610,75 @@ export function createTokenSystem(options) {
     return T.tokenLayer;
   }
 
+  function removeMapScalePreview() {
+    refreshElements();
+
+    if (scalePreviewHideTimer) {
+      clearTimeout(scalePreviewHideTimer);
+      scalePreviewHideTimer = null;
+    }
+
+    if (!T.tokenLayer) {
+      return;
+    }
+
+    const oldCircle = T.tokenLayer.querySelector(".hg-map-scale-preview");
+    const oldLabel = T.tokenLayer.querySelector(".hg-map-scale-label");
+
+    if (oldCircle) oldCircle.remove();
+    if (oldLabel) oldLabel.remove();
+  }
+
+  function showMapScalePreview(mediumSize, labelName = "Medium") {
+    refreshElements();
+
+    const layer = prepareTokenLayer();
+
+    if (!layer) {
+      return;
+    }
+
+    if (scalePreviewHideTimer) {
+      clearTimeout(scalePreviewHideTimer);
+      scalePreviewHideTimer = null;
+    }
+
+    const cleanSize = clampMediumSize(mediumSize);
+
+    let circle = layer.querySelector(".hg-map-scale-preview");
+    let label = layer.querySelector(".hg-map-scale-label");
+
+    if (!circle) {
+      circle = document.createElement("div");
+      circle.className = "hg-map-scale-preview";
+      layer.appendChild(circle);
+    }
+
+    if (!label) {
+      label = document.createElement("div");
+      label.className = "hg-map-scale-label";
+      layer.appendChild(label);
+    }
+
+    circle.style.width = cleanSize + "px";
+    circle.style.height = cleanSize + "px";
+
+    label.style.setProperty("--preview-radius", (cleanSize / 2) + "px");
+    label.textContent = labelName + " " + cleanSize + "px";
+
+    setStatus("Scale preview: " + labelName + " " + cleanSize + "px. Save when it fits one square.");
+  }
+
+  function hideMapScalePreviewSoon() {
+    if (scalePreviewHideTimer) {
+      clearTimeout(scalePreviewHideTimer);
+    }
+
+    scalePreviewHideTimer = setTimeout(function () {
+      removeMapScalePreview();
+    }, 900);
+  }
+
   function positionTokenElement(tokenEl, token, room) {
     const size = getTokenPixelSize(token, room || {});
     const x = clampPercent(token.x);
@@ -644,7 +710,18 @@ export function createTokenSystem(options) {
       return;
     }
 
+    const existingScaleCircle = layer.querySelector(".hg-map-scale-preview");
+    const existingScaleLabel = layer.querySelector(".hg-map-scale-label");
+
     layer.innerHTML = "";
+
+    if (existingScaleCircle) {
+      layer.appendChild(existingScaleCircle);
+    }
+
+    if (existingScaleLabel) {
+      layer.appendChild(existingScaleLabel);
+    }
 
     const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
 
@@ -748,8 +825,9 @@ export function createTokenSystem(options) {
         updatedAt: deps.serverTimestamp()
       });
 
-      updateScalePreview(mediumSize);
       render(newRoomData);
+      showMapScalePreview(mediumSize, "Saved Medium");
+      hideMapScalePreviewSoon();
       setStatus("Medium token size saved at " + mediumSize + "px.");
     } catch (error) {
       console.error(error);
@@ -806,6 +884,7 @@ export function createTokenSystem(options) {
         return;
       }
 
+      removeMapScalePreview();
       setStatus("Uploading token...");
 
       if (T.addTokenButton) {
