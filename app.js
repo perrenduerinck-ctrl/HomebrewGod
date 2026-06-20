@@ -2378,17 +2378,17 @@ if (!tokenSystem) {
 
 
 // =====================================================
-// APP SECTION 13 — BATTLE MAP / CREATOR SCREEN NAVIGATION
+// APP SECTION 13 — BATTLE MAP / CREATOR TAB NAVIGATION
 // =====================================================
 
 function showAnyMainScreen(screenName) {
   const screens = [
-    $("authScreen"),
-    $("lobbyScreen"),
-    $("roomDashboardScreen"),
-    $("battleMapScreen"),
-    $("monsterCreatorScreen"),
-    $("characterCreatorScreen")
+    E.authScreen,
+    E.lobbyScreen,
+    E.roomDashboardScreen,
+    E.battleMapScreen,
+    E.monsterCreatorScreen,
+    E.characterCreatorScreen
   ];
 
   screens.forEach(function (screen) {
@@ -2398,12 +2398,12 @@ function showAnyMainScreen(screenName) {
   });
 
   const screenMap = {
-    auth: $("authScreen"),
-    lobby: $("lobbyScreen"),
-    room: $("roomDashboardScreen"),
-    battle: $("battleMapScreen"),
-    monsterCreator: $("monsterCreatorScreen"),
-    characterCreator: $("characterCreatorScreen")
+    auth: E.authScreen,
+    lobby: E.lobbyScreen,
+    room: E.roomDashboardScreen,
+    battle: E.battleMapScreen,
+    monsterCreator: E.monsterCreatorScreen,
+    characterCreator: E.characterCreatorScreen
   };
 
   if (screenMap[screenName]) {
@@ -2420,19 +2420,57 @@ function applyBattleZoom() {
   text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
 }
 
+function openToolTab(viewName) {
+  if (!currentRoomCode) {
+    alert("Open a room first.");
+    return;
+  }
+
+  const toolUrl = new URL(window.location.href);
+
+  toolUrl.searchParams.set("room", currentRoomCode);
+  toolUrl.searchParams.set("view", viewName);
+
+  window.open(toolUrl.toString(), "_blank");
+}
+
+function initCharacterCreatorSystem() {
+  if (characterCreatorSystem) {
+    return;
+  }
+
+  characterCreatorSystem = createCharacterCreator({
+    db,
+    doc,
+    collection,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    onSnapshot,
+    serverTimestamp,
+
+    getCurrentRoomCode: function () {
+      return currentRoomCode;
+    },
+
+    getCurrentRoomData: function () {
+      return currentRoomData;
+    },
+
+    getCurrentIsDM: function () {
+      return currentIsDM;
+    }
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13A — BATTLE MAP BUTTONS
+// =====================================================
+
 if (E.openBattleMapButton) {
   E.openBattleMapButton.addEventListener("click", function () {
-    if (!currentRoomCode) {
-      alert("Open a room first.");
-      return;
-    }
-
-    const battleUrl = new URL(window.location.href);
-
-    battleUrl.searchParams.set("room", currentRoomCode);
-    battleUrl.searchParams.set("view", "battle");
-
-    window.open(battleUrl.toString(), "_blank");
+    openToolTab("battle");
   });
 }
 
@@ -2475,29 +2513,31 @@ if (E.zoomInButton) {
 
 
 // =====================================================
-// APP SECTION 13A — CREATOR SCREEN LAUNCHERS
+// APP SECTION 13B — CREATOR TOOL LAUNCHERS
+// Character opens in its own browser tab.
+// Monster button is a placeholder until monsterCreator.js exists.
 // =====================================================
 
-const openMonsterCreatorButton = $("openMonsterCreatorButton");
-const openCharacterCreatorButton = $("openCharacterCreatorButton");
-
-const backFromMonsterCreatorButton = $("backFromMonsterCreatorButton");
-const backFromCharacterCreatorButton = $("backFromCharacterCreatorButton");
-
-if (openMonsterCreatorButton) {
-  openMonsterCreatorButton.addEventListener("click", function () {
-    showAnyMainScreen("monsterCreator");
+if (E.openCharacterCreatorButton) {
+  E.openCharacterCreatorButton.addEventListener("click", function () {
+    openToolTab("characterCreator");
   });
 }
 
-if (openCharacterCreatorButton) {
-  openCharacterCreatorButton.addEventListener("click", function () {
-    showAnyMainScreen("characterCreator");
+if (E.openMonsterCreatorButton) {
+  E.openMonsterCreatorButton.addEventListener("click", function () {
+    alert("Monster Creator file comes next.");
   });
 }
 
-if (backFromMonsterCreatorButton) {
-  backFromMonsterCreatorButton.addEventListener("click", function () {
+
+// =====================================================
+// APP SECTION 13C — CREATOR BACK BUTTONS
+// In tool tabs, this returns to the battle view in the same tab.
+// =====================================================
+
+if (E.backFromCharacterCreatorButton) {
+  E.backFromCharacterCreatorButton.addEventListener("click", function () {
     showAnyMainScreen("battle");
     applyBattleZoom();
 
@@ -2510,67 +2550,48 @@ if (backFromMonsterCreatorButton) {
   });
 }
 
-if (backFromCharacterCreatorButton) {
-  backFromCharacterCreatorButton.addEventListener("click", function () {
-    showAnyMainScreen("battle");
-    applyBattleZoom();
-
-    if (
-      window.HomebrewGodTokens &&
-      typeof window.HomebrewGodTokens.render === "function"
-    ) {
-      window.HomebrewGodTokens.render(currentRoomData || {});
-    }
-  });
-}
-
 
 // =====================================================
-// APP SECTION 13B — CREATOR PLACEHOLDER BUTTONS
-// Saving / import / export comes next.
+// APP SECTION 13D — STARTUP VIEW ROUTING HELPERS
+// Section 14 will call this after the room loads.
 // =====================================================
 
-[
-  "newMonsterButton",
-  "saveMonsterButton",
-  "copyMonsterJsonButton",
-  "exportMonsterJsonButton",
-  "newCharacterButton",
-  "saveCharacterButton",
-  "copyCharacterJsonButton",
-  "exportCharacterJsonButton"
-].forEach(function (buttonId) {
-  const button = $(buttonId);
-
-  if (!button) {
+function openStartupViewIfNeeded() {
+  if (alreadyUsedStartupLink) {
     return;
   }
 
-  button.addEventListener("click", function () {
-    alert("This button is wired. Saving/import/export comes next.");
-  });
-});
+  if (!startupRoomCode || !startupView) {
+    return;
+  }
 
-const importMonsterJsonInput = $("importMonsterJsonInput");
-const importCharacterJsonInput = $("importCharacterJsonInput");
+  if (!currentRoomCode || currentRoomCode !== startupRoomCode) {
+    return;
+  }
 
-if (importMonsterJsonInput) {
-  importMonsterJsonInput.addEventListener("change", function () {
-    alert("Monster JSON import comes next.");
-    importMonsterJsonInput.value = "";
-  });
-}
+  alreadyUsedStartupLink = true;
 
-if (importCharacterJsonInput) {
-  importCharacterJsonInput.addEventListener("change", function () {
-    alert("Character JSON import comes next.");
-    importCharacterJsonInput.value = "";
-  });
+  if (startupView === "battle") {
+    showAnyMainScreen("battle");
+    applyBattleZoom();
+    return;
+  }
+
+  if (startupView === "characterCreator") {
+    showAnyMainScreen("characterCreator");
+    initCharacterCreatorSystem();
+    return;
+  }
+
+  if (startupView === "monsterCreator") {
+    alert("Monster Creator file comes next.");
+    showAnyMainScreen("battle");
+  }
 }
 
 
 // =====================================================
-// APP SECTION 13C — PAGE LEAVE CLEANUP
+// APP SECTION 13E — PAGE LEAVE CLEANUP
 // =====================================================
 
 window.addEventListener("pagehide", function () {
