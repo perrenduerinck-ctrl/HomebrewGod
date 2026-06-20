@@ -1250,6 +1250,7 @@ ensurePuzzleDragListeners();
 
 // =====================================================
 // APP SECTION 12B — BATTLE MANAGER POLISH STYLES
+// Keeps Battle Manager UI above map tokens
 // =====================================================
 
 function ensureBattleManagerPolishStyles() {
@@ -1261,26 +1262,48 @@ function ensureBattleManagerPolishStyles() {
   style.id = "battleManagerPolishStyles";
 
   style.textContent = `
-    #battleMapSurface {
+    #battleTopBar {
       position: relative;
+      z-index: 2000;
     }
 
     #battleManagerBar {
+      position: relative;
+      z-index: 2100;
       max-width: none !important;
     }
 
     #battleManagerInner {
+      position: relative;
+      z-index: 2110;
       display: grid;
       gap: 10px;
     }
 
     #puzzleMapControls,
-    #tokenBuilderControls {
+    #tokenBuilderControls,
+    #creatorLauncherControls {
+      position: relative;
+      z-index: 2120;
       max-width: none !important;
     }
 
+    #battleMapSurface {
+      position: relative;
+      z-index: 1;
+      isolation: isolate;
+    }
+
+    #battleMapViewer,
+    #puzzleMapBoard {
+      position: relative;
+      z-index: 2;
+      isolation: isolate;
+    }
+
     #puzzleMapControls .battleEditorInner,
-    #tokenBuilderControls .battleEditorInner {
+    #tokenBuilderControls .battleEditorInner,
+    #creatorLauncherControls .battleEditorInner {
       padding: 10px 12px 12px 12px !important;
     }
 
@@ -1303,11 +1326,6 @@ function ensureBattleManagerPolishStyles() {
       vertical-align: middle !important;
     }
 
-    #puzzleMapBoard {
-      position: relative;
-      isolation: isolate;
-    }
-
     #puzzleMapBoard.hidden {
       display: none !important;
     }
@@ -1316,7 +1334,7 @@ function ensureBattleManagerPolishStyles() {
       position: absolute;
       inset: 0;
       pointer-events: none;
-      z-index: 40;
+      z-index: 10;
     }
 
     .map-tile {
@@ -1446,6 +1464,10 @@ function syncBattleManagerVisibility() {
 
   if (E.tokenBuilderControls) {
     E.tokenBuilderControls.classList.toggle("hidden", !showDmTools);
+  }
+
+  if (E.creatorLauncherControls) {
+    E.creatorLauncherControls.classList.toggle("hidden", !showDmTools);
   }
 }
 
