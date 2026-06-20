@@ -1,12 +1,18 @@
 // =====================================================
 // TOKENS SECTION 1 — TOKEN SYSTEM EXPORT / DEPENDENCIES
+// Firestore subcollection version.
+// Tokens live at rooms/{roomCode}/tokens/{tokenId}
 // =====================================================
 
 export function createTokenSystem(options) {
   const deps = {
     db: options.db,
     doc: options.doc,
+    collection: options.collection,
+    addDoc: options.addDoc,
     updateDoc: options.updateDoc,
+    deleteDoc: options.deleteDoc,
+    onSnapshot: options.onSnapshot,
     serverTimestamp: options.serverTimestamp,
 
     uploadImage: options.uploadImage,
@@ -35,6 +41,10 @@ export function createTokenSystem(options) {
   let lastRenderedRoom = null;
   let scalePreviewHideTimer = null;
 
+  let tokenUnsubscribe = null;
+  let tokenRoomCode = null;
+  let tokenCache = [];
+
 
 // =====================================================
 // TOKENS SECTION 2 — DOM ELEMENTS / REFRESH
@@ -48,12 +58,6 @@ export function createTokenSystem(options) {
     tokenMediumSizeInput: null,
     tokenMediumSizeValue: null,
     saveTokenScaleButton: null,
-
-    tokenPreviewTiny: null,
-    tokenPreviewMedium: null,
-    tokenPreviewLarge: null,
-    tokenPreviewHuge: null,
-    tokenPreviewGargantuan: null,
 
     tokenNameInput: null,
     tokenTypeSelect: null,
@@ -74,12 +78,6 @@ export function createTokenSystem(options) {
     T.tokenMediumSizeInput = $("tokenMediumSizeInput");
     T.tokenMediumSizeValue = $("tokenMediumSizeValue");
     T.saveTokenScaleButton = $("saveTokenScaleButton");
-
-    T.tokenPreviewTiny = $("tokenPreviewTiny");
-    T.tokenPreviewMedium = $("tokenPreviewMedium");
-    T.tokenPreviewLarge = $("tokenPreviewLarge");
-    T.tokenPreviewHuge = $("tokenPreviewHuge");
-    T.tokenPreviewGargantuan = $("tokenPreviewGargantuan");
 
     T.tokenNameInput = $("tokenNameInput");
     T.tokenTypeSelect = $("tokenTypeSelect");
@@ -148,6 +146,16 @@ export function createTokenSystem(options) {
     if (clean === "gargantuan") return "Gargantuan";
 
     return "Medium";
+  }
+
+  function safeTokenType(type) {
+    const clean = String(type || "");
+
+    if (["player", "enemy", "npc", "object"].includes(clean)) {
+      return clean;
+    }
+
+    return "object";
   }
 
 
@@ -571,38 +579,70 @@ export function createTokenSystem(options) {
   }
 
 
-
 // =====================================================
-// TOKENS SECTION 8 — ROOM TOKEN DATA
+// TOKENS SECTION 8 — TOKEN SUBCOLLECTION DATA / LISTENER
 // =====================================================
 
-  function getRoomTokens(room) {
-    if (!room || !Array.isArray(room.tokens)) {
-      return [];
+  function normalizeToken(rawToken) {
+    const token = rawToken || {};
+    const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
+
+    return {
+      ...token,
+      id: token.id,
+      name: token.name || "Token",
+      type: safeTokenType(token.type),
+      x: clampPercent(token.x),
+      y: clampPercent(token.y),
+      sizeCategory: cleanSizeCategory,
+      creatureSize: cleanSizeCategory,
+      mapMode: token.mapMode || "single",
+      tileKey: token.tileKey || null
+    };
+  }
+
+  function getRoomTokens() {
+    return tokenCache.map(function (token) {
+      return normalizeToken(token);
+    });
+  }
+
+  function stopTokenListener() {
+    if (typeof tokenUnsubscribe === "function") {
+      tokenUnsubscribe();
     }
 
-    return room.tokens
-      .filter(function (token) {
-        return token && token.id;
-      })
-      .map(function (token) {
-        const cleanType = ["player", "enemy", "npc", "object"].includes(String(token.type))
-          ? String(token.type)
-          : "object";
+    tokenUnsubscribe = null;
+    tokenRoomCode = null;
+    tokenCache = [];
+  }
 
-        const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
+  function startTokenListenerForRoom(roomCode) {
+    if (!roomCode) {
+      stopTokenListener();
+      return;
+    }
 
-        return {
-          ...token,
-          type: cleanType,
-          x: clampPercent(token.x),
-          y: clampPercent(token.y),
-          sizeCategory: cleanSizeCategory,
-          creatureSize: cleanSizeCategory,
-          mapMode: token.mapMode || "single",
-          tileKey: token.tileKey || null
-        };
+    if (tokenRoomCode === roomCode && tokenUnsubscribe) {
+      return;
+    }
+
+    stopTokenListener();
+
+    tokenRoomCode = roomCode;
+
+    const tokenCollectionRef = deps.collection(deps.db, "rooms", roomCode, "tokens");
+
+    tokenUnsubscribe = deps.onSnapshot(tokenCollectionRef, function (snapshot) {
+      tokenCache = snapshot.docs.map(function (tokenDoc) {
+        return normalizeToken({
+          ...tokenDoc.data(),
+          id: tokenDoc.id
+        });
       });
+
+      render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
+    });
   }
 
   function getCurrentTokenTarget(room) {
@@ -741,8 +781,11 @@ export function createTokenSystem(options) {
     connectControls();
 
     const safeRoom = room || (deps.getCurrentRoomData ? deps.getCurrentRoomData() : {}) || {};
+    const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
+
     lastRenderedRoom = safeRoom;
 
+    startTokenListenerForRoom(roomCode);
     updateScaleControlsFromRoom(safeRoom);
 
     if (activeTokenDrag) {
@@ -770,7 +813,7 @@ export function createTokenSystem(options) {
 
     const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
 
-    const visibleTokens = getRoomTokens(safeRoom).filter(function (token) {
+    const visibleTokens = getRoomTokens().filter(function (token) {
       return tokenMatchesCurrentView(token, safeRoom);
     });
 
@@ -830,6 +873,8 @@ export function createTokenSystem(options) {
 
 // =====================================================
 // TOKENS SECTION 11 — SCALE SAVE
+// Scale still lives on the room doc.
+// This rarely changes, so it is okay if the room updates here.
 // =====================================================
 
   async function saveTokenScale() {
@@ -888,6 +933,7 @@ export function createTokenSystem(options) {
 
 // =====================================================
 // TOKENS SECTION 12 — ADD / DELETE TOKEN
+// Uses rooms/{roomCode}/tokens/{tokenId}
 // =====================================================
 
   async function addToken() {
@@ -927,7 +973,7 @@ export function createTokenSystem(options) {
         : "Unnamed Token";
 
       const type = T.tokenTypeSelect && T.tokenTypeSelect.value
-        ? T.tokenTypeSelect.value
+        ? safeTokenType(T.tokenTypeSelect.value)
         : "object";
 
       const sizeCategory = T.tokenSizeSelect && T.tokenSizeSelect.value
@@ -947,20 +993,18 @@ export function createTokenSystem(options) {
       }
 
       const cloudinaryResult = await deps.uploadImage(file);
-      const oldTokens = getRoomTokens(roomData || {});
       const mediumSize = getMediumSize(roomData || {});
 
       const newToken = {
-        id: crypto.randomUUID(),
-        name: name,
-        type: type,
+        name,
+        type,
         imageUrl: cloudinaryResult.secure_url,
         publicId: cloudinaryResult.public_id,
         x: 50,
         y: 50,
         mapMode: target.mapMode,
         tileKey: target.tileKey,
-        sizeCategory: sizeCategory,
+        sizeCategory,
         creatureSize: sizeCategory,
         size: Math.round(mediumSize * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
         sheetId: null,
@@ -972,26 +1016,16 @@ export function createTokenSystem(options) {
           conditions: true,
           initiative: false
         },
-        createdAtMillis: Date.now()
-      };
-
-      const newTokens = oldTokens.concat(newToken);
-
-      const newRoomData = {
-        ...(roomData || {}),
-        tokens: newTokens
-      };
-
-      if (deps.setCurrentRoomData) {
-        deps.setCurrentRoomData(newRoomData);
-      }
-
-      await deps.updateDoc(deps.doc(deps.db, "rooms", roomCode), {
-        tokens: newTokens,
+        createdAtMillis: Date.now(),
+        updatedAtMillis: Date.now(),
+        createdAt: deps.serverTimestamp(),
         updatedAt: deps.serverTimestamp()
-      });
+      };
 
-      render(newRoomData);
+      await deps.addDoc(
+        deps.collection(deps.db, "rooms", roomCode, "tokens"),
+        newToken
+      );
 
       if (T.tokenNameInput) {
         T.tokenNameInput.value = "";
@@ -1018,7 +1052,6 @@ export function createTokenSystem(options) {
   async function deleteToken(tokenId) {
     try {
       const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-      const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : null;
       const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
 
       if (!roomCode || !isDM) {
@@ -1030,26 +1063,10 @@ export function createTokenSystem(options) {
         return;
       }
 
-      const oldTokens = getRoomTokens(roomData || {});
-      const newTokens = oldTokens.filter(function (token) {
-        return token.id !== tokenId;
-      });
+      await deps.deleteDoc(
+        deps.doc(deps.db, "rooms", roomCode, "tokens", tokenId)
+      );
 
-      const newRoomData = {
-        ...(roomData || {}),
-        tokens: newTokens
-      };
-
-      if (deps.setCurrentRoomData) {
-        deps.setCurrentRoomData(newRoomData);
-      }
-
-      await deps.updateDoc(deps.doc(deps.db, "rooms", roomCode), {
-        tokens: newTokens,
-        updatedAt: deps.serverTimestamp()
-      });
-
-      render(newRoomData);
       setStatus("Token deleted.");
     } catch (error) {
       console.error(error);
@@ -1060,54 +1077,28 @@ export function createTokenSystem(options) {
 
 // =====================================================
 // TOKENS SECTION 13 — TOKEN DRAGGING
-// No Firebase saving while dragging.
-// Saves once when the token is released.
+// No room document updates.
+// Saves only rooms/{roomCode}/tokens/{tokenId}
 // =====================================================
 
   async function saveTokenPosition(tokenId, x, y) {
     const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-    const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : null;
     const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
 
-    if (!roomCode || !isDM) {
+    if (!roomCode || !isDM || !tokenId) {
       return;
     }
 
-    const oldTokens = getRoomTokens(roomData || {});
-    let foundToken = false;
-
-    const newTokens = oldTokens.map(function (token) {
-      if (token.id !== tokenId) {
-        return token;
-      }
-
-      foundToken = true;
-
-      return {
-        ...token,
+    await deps.updateDoc(
+      deps.doc(deps.db, "rooms", roomCode, "tokens", tokenId),
+      {
         x: clampPercent(x),
         y: clampPercent(y),
-        movedAtMillis: Date.now()
-      };
-    });
-
-    if (!foundToken) {
-      return;
-    }
-
-    const newRoomData = {
-      ...(roomData || {}),
-      tokens: newTokens
-    };
-
-    if (deps.setCurrentRoomData) {
-      deps.setCurrentRoomData(newRoomData);
-    }
-
-    await deps.updateDoc(deps.doc(deps.db, "rooms", roomCode), {
-      tokens: newTokens,
-      updatedAt: deps.serverTimestamp()
-    });
+        movedAtMillis: Date.now(),
+        updatedAtMillis: Date.now(),
+        updatedAt: deps.serverTimestamp()
+      }
+    );
   }
 
   function startTokenDrag(event, token, tokenEl) {
@@ -1142,7 +1133,7 @@ export function createTokenSystem(options) {
     try {
       tokenEl.setPointerCapture(event.pointerId);
     } catch (error) {
-      // Some browsers do not need pointer capture here.
+      // Safe to ignore.
     }
 
     const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : {};
@@ -1150,7 +1141,7 @@ export function createTokenSystem(options) {
 
     activeTokenDrag = {
       tokenId: token.id,
-      tokenEl: tokenEl,
+      tokenEl,
       pointerId: event.pointerId,
       size: tokenPixelSize,
       startClientX: event.clientX,
@@ -1165,12 +1156,6 @@ export function createTokenSystem(options) {
 
     tokenEl.classList.add("hg-token-dragging");
     setStatus("Dragging token...");
-  }
-
-  function queueTokenPositionSave() {
-    // Intentionally disabled.
-    // Saving to Firebase during drag causes room snapshots and map redraw flicker.
-    // Token position saves once on pointerup instead.
   }
 
   function handleTokenPointerMove(event) {
@@ -1221,6 +1206,16 @@ export function createTokenSystem(options) {
       }
 
       await saveTokenPosition(drag.tokenId, drag.currentX, drag.currentY);
+
+      const cachedToken = tokenCache.find(function (token) {
+        return token.id === drag.tokenId;
+      });
+
+      if (cachedToken) {
+        cachedToken.x = drag.currentX;
+        cachedToken.y = drag.currentY;
+      }
+
       render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
       setStatus("Token position saved.");
     } catch (error) {
@@ -1255,6 +1250,9 @@ export function createTokenSystem(options) {
     window.HomebrewGodTokens = api;
 
     const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : {};
+    const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
+
+    startTokenListenerForRoom(roomCode);
     updateScaleControlsFromRoom(roomData || {});
     render(roomData || {});
 
@@ -1266,7 +1264,9 @@ export function createTokenSystem(options) {
     render,
     addToken,
     deleteToken,
-    saveTokenScale
+    saveTokenScale,
+    startTokenListenerForRoom,
+    stopTokenListener
   };
 
   init();
