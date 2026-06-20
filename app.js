@@ -3,6 +3,7 @@
 // =====================================================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+
 import {
   getAuth,
   onAuthStateChanged,
@@ -12,6 +13,7 @@ import {
   signOut,
   updateProfile
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
 import {
   getFirestore,
   doc,
@@ -26,6 +28,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 import { createTokenSystem } from "./tokens.js";
+import { createCharacterCreator } from "./characterCreator.js";
 // =====================================================
 // APP SECTION 2 — FIREBASE / CLOUDINARY CONFIG
 // =====================================================
