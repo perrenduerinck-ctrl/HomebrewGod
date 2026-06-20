@@ -176,7 +176,7 @@
       <div id="battleManagerInner" class="battleEditorInner">
 
         <!-- =====================================================
-             COLLAPSIBLE PUZZLE MAP BUILDER
+             PUZZLE MAP BUILDER
         ====================================================== -->
         <details id="puzzleMapControls" class="battleEditorMenu">
           <summary>
@@ -200,7 +200,7 @@
         </details>
 
         <!-- =====================================================
-             COLLAPSIBLE TOKEN BUILDER
+             TOKEN BUILDER
         ====================================================== -->
         <details id="tokenBuilderControls" class="battleEditorMenu" open>
           <summary>
@@ -209,11 +209,8 @@
 
           <div class="battleEditorInner compactEditorInner">
 
-            <!-- =====================================================
-                 COMPACT TOKEN SCALE
-            ====================================================== -->
-            <div class="battleEditorGroup tokenCompactGroup">
-              <h3>Token Scale</h3>
+            <div class="toolPanelMini">
+              <h3>Scale</h3>
 
               <div class="tokenScaleCompactRow">
                 <label class="small" for="tokenMediumSizeInput">
@@ -234,43 +231,13 @@
               </div>
 
               <p class="small tokenScaleHint">
-                Medium = 1 square. Large 2x, Huge 3x, Gargantuan 4x.
+                Drag the slider until the white circle fits one map square.
               </p>
 
-              <div id="tokenScalePreview" class="tokenScalePreviewCompact" aria-label="Token size preview">
-                <div class="tokenScalePreviewItem">
-                  <div id="tokenPreviewTiny" class="tokenScaleDot">T</div>
-                  <span>Tiny</span>
-                </div>
-
-                <div class="tokenScalePreviewItem">
-                  <div id="tokenPreviewMedium" class="tokenScaleDot">M</div>
-                  <span>Medium</span>
-                </div>
-
-                <div class="tokenScalePreviewItem">
-                  <div id="tokenPreviewLarge" class="tokenScaleDot">L</div>
-                  <span>Large</span>
-                </div>
-
-                <div class="tokenScalePreviewItem">
-                  <div id="tokenPreviewHuge" class="tokenScaleDot">H</div>
-                  <span>Huge</span>
-                </div>
-
-                <div class="tokenScalePreviewItem">
-                  <div id="tokenPreviewGargantuan" class="tokenScaleDot">G</div>
-                  <span>Gargantuan</span>
-                </div>
-              </div>
+              <div id="tokenScalePreview" class="tokenScalePreviewCompact" aria-label="Token size preview"></div>
             </div>
 
-            <hr>
-
-            <!-- =====================================================
-                 COMPACT ADD TOKEN
-            ====================================================== -->
-            <div class="battleEditorGroup tokenCompactGroup">
+            <div class="toolPanelMini">
               <h3>Add Token</h3>
 
               <div class="tokenAddCompactRow">
@@ -278,7 +245,7 @@
 
                 <select id="tokenTypeSelect">
                   <option value="player">Player</option>
-                  <option value="enemy" selected>Monster / Enemy</option>
+                  <option value="enemy" selected>Monster</option>
                   <option value="npc">NPC</option>
                   <option value="object">Object</option>
                 </select>
@@ -303,6 +270,126 @@
             </div>
           </div>
         </details>
+
+        <!-- =====================================================
+             MONSTER CREATOR MENU SHELL
+        ====================================================== -->
+        <details id="monsterCreatorControls" class="battleEditorMenu">
+          <summary>
+            <span>Monster Creator</span>
+          </summary>
+
+          <div class="battleEditorInner compactEditorInner">
+            <div class="creatorMenuGrid">
+
+              <div class="toolPanelMini">
+                <h3>Monster Basics</h3>
+
+                <input id="monsterNameInput" type="text" placeholder="Monster name">
+                <input id="monsterTypeInput" type="text" placeholder="Type, like Undead or Dragon">
+
+                <select id="monsterSizeSelect">
+                  <option value="tiny">Tiny</option>
+                  <option value="small">Small</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="large">Large</option>
+                  <option value="huge">Huge</option>
+                  <option value="gargantuan">Gargantuan</option>
+                </select>
+
+                <input id="monsterImageUploadInput" type="file" accept="image/*">
+              </div>
+
+              <div class="toolPanelMini">
+                <h3>Combat Basics</h3>
+
+                <input id="monsterAcInput" type="number" placeholder="Armor Class">
+                <input id="monsterHpInput" type="number" placeholder="Hit Points">
+                <input id="monsterSpeedInput" type="text" placeholder="Speed, like 30 ft.">
+                <input id="monsterCrInput" type="text" placeholder="CR, like 5 or 1/2">
+              </div>
+
+              <div class="toolPanelMini">
+                <h3>Notes</h3>
+
+                <textarea id="monsterNotesInput" placeholder="Traits, attacks, abilities, notes..."></textarea>
+
+                <div class="creatorButtonRow">
+                  <button id="saveMonsterButton" type="button">Save Monster Later</button>
+                  <button id="monsterToTokenButton" type="button">Make Token Later</button>
+                </div>
+
+                <p id="monsterCreatorStatus" class="status">
+                  Monster creator menu ready. Saving comes later.
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </details>
+
+        <!-- =====================================================
+             CHARACTER CREATOR MENU SHELL
+        ====================================================== -->
+        <details id="characterCreatorControls" class="battleEditorMenu">
+          <summary>
+            <span>Character Creator</span>
+          </summary>
+
+          <div class="battleEditorInner compactEditorInner">
+            <div class="creatorMenuGrid">
+
+              <div class="toolPanelMini">
+                <h3>Character Basics</h3>
+
+                <input id="characterNameInput" type="text" placeholder="Character name">
+                <input id="characterRaceInput" type="text" placeholder="Race / species">
+                <input id="characterClassInput" type="text" placeholder="Class">
+                <input id="characterLevelInput" type="number" min="1" max="20" placeholder="Level">
+                <input id="characterImageUploadInput" type="file" accept="image/*">
+              </div>
+
+              <div class="toolPanelMini">
+                <h3>Combat Basics</h3>
+
+                <input id="characterAcInput" type="number" placeholder="Armor Class">
+                <input id="characterMaxHpInput" type="number" placeholder="Max HP">
+                <input id="characterCurrentHpInput" type="number" placeholder="Current HP">
+                <input id="characterSpeedInput" type="text" placeholder="Speed, like 30 ft.">
+              </div>
+
+              <div class="toolPanelMini">
+                <h3>Stats</h3>
+
+                <div class="statMiniGrid">
+                  <input id="characterStrInput" type="number" placeholder="STR">
+                  <input id="characterDexInput" type="number" placeholder="DEX">
+                  <input id="characterConInput" type="number" placeholder="CON">
+                  <input id="characterIntInput" type="number" placeholder="INT">
+                  <input id="characterWisInput" type="number" placeholder="WIS">
+                  <input id="characterChaInput" type="number" placeholder="CHA">
+                </div>
+              </div>
+
+              <div class="toolPanelMini">
+                <h3>Notes</h3>
+
+                <textarea id="characterNotesInput" placeholder="Backstory, attacks, spells, inventory, notes..."></textarea>
+
+                <div class="creatorButtonRow">
+                  <button id="saveCharacterButton" type="button">Save Character Later</button>
+                  <button id="characterToTokenButton" type="button">Make Token Later</button>
+                </div>
+
+                <p id="characterCreatorStatus" class="status">
+                  Character creator menu ready. Saving comes later.
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </details>
+
       </div>
     </details>
   </section>
