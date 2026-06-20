@@ -2600,6 +2600,9 @@ window.addEventListener("pagehide", function () {
 
 // =====================================================
 // APP SECTION 14 — STARTUP / AUTH WATCHER
+// Supports startup tabs:
+// ?room=ROOMCODE&view=battle
+// ?room=ROOMCODE&view=characterCreator
 // =====================================================
 
 onAuthStateChanged(auth, async function (user) {
@@ -2615,12 +2618,22 @@ onAuthStateChanged(auth, async function (user) {
   listenToMyRooms();
 
   if (!alreadyUsedStartupLink && startupRoomCode) {
-    alreadyUsedStartupLink = true;
+    const startupScreen =
+      startupView === "battle"
+        ? "battle"
+        : "room";
 
     await joinRoom(
       startupRoomCode,
       "player",
-      startupView === "battle" ? "battle" : "room"
+      startupScreen
     );
+
+    // openRoom starts the room listener, then this switches to the requested tool tab.
+    setTimeout(function () {
+      if (typeof openStartupViewIfNeeded === "function") {
+        openStartupViewIfNeeded();
+      }
+    }, 150);
   }
 });
