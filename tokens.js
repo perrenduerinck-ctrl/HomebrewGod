@@ -161,6 +161,7 @@ export function createTokenSystem(options) {
 
 // =====================================================
 // TOKENS SECTION 4 — TOKEN STYLES
+// Compact token UI + creator menu shell polish
 // =====================================================
 
   function ensureStyles() {
@@ -172,13 +173,53 @@ export function createTokenSystem(options) {
     style.id = "homebrewGodTokenStyles";
 
     style.textContent = `
-      #tokenMediumSizeInput {
-        width: min(360px, 100%) !important;
-        display: inline-block !important;
-        margin: 6px 8px !important;
-        accent-color: #9d6bff;
-        vertical-align: middle;
+      /* =====================================================
+         COMPACT BATTLE MANAGER PANELS
+      ===================================================== */
+
+      .compactEditorInner {
+        padding: 10px !important;
       }
+
+      .toolPanelMini {
+        padding: 10px;
+        margin: 8px 0;
+        border-radius: 14px;
+        background:
+          radial-gradient(circle at top left, rgba(88, 166, 255, 0.08), transparent 42%),
+          linear-gradient(180deg, rgba(12, 17, 35, 0.92), rgba(7, 10, 22, 0.94));
+        border: 1px solid rgba(116, 138, 255, 0.20);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.025),
+          0 8px 20px rgba(0, 0, 0, 0.22);
+      }
+
+      .toolPanelMini h3 {
+        margin: 0 0 8px 0 !important;
+        font-size: 15px !important;
+        letter-spacing: 0.02em;
+        color: #e7ecff;
+      }
+
+      .toolPanelMini .small,
+      .tokenScaleHint {
+        margin: 5px 0 !important;
+        color: #aeb8df !important;
+        font-size: 12px !important;
+        line-height: 1.35 !important;
+      }
+
+      .toolPanelMini hr,
+      .compactEditorInner hr {
+        width: 100%;
+        border: 0;
+        border-top: 1px solid rgba(116, 138, 255, 0.16);
+        margin: 8px 0;
+      }
+
+      /* =====================================================
+         TOKEN BUILDER COMPACT ROWS
+      ===================================================== */
 
       .tokenScaleCompactRow,
       .tokenAddCompactRow {
@@ -188,28 +229,46 @@ export function createTokenSystem(options) {
         gap: 8px;
       }
 
-      .tokenScaleHint {
-        margin: 6px 0 0 0 !important;
-        padding: 8px 10px !important;
+      #tokenMediumSizeInput {
+        width: min(320px, 100%) !important;
+        display: inline-block !important;
+        margin: 4px 6px !important;
+        accent-color: #9d6bff;
+        vertical-align: middle;
       }
 
-      #tokenScalePreview {
-        display: none !important;
+      #saveTokenScaleButton,
+      #addTokenButton {
+        width: auto !important;
+        min-width: 110px !important;
+        padding: 8px 12px !important;
+        margin: 4px !important;
+        font-size: 14px !important;
+      }
+
+      #tokenNameInput {
+        width: 180px !important;
+        max-width: 100% !important;
+      }
+
+      #tokenImageUploadInput {
+        width: 220px !important;
+        max-width: 100% !important;
       }
 
       #tokenTypeSelect,
       #tokenSizeSelect {
         display: inline-block !important;
-        width: 170px !important;
+        width: 150px !important;
         max-width: 100% !important;
         min-height: auto !important;
         height: auto !important;
-        padding: 10px 12px !important;
-        margin: 6px 4px !important;
-        font-size: 15px !important;
+        padding: 9px 10px !important;
+        margin: 4px !important;
+        font-size: 14px !important;
         color: #f5f7ff !important;
         background: linear-gradient(180deg, rgba(19, 26, 49, 0.95), rgba(12, 17, 33, 0.96)) !important;
-        border: 1px solid rgba(116, 138, 255, 0.22) !important;
+        border: 1px solid rgba(116, 138, 255, 0.24) !important;
         border-radius: 12px !important;
         outline: none !important;
         vertical-align: middle !important;
@@ -220,6 +279,74 @@ export function createTokenSystem(options) {
         color: #ffffff;
         background: #101528;
       }
+
+      #tokenScalePreview {
+        display: none !important;
+      }
+
+      #tokenBuilderStatus,
+      #monsterCreatorStatus,
+      #characterCreatorStatus {
+        margin: 7px 0 0 0 !important;
+        font-size: 12px !important;
+      }
+
+      /* =====================================================
+         MONSTER / CHARACTER CREATOR SHELLS
+      ===================================================== */
+
+      .creatorMenuGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 10px;
+        align-items: start;
+      }
+
+      #monsterCreatorControls input,
+      #monsterCreatorControls select,
+      #monsterCreatorControls textarea,
+      #characterCreatorControls input,
+      #characterCreatorControls select,
+      #characterCreatorControls textarea {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin: 4px 0 !important;
+      }
+
+      #monsterCreatorControls textarea,
+      #characterCreatorControls textarea {
+        min-height: 105px;
+        resize: vertical;
+      }
+
+      .statMiniGrid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .statMiniGrid input {
+        text-align: center;
+      }
+
+      .creatorButtonRow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .creatorButtonRow button {
+        width: auto !important;
+        flex: 1 1 150px;
+        padding: 8px 10px !important;
+        margin: 0 !important;
+        font-size: 13px !important;
+      }
+
+      /* =====================================================
+         TOKEN LAYER / MAP SCALE PREVIEW
+      ===================================================== */
 
       #tokenLayer {
         position: absolute;
@@ -263,6 +390,10 @@ export function createTokenSystem(options) {
         z-index: 9999;
         box-shadow: 0 0 14px rgba(255, 255, 255, 0.24);
       }
+
+      /* =====================================================
+         TOKEN PIECES
+      ===================================================== */
 
       .hg-token {
         position: absolute;
@@ -391,6 +522,10 @@ export function createTokenSystem(options) {
         filter: brightness(1.15);
       }
 
+      /* =====================================================
+         SMALL SCREENS
+      ===================================================== */
+
       @media (max-width: 900px) {
         .tokenScaleCompactRow,
         .tokenAddCompactRow {
@@ -399,17 +534,26 @@ export function createTokenSystem(options) {
 
         #tokenMediumSizeInput,
         #tokenTypeSelect,
-        #tokenSizeSelect {
+        #tokenSizeSelect,
+        #tokenNameInput,
+        #tokenImageUploadInput {
           display: block !important;
           width: 100% !important;
           margin: 6px 0 !important;
+        }
+
+        .creatorMenuGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .statMiniGrid {
+          grid-template-columns: repeat(2, 1fr);
         }
       }
     `;
 
     document.head.appendChild(style);
   }
-
 
 // =====================================================
 // TOKENS SECTION 5 — CONTROL CONNECTIONS
