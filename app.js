@@ -56,11 +56,15 @@ const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
 
 const E = {
+  // Main screens
   authScreen: $("authScreen"),
   lobbyScreen: $("lobbyScreen"),
   roomDashboardScreen: $("roomDashboardScreen"),
   battleMapScreen: $("battleMapScreen"),
+  monsterCreatorScreen: $("monsterCreatorScreen"),
+  characterCreatorScreen: $("characterCreatorScreen"),
 
+  // Auth
   guestNameInput: $("guestNameInput"),
   guestButton: $("guestButton"),
   signupNameInput: $("signupNameInput"),
@@ -77,6 +81,7 @@ const E = {
   userIdText: $("userIdText"),
   myRoomsList: $("myRoomsList"),
 
+  // Lobby / room
   roomNameInput: $("roomNameInput"),
   createRoomButton: $("createRoomButton"),
   joinRoomCodeInput: $("joinRoomCodeInput"),
@@ -92,6 +97,7 @@ const E = {
   yourRoleText: $("yourRoleText"),
   playersList: $("playersList"),
 
+  // Room map controls
   dmMapControls: $("dmMapControls"),
   roomMapUploadInput: $("roomMapUploadInput"),
   uploadRoomMapButton: $("uploadRoomMapButton"),
@@ -103,6 +109,7 @@ const E = {
   roomMapPreviewImage: $("roomMapPreviewImage"),
   noRoomMapPreviewText: $("noRoomMapPreviewText"),
 
+  // Battle map top bar
   backToRoomButton: $("backToRoomButton"),
   zoomOutButton: $("zoomOutButton"),
   zoomResetButton: $("zoomResetButton"),
@@ -114,15 +121,19 @@ const E = {
   battleMapImage: $("battleMapImage"),
   noBattleMapText: $("noBattleMapText"),
   battleMapViewer: $("battleMapViewer"),
-  battleMapSurface: $("battleMapSurface"),
 
-  battleManagerBar: $("battleManagerBar"),
-
+  // Old quick battle map controls, kept safe if missing
   battleDmMapControls: $("battleDmMapControls"),
   battleMapUploadInput: $("battleMapUploadInput"),
   updateBattleMapButton: $("updateBattleMapButton"),
   battleMapUpdateStatus: $("battleMapUpdateStatus"),
 
+  // Battle manager
+  battleManagerBar: $("battleManagerBar"),
+  battleManagerInner: $("battleManagerInner"),
+  battleMapSurface: $("battleMapSurface"),
+
+  // Puzzle map
   puzzleMapControls: $("puzzleMapControls"),
   puzzleTileUploadInput: $("puzzleTileUploadInput"),
   addTileNorthButton: $("addTileNorthButton"),
@@ -132,14 +143,19 @@ const E = {
   centerPuzzleBoardButton: $("centerPuzzleBoardButton"),
   puzzleMapStatus: $("puzzleMapStatus"),
   puzzleMapBoard: $("puzzleMapBoard"),
+  puzzleMapEmptyText: $("puzzleMapEmptyText"),
 
+  // Tokens
   tokenBuilderControls: $("tokenBuilderControls"),
-  tokenNameInput: $("tokenNameInput"),
-  tokenTypeSelect: $("tokenTypeSelect"),
-  tokenImageUploadInput: $("tokenImageUploadInput"),
-  addTokenButton: $("addTokenButton"),
-  tokenBuilderStatus: $("tokenBuilderStatus"),
-  tokenLayer: $("tokenLayer")
+  tokenLayer: $("tokenLayer"),
+
+  // Creator launchers
+  creatorLauncherControls: $("creatorLauncherControls"),
+  openMonsterCreatorButton: $("openMonsterCreatorButton"),
+  openCharacterCreatorButton: $("openCharacterCreatorButton"),
+
+  // Character creator navigation
+  backFromCharacterCreatorButton: $("backFromCharacterCreatorButton")
 };
 
 let currentUser = null;
@@ -147,14 +163,20 @@ let currentRoomCode = null;
 let currentRoomData = null;
 let currentIsDM = false;
 let currentMapId = null;
+
 let latestMapsSnapshot = null;
 let latestActivePlayersSnapshot = null;
+
 let battleZoom = 1;
-let tokenSystem = null;
+
 let stopListeningToMyRooms = null;
 let stopListeningToRoom = null;
 let stopListeningToPlayers = null;
 let stopListeningToMaps = null;
+
+let tokenSystem = null;
+let characterCreatorSystem = null;
+
 let activeSessionId = sessionStorage.getItem("homebrewGodSessionId");
 let activeSessionRoomCode = null;
 
