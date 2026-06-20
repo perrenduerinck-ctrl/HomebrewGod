@@ -2351,62 +2351,206 @@ if (!tokenSystem) {
   });
 }
 
+
 // =====================================================
-// APP SECTION 13 — BATTLE MAP SCREEN / NEW TAB
+// APP SECTION 13 — BATTLE MAP / CREATOR SCREEN NAVIGATION
 // =====================================================
 
+function showAnyMainScreen(screenName) {
+  const screens = [
+    $("authScreen"),
+    $("lobbyScreen"),
+    $("roomDashboardScreen"),
+    $("battleMapScreen"),
+    $("monsterCreatorScreen"),
+    $("characterCreatorScreen")
+  ];
+
+  screens.forEach(function (screen) {
+    if (screen) {
+      screen.classList.add("hidden");
+    }
+  });
+
+  const screenMap = {
+    auth: $("authScreen"),
+    lobby: $("lobbyScreen"),
+    room: $("roomDashboardScreen"),
+    battle: $("battleMapScreen"),
+    monsterCreator: $("monsterCreatorScreen"),
+    characterCreator: $("characterCreatorScreen")
+  };
+
+  if (screenMap[screenName]) {
+    screenMap[screenName].classList.remove("hidden");
+  }
+}
+
 function applyBattleZoom() {
+  if (!E.battleMapImage) {
+    return;
+  }
+
   E.battleMapImage.style.transform = "scale(" + battleZoom + ")";
   text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
 }
 
-E.openBattleMapButton.addEventListener("click", function () {
-  if (!currentRoomCode) {
-    alert("Open a room first.");
+if (E.openBattleMapButton) {
+  E.openBattleMapButton.addEventListener("click", function () {
+    if (!currentRoomCode) {
+      alert("Open a room first.");
+      return;
+    }
+
+    const battleUrl = new URL(window.location.href);
+
+    battleUrl.searchParams.set("room", currentRoomCode);
+    battleUrl.searchParams.set("view", "battle");
+
+    window.open(battleUrl.toString(), "_blank");
+  });
+}
+
+if (E.backToRoomButton) {
+  E.backToRoomButton.addEventListener("click", function () {
+    showAnyMainScreen("room");
+  });
+}
+
+if (E.zoomOutButton) {
+  E.zoomOutButton.addEventListener("click", function () {
+    battleZoom -= 0.25;
+
+    if (battleZoom < 0.25) {
+      battleZoom = 0.25;
+    }
+
+    applyBattleZoom();
+  });
+}
+
+if (E.zoomResetButton) {
+  E.zoomResetButton.addEventListener("click", function () {
+    battleZoom = 1;
+    applyBattleZoom();
+  });
+}
+
+if (E.zoomInButton) {
+  E.zoomInButton.addEventListener("click", function () {
+    battleZoom += 0.25;
+
+    if (battleZoom > 4) {
+      battleZoom = 4;
+    }
+
+    applyBattleZoom();
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13A — CREATOR SCREEN LAUNCHERS
+// =====================================================
+
+const openMonsterCreatorButton = $("openMonsterCreatorButton");
+const openCharacterCreatorButton = $("openCharacterCreatorButton");
+
+const backFromMonsterCreatorButton = $("backFromMonsterCreatorButton");
+const backFromCharacterCreatorButton = $("backFromCharacterCreatorButton");
+
+if (openMonsterCreatorButton) {
+  openMonsterCreatorButton.addEventListener("click", function () {
+    showAnyMainScreen("monsterCreator");
+  });
+}
+
+if (openCharacterCreatorButton) {
+  openCharacterCreatorButton.addEventListener("click", function () {
+    showAnyMainScreen("characterCreator");
+  });
+}
+
+if (backFromMonsterCreatorButton) {
+  backFromMonsterCreatorButton.addEventListener("click", function () {
+    showAnyMainScreen("battle");
+    applyBattleZoom();
+
+    if (
+      window.HomebrewGodTokens &&
+      typeof window.HomebrewGodTokens.render === "function"
+    ) {
+      window.HomebrewGodTokens.render(currentRoomData || {});
+    }
+  });
+}
+
+if (backFromCharacterCreatorButton) {
+  backFromCharacterCreatorButton.addEventListener("click", function () {
+    showAnyMainScreen("battle");
+    applyBattleZoom();
+
+    if (
+      window.HomebrewGodTokens &&
+      typeof window.HomebrewGodTokens.render === "function"
+    ) {
+      window.HomebrewGodTokens.render(currentRoomData || {});
+    }
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13B — CREATOR PLACEHOLDER BUTTONS
+// Saving / import / export comes next.
+// =====================================================
+
+[
+  "newMonsterButton",
+  "saveMonsterButton",
+  "copyMonsterJsonButton",
+  "exportMonsterJsonButton",
+  "newCharacterButton",
+  "saveCharacterButton",
+  "copyCharacterJsonButton",
+  "exportCharacterJsonButton"
+].forEach(function (buttonId) {
+  const button = $(buttonId);
+
+  if (!button) {
     return;
   }
 
-  const battleUrl = new URL(window.location.href);
-
-  battleUrl.searchParams.set("room", currentRoomCode);
-  battleUrl.searchParams.set("view", "battle");
-
-  window.open(battleUrl.toString(), "_blank");
+  button.addEventListener("click", function () {
+    alert("This button is wired. Saving/import/export comes next.");
+  });
 });
 
-E.backToRoomButton.addEventListener("click", function () {
-  showScreen("room");
-});
+const importMonsterJsonInput = $("importMonsterJsonInput");
+const importCharacterJsonInput = $("importCharacterJsonInput");
 
-E.zoomOutButton.addEventListener("click", function () {
-  battleZoom -= 0.25;
+if (importMonsterJsonInput) {
+  importMonsterJsonInput.addEventListener("change", function () {
+    alert("Monster JSON import comes next.");
+    importMonsterJsonInput.value = "";
+  });
+}
 
-  if (battleZoom < 0.25) {
-    battleZoom = 0.25;
-  }
+if (importCharacterJsonInput) {
+  importCharacterJsonInput.addEventListener("change", function () {
+    alert("Character JSON import comes next.");
+    importCharacterJsonInput.value = "";
+  });
+}
 
-  applyBattleZoom();
-});
 
-E.zoomResetButton.addEventListener("click", function () {
-  battleZoom = 1;
-  applyBattleZoom();
-});
-
-E.zoomInButton.addEventListener("click", function () {
-  battleZoom += 0.25;
-
-  if (battleZoom > 4) {
-    battleZoom = 4;
-  }
-
-  applyBattleZoom();
-});
+// =====================================================
+// APP SECTION 13C — PAGE LEAVE CLEANUP
+// =====================================================
 
 window.addEventListener("pagehide", function () {
   removeActivePlayerSession();
 });
-
 
 // =====================================================
 // APP SECTION 14 — STARTUP / AUTH WATCHER
