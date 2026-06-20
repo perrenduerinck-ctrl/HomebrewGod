@@ -143,7 +143,11 @@
   </main>
 
 <!-- =====================================================
-     INDEX SECTION 5 — BATTLE MAP SCREEN
+     INDEX SECTION 5 — BATTLE MAP / CREATOR SCREENS
+====================================================== -->
+
+<!-- =====================================================
+     INDEX SECTION 5A — BATTLE MAP SCREEN
 ====================================================== -->
 <main id="battleMapScreen" class="screen hidden">
   <section id="battleTopBar">
@@ -272,121 +276,27 @@
         </details>
 
         <!-- =====================================================
-             MONSTER CREATOR MENU SHELL
+             CREATOR TOOL LAUNCHERS
         ====================================================== -->
-        <details id="monsterCreatorControls" class="battleEditorMenu">
+        <details id="creatorLauncherControls" class="battleEditorMenu" open>
           <summary>
-            <span>Monster Creator</span>
+            <span>Creator Tools</span>
           </summary>
 
           <div class="battleEditorInner compactEditorInner">
-            <div class="creatorMenuGrid">
+            <div class="creatorLauncherGrid">
+              <button id="openMonsterCreatorButton" type="button">
+                Open Monster Creator
+              </button>
 
-              <div class="toolPanelMini">
-                <h3>Monster Basics</h3>
-
-                <input id="monsterNameInput" type="text" placeholder="Monster name">
-                <input id="monsterTypeInput" type="text" placeholder="Type, like Undead or Dragon">
-
-                <select id="monsterSizeSelect">
-                  <option value="tiny">Tiny</option>
-                  <option value="small">Small</option>
-                  <option value="medium" selected>Medium</option>
-                  <option value="large">Large</option>
-                  <option value="huge">Huge</option>
-                  <option value="gargantuan">Gargantuan</option>
-                </select>
-
-                <input id="monsterImageUploadInput" type="file" accept="image/*">
-              </div>
-
-              <div class="toolPanelMini">
-                <h3>Combat Basics</h3>
-
-                <input id="monsterAcInput" type="number" placeholder="Armor Class">
-                <input id="monsterHpInput" type="number" placeholder="Hit Points">
-                <input id="monsterSpeedInput" type="text" placeholder="Speed, like 30 ft.">
-                <input id="monsterCrInput" type="text" placeholder="CR, like 5 or 1/2">
-              </div>
-
-              <div class="toolPanelMini">
-                <h3>Notes</h3>
-
-                <textarea id="monsterNotesInput" placeholder="Traits, attacks, abilities, notes..."></textarea>
-
-                <div class="creatorButtonRow">
-                  <button id="saveMonsterButton" type="button">Save Monster Later</button>
-                  <button id="monsterToTokenButton" type="button">Make Token Later</button>
-                </div>
-
-                <p id="monsterCreatorStatus" class="status">
-                  Monster creator menu ready. Saving comes later.
-                </p>
-              </div>
-
+              <button id="openCharacterCreatorButton" type="button">
+                Open Character Creator
+              </button>
             </div>
-          </div>
-        </details>
 
-        <!-- =====================================================
-             CHARACTER CREATOR MENU SHELL
-        ====================================================== -->
-        <details id="characterCreatorControls" class="battleEditorMenu">
-          <summary>
-            <span>Character Creator</span>
-          </summary>
-
-          <div class="battleEditorInner compactEditorInner">
-            <div class="creatorMenuGrid">
-
-              <div class="toolPanelMini">
-                <h3>Character Basics</h3>
-
-                <input id="characterNameInput" type="text" placeholder="Character name">
-                <input id="characterRaceInput" type="text" placeholder="Race / species">
-                <input id="characterClassInput" type="text" placeholder="Class">
-                <input id="characterLevelInput" type="number" min="1" max="20" placeholder="Level">
-                <input id="characterImageUploadInput" type="file" accept="image/*">
-              </div>
-
-              <div class="toolPanelMini">
-                <h3>Combat Basics</h3>
-
-                <input id="characterAcInput" type="number" placeholder="Armor Class">
-                <input id="characterMaxHpInput" type="number" placeholder="Max HP">
-                <input id="characterCurrentHpInput" type="number" placeholder="Current HP">
-                <input id="characterSpeedInput" type="text" placeholder="Speed, like 30 ft.">
-              </div>
-
-              <div class="toolPanelMini">
-                <h3>Stats</h3>
-
-                <div class="statMiniGrid">
-                  <input id="characterStrInput" type="number" placeholder="STR">
-                  <input id="characterDexInput" type="number" placeholder="DEX">
-                  <input id="characterConInput" type="number" placeholder="CON">
-                  <input id="characterIntInput" type="number" placeholder="INT">
-                  <input id="characterWisInput" type="number" placeholder="WIS">
-                  <input id="characterChaInput" type="number" placeholder="CHA">
-                </div>
-              </div>
-
-              <div class="toolPanelMini">
-                <h3>Notes</h3>
-
-                <textarea id="characterNotesInput" placeholder="Backstory, attacks, spells, inventory, notes..."></textarea>
-
-                <div class="creatorButtonRow">
-                  <button id="saveCharacterButton" type="button">Save Character Later</button>
-                  <button id="characterToTokenButton" type="button">Make Token Later</button>
-                </div>
-
-                <p id="characterCreatorStatus" class="status">
-                  Character creator menu ready. Saving comes later.
-                </p>
-              </div>
-
-            </div>
+            <p class="status">
+              Monster and character creators open as full tool tabs.
+            </p>
           </div>
         </details>
 
@@ -419,6 +329,184 @@
          TOKEN LAYER
     ====================================================== -->
     <div id="tokenLayer" aria-label="Battle map token layer"></div>
+  </section>
+</main>
+
+
+<!-- =====================================================
+     INDEX SECTION 5B — MONSTER CREATOR SCREEN
+====================================================== -->
+<main id="monsterCreatorScreen" class="screen hidden">
+  <section class="box creatorFullScreen">
+    <div class="creatorTopBar">
+      <div>
+        <h2>Monster Creator</h2>
+        <p class="small">
+          Build, save, import, and export monsters. Full stat block saving comes next.
+        </p>
+      </div>
+
+      <div class="creatorTopActions">
+        <button id="backFromMonsterCreatorButton" type="button">Back To Battle Map</button>
+      </div>
+    </div>
+
+    <div class="creatorActionBar">
+      <button id="newMonsterButton" type="button">New Monster</button>
+      <button id="saveMonsterButton" type="button">Save Monster</button>
+      <button id="copyMonsterJsonButton" type="button">Copy JSON</button>
+      <button id="exportMonsterJsonButton" type="button">Export JSON</button>
+
+      <label class="fileButtonLabel">
+        Import JSON
+        <input id="importMonsterJsonInput" type="file" accept="application/json,.json">
+      </label>
+    </div>
+
+    <div class="creatorFullGrid">
+      <section class="toolPanelMini">
+        <h3>Monster Basics</h3>
+
+        <input id="monsterNameInput" type="text" placeholder="Monster name">
+        <input id="monsterTypeInput" type="text" placeholder="Type, like Undead or Dragon">
+
+        <select id="monsterSizeSelect">
+          <option value="tiny">Tiny</option>
+          <option value="small">Small</option>
+          <option value="medium" selected>Medium</option>
+          <option value="large">Large</option>
+          <option value="huge">Huge</option>
+          <option value="gargantuan">Gargantuan</option>
+        </select>
+
+        <input id="monsterImageUploadInput" type="file" accept="image/*">
+      </section>
+
+      <section class="toolPanelMini">
+        <h3>Combat Basics</h3>
+
+        <input id="monsterAcInput" type="number" placeholder="Armor Class">
+        <input id="monsterHpInput" type="number" placeholder="Hit Points">
+        <input id="monsterSpeedInput" type="text" placeholder="Speed, like 30 ft.">
+        <input id="monsterCrInput" type="text" placeholder="CR, like 5 or 1/2">
+      </section>
+
+      <section class="toolPanelMini">
+        <h3>Ability Scores</h3>
+
+        <div class="statMiniGrid">
+          <input id="monsterStrInput" type="number" placeholder="STR">
+          <input id="monsterDexInput" type="number" placeholder="DEX">
+          <input id="monsterConInput" type="number" placeholder="CON">
+          <input id="monsterIntInput" type="number" placeholder="INT">
+          <input id="monsterWisInput" type="number" placeholder="WIS">
+          <input id="monsterChaInput" type="number" placeholder="CHA">
+        </div>
+      </section>
+
+      <section class="toolPanelMini creatorWidePanel">
+        <h3>Traits / Attacks / Notes</h3>
+
+        <textarea id="monsterNotesInput" placeholder="Traits, attacks, legendary actions, reactions, notes..."></textarea>
+
+        <p id="monsterCreatorStatus" class="status">
+          Monster creator ready.
+        </p>
+      </section>
+
+      <section class="toolPanelMini creatorLibraryPanel">
+        <h3>Saved Monsters</h3>
+
+        <div id="monsterLibraryList" class="creatorLibraryList">
+          No saved monsters yet.
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+
+
+<!-- =====================================================
+     INDEX SECTION 5C — CHARACTER CREATOR SCREEN
+====================================================== -->
+<main id="characterCreatorScreen" class="screen hidden">
+  <section class="box creatorFullScreen">
+    <div class="creatorTopBar">
+      <div>
+        <h2>Character Creator</h2>
+        <p class="small">
+          Build, save, import, and export characters. Sheet-to-token linking comes later.
+        </p>
+      </div>
+
+      <div class="creatorTopActions">
+        <button id="backFromCharacterCreatorButton" type="button">Back To Battle Map</button>
+      </div>
+    </div>
+
+    <div class="creatorActionBar">
+      <button id="newCharacterButton" type="button">New Character</button>
+      <button id="saveCharacterButton" type="button">Save Character</button>
+      <button id="copyCharacterJsonButton" type="button">Copy JSON</button>
+      <button id="exportCharacterJsonButton" type="button">Export JSON</button>
+
+      <label class="fileButtonLabel">
+        Import JSON
+        <input id="importCharacterJsonInput" type="file" accept="application/json,.json">
+      </label>
+    </div>
+
+    <div class="creatorFullGrid">
+      <section class="toolPanelMini">
+        <h3>Character Basics</h3>
+
+        <input id="characterNameInput" type="text" placeholder="Character name">
+        <input id="characterRaceInput" type="text" placeholder="Race / species">
+        <input id="characterClassInput" type="text" placeholder="Class">
+        <input id="characterLevelInput" type="number" min="1" max="20" placeholder="Level">
+        <input id="characterImageUploadInput" type="file" accept="image/*">
+      </section>
+
+      <section class="toolPanelMini">
+        <h3>Combat Basics</h3>
+
+        <input id="characterAcInput" type="number" placeholder="Armor Class">
+        <input id="characterMaxHpInput" type="number" placeholder="Max HP">
+        <input id="characterCurrentHpInput" type="number" placeholder="Current HP">
+        <input id="characterSpeedInput" type="text" placeholder="Speed, like 30 ft.">
+      </section>
+
+      <section class="toolPanelMini">
+        <h3>Ability Scores</h3>
+
+        <div class="statMiniGrid">
+          <input id="characterStrInput" type="number" placeholder="STR">
+          <input id="characterDexInput" type="number" placeholder="DEX">
+          <input id="characterConInput" type="number" placeholder="CON">
+          <input id="characterIntInput" type="number" placeholder="INT">
+          <input id="characterWisInput" type="number" placeholder="WIS">
+          <input id="characterChaInput" type="number" placeholder="CHA">
+        </div>
+      </section>
+
+      <section class="toolPanelMini creatorWidePanel">
+        <h3>Notes / Inventory / Spells</h3>
+
+        <textarea id="characterNotesInput" placeholder="Backstory, attacks, spells, inventory, notes..."></textarea>
+
+        <p id="characterCreatorStatus" class="status">
+          Character creator ready.
+        </p>
+      </section>
+
+      <section class="toolPanelMini creatorLibraryPanel">
+        <h3>Saved Characters</h3>
+
+        <div id="characterLibraryList" class="creatorLibraryList">
+          No saved characters yet.
+        </div>
+      </section>
+    </div>
   </section>
 </main>
   
