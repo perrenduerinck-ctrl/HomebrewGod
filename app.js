@@ -1612,25 +1612,27 @@ async function updateRoomWithPuzzleTiles(tiles, activeTile, viewMode) {
 
 // =====================================================
 // APP SECTION 12D — PUZZLE MAP VIEW MODE / TOKEN NOTIFY
+// No show()/hide() helpers used here.
+// Uses classList directly because app.js only has showScreen().
 // =====================================================
 
 function showPuzzleBoardView() {
   if (E.puzzleMapBoard) {
-    show(E.puzzleMapBoard);
+    E.puzzleMapBoard.classList.remove("hidden");
   }
 
   if (E.battleMapViewer) {
-    hide(E.battleMapViewer);
+    E.battleMapViewer.classList.add("hidden");
   }
 }
 
 function showSingleBattleMapView() {
   if (E.puzzleMapBoard) {
-    hide(E.puzzleMapBoard);
+    E.puzzleMapBoard.classList.add("hidden");
   }
 
   if (E.battleMapViewer) {
-    show(E.battleMapViewer);
+    E.battleMapViewer.classList.remove("hidden");
   }
 }
 
