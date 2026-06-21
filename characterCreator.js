@@ -1183,44 +1183,88 @@ export function createCharacterCreator(options) {
     );
   }
 
+  function buildCharacterPayload(character) {
+    const payload = {
+      ...character,
+      updatedAt: deps.serverTimestamp()
+    };
+
+    delete payload.id;
+
+    return payload;
+  }
+
+  async function createCharacterDocument(statusMessage) {
+    const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
+
+    if (!roomCode) {
+      alert("Open a room first.");
+      return;
+    }
+
+    const character = getCharacterFromForm();
+    const payload = buildCharacterPayload(character);
+
+    const newDoc = await deps.addDoc(
+      deps.collection(deps.db, "rooms", roomCode, "characters"),
+      {
+        ...payload,
+        createdAt: deps.serverTimestamp()
+      }
+    );
+
+    currentCharacterId = newDoc.id;
+
+    renderCharacterLibrary();
+    connectButtons();
+
+    setStatus(statusMessage || "Character saved as new.");
+  }
+
+  async function updateCharacterDocument() {
+    const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
+
+    if (!roomCode) {
+      alert("Open a room first.");
+      return;
+    }
+
+    if (!currentCharacterId) {
+      await createCharacterDocument("Character saved as new.");
+      return;
+    }
+
+    const character = getCharacterFromForm();
+    const payload = buildCharacterPayload(character);
+
+    await deps.updateDoc(
+      deps.doc(deps.db, "rooms", roomCode, "characters", currentCharacterId),
+      payload
+    );
+
+    renderCharacterLibrary();
+    connectButtons();
+
+    setStatus("Character updated.");
+  }
+
   async function saveCharacter() {
     try {
-      const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-
-      if (!roomCode) {
-        alert("Open a room first.");
-        return;
-      }
-
-      const character = getCharacterFromForm();
-
-      const payload = {
-        ...character,
-        updatedAt: deps.serverTimestamp()
-      };
-
-      delete payload.id;
-
       if (currentCharacterId) {
-        await deps.updateDoc(
-          deps.doc(deps.db, "rooms", roomCode, "characters", currentCharacterId),
-          payload
-        );
-
-        setStatus("Character updated.");
+        await updateCharacterDocument();
         return;
       }
 
-      const newDoc = await deps.addDoc(
-        deps.collection(deps.db, "rooms", roomCode, "characters"),
-        {
-          ...payload,
-          createdAt: deps.serverTimestamp()
-        }
-      );
+      await createCharacterDocument("Character saved as new.");
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    }
+  }
 
-      currentCharacterId = newDoc.id;
-      setStatus("Character saved.");
+  async function saveCharacterAsNew() {
+    try {
+      await createCharacterDocument("Character saved as a new character.");
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -1246,6 +1290,9 @@ export function createCharacterCreator(options) {
       if (currentCharacterId === characterId) {
         currentCharacterId = null;
       }
+
+      renderCharacterLibrary();
+      connectButtons();
 
       setStatus("Character deleted.");
     } catch (error) {
