@@ -4546,3 +4546,2348 @@ export function createCharacterCreator(options = {}) {
   );
 
 
+// =====================================================
+// CHARACTER CREATOR SECTION 11 — BASICS / SPECIES
+// =====================================================
+
+  function renderBasicsStep() {
+    const identity =
+      creatorState.draft.identity;
+
+    const sizes = [
+      "tiny",
+      "small",
+      "medium",
+      "large",
+      "huge",
+      "gargantuan"
+    ].map((size) => {
+      return {
+        value: size,
+
+        label:
+          size.charAt(0).toUpperCase() +
+          size.slice(1)
+      };
+    });
+
+    return `
+      <div class="hg-character-field-grid">
+        ${wizardField(
+          "Character Name",
+          "ccCharacterName",
+          getSafeCharacterName(),
+          {
+            path: "identity.name",
+            placeholder: "Character name"
+          }
+        )}
+
+        ${wizardField(
+          "Pronouns",
+          "ccPronouns",
+          safeDisplayString(
+            identity.pronouns
+          ),
+          {
+            path: "identity.pronouns",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardField(
+          "Alignment / Outlook",
+          "ccAlignment",
+          safeDisplayString(
+            identity.alignment
+          ),
+          {
+            path: "identity.alignment",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardField(
+          "Deity / Belief",
+          "ccDeity",
+          safeDisplayString(
+            identity.deity
+          ),
+          {
+            path: "identity.deity",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardField(
+          "Age",
+          "ccAge",
+          safeDisplayString(
+            identity.age
+          ),
+          {
+            path: "identity.age",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardSelect(
+          "Size",
+          "ccIdentitySize",
+          identity.size,
+          sizes,
+          {
+            path: "identity.size"
+          }
+        )}
+
+        ${wizardField(
+          "Appearance / Identity Notes",
+          "ccAppearance",
+          safeDisplayString(
+            identity.appearance
+          ),
+          {
+            type: "textarea",
+            path: "identity.appearance",
+
+            placeholder:
+              "Appearance, personality, identity notes...",
+
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "General Notes",
+          "ccGeneralNotes",
+          safeDisplayString(
+            creatorState.draft.notes
+          ),
+          {
+            type: "textarea",
+            path: "notes",
+
+            placeholder:
+              "Anything that does not fit elsewhere...",
+
+            wide: true
+          }
+        )}
+      </div>
+    `;
+  }
+
+  function getAllSpeciesTemplates() {
+    const speciesMap =
+      new Map();
+
+    DEFAULT_SPECIES_TEMPLATES
+      .forEach((species) => {
+        const speciesId =
+          makeSafeId(
+            species.id ||
+            species.name,
+            "species"
+          );
+
+        speciesMap.set(
+          speciesId,
+          {
+            ...cloneData(species),
+            id: speciesId,
+            source:
+              species.source ||
+              "template"
+          }
+        );
+      });
+
+    (
+      creatorState.roomSpeciesCache ||
+      []
+    ).forEach((species) => {
+      const speciesId =
+        makeSafeId(
+          species.id ||
+          species.docId ||
+          species.name,
+          "custom-species"
+        );
+
+      speciesMap.set(
+        speciesId,
+        {
+          ...cloneData(species),
+          id: speciesId,
+          source:
+            species.source ||
+            "homebrew"
+        }
+      );
+    });
+
+    const selectedSpecies =
+      creatorState.draft
+        .species
+        .templateSnapshot;
+
+    if (selectedSpecies) {
+      const speciesId =
+        makeSafeId(
+          selectedSpecies.id ||
+          selectedSpecies.name,
+          "character-species"
+        );
+
+      speciesMap.set(
+        speciesId,
+        {
+          ...cloneData(
+            selectedSpecies
+          ),
+
+          id: speciesId,
+
+          source:
+            selectedSpecies.source ||
+            "character"
+        }
+      );
+    }
+
+    return Array.from(
+      speciesMap.values()
+    ).sort((a, b) => {
+      return String(a.name || "")
+        .localeCompare(
+          String(b.name || "")
+        );
+    });
+  }
+
+  function chooseSpeciesFromTemplate(
+    speciesId
+  ) {
+    const species =
+      getAllSpeciesTemplates()
+        .find((item) => {
+          return item.id === speciesId;
+        });
+
+    if (!species) {
+      return false;
+    }
+
+    creatorState.draft.species = {
+      id: species.id,
+
+      name:
+        safeDisplayString(
+          species.name,
+          "Unnamed Species"
+        ),
+
+      source:
+        species.source ||
+        "template",
+
+      templateSnapshot:
+        cloneData(species),
+
+      choices: {},
+
+      traits:
+        cloneData(
+          species.traits ||
+          []
+        )
+    };
+
+    creatorState.draft.identity.size =
+      species.size ||
+      "medium";
+
+    creatorState.draft
+      .combat
+      .speed
+      .walk =
+        Math.max(
+          0,
+          safeNumber(
+            species.speed,
+            30
+          )
+        );
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(
+          creatorState.draft
+            .species
+            .traits
+        );
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applyCustomSpecies() {
+    const name =
+      safeDisplayString(
+        $("ccCustomSpeciesName")
+          ?.value
+      );
+
+    if (!name) {
+      alert(
+        "Enter a custom species name."
+      );
+
+      return false;
+    }
+
+    const currentTraits =
+      Array.isArray(
+        creatorState.draft
+          .species
+          .traits
+      )
+        ? cloneData(
+            creatorState.draft
+              .species
+              .traits
+          )
+        : [];
+
+    creatorState.draft.species = {
+      id: makeSafeId(
+        name,
+        "custom-species"
+      ),
+
+      name,
+      source: "custom",
+      templateSnapshot: null,
+      choices: {},
+      traits: currentTraits
+    };
+
+    creatorState.draft.identity.size =
+      $("ccCustomSpeciesSize")
+        ?.value ||
+      "medium";
+
+    creatorState.draft
+      .combat
+      .speed
+      .walk =
+        Math.max(
+          0,
+          safeNumber(
+            $("ccCustomSpeciesSpeed")
+              ?.value,
+            30
+          )
+        );
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(currentTraits);
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function addSpeciesTrait() {
+    const name =
+      safeDisplayString(
+        $("ccNewSpeciesTraitName")
+          ?.value
+      );
+
+    const summary =
+      safeDisplayString(
+        $("ccNewSpeciesTraitSummary")
+          ?.value
+      );
+
+    if (!name) {
+      alert(
+        "Enter a trait name."
+      );
+
+      return false;
+    }
+
+    if (
+      !Array.isArray(
+        creatorState.draft
+          .species
+          .traits
+      )
+    ) {
+      creatorState.draft
+        .species
+        .traits = [];
+    }
+
+    creatorState.draft
+      .species
+      .traits
+      .push({
+        id: makeSafeId(
+          name +
+          "-" +
+          Date.now(),
+          "species-trait"
+        ),
+
+        name,
+        summary
+      });
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(
+          creatorState.draft
+            .species
+            .traits
+        );
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function removeSpeciesTrait(index) {
+    const traits =
+      creatorState.draft
+        .species
+        .traits;
+
+    if (
+      !Array.isArray(traits) ||
+      index < 0 ||
+      index >= traits.length
+    ) {
+      return false;
+    }
+
+    traits.splice(index, 1);
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(traits);
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderSpeciesStep() {
+    const currentSpecies =
+      getSafeSpeciesName();
+
+    const selectedSpeciesId =
+      creatorState.draft
+        .species
+        .id;
+
+    const speciesCards =
+      getAllSpeciesTemplates()
+        .map((species) => {
+          const selected =
+            selectedSpeciesId ===
+              species.id ||
+            (
+              !selectedSpeciesId &&
+              currentSpecies ===
+                species.name
+            );
+
+          const body = `
+            <p>
+              ${escapeHtml(
+                species.summary ||
+                "No description provided."
+              )}
+            </p>
+
+            <p>
+              <b>Size:</b>
+
+              ${escapeHtml(
+                species.size ||
+                "medium"
+              )}
+            </p>
+
+            <p>
+              <b>Walking Speed:</b>
+
+              ${Math.max(
+                0,
+                safeNumber(
+                  species.speed,
+                  30
+                )
+              )} ft.
+            </p>
+          `;
+
+          return wizardChoiceCard(
+            species.name ||
+              "Unnamed Species",
+
+            body,
+
+            selected
+              ? "Selected"
+              : "Choose Species",
+
+            "choose-species",
+
+            {
+              "species-id":
+                species.id
+            },
+
+            selected
+          );
+        })
+        .join("");
+
+    const traits =
+      Array.isArray(
+        creatorState.draft
+          .species
+          .traits
+      )
+        ? creatorState.draft
+            .species
+            .traits
+        : [];
+
+    const traitCards =
+      traits
+        .map((trait, index) => {
+          return wizardChoiceCard(
+            trait.name ||
+              "Unnamed Trait",
+
+            `
+              <p>
+                ${escapeHtml(
+                  trait.summary ||
+                  "No description provided."
+                )}
+              </p>
+            `,
+
+            "Remove Trait",
+
+            "remove-species-trait",
+
+            {
+              index
+            },
+
+            false
+          );
+        })
+        .join("");
+
+    const sizes = [
+      "tiny",
+      "small",
+      "medium",
+      "large",
+      "huge",
+      "gargantuan"
+    ].map((size) => {
+      return {
+        value: size,
+
+        label:
+          size.charAt(0).toUpperCase() +
+          size.slice(1)
+      };
+    });
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Current species:</b>
+
+        ${escapeHtml(
+          currentSpecies ||
+          "None selected"
+        )}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${speciesCards}
+      </div>
+
+      <hr>
+
+      <h3>Custom Species</h3>
+
+      <p>
+        Use this when your species is completely
+        homebrewed or is not in the available templates.
+      </p>
+
+      <div class="hg-character-field-grid three">
+        ${wizardField(
+          "Name",
+          "ccCustomSpeciesName",
+
+          creatorState.draft
+            .species
+            .source ===
+            "custom"
+              ? currentSpecies
+              : "",
+
+          {
+            placeholder:
+              "Half Celestial Owlbear"
+          }
+        )}
+
+        ${wizardSelect(
+          "Size",
+          "ccCustomSpeciesSize",
+
+          creatorState.draft
+            .identity
+            .size,
+
+          sizes
+        )}
+
+        ${wizardField(
+          "Walking Speed",
+          "ccCustomSpeciesSpeed",
+
+          creatorState.draft
+            .combat
+            .speed
+            .walk,
+
+          {
+            type: "number",
+            valueType: "number",
+            extra: 'min="0" step="5"'
+          }
+        )}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="use-custom-species"
+        >
+          Use Custom Species
+        </button>
+      </div>
+
+      <hr>
+
+      <h3>Species Traits</h3>
+
+      <div class="hg-character-choice-grid">
+        ${
+          traitCards ||
+          `
+            <div class="hg-character-placeholder">
+              No species traits have been added yet.
+            </div>
+          `
+        }
+      </div>
+
+      <div
+        class="hg-character-field-grid"
+        style="margin-top: 12px;"
+      >
+        ${wizardField(
+          "Trait Name",
+          "ccNewSpeciesTraitName",
+          "",
+          {
+            placeholder:
+              "Darkvision"
+          }
+        )}
+
+        ${wizardField(
+          "Trait Description",
+          "ccNewSpeciesTraitSummary",
+          "",
+          {
+            placeholder:
+              "Short original description"
+          }
+        )}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="add-species-trait"
+        >
+          Add Species Trait
+        </button>
+      </div>
+    `;
+  }
+
+  function findSection11ActionElement(
+    ...values
+  ) {
+    for (const value of values) {
+      const candidates = [
+        value,
+        value?.target,
+        value?.currentTarget,
+        value?.element,
+        value?.button,
+        value?.control,
+        value?.actionElement
+      ];
+
+      for (const candidate of candidates) {
+        if (
+          typeof Element !==
+            "undefined" &&
+          candidate instanceof Element
+        ) {
+          return (
+            candidate.closest(
+              "[data-cc-action]"
+            ) ||
+            candidate
+          );
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function handleChooseSpeciesAction(
+    ...values
+  ) {
+    const button =
+      findSection11ActionElement(
+        ...values
+      );
+
+    const speciesId =
+      button?.dataset
+        ?.speciesId ||
+      "";
+
+    if (
+      chooseSpeciesFromTemplate(
+        speciesId
+      )
+    ) {
+      setStatus(
+        "Species selected: " +
+        getSafeSpeciesName() +
+        "."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleUseCustomSpeciesAction() {
+    if (applyCustomSpecies()) {
+      setStatus(
+        "Custom species applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleAddSpeciesTraitAction() {
+    if (addSpeciesTrait()) {
+      setStatus(
+        "Species trait added."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleRemoveSpeciesTraitAction(
+    ...values
+  ) {
+    const button =
+      findSection11ActionElement(
+        ...values
+      );
+
+    const index =
+      Math.round(
+        safeNumber(
+          button?.dataset?.index,
+          -1
+        )
+      );
+
+    if (removeSpeciesTrait(index)) {
+      setStatus(
+        "Species trait removed."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  registerCharacterStepRenderer(
+    "basics",
+    renderBasicsStep
+  );
+
+  registerCharacterStepRenderer(
+    "species",
+    renderSpeciesStep
+  );
+
+  registerCharacterCreatorAction(
+    "choose-species",
+    handleChooseSpeciesAction
+  );
+
+  registerCharacterCreatorAction(
+    "use-custom-species",
+    handleUseCustomSpeciesAction
+  );
+
+  registerCharacterCreatorAction(
+    "add-species-trait",
+    handleAddSpeciesTraitAction
+  );
+
+  registerCharacterCreatorAction(
+    "remove-species-trait",
+    handleRemoveSpeciesTraitAction
+  );
+
+// =====================================================
+// CHARACTER CREATOR SECTION 12 — CLASS / SUBCLASS
+// =====================================================
+
+  function parseSection12List(value) {
+    return String(value || "")
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function formatSection12List(value) {
+    return Array.isArray(value)
+      ? value.join(", ")
+      : "";
+  }
+
+  function getSection12PrimaryClass() {
+    return getPrimaryClassEntry(
+      creatorState.draft
+    );
+  }
+
+  function getSection12LevelData(
+    template,
+    level
+  ) {
+    const levels =
+      template?.levels &&
+      typeof template.levels === "object"
+        ? template.levels
+        : {};
+
+    return (
+      levels[level] ||
+      levels[String(level)] ||
+      null
+    );
+  }
+
+  function collectSection12Features(
+    source,
+    totalLevel,
+    sourceLabel
+  ) {
+    const featureMap = new Map();
+
+    const addFeature = (
+      feature,
+      unlockedLevel = 1
+    ) => {
+      if (!feature) {
+        return;
+      }
+
+      const name =
+        safeDisplayString(
+          feature.name,
+          "Unnamed Feature"
+        );
+
+      const id = makeSafeId(
+        feature.id ||
+        `${sourceLabel}-${unlockedLevel}-${name}`,
+        "class-feature"
+      );
+
+      featureMap.set(id, {
+        ...cloneData(feature),
+        id,
+        name,
+
+        summary:
+          safeDisplayString(
+            feature.summary ||
+            feature.description,
+            "No description provided."
+          ),
+
+        level: Math.max(
+          1,
+          Math.round(
+            safeNumber(
+              feature.level,
+              unlockedLevel
+            )
+          )
+        ),
+
+        source: sourceLabel
+      });
+    };
+
+    (
+      Array.isArray(source?.features)
+        ? source.features
+        : []
+    ).forEach((feature) => {
+      addFeature(
+        feature,
+        safeNumber(
+          feature?.level,
+          1
+        )
+      );
+    });
+
+    const levels =
+      source?.levels &&
+      typeof source.levels === "object"
+        ? source.levels
+        : {};
+
+    Object.entries(levels)
+      .sort((a, b) => {
+        return (
+          safeNumber(a[0], 0) -
+          safeNumber(b[0], 0)
+        );
+      })
+      .forEach(
+        ([levelKey, levelData]) => {
+          const unlockedLevel =
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  levelKey,
+                  1
+                )
+              )
+            );
+
+          if (
+            unlockedLevel >
+            totalLevel
+          ) {
+            return;
+          }
+
+          (
+            Array.isArray(
+              levelData?.features
+            )
+              ? levelData.features
+              : []
+          ).forEach((feature) => {
+            addFeature(
+              feature,
+              unlockedLevel
+            );
+          });
+        }
+      );
+
+    return Array.from(
+      featureMap.values()
+    ).filter((feature) => {
+      return (
+        feature.level <=
+        totalLevel
+      );
+    });
+  }
+
+  function normalizeSection12Subclass(
+    rawSubclass,
+    fallbackSource = "template"
+  ) {
+    const raw = rawSubclass || {};
+
+    const name =
+      safeDisplayString(
+        raw.name,
+        "Custom Subclass"
+      );
+
+    return {
+      ...cloneData(raw),
+
+      id: makeSafeId(
+        raw.id || name,
+        "custom-subclass"
+      ),
+
+      name,
+
+      source:
+        safeDisplayString(
+          raw.source,
+          fallbackSource
+        ),
+
+      summary:
+        safeDisplayString(
+          raw.summary ||
+          raw.description,
+          "No description provided."
+        ),
+
+      features:
+        Array.isArray(raw.features)
+          ? cloneData(raw.features)
+          : [],
+
+      levels:
+        raw.levels &&
+        typeof raw.levels ===
+          "object" &&
+        !Array.isArray(raw.levels)
+          ? cloneData(raw.levels)
+          : {}
+    };
+  }
+
+  function getSection12SubclassTemplates() {
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const subclassMap =
+      new Map();
+
+    (
+      Array.isArray(
+        selectedClass?.subclasses
+      )
+        ? selectedClass.subclasses
+        : []
+    ).forEach((subclass) => {
+      const normalized =
+        normalizeSection12Subclass(
+          subclass,
+
+          subclass?.source ||
+          selectedClass?.source ||
+          "template"
+        );
+
+      subclassMap.set(
+        normalized.id,
+        normalized
+      );
+    });
+
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const savedSubclass =
+      primaryClass?.choices
+        ?.subclassSnapshot;
+
+    if (savedSubclass) {
+      const normalized =
+        normalizeSection12Subclass(
+          savedSubclass,
+          "character"
+        );
+
+      subclassMap.set(
+        normalized.id,
+        normalized
+      );
+    }
+
+    return Array.from(
+      subclassMap.values()
+    ).sort((a, b) => {
+      return a.name.localeCompare(
+        b.name
+      );
+    });
+  }
+
+  function getSelectedSection12Subclass() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    if (!primaryClass) {
+      return null;
+    }
+
+    const savedSnapshot =
+      primaryClass.choices
+        ?.subclassSnapshot;
+
+    if (savedSnapshot) {
+      return normalizeSection12Subclass(
+        savedSnapshot,
+        "character"
+      );
+    }
+
+    return (
+      getSection12SubclassTemplates()
+        .find((subclass) => {
+          return (
+            subclass.id ===
+            primaryClass.subclassId
+          );
+        }) ||
+      null
+    );
+  }
+
+  function refreshSelectedClassFeatures() {
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const selectedSubclass =
+      getSelectedSection12Subclass();
+
+    const totalLevel =
+      clampLevel(
+        creatorState.draft
+          .classProgression
+          .totalLevel
+      );
+
+    const classFeatures =
+      collectSection12Features(
+        selectedClass,
+        totalLevel,
+        "class"
+      );
+
+    const subclassFeatures =
+      collectSection12Features(
+        selectedSubclass,
+        totalLevel,
+        "subclass"
+      );
+
+    creatorState.draft
+      .features
+      .classFeatures = [
+        ...classFeatures,
+        ...subclassFeatures
+      ];
+
+    return creatorState.draft
+      .features
+      .classFeatures;
+  }
+
+  function applySection12ClassDefaults(
+    classTemplate
+  ) {
+    if (!classTemplate) {
+      return;
+    }
+
+    const totalLevel =
+      clampLevel(
+        creatorState.draft
+          .classProgression
+          .totalLevel
+      );
+
+    creatorState.draft
+      .proficiencies
+      .savingThrows =
+        cloneData(
+          classTemplate
+            .savingThrows ||
+          []
+        );
+
+    creatorState.draft
+      .proficiencies
+      .armor =
+        cloneData(
+          classTemplate
+            .armorProficiencies ||
+          []
+        );
+
+    creatorState.draft
+      .proficiencies
+      .weapons =
+        cloneData(
+          classTemplate
+            .weaponProficiencies ||
+          []
+        );
+
+    creatorState.draft
+      .proficiencies
+      .tools =
+        cloneData(
+          classTemplate
+            .toolProficiencies ||
+          []
+        );
+
+    creatorState.draft
+      .combat
+      .proficiencyBonus =
+        safeNumber(
+          getSection12LevelData(
+            classTemplate,
+            totalLevel
+          )?.proficiencyBonus,
+
+          getGenericProficiencyBonus(
+            totalLevel
+          )
+        );
+
+    creatorState.draft
+      .combat
+      .hitDice = [
+        {
+          classId:
+            classTemplate.id,
+
+          className:
+            classTemplate.name,
+
+          die:
+            classTemplate.hitDie ||
+            "d8",
+
+          count: totalLevel
+        }
+      ];
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+  }
+
+  function chooseSection12Class(
+    classId
+  ) {
+    if (
+      !selectClassTemplate(
+        classId
+      )
+    ) {
+      return false;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    applySection12ClassDefaults(
+      selectedClass
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applySection12CustomClass() {
+    const name =
+      safeDisplayString(
+        $("ccCustomClassName")
+          ?.value
+      );
+
+    if (!name) {
+      alert(
+        "Enter a custom class name."
+      );
+
+      return false;
+    }
+
+    const totalLevel =
+      clampLevel(
+        creatorState.draft
+          .classProgression
+          .totalLevel
+      );
+
+    const customClass =
+      normalizeClassTemplate(
+        {
+          id: makeSafeId(
+            name,
+            "custom-class"
+          ),
+
+          name,
+          source: "custom",
+
+          summary:
+            safeDisplayString(
+              $("ccCustomClassSummary")
+                ?.value,
+              "Custom class."
+            ),
+
+          hitDie:
+            $("ccCustomClassHitDie")
+              ?.value ||
+            "d8",
+
+          primaryAbilities:
+            parseSection12List(
+              $("ccCustomClassPrimaryAbilities")
+                ?.value
+            ),
+
+          savingThrows:
+            parseSection12List(
+              $("ccCustomClassSavingThrows")
+                ?.value
+            ),
+
+          armorProficiencies:
+            parseSection12List(
+              $("ccCustomClassArmor")
+                ?.value
+            ),
+
+          weaponProficiencies:
+            parseSection12List(
+              $("ccCustomClassWeapons")
+                ?.value
+            ),
+
+          toolProficiencies:
+            parseSection12List(
+              $("ccCustomClassTools")
+                ?.value
+            ),
+
+          skillChoices: {
+            choose: Math.max(
+              0,
+              Math.round(
+                safeNumber(
+                  $("ccCustomClassSkillCount")
+                    ?.value,
+                  0
+                )
+              )
+            ),
+
+            from:
+              parseSection12List(
+                $("ccCustomClassSkills")
+                  ?.value
+              )
+          },
+
+          subclassLevel:
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  $("ccCustomClassSubclassLevel")
+                    ?.value,
+                  3
+                )
+              )
+            ),
+
+          levels: {
+            1: {
+              proficiencyBonus: 2,
+              features: []
+            }
+          },
+
+          subclasses: []
+        },
+
+        "custom"
+      );
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        {
+          classId:
+            customClass.id,
+
+          className:
+            customClass.name,
+
+          source: "custom",
+          level: totalLevel,
+          subclassId: "",
+          subclassName: "",
+
+          templateSnapshot:
+            cloneData(
+              customClass
+            ),
+
+          choices: {}
+        }
+      ];
+
+    creatorState.draft
+      .proficiencies
+      .skills = {};
+
+    applySection12ClassDefaults(
+      customClass
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function chooseSection12Subclass(
+    subclassId
+  ) {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const subclass =
+      getSection12SubclassTemplates()
+        .find((item) => {
+          return (
+            item.id ===
+            subclassId
+          );
+        });
+
+    if (
+      !primaryClass ||
+      !subclass
+    ) {
+      return false;
+    }
+
+    primaryClass.subclassId =
+      subclass.id;
+
+    primaryClass.subclassName =
+      subclass.name;
+
+    primaryClass.choices = {
+      ...(primaryClass.choices || {}),
+
+      subclassSnapshot:
+        cloneData(subclass)
+    };
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applySection12CustomSubclass() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const name =
+      safeDisplayString(
+        $("ccCustomSubclassName")
+          ?.value
+      );
+
+    if (!primaryClass) {
+      alert(
+        "Choose a class before creating a subclass."
+      );
+
+      return false;
+    }
+
+    if (!name) {
+      alert(
+        "Enter a custom subclass name."
+      );
+
+      return false;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const unlockLevel =
+      Math.max(
+        1,
+        Math.round(
+          safeNumber(
+            $("ccCustomSubclassLevel")
+              ?.value,
+
+            selectedClass
+              ?.subclassLevel ||
+            3
+          )
+        )
+      );
+
+    const customSubclass =
+      normalizeSection12Subclass(
+        {
+          id: makeSafeId(
+            name,
+            "custom-subclass"
+          ),
+
+          name,
+          source: "custom",
+
+          summary:
+            safeDisplayString(
+              $("ccCustomSubclassSummary")
+                ?.value,
+              "Custom subclass."
+            ),
+
+          features: [],
+          levels: {},
+          unlockLevel
+        },
+
+        "custom"
+      );
+
+    primaryClass.subclassId =
+      customSubclass.id;
+
+    primaryClass.subclassName =
+      customSubclass.name;
+
+    primaryClass.choices = {
+      ...(primaryClass.choices || {}),
+
+      subclassSnapshot:
+        cloneData(
+          customSubclass
+        )
+    };
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function clearSection12Subclass() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    if (!primaryClass) {
+      return false;
+    }
+
+    primaryClass.subclassId = "";
+    primaryClass.subclassName = "";
+
+    primaryClass.choices = {
+      ...(primaryClass.choices || {})
+    };
+
+    delete primaryClass
+      .choices
+      .subclassSnapshot;
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderClassStep() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const selectedClassId =
+      primaryClass?.classId || "";
+
+    const classCards =
+      getAllClassTemplates()
+        .map((classData) => {
+          const selected =
+            selectedClassId ===
+            classData.id;
+
+          const primaryAbilities =
+            formatSection12List(
+              classData
+                .primaryAbilities
+            ) ||
+            "Not specified";
+
+          const savingThrows =
+            formatSection12List(
+              classData
+                .savingThrows
+            ) ||
+            "Not specified";
+
+          return wizardChoiceCard(
+            classData.name ||
+            "Unnamed Class",
+
+            `
+              <p>
+                ${escapeHtml(
+                  classData.summary ||
+                  "No description provided."
+                )}
+              </p>
+
+              <p>
+                <b>Hit Die:</b>
+
+                ${escapeHtml(
+                  classData.hitDie ||
+                  "d8"
+                )}
+              </p>
+
+              <p>
+                <b>Primary Abilities:</b>
+
+                ${escapeHtml(
+                  primaryAbilities
+                )}
+              </p>
+
+              <p>
+                <b>Saving Throws:</b>
+
+                ${escapeHtml(
+                  savingThrows
+                )}
+              </p>
+
+              <p>
+                <b>Subclass Level:</b>
+
+                ${Math.max(
+                  1,
+                  safeNumber(
+                    classData
+                      .subclassLevel,
+                    3
+                  )
+                )}
+              </p>
+
+              <p class="small">
+                Source:
+
+                ${escapeHtml(
+                  classData.source ||
+                  "template"
+                )}
+              </p>
+            `,
+
+            selected
+              ? "Selected"
+              : "Choose Class",
+
+            "choose-class",
+
+            {
+              "class-id":
+                classData.id
+            },
+
+            selected
+          );
+        })
+        .join("");
+
+    const customSource =
+      primaryClass?.source ===
+      "custom";
+
+    const customTemplate =
+      customSource
+        ? primaryClass
+            ?.templateSnapshot
+        : null;
+
+    const hitDice = [
+      "d4",
+      "d6",
+      "d8",
+      "d10",
+      "d12",
+      "d20"
+    ].map((die) => {
+      return {
+        value: die,
+        label: die
+      };
+    });
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Current class:</b>
+
+        ${escapeHtml(
+          getSafeClassName() ||
+          "None selected"
+        )}
+
+        ${
+          selectedClass
+            ? `
+              <span class="small">
+                · ${escapeHtml(
+                  selectedClass
+                    .hitDie ||
+                  "d8"
+                )} hit die
+              </span>
+            `
+            : ""
+        }
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${classCards}
+      </div>
+
+      <hr>
+
+      <h3>Custom Class</h3>
+
+      <p>
+        Use this for a fully original class or a class
+        that has not been added to the room library yet.
+      </p>
+
+      <div class="hg-character-field-grid three">
+        ${wizardField(
+          "Class Name",
+          "ccCustomClassName",
+
+          customSource
+            ? getSafeClassName()
+            : "",
+
+          {
+            placeholder:
+              "Blood Hunter"
+          }
+        )}
+
+        ${wizardSelect(
+          "Hit Die",
+          "ccCustomClassHitDie",
+
+          customTemplate
+            ?.hitDie ||
+          "d8",
+
+          hitDice
+        )}
+
+        ${wizardField(
+          "Subclass Unlock Level",
+          "ccCustomClassSubclassLevel",
+
+          customTemplate
+            ?.subclassLevel ||
+          3,
+
+          {
+            type: "number",
+            valueType: "integer",
+            extra:
+              'min="1" max="20" step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Primary Abilities",
+          "ccCustomClassPrimaryAbilities",
+
+          formatSection12List(
+            customTemplate
+              ?.primaryAbilities
+          ),
+
+          {
+            placeholder:
+              "Strength, Wisdom"
+          }
+        )}
+
+        ${wizardField(
+          "Saving Throws",
+          "ccCustomClassSavingThrows",
+
+          formatSection12List(
+            customTemplate
+              ?.savingThrows
+          ),
+
+          {
+            placeholder:
+              "Strength, Constitution"
+          }
+        )}
+
+        ${wizardField(
+          "Skills to Choose",
+          "ccCustomClassSkillCount",
+
+          customTemplate
+            ?.skillChoices
+            ?.choose ||
+          0,
+
+          {
+            type: "number",
+            valueType: "integer",
+            extra:
+              'min="0" max="18" step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Available Skills",
+          "ccCustomClassSkills",
+
+          formatSection12List(
+            customTemplate
+              ?.skillChoices
+              ?.from
+          ),
+
+          {
+            placeholder:
+              "Athletics, Arcana, Perception",
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "Armor Proficiencies",
+          "ccCustomClassArmor",
+
+          formatSection12List(
+            customTemplate
+              ?.armorProficiencies
+          ),
+
+          {
+            placeholder:
+              "Light armor, Shields",
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "Weapon Proficiencies",
+          "ccCustomClassWeapons",
+
+          formatSection12List(
+            customTemplate
+              ?.weaponProficiencies
+          ),
+
+          {
+            placeholder:
+              "Simple weapons, Martial weapons",
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "Tool Proficiencies",
+          "ccCustomClassTools",
+
+          formatSection12List(
+            customTemplate
+              ?.toolProficiencies
+          ),
+
+          {
+            placeholder:
+              "Smith's tools",
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "Class Summary",
+          "ccCustomClassSummary",
+
+          safeDisplayString(
+            customTemplate?.summary
+          ),
+
+          {
+            type: "textarea",
+
+            placeholder:
+              "Describe the class's central fantasy and playstyle...",
+
+            wide: true
+          }
+        )}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="use-custom-class"
+        >
+          Use Custom Class
+        </button>
+      </div>
+    `;
+  }
+
+  function renderSubclassStep() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const selectedSubclass =
+      getSelectedSection12Subclass();
+
+    const subclassLevel =
+      Math.max(
+        1,
+        Math.round(
+          safeNumber(
+            selectedClass
+              ?.subclassLevel,
+            3
+          )
+        )
+      );
+
+    if (!primaryClass) {
+      return `
+        <div class="hg-character-warning">
+          Choose a class before selecting a subclass.
+        </div>
+      `;
+    }
+
+    const subclassCards =
+      getSection12SubclassTemplates()
+        .map((subclass) => {
+          const selected =
+            primaryClass
+              .subclassId ===
+            subclass.id;
+
+          return wizardChoiceCard(
+            subclass.name ||
+            "Unnamed Subclass",
+
+            `
+              <p>
+                ${escapeHtml(
+                  subclass.summary ||
+                  "No description provided."
+                )}
+              </p>
+
+              <p class="small">
+                Source:
+
+                ${escapeHtml(
+                  subclass.source ||
+                  "template"
+                )}
+              </p>
+            `,
+
+            selected
+              ? "Selected"
+              : "Choose Subclass",
+
+            "choose-subclass",
+
+            {
+              "subclass-id":
+                subclass.id
+            },
+
+            selected
+          );
+        })
+        .join("");
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Class:</b>
+
+        ${escapeHtml(
+          getSafeClassName() ||
+          "None selected"
+        )}
+
+        <br>
+
+        <b>Current subclass:</b>
+
+        ${escapeHtml(
+          getSafeSubclassName() ||
+          "None selected"
+        )}
+      </div>
+
+      <div class="hg-character-warning">
+        This class normally gains its subclass at level
+        ${subclassLevel}. You may choose it early while
+        planning the character.
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${
+          subclassCards ||
+          `
+            <div class="hg-character-placeholder">
+              This class does not have any saved subclass
+              templates yet. You can create a custom one below.
+            </div>
+          `
+        }
+      </div>
+
+      ${
+        selectedSubclass
+          ? `
+            <div class="hg-character-inline-actions">
+              <button
+                type="button"
+                data-cc-action="clear-subclass"
+              >
+                Remove Current Subclass
+              </button>
+            </div>
+          `
+          : ""
+      }
+
+      <hr>
+
+      <h3>Custom Subclass</h3>
+
+      <div class="hg-character-field-grid">
+        ${wizardField(
+          "Subclass Name",
+          "ccCustomSubclassName",
+
+          selectedSubclass?.source ===
+          "custom"
+            ? selectedSubclass.name
+            : "",
+
+          {
+            placeholder:
+              "Order of the Crimson Moon"
+          }
+        )}
+
+        ${wizardField(
+          "Subclass Unlock Level",
+          "ccCustomSubclassLevel",
+
+          selectedSubclass
+            ?.unlockLevel ||
+          subclassLevel,
+
+          {
+            type: "number",
+            valueType: "integer",
+            extra:
+              'min="1" max="20" step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Subclass Summary",
+          "ccCustomSubclassSummary",
+
+          selectedSubclass?.source ===
+          "custom"
+            ? selectedSubclass.summary
+            : "",
+
+          {
+            type: "textarea",
+
+            placeholder:
+              "Describe the subclass theme and abilities...",
+
+            wide: true
+          }
+        )}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="use-custom-subclass"
+        >
+          Use Custom Subclass
+        </button>
+      </div>
+    `;
+  }
+
+  function findSection12ActionElement(
+    ...values
+  ) {
+    for (const value of values) {
+      const candidates = [
+        value,
+        value?.target,
+        value?.currentTarget,
+        value?.element,
+        value?.button,
+        value?.control,
+        value?.actionElement
+      ];
+
+      for (const candidate of candidates) {
+        if (
+          typeof Element !==
+            "undefined" &&
+          candidate instanceof Element
+        ) {
+          return (
+            candidate.closest(
+              "[data-cc-action]"
+            ) ||
+            candidate
+          );
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function handleSection12ChooseClass(
+    ...values
+  ) {
+    const button =
+      findSection12ActionElement(
+        ...values
+      );
+
+    const classId =
+      button?.dataset?.classId ||
+      "";
+
+    if (
+      chooseSection12Class(
+        classId
+      )
+    ) {
+      setStatus(
+        "Class selected: " +
+        getSafeClassName() +
+        "."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleSection12CustomClass() {
+    if (
+      applySection12CustomClass()
+    ) {
+      setStatus(
+        "Custom class applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleSection12ChooseSubclass(
+    ...values
+  ) {
+    const button =
+      findSection12ActionElement(
+        ...values
+      );
+
+    const subclassId =
+      button?.dataset
+        ?.subclassId ||
+      "";
+
+    if (
+      chooseSection12Subclass(
+        subclassId
+      )
+    ) {
+      setStatus(
+        "Subclass selected: " +
+        getSafeSubclassName() +
+        "."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleSection12CustomSubclass() {
+    if (
+      applySection12CustomSubclass()
+    ) {
+      setStatus(
+        "Custom subclass applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleSection12ClearSubclass() {
+    if (
+      clearSection12Subclass()
+    ) {
+      setStatus(
+        "Subclass removed."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  registerCharacterStepRenderer(
+    "class",
+    renderClassStep
+  );
+
+  registerCharacterStepRenderer(
+    "subclass",
+    renderSubclassStep
+  );
+
+  registerCharacterCreatorAction(
+    "choose-class",
+    handleSection12ChooseClass
+  );
+
+  registerCharacterCreatorAction(
+    "use-custom-class",
+    handleSection12CustomClass
+  );
+
+  registerCharacterCreatorAction(
+    "choose-subclass",
+    handleSection12ChooseSubclass
+  );
+
+  registerCharacterCreatorAction(
+    "use-custom-subclass",
+    handleSection12CustomSubclass
+  );
+
+  registerCharacterCreatorAction(
+    "clear-subclass",
+    handleSection12ClearSubclass
+  );
