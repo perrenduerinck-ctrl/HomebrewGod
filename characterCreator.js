@@ -15649,3 +15649,562 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorChangeHandler(
     handleSection18Change
   );
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 19 - PERMANENT FIRESTORE CONNECTIONS / CLEANUP
+// =====================================================
+
+  function getSection19CollectionName(
+    primaryOption,
+    secondaryOption,
+    fallback
+  ) {
+    return cleanString(
+      options?.[primaryOption] ||
+      options?.[secondaryOption],
+      fallback
+    );
+  }
+
+  function getSection19RoomCollection(
+    collectionName
+  ) {
+    const roomCode = getRoomCode();
+
+    if (!roomCode) {
+      throw new Error(
+        "Open a room before loading character creator data."
+      );
+    }
+
+    if (!hasFirestoreTools()) {
+      throw new Error(
+        "The character creator is missing its Firestore tools."
+      );
+    }
+
+    return deps.collection(
+      deps.db,
+      "rooms",
+      roomCode,
+      collectionName
+    );
+  }
+
+  function readSection19SnapshotRecords(
+    snapshot
+  ) {
+    const docs = Array.isArray(snapshot?.docs)
+      ? snapshot.docs
+      : [];
+
+    return docs.map((documentSnapshot) => {
+      const data =
+        typeof documentSnapshot.data === "function"
+          ? documentSnapshot.data()
+          : {};
+
+      const docId =
+        String(
+          documentSnapshot.id ||
+          data?.docId ||
+          data?.id ||
+          ""
+        );
+
+      return {
+        ...(data || {}),
+        id: data?.id || docId,
+        docId
+      };
+    });
+  }
+
+  function normalizeSection19CharacterRecord(
+    record
+  ) {
+    return normalizeCharacter({
+      ...record,
+      id: record.id || record.docId
+    });
+  }
+
+  function normalizeSection19ClassRecord(
+    record
+  ) {
+    const normalized = normalizeClassTemplate(
+      {
+        ...record,
+        id: record.id || record.docId,
+        docId: record.docId || record.id || null
+      },
+      "homebrew"
+    );
+
+    normalized.docId =
+      record.docId ||
+      normalized.docId ||
+      null;
+
+    return normalized;
+  }
+
+  function normalizeSection19SpeciesRecord(
+    record
+  ) {
+    const name = safeDisplayString(
+      record.name,
+      "Custom Species"
+    );
+
+    return {
+      ...cloneData(record),
+
+      id: makeSafeId(
+        record.id ||
+        record.docId ||
+        name,
+        "custom-species"
+      ),
+
+      docId:
+        record.docId ||
+        record.id ||
+        null,
+
+      name,
+
+      source: safeDisplayString(
+        record.source,
+        "homebrew"
+      ),
+
+      summary: safeDisplayString(
+        record.summary ||
+        record.description,
+        "No description provided."
+      ),
+
+      size: safeDisplayString(
+        record.size,
+        "medium"
+      ),
+
+      speed: Math.max(
+        0,
+        safeNumber(
+          record.speed ??
+          record.walkSpeed,
+          30
+        )
+      ),
+
+      traits: Array.isArray(record.traits)
+        ? cloneData(record.traits)
+        : []
+    };
+  }
+
+  function normalizeSection19BackgroundRecord(
+    record
+  ) {
+    const normalized =
+      normalizeSection14Background(
+        {
+          ...record,
+          id: record.id || record.docId,
+          docId: record.docId || record.id || null
+        },
+        "homebrew"
+      );
+
+    normalized.docId =
+      record.docId ||
+      normalized.docId ||
+      null;
+
+    return normalized;
+  }
+
+  function stopSection19Listener(
+    unsubscribeKey,
+    roomKey,
+    cacheKey
+  ) {
+    const unsubscribe =
+      creatorState[unsubscribeKey];
+
+    if (typeof unsubscribe === "function") {
+      try {
+        unsubscribe();
+      } catch (error) {
+        console.warn(
+          "Could not stop character creator listener:",
+          error
+        );
+      }
+    }
+
+    creatorState[unsubscribeKey] = null;
+    creatorState[roomKey] = null;
+
+    if (cacheKey) {
+      creatorState[cacheKey] = [];
+    }
+  }
+
+  function connectSection19Listener({
+    label,
+    collectionName,
+    roomKey,
+    unsubscribeKey,
+    cacheKey,
+    normalizeRecord
+  }) {
+    const roomCode = getRoomCode();
+
+    if (!roomCode || !hasFirestoreTools()) {
+      stopSection19Listener(
+        unsubscribeKey,
+        roomKey,
+        cacheKey
+      );
+
+      return false;
+    }
+
+    if (
+      creatorState[roomKey] === roomCode &&
+      typeof creatorState[unsubscribeKey] ===
+        "function"
+    ) {
+      return true;
+    }
+
+    stopSection19Listener(
+      unsubscribeKey,
+      roomKey,
+      cacheKey
+    );
+
+    creatorState[roomKey] = roomCode;
+
+    try {
+      creatorState[unsubscribeKey] =
+        deps.onSnapshot(
+          getSection19RoomCollection(
+            collectionName
+          ),
+
+          (snapshot) => {
+            creatorState[cacheKey] =
+              readSection19SnapshotRecords(
+                snapshot
+              ).map(normalizeRecord);
+
+            if (wizardRuntime.shellBuilt) {
+              renderCreatorView();
+            }
+          },
+
+          (error) => {
+            console.error(
+              `Could not load character creator ${label}:`,
+              error
+            );
+
+            setStatus(
+              `Could not load ${label}.`
+            );
+          }
+        );
+
+      return true;
+    } catch (error) {
+      console.error(
+        `Could not start character creator ${label} listener:`,
+        error
+      );
+
+      setStatus(
+        `Could not connect ${label}.`
+      );
+
+      stopSection19Listener(
+        unsubscribeKey,
+        roomKey,
+        cacheKey
+      );
+
+      return false;
+    }
+  }
+
+  function connectSection19Characters() {
+    return connectSection19Listener({
+      label: "characters",
+
+      collectionName:
+        getSection19CollectionName(
+          "characterCollectionName",
+          "charactersCollectionName",
+          "characters"
+        ),
+
+      roomKey: "characterRoomCode",
+      unsubscribeKey: "characterUnsubscribe",
+      cacheKey: "characterCache",
+      normalizeRecord:
+        normalizeSection19CharacterRecord
+    });
+  }
+
+  function connectSection19Classes() {
+    return connectSection19Listener({
+      label: "class templates",
+
+      collectionName:
+        getSection19CollectionName(
+          "classCollectionName",
+          "classTemplatesCollectionName",
+          "classes"
+        ),
+
+      roomKey: "classRoomCode",
+      unsubscribeKey: "classUnsubscribe",
+      cacheKey: "roomClassCache",
+      normalizeRecord:
+        normalizeSection19ClassRecord
+    });
+  }
+
+  function connectSection19Species() {
+    return connectSection19Listener({
+      label: "species templates",
+
+      collectionName:
+        getSection19CollectionName(
+          "speciesCollectionName",
+          "speciesTemplatesCollectionName",
+          "species"
+        ),
+
+      roomKey: "speciesRoomCode",
+      unsubscribeKey: "speciesUnsubscribe",
+      cacheKey: "roomSpeciesCache",
+      normalizeRecord:
+        normalizeSection19SpeciesRecord
+    });
+  }
+
+  function connectSection19Backgrounds() {
+    return connectSection19Listener({
+      label: "background templates",
+
+      collectionName:
+        getSection19CollectionName(
+          "backgroundCollectionName",
+          "backgroundTemplatesCollectionName",
+          "backgrounds"
+        ),
+
+      roomKey: "backgroundRoomCode",
+      unsubscribeKey: "backgroundUnsubscribe",
+      cacheKey: "roomBackgroundCache",
+      normalizeRecord:
+        normalizeSection19BackgroundRecord
+    });
+  }
+
+  function connectSection19PermanentListeners() {
+    connectSection19Characters();
+    connectSection19Classes();
+    connectSection19Species();
+    connectSection19Backgrounds();
+  }
+
+  function cleanupSection19PermanentListeners() {
+    stopSection19Listener(
+      "characterUnsubscribe",
+      "characterRoomCode",
+      "characterCache"
+    );
+
+    stopSection19Listener(
+      "classUnsubscribe",
+      "classRoomCode",
+      "roomClassCache"
+    );
+
+    stopSection19Listener(
+      "speciesUnsubscribe",
+      "speciesRoomCode",
+      "roomSpeciesCache"
+    );
+
+    stopSection19Listener(
+      "backgroundUnsubscribe",
+      "backgroundRoomCode",
+      "roomBackgroundCache"
+    );
+  }
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 20 - STARTUP / INITIALIZATION / RETURNED API
+// =====================================================
+
+  function disconnectSection20Routing() {
+    if (
+      wizardRuntime
+        .popstateConnected
+    ) {
+      window.removeEventListener(
+        "popstate",
+        handleBrowserRouteChange
+      );
+
+      wizardRuntime.popstateConnected =
+        false;
+    }
+  }
+
+  function refreshSection20CharacterCreator() {
+    refreshElements();
+    connectSection19PermanentListeners();
+    renderCreatorView();
+
+    return creatorState;
+  }
+
+  function startSection20CharacterCreator() {
+    wizardRuntime.destroyed = false;
+
+    refreshElements();
+    ensureWizardStyles();
+    connectPopstateRouting();
+    connectSection19PermanentListeners();
+
+    if (
+      !wizardRuntime
+        .initialRouteApplied
+    ) {
+      applyInitialRoute();
+
+      wizardRuntime.initialRouteApplied =
+        true;
+    }
+
+    renderCreatorView();
+
+    return creatorState;
+  }
+
+  function cleanupSection20CharacterCreator() {
+    wizardRuntime.destroyed = true;
+
+    disconnectWizardEvents();
+    disconnectSection20Routing();
+    cleanupSection19PermanentListeners();
+
+    return creatorState;
+  }
+
+  function startSection20NewCharacter() {
+    clearStoredDraft();
+    startNewDraft();
+
+    creatorState.draft =
+      sanitizeDraftStrings(
+        creatorState.draft
+      );
+
+    persistDraftToSession();
+    navigateToStep("basics");
+
+    return creatorState.draft;
+  }
+
+  function replaceSection20Draft(
+    character,
+    options = {}
+  ) {
+    const draft =
+      replaceDraft(
+        character,
+        options
+      );
+
+    creatorState.draft =
+      sanitizeDraftStrings(
+        creatorState.draft
+      );
+
+    persistDraftToSession();
+    renderCreatorView();
+
+    return draft;
+  }
+
+  function bootSection20WhenReady() {
+    if (
+      typeof document !== "undefined" &&
+      document.readyState === "loading"
+    ) {
+      document.addEventListener(
+        "DOMContentLoaded",
+        startSection20CharacterCreator,
+        { once: true }
+      );
+
+      return false;
+    }
+
+    startSection20CharacterCreator();
+
+    return true;
+  }
+
+  bootSection20WhenReady();
+
+  return {
+    state: creatorState,
+    steps: BUILDER_STEPS,
+
+    init: startSection20CharacterCreator,
+    start: startSection20CharacterCreator,
+    refresh: refreshSection20CharacterCreator,
+    render: renderCreatorView,
+    cleanup: cleanupSection20CharacterCreator,
+    destroy: cleanupSection20CharacterCreator,
+
+    openLibrary: navigateToLibrary,
+    navigateToStep,
+    startNew: startSection20NewCharacter,
+    replaceDraft: replaceSection20Draft,
+
+    getState() {
+      return creatorState;
+    },
+
+    getDraft() {
+      return creatorState.draft;
+    },
+
+    getCharacter() {
+      return getCharacterSnapshot();
+    },
+
+    save: handleSection18Save,
+    saveCopy: handleSection18SaveCopy,
+    copyJson: copySection18Json,
+    exportJson: exportSection18Json,
+    importJson: importSection18JsonText,
+
+    connectListeners:
+      connectSection19PermanentListeners,
+    cleanupListeners:
+      cleanupSection19PermanentListeners
+  };
+}
