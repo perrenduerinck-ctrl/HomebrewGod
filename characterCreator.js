@@ -3158,29 +3158,19 @@ export function createCharacterCreator(options = {}) {
     refreshElements();
     ensureWizardStyles();
 
-    if (
-      !C.actionBar ||
-      !C.grid
-    ) {
+    if (!C.actionBar || !C.grid) {
       return;
     }
 
     if (!wizardRuntime.shellBuilt) {
-      wizardRuntime.shellBuilt =
-        true;
+      wizardRuntime.shellBuilt = true;
 
       C.actionBar.innerHTML = `
-        <button
-          type="button"
-          data-cc-action="library"
-        >
+        <button type="button" data-cc-action="library">
           Characters
         </button>
 
-        <button
-          type="button"
-          data-cc-action="new-character"
-        >
+        <button type="button" data-cc-action="new-character">
           New Character
         </button>
 
@@ -3192,24 +3182,15 @@ export function createCharacterCreator(options = {}) {
           Save Character
         </button>
 
-        <button
-          type="button"
-          data-cc-action="save-copy"
-        >
+        <button type="button" data-cc-action="save-copy">
           Save Another Copy
         </button>
 
-        <button
-          type="button"
-          data-cc-action="copy-json"
-        >
+        <button type="button" data-cc-action="copy-json">
           Copy JSON
         </button>
 
-        <button
-          type="button"
-          data-cc-action="export-json"
-        >
+        <button type="button" data-cc-action="export-json">
           Export JSON
         </button>
 
@@ -3233,7 +3214,7 @@ export function createCharacterCreator(options = {}) {
 
       if (C.subtitle) {
         C.subtitle.textContent =
-          "Build one step at a time. Your characters stay in this room's library.";
+          "Build one step at a time. Changes remain in this tab until saved.";
       }
     }
 
@@ -3244,8 +3225,7 @@ export function createCharacterCreator(options = {}) {
   function renderActionBar() {
     refreshWizardElements();
 
-    const saveButton =
-      $("characterWizardSaveButton");
+    const saveButton = $("characterWizardSaveButton");
 
     if (saveButton) {
       saveButton.textContent =
@@ -3255,19 +3235,103 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function getStepCompletionState(stepId) {
+    const character = creatorState.draft;
+
+    if (stepId === "basics") {
+      return Boolean(getSafeCharacterName(character));
+    }
+
+    if (stepId === "species") {
+      return Boolean(getSafeSpeciesName(character));
+    }
+
+    if (stepId === "class") {
+      return Boolean(getSafeClassName(character));
+    }
+
+    if (stepId === "subclass") {
+      const selectedClass = getSelectedClassTemplate();
+      const subclassLevel = safeNumber(
+        selectedClass?.subclassLevel,
+        3
+      );
+
+      const level = clampLevel(
+        character.classProgression.totalLevel
+      );
+
+      if (level < subclassLevel) {
+        return true;
+      }
+
+      return Boolean(getSafeSubclassName(character));
+    }
+
+    if (stepId === "level") {
+      return (
+        clampLevel(
+          character.classProgression.totalLevel
+        ) >= 1
+      );
+    }
+
+    if (stepId === "abilities") {
+      return ABILITY_DEFINITIONS.every((ability) => {
+        const score = safeNumber(
+          character.abilities.scores[ability.id],
+          0
+        );
+
+        return score >= 1 && score <= 30;
+      });
+    }
+
+    if (stepId === "background") {
+      return Boolean(getSafeBackgroundName(character));
+    }
+
+    if (stepId === "skills") {
+      const selectedClass = getSelectedClassTemplate();
+      const required = Math.max(
+        0,
+        safeNumber(
+          selectedClass?.skillChoices?.choose,
+          0
+        )
+      );
+
+      return getChosenClassSkills().length >= required;
+    }
+
+    if (
+      typeof getFinalStepCompletionState === "function"
+    ) {
+      return getFinalStepCompletionState(stepId);
+    }
+
+    return false;
+  }
+
   function renderStepRail() {
     return BUILDER_STEPS
       .map((step, index) => {
         const active =
-          step.id ===
-          creatorState.currentStepId;
+          step.id === creatorState.currentStepId;
 
         const visited =
-          creatorState
-            .draft
-            .builder
-            .visitedSteps
-            .includes(step.id);
+          creatorState.draft.builder.visitedSteps.includes(
+            step.id
+          );
+
+        const complete =
+          getStepCompletionState(step.id);
+
+        let marker = index + 1;
+
+        if (complete) {
+          marker = "✓";
+        }
 
         return `
           <button
@@ -3276,12 +3340,13 @@ export function createCharacterCreator(options = {}) {
               hg-character-step-button
               ${active ? "active" : ""}
               ${visited ? "visited" : ""}
+              ${complete ? "complete" : ""}
             "
             data-cc-action="go-step"
             data-step-id="${escapeHtml(step.id)}"
           >
             <span class="hg-character-step-number">
-              ${index + 1}
+              ${marker}
             </span>
 
             <span class="hg-character-step-label">
@@ -3293,1186 +3358,16 @@ export function createCharacterCreator(options = {}) {
       .join("");
   }
 
-  function renderBasicsStep() {
-    const identity =
-      creatorState.draft.identity;
-
-    return `
-      <div class="hg-character-field-grid">
-        <div class="hg-character-field">
-          <label for="ccCharacterName">
-            Character Name
-          </label>
-
-          <input
-            id="ccCharacterName"
-            data-draft-path="identity.name"
-            value="${escapeHtml(
-              getSafeCharacterName()
-            )}"
-            placeholder="Character name"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccPronouns">
-            Pronouns
-          </label>
-
-          <input
-            id="ccPronouns"
-            data-draft-path="identity.pronouns"
-            value="${escapeHtml(
-              safeDisplayString(
-                identity.pronouns
-              )
-            )}"
-            placeholder="Optional"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccAlignment">
-            Alignment / Outlook
-          </label>
-
-          <input
-            id="ccAlignment"
-            data-draft-path="identity.alignment"
-            value="${escapeHtml(
-              safeDisplayString(
-                identity.alignment
-              )
-            )}"
-            placeholder="Optional"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccDeity">
-            Deity / Belief
-          </label>
-
-          <input
-            id="ccDeity"
-            data-draft-path="identity.deity"
-            value="${escapeHtml(
-              safeDisplayString(
-                identity.deity
-              )
-            )}"
-            placeholder="Optional"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccAge">
-            Age
-          </label>
-
-          <input
-            id="ccAge"
-            data-draft-path="identity.age"
-            value="${escapeHtml(
-              safeDisplayString(
-                identity.age
-              )
-            )}"
-            placeholder="Optional"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccSize">
-            Size
-          </label>
-
-          <select
-            id="ccSize"
-            data-draft-path="identity.size"
-          >
-            ${
-              [
-                "tiny",
-                "small",
-                "medium",
-                "large",
-                "huge",
-                "gargantuan"
-              ]
-                .map((size) => {
-                  return `
-                    <option
-                      value="${size}"
-                      ${
-                        identity.size === size
-                          ? "selected"
-                          : ""
-                      }
-                    >
-                      ${
-                        size.charAt(0).toUpperCase() +
-                        size.slice(1)
-                      }
-                    </option>
-                  `;
-                })
-                .join("")
-            }
-          </select>
-        </div>
-
-        <div class="hg-character-field hg-character-wide-field">
-          <label for="ccAppearance">
-            Appearance / Identity Notes
-          </label>
-
-          <textarea
-            id="ccAppearance"
-            data-draft-path="identity.appearance"
-            placeholder="Appearance, personality, identity notes..."
-          >${escapeHtml(
-            safeDisplayString(
-              identity.appearance
-            )
-          )}</textarea>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderSpeciesStep() {
-    const currentSpecies =
-      getSafeSpeciesName();
-
-    const cards =
-      DEFAULT_SPECIES_TEMPLATES
-        .map((species) => {
-          const selected =
-            creatorState.draft
-              .species.id ===
-              species.id ||
-            currentSpecies ===
-              species.name;
-
-          return `
-            <div
-              class="
-                hg-character-choice-card
-                ${selected ? "selected" : ""}
-              "
-            >
-              <h3>
-                ${escapeHtml(species.name)}
-              </h3>
-
-              <p>
-                ${escapeHtml(species.summary)}
-              </p>
-
-              <p>
-                <b>Size:</b>
-                ${escapeHtml(species.size)}
-              </p>
-
-              <p>
-                <b>Walk:</b>
-                ${escapeHtml(species.speed)} ft.
-              </p>
-
-              <button
-                type="button"
-                data-cc-action="choose-species"
-                data-species-id="${escapeHtml(
-                  species.id
-                )}"
-              >
-                ${
-                  selected
-                    ? "Selected"
-                    : "Choose Species"
-                }
-              </button>
-            </div>
-          `;
-        })
-        .join("");
-
-    return `
-      <div class="hg-character-current-choice">
-        <b>Current species:</b>
-
-        ${escapeHtml(
-          currentSpecies ||
-          "None selected"
-        )}
-      </div>
-
-      <div class="hg-character-choice-grid">
-        ${cards}
-      </div>
-
-      <div
-        class="hg-character-step-panel"
-        style="min-height:0; margin-top:12px;"
-      >
-        <h3>Custom Species</h3>
-
-        <div class="hg-character-field-grid">
-          <div class="hg-character-field">
-            <label for="ccCustomSpeciesName">
-              Custom Species Name
-            </label>
-
-            <input
-              id="ccCustomSpeciesName"
-              value="${escapeHtml(
-                creatorState.draft
-                  .species.source === "custom"
-                    ? currentSpecies
-                    : ""
-              )}"
-              placeholder="Example: Half Celestial Owlbear"
-            >
-          </div>
-
-          <div
-            class="hg-character-inline-actions"
-            style="align-items:end;"
-          >
-            <button
-              type="button"
-              data-cc-action="use-custom-species"
-            >
-              Use Custom Species
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderClassStep() {
-    const currentClass =
-      getSafeClassName();
-
-    const cards =
-      getAllClassTemplates()
-        .map((classData) => {
-          const primaryClass =
-            getPrimaryClassEntry(
-              creatorState.draft
-            );
-
-          const selected =
-            primaryClass?.classId ===
-              classData.id ||
-            currentClass ===
-              classData.name;
-
-          return `
-            <div
-              class="
-                hg-character-choice-card
-                ${selected ? "selected" : ""}
-              "
-            >
-              <h3>
-                ${escapeHtml(classData.name)}
-              </h3>
-
-              <p>
-                ${escapeHtml(classData.summary)}
-              </p>
-
-              <p>
-                <b>Hit Die:</b>
-                ${escapeHtml(classData.hitDie)}
-              </p>
-
-              <p>
-                <b>Primary:</b>
-
-                ${escapeHtml(
-                  classData
-                    .primaryAbilities
-                    .join(", ") ||
-                  "Any"
-                )}
-              </p>
-
-              <button
-                type="button"
-                data-cc-action="choose-class"
-                data-class-id="${escapeHtml(
-                  classData.id
-                )}"
-              >
-                ${
-                  selected
-                    ? "Selected"
-                    : "Choose Class"
-                }
-              </button>
-            </div>
-          `;
-        })
-        .join("");
-
-    const primaryClass =
-      getPrimaryClassEntry(
-        creatorState.draft
-      );
-
-    return `
-      <div class="hg-character-current-choice">
-        <b>Current class:</b>
-
-        ${escapeHtml(
-          currentClass ||
-          "None selected"
-        )}
-      </div>
-
-      <div class="hg-character-choice-grid">
-        ${cards}
-      </div>
-
-      <div
-        class="hg-character-step-panel"
-        style="min-height:0; margin-top:12px;"
-      >
-        <h3>Custom Homebrew Class</h3>
-
-        <p class="small">
-          Entering a custom name here creates a real
-          custom class choice. It will not fall back
-          to Fighter.
-        </p>
-
-        <div class="hg-character-field-grid">
-          <div class="hg-character-field">
-            <label for="ccCustomClassName">
-              Custom Class Name
-            </label>
-
-            <input
-              id="ccCustomClassName"
-              value="${escapeHtml(
-                primaryClass?.source === "custom"
-                  ? currentClass
-                  : ""
-              )}"
-              placeholder="Example: Piss Wizard"
-            >
-          </div>
-
-          <div
-            class="hg-character-inline-actions"
-            style="align-items:end;"
-          >
-            <button
-              type="button"
-              data-cc-action="use-custom-class"
-            >
-              Use Custom Class
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderSubclassStep() {
-    const primaryClass =
-      getPrimaryClassEntry(
-        creatorState.draft
-      );
-
-    const selectedClass =
-      getSelectedClassTemplate();
-
-    const subclasses =
-      Array.isArray(
-        selectedClass?.subclasses
-      )
-        ? selectedClass.subclasses
-        : [];
-
-    const options =
-      subclasses
-        .map((subclass) => {
-          const id =
-            makeSafeId(
-              subclass.id ||
-              subclass.name,
-              "subclass"
-            );
-
-          const name =
-            safeDisplayString(
-              subclass.name,
-              "Unnamed Subclass"
-            );
-
-          return `
-            <option
-              value="${escapeHtml(id)}"
-              ${
-                primaryClass?.subclassId === id
-                  ? "selected"
-                  : ""
-              }
-            >
-              ${escapeHtml(name)}
-            </option>
-          `;
-        })
-        .join("");
-
-    return `
-      <div class="hg-character-current-choice">
-        <b>Class:</b>
-
-        ${escapeHtml(
-          getSafeClassName() ||
-          "No class selected"
-        )}
-      </div>
-
-      <div class="hg-character-field-grid">
-        <div class="hg-character-field">
-          <label for="ccSubclassSelect">
-            Saved Subclass Options
-          </label>
-
-          <select
-            id="ccSubclassSelect"
-            data-cc-action-change="choose-subclass"
-          >
-            <option value="">
-              No subclass selected
-            </option>
-
-            ${options}
-          </select>
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccCustomSubclassName">
-            Custom Subclass Name
-          </label>
-
-          <input
-            id="ccCustomSubclassName"
-            value="${escapeHtml(
-              getSafeSubclassName()
-            )}"
-            placeholder="Optional homebrew subclass"
-          >
-        </div>
-      </div>
-
-      <div class="hg-character-inline-actions">
-        <button
-          type="button"
-          data-cc-action="use-custom-subclass"
-        >
-          Use Custom Subclass
-        </button>
-      </div>
-
-      ${
-        subclasses.length === 0
-          ? `
-            <div
-              class="hg-character-placeholder"
-              style="margin-top:12px;"
-            >
-              This class does not have saved subclass
-              templates yet. The custom field works now;
-              full subclass libraries arrive with
-              Sections 11–15.
-            </div>
-          `
-          : ""
-      }
-    `;
-  }
-
-  function renderLevelStep() {
-    const combat =
-      creatorState.draft.combat;
-
-    const level =
-      clampLevel(
-        creatorState.draft
-          .classProgression
-          .totalLevel
-      );
-
-    return `
-      <div class="hg-character-field-grid three">
-        <div class="hg-character-field">
-          <label for="ccLevel">
-            Character Level
-          </label>
-
-          <input
-            id="ccLevel"
-            type="number"
-            min="1"
-            max="20"
-            value="${level}"
-            data-level-input="true"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccProficiencyBonus">
-            Proficiency Bonus
-          </label>
-
-          <input
-            id="ccProficiencyBonus"
-            value="+${combat.proficiencyBonus}"
-            readonly
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccArmorClass">
-            Armor Class
-          </label>
-
-          <input
-            id="ccArmorClass"
-            type="number"
-            data-draft-path="combat.armorClass"
-            data-value-type="number"
-            value="${combat.armorClass}"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccMaxHp">
-            Maximum HP
-          </label>
-
-          <input
-            id="ccMaxHp"
-            type="number"
-            min="1"
-            data-draft-path="combat.maxHp"
-            data-value-type="number"
-            value="${combat.maxHp}"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccCurrentHp">
-            Current HP
-          </label>
-
-          <input
-            id="ccCurrentHp"
-            type="number"
-            data-draft-path="combat.currentHp"
-            data-value-type="number"
-            value="${combat.currentHp}"
-          >
-        </div>
-
-        <div class="hg-character-field">
-          <label for="ccWalkSpeed">
-            Walking Speed
-          </label>
-
-          <input
-            id="ccWalkSpeed"
-            type="number"
-            min="0"
-            data-draft-path="combat.speed.walk"
-            data-value-type="number"
-            value="${combat.speed.walk}"
-          >
-        </div>
-      </div>
-    `;
-  }
-
-  function renderAbilitiesStep() {
-    const abilities =
-      creatorState.draft.abilities;
-
-    const boxes =
-      ABILITY_DEFINITIONS
-        .map((ability) => {
-          const score =
-            safeNumber(
-              abilities.scores[ability.id],
-              10
-            );
-
-          const modifier =
-            calculateAbilityModifier(score);
-
-          const modifierText =
-            modifier >= 0
-              ? "+" + modifier
-              : String(modifier);
-
-          return `
-            <div class="hg-character-ability-box">
-              <b>
-                ${escapeHtml(ability.name)}
-              </b>
-
-              <div class="small">
-                Modifier
-                ${escapeHtml(modifierText)}
-              </div>
-
-              <input
-                type="number"
-                min="1"
-                max="30"
-                value="${score}"
-                data-ability-id="${escapeHtml(
-                  ability.id
-                )}"
-              >
-            </div>
-          `;
-        })
-        .join("");
-
-    return `
-      <div
-        class="hg-character-field"
-        style="max-width:360px; margin-bottom:12px;"
-      >
-        <label for="ccAbilityMethod">
-          Score Method
-        </label>
-
-        <select
-          id="ccAbilityMethod"
-          data-draft-path="abilities.method"
-        >
-          ${
-            ABILITY_SCORE_METHODS
-              .map((method) => {
-                return `
-                  <option
-                    value="${escapeHtml(method.id)}"
-                    ${
-                      abilities.method ===
-                      method.id
-                        ? "selected"
-                        : ""
-                    }
-                  >
-                    ${escapeHtml(method.name)}
-                  </option>
-                `;
-              })
-              .join("")
-          }
-        </select>
-      </div>
-
-      <div class="hg-character-ability-grid">
-        ${boxes}
-      </div>
-
-      <div
-        class="hg-character-placeholder"
-        style="margin-top:12px;"
-      >
-        Manual scores work now. Standard-array
-        assignment and point-buy enforcement are added
-        in Sections 11–15.
-      </div>
-    `;
-  }
-
-  function renderBackgroundStep() {
-    const currentName =
-      getSafeBackgroundName();
-
-    const cards =
-      DEFAULT_BACKGROUND_TEMPLATES
-        .map((background) => {
-          const selected =
-            creatorState.draft
-              .background.id ===
-              background.id ||
-            currentName ===
-              background.name;
-
-          return `
-            <div
-              class="
-                hg-character-choice-card
-                ${selected ? "selected" : ""}
-              "
-            >
-              <h3>
-                ${escapeHtml(background.name)}
-              </h3>
-
-              <p>
-                ${escapeHtml(background.summary)}
-              </p>
-
-              <button
-                type="button"
-                data-cc-action="choose-background"
-                data-background-id="${escapeHtml(
-                  background.id
-                )}"
-              >
-                ${
-                  selected
-                    ? "Selected"
-                    : "Choose Background"
-                }
-              </button>
-            </div>
-          `;
-        })
-        .join("");
-
-    return `
-      <div class="hg-character-current-choice">
-        <b>Current background:</b>
-
-        ${escapeHtml(
-          currentName ||
-          "None selected"
-        )}
-      </div>
-
-      <div class="hg-character-choice-grid">
-        ${cards}
-      </div>
-
-      <div
-        class="hg-character-field-grid"
-        style="margin-top:12px;"
-      >
-        <div class="hg-character-field">
-          <label for="ccCustomBackgroundName">
-            Custom Background Name
-          </label>
-
-          <input
-            id="ccCustomBackgroundName"
-            value="${escapeHtml(
-              creatorState.draft
-                .background.source === "custom"
-                  ? currentName
-                  : ""
-            )}"
-            placeholder="Optional custom background"
-          >
-        </div>
-
-        <div
-          class="hg-character-inline-actions"
-          style="align-items:end;"
-        >
-          <button
-            type="button"
-            data-cc-action="use-custom-background"
-          >
-            Use Custom Background
-          </button>
-        </div>
-
-        <div class="hg-character-field hg-character-wide-field">
-          <label for="ccBackstory">
-            Backstory
-          </label>
-
-          <textarea
-            id="ccBackstory"
-            data-draft-path="background.backstory"
-          >${escapeHtml(
-            safeDisplayString(
-              creatorState.draft
-                .background
-                .backstory
-            )
-          )}</textarea>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderSkillsStep() {
-    const chosen =
-      Object.entries(
-        creatorState.draft
-          .proficiencies
-          .skills || {}
-      )
-        .filter(([, value]) => {
-          return (
-            value?.proficient === true
-          );
-        })
-        .map(([name]) => name);
-
-    return `
-      <div class="hg-character-current-choice">
-        <b>Current proficient skills:</b>
-
-        ${escapeHtml(
-          chosen.join(", ") ||
-          "None selected"
-        )}
-      </div>
-
-      <div class="hg-character-placeholder">
-        The guided skill-choice rules, allowed-choice
-        counters, expertise, tools, languages, armor,
-        and weapons are implemented in Sections 11–15.
-
-        This page is already routed correctly and stays
-        in the same browser tab.
-      </div>
-    `;
-  }
-
-  function renderEquipmentStep() {
-    return `
-      <div class="hg-character-field">
-        <label for="ccEquipmentNotes">
-          Equipment / Inventory Notes
-        </label>
-
-        <textarea
-          id="ccEquipmentNotes"
-          data-draft-path="equipment.notes"
-          placeholder="Weapons, armor, gear, currency notes..."
-        >${escapeHtml(
-          safeDisplayString(
-            creatorState.draft
-              .equipment
-              .notes
-          )
-        )}</textarea>
-      </div>
-
-      <div
-        class="hg-character-placeholder"
-        style="margin-top:12px;"
-      >
-        Structured item cards, starting packages,
-        quantity, weight, currency, and equipped state
-        are added in Sections 16–20.
-      </div>
-    `;
-  }
-
-  function renderSpellsStep() {
-    return `
-      <div class="hg-character-field-grid">
-        <div class="hg-character-field hg-character-wide-field">
-          <label for="ccSpellNotes">
-            Spells / Magic Notes
-          </label>
-
-          <textarea
-            id="ccSpellNotes"
-            data-draft-path="magic.notes"
-            placeholder="Known spells, prepared spells, spell notes..."
-          >${escapeHtml(
-            safeDisplayString(
-              creatorState.draft
-                .magic
-                .notes
-            )
-          )}</textarea>
-        </div>
-
-        <div class="hg-character-field hg-character-wide-field">
-          <label for="ccFeatureNotes">
-            Features / Traits Notes
-          </label>
-
-          <textarea
-            id="ccFeatureNotes"
-            data-draft-path="features.notes"
-            placeholder="Class features, species traits, custom features..."
-          >${escapeHtml(
-            safeDisplayString(
-              creatorState.draft
-                .features
-                .notes
-            )
-          )}</textarea>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderReviewStep() {
-    const warnings =
-      getValidationWarnings();
-
-    const level =
-      clampLevel(
-        creatorState.draft
-          .classProgression
-          .totalLevel
-      );
-
-    return `
-      <div class="hg-character-summary-grid">
-        <div class="hg-character-summary-card">
-          <h3>Identity</h3>
-
-          <p>
-            <b>Name:</b>
-            ${escapeHtml(
-              getSafeCharacterName() ||
-              "Missing"
-            )}
-          </p>
-
-          <p>
-            <b>Species:</b>
-            ${escapeHtml(
-              getSafeSpeciesName() ||
-              "Missing"
-            )}
-          </p>
-
-          <p>
-            <b>Background:</b>
-            ${escapeHtml(
-              getSafeBackgroundName() ||
-              "None"
-            )}
-          </p>
-        </div>
-
-        <div class="hg-character-summary-card">
-          <h3>Advancement</h3>
-
-          <p>
-            <b>Class:</b>
-            ${escapeHtml(
-              getSafeClassName() ||
-              "Missing"
-            )}
-          </p>
-
-          <p>
-            <b>Subclass:</b>
-            ${escapeHtml(
-              getSafeSubclassName() ||
-              "None"
-            )}
-          </p>
-
-          <p>
-            <b>Level:</b>
-            ${level}
-          </p>
-        </div>
-
-        <div class="hg-character-summary-card">
-          <h3>Combat</h3>
-
-          <p>
-            <b>AC:</b>
-            ${creatorState.draft
-              .combat
-              .armorClass}
-          </p>
-
-          <p>
-            <b>HP:</b>
-            ${creatorState.draft
-              .combat
-              .currentHp}
-            /
-            ${creatorState.draft
-              .combat
-              .maxHp}
-          </p>
-
-          <p>
-            <b>Speed:</b>
-            ${creatorState.draft
-              .combat
-              .speed
-              .walk}
-            ft.
-          </p>
-        </div>
-      </div>
-
-      <div class="hg-character-warning-list">
-        ${
-          warnings.length
-            ? warnings
-                .map((warning) => {
-                  return `
-                    <div class="hg-character-warning">
-                      ${escapeHtml(warning)}
-                    </div>
-                  `;
-                })
-                .join("")
-            : `
-              <div class="hg-character-current-choice">
-                <b>Ready:</b>
-                No basic validation warnings.
-              </div>
-            `
-        }
-      </div>
-    `;
-  }
-
-  function renderSaveStep() {
-    const warnings =
-      getValidationWarnings();
-
-    return `
-      ${renderReviewStep()}
-
-      <div class="hg-character-inline-actions">
-        <button
-          type="button"
-          data-cc-action="save-character"
-        >
-          ${
-            creatorState.currentCharacterId
-              ? "Update Character"
-              : "Save New Character"
-          }
-        </button>
-
-        <button
-          type="button"
-          data-cc-action="save-copy"
-        >
-          Save Another Copy
-        </button>
-
-        <button
-          type="button"
-          data-cc-action="copy-json"
-        >
-          Copy JSON
-        </button>
-
-        <button
-          type="button"
-          data-cc-action="export-json"
-        >
-          Export JSON
-        </button>
-      </div>
-
-      <div
-        class="hg-character-placeholder"
-        style="margin-top:12px;"
-      >
-        ${
-          warnings.length
-            ? `
-              You can still save a draft, but the
-              warnings above show unfinished choices.
-            `
-            : `
-              This character is ready to save.
-              Token creation arrives in Sections 16–20.
-            `
-        }
-      </div>
-    `;
-  }
-
-  function renderStepContent(stepId) {
-    if (stepId === "basics") {
-      return renderBasicsStep();
-    }
-
-    if (stepId === "species") {
-      return renderSpeciesStep();
-    }
-
-    if (stepId === "class") {
-      return renderClassStep();
-    }
-
-    if (stepId === "subclass") {
-      return renderSubclassStep();
-    }
-
-    if (stepId === "level") {
-      return renderLevelStep();
-    }
-
-    if (stepId === "abilities") {
-      return renderAbilitiesStep();
-    }
-
-    if (stepId === "background") {
-      return renderBackgroundStep();
-    }
-
-    if (stepId === "skills") {
-      return renderSkillsStep();
-    }
-
-    if (stepId === "equipment") {
-      return renderEquipmentStep();
-    }
-
-    if (stepId === "spells") {
-      return renderSpellsStep();
-    }
-
-    if (stepId === "review") {
-      return renderReviewStep();
-    }
-
-    if (stepId === "save") {
-      return renderSaveStep();
-    }
-
-    return `
-      <div class="hg-character-placeholder">
-        This step is not available yet.
-      </div>
-    `;
-  }
-
   function renderBuilderView() {
-    const step =
-      getStepById(
-        creatorState.currentStepId
-      );
+    const step = getStepById(
+      creatorState.currentStepId
+    );
 
-    const stepIndex =
-      getStepIndex(step.id);
+    const stepIndex = getStepIndex(step.id);
 
-    const progress =
-      Math.round(
-        (
-          (stepIndex + 1) /
-          BUILDER_STEPS.length
-        ) *
-        100
-      );
+    const progress = Math.round(
+      ((stepIndex + 1) / BUILDER_STEPS.length) * 100
+    );
 
     W.root.innerHTML = `
       <div class="hg-character-builder-header">
@@ -4556,8 +3451,7 @@ export function createCharacterCreator(options = {}) {
               class="status hg-character-status-line"
             >
               ${escapeHtml(
-                creatorState.statusMessage ||
-                ""
+                creatorState.statusMessage || ""
               )}
             </p>
 
@@ -4566,11 +3460,7 @@ export function createCharacterCreator(options = {}) {
                 id="characterPreviousStepButton"
                 type="button"
                 data-cc-action="previous-step"
-                ${
-                  stepIndex === 0
-                    ? "disabled"
-                    : ""
-                }
+                ${stepIndex === 0 ? "disabled" : ""}
               >
                 Previous
               </button>
@@ -4592,8 +3482,7 @@ export function createCharacterCreator(options = {}) {
                   type="button"
                   data-cc-action="next-step"
                   ${
-                    stepIndex ===
-                    BUILDER_STEPS.length - 1
+                    stepIndex === BUILDER_STEPS.length - 1
                       ? "disabled"
                       : ""
                   }
@@ -4604,6 +3493,76 @@ export function createCharacterCreator(options = {}) {
             </div>
           </div>
         </section>
+      </div>
+    `;
+
+    refreshWizardElements();
+  }
+
+  function renderStepContent(stepId) {
+    if (stepId === "basics") {
+      return renderBasicsStep();
+    }
+
+    if (stepId === "species") {
+      return renderSpeciesStep();
+    }
+
+    if (stepId === "class") {
+      return renderClassStep();
+    }
+
+    if (stepId === "subclass") {
+      return renderSubclassStep();
+    }
+
+    if (stepId === "level") {
+      return renderLevelStep();
+    }
+
+    if (stepId === "abilities") {
+      return renderAbilitiesStep();
+    }
+
+    if (stepId === "background") {
+      return renderBackgroundStep();
+    }
+
+    if (stepId === "skills") {
+      return renderSkillsStep();
+    }
+
+    if (
+      stepId === "equipment" &&
+      typeof renderEquipmentStepFinal === "function"
+    ) {
+      return renderEquipmentStepFinal();
+    }
+
+    if (
+      stepId === "spells" &&
+      typeof renderSpellsFeaturesStepFinal === "function"
+    ) {
+      return renderSpellsFeaturesStepFinal();
+    }
+
+    if (
+      stepId === "review" &&
+      typeof renderReviewStepFinal === "function"
+    ) {
+      return renderReviewStepFinal();
+    }
+
+    if (
+      stepId === "save" &&
+      typeof renderSaveStepFinal === "function"
+    ) {
+      return renderSaveStepFinal();
+    }
+
+    return `
+      <div class="hg-character-placeholder">
+        This page is completed in Sections 16–20.
       </div>
     `;
   }
@@ -4617,10 +3576,7 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
-    if (
-      creatorState.viewMode ===
-      "library"
-    ) {
+    if (creatorState.viewMode === "library") {
       renderCharacterLibraryView();
     } else {
       renderBuilderView();
@@ -4630,14 +3586,11 @@ export function createCharacterCreator(options = {}) {
   }
 
   function connectWizardEvents() {
-    if (
-      wizardRuntime.eventsConnected
-    ) {
+    if (wizardRuntime.eventsConnected) {
       return;
     }
 
-    wizardRuntime.eventsConnected =
-      true;
+    wizardRuntime.eventsConnected = true;
 
     C.actionBar.addEventListener(
       "click",
@@ -4669,8 +3622,7 @@ export function createCharacterCreator(options = {}) {
           return;
         }
 
-        const file =
-          event.target.files?.[0];
+        const file = event.target.files?.[0];
 
         await importCharacterJson(file);
 
@@ -4679,54 +3631,41 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
-  async function handleWizardClick(
-    event
-  ) {
-    const button =
-      event.target.closest(
-        "[data-cc-action]"
-      );
+  async function handleWizardClick(event) {
+    const button = event.target.closest(
+      "[data-cc-action]"
+    );
 
     if (!button) {
       return;
     }
 
-    const action =
-      button.dataset.ccAction;
+    const action = button.dataset.ccAction;
 
     if (action === "library") {
       navigateToLibrary();
       return;
     }
 
-    if (
-      action === "new-character"
-    ) {
+    if (action === "new-character") {
       clearStoredDraft();
       startNewDraft();
 
-      creatorState.draft =
-        sanitizeDraftStrings(
-          creatorState.draft
-        );
+      creatorState.draft = sanitizeDraftStrings(
+        creatorState.draft
+      );
 
       persistDraftToSession();
       navigateToStep("basics");
-
       return;
     }
 
     if (action === "go-step") {
-      navigateToStep(
-        button.dataset.stepId
-      );
-
+      navigateToStep(button.dataset.stepId);
       return;
     }
 
-    if (
-      action === "previous-step"
-    ) {
+    if (action === "previous-step") {
       navigateByStepOffset(-1);
       return;
     }
@@ -4736,10 +3675,8 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
-    if (
-      action === "choose-species"
-    ) {
-      useSpeciesTemplate(
+    if (action === "choose-species") {
+      chooseSpeciesFromTemplate(
         button.dataset.speciesId
       );
 
@@ -4747,153 +3684,103 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
-    if (
-      action === "use-custom-species"
-    ) {
-      useCustomSpeciesName(
-        $("ccCustomSpeciesName")
-          ?.value
+    if (action === "use-custom-species") {
+      applyCustomSpecies();
+      renderCreatorView();
+      return;
+    }
+
+    if (action === "add-species-trait") {
+      addSpeciesTrait();
+      renderCreatorView();
+      return;
+    }
+
+    if (action === "remove-species-trait") {
+      removeSpeciesTrait(
+        safeNumber(button.dataset.index, -1)
       );
 
       renderCreatorView();
       return;
     }
 
-    if (
-      action === "choose-class"
-    ) {
-      selectClassTemplate(
+    if (action === "choose-class") {
+      chooseClassFromTemplate(
         button.dataset.classId
       );
 
-      markDraftChanged();
       renderCreatorView();
-
       return;
     }
 
-    if (
-      action === "use-custom-class"
-    ) {
-      useCustomClassName(
-        $("ccCustomClassName")
-          ?.value
+    if (action === "use-custom-class") {
+      applyCustomClass();
+      renderCreatorView();
+      return;
+    }
+
+    if (action === "choose-subclass") {
+      chooseSubclass(
+        button.dataset.subclassId
       );
 
       renderCreatorView();
       return;
     }
 
-    if (
-      action === "use-custom-subclass"
-    ) {
-      const primaryClass =
-        getPrimaryClassEntry(
-          creatorState.draft
-        );
-
-      const name =
-        safeDisplayString(
-          $("ccCustomSubclassName")
-            ?.value
-        );
-
-      if (primaryClass) {
-        primaryClass.subclassId =
-          name
-            ? makeSafeId(
-                name,
-                "custom-subclass"
-              )
-            : "";
-
-        primaryClass.subclassName =
-          name;
-
-        markDraftChanged();
-      }
-
+    if (action === "use-custom-subclass") {
+      applyCustomSubclass();
       renderCreatorView();
       return;
     }
 
-    if (
-      action === "choose-background"
-    ) {
-      const template =
-        DEFAULT_BACKGROUND_TEMPLATES
-          .find((background) => {
-            return (
-              background.id ===
-              button.dataset.backgroundId
-            );
-          });
-
-      if (template) {
-        creatorState.draft.background = {
-          ...creatorState.draft.background,
-          id: template.id,
-          name: template.name,
-          source: template.source,
-          templateSnapshot:
-            cloneData(template)
-        };
-
-        applyCompatibilityAliases(
-          creatorState.draft
-        );
-
-        markDraftChanged();
-      }
-
+    if (action === "set-standard-array") {
+      applyStandardArrayDefaults();
       renderCreatorView();
       return;
     }
 
-    if (
-      action === "use-custom-background"
-    ) {
-      const name =
-        safeDisplayString(
-          $("ccCustomBackgroundName")
-            ?.value
-        );
+    if (action === "reset-point-buy") {
+      resetPointBuy();
+      renderCreatorView();
+      return;
+    }
 
-      creatorState.draft
-        .background.id =
-          name
-            ? makeSafeId(
-                name,
-                "custom-background"
-              )
-            : "";
-
-      creatorState.draft
-        .background.name =
-          name;
-
-      creatorState.draft
-        .background.source =
-          "custom";
-
-      creatorState.draft
-        .background
-        .templateSnapshot =
-          null;
-
-      applyCompatibilityAliases(
-        creatorState.draft
+    if (action === "choose-background") {
+      chooseBackgroundTemplate(
+        button.dataset.backgroundId
       );
 
-      markDraftChanged();
       renderCreatorView();
-
       return;
     }
 
-    if (
-      action === "save-character"
-    ) {
+    if (action === "use-custom-background") {
+      applyCustomBackground();
+      renderCreatorView();
+      return;
+    }
+
+    if (action === "toggle-skill") {
+      toggleClassSkill(
+        button.dataset.skillId
+      );
+
+      renderCreatorView();
+      return;
+    }
+
+    if (action === "toggle-expertise") {
+      toggleSkillExpertise(
+        button.dataset.skillId
+      );
+
+      renderCreatorView();
+      return;
+    }
+
+    if (action === "save-character") {
       await saveCharacter(false);
       return;
     }
@@ -4913,9 +3800,7 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
-    if (
-      action === "edit-character"
-    ) {
+    if (action === "edit-character") {
       editCharacterFromLibrary(
         button.dataset.characterId
       );
@@ -4923,9 +3808,7 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
-    if (
-      action === "duplicate-character"
-    ) {
+    if (action === "duplicate-character") {
       duplicateCharacterFromLibrary(
         button.dataset.characterId
       );
@@ -4933,11 +3816,21 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
-    if (
-      action === "delete-character"
-    ) {
+    if (action === "delete-character") {
       await deleteCharacter(
         button.dataset.characterId
+      );
+
+      return;
+    }
+
+    if (
+      typeof handleFinalWizardAction === "function"
+    ) {
+      await handleFinalWizardAction(
+        action,
+        button,
+        event
       );
     }
   }
@@ -4946,22 +3839,28 @@ export function createCharacterCreator(options = {}) {
     const target = event.target;
 
     if (target.dataset.abilityId) {
-      setAbilityScore(
+      setAbilityScoreForMethod(
         target.dataset.abilityId,
         target.value
       );
 
+      updateAbilityMethodReadout();
       return;
     }
 
-    if (
-      target.dataset.levelInput ===
-      "true"
-    ) {
-      setCharacterLevel(
+    if (target.dataset.standardArrayAbility) {
+      assignStandardArrayValue(
+        target.dataset.standardArrayAbility,
         target.value
       );
 
+      renderCreatorView();
+      return;
+    }
+
+    if (target.dataset.levelInput === "true") {
+      setCharacterLevel(target.value);
+      calculateCharacterValues();
       return;
     }
 
@@ -4969,9 +3868,16 @@ export function createCharacterCreator(options = {}) {
       setSimpleDraftField(
         target.dataset.draftPath,
         target.value,
-        target.dataset.valueType ||
-        "string"
+        target.dataset.valueType || "string"
       );
+
+      calculateCharacterValues();
+    }
+
+    if (
+      typeof handleFinalWizardInput === "function"
+    ) {
+      handleFinalWizardInput(event);
     }
   }
 
@@ -4982,58 +3888,2290 @@ export function createCharacterCreator(options = {}) {
       setSimpleDraftField(
         target.dataset.draftPath,
         target.value,
-        target.dataset.valueType ||
-        "string"
+        target.dataset.valueType || "string"
       );
+
+      calculateCharacterValues();
     }
 
     if (
       target.dataset.ccActionChange ===
-      "choose-subclass"
+      "ability-method"
     ) {
-      const primaryClass =
-        getPrimaryClassEntry(
+      changeAbilityMethod(target.value);
+      renderCreatorView();
+      return;
+    }
+
+    if (
+      target.dataset.ccActionChange ===
+      "species-size"
+    ) {
+      creatorState.draft.identity.size =
+        target.value;
+
+      markDraftChanged();
+      return;
+    }
+
+    if (
+      target.dataset.ccActionChange ===
+      "skill-languages"
+    ) {
+      creatorState.draft.proficiencies.languages =
+        String(target.value || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+
+      markDraftChanged();
+      return;
+    }
+
+    if (
+      target.dataset.ccActionChange ===
+      "skill-tools"
+    ) {
+      creatorState.draft.proficiencies.tools =
+        String(target.value || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+
+      markDraftChanged();
+      return;
+    }
+
+    if (
+      typeof handleFinalWizardChange === "function"
+    ) {
+      handleFinalWizardChange(event);
+    }
+  }
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 11 — BASICS / SPECIES
+// =====================================================
+
+  function renderBasicsStep() {
+    const identity = creatorState.draft.identity;
+
+    return `
+      <div class="hg-character-field-grid">
+        <div class="hg-character-field">
+          <label for="ccCharacterName">
+            Character Name
+          </label>
+
+          <input
+            id="ccCharacterName"
+            data-draft-path="identity.name"
+            value="${escapeHtml(
+              getSafeCharacterName()
+            )}"
+            placeholder="Character name"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccPronouns">
+            Pronouns
+          </label>
+
+          <input
+            id="ccPronouns"
+            data-draft-path="identity.pronouns"
+            value="${escapeHtml(
+              safeDisplayString(identity.pronouns)
+            )}"
+            placeholder="Optional"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccAlignment">
+            Alignment / Outlook
+          </label>
+
+          <input
+            id="ccAlignment"
+            data-draft-path="identity.alignment"
+            value="${escapeHtml(
+              safeDisplayString(identity.alignment)
+            )}"
+            placeholder="Optional"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccDeity">
+            Deity / Belief
+          </label>
+
+          <input
+            id="ccDeity"
+            data-draft-path="identity.deity"
+            value="${escapeHtml(
+              safeDisplayString(identity.deity)
+            )}"
+            placeholder="Optional"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccAge">
+            Age
+          </label>
+
+          <input
+            id="ccAge"
+            data-draft-path="identity.age"
+            value="${escapeHtml(
+              safeDisplayString(identity.age)
+            )}"
+            placeholder="Optional"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccIdentitySize">
+            Size
+          </label>
+
+          <select
+            id="ccIdentitySize"
+            data-cc-action-change="species-size"
+          >
+            ${[
+              "tiny",
+              "small",
+              "medium",
+              "large",
+              "huge",
+              "gargantuan"
+            ]
+              .map((size) => {
+                return `
+                  <option
+                    value="${size}"
+                    ${
+                      identity.size === size
+                        ? "selected"
+                        : ""
+                    }
+                  >
+                    ${
+                      size.charAt(0).toUpperCase() +
+                      size.slice(1)
+                    }
+                  </option>
+                `;
+              })
+              .join("")}
+          </select>
+        </div>
+
+        <div class="hg-character-field hg-character-wide-field">
+          <label for="ccAppearance">
+            Appearance / Identity Notes
+          </label>
+
+          <textarea
+            id="ccAppearance"
+            data-draft-path="identity.appearance"
+            placeholder="Appearance, personality, identity notes..."
+          >${escapeHtml(
+            safeDisplayString(identity.appearance)
+          )}</textarea>
+        </div>
+
+        <div class="hg-character-field hg-character-wide-field">
+          <label for="ccGeneralNotes">
+            General Notes
+          </label>
+
+          <textarea
+            id="ccGeneralNotes"
+            data-draft-path="notes"
+            placeholder="Anything that does not fit elsewhere..."
+          >${escapeHtml(
+            safeDisplayString(
+              creatorState.draft.notes
+            )
+          )}</textarea>
+        </div>
+      </div>
+    `;
+  }
+
+  function getAllSpeciesTemplates() {
+    const map = new Map();
+
+    DEFAULT_SPECIES_TEMPLATES.forEach((species) => {
+      map.set(species.id, cloneData(species));
+    });
+
+    creatorState.roomSpeciesCache.forEach((species) => {
+      map.set(
+        makeSafeId(
+          species.id || species.name,
+          "custom-species"
+        ),
+        cloneData(species)
+      );
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      return String(a.name).localeCompare(
+        String(b.name)
+      );
+    });
+  }
+
+  function chooseSpeciesFromTemplate(speciesId) {
+    const species = getAllSpeciesTemplates().find(
+      (item) => item.id === speciesId
+    );
+
+    if (!species) {
+      return;
+    }
+
+    creatorState.draft.species = {
+      id: species.id,
+      name: species.name,
+      source: species.source || "template",
+      templateSnapshot: cloneData(species),
+      choices: {},
+      traits: cloneData(species.traits || [])
+    };
+
+    creatorState.draft.identity.size =
+      species.size || "medium";
+
+    creatorState.draft.combat.speed.walk =
+      safeNumber(species.speed, 30);
+
+    creatorState.draft.features.speciesTraits =
+      cloneData(species.traits || []);
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+  }
+
+  function applyCustomSpecies() {
+    const name = safeDisplayString(
+      $("ccCustomSpeciesName")?.value
+    );
+
+    if (!name) {
+      alert("Enter a custom species name.");
+      return;
+    }
+
+    const size =
+      $("ccCustomSpeciesSize")?.value ||
+      "medium";
+
+    const speed = Math.max(
+      0,
+      safeNumber(
+        $("ccCustomSpeciesSpeed")?.value,
+        30
+      )
+    );
+
+    creatorState.draft.species = {
+      id: makeSafeId(name, "custom-species"),
+      name,
+      source: "custom",
+      templateSnapshot: null,
+      choices: {},
+      traits: cloneData(
+        creatorState.draft.species.traits || []
+      )
+    };
+
+    creatorState.draft.identity.size = size;
+    creatorState.draft.combat.speed.walk = speed;
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+  }
+
+  function addSpeciesTrait() {
+    const name = safeDisplayString(
+      $("ccNewSpeciesTraitName")?.value
+    );
+
+    const summary = safeDisplayString(
+      $("ccNewSpeciesTraitSummary")?.value
+    );
+
+    if (!name) {
+      alert("Enter a trait name.");
+      return;
+    }
+
+    creatorState.draft.species.traits.push({
+      id: makeSafeId(
+        name + "-" + Date.now(),
+        "species-trait"
+      ),
+      name,
+      summary
+    });
+
+    creatorState.draft.features.speciesTraits =
+      cloneData(
+        creatorState.draft.species.traits
+      );
+
+    markDraftChanged();
+  }
+
+  function removeSpeciesTrait(index) {
+    if (
+      index < 0 ||
+      index >= creatorState.draft.species.traits.length
+    ) {
+      return;
+    }
+
+    creatorState.draft.species.traits.splice(
+      index,
+      1
+    );
+
+    creatorState.draft.features.speciesTraits =
+      cloneData(
+        creatorState.draft.species.traits
+      );
+
+    markDraftChanged();
+  }
+
+  function renderSpeciesStep() {
+    const currentSpecies = getSafeSpeciesName();
+
+    const cards = getAllSpeciesTemplates()
+      .map((species) => {
+        const selected =
+          creatorState.draft.species.id ===
+            species.id ||
+          currentSpecies === species.name;
+
+        return `
+          <div
+            class="
+              hg-character-choice-card
+              ${selected ? "selected" : ""}
+            "
+          >
+            <h3>${escapeHtml(species.name)}</h3>
+
+            <p>${escapeHtml(species.summary || "")}</p>
+
+            <p>
+              <b>Size:</b>
+              ${escapeHtml(species.size || "medium")}
+            </p>
+
+            <p>
+              <b>Speed:</b>
+              ${safeNumber(species.speed, 30)} ft.
+            </p>
+
+            <button
+              type="button"
+              data-cc-action="choose-species"
+              data-species-id="${escapeHtml(
+                species.id
+              )}"
+            >
+              ${
+                selected
+                  ? "Selected"
+                  : "Choose Species"
+              }
+            </button>
+          </div>
+        `;
+      })
+      .join("");
+
+    const traits = creatorState.draft.species.traits
+      .map((trait, index) => {
+        return `
+          <div class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(
+                trait.name || "Unnamed Trait"
+              )}
+            </h3>
+
+            <p>
+              ${escapeHtml(trait.summary || "")}
+            </p>
+
+            <button
+              type="button"
+              data-cc-action="remove-species-trait"
+              data-index="${index}"
+            >
+              Remove Trait
+            </button>
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Current species:</b>
+
+        ${escapeHtml(
+          currentSpecies || "None selected"
+        )}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${cards}
+      </div>
+
+      <hr>
+
+      <h3>Custom Species</h3>
+
+      <div class="hg-character-field-grid three">
+        <div class="hg-character-field">
+          <label for="ccCustomSpeciesName">
+            Name
+          </label>
+
+          <input
+            id="ccCustomSpeciesName"
+            value="${escapeHtml(
+              creatorState.draft.species.source ===
+                "custom"
+                ? currentSpecies
+                : ""
+            )}"
+            placeholder="Half Celestial Owlbear"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccCustomSpeciesSize">
+            Size
+          </label>
+
+          <select id="ccCustomSpeciesSize">
+            ${[
+              "tiny",
+              "small",
+              "medium",
+              "large",
+              "huge",
+              "gargantuan"
+            ]
+              .map((size) => {
+                return `
+                  <option
+                    value="${size}"
+                    ${
+                      creatorState.draft.identity.size ===
+                      size
+                        ? "selected"
+                        : ""
+                    }
+                  >
+                    ${
+                      size.charAt(0).toUpperCase() +
+                      size.slice(1)
+                    }
+                  </option>
+                `;
+              })
+              .join("")}
+          </select>
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccCustomSpeciesSpeed">
+            Walking Speed
+          </label>
+
+          <input
+            id="ccCustomSpeciesSpeed"
+            type="number"
+            min="0"
+            value="${
+              creatorState.draft.combat.speed.walk
+            }"
+          >
+        </div>
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="use-custom-species"
+        >
+          Use Custom Species
+        </button>
+      </div>
+
+      <hr>
+
+      <h3>Species Traits</h3>
+
+      <div class="hg-character-choice-grid">
+        ${
+          traits ||
+          `
+            <div class="hg-character-placeholder">
+              No species traits added yet.
+            </div>
+          `
+        }
+      </div>
+
+      <div
+        class="hg-character-field-grid"
+        style="margin-top:12px;"
+      >
+        <div class="hg-character-field">
+          <label for="ccNewSpeciesTraitName">
+            Trait Name
+          </label>
+
+          <input
+            id="ccNewSpeciesTraitName"
+            placeholder="Darkvision"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccNewSpeciesTraitSummary">
+            Trait Description
+          </label>
+
+          <input
+            id="ccNewSpeciesTraitSummary"
+            placeholder="Short original description"
+          >
+        </div>
+      </div>
+
+      <button
+        type="button"
+        data-cc-action="add-species-trait"
+      >
+        Add Species Trait
+      </button>
+    `;
+  }
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 12 — CLASS / SUBCLASS / LEVEL
+// =====================================================
+
+  function applyClassProficiencies(classData) {
+    creatorState.draft.proficiencies.savingThrows =
+      cloneData(classData.savingThrows || []);
+
+    creatorState.draft.proficiencies.armor =
+      cloneData(
+        classData.armorProficiencies || []
+      );
+
+    creatorState.draft.proficiencies.weapons =
+      cloneData(
+        classData.weaponProficiencies || []
+      );
+
+    creatorState.draft.proficiencies.tools =
+      Array.from(
+        new Set([
+          ...creatorState.draft.proficiencies.tools,
+          ...(classData.toolProficiencies || [])
+        ])
+      );
+
+    creatorState.draft.proficiencies.skills = {};
+  }
+
+  function chooseClassFromTemplate(classId) {
+    const selected = getAllClassTemplates().find(
+      (classData) => classData.id === classId
+    );
+
+    if (!selected) {
+      return;
+    }
+
+    selectClassTemplate(selected.id);
+    applyClassProficiencies(selected);
+    calculateCharacterValues();
+    markDraftChanged();
+  }
+
+  function applyCustomClass() {
+    const name = safeDisplayString(
+      $("ccCustomClassName")?.value
+    );
+
+    if (!name) {
+      alert("Enter a custom class name.");
+      return;
+    }
+
+    const hitDie =
+      $("ccCustomClassHitDie")?.value ||
+      "d8";
+
+    const primaryAbilities = String(
+      $("ccCustomClassPrimaryAbilities")?.value ||
+      ""
+    )
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const primaryClass = getPrimaryClassEntry(
+      creatorState.draft
+    );
+
+    const customTemplate = normalizeClassTemplate(
+      {
+        id: makeSafeId(name, "custom-class"),
+        name,
+        source: "custom",
+        summary: "Custom class created on this character.",
+        hitDie,
+        primaryAbilities,
+        savingThrows: [],
+        armorProficiencies: [],
+        weaponProficiencies: [],
+        toolProficiencies: [],
+        skillChoices: {
+          choose: 2,
+          from: SKILL_DEFINITIONS.map(
+            (skill) => skill.name
+          )
+        },
+        subclassLevel: 3,
+        levels: {
+          1: {
+            proficiencyBonus: 2,
+            features: []
+          }
+        },
+        subclasses: []
+      },
+      "custom"
+    );
+
+    primaryClass.classId =
+      customTemplate.id;
+
+    primaryClass.className =
+      customTemplate.name;
+
+    primaryClass.source = "custom";
+    primaryClass.templateSnapshot =
+      cloneData(customTemplate);
+
+    primaryClass.subclassId = "";
+    primaryClass.subclassName = "";
+    primaryClass.choices = {};
+
+    creatorState.draft.proficiencies.skills = {};
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    calculateCharacterValues();
+    markDraftChanged();
+  }
+
+  function renderClassStep() {
+    const currentClass = getSafeClassName();
+
+    const cards = getAllClassTemplates()
+      .map((classData) => {
+        const primaryClass = getPrimaryClassEntry(
           creatorState.draft
         );
 
-      const selectedClass =
-        getSelectedClassTemplate();
+        const selected =
+          primaryClass?.classId === classData.id ||
+          currentClass === classData.name;
 
-      const selected =
-        selectedClass
-          ?.subclasses
-          ?.find((subclass) => {
-            return (
-              makeSafeId(
-                subclass.id ||
-                subclass.name,
-                "subclass"
-              ) === target.value
-            );
-          });
+        return `
+          <div
+            class="
+              hg-character-choice-card
+              ${selected ? "selected" : ""}
+            "
+          >
+            <h3>${escapeHtml(classData.name)}</h3>
 
-      if (primaryClass) {
-        primaryClass.subclassId =
-          selected
-            ? makeSafeId(
-                selected.id ||
-                selected.name,
-                "subclass"
-              )
-            : "";
+            <p>${escapeHtml(classData.summary)}</p>
 
-        primaryClass.subclassName =
-          selected
-            ? safeDisplayString(
-                selected.name
-              )
-            : "";
+            <p>
+              <b>Hit Die:</b>
+              ${escapeHtml(classData.hitDie)}
+            </p>
 
-        markDraftChanged();
+            <p>
+              <b>Primary Abilities:</b>
+
+              ${escapeHtml(
+                classData.primaryAbilities.join(", ") ||
+                "Any"
+              )}
+            </p>
+
+            <p>
+              <b>Skill Choices:</b>
+              ${safeNumber(
+                classData.skillChoices?.choose,
+                0
+              )}
+            </p>
+
+            <button
+              type="button"
+              data-cc-action="choose-class"
+              data-class-id="${escapeHtml(
+                classData.id
+              )}"
+            >
+              ${
+                selected
+                  ? "Selected"
+                  : "Choose Class"
+              }
+            </button>
+          </div>
+        `;
+      })
+      .join("");
+
+    const selectedClass = getSelectedClassTemplate();
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Current class:</b>
+
+        ${escapeHtml(
+          currentClass || "None selected"
+        )}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${cards}
+      </div>
+
+      <hr>
+
+      <h3>Custom Homebrew Class</h3>
+
+      <p class="small">
+        A custom name is stored as its own class.
+        It will not fall back to Fighter.
+      </p>
+
+      <div class="hg-character-field-grid three">
+        <div class="hg-character-field">
+          <label for="ccCustomClassName">
+            Class Name
+          </label>
+
+          <input
+            id="ccCustomClassName"
+            value="${escapeHtml(
+              selectedClass?.source === "custom"
+                ? currentClass
+                : ""
+            )}"
+            placeholder="Piss Wizard"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccCustomClassHitDie">
+            Hit Die
+          </label>
+
+          <select id="ccCustomClassHitDie">
+            ${["d6", "d8", "d10", "d12"]
+              .map((die) => {
+                return `
+                  <option
+                    value="${die}"
+                    ${
+                      selectedClass?.hitDie === die
+                        ? "selected"
+                        : ""
+                    }
+                  >
+                    ${die}
+                  </option>
+                `;
+              })
+              .join("")}
+          </select>
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccCustomClassPrimaryAbilities">
+            Primary Abilities
+          </label>
+
+          <input
+            id="ccCustomClassPrimaryAbilities"
+            value="${escapeHtml(
+              selectedClass?.source === "custom"
+                ? selectedClass.primaryAbilities.join(
+                    ", "
+                  )
+                : ""
+            )}"
+            placeholder="Intelligence, Charisma"
+          >
+        </div>
+      </div>
+
+      <button
+        type="button"
+        data-cc-action="use-custom-class"
+      >
+        Use Custom Class
+      </button>
+    `;
+  }
+
+  function chooseSubclass(subclassId) {
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const subclass =
+      selectedClass?.subclasses?.find(
+        (item) => {
+          return (
+            makeSafeId(
+              item.id || item.name,
+              "subclass"
+            ) === subclassId
+          );
+        }
+      );
+
+    const primaryClass = getPrimaryClassEntry(
+      creatorState.draft
+    );
+
+    if (!primaryClass || !subclass) {
+      return;
+    }
+
+    primaryClass.subclassId = subclassId;
+
+    primaryClass.subclassName =
+      safeDisplayString(
+        subclass.name,
+        "Unnamed Subclass"
+      );
+
+    primaryClass.choices = {
+      ...primaryClass.choices,
+      subclassSnapshot: cloneData(subclass)
+    };
+
+    markDraftChanged();
+  }
+
+  function applyCustomSubclass() {
+    const name = safeDisplayString(
+      $("ccCustomSubclassName")?.value
+    );
+
+    const primaryClass = getPrimaryClassEntry(
+      creatorState.draft
+    );
+
+    if (!primaryClass) {
+      return;
+    }
+
+    primaryClass.subclassId = name
+      ? makeSafeId(name, "custom-subclass")
+      : "";
+
+    primaryClass.subclassName = name;
+
+    primaryClass.choices = {
+      ...primaryClass.choices,
+      subclassSnapshot: name
+        ? {
+            id: primaryClass.subclassId,
+            name,
+            source: "custom",
+            features: []
+          }
+        : null
+    };
+
+    markDraftChanged();
+  }
+
+  function renderSubclassStep() {
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const primaryClass = getPrimaryClassEntry(
+      creatorState.draft
+    );
+
+    const level = clampLevel(
+      creatorState.draft
+        .classProgression
+        .totalLevel
+    );
+
+    const subclassLevel = safeNumber(
+      selectedClass?.subclassLevel,
+      3
+    );
+
+    const subclasses = Array.isArray(
+      selectedClass?.subclasses
+    )
+      ? selectedClass.subclasses
+      : [];
+
+    const cards = subclasses
+      .map((subclass) => {
+        const id = makeSafeId(
+          subclass.id || subclass.name,
+          "subclass"
+        );
+
+        const selected =
+          primaryClass?.subclassId === id;
+
+        return `
+          <div
+            class="
+              hg-character-choice-card
+              ${selected ? "selected" : ""}
+            "
+          >
+            <h3>
+              ${escapeHtml(
+                subclass.name || "Unnamed Subclass"
+              )}
+            </h3>
+
+            <p>
+              ${escapeHtml(
+                subclass.summary || ""
+              )}
+            </p>
+
+            <button
+              type="button"
+              data-cc-action="choose-subclass"
+              data-subclass-id="${escapeHtml(id)}"
+            >
+              ${
+                selected
+                  ? "Selected"
+                  : "Choose Subclass"
+              }
+            </button>
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Class:</b>
+        ${escapeHtml(
+          getSafeClassName() ||
+          "No class"
+        )}
+
+        <br>
+
+        <b>Subclass level:</b>
+        ${subclassLevel}
+
+        <br>
+
+        <b>Current level:</b>
+        ${level}
+      </div>
+
+      ${
+        level < subclassLevel
+          ? `
+            <div class="hg-character-placeholder">
+              This class normally chooses its subclass
+              at level ${subclassLevel}. You can still
+              enter one early for homebrew use.
+            </div>
+          `
+          : ""
       }
 
-      renderCreatorView();
+      <div class="hg-character-choice-grid">
+        ${
+          cards ||
+          `
+            <div class="hg-character-placeholder">
+              No saved subclasses exist for this class.
+              Use the custom subclass field below.
+            </div>
+          `
+        }
+      </div>
+
+      <hr>
+
+      <div class="hg-character-field">
+        <label for="ccCustomSubclassName">
+          Custom Subclass Name
+        </label>
+
+        <input
+          id="ccCustomSubclassName"
+          value="${escapeHtml(
+            getSafeSubclassName()
+          )}"
+          placeholder="Custom subclass"
+        >
+      </div>
+
+      <button
+        type="button"
+        data-cc-action="use-custom-subclass"
+      >
+        Use Custom Subclass
+      </button>
+    `;
+  }
+
+  function renderLevelStep() {
+    calculateCharacterValues();
+
+    const combat = creatorState.draft.combat;
+
+    const level = clampLevel(
+      creatorState.draft
+        .classProgression
+        .totalLevel
+    );
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>${escapeHtml(
+          getSafeClassName() || "No class"
+        )}</b>
+
+        · Hit Die
+
+        ${escapeHtml(
+          selectedClass?.hitDie || "d8"
+        )}
+      </div>
+
+      <div class="hg-character-field-grid three">
+        <div class="hg-character-field">
+          <label for="ccLevel">
+            Character Level
+          </label>
+
+          <input
+            id="ccLevel"
+            type="number"
+            min="1"
+            max="20"
+            value="${level}"
+            data-level-input="true"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label>
+            Proficiency Bonus
+          </label>
+
+          <input
+            value="+${combat.proficiencyBonus}"
+            readonly
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label>
+            Hit Dice
+          </label>
+
+          <input
+            value="${escapeHtml(
+              combat.hitDice
+                .map((entry) => {
+                  return (
+                    entry.count +
+                    entry.die
+                  );
+                })
+                .join(", ") ||
+              level +
+                (selectedClass?.hitDie || "d8")
+            )}"
+            readonly
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccArmorClass">
+            Armor Class
+          </label>
+
+          <input
+            id="ccArmorClass"
+            type="number"
+            data-draft-path="combat.armorClass"
+            data-value-type="number"
+            value="${combat.armorClass}"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccMaxHp">
+            Maximum HP
+          </label>
+
+          <input
+            id="ccMaxHp"
+            type="number"
+            min="1"
+            data-draft-path="combat.maxHp"
+            data-value-type="number"
+            value="${combat.maxHp}"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccCurrentHp">
+            Current HP
+          </label>
+
+          <input
+            id="ccCurrentHp"
+            type="number"
+            data-draft-path="combat.currentHp"
+            data-value-type="number"
+            value="${combat.currentHp}"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccTemporaryHp">
+            Temporary HP
+          </label>
+
+          <input
+            id="ccTemporaryHp"
+            type="number"
+            min="0"
+            data-draft-path="combat.temporaryHp"
+            data-value-type="number"
+            value="${combat.temporaryHp}"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccWalkSpeed">
+            Walking Speed
+          </label>
+
+          <input
+            id="ccWalkSpeed"
+            type="number"
+            min="0"
+            data-draft-path="combat.speed.walk"
+            data-value-type="number"
+            value="${combat.speed.walk}"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label>
+            Initiative
+          </label>
+
+          <input
+            value="${
+              combat.initiative >= 0
+                ? "+"
+                : ""
+            }${combat.initiative}"
+            readonly
+          >
+        </div>
+      </div>
+    `;
+  }
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 13 — ABILITY SCORES
+// =====================================================
+
+  const POINT_BUY_COSTS = Object.freeze({
+    8: 0,
+    9: 1,
+    10: 2,
+    11: 3,
+    12: 4,
+    13: 5,
+    14: 7,
+    15: 9
+  });
+
+  function getPointBuyCost(scores) {
+    return ABILITY_DEFINITIONS.reduce(
+      (total, ability) => {
+        const score = Math.max(
+          8,
+          Math.min(
+            15,
+            safeNumber(
+              scores[ability.id],
+              8
+            )
+          )
+        );
+
+        return total + POINT_BUY_COSTS[score];
+      },
+      0
+    );
+  }
+
+  function changeAbilityMethod(methodId) {
+    const valid = ABILITY_SCORE_METHODS.some(
+      (method) => method.id === methodId
+    );
+
+    if (!valid) {
+      return;
     }
+
+    creatorState.draft.abilities.method =
+      methodId;
+
+    if (methodId === "standard-array") {
+      applyStandardArrayDefaults();
+    }
+
+    if (methodId === "point-buy") {
+      resetPointBuy();
+    }
+
+    markDraftChanged();
+  }
+
+  function applyStandardArrayDefaults() {
+    const values = [15, 14, 13, 12, 10, 8];
+
+    ABILITY_DEFINITIONS.forEach(
+      (ability, index) => {
+        creatorState.draft
+          .abilities
+          .base[ability.id] =
+            values[index];
+
+        creatorState.draft
+          .abilities
+          .scores[ability.id] =
+            values[index];
+      }
+    );
+
+    creatorState.draft
+      .abilities
+      .assignmentPool =
+        cloneData(values);
+
+    calculateCharacterValues();
+    markDraftChanged();
+  }
+
+  function assignStandardArrayValue(
+    abilityId,
+    rawValue
+  ) {
+    const value = safeNumber(rawValue, 10);
+
+    const usedAbility = ABILITY_DEFINITIONS.find(
+      (ability) => {
+        return (
+          ability.id !== abilityId &&
+          safeNumber(
+            creatorState.draft
+              .abilities
+              .base[ability.id],
+            0
+          ) === value
+        );
+      }
+    );
+
+    if (usedAbility) {
+      const oldValue = safeNumber(
+        creatorState.draft
+          .abilities
+          .base[abilityId],
+        10
+      );
+
+      creatorState.draft
+        .abilities
+        .base[usedAbility.id] =
+          oldValue;
+
+      creatorState.draft
+        .abilities
+        .scores[usedAbility.id] =
+          oldValue;
+    }
+
+    creatorState.draft
+      .abilities
+      .base[abilityId] =
+        value;
+
+    creatorState.draft
+      .abilities
+      .scores[abilityId] =
+        value;
+
+    calculateCharacterValues();
+    markDraftChanged();
+  }
+
+  function resetPointBuy() {
+    ABILITY_DEFINITIONS.forEach((ability) => {
+      creatorState.draft
+        .abilities
+        .base[ability.id] = 8;
+
+      creatorState.draft
+        .abilities
+        .scores[ability.id] = 8;
+    });
+
+    calculateCharacterValues();
+    markDraftChanged();
+  }
+
+  function setAbilityScoreForMethod(
+    abilityId,
+    rawValue
+  ) {
+    const method =
+      creatorState.draft.abilities.method;
+
+    let score = Math.round(
+      safeNumber(rawValue, 10)
+    );
+
+    if (method === "point-buy") {
+      score = Math.max(
+        8,
+        Math.min(15, score)
+      );
+
+      const testScores = {
+        ...creatorState.draft.abilities.base,
+        [abilityId]: score
+      };
+
+      if (getPointBuyCost(testScores) > 27) {
+        setStatus(
+          "Point buy cannot exceed 27 points."
+        );
+
+        return;
+      }
+    } else {
+      score = Math.max(
+        1,
+        Math.min(30, score)
+      );
+    }
+
+    creatorState.draft
+      .abilities
+      .base[abilityId] =
+        score;
+
+    creatorState.draft
+      .abilities
+      .scores[abilityId] =
+        score;
+
+    calculateCharacterValues();
+    markDraftChanged();
+  }
+
+  function updateAbilityMethodReadout() {
+    const output = $("ccAbilityMethodReadout");
+
+    if (!output) {
+      return;
+    }
+
+    const method =
+      creatorState.draft.abilities.method;
+
+    if (method === "point-buy") {
+      const spent = getPointBuyCost(
+        creatorState.draft.abilities.base
+      );
+
+      output.textContent =
+        `${spent} / 27 points spent`;
+    }
+  }
+
+  function renderAbilitiesStep() {
+    calculateCharacterValues();
+
+    const abilities = creatorState.draft.abilities;
+    const method = abilities.method;
+
+    let scoreInputs = "";
+
+    if (method === "standard-array") {
+      scoreInputs = ABILITY_DEFINITIONS.map(
+        (ability) => {
+          const current = safeNumber(
+            abilities.base[ability.id],
+            10
+          );
+
+          return `
+            <div class="hg-character-ability-box">
+              <b>${escapeHtml(ability.name)}</b>
+
+              <select
+                data-standard-array-ability="${
+                  ability.id
+                }"
+              >
+                ${[15, 14, 13, 12, 10, 8]
+                  .map((value) => {
+                    return `
+                      <option
+                        value="${value}"
+                        ${
+                          current === value
+                            ? "selected"
+                            : ""
+                        }
+                      >
+                        ${value}
+                      </option>
+                    `;
+                  })
+                  .join("")}
+              </select>
+
+              <div class="small">
+                Modifier
+                ${
+                  calculateAbilityModifier(
+                    abilities.scores[ability.id]
+                  ) >= 0
+                    ? "+"
+                    : ""
+                }${calculateAbilityModifier(
+                  abilities.scores[ability.id]
+                )}
+              </div>
+            </div>
+          `;
+        }
+      ).join("");
+    } else {
+      scoreInputs = ABILITY_DEFINITIONS.map(
+        (ability) => {
+          const score = safeNumber(
+            abilities.scores[ability.id],
+            10
+          );
+
+          const modifier =
+            calculateAbilityModifier(score);
+
+          return `
+            <div class="hg-character-ability-box">
+              <b>${escapeHtml(ability.name)}</b>
+
+              <input
+                type="number"
+                min="${
+                  method === "point-buy"
+                    ? 8
+                    : 1
+                }"
+                max="${
+                  method === "point-buy"
+                    ? 15
+                    : 30
+                }"
+                value="${score}"
+                data-ability-id="${ability.id}"
+              >
+
+              <div class="small">
+                Modifier
+                ${modifier >= 0 ? "+" : ""}${modifier}
+              </div>
+            </div>
+          `;
+        }
+      ).join("");
+    }
+
+    const spent =
+      method === "point-buy"
+        ? getPointBuyCost(abilities.base)
+        : null;
+
+    return `
+      <div class="hg-character-field-grid">
+        <div class="hg-character-field">
+          <label for="ccAbilityMethod">
+            Score Method
+          </label>
+
+          <select
+            id="ccAbilityMethod"
+            data-cc-action-change="ability-method"
+          >
+            ${ABILITY_SCORE_METHODS.map(
+              (scoreMethod) => {
+                return `
+                  <option
+                    value="${scoreMethod.id}"
+                    ${
+                      method === scoreMethod.id
+                        ? "selected"
+                        : ""
+                    }
+                  >
+                    ${escapeHtml(
+                      scoreMethod.name
+                    )}
+                  </option>
+                `;
+              }
+            ).join("")}
+          </select>
+        </div>
+
+        <div
+          id="ccAbilityMethodReadout"
+          class="hg-character-current-choice"
+        >
+          ${
+            method === "point-buy"
+              ? `${spent} / 27 points spent`
+              : escapeHtml(
+                  ABILITY_SCORE_METHODS.find(
+                    (item) => item.id === method
+                  )?.description || ""
+                )
+          }
+        </div>
+      </div>
+
+      <div class="hg-character-ability-grid">
+        ${scoreInputs}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        ${
+          method === "standard-array"
+            ? `
+              <button
+                type="button"
+                data-cc-action="set-standard-array"
+              >
+                Reset Standard Array
+              </button>
+            `
+            : ""
+        }
+
+        ${
+          method === "point-buy"
+            ? `
+              <button
+                type="button"
+                data-cc-action="reset-point-buy"
+              >
+                Reset All To 8
+              </button>
+            `
+            : ""
+        }
+      </div>
+    `;
+  }
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 14 — BACKGROUND
+// =====================================================
+
+  function chooseBackgroundTemplate(backgroundId) {
+    const background =
+      DEFAULT_BACKGROUND_TEMPLATES.find(
+        (item) => item.id === backgroundId
+      );
+
+    if (!background) {
+      return;
+    }
+
+    creatorState.draft.background = {
+      ...creatorState.draft.background,
+      id: background.id,
+      name: background.name,
+      source: background.source || "template",
+      templateSnapshot: cloneData(background),
+      featureChoices: {}
+    };
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+  }
+
+  function applyCustomBackground() {
+    const name = safeDisplayString(
+      $("ccCustomBackgroundName")?.value
+    );
+
+    if (!name) {
+      alert("Enter a custom background name.");
+      return;
+    }
+
+    creatorState.draft.background.id =
+      makeSafeId(name, "custom-background");
+
+    creatorState.draft.background.name = name;
+    creatorState.draft.background.source =
+      "custom";
+
+    creatorState.draft.background.templateSnapshot =
+      null;
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+  }
+
+  function renderBackgroundStep() {
+    const currentName =
+      getSafeBackgroundName();
+
+    const cards = DEFAULT_BACKGROUND_TEMPLATES
+      .map((background) => {
+        const selected =
+          creatorState.draft.background.id ===
+            background.id ||
+          currentName === background.name;
+
+        return `
+          <div
+            class="
+              hg-character-choice-card
+              ${selected ? "selected" : ""}
+            "
+          >
+            <h3>
+              ${escapeHtml(background.name)}
+            </h3>
+
+            <p>
+              ${escapeHtml(background.summary)}
+            </p>
+
+            <p>
+              <b>Skill choices:</b>
+              ${safeNumber(
+                background.skillChoices?.choose,
+                0
+              )}
+            </p>
+
+            <p>
+              <b>Languages:</b>
+              ${safeNumber(
+                background.languageChoices?.choose,
+                0
+              )}
+            </p>
+
+            <button
+              type="button"
+              data-cc-action="choose-background"
+              data-background-id="${background.id}"
+            >
+              ${
+                selected
+                  ? "Selected"
+                  : "Choose Background"
+              }
+            </button>
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Current background:</b>
+
+        ${escapeHtml(
+          currentName || "None selected"
+        )}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${cards}
+      </div>
+
+      <hr>
+
+      <div class="hg-character-field">
+        <label for="ccCustomBackgroundName">
+          Custom Background Name
+        </label>
+
+        <input
+          id="ccCustomBackgroundName"
+          value="${escapeHtml(
+            creatorState.draft.background.source ===
+              "custom"
+              ? currentName
+              : ""
+          )}"
+          placeholder="Custom background"
+        >
+      </div>
+
+      <button
+        type="button"
+        data-cc-action="use-custom-background"
+      >
+        Use Custom Background
+      </button>
+
+      <hr>
+
+      <div class="hg-character-field-grid">
+        <div class="hg-character-field">
+          <label for="ccPersonalityTraits">
+            Personality Traits
+          </label>
+
+          <textarea
+            id="ccPersonalityTraits"
+            data-draft-path="background.traits"
+          >${escapeHtml(
+            creatorState.draft.background.traits
+          )}</textarea>
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccIdeals">
+            Ideals
+          </label>
+
+          <textarea
+            id="ccIdeals"
+            data-draft-path="background.ideals"
+          >${escapeHtml(
+            creatorState.draft.background.ideals
+          )}</textarea>
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccBonds">
+            Bonds
+          </label>
+
+          <textarea
+            id="ccBonds"
+            data-draft-path="background.bonds"
+          >${escapeHtml(
+            creatorState.draft.background.bonds
+          )}</textarea>
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccFlaws">
+            Flaws
+          </label>
+
+          <textarea
+            id="ccFlaws"
+            data-draft-path="background.flaws"
+          >${escapeHtml(
+            creatorState.draft.background.flaws
+          )}</textarea>
+        </div>
+
+        <div class="hg-character-field hg-character-wide-field">
+          <label for="ccBackstory">
+            Backstory
+          </label>
+
+          <textarea
+            id="ccBackstory"
+            data-draft-path="background.backstory"
+          >${escapeHtml(
+            creatorState.draft.background.backstory
+          )}</textarea>
+        </div>
+      </div>
+    `;
+  }
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 15 — SKILLS / PROFICIENCIES
+// =====================================================
+
+  function getChosenClassSkills() {
+    return Object.values(
+      creatorState.draft.proficiencies.skills || {}
+    ).filter((skill) => {
+      return (
+        skill.proficient === true &&
+        Array.isArray(skill.source) &&
+        skill.source.includes("class")
+      );
+    });
+  }
+
+  function toggleClassSkill(skillId) {
+    const skillDefinition =
+      SKILL_DEFINITIONS.find(
+        (skill) => skill.id === skillId
+      );
+
+    if (!skillDefinition) {
+      return;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const allowedNames =
+      selectedClass?.skillChoices?.from || [];
+
+    const allowed =
+      allowedNames.length === 0 ||
+      allowedNames.includes(
+        skillDefinition.name
+      );
+
+    if (!allowed) {
+      return;
+    }
+
+    const current =
+      creatorState.draft
+        .proficiencies
+        .skills[skillId];
+
+    if (current?.proficient === true) {
+      delete creatorState.draft
+        .proficiencies
+        .skills[skillId];
+
+      markDraftChanged();
+      return;
+    }
+
+    const required = Math.max(
+      0,
+      safeNumber(
+        selectedClass?.skillChoices?.choose,
+        0
+      )
+    );
+
+    if (
+      required > 0 &&
+      getChosenClassSkills().length >= required
+    ) {
+      setStatus(
+        `Choose only ${required} class skills.`
+      );
+
+      return;
+    }
+
+    creatorState.draft
+      .proficiencies
+      .skills[skillId] = {
+        id: skillId,
+        name: skillDefinition.name,
+        ability: skillDefinition.ability,
+        proficient: true,
+        expertise: false,
+        source: ["class"]
+      };
+
+    markDraftChanged();
+  }
+
+  function toggleSkillExpertise(skillId) {
+    const skill =
+      creatorState.draft
+        .proficiencies
+        .skills[skillId];
+
+    if (!skill?.proficient) {
+      return;
+    }
+
+    skill.expertise =
+      skill.expertise !== true;
+
+    markDraftChanged();
+  }
+
+  function renderSkillsStep() {
+    calculateCharacterValues();
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const required = Math.max(
+      0,
+      safeNumber(
+        selectedClass?.skillChoices?.choose,
+        0
+      )
+    );
+
+    const chosenCount =
+      getChosenClassSkills().length;
+
+    const allowedNames =
+      selectedClass?.skillChoices?.from || [];
+
+    const skillCards = SKILL_DEFINITIONS
+      .filter((skill) => {
+        return (
+          allowedNames.length === 0 ||
+          allowedNames.includes(skill.name)
+        );
+      })
+      .map((skill) => {
+        const saved =
+          creatorState.draft
+            .proficiencies
+            .skills[skill.id];
+
+        const selected =
+          saved?.proficient === true;
+
+        const expertise =
+          saved?.expertise === true;
+
+        const modifier =
+          calculateSkillModifier(skill.id);
+
+        return `
+          <div
+            class="
+              hg-character-choice-card
+              ${selected ? "selected" : ""}
+            "
+          >
+            <h3>${escapeHtml(skill.name)}</h3>
+
+            <p>
+              <b>Ability:</b>
+              ${escapeHtml(
+                skill.ability.toUpperCase()
+              )}
+            </p>
+
+            <p>
+              <b>Total:</b>
+              ${modifier >= 0 ? "+" : ""}${modifier}
+            </p>
+
+            <button
+              type="button"
+              data-cc-action="toggle-skill"
+              data-skill-id="${skill.id}"
+            >
+              ${
+                selected
+                  ? "Remove Proficiency"
+                  : "Choose Proficiency"
+              }
+            </button>
+
+            ${
+              selected
+                ? `
+                  <button
+                    type="button"
+                    data-cc-action="toggle-expertise"
+                    data-skill-id="${skill.id}"
+                  >
+                    ${
+                      expertise
+                        ? "Remove Expertise"
+                        : "Add Expertise"
+                    }
+                  </button>
+                `
+                : ""
+            }
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Class skill choices:</b>
+
+        ${chosenCount} / ${required}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${
+          skillCards ||
+          `
+            <div class="hg-character-placeholder">
+              This class currently allows any skills.
+            </div>
+          `
+        }
+      </div>
+
+      <hr>
+
+      <div class="hg-character-summary-grid">
+        <div class="hg-character-summary-card">
+          <h3>Saving Throws</h3>
+
+          <p>
+            ${escapeHtml(
+              creatorState.draft
+                .proficiencies
+                .savingThrows
+                .join(", ") ||
+              "None"
+            )}
+          </p>
+        </div>
+
+        <div class="hg-character-summary-card">
+          <h3>Armor</h3>
+
+          <p>
+            ${escapeHtml(
+              creatorState.draft
+                .proficiencies
+                .armor
+                .join(", ") ||
+              "None"
+            )}
+          </p>
+        </div>
+
+        <div class="hg-character-summary-card">
+          <h3>Weapons</h3>
+
+          <p>
+            ${escapeHtml(
+              creatorState.draft
+                .proficiencies
+                .weapons
+                .join(", ") ||
+              "None"
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div
+        class="hg-character-field-grid"
+        style="margin-top:12px;"
+      >
+        <div class="hg-character-field">
+          <label for="ccLanguages">
+            Languages
+          </label>
+
+          <input
+            id="ccLanguages"
+            data-cc-action-change="skill-languages"
+            value="${escapeHtml(
+              creatorState.draft
+                .proficiencies
+                .languages
+                .join(", ")
+            )}"
+            placeholder="Common, Draconic"
+          >
+        </div>
+
+        <div class="hg-character-field">
+          <label for="ccTools">
+            Tool Proficiencies
+          </label>
+
+          <input
+            id="ccTools"
+            data-cc-action-change="skill-tools"
+            value="${escapeHtml(
+              creatorState.draft
+                .proficiencies
+                .tools
+                .join(", ")
+            )}"
+            placeholder="Thieves' tools, Smith's tools"
+          >
+        </div>
+      </div>
+    `;
+  }
+
+  function calculateSkillModifier(skillId) {
+    const definition =
+      SKILL_DEFINITIONS.find(
+        (skill) => skill.id === skillId
+      );
+
+    if (!definition) {
+      return 0;
+    }
+
+    const abilityModifier = safeNumber(
+      creatorState.draft
+        .abilities
+        .modifiers[definition.ability],
+      0
+    );
+
+    const saved =
+      creatorState.draft
+        .proficiencies
+        .skills[skillId];
+
+    if (!saved?.proficient) {
+      return abilityModifier;
+    }
+
+    const multiplier =
+      saved.expertise === true ? 2 : 1;
+
+    return (
+      abilityModifier +
+      creatorState.draft
+        .combat
+        .proficiencyBonus *
+        multiplier
+    );
+  }
+
+  function calculateCharacterValues() {
+    const character = creatorState.draft;
+
+    character.abilities.modifiers =
+      calculateAbilityModifiers(
+        character.abilities.scores
+      );
+
+    const level = clampLevel(
+      character.classProgression.totalLevel
+    );
+
+    const primaryClass =
+      getPrimaryClassEntry(character);
+
+    if (primaryClass) {
+      primaryClass.level = level;
+    }
+
+    character.combat.proficiencyBonus =
+      getGenericProficiencyBonus(level);
+
+    character.combat.initiative =
+      safeNumber(
+        character.abilities.modifiers.dex,
+        0
+      );
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    character.combat.hitDice = [
+      {
+        classId:
+          primaryClass?.classId || "",
+        className:
+          primaryClass?.className || "",
+        die:
+          selectedClass?.hitDie || "d8",
+        count: level
+      }
+    ];
+
+    applyCompatibilityAliases(character);
+
+    return character;
   }
 
 
