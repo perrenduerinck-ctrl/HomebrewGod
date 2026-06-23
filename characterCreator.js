@@ -221,18 +221,7 @@ export function createCharacterCreator(options = {}) {
 
       classProgression: {
         totalLevel: 1,
-        classes: [
-          {
-            classId: "fighter",
-            className: "Fighter",
-            source: "template",
-            level: 1,
-            subclassId: "",
-            subclassName: "",
-            templateSnapshot: null,
-            choices: {}
-          }
-        ]
+        classes: []
       },
 
       abilities: {
@@ -335,8 +324,8 @@ export function createCharacterCreator(options = {}) {
       // until Sections 6–20 are installed.
       name: "",
       race: "",
-      classId: "fighter",
-      className: "Fighter",
+      classId: "",
+      className: "",
       selectedClassSnapshot: null,
       subclassName: "",
       level: 1,
@@ -390,6 +379,409 @@ export function createCharacterCreator(options = {}) {
     return value
       .map((item) => cleanString(item))
       .filter(Boolean);
+  }
+
+  function uniqueCleanArray(value) {
+    return [
+      ...new Set(
+        cleanArray(value)
+      )
+    ];
+  }
+
+  function ensureProficiencySources(character) {
+    const proficiencies =
+      character.proficiencies ||
+      {};
+
+    if (
+      !proficiencies.sources ||
+      typeof proficiencies.sources !== "object" ||
+      Array.isArray(proficiencies.sources)
+    ) {
+      proficiencies.sources = {};
+    }
+
+    return proficiencies.sources;
+  }
+
+  function sourceMatches(source, sourceName) {
+    const cleanSource =
+      cleanString(source);
+
+    return cleanSource === sourceName;
+  }
+
+  function getClassSourceLabel(classEntry) {
+    const classId =
+      cleanString(
+        classEntry?.classId ||
+        classEntry?.id
+      );
+
+    const className =
+      cleanString(
+        classEntry?.className ||
+        classEntry?.name
+      );
+
+    const sourceId =
+      classId ||
+      (
+        className
+          ? makeSafeId(
+              className,
+              "class"
+            )
+          : ""
+      );
+
+    return sourceId
+      ? `class:${sourceId}`
+      : "";
+  }
+
+  function getBackgroundSourceLabel(background) {
+    const backgroundId =
+      cleanString(
+        background?.id ||
+        background?.docId
+      );
+
+    const backgroundName =
+      cleanString(background?.name);
+
+    const sourceId =
+      backgroundId ||
+      (
+        backgroundName
+          ? makeSafeId(
+              backgroundName,
+              "background"
+            )
+          : ""
+      );
+
+    return sourceId
+      ? `background:${sourceId}`
+      : "";
+  }
+
+  function getStoredSources(
+    sourceMap,
+    value,
+    fallback = ["manual"]
+  ) {
+    const sources =
+      cleanArray(
+        sourceMap?.[value]
+      );
+
+    return sources.length
+      ? sources
+      : cleanArray(fallback);
+  }
+
+  function removeSkillProficiencySource(sourceName) {
+    if (!cleanString(sourceName)) {
+      return;
+    }
+
+    const skills =
+      creatorState.draft
+        .proficiencies
+        .skills || {};
+
+    Object.keys(skills)
+      .forEach((skillKey) => {
+        const entry =
+          skills[skillKey];
+
+        if (
+          !entry ||
+          typeof entry !== "object"
+        ) {
+          return;
+        }
+
+        const sources =
+          cleanArray(entry.source);
+
+        if (
+          !sources.some((source) => {
+            return sourceMatches(
+              source,
+              sourceName
+            );
+          })
+        ) {
+          return;
+        }
+
+        const keptSources =
+          sources.filter((source) => {
+            return !sourceMatches(
+              source,
+              sourceName
+            );
+          });
+
+        if (!keptSources.length) {
+          delete skills[skillKey];
+          return;
+        }
+
+        entry.source =
+          keptSources;
+      });
+  }
+
+  function setSourceProficiencyList(
+    category,
+    values,
+    sourceName
+  ) {
+    if (!cleanString(sourceName)) {
+      return;
+    }
+
+    const proficiencies =
+      creatorState.draft
+        .proficiencies;
+
+    const currentValues =
+      uniqueCleanArray(
+        proficiencies[category]
+      );
+
+    const incomingValues =
+      uniqueCleanArray(values);
+
+    const allSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    const categorySources =
+      allSources[category] &&
+      typeof allSources[category] === "object" &&
+      !Array.isArray(allSources[category])
+        ? allSources[category]
+        : {};
+
+    const nextValues = [];
+    const nextSources = {};
+
+    currentValues.forEach((value) => {
+      const keptSources =
+        getStoredSources(
+          categorySources,
+          value
+        ).filter((source) => {
+          return !sourceMatches(
+            source,
+            sourceName
+          );
+        });
+
+      if (keptSources.length) {
+        nextValues.push(value);
+        nextSources[value] =
+          keptSources;
+      }
+    });
+
+    incomingValues.forEach((value) => {
+      if (!nextValues.includes(value)) {
+        nextValues.push(value);
+      }
+
+      nextSources[value] = [
+        ...new Set([
+          ...cleanArray(
+            nextSources[value]
+          ),
+          sourceName
+        ])
+      ];
+    });
+
+    proficiencies[category] =
+      nextValues;
+
+    allSources[category] =
+      nextSources;
+  }
+
+  function setManualProficiencyList(
+    category,
+    values
+  ) {
+    const incomingValues =
+      uniqueCleanArray(values);
+
+    const allSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    const proficiencies =
+      creatorState.draft
+        .proficiencies;
+
+    const currentValues =
+      uniqueCleanArray(
+        proficiencies[category]
+      );
+
+    const categorySources =
+      allSources[category] &&
+      typeof allSources[category] === "object" &&
+      !Array.isArray(allSources[category])
+        ? allSources[category]
+        : {};
+
+    const nextValues = [];
+    const nextSources = {};
+
+    currentValues.forEach((value) => {
+      const keptSources =
+        getStoredSources(
+          categorySources,
+          value
+        ).filter((source) => {
+          return !sourceMatches(
+            source,
+            "manual"
+          );
+        });
+
+      if (keptSources.length) {
+        nextValues.push(value);
+        nextSources[value] =
+          keptSources;
+      }
+    });
+
+    incomingValues.forEach((value) => {
+      if (!nextValues.includes(value)) {
+        nextValues.push(value);
+      }
+
+      nextSources[value] = [
+        ...new Set([
+          ...cleanArray(
+            nextSources[value]
+          ),
+          "manual"
+        ])
+      ];
+    });
+
+    creatorState.draft
+      .proficiencies[category] =
+        nextValues;
+
+    allSources[category] =
+      nextSources;
+  }
+
+  function getManualProficiencyList(
+    category
+  ) {
+    const proficiencies =
+      creatorState.draft
+        .proficiencies || {};
+
+    const allSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    const categorySources =
+      allSources[category] &&
+      typeof allSources[category] === "object" &&
+      !Array.isArray(allSources[category])
+        ? allSources[category]
+        : {};
+
+    return uniqueCleanArray(
+      proficiencies[category]
+    ).filter((value) => {
+      return getStoredSources(
+        categorySources,
+        value,
+        []
+      ).some((source) => {
+        return sourceMatches(
+          source,
+          "manual"
+        );
+      });
+    });
+  }
+
+  function removeListProficiencySource(sourceName) {
+    if (!cleanString(sourceName)) {
+      return;
+    }
+
+    const proficiencies =
+      creatorState.draft
+        .proficiencies;
+
+    const allSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    [
+      "savingThrows",
+      "armor",
+      "weapons",
+      "tools",
+      "languages"
+    ].forEach((category) => {
+      const currentValues =
+        uniqueCleanArray(
+          proficiencies[category]
+        );
+
+      const categorySources =
+        allSources[category] &&
+        typeof allSources[category] === "object" &&
+        !Array.isArray(allSources[category])
+          ? allSources[category]
+          : {};
+
+      const nextValues = [];
+      const nextSources = {};
+
+      currentValues.forEach((value) => {
+        const keptSources =
+          getStoredSources(
+            categorySources,
+            value
+          ).filter((source) => {
+            return !sourceMatches(
+              source,
+              sourceName
+            );
+          });
+
+        if (keptSources.length) {
+          nextValues.push(value);
+          nextSources[value] =
+            keptSources;
+        }
+      });
+
+      proficiencies[category] =
+        nextValues;
+
+      allSources[category] =
+        nextSources;
+    });
   }
 
   function normalizeAbilityMap(value, fallbackValue = 10) {
@@ -452,13 +844,11 @@ export function createCharacterCreator(options = {}) {
     clean.race = cleanString(clean.species?.name);
 
     clean.classId = cleanString(
-      primaryClass?.classId,
-      "fighter"
+      primaryClass?.classId
     );
 
     clean.className = cleanString(
-      primaryClass?.className,
-      "Fighter"
+      primaryClass?.className
     );
 
     clean.selectedClassSnapshot = primaryClass?.templateSnapshot
@@ -542,30 +932,191 @@ export function createCharacterCreator(options = {}) {
       raw.builder ||
       {};
 
-    const rawClassEntry =
+    const rawClassEntries =
       Array.isArray(raw.classProgression?.classes)
-        ? raw.classProgression.classes[0]
-        : null;
+        ? raw.classProgression.classes
+            .filter((entry) => {
+              return (
+                entry &&
+                typeof entry === "object"
+              );
+            })
+        : [];
 
-    const classId = cleanString(
-      rawClassEntry?.classId ||
-      raw.classId ||
-      rawBuilder.selectedClassId,
-      "fighter"
-    );
+    const rawClassEntry =
+      rawClassEntries[0] ||
+      null;
 
-    const className = cleanString(
-      rawClassEntry?.className ||
-      raw.className,
-      "Fighter"
-    );
+    const legacyClassSnapshot =
+      raw.selectedClassSnapshot ||
+      rawBuilder.selectedClassSnapshot ||
+      null;
+
+    const legacyClassName =
+      cleanString(
+        raw.className ||
+        legacyClassSnapshot?.name
+      );
+
+    const legacyClassId =
+      cleanString(
+        raw.classId ||
+        rawBuilder.selectedClassId ||
+        legacyClassSnapshot?.id ||
+        (
+          legacyClassName
+            ? makeSafeId(
+                legacyClassName,
+                "custom-class"
+              )
+            : ""
+        )
+      );
+
+    const hasLegacyClassData =
+      Boolean(
+        rawClassEntries.length ||
+        legacyClassId ||
+        legacyClassName ||
+        legacyClassSnapshot
+      );
+
+    const fallbackClassId =
+      cleanString(
+        rawClassEntry?.classId ||
+        legacyClassId
+      );
+
+    const fallbackClassName =
+      cleanString(
+        rawClassEntry?.className ||
+        legacyClassName
+      );
+
+    const rawClassList =
+      rawClassEntries.length
+        ? rawClassEntries
+        : hasLegacyClassData
+          ? [
+            {
+              classId: fallbackClassId,
+              className:
+                fallbackClassName ||
+                "Custom Class",
+              source: "template",
+              level: raw.level || 1,
+              subclassId: "",
+              subclassName: raw.subclassName,
+              templateSnapshot:
+                legacyClassSnapshot,
+              choices: {}
+            }
+          ]
+          : [];
+
+    const classLevelTotal =
+      rawClassList.reduce(
+        (sum, classEntry) => {
+          return (
+            sum +
+            Math.max(
+              0,
+              safeNumber(
+                classEntry?.level,
+                0
+              )
+            )
+          );
+        },
+        0
+      );
 
     const totalLevel = clampLevel(
       raw.classProgression?.totalLevel ||
-      rawClassEntry?.level ||
+      classLevelTotal ||
       raw.level ||
+      rawClassEntry?.level ||
       1
     );
+
+    const normalizedClassList =
+      rawClassList.map(
+        (classEntry, index) => {
+          const isPrimary =
+            index === 0;
+
+          return {
+            classId: cleanString(
+              classEntry?.classId ||
+              (
+                isPrimary
+                  ? raw.classId ||
+                    rawBuilder.selectedClassId
+                  : ""
+              ),
+              isPrimary
+                ? fallbackClassId
+                : makeSafeId(
+                    classEntry?.className,
+                    "custom-class"
+                  )
+            ),
+
+            className: cleanString(
+              classEntry?.className ||
+              (
+                isPrimary
+                  ? raw.className
+                  : ""
+              ),
+              isPrimary
+                ? fallbackClassName
+                : "Custom Class"
+            ),
+
+            source: cleanString(
+              classEntry?.source,
+              "template"
+            ),
+
+            level:
+              rawClassList.length === 1
+                ? totalLevel
+                : clampLevel(
+                    classEntry?.level ||
+                    1
+                  ),
+
+            subclassId: cleanString(
+              classEntry?.subclassId
+            ),
+
+            subclassName: cleanString(
+              classEntry?.subclassName ||
+              (
+                isPrimary
+                  ? raw.subclassName
+                  : ""
+              )
+            ),
+
+            templateSnapshot: cloneData(
+              classEntry?.templateSnapshot ||
+              (
+                isPrimary
+                  ? raw.selectedClassSnapshot ||
+                    rawBuilder.selectedClassSnapshot
+                  : null
+              ) ||
+              null
+            ),
+
+            choices: cloneData(
+              classEntry?.choices || {}
+            )
+          };
+        }
+      );
 
     const speciesObject =
       raw.species &&
@@ -658,39 +1209,8 @@ export function createCharacterCreator(options = {}) {
       classProgression: {
         totalLevel,
 
-        classes: [
-          {
-            classId,
-            className,
-
-            source: cleanString(
-              rawClassEntry?.source,
-              "template"
-            ),
-
-            level: totalLevel,
-
-            subclassId: cleanString(
-              rawClassEntry?.subclassId
-            ),
-
-            subclassName: cleanString(
-              rawClassEntry?.subclassName ||
-              raw.subclassName
-            ),
-
-            templateSnapshot: cloneData(
-              rawClassEntry?.templateSnapshot ||
-              raw.selectedClassSnapshot ||
-              rawBuilder.selectedClassSnapshot ||
-              null
-            ),
-
-            choices: cloneData(
-              rawClassEntry?.choices || {}
-            )
-          }
-        ]
+        classes:
+          normalizedClassList
       },
 
       abilities: {
@@ -796,6 +1316,11 @@ export function createCharacterCreator(options = {}) {
 
         languages: cleanArray(
           raw.proficiencies?.languages
+        ),
+
+        sources: cloneData(
+          raw.proficiencies?.sources ||
+          {}
         )
       },
 
@@ -1010,6 +1535,99 @@ export function createCharacterCreator(options = {}) {
       });
     }
 
+    const primaryClassSource =
+      getClassSourceLabel(
+        getPrimaryClassEntry(
+          normalized
+        )
+      );
+
+    const backgroundSource =
+      getBackgroundSourceLabel(
+        normalized.background
+      );
+
+    Object.values(
+      normalized.proficiencies
+        .skills || {}
+    ).forEach((entry) => {
+      if (
+        !entry ||
+        typeof entry !== "object"
+      ) {
+        return;
+      }
+
+      const sources =
+        cleanArray(entry.source);
+
+      entry.source =
+        sources.length
+          ? sources.map((source) => {
+              if (
+                source === "class" &&
+                primaryClassSource
+              ) {
+                return primaryClassSource;
+              }
+
+              if (
+                source === "background" &&
+                backgroundSource
+              ) {
+                return backgroundSource;
+              }
+
+              return source;
+            })
+          : entry.proficient === true
+            ? ["legacy"]
+            : [];
+    });
+
+    [
+      "savingThrows",
+      "armor",
+      "weapons",
+      "tools",
+      "languages"
+    ].forEach((category) => {
+      const sourceMap =
+        normalized.proficiencies
+          .sources?.[category];
+
+      if (
+        !sourceMap ||
+        typeof sourceMap !== "object" ||
+        Array.isArray(sourceMap)
+      ) {
+        return;
+      }
+
+      Object.keys(sourceMap).forEach((value) => {
+        sourceMap[value] =
+          cleanArray(
+            sourceMap[value]
+          ).map((source) => {
+            if (
+              source === "class" &&
+              primaryClassSource
+            ) {
+              return primaryClassSource;
+            }
+
+            if (
+              source === "background" &&
+              backgroundSource
+            ) {
+              return backgroundSource;
+            }
+
+            return source;
+          });
+      });
+    });
+
     return applyCompatibilityAliases(normalized);
   }
 
@@ -1027,8 +1645,6 @@ export function createCharacterCreator(options = {}) {
       getGenericProficiencyBonus(
         normalized.classProgression.totalLevel
       );
-
-    normalized.builder.lastSavedAtMillis = Date.now();
 
     applyCompatibilityAliases(normalized);
 
@@ -1936,6 +2552,17 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft
     );
 
+    if (
+      !primaryClass ||
+      (
+        !cleanString(primaryClass.classId) &&
+        !cleanString(primaryClass.className) &&
+        !primaryClass.templateSnapshot
+      )
+    ) {
+      return null;
+    }
+
     const allClasses = getAllClassTemplates();
 
     return (
@@ -1946,13 +2573,85 @@ export function createCharacterCreator(options = {}) {
       allClasses.find((classData) => {
         return classData.name === primaryClass?.className;
       }) ||
-
-      allClasses[0] ||
       null
     );
   }
 
+  function isMulticlassDraft(
+    character = creatorState.draft
+  ) {
+    return (
+      Array.isArray(
+        character
+          ?.classProgression
+          ?.classes
+      ) &&
+      character
+        .classProgression
+        .classes
+        .length > 1
+    );
+  }
+
+  function recalculateClassTotalLevel(
+    character = creatorState.draft
+  ) {
+    const classes =
+      Array.isArray(
+        character
+          ?.classProgression
+          ?.classes
+      )
+        ? character
+            .classProgression
+            .classes
+        : [];
+
+    const total =
+      classes.reduce(
+        (sum, classEntry) => {
+          return (
+            sum +
+            Math.max(
+              0,
+              Math.round(
+                safeNumber(
+                  classEntry?.level,
+                  0
+                )
+              )
+            )
+          );
+        },
+        0
+      );
+
+    character.classProgression.totalLevel =
+      clampLevel(total || 1);
+
+    return character.classProgression.totalLevel;
+  }
+
+  function blockMulticlassEdit(actionText) {
+    const message =
+      `${actionText} is not available for imported multiclass characters yet. The existing class data was preserved.`;
+
+    setStatus(message);
+
+    if (typeof alert === "function") {
+      alert(message);
+    }
+
+    return false;
+  }
+
   function selectClassTemplate(classId) {
+    if (isMulticlassDraft()) {
+      return blockMulticlassEdit(
+        "Changing the primary class"
+      );
+    }
+
     const selectedClass =
       getAllClassTemplates().find((classData) => {
         return classData.id === classId;
@@ -1966,20 +2665,49 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft.classProgression.totalLevel
     );
 
-    creatorState.draft.classProgression.classes = [
-      {
-        classId: selectedClass.id,
-        className: selectedClass.name,
-        source: selectedClass.source,
-        level: totalLevel,
-        subclassId: "",
-        subclassName: "",
-        templateSnapshot: cloneData(selectedClass),
-        choices: {}
-      }
-    ];
+    const oldPrimaryClass =
+      getPrimaryClassEntry(
+        creatorState.draft
+      );
 
-    creatorState.draft.proficiencies.skills = {};
+    const oldClassSource =
+      getClassSourceLabel(
+        oldPrimaryClass
+      );
+
+    if (oldClassSource) {
+      removeSkillProficiencySource(
+        oldClassSource
+      );
+
+      removeListProficiencySource(
+        oldClassSource
+      );
+    }
+
+    const selectedEntry = {
+      classId: selectedClass.id,
+      className: selectedClass.name,
+      source: selectedClass.source,
+      level:
+        oldPrimaryClass?.level ||
+        totalLevel,
+      subclassId: "",
+      subclassName: "",
+      templateSnapshot: cloneData(selectedClass),
+      choices: {}
+    };
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        selectedEntry
+      ];
+
+    recalculateClassTotalLevel(
+      creatorState.draft
+    );
+
     creatorState.dirty = true;
 
     applyCompatibilityAliases(
@@ -2042,6 +2770,22 @@ export function createCharacterCreator(options = {}) {
     setStatus("New character started.");
 
     return creatorState.draft;
+  }
+
+  function confirmDiscardUnsavedDraft(
+    actionDescription
+  ) {
+    if (creatorState.dirty !== true) {
+      return true;
+    }
+
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.confirm(
+      `Discard unsaved changes before ${actionDescription}?`
+    );
   }
 
   function duplicateIntoDraft(character) {
@@ -2274,7 +3018,7 @@ export function createCharacterCreator(options = {}) {
       .hg-character-step-button {
         width: 100% !important;
         display: grid !important;
-        grid-template-columns: 30px minmax(0, 1fr);
+        grid-template-columns: 30px minmax(0, 1fr) 18px;
         gap: 9px;
         align-items: center;
         text-align: left;
@@ -2317,6 +3061,19 @@ export function createCharacterCreator(options = {}) {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      .hg-character-step-complete-badge {
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(87, 217, 163, 0.16);
+        color: #9ff0cb;
+        font-size: 12px;
+        font-weight: bold;
       }
 
       .hg-character-builder-main {
@@ -2594,12 +3351,18 @@ export function createCharacterCreator(options = {}) {
 
     if (primaryClass) {
       primaryClass.className =
-        getSafeClassName(clean) || "Fighter";
+        getSafeClassName(clean);
 
-      primaryClass.classId = makeSafeId(
-        primaryClass.classId || primaryClass.className,
-        "fighter"
-      );
+      primaryClass.classId =
+        primaryClass.classId ||
+        (
+          primaryClass.className
+            ? makeSafeId(
+                primaryClass.className,
+                "custom-class"
+              )
+            : ""
+        );
 
       primaryClass.subclassName =
         getSafeSubclassName(clean);
@@ -2612,6 +3375,7 @@ export function createCharacterCreator(options = {}) {
     creatorState.dirty = true;
     persistDraftToSession();
     renderActionBar();
+    refreshBuilderChrome();
   }
 
   function getDraftStorageKey() {
@@ -2747,15 +3511,21 @@ export function createCharacterCreator(options = {}) {
   }
 
   function useCustomClassName(name) {
+    if (isMulticlassDraft()) {
+      return blockMulticlassEdit(
+        "Editing the class name"
+      );
+    }
+
     const cleanName =
       safeDisplayString(name);
 
-    const primaryClass =
+    let primaryClass =
       getPrimaryClassEntry(
         creatorState.draft
       );
 
-    if (!primaryClass || !cleanName) {
+    if (!cleanName) {
       return;
     }
 
@@ -2774,6 +3544,29 @@ export function createCharacterCreator(options = {}) {
         matchingTemplate.id
       );
     } else {
+      if (!primaryClass) {
+        primaryClass = {
+          classId: "",
+          className: "",
+          source: "custom",
+          level: clampLevel(
+            creatorState.draft
+              .classProgression
+              .totalLevel
+          ),
+          subclassId: "",
+          subclassName: "",
+          templateSnapshot: null,
+          choices: {}
+        };
+
+        creatorState.draft
+          .classProgression
+          .classes = [
+            primaryClass
+          ];
+      }
+
       primaryClass.classId =
         makeSafeId(
           cleanName,
@@ -2807,6 +3600,12 @@ export function createCharacterCreator(options = {}) {
   }
 
   function setCharacterLevel(value) {
+    if (isMulticlassDraft()) {
+      return blockMulticlassEdit(
+        "Changing total level"
+      );
+    }
+
     const level =
       clampLevel(value);
 
@@ -2833,6 +3632,8 @@ export function createCharacterCreator(options = {}) {
     );
 
     markDraftChanged();
+
+    return true;
   }
 
   function setAbilityScore(
@@ -2877,11 +3678,17 @@ export function createCharacterCreator(options = {}) {
             .scores
         );
 
+    creatorState.draft.builder.validation = {
+      ...(creatorState.draft.builder.validation || {}),
+      abilitiesTouched: true
+    };
+
     applyCompatibilityAliases(
       creatorState.draft
     );
 
     markDraftChanged();
+    refreshSection13AbilitySummary();
   }
 
   function setSimpleDraftField(
@@ -2907,6 +3714,7 @@ export function createCharacterCreator(options = {}) {
     setDraftValue(path, value);
     persistDraftToSession();
     renderActionBar();
+    refreshBuilderChrome();
   }
 
   function getValidationWarnings(
@@ -2941,10 +3749,29 @@ export function createCharacterCreator(options = {}) {
 // =====================================================
 
   function getRouteFromUrl() {
+    if (typeof window === "undefined") {
+      return {
+        isCharacterCreator: false,
+        viewMode: "external",
+        stepId: null
+      };
+    }
+
     const params =
       new URLSearchParams(
         window.location.search
       );
+
+    if (
+      params.get("view") !==
+      "characterCreator"
+    ) {
+      return {
+        isCharacterCreator: false,
+        viewMode: "external",
+        stepId: null
+      };
+    }
 
     const requestedStep =
       params.get("step");
@@ -2954,12 +3781,14 @@ export function createCharacterCreator(options = {}) {
       requestedStep === "library"
     ) {
       return {
+        isCharacterCreator: true,
         viewMode: "library",
         stepId: "basics"
       };
     }
 
     return {
+      isCharacterCreator: true,
       viewMode: "builder",
       stepId:
         getStepById(
@@ -2978,10 +3807,15 @@ export function createCharacterCreator(options = {}) {
         window.location.href
       );
 
-    url.searchParams.set(
-      "room",
-      getRoomCode()
-    );
+    const roomCode =
+      getRoomCode();
+
+    if (roomCode) {
+      url.searchParams.set(
+        "room",
+        roomCode
+      );
+    }
 
     url.searchParams.set(
       "view",
@@ -3085,6 +3919,34 @@ export function createCharacterCreator(options = {}) {
     const route =
       getRouteFromUrl();
 
+    if (!route.isCharacterCreator) {
+      creatorState.viewMode =
+        "external";
+
+      if (
+        typeof disconnectWizardEvents ===
+        "function"
+      ) {
+        disconnectWizardEvents();
+      }
+
+      if (
+        typeof cleanupSection19PermanentListeners ===
+        "function"
+      ) {
+        cleanupSection19PermanentListeners();
+      }
+
+      return;
+    }
+
+    if (
+      typeof connectSection19PermanentListeners ===
+      "function"
+    ) {
+      connectSection19PermanentListeners();
+    }
+
     creatorState.viewMode =
       route.viewMode;
 
@@ -3120,6 +3982,10 @@ export function createCharacterCreator(options = {}) {
     const route =
       getRouteFromUrl();
 
+    if (!route.isCharacterCreator) {
+      return false;
+    }
+
     if (
       route.viewMode === "builder"
     ) {
@@ -3138,6 +4004,8 @@ export function createCharacterCreator(options = {}) {
         true
       );
     } else {
+      restoreDraftFromSession();
+
       creatorState.viewMode =
         "library";
 
@@ -3147,6 +4015,8 @@ export function createCharacterCreator(options = {}) {
         true
       );
     }
+
+    return true;
   }
 
 
@@ -3451,6 +4321,10 @@ export function createCharacterCreator(options = {}) {
   }
 
   function isCharacterCreatorRoute() {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
     const params =
       new URLSearchParams(
         window.location.search
@@ -3621,18 +4495,78 @@ export function createCharacterCreator(options = {}) {
             "
             data-cc-action="go-step"
             data-step-id="${escapeHtml(step.id)}"
+            aria-label="${escapeHtml(
+              `${step.label} step ${index + 1} of ${BUILDER_STEPS.length}${
+                complete ? ", complete" : ", incomplete"
+              }${active ? ", current step" : ""}`
+            )}"
           >
             <span class="hg-character-step-number">
-              ${complete ? "✓" : index + 1}
+              ${index + 1}
             </span>
 
             <span class="hg-character-step-label">
               ${escapeHtml(step.shortLabel)}
             </span>
+
+            ${
+              complete
+                ? `
+                  <span
+                    class="hg-character-step-complete-badge"
+                    aria-hidden="true"
+                  >
+                    &#10003;
+                  </span>
+                `
+                : ""
+            }
           </button>
         `;
       })
       .join("");
+  }
+
+  function refreshBuilderChrome() {
+    if (
+      creatorState.viewMode !==
+      "builder"
+    ) {
+      return;
+    }
+
+    refreshWizardElements();
+
+    const title =
+      $("characterBuilderTitle");
+
+    if (title) {
+      title.textContent =
+        getSafeCharacterName() ||
+        "New Character";
+    }
+
+    const summary =
+      $("characterBuilderSummary");
+
+    if (summary) {
+      summary.textContent = `${
+        getSafeSpeciesName() ||
+        "No species"
+      } - Level ${clampLevel(
+        creatorState.draft
+          .classProgression
+          .totalLevel
+      )} ${
+        getSafeClassName() ||
+        "No class"
+      }`;
+    }
+
+    if (W.stepRail) {
+      W.stepRail.innerHTML =
+        renderStepRail();
+    }
   }
 
   function renderMissingStep(stepId) {
@@ -3702,14 +4636,17 @@ export function createCharacterCreator(options = {}) {
     W.root.innerHTML = `
       <div class="hg-character-builder-header">
         <div>
-          <h2>
+          <h2 id="characterBuilderTitle">
             ${escapeHtml(
               getSafeCharacterName() ||
               "New Character"
             )}
           </h2>
 
-          <p class="small">
+          <p
+            id="characterBuilderSummary"
+            class="small"
+          >
             ${escapeHtml(
               getSafeSpeciesName() ||
               "No species"
@@ -3913,6 +4850,14 @@ export function createCharacterCreator(options = {}) {
     if (
       action === "new-character"
     ) {
+      if (
+        !confirmDiscardUnsavedDraft(
+          "starting a new character"
+        )
+      ) {
+        return;
+      }
+
       clearStoredDraft();
       startNewDraft();
 
@@ -4440,6 +5385,14 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    if (
+      !confirmDiscardUnsavedDraft(
+        "opening another character"
+      )
+    ) {
+      return false;
+    }
+
     const requestedStep =
       getStepById(
         character?.builder?.currentStep ||
@@ -4490,6 +5443,14 @@ export function createCharacterCreator(options = {}) {
 
       renderCharacterLibraryView();
 
+      return false;
+    }
+
+    if (
+      !confirmDiscardUnsavedDraft(
+        "duplicating another character"
+      )
+    ) {
       return false;
     }
 
@@ -5760,41 +6721,38 @@ export function createCharacterCreator(options = {}) {
           .totalLevel
       );
 
-    creatorState.draft
-      .proficiencies
-      .savingThrows =
-        cloneData(
-          classTemplate
-            .savingThrows ||
-          []
-        );
+    const primaryClass =
+      getSection12PrimaryClass();
 
-    creatorState.draft
-      .proficiencies
-      .armor =
-        cloneData(
-          classTemplate
-            .armorProficiencies ||
-          []
-        );
+    const classSource =
+      getClassSourceLabel(
+        primaryClass ||
+        classTemplate
+      );
 
-    creatorState.draft
-      .proficiencies
-      .weapons =
-        cloneData(
-          classTemplate
-            .weaponProficiencies ||
-          []
-        );
+    setSourceProficiencyList(
+      "savingThrows",
+      classTemplate.savingThrows || [],
+      classSource
+    );
 
-    creatorState.draft
-      .proficiencies
-      .tools =
-        cloneData(
-          classTemplate
-            .toolProficiencies ||
-          []
-        );
+    setSourceProficiencyList(
+      "armor",
+      classTemplate.armorProficiencies || [],
+      classSource
+    );
+
+    setSourceProficiencyList(
+      "weapons",
+      classTemplate.weaponProficiencies || [],
+      classSource
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      classTemplate.toolProficiencies || [],
+      classSource
+    );
 
     creatorState.draft
       .combat
@@ -5859,6 +6817,12 @@ export function createCharacterCreator(options = {}) {
   }
 
   function applySection12CustomClass() {
+    if (isMulticlassDraft()) {
+      return blockMulticlassEdit(
+        "Creating a custom primary class"
+      );
+    }
+
     const name =
       safeDisplayString(
         $("ccCustomClassName")
@@ -5977,6 +6941,26 @@ export function createCharacterCreator(options = {}) {
         "custom"
       );
 
+    const oldPrimaryClass =
+      getPrimaryClassEntry(
+        creatorState.draft
+      );
+
+    const oldClassSource =
+      getClassSourceLabel(
+        oldPrimaryClass
+      );
+
+    if (oldClassSource) {
+      removeSkillProficiencySource(
+        oldClassSource
+      );
+
+      removeListProficiencySource(
+        oldClassSource
+      );
+    }
+
     creatorState.draft
       .classProgression
       .classes = [
@@ -6001,9 +6985,9 @@ export function createCharacterCreator(options = {}) {
         }
       ];
 
-    creatorState.draft
-      .proficiencies
-      .skills = {};
+    recalculateClassTotalLevel(
+      creatorState.draft
+    );
 
     applySection12ClassDefaults(
       customClass
@@ -7005,11 +7989,17 @@ export function createCharacterCreator(options = {}) {
             .scores
         );
 
+    creatorState.draft.builder.validation = {
+      ...(creatorState.draft.builder.validation || {}),
+      abilitiesTouched: true
+    };
+
     applyCompatibilityAliases(
       creatorState.draft
     );
 
     markDraftChanged();
+    refreshSection13AbilitySummary();
   }
 
   function applySection13StandardArray() {
@@ -7394,6 +8384,12 @@ export function createCharacterCreator(options = {}) {
   }
 
   function refreshSection13LevelProgression() {
+    if (isMulticlassDraft()) {
+      return blockMulticlassEdit(
+        "Refreshing level progression"
+      );
+    }
+
     const selectedClass =
       getSelectedClassTemplate();
 
@@ -8023,6 +9019,29 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function refreshSection13AbilitySummary() {
+    if (
+      creatorState.currentStepId !==
+      "abilities"
+    ) {
+      return;
+    }
+
+    const summaryElement =
+      typeof document !== "undefined"
+        ? document.getElementById(
+            "characterAbilitySummary"
+          )
+        : null;
+
+    if (!summaryElement) {
+      return;
+    }
+
+    summaryElement.innerHTML =
+      renderSection13AbilitySummary();
+  }
+
   function renderAbilitiesStep() {
     const method =
       creatorState.draft
@@ -8078,7 +9097,9 @@ export function createCharacterCreator(options = {}) {
 
       <h3>Current Ability Summary</h3>
 
-      ${renderSection13AbilitySummary()}
+      <div id="characterAbilitySummary">
+        ${renderSection13AbilitySummary()}
+      </div>
     `;
   }
 
@@ -8116,7 +9137,12 @@ export function createCharacterCreator(options = {}) {
   }
 
   function handleSection13RefreshLevel() {
-    refreshSection13LevelProgression();
+    if (
+      refreshSection13LevelProgression() ===
+      false
+    ) {
+      return;
+    }
 
     setStatus(
       "Level progression refreshed."
@@ -8558,6 +9584,21 @@ export function createCharacterCreator(options = {}) {
     const current =
       creatorState.draft.background;
 
+    const oldBackgroundSource =
+      getBackgroundSourceLabel(
+        current
+      );
+
+    if (oldBackgroundSource) {
+      removeSkillProficiencySource(
+        oldBackgroundSource
+      );
+
+      removeListProficiencySource(
+        oldBackgroundSource
+      );
+    }
+
     creatorState.draft.background = {
       id: template.id,
       name: template.name,
@@ -8631,6 +9672,21 @@ export function createCharacterCreator(options = {}) {
 
     const current =
       creatorState.draft.background;
+
+    const oldBackgroundSource =
+      getBackgroundSourceLabel(
+        current
+      );
+
+    if (oldBackgroundSource) {
+      removeSkillProficiencySource(
+        oldBackgroundSource
+      );
+
+      removeListProficiencySource(
+        oldBackgroundSource
+      );
+    }
 
     const customBackground =
       normalizeSection14Background(
@@ -9376,9 +10432,169 @@ export function createCharacterCreator(options = {}) {
 
       source:
         Array.isArray(raw?.source)
-          ? [...raw.source]
-          : []
+          ? cleanArray(raw.source)
+          : raw?.proficient === true
+            ? ["legacy"]
+            : []
     };
+  }
+
+  function getSection14SkillSourceLabel(
+    sourceType
+  ) {
+    if (sourceType === "class") {
+      return getClassSourceLabel(
+        getPrimaryClassEntry(
+          creatorState.draft
+        )
+      );
+    }
+
+    if (sourceType === "background") {
+      return getBackgroundSourceLabel(
+        creatorState.draft
+          .background
+      );
+    }
+
+    if (sourceType === "legacy") {
+      return "legacy";
+    }
+
+    return "manual";
+  }
+
+  function getSection14SkillChoiceList(
+    sourceType
+  ) {
+    if (sourceType === "class") {
+      const primaryClass =
+        getPrimaryClassEntry(
+          creatorState.draft
+        );
+
+      if (!primaryClass) {
+        return [];
+      }
+
+      primaryClass.choices =
+        primaryClass.choices || {};
+
+      primaryClass.choices.skillProficiencyIds =
+        cleanArray(
+          primaryClass.choices
+            .skillProficiencyIds
+        );
+
+      return primaryClass.choices
+        .skillProficiencyIds;
+    }
+
+    if (sourceType === "background") {
+      const background =
+        creatorState.draft
+          .background;
+
+      background.featureChoices =
+        background.featureChoices || {};
+
+      background.featureChoices.skillProficiencyIds =
+        cleanArray(
+          background.featureChoices
+            .skillProficiencyIds
+        );
+
+      return background.featureChoices
+        .skillProficiencyIds;
+    }
+
+    return [];
+  }
+
+  function setSection14StoredSkillChoice(
+    sourceType,
+    skillId,
+    selected
+  ) {
+    const choices =
+      getSection14SkillChoiceList(
+        sourceType
+      );
+
+    const cleanSkillId =
+      cleanString(skillId);
+
+    if (!cleanSkillId) {
+      return choices;
+    }
+
+    const nextChoices =
+      selected
+        ? [
+            ...new Set([
+              ...choices,
+              cleanSkillId
+            ])
+          ]
+        : choices.filter((id) => {
+            return id !== cleanSkillId;
+          });
+
+    if (sourceType === "class") {
+      const primaryClass =
+        getPrimaryClassEntry(
+          creatorState.draft
+        );
+
+      if (primaryClass) {
+        primaryClass.choices =
+          primaryClass.choices || {};
+
+        primaryClass.choices
+          .skillProficiencyIds =
+            nextChoices;
+      }
+    }
+
+    if (sourceType === "background") {
+      creatorState.draft
+        .background
+        .featureChoices =
+          creatorState.draft
+            .background
+            .featureChoices || {};
+
+      creatorState.draft
+        .background
+        .featureChoices
+        .skillProficiencyIds =
+          nextChoices;
+    }
+
+    return nextChoices;
+  }
+
+  function countSection14SkillSource(
+    sourceType
+  ) {
+    const sourceLabel =
+      getSection14SkillSourceLabel(
+        sourceType
+      );
+
+    if (!sourceLabel) {
+      return 0;
+    }
+
+    return Object.values(
+      creatorState.draft
+        .proficiencies
+        .skills || {}
+    ).filter((entry) => {
+      return cleanArray(
+        entry?.source
+      ).includes(sourceLabel);
+    }).length;
   }
 
   function setSection14SkillEntry(
@@ -9414,7 +10630,8 @@ export function createCharacterCreator(options = {}) {
   }
 
   function toggleSection14Skill(
-    skillId
+    skillId,
+    sourceType = "manual"
   ) {
     const skill =
       SKILL_DEFINITIONS.find(
@@ -9432,14 +10649,132 @@ export function createCharacterCreator(options = {}) {
         skill
       );
 
+    const sourceLabel =
+      getSection14SkillSourceLabel(
+        sourceType
+      );
+
+    if (!sourceLabel) {
+      return false;
+    }
+
+    const currentSources =
+      cleanArray(current.source);
+
+    const alreadySelected =
+      currentSources.includes(
+        sourceLabel
+      );
+
+    if (
+      !alreadySelected &&
+      sourceType === "class"
+    ) {
+      const selectedClass =
+        getSelectedClassTemplate();
+
+      const maxChoices =
+        Math.max(
+          0,
+          safeNumber(
+            selectedClass
+              ?.skillChoices
+              ?.choose,
+            0
+          )
+        );
+
+      if (
+        maxChoices > 0 &&
+        countSection14SkillSource(
+          "class"
+        ) >= maxChoices
+      ) {
+        alert(
+          `Choose only ${maxChoices} class skill proficienc${
+            maxChoices === 1
+              ? "y"
+              : "ies"
+          }.`
+        );
+
+        return false;
+      }
+    }
+
+    if (
+      !alreadySelected &&
+      sourceType === "background"
+    ) {
+      const selectedBackground =
+        getSelectedSection14Background();
+
+      const maxChoices =
+        Math.max(
+          0,
+          safeNumber(
+            selectedBackground
+              ?.skillChoices
+              ?.choose,
+            0
+          )
+        );
+
+      if (
+        maxChoices > 0 &&
+        countSection14SkillSource(
+          "background"
+        ) >= maxChoices
+      ) {
+        alert(
+          `Choose only ${maxChoices} background skill proficienc${
+            maxChoices === 1
+              ? "y"
+              : "ies"
+          }.`
+        );
+
+        return false;
+      }
+    }
+
+    const nextSources =
+      alreadySelected
+        ? currentSources.filter(
+            (source) => {
+              return source !==
+                sourceLabel;
+            }
+          )
+        : [
+            ...new Set([
+              ...currentSources,
+              sourceLabel
+            ])
+          ];
+
+    if (
+      sourceType === "class" ||
+      sourceType === "background"
+    ) {
+      setSection14StoredSkillChoice(
+        sourceType,
+        skill.id,
+        !alreadySelected
+      );
+    }
+
     setSection14SkillEntry(
       skill,
       {
         proficient:
-          !current.proficient,
+          nextSources.length > 0,
 
-        expertise: false,
-        source: ["manual"]
+        expertise:
+          nextSources.length > 0 &&
+          current.expertise === true,
+
+        source: nextSources
       }
     );
 
@@ -9535,45 +10870,45 @@ export function createCharacterCreator(options = {}) {
   }
 
   function applySection14ProficiencyLists() {
-    creatorState.draft
-      .proficiencies
-      .savingThrows =
-        parseSection14List(
-          $("ccSavingThrowProficiencies")
-            ?.value
-        );
+    setManualProficiencyList(
+      "savingThrows",
+      parseSection14List(
+        $("ccSavingThrowProficiencies")
+          ?.value
+      )
+    );
 
-    creatorState.draft
-      .proficiencies
-      .armor =
-        parseSection14List(
-          $("ccArmorProficiencies")
-            ?.value
-        );
+    setManualProficiencyList(
+      "armor",
+      parseSection14List(
+        $("ccArmorProficiencies")
+          ?.value
+      )
+    );
 
-    creatorState.draft
-      .proficiencies
-      .weapons =
-        parseSection14List(
-          $("ccWeaponProficiencies")
-            ?.value
-        );
+    setManualProficiencyList(
+      "weapons",
+      parseSection14List(
+        $("ccWeaponProficiencies")
+          ?.value
+      )
+    );
 
-    creatorState.draft
-      .proficiencies
-      .tools =
-        parseSection14List(
-          $("ccToolProficiencies")
-            ?.value
-        );
+    setManualProficiencyList(
+      "tools",
+      parseSection14List(
+        $("ccToolProficiencies")
+          ?.value
+      )
+    );
 
-    creatorState.draft
-      .proficiencies
-      .languages =
-        parseSection14List(
-          $("ccLanguageProficiencies")
-            ?.value
-        );
+    setManualProficiencyList(
+      "languages",
+      parseSection14List(
+        $("ccLanguageProficiencies")
+          ?.value
+      )
+    );
 
     applyCompatibilityAliases(
       creatorState.draft
@@ -9653,6 +10988,37 @@ export function createCharacterCreator(options = {}) {
                 );
               });
 
+          const classSourceLabel =
+            getSection14SkillSourceLabel(
+              "class"
+            );
+
+          const backgroundSourceLabel =
+            getSection14SkillSourceLabel(
+              "background"
+            );
+
+          const classSelected =
+            Boolean(
+              classSourceLabel &&
+              entry.source.includes(
+                classSourceLabel
+              )
+            );
+
+          const backgroundSelected =
+            Boolean(
+              backgroundSourceLabel &&
+              entry.source.includes(
+                backgroundSourceLabel
+              )
+            );
+
+          const manualSelected =
+            entry.source.includes(
+              "manual"
+            );
+
           return `
             <article
               class="
@@ -9717,17 +11083,62 @@ export function createCharacterCreator(options = {}) {
               </p>
 
               <div class="hg-character-card-actions">
+                ${
+                  classAvailable &&
+                  classSourceLabel
+                    ? `
+                      <button
+                        type="button"
+                        data-cc-action="toggle-skill-proficiency"
+                        data-skill-id="${escapeHtml(
+                          skill.id
+                        )}"
+                        data-skill-source="class"
+                      >
+                        ${
+                          classSelected
+                            ? "Remove Class"
+                            : "Add Class"
+                        }
+                      </button>
+                    `
+                    : ""
+                }
+
+                ${
+                  backgroundAvailable &&
+                  backgroundSourceLabel
+                    ? `
+                      <button
+                        type="button"
+                        data-cc-action="toggle-skill-proficiency"
+                        data-skill-id="${escapeHtml(
+                          skill.id
+                        )}"
+                        data-skill-source="background"
+                      >
+                        ${
+                          backgroundSelected
+                            ? "Remove Background"
+                            : "Add Background"
+                        }
+                      </button>
+                    `
+                    : ""
+                }
+
                 <button
                   type="button"
                   data-cc-action="toggle-skill-proficiency"
                   data-skill-id="${escapeHtml(
                     skill.id
                   )}"
+                  data-skill-source="manual"
                 >
                   ${
-                    entry.proficient
-                      ? "Remove Proficiency"
-                      : "Add Proficiency"
+                    manualSelected
+                      ? "Remove Manual"
+                      : "Add Manual"
                   }
                 </button>
 
@@ -9805,9 +11216,9 @@ export function createCharacterCreator(options = {}) {
           "ccSavingThrowProficiencies",
 
           formatSection14List(
-            creatorState.draft
-              .proficiencies
-              .savingThrows
+            getManualProficiencyList(
+              "savingThrows"
+            )
           ),
 
           {
@@ -9825,9 +11236,9 @@ export function createCharacterCreator(options = {}) {
           "ccArmorProficiencies",
 
           formatSection14List(
-            creatorState.draft
-              .proficiencies
-              .armor
+            getManualProficiencyList(
+              "armor"
+            )
           ),
 
           {
@@ -9845,9 +11256,9 @@ export function createCharacterCreator(options = {}) {
           "ccWeaponProficiencies",
 
           formatSection14List(
-            creatorState.draft
-              .proficiencies
-              .weapons
+            getManualProficiencyList(
+              "weapons"
+            )
           ),
 
           {
@@ -9865,9 +11276,9 @@ export function createCharacterCreator(options = {}) {
           "ccToolProficiencies",
 
           formatSection14List(
-            creatorState.draft
-              .proficiencies
-              .tools
+            getManualProficiencyList(
+              "tools"
+            )
           ),
 
           {
@@ -9885,9 +11296,9 @@ export function createCharacterCreator(options = {}) {
           "ccLanguageProficiencies",
 
           formatSection14List(
-            creatorState.draft
-              .proficiencies
-              .languages
+            getManualProficiencyList(
+              "languages"
+            )
           ),
 
           {
@@ -10038,9 +11449,15 @@ export function createCharacterCreator(options = {}) {
       button?.dataset?.skillId ||
       "";
 
+    const sourceType =
+      button?.dataset
+        ?.skillSource ||
+      "manual";
+
     if (
       toggleSection14Skill(
-        skillId
+        skillId,
+        sourceType
       )
     ) {
       setStatus(
@@ -13307,6 +14724,12 @@ export function createCharacterCreator(options = {}) {
           .totalLevel
       );
 
+    if (!isSection17AbilitiesComplete(draft)) {
+      warnings.push(
+        "Review and confirm the ability scores before finishing."
+      );
+    }
+
     if (
       safeNumber(
         draft.combat.maxHp,
@@ -13395,6 +14818,75 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
+    const selectedBackground =
+      getSelectedSection14Background();
+
+    const requiredClassSkills =
+      Math.max(
+        0,
+        safeNumber(
+          selectedClass
+            ?.skillChoices
+            ?.choose,
+          0
+        )
+      );
+
+    const selectedClassSkills =
+      countSection14SkillSource(
+        "class"
+      );
+
+    if (
+      requiredClassSkills > 0 &&
+      selectedClassSkills <
+        requiredClassSkills
+    ) {
+      warnings.push(
+        `Choose ${requiredClassSkills} class skill proficiencies.`
+      );
+    }
+
+    const requiredBackgroundSkills =
+      Math.max(
+        0,
+        safeNumber(
+          selectedBackground
+            ?.skillChoices
+            ?.choose,
+          0
+        )
+      );
+
+    const selectedBackgroundSkills =
+      countSection14SkillSource(
+        "background"
+      );
+
+    if (
+      requiredBackgroundSkills > 0 &&
+      selectedBackgroundSkills <
+        requiredBackgroundSkills
+    ) {
+      warnings.push(
+        `Choose ${requiredBackgroundSkills} background skill proficiencies.`
+      );
+    }
+
+    Object.values(
+      draft.proficiencies
+        .skills || {}
+    ).forEach((entry) => {
+      if (
+        entry?.expertise === true &&
+        entry?.proficient !== true
+      ) {
+        warnings.push(
+          "Expertise cannot exist without proficiency."
+        );
+      }
+    });
+
     if (
       draft.magic
         .spellcastingAbility &&
@@ -13470,6 +14962,10 @@ export function createCharacterCreator(options = {}) {
     creatorState.draft
       .builder
       .validation = {
+        ...(creatorState.draft
+          .builder
+          .validation || {}),
+
         warnings:
           getSection17Warnings(),
 
@@ -14421,14 +15917,56 @@ export function createCharacterCreator(options = {}) {
     character
   ) {
     return Boolean(
-      getSafeClassName(
+      getPrimaryClassEntry(
         character
-      )
+      ) &&
+      getSafeClassName(character)
     );
   }
 
-  function isSection17SubclassComplete() {
-    return true;
+  function isSection17SubclassComplete(
+    character = creatorState.draft
+  ) {
+    if (!isSection17ClassComplete(character)) {
+      return false;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const subclassLevel =
+      Math.max(
+        1,
+        safeNumber(
+          selectedClass?.subclassLevel,
+          0
+        )
+      );
+
+    const totalLevel =
+      clampLevel(
+        character
+          ?.classProgression
+          ?.totalLevel
+      );
+
+    const subclassOptions =
+      Array.isArray(
+        selectedClass?.subclasses
+      )
+        ? selectedClass.subclasses
+        : [];
+
+    if (
+      !subclassOptions.length ||
+      totalLevel < subclassLevel
+    ) {
+      return true;
+    }
+
+    return Boolean(
+      getSafeSubclassName(character)
+    );
   }
 
   function isSection17LevelComplete(
@@ -14451,16 +15989,43 @@ export function createCharacterCreator(options = {}) {
       );
 
     return (
+      isSection17ClassComplete(
+        character
+      ) &&
       level >= 1 &&
       level <= 20 &&
-      maxHp >= 1
+      maxHp >= 1 &&
+      safeNumber(
+        character
+          ?.combat
+          ?.currentHp,
+        0
+      ) >= 0
     );
   }
 
   function isSection17AbilitiesComplete(
     character
   ) {
-    return ABILITY_DEFINITIONS.every(
+    const touched =
+      character
+        ?.builder
+        ?.validation
+        ?.abilitiesTouched === true ||
+      (
+        Array.isArray(
+          character
+            ?.builder
+            ?.completedSteps
+        ) &&
+        character.builder
+          .completedSteps
+          .includes("abilities")
+      );
+
+    return (
+      touched &&
+      ABILITY_DEFINITIONS.every(
       (ability) => {
         const score =
           safeNumber(
@@ -14476,6 +16041,191 @@ export function createCharacterCreator(options = {}) {
           score <= 30
         );
       }
+      )
+    );
+  }
+
+  function isSection17BackgroundComplete(
+    character
+  ) {
+    const background =
+      character?.background || {};
+
+    return Boolean(
+      getSafeBackgroundName(character) ||
+      background.templateSnapshot ||
+      safeDisplayString(
+        background.traits
+      ) ||
+      safeDisplayString(
+        background.ideals
+      ) ||
+      safeDisplayString(
+        background.bonds
+      ) ||
+      safeDisplayString(
+        background.flaws
+      ) ||
+      safeDisplayString(
+        background.backstory
+      ) ||
+      (
+        Array.isArray(
+          character
+            ?.features
+            ?.backgroundFeatures
+        ) &&
+        character.features
+          .backgroundFeatures
+          .length > 0
+      )
+    );
+  }
+
+  function isSection17SkillsComplete(
+    character = creatorState.draft
+  ) {
+    if (!isSection17ClassComplete(character)) {
+      return false;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const selectedBackground =
+      getSelectedSection14Background();
+
+    const classRequired =
+      Math.max(
+        0,
+        safeNumber(
+          selectedClass
+            ?.skillChoices
+            ?.choose,
+          0
+        )
+      );
+
+    const backgroundRequired =
+      Math.max(
+        0,
+        safeNumber(
+          selectedBackground
+            ?.skillChoices
+            ?.choose,
+          0
+        )
+      );
+
+    const classComplete =
+      classRequired === 0 ||
+      countSection14SkillSource(
+        "class"
+      ) >= classRequired;
+
+    const backgroundComplete =
+      backgroundRequired === 0 ||
+      countSection14SkillSource(
+        "background"
+      ) >= backgroundRequired;
+
+    const expertiseValid =
+      Object.values(
+        character
+          ?.proficiencies
+          ?.skills || {}
+      ).every((entry) => {
+        return (
+          entry?.expertise !== true ||
+          entry?.proficient === true
+        );
+      });
+
+    return (
+      classComplete &&
+      backgroundComplete &&
+      expertiseValid
+    );
+  }
+
+  function isSection17EquipmentComplete(
+    character
+  ) {
+    const equipment =
+      character?.equipment || {};
+
+    const currency =
+      equipment.currency || {};
+
+    const hasCurrency =
+      Object.values(currency).some((value) => {
+        return safeNumber(value, 0) > 0;
+      });
+
+    return Boolean(
+      safeDisplayString(
+        equipment.startingPackageId
+      ) ||
+      safeDisplayString(
+        equipment.notes
+      ) ||
+      hasCurrency ||
+      (
+        Array.isArray(equipment.items) &&
+        equipment.items.length > 0
+      )
+    );
+  }
+
+  function isSection17SpellsComplete(
+    character
+  ) {
+    const magic =
+      character?.magic || {};
+
+    return Boolean(
+      safeDisplayString(
+        magic.spellcastingAbility
+      ) ||
+      safeDisplayString(
+        magic.notes
+      ) ||
+      Object.keys(
+        magic.slots || {}
+      ).length > 0 ||
+      (
+        Array.isArray(
+          magic.knownSpellIds
+        ) &&
+        magic.knownSpellIds.length > 0
+      ) ||
+      (
+        Array.isArray(
+          magic.preparedSpellIds
+        ) &&
+        magic.preparedSpellIds.length > 0
+      ) ||
+      (
+        Array.isArray(
+          magic.customSpells
+        ) &&
+        magic.customSpells.length > 0
+      ) ||
+      safeDisplayString(
+        character
+          ?.features
+          ?.notes
+      ) ||
+      (
+        Array.isArray(
+          character
+            ?.features
+            ?.customFeatures
+        ) &&
+        character.features
+          .customFeatures
+          .length > 0
+      )
     );
   }
 
@@ -14528,22 +16278,22 @@ export function createCharacterCreator(options = {}) {
 
   registerCharacterStepCompletion(
     "background",
-    () => true
+    isSection17BackgroundComplete
   );
 
   registerCharacterStepCompletion(
     "skills",
-    () => true
+    isSection17SkillsComplete
   );
 
   registerCharacterStepCompletion(
     "equipment",
-    () => true
+    isSection17EquipmentComplete
   );
 
   registerCharacterStepCompletion(
     "spells",
-    () => true
+    isSection17SpellsComplete
   );
 
   registerCharacterStepCompletion(
@@ -14565,6 +16315,14 @@ export function createCharacterCreator(options = {}) {
 // CHARACTER CREATOR SECTION 18 — SAVE / EXPORT / IMPORT
 // =====================================================
 
+  function getSection18CharacterCollectionName() {
+    return getSection19CollectionName(
+      "characterCollectionName",
+      "charactersCollectionName",
+      "characters"
+    );
+  }
+
   function getSection18CharacterCollection() {
     const roomCode = getRoomCode();
 
@@ -14584,7 +16342,7 @@ export function createCharacterCreator(options = {}) {
       deps.db,
       "rooms",
       roomCode,
-      "characters"
+      getSection18CharacterCollectionName()
     );
   }
 
@@ -14619,7 +16377,7 @@ export function createCharacterCreator(options = {}) {
       deps.db,
       "rooms",
       roomCode,
-      "characters",
+      getSection18CharacterCollectionName(),
       cleanId
     );
   }
@@ -14653,10 +16411,7 @@ export function createCharacterCreator(options = {}) {
 
       currentStep:
         creatorState.currentStepId ||
-        "save",
-
-      lastSavedAtMillis:
-        Date.now()
+        "save"
     };
 
     if (
@@ -14672,10 +16427,6 @@ export function createCharacterCreator(options = {}) {
         sanitizeDraftStrings(
           creatorState.draft
         );
-
-      character.builder
-        .lastSavedAtMillis =
-          Date.now();
     }
 
     applyCompatibilityAliases(
@@ -14718,6 +16469,15 @@ export function createCharacterCreator(options = {}) {
 
     const roomCode =
       getRoomCode();
+
+    const savedAtMillis =
+      Date.now();
+
+    character.builder = {
+      ...(character.builder || {}),
+      lastSavedAtMillis:
+        savedAtMillis
+    };
 
     const characterPayload =
       createCharacterPayload(
@@ -14827,6 +16587,16 @@ export function createCharacterCreator(options = {}) {
       );
 
     if (!cleanId) {
+      return false;
+    }
+
+    if (
+      creatorState.currentCharacterId ===
+        cleanId &&
+      !confirmDiscardUnsavedDraft(
+        "deleting this saved character"
+      )
+    ) {
       return false;
     }
 
@@ -15102,6 +16872,14 @@ export function createCharacterCreator(options = {}) {
   function useSection18ImportedCharacter(
     character
   ) {
+    if (
+      !confirmDiscardUnsavedDraft(
+        "importing a character"
+      )
+    ) {
+      return false;
+    }
+
     const requestedStep =
       getStepById(
         character?.builder
@@ -15946,11 +17724,7 @@ export function createCharacterCreator(options = {}) {
       label: "characters",
 
       collectionName:
-        getSection19CollectionName(
-          "characterCollectionName",
-          "charactersCollectionName",
-          "characters"
-        ),
+        getSection18CharacterCollectionName(),
 
       roomKey: "characterRoomCode",
       unsubscribeKey: "characterUnsubscribe",
@@ -16071,6 +17845,10 @@ export function createCharacterCreator(options = {}) {
   }
 
   function refreshSection20CharacterCreator() {
+    if (!isCharacterCreatorRoute()) {
+      return creatorState;
+    }
+
     refreshElements();
     connectSection19PermanentListeners();
     renderCreatorView();
@@ -16080,6 +17858,10 @@ export function createCharacterCreator(options = {}) {
 
   function startSection20CharacterCreator() {
     wizardRuntime.destroyed = false;
+
+    if (!isCharacterCreatorRoute()) {
+      return creatorState;
+    }
 
     refreshElements();
     ensureWizardStyles();
@@ -16112,6 +17894,14 @@ export function createCharacterCreator(options = {}) {
   }
 
   function startSection20NewCharacter() {
+    if (
+      !confirmDiscardUnsavedDraft(
+        "starting a new character"
+      )
+    ) {
+      return creatorState.draft;
+    }
+
     clearStoredDraft();
     startNewDraft();
 
@@ -16130,6 +17920,15 @@ export function createCharacterCreator(options = {}) {
     character,
     options = {}
   ) {
+    if (
+      options.skipDiscardGuard !== true &&
+      !confirmDiscardUnsavedDraft(
+        "replacing the current draft"
+      )
+    ) {
+      return creatorState.draft;
+    }
+
     const draft =
       replaceDraft(
         character,
@@ -16148,6 +17947,10 @@ export function createCharacterCreator(options = {}) {
   }
 
   function bootSection20WhenReady() {
+    if (!isCharacterCreatorRoute()) {
+      return false;
+    }
+
     if (
       typeof document !== "undefined" &&
       document.readyState === "loading"
