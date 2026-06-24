@@ -177,6 +177,14 @@ export function createCharacterCreator(options = {}) {
 // CHARACTER CREATOR SECTION 3 — CHARACTER DATA SCHEMA
 // =====================================================
 
+  const CURRENCY_DENOMINATIONS = Object.freeze([
+    "cp",
+    "sp",
+    "ep",
+    "gp",
+    "pp"
+  ]);
+
   function createAbilityMap(defaultValue = 0) {
     return {
       str: defaultValue,
@@ -228,6 +236,7 @@ export function createCharacterCreator(options = {}) {
         method: "manual",
         base: { ...baseScores },
         bonuses: createAbilityMap(0),
+        bonusSources: {},
         scores: { ...baseScores },
         modifiers: createAbilityMap(0),
         assignmentPool: []
@@ -299,6 +308,8 @@ export function createCharacterCreator(options = {}) {
           pp: 0
         },
 
+        currencySources: {},
+
         items: [],
         notes: ""
       },
@@ -312,6 +323,7 @@ export function createCharacterCreator(options = {}) {
         knownSpellIds: [],
         preparedSpellIds: [],
         customSpells: [],
+        innateSpells: [],
         slots: {},
         pactMagic: {
           slots: 0,
@@ -408,6 +420,40 @@ export function createCharacterCreator(options = {}) {
     ];
   }
 
+  function addMigrationWarning(
+    character,
+    warning
+  ) {
+    const message =
+      cleanString(warning);
+
+    if (!message) {
+      return;
+    }
+
+    character.builder =
+      character.builder || {};
+
+    character.builder.validation =
+      character.builder.validation || {};
+
+    const warnings =
+      cleanArray(
+        character.builder
+          .validation
+          .migrationWarnings
+      );
+
+    character.builder
+      .validation
+      .migrationWarnings = [
+        ...new Set([
+          ...warnings,
+          message
+        ])
+      ];
+  }
+
   function ensureProficiencySources(character) {
     const proficiencies =
       character.proficiencies ||
@@ -484,6 +530,346 @@ export function createCharacterCreator(options = {}) {
     return sourceId
       ? `background:${sourceId}`
       : "";
+  }
+
+  function getSpeciesSourceLabel(species) {
+    const speciesId =
+      cleanString(
+        species?.id ||
+        species?.docId
+      );
+
+    const speciesName =
+      cleanString(species?.name);
+
+    const sourceId =
+      speciesId ||
+      (
+        speciesName
+          ? makeSafeId(
+              speciesName,
+              "species"
+            )
+          : ""
+      );
+
+    return sourceId
+      ? `species:${sourceId}`
+      : "";
+  }
+
+  function getSubraceSourceLabel(subrace) {
+    const subraceId =
+      cleanString(
+        subrace?.id ||
+        subrace?.docId
+      );
+
+    const subraceName =
+      cleanString(subrace?.name);
+
+    const sourceId =
+      subraceId ||
+      (
+        subraceName
+          ? makeSafeId(
+              subraceName,
+              "subrace"
+            )
+          : ""
+      );
+
+    return sourceId
+      ? `subrace:${sourceId}`
+      : "";
+  }
+
+  function ensureAbilityBonusSources(character) {
+    if (
+      !character.abilities ||
+      typeof character.abilities !== "object"
+    ) {
+      character.abilities = {};
+    }
+
+    if (
+      !character.abilities.bonusSources ||
+      typeof character.abilities.bonusSources !== "object" ||
+      Array.isArray(
+        character.abilities.bonusSources
+      )
+    ) {
+      character.abilities.bonusSources = {};
+    }
+
+    return character.abilities.bonusSources;
+  }
+
+  function recalculateAbilityTotals(character) {
+    const abilities =
+      character.abilities ||
+      {};
+
+    const base =
+      normalizeAbilityMap(
+        abilities.base,
+        10
+      );
+
+    const bonusSources =
+      ensureAbilityBonusSources(
+        character
+      );
+
+    const bonuses =
+      createAbilityMap(0);
+
+    Object.values(bonusSources)
+      .forEach((bonusMap) => {
+        ABILITY_DEFINITIONS.forEach(
+          (ability) => {
+            bonuses[ability.id] +=
+              safeNumber(
+                bonusMap?.[ability.id],
+                0
+              );
+          }
+        );
+      });
+
+    const scores =
+      createAbilityMap(10);
+
+    ABILITY_DEFINITIONS.forEach(
+      (ability) => {
+        scores[ability.id] =
+          Math.max(
+            1,
+            Math.min(
+              30,
+              Math.round(
+                safeNumber(
+                  base[ability.id],
+                  10
+                ) +
+                safeNumber(
+                  bonuses[ability.id],
+                  0
+                )
+              )
+            )
+          );
+      }
+    );
+
+    character.abilities = {
+      ...abilities,
+      base,
+      bonuses,
+      scores,
+      modifiers:
+        calculateAbilityModifiers(scores),
+      bonusSources
+    };
+
+    return character.abilities;
+  }
+
+  function setAbilityBonusSource(
+    sourceName,
+    bonusMap
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    if (!cleanSource) {
+      return;
+    }
+
+    const sources =
+      ensureAbilityBonusSources(
+        creatorState.draft
+      );
+
+    const cleaned =
+      createAbilityMap(0);
+
+    ABILITY_DEFINITIONS.forEach(
+      (ability) => {
+        cleaned[ability.id] =
+          safeNumber(
+            bonusMap?.[ability.id],
+            0
+          );
+      }
+    );
+
+    const hasBonus =
+      Object.values(cleaned)
+        .some((value) => {
+          return value !== 0;
+        });
+
+    if (hasBonus) {
+      sources[cleanSource] = cleaned;
+    } else {
+      delete sources[cleanSource];
+    }
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+  }
+
+  function removeAbilityBonusSourcesByPrefix(
+    prefixes
+  ) {
+    const cleanPrefixes =
+      cleanArray(prefixes);
+
+    if (!cleanPrefixes.length) {
+      return;
+    }
+
+    const sources =
+      ensureAbilityBonusSources(
+        creatorState.draft
+      );
+
+    Object.keys(sources)
+      .forEach((sourceName) => {
+        if (
+          cleanPrefixes.some((prefix) => {
+            return sourceName.startsWith(
+              prefix
+            );
+          })
+        ) {
+          delete sources[sourceName];
+        }
+      });
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+  }
+
+  function removeSkillProficiencySourcesByPrefix(
+    prefixes
+  ) {
+    const cleanPrefixes =
+      cleanArray(prefixes);
+
+    if (!cleanPrefixes.length) {
+      return;
+    }
+
+    const skills =
+      creatorState.draft
+        .proficiencies
+        .skills || {};
+
+    Object.keys(skills)
+      .forEach((skillKey) => {
+        const entry =
+          skills[skillKey];
+
+        if (
+          !entry ||
+          typeof entry !== "object"
+        ) {
+          return;
+        }
+
+        const keptSources =
+          cleanArray(entry.source)
+            .filter((source) => {
+              return !cleanPrefixes.some(
+                (prefix) => {
+                  return source.startsWith(
+                    prefix
+                  );
+                }
+              );
+            });
+
+        if (!keptSources.length) {
+          delete skills[skillKey];
+        } else {
+          entry.source = keptSources;
+        }
+      });
+  }
+
+  function removeListProficiencySourcesByPrefix(
+    prefixes
+  ) {
+    const cleanPrefixes =
+      cleanArray(prefixes);
+
+    if (!cleanPrefixes.length) {
+      return;
+    }
+
+    const proficiencies =
+      creatorState.draft
+        .proficiencies;
+
+    const allSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    [
+      "savingThrows",
+      "armor",
+      "weapons",
+      "tools",
+      "languages"
+    ].forEach((category) => {
+      const currentValues =
+        uniqueCleanArray(
+          proficiencies[category]
+        );
+
+      const categorySources =
+        allSources[category] &&
+        typeof allSources[category] === "object" &&
+        !Array.isArray(allSources[category])
+          ? allSources[category]
+          : {};
+
+      const nextValues = [];
+      const nextSources = {};
+
+      currentValues.forEach((value) => {
+        const keptSources =
+          getStoredSources(
+            categorySources,
+            value
+          ).filter((source) => {
+            return !cleanPrefixes.some(
+              (prefix) => {
+                return source.startsWith(
+                  prefix
+                );
+              }
+            );
+          });
+
+        if (keptSources.length) {
+          nextValues.push(value);
+          nextSources[value] =
+            keptSources;
+        }
+      });
+
+      proficiencies[category] =
+        nextValues;
+
+      allSources[category] =
+        nextSources;
+    });
   }
 
   function getStoredSources(
@@ -816,6 +1202,410 @@ export function createCharacterCreator(options = {}) {
     };
   }
 
+  function normalizeCurrencyMap(value) {
+    const raw =
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+        ? value
+        : {};
+
+    return CURRENCY_DENOMINATIONS
+      .reduce((currency, coin) => {
+        currency[coin] = Math.max(
+          0,
+          safeNumber(raw[coin], 0)
+        );
+
+        return currency;
+      }, {});
+  }
+
+  function hasCurrencyValue(currency) {
+    const clean =
+      normalizeCurrencyMap(currency);
+
+    return CURRENCY_DENOMINATIONS
+      .some((coin) => {
+        return clean[coin] > 0;
+      });
+  }
+
+  function addCurrencyMaps(...maps) {
+    const total =
+      normalizeCurrencyMap({});
+
+    maps.forEach((map) => {
+      const clean =
+        normalizeCurrencyMap(map);
+
+      CURRENCY_DENOMINATIONS
+        .forEach((coin) => {
+          total[coin] += clean[coin];
+        });
+    });
+
+    return total;
+  }
+
+  function subtractCurrencyMaps(
+    left,
+    right
+  ) {
+    const cleanLeft =
+      normalizeCurrencyMap(left);
+
+    const cleanRight =
+      normalizeCurrencyMap(right);
+
+    return CURRENCY_DENOMINATIONS
+      .reduce((currency, coin) => {
+        currency[coin] = Math.max(
+          0,
+          cleanLeft[coin] -
+          cleanRight[coin]
+        );
+
+        return currency;
+      }, {});
+  }
+
+  function normalizeCurrencySourceMap(value) {
+    const raw =
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+        ? value
+        : {};
+
+    const normalized = {};
+
+    Object.entries(raw)
+      .forEach(([sourceName, packageMap]) => {
+        const cleanSource =
+          cleanString(sourceName);
+
+        if (!cleanSource) {
+          return;
+        }
+
+        const rawPackages =
+          packageMap &&
+          typeof packageMap === "object" &&
+          !Array.isArray(packageMap)
+            ? packageMap
+            : {};
+
+        const looksLikeCurrency =
+          CURRENCY_DENOMINATIONS.some(
+            (coin) => {
+              return rawPackages[coin] !==
+                undefined;
+            }
+          );
+
+        const cleanPackages = {};
+
+        if (looksLikeCurrency) {
+          const currency =
+            normalizeCurrencyMap(
+              rawPackages
+            );
+
+          if (hasCurrencyValue(currency)) {
+            cleanPackages.legacy =
+              currency;
+          }
+        } else {
+          Object.entries(rawPackages)
+            .forEach(
+              ([
+                packageId,
+                currency
+              ]) => {
+                const cleanPackageId =
+                  cleanString(
+                    packageId,
+                    "package"
+                  );
+
+                const cleanCurrency =
+                  normalizeCurrencyMap(
+                    currency
+                  );
+
+                if (
+                  cleanPackageId &&
+                  hasCurrencyValue(
+                    cleanCurrency
+                  )
+                ) {
+                  cleanPackages[
+                    cleanPackageId
+                  ] = cleanCurrency;
+                }
+              }
+            );
+        }
+
+        if (
+          Object.keys(cleanPackages)
+            .length
+        ) {
+          normalized[cleanSource] =
+            cleanPackages;
+        }
+      });
+
+    return normalized;
+  }
+
+  function getCurrencySourceTotals(
+    sourceMap
+  ) {
+    const sources =
+      normalizeCurrencySourceMap(
+        sourceMap
+      );
+
+    return Object.values(sources)
+      .reduce((total, packageMap) => {
+        return addCurrencyMaps(
+          total,
+          ...Object.values(packageMap)
+        );
+      }, normalizeCurrencyMap({}));
+  }
+
+  function ensureEquipmentCurrencySources(
+    equipment =
+      creatorState.draft.equipment
+  ) {
+    if (!equipment.currencySources) {
+      equipment.currencySources = {};
+    }
+
+    equipment.currencySources =
+      normalizeCurrencySourceMap(
+        equipment.currencySources
+      );
+
+    return equipment.currencySources;
+  }
+
+  function getManualCurrencyBalance(
+    equipment =
+      creatorState.draft.equipment
+  ) {
+    return subtractCurrencyMaps(
+      equipment.currency,
+      getCurrencySourceTotals(
+        ensureEquipmentCurrencySources(
+          equipment
+        )
+      )
+    );
+  }
+
+  function syncEquipmentCurrencyFromSources(
+    equipment =
+      creatorState.draft.equipment,
+    manualCurrency =
+      getManualCurrencyBalance(equipment)
+  ) {
+    equipment.currency =
+      addCurrencyMaps(
+        manualCurrency,
+        getCurrencySourceTotals(
+          ensureEquipmentCurrencySources(
+            equipment
+          )
+        )
+      );
+
+    return equipment.currency;
+  }
+
+  function backfillBackgroundCurrencySources(
+    character
+  ) {
+    const equipment =
+      character?.equipment;
+
+    const background =
+      character?.background;
+
+    if (!equipment || !background) {
+      return;
+    }
+
+    const sourceName =
+      getBackgroundSourceLabel(
+        background
+      );
+
+    const appliedPackageIds =
+      cleanArray(
+        background
+          .featureChoices
+          ?.appliedEquipmentPackageIds
+      );
+
+    if (
+      !sourceName ||
+      !appliedPackageIds.length
+    ) {
+      return;
+    }
+
+    const sources =
+      ensureEquipmentCurrencySources(
+        equipment
+      );
+
+    sources[sourceName] =
+      sources[sourceName] || {};
+
+    appliedPackageIds.forEach(
+      (packageId) => {
+        const cleanPackageId =
+          cleanString(packageId);
+
+        if (
+          !cleanPackageId ||
+          sources[sourceName][
+            cleanPackageId
+          ]
+        ) {
+          return;
+        }
+
+        const pack =
+          DEFAULT_BACKGROUND_EQUIPMENT_PACKAGES
+            .find((candidate) => {
+              return candidate.id ===
+                cleanPackageId;
+            });
+
+        const currency =
+          normalizeCurrencyMap(
+            pack?.currency
+          );
+
+        if (hasCurrencyValue(currency)) {
+          sources[sourceName][
+            cleanPackageId
+          ] = currency;
+        }
+      }
+    );
+
+    if (
+      !Object.keys(sources[sourceName])
+        .length
+    ) {
+      delete sources[sourceName];
+    }
+  }
+
+  function hasAbilityMapValues(value) {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value)
+    ) {
+      return false;
+    }
+
+    return ABILITY_DEFINITIONS.some((ability) => {
+      const raw = value[ability.id];
+
+      return (
+        raw !== undefined &&
+        raw !== null &&
+        raw !== ""
+      );
+    });
+  }
+
+  function getAbilityBonusTotalsFromSources(sources) {
+    const totals =
+      createAbilityMap(0);
+
+    Object.values(
+      sources &&
+      typeof sources === "object" &&
+      !Array.isArray(sources)
+        ? sources
+        : {}
+    ).forEach((bonusMap) => {
+      const normalizedBonusMap =
+        normalizeAbilityMap(
+          bonusMap,
+          0
+        );
+
+      ABILITY_DEFINITIONS.forEach(
+        (ability) => {
+          totals[ability.id] +=
+            safeNumber(
+              normalizedBonusMap[
+                ability.id
+              ],
+              0
+            );
+        }
+      );
+    });
+
+    return totals;
+  }
+
+  function deriveAbilityBaseFromFinalScores(
+    finalScores,
+    bonusTotals,
+    fallbackValue = 10
+  ) {
+    const scores =
+      normalizeAbilityMap(
+        finalScores,
+        fallbackValue
+      );
+
+    const bonuses =
+      normalizeAbilityMap(
+        bonusTotals,
+        0
+      );
+
+    const base =
+      createAbilityMap(fallbackValue);
+
+    ABILITY_DEFINITIONS.forEach(
+      (ability) => {
+        base[ability.id] =
+          Math.max(
+            1,
+            Math.min(
+              30,
+              Math.round(
+                safeNumber(
+                  scores[ability.id],
+                  fallbackValue
+                ) -
+                safeNumber(
+                  bonuses[ability.id],
+                  0
+                )
+              )
+            )
+          );
+      }
+    );
+
+    return base;
+  }
+
   function calculateAbilityModifier(score) {
     return Math.floor((safeNumber(score, 10) - 10) / 2);
   }
@@ -934,10 +1724,6 @@ export function createCharacterCreator(options = {}) {
       raw.stats ||
       raw.abilities?.scores ||
       {};
-
-    const rawBase =
-      raw.abilities?.base ||
-      rawStats;
 
     const rawBonuses =
       raw.abilities?.bonuses ||
@@ -1174,6 +1960,46 @@ export function createCharacterCreator(options = {}) {
       )
     );
 
+    const normalizedRawBonuses =
+      normalizeAbilityMap(
+        rawBonuses,
+        0
+      );
+
+    const hasLegacyAbilityBonuses =
+      Object.values(normalizedRawBonuses)
+        .some((value) => {
+          return value !== 0;
+        });
+
+    const rawAbilityBonusSources =
+      raw.abilities?.bonusSources &&
+      typeof raw.abilities.bonusSources === "object" &&
+      !Array.isArray(raw.abilities.bonusSources)
+        ? cloneData(raw.abilities.bonusSources)
+        : hasLegacyAbilityBonuses
+          ? {
+              legacy:
+                normalizedRawBonuses
+            }
+          : {};
+
+    const rawAbilityBonusTotals =
+      getAbilityBonusTotalsFromSources(
+        rawAbilityBonusSources
+      );
+
+    const rawBase =
+      hasAbilityMapValues(
+        raw.abilities?.base
+      )
+        ? raw.abilities.base
+        : deriveAbilityBaseFromFinalScores(
+            rawScores,
+            rawAbilityBonusTotals,
+            10
+          );
+
     const normalized = {
       ...empty,
 
@@ -1247,6 +2073,9 @@ export function createCharacterCreator(options = {}) {
           rawBonuses,
           0
         ),
+
+        bonusSources:
+          rawAbilityBonusSources,
 
         scores: normalizeAbilityMap(
           rawScores,
@@ -1460,8 +2289,15 @@ export function createCharacterCreator(options = {}) {
 
         currency: {
           ...empty.equipment.currency,
-          ...(raw.equipment?.currency || {})
+          ...normalizeCurrencyMap(
+            raw.equipment?.currency
+          )
         },
+
+        currencySources:
+          normalizeCurrencySourceMap(
+            raw.equipment?.currencySources
+          ),
 
         items: Array.isArray(raw.equipment?.items)
           ? raw.equipment.items.map((item) => {
@@ -1498,6 +2334,11 @@ export function createCharacterCreator(options = {}) {
         customSpells:
           Array.isArray(raw.magic?.customSpells)
             ? cloneData(raw.magic.customSpells)
+            : [],
+
+        innateSpells:
+          Array.isArray(raw.magic?.innateSpells)
+            ? cloneData(raw.magic.innateSpells)
             : [],
 
         slots: cloneData(
@@ -1717,6 +2558,77 @@ export function createCharacterCreator(options = {}) {
       });
     });
 
+    if (
+      normalized.species.id ===
+      "custom-species"
+    ) {
+      normalized.species.id =
+        makeSafeId(
+          normalized.species.name ||
+          "custom-species",
+          "custom-species"
+        );
+
+      normalized.species.source =
+        "custom";
+
+      normalized.species.templateSnapshot =
+        null;
+    }
+
+    if (
+      normalized.background.id ===
+      "custom-background"
+    ) {
+      normalized.background.id =
+        makeSafeId(
+          normalized.background.name ||
+          "custom-background",
+          "custom-background"
+        );
+
+      normalized.background.source =
+        "custom";
+
+      normalized.background.templateSnapshot =
+        null;
+    }
+
+    recordRawEquipmentMigrationWarnings(
+      raw.equipment?.items,
+      normalized
+    );
+
+    normalized.equipment.items =
+      repairContainerState(
+        normalized.equipment.items,
+        normalized
+      );
+
+    if (
+      normalized.combat
+        .hpCalculation
+        .mode === "rolled"
+    ) {
+      normalized.combat
+        .hpCalculation
+        .laterLevelValues =
+          normalizeHpRollRecordsForCharacter(
+            normalized.combat
+              .hpCalculation
+              .laterLevelValues,
+            normalized
+          );
+    }
+
+    backfillBackgroundCurrencySources(
+      normalized
+    );
+
+    recalculateAbilityTotals(
+      normalized
+    );
+
     return applyCompatibilityAliases(normalized);
   }
 
@@ -1725,15 +2637,9 @@ export function createCharacterCreator(options = {}) {
 
     normalized.id = null;
 
-    normalized.abilities.modifiers =
-      calculateAbilityModifiers(
-        normalized.abilities.scores
-      );
-
-    normalized.combat.proficiencyBonus =
-      getGenericProficiencyBonus(
-        normalized.classProgression.totalLevel
-      );
+    syncSection18DerivedValues(
+      normalized
+    );
 
     applyCompatibilityAliases(normalized);
 
@@ -2548,9 +3454,46 @@ export function createCharacterCreator(options = {}) {
       laterLevelValues:
         Array.isArray(raw.laterLevelValues)
           ? raw.laterLevelValues.map((value) => {
+              if (
+                value &&
+                typeof value === "object" &&
+                !Array.isArray(value)
+              ) {
+                return {
+                  characterLevel:
+                    Math.max(
+                      2,
+                      Math.round(
+                        safeNumber(
+                          value.characterLevel,
+                          2
+                        )
+                      )
+                    ),
+                  classId:
+                    cleanString(value.classId),
+                  className:
+                    cleanString(value.className),
+                  hitDie:
+                    cleanString(value.hitDie),
+                  roll:
+                    Math.max(
+                      1,
+                      Math.round(
+                        safeNumber(
+                          value.roll,
+                          1
+                        )
+                      )
+                    )
+                };
+              }
+
               return Math.max(
                 1,
-                safeNumber(value, 1)
+                Math.round(
+                  safeNumber(value, 1)
+                )
               );
             })
           : [],
@@ -2745,11 +3688,408 @@ export function createCharacterCreator(options = {}) {
       });
   }
 
+  function getHitDieSize(hitDie) {
+    return Math.max(
+      1,
+      safeNumber(
+        String(hitDie || "d8")
+          .replace(/[^0-9]/g, ""),
+        8
+      )
+    );
+  }
+
+  function getHpRollRawRecords(rawRolls) {
+    return (Array.isArray(rawRolls)
+      ? rawRolls
+      : []
+    ).map((raw, index) => {
+      const isRecord =
+        raw &&
+        typeof raw === "object" &&
+        !Array.isArray(raw);
+
+      const characterLevel =
+        isRecord
+          ? Math.max(
+              2,
+              Math.round(
+                safeNumber(
+                  raw.characterLevel,
+                  index + 2
+                )
+              )
+            )
+          : index + 2;
+
+      const roll =
+        isRecord
+          ? raw.roll
+          : raw;
+
+      return {
+        rawIndex: index,
+        legacy:
+          !isRecord,
+        characterLevel,
+        classId:
+          isRecord
+            ? cleanString(raw.classId)
+            : "",
+        className:
+          isRecord
+            ? cleanString(raw.className)
+            : "",
+        hitDie:
+          isRecord
+            ? cleanString(raw.hitDie)
+            : "",
+        roll:
+          Math.max(
+            1,
+            Math.round(
+              safeNumber(roll, 1)
+            )
+          )
+      };
+    });
+  }
+
+  function hpRollRawMatchesLevel(
+    rawRecord,
+    levelRecord
+  ) {
+    if (!rawRecord || !levelRecord) {
+      return false;
+    }
+
+    const rawHitDie =
+      cleanString(rawRecord.hitDie);
+
+    if (
+      rawHitDie &&
+      rawHitDie !== cleanString(
+        levelRecord.hitDie
+      )
+    ) {
+      return false;
+    }
+
+    const rawClassId =
+      cleanString(rawRecord.classId);
+
+    const levelClassId =
+      cleanString(levelRecord.classId);
+
+    if (
+      rawClassId &&
+      levelClassId &&
+      rawClassId !== levelClassId
+    ) {
+      return false;
+    }
+
+    const rawClassName =
+      cleanString(rawRecord.className)
+        .toLowerCase();
+
+    const levelClassName =
+      cleanString(levelRecord.className)
+        .toLowerCase();
+
+    if (
+      rawClassName &&
+      levelClassName &&
+      rawClassName !== levelClassName
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function findHpRollRawRecordForLevel({
+    rawRecords,
+    usedIndexes,
+    levelRecord,
+    laterLevelIndex
+  }) {
+    const unusedRecords =
+      rawRecords.filter((record) => {
+        return !usedIndexes.has(
+          record.rawIndex
+        );
+      });
+
+    return (
+      unusedRecords.find((record) => {
+        return (
+          record.characterLevel ===
+            levelRecord.characterLevel &&
+          hpRollRawMatchesLevel(
+            record,
+            levelRecord
+          )
+        );
+      }) ||
+      unusedRecords.find((record) => {
+        return hpRollRawMatchesLevel(
+          record,
+          levelRecord
+        );
+      }) ||
+      unusedRecords.find((record) => {
+        return (
+          record.characterLevel ===
+          levelRecord.characterLevel
+        );
+      }) ||
+      unusedRecords.find((record) => {
+        return (
+          record.rawIndex ===
+          laterLevelIndex
+        );
+      }) ||
+      null
+    );
+  }
+
+  function getCharacterLevelHitDieRecords(
+    character
+  ) {
+    const records = [];
+
+    getCharacterClassEntries(character)
+      .forEach((classEntry) => {
+        const template =
+          resolveClassTemplateForEntry(
+            classEntry
+          );
+
+        const classLevel =
+          Math.max(
+            0,
+            Math.round(
+              safeNumber(
+                classEntry?.level,
+                0
+              )
+            )
+          );
+
+        const hitDie =
+          template?.hitDie ||
+          classEntry?.hitDie ||
+          "d8";
+
+        for (
+          let index = 0;
+          index < classLevel;
+          index += 1
+        ) {
+          records.push({
+            characterLevel:
+              records.length + 1,
+            classId:
+              classEntry.classId ||
+              template?.id ||
+              "",
+            className:
+              classEntry.className ||
+              template?.name ||
+              "Class",
+            hitDie
+          });
+        }
+      });
+
+    return records.slice(
+      0,
+      clampLevel(
+        character
+          ?.classProgression
+          ?.totalLevel ||
+        records.length ||
+        1
+      )
+    );
+  }
+
+  function normalizeHpRollRecordsForCharacter(
+    rawRolls,
+    character
+  ) {
+    const levelRecords =
+      getCharacterLevelHitDieRecords(
+        character
+      );
+
+    const laterLevels =
+      levelRecords.slice(1);
+
+    const rawRecords =
+      getHpRollRawRecords(rawRolls);
+
+    const hasMulticlass =
+      getCharacterClassEntries(character)
+        .length > 1;
+
+    let migratedNumericRolls = false;
+    const usedIndexes = new Set();
+
+    const records =
+      laterLevels.map((levelRecord, index) => {
+        const raw =
+          findHpRollRawRecordForLevel({
+            rawRecords,
+            usedIndexes,
+            levelRecord,
+            laterLevelIndex: index
+          });
+
+        if (
+          raw &&
+          raw.legacy
+        ) {
+          migratedNumericRolls = true;
+        }
+
+        if (raw) {
+          usedIndexes.add(raw.rawIndex);
+        }
+
+        const dieSize =
+          getHitDieSize(
+            levelRecord.hitDie
+          );
+
+        return {
+          characterLevel:
+            levelRecord.characterLevel,
+          classId:
+            levelRecord.classId,
+          className:
+            levelRecord.className,
+          hitDie:
+            levelRecord.hitDie,
+          roll:
+            Math.max(
+              1,
+              Math.min(
+                dieSize,
+                Math.round(
+                  safeNumber(
+                    raw?.roll,
+                    Math.floor(dieSize / 2) + 1
+                  )
+                )
+              )
+            )
+        };
+      });
+
+    if (migratedNumericRolls) {
+      addMigrationWarning(
+        character,
+        "Old rolled HP values were migrated to per-level roll records."
+      );
+
+      if (hasMulticlass) {
+        addMigrationWarning(
+          character,
+          "Old multiclass rolled HP values were assigned to class levels in class-entry order."
+        );
+      }
+    }
+
+    return records;
+  }
+
+  function getSpeciesHpBonus(
+    character
+  ) {
+    const species =
+      character?.species || {};
+
+    const subraceId =
+      cleanString(
+        species.choices?.subraceId
+      );
+
+    if (
+      species.id === "dwarf" &&
+      subraceId === "hill-dwarf"
+    ) {
+      return clampLevel(
+        character
+          ?.classProgression
+          ?.totalLevel || 1
+      );
+    }
+
+    return 0;
+  }
+
+  function calculateCharacterRolledHp(
+    character,
+    hpCalculation,
+    constitutionModifier
+  ) {
+    const levelRecords =
+      getCharacterLevelHitDieRecords(
+        character
+      );
+
+    if (!levelRecords.length) {
+      return 1;
+    }
+
+    const firstDieSize =
+      getHitDieSize(
+        levelRecords[0].hitDie
+      );
+
+    const rollRecords =
+      normalizeHpRollRecordsForCharacter(
+        hpCalculation.laterLevelValues,
+        character
+      );
+
+    let total =
+      Math.max(
+        1,
+        hpCalculation.levelOneValue === null ||
+        hpCalculation.levelOneValue === undefined
+          ? firstDieSize +
+            constitutionModifier
+          : safeNumber(
+              hpCalculation.levelOneValue,
+              firstDieSize +
+                constitutionModifier
+            )
+      );
+
+    rollRecords.forEach((record) => {
+      total += Math.max(
+        1,
+        record.roll +
+          constitutionModifier
+      );
+    });
+
+    return total;
+  }
+
   function calculateCharacterHp(
     character
   ) {
+    const classEntries =
+      getCharacterClassEntries(
+        character
+      );
+
     const primaryClass =
-      getCharacterClassEntries(character)[0];
+      classEntries[0];
 
     const template =
       resolveClassTemplateForEntry(
@@ -2782,6 +4122,8 @@ export function createCharacterCreator(options = {}) {
       );
 
     let maximumHp;
+    const speciesHpBonus =
+      getSpeciesHpBonus(character);
 
     if (hpCalculation.mode === "manual") {
       maximumHp =
@@ -2792,15 +4134,69 @@ export function createCharacterCreator(options = {}) {
         });
     } else if (hpCalculation.mode === "rolled") {
       maximumHp =
-        calculateRuleRolledHp({
-          hitDie,
-          level,
-          constitutionModifier,
-          levelOneValue:
-            hpCalculation.levelOneValue,
-          rolls:
-            hpCalculation.laterLevelValues
-        });
+        calculateCharacterRolledHp(
+          character,
+          hpCalculation,
+          constitutionModifier
+        ) +
+        speciesHpBonus;
+    } else if (classEntries.length > 1) {
+      let characterLevelIndex = 0;
+
+      maximumHp =
+        classEntries.reduce(
+          (total, classEntry) => {
+            const entryTemplate =
+              resolveClassTemplateForEntry(
+                classEntry
+              );
+
+            const entryDieSize =
+              getHitDieSize(
+                entryTemplate?.hitDie ||
+                classEntry?.hitDie ||
+                "d8"
+              );
+
+            const entryLevel =
+              Math.max(
+                0,
+                Math.round(
+                  safeNumber(
+                    classEntry?.level,
+                    0
+                  )
+                )
+              );
+
+            let classTotal = 0;
+
+            for (
+              let index = 0;
+              index < entryLevel;
+              index += 1
+            ) {
+              classTotal +=
+                characterLevelIndex === 0
+                  ? entryDieSize +
+                    constitutionModifier
+                  : Math.max(
+                      1,
+                      Math.floor(
+                        entryDieSize / 2
+                      ) +
+                      1 +
+                      constitutionModifier
+                    );
+
+              characterLevelIndex += 1;
+            }
+
+            return total + classTotal;
+          },
+          0
+        ) +
+        speciesHpBonus;
     } else {
       maximumHp =
         calculateRuleFixedAverageHp({
@@ -2809,7 +4205,8 @@ export function createCharacterCreator(options = {}) {
           constitutionModifier,
           levelOneValue:
             hpCalculation.levelOneValue
-        });
+        }) +
+        speciesHpBonus;
     }
 
     return {
@@ -2818,12 +4215,18 @@ export function createCharacterCreator(options = {}) {
       hitDie,
       level,
       constitutionModifier,
+      speciesHpBonus,
       manualOverride:
         hpCalculation.manualOverride,
       levelOneValue:
         hpCalculation.levelOneValue,
       rolls:
-        hpCalculation.laterLevelValues
+        hpCalculation.mode === "rolled"
+          ? normalizeHpRollRecordsForCharacter(
+              hpCalculation.laterLevelValues,
+              character
+            )
+          : hpCalculation.laterLevelValues
     };
   }
 
@@ -2880,6 +4283,7 @@ export function createCharacterCreator(options = {}) {
       inventory.filter((item) => {
         return (
           item.equipped === true &&
+          !cleanString(item.containerId) &&
           item.baseArmorClass &&
           item.isShield !== true
         );
@@ -2889,26 +4293,29 @@ export function createCharacterCreator(options = {}) {
       inventory.filter((item) => {
         return (
           item.equipped === true &&
+          !cleanString(item.containerId) &&
           item.isShield === true
         );
       });
 
     const shieldBonus =
-      equippedShields.reduce((total, item) => {
-        return (
-          total +
+      equippedShields.length
+        ? (
           2 +
           safeNumber(
-            item.magicalArmorClassBonus ??
-            item.magicalBonus,
+            equippedShields[0]
+              .magicalArmorClassBonus,
             0
           )
-        );
-      }, 0);
+        )
+        : 0;
 
     const generalArmorClassBonus =
       inventory.reduce((total, item) => {
-        if (item.equipped !== true) {
+        if (
+          item.equipped !== true ||
+          cleanString(item.containerId)
+        ) {
           return total;
         }
 
@@ -3041,8 +4448,7 @@ export function createCharacterCreator(options = {}) {
         base + dexBonus,
         `${base} + Dex ${formatSignedNumber(dexBonus)}`,
         safeNumber(
-          armor.magicalArmorClassBonus ??
-          armor.magicalBonus,
+          armor.magicalArmorClassBonus,
           0
         )
       );
@@ -3205,6 +4611,61 @@ export function createCharacterCreator(options = {}) {
     return false;
   }
 
+  function calculateContainerContentWeight(
+    items,
+    containerId,
+    visited = new Set()
+  ) {
+    const cleanId =
+      cleanString(containerId);
+
+    if (!cleanId || visited.has(cleanId)) {
+      return {
+        knownWeight: 0,
+        unknownCount: 0
+      };
+    }
+
+    visited.add(cleanId);
+
+    return getContainerContents(
+      items,
+      cleanId
+    ).reduce(
+      (summary, item) => {
+        const weight =
+          getInventoryItemKnownWeight(item);
+
+        if (weight === null) {
+          summary.unknownCount += 1;
+        } else {
+          summary.knownWeight += weight;
+        }
+
+        if (item.isContainer === true) {
+          const nested =
+            calculateContainerContentWeight(
+              items,
+              item.id,
+              new Set(visited)
+            );
+
+          summary.knownWeight +=
+            nested.knownWeight;
+
+          summary.unknownCount +=
+            nested.unknownCount;
+        }
+
+        return summary;
+      },
+      {
+        knownWeight: 0,
+        unknownCount: 0
+      }
+    );
+  }
+
   function getContainerSummaries(items = []) {
     const inventory =
       Array.isArray(items) ? items : [];
@@ -3221,8 +4682,9 @@ export function createCharacterCreator(options = {}) {
           );
 
         const weight =
-          calculateInventoryWeightSummary(
-            contents
+          calculateContainerContentWeight(
+            inventory,
+            container.id
           );
 
         const capacity =
@@ -3308,6 +4770,156 @@ export function createCharacterCreator(options = {}) {
     return warnings;
   }
 
+  function repairContainerState(
+    items = [],
+    character = null
+  ) {
+    const inventory =
+      cloneData(
+        Array.isArray(items) ? items : []
+      );
+
+    const ids =
+      new Set(
+        inventory.map((item) => {
+          return item.id;
+        })
+      );
+
+    inventory.forEach((item) => {
+      if (
+        item.isContainer === true &&
+        item.equipped === true
+      ) {
+        item.equipped = false;
+
+        if (character) {
+          addMigrationWarning(
+            character,
+            `${item.name || "Container"} was imported as equipped and was repaired to carried container state.`
+          );
+        }
+      }
+
+      const containerId =
+        cleanString(item.containerId);
+
+      if (!containerId) {
+        return;
+      }
+
+      if (!ids.has(containerId)) {
+        if (character) {
+          addMigrationWarning(
+            character,
+            `${item.name || "Item"} referenced missing container ${containerId}; the container reference was cleared.`
+          );
+        }
+
+        item.containerId = "";
+        return;
+      }
+
+      if (
+        wouldCreateContainerCycle(
+          inventory,
+          item.id,
+          containerId
+        )
+      ) {
+        if (character) {
+          addMigrationWarning(
+            character,
+            `${item.name || "Item"} had an invalid container loop; the container reference was cleared.`
+          );
+        }
+
+        item.containerId = "";
+        return;
+      }
+
+      if (character) {
+        if (item.equipped === true) {
+          addMigrationWarning(
+            character,
+            `${item.name || "Item"} was equipped while stored in a container and was repaired to unequipped.`
+          );
+        }
+
+        if (item.attuned === true) {
+          addMigrationWarning(
+            character,
+            `${item.name || "Item"} was attuned while stored in a container and was repaired to unattuned.`
+          );
+        }
+      }
+
+      item.equipped = false;
+      item.attuned = false;
+    });
+
+    return inventory;
+  }
+
+  function recordRawEquipmentMigrationWarnings(
+    rawItems,
+    character
+  ) {
+    if (
+      !Array.isArray(rawItems) ||
+      !character
+    ) {
+      return;
+    }
+
+    rawItems.forEach((rawItem) => {
+      const raw =
+        rawItem &&
+        typeof rawItem === "object"
+          ? rawItem
+          : {};
+
+      const name =
+        safeDisplayString(
+          raw.name,
+          "Item"
+        );
+
+      const containerId =
+        cleanString(raw.containerId);
+
+      if (
+        raw.isContainer === true &&
+        raw.equipped === true
+      ) {
+        addMigrationWarning(
+          character,
+          `${name} was imported as an equipped container and was repaired to carried container state.`
+        );
+      }
+
+      if (
+        containerId &&
+        raw.equipped === true
+      ) {
+        addMigrationWarning(
+          character,
+          `${name} was imported as equipped while stored in container ${containerId} and was repaired to unequipped.`
+        );
+      }
+
+      if (
+        containerId &&
+        raw.attuned === true
+      ) {
+        addMigrationWarning(
+          character,
+          `${name} was imported as attuned while stored in container ${containerId} and was repaired to unattuned.`
+        );
+      }
+    });
+  }
+
   function splitInventoryStack(
     items,
     itemId,
@@ -3351,6 +4963,12 @@ export function createCharacterCreator(options = {}) {
     if (moveQuantity >= currentQuantity) {
       item.containerId =
         cleanString(targetContainerId);
+
+      if (item.containerId) {
+        item.equipped = false;
+        item.attuned = false;
+      }
+
       return inventory;
     }
 
@@ -3363,10 +4981,18 @@ export function createCharacterCreator(options = {}) {
         makeSafeId(
           `${item.id}-${Date.now()}-${Math.random()}`,
           "split-item"
-        ),
+      ),
       quantity: moveQuantity,
       containerId:
+        cleanString(targetContainerId),
+      equipped:
         cleanString(targetContainerId)
+          ? false
+          : item.equipped === true,
+      attuned:
+        cleanString(targetContainerId)
+          ? false
+          : item.attuned === true
     });
 
     return inventory;
@@ -3563,6 +5189,7 @@ export function createCharacterCreator(options = {}) {
       .filter((item) => {
         return (
           item.equipped === true &&
+          !cleanString(item.containerId) &&
           (
             item.category === "weapon" ||
             item.weaponType ||
@@ -3898,6 +5525,165 @@ export function createCharacterCreator(options = {}) {
       knownIds,
       preparedIds
     };
+  }
+
+  function getSpellcastingClassOptions(
+    character
+  ) {
+    return getSpellcastingSummary(character)
+      .classes
+      .filter((entry) => {
+        return (
+          cleanString(
+            entry.progressionType,
+            "none"
+          ) !== "none" ||
+          safeNumber(
+            entry.pactMagic?.slots,
+            0
+          ) > 0 ||
+          safeNumber(
+            entry.cantripsKnown,
+            0
+          ) > 0 ||
+          safeNumber(
+            entry.spellsKnown,
+            0
+          ) > 0
+        );
+      });
+  }
+
+  function getSpellSourceId(spell) {
+    return cleanString(
+      spell?.spellcastingSourceId ||
+      spell?.classId
+    );
+  }
+
+  function getSpellcastingEntryForSpell(
+    character,
+    spell
+  ) {
+    const spellcasters =
+      getSpellcastingClassOptions(
+        character
+      );
+
+    const sourceId =
+      getSpellSourceId(spell);
+
+    if (!sourceId) {
+      return spellcasters.length === 1
+        ? spellcasters[0]
+        : null;
+    }
+
+    return (
+      spellcasters.find((entry) => {
+        return (
+          cleanString(entry.classId) ===
+          sourceId
+        );
+      }) ||
+      null
+    );
+  }
+
+  function getSpellSourceWarning(
+    character,
+    spell
+  ) {
+    if (
+      spell?.innate === true ||
+      cleanString(spell?.innateSource) ||
+      cleanString(spell?.source)
+        .startsWith("species:") ||
+      cleanString(spell?.source)
+        .startsWith("species-choice:")
+    ) {
+      return "";
+    }
+
+    const spellcasters =
+      getSpellcastingClassOptions(
+        character
+      );
+
+    if (!spellcasters.length) {
+      return "";
+    }
+
+    const sourceId =
+      getSpellSourceId(spell);
+
+    if (
+      spellcasters.length > 1 &&
+      !sourceId
+    ) {
+      return `${spell?.name || "A spell"} needs a class source.`;
+    }
+
+    const entry =
+      getSpellcastingEntryForSpell(
+        character,
+        spell
+      );
+
+    if (!entry) {
+      return `${spell?.name || "A spell"} has an invalid class source.`;
+    }
+
+    const spellLevel =
+      safeNumber(spell?.level, 0);
+
+    if (
+      spellLevel > 0 &&
+      spellLevel >
+        safeNumber(entry.maxSpellLevel, 0) &&
+      spell?.manualOverride !== true
+    ) {
+      return `${spell?.name || "A spell"} is above ${entry.className || "its class"}'s available spell level.`;
+    }
+
+    return "";
+  }
+
+  function isCharacterNonSpellcaster(
+    character
+  ) {
+    const spellcasting =
+      getSpellcastingSummary(character);
+
+    const classes =
+      Array.isArray(spellcasting.classes)
+        ? spellcasting.classes
+        : [];
+
+    if (!classes.length) {
+      return false;
+    }
+
+    return classes.every((entry) => {
+      return (
+        cleanString(
+          entry.progressionType,
+          "none"
+        ) === "none" &&
+        safeNumber(
+          entry.pactMagic?.slots,
+          0
+        ) === 0 &&
+        safeNumber(
+          entry.cantripsKnown,
+          0
+        ) === 0 &&
+        safeNumber(
+          entry.spellsKnown,
+          0
+        ) === 0
+      );
+    });
   }
 
   function createSrdFeature(
@@ -5223,6 +7009,3353 @@ export function createCharacterCreator(options = {}) {
       ]
     );
 
+    record(
+      "All core 2014 species are present",
+      [
+        "human",
+        "dwarf",
+        "elf",
+        "halfling",
+        "dragonborn",
+        "gnome",
+        "half-elf",
+        "half-orc",
+        "tiefling"
+      ].every((speciesId) => {
+        return DEFAULT_SPECIES_TEMPLATES
+          .some((species) => {
+            return species.id === speciesId;
+          });
+      }),
+      true
+    );
+
+    record(
+      "Custom Species preset card is absent",
+      DEFAULT_SPECIES_TEMPLATES
+        .some((species) => {
+          return species.id === "custom-species";
+        }),
+      false
+    );
+
+    record(
+      "Custom Background preset card is absent",
+      DEFAULT_BACKGROUND_TEMPLATES
+        .some((background) => {
+          return background.id ===
+            "custom-background";
+        }),
+      false
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("dwarf");
+
+    record(
+      "Species bonuses apply by scoped source",
+      {
+        con:
+          creatorState.draft
+            .abilities
+            .bonuses
+            .con,
+        source:
+          creatorState.draft
+            .abilities
+            .bonusSources
+            ["species:dwarf"]
+            ?.con || 0
+      },
+      {
+        con: 2,
+        source: 2
+      }
+    );
+
+    chooseSpeciesFromTemplate("human");
+
+    record(
+      "Changing species removes old scoped source",
+      Boolean(
+        creatorState.draft
+          .abilities
+          .bonusSources
+          ["species:dwarf"]
+      ),
+      false
+    );
+
+    const importedFinalScores =
+      normalizeCharacter({
+        abilities: {
+          scores: {
+            str: 17,
+            dex: 10,
+            con: 10,
+            int: 10,
+            wis: 10,
+            cha: 10
+          },
+          bonusSources: {
+            "species:test": {
+              str: 2
+            }
+          }
+        }
+      });
+
+    record(
+      "Import derives base scores from final scores and bonuses",
+      {
+        base:
+          importedFinalScores
+            .abilities
+            .base
+            .str,
+        bonus:
+          importedFinalScores
+            .abilities
+            .bonuses
+            .str,
+        final:
+          importedFinalScores
+            .abilities
+            .scores
+            .str
+      },
+      {
+        base: 15,
+        bonus: 2,
+        final: 17
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    setAbilityBonusSource(
+      "species:test",
+      {
+        str: 2
+      }
+    );
+
+    setAbilityScore("str", 15);
+
+    record(
+      "Manual ability edit writes base and recalculates final",
+      {
+        base:
+          creatorState.draft
+            .abilities
+            .base
+            .str,
+        bonus:
+          creatorState.draft
+            .abilities
+            .bonuses
+            .str,
+        final:
+          creatorState.draft
+            .abilities
+            .scores
+            .str
+      },
+      {
+        base: 15,
+        bonus: 2,
+        final: 17
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    setAbilityBonusSource(
+      "species:test",
+      {
+        str: 2
+      }
+    );
+
+    applySection13Scores({
+      str: 15,
+      dex: 8,
+      con: 8,
+      int: 8,
+      wis: 8,
+      cha: 8
+    });
+
+    creatorState.draft
+      .abilities
+      .method = "point-buy";
+
+    record(
+      "Point buy uses base scores for cost",
+      {
+        spent:
+          getSection13PointBuySpent(),
+        base:
+          getSection13BaseAbilityScore(
+            "str"
+          ),
+        final:
+          getSection13AbilityScore(
+            "str"
+          )
+      },
+      {
+        spent: 9,
+        base: 15,
+        final: 17
+      }
+    );
+
+    record(
+      "Ability screen labels base bonus and final separately",
+      [
+        "Base Score",
+        "Species/Other Bonuses",
+        "Final Score"
+      ].every((label) => {
+        return renderSection13AbilitySummary()
+          .includes(label);
+      }),
+      true
+    );
+
+    const noncasterCharacter =
+      createEmptyCharacter();
+
+    noncasterCharacter.classProgression.totalLevel = 1;
+    noncasterCharacter.classProgression.classes = [
+      {
+        classId: "barbarian",
+        className: "Barbarian",
+        level: 1,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "barbarian";
+            }
+          )
+      }
+    ];
+
+    record(
+      "Noncaster Spells step is complete",
+      isSection17SpellsComplete(
+        noncasterCharacter
+      ),
+      true
+    );
+
+    const wizardCharacter =
+      createEmptyCharacter();
+
+    wizardCharacter.classProgression.totalLevel = 1;
+    wizardCharacter.classProgression.classes = [
+      {
+        classId: "wizard",
+        className: "Wizard",
+        level: 1,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "wizard";
+            }
+          )
+      }
+    ];
+
+    record(
+      "Spellcaster needs required spell choices",
+      isSection17SpellsComplete(
+        wizardCharacter
+      ),
+      false
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    record(
+      "Expertise requires proficiency",
+      toggleSection14Expertise("arcana"),
+      false
+    );
+
+    const fighterWizard =
+      createEmptyCharacter();
+
+    fighterWizard.abilities.scores.con = 14;
+    fighterWizard.classProgression.totalLevel = 5;
+    fighterWizard.classProgression.classes = [
+      {
+        classId: "fighter",
+        className: "Fighter",
+        level: 3,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "fighter";
+            }
+          )
+      },
+      {
+        classId: "wizard",
+        className: "Wizard",
+        level: 2,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "wizard";
+            }
+          )
+      }
+    ];
+
+    record(
+      "Fighter 3 Wizard 2 multiclass HP",
+      calculateCharacterHp(
+        fighterWizard
+      ).maximumHp,
+      40
+    );
+
+    record(
+      "Multiclass hit dice stay separate",
+      calculateCharacterHitDice(
+        fighterWizard
+      ).map((entry) => {
+        return {
+          die: entry.die,
+          count: entry.count
+        };
+      }),
+      [
+        { die: "d10", count: 3 },
+        { die: "d6", count: 2 }
+      ]
+    );
+
+    const twoShieldCharacter =
+      cloneData(fighterCharacter);
+
+    twoShieldCharacter.equipment.items = [
+      normalizeSection15Item({
+        id: "shield-a",
+        name: "Shield A",
+        category: "shield",
+        isShield: true,
+        equipped: true
+      }),
+      normalizeSection15Item({
+        id: "shield-b",
+        name: "Shield B",
+        category: "shield",
+        isShield: true,
+        equipped: true
+      })
+    ];
+
+    record(
+      "Two shields do not stack",
+      calculateArmorClassOptions(
+        twoShieldCharacter
+      ).selected.total,
+      14
+    );
+
+    const magicWeaponNoAc =
+      cloneData(fighterCharacter);
+
+    magicWeaponNoAc.equipment.items = [
+      normalizeSection15Item({
+        id: "magic-sword",
+        name: "Magic Sword",
+        category: "weapon",
+        weaponType: "martial melee",
+        damageDice: "1d8",
+        magicalBonus: 1,
+        equipped: true
+      })
+    ];
+
+    record(
+      "+1 weapon does not grant AC",
+      calculateArmorClassOptions(
+        magicWeaponNoAc
+      ).selected.total,
+      12
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.draft.equipment.items = [
+      normalizeSection15Item({
+        id: "mail",
+        name: "Chain Mail",
+        category: "armor",
+        armorCategory: "heavy armor",
+        baseArmorClass: 16,
+        equipped: true
+      }),
+      normalizeSection15Item({
+        id: "pack",
+        name: "Pack",
+        isContainer: true,
+        capacityWeight: 30
+      })
+    ];
+
+    moveSection15ItemToContainer(
+      0,
+      "pack",
+      1
+    );
+
+    record(
+      "Moving equipped armor into backpack unequips it",
+      {
+        equipped:
+          creatorState.draft
+            .equipment
+            .items[0]
+            .equipped,
+        containerId:
+          creatorState.draft
+            .equipment
+            .items[0]
+            .containerId
+      },
+      {
+        equipped: false,
+        containerId: "pack"
+      }
+    );
+
+    record(
+      "Recursive nested-container weight",
+      getContainerSummaries([
+        normalizeSection15Item({
+          id: "backpack",
+          name: "Backpack",
+          isContainer: true,
+          weight: 5
+        }),
+        normalizeSection15Item({
+          id: "pouch",
+          name: "Pouch",
+          isContainer: true,
+          weight: 1,
+          containerId: "backpack"
+        }),
+        normalizeSection15Item({
+          id: "coins",
+          name: "Coins",
+          weight: 10,
+          containerId: "pouch"
+        })
+      ])[0].knownWeight,
+      11
+    );
+
+    record(
+      "Missing container import repair",
+      normalizeCharacter({
+        equipment: {
+          items: [
+            {
+              id: "gem",
+              name: "Gem",
+              containerId: "missing"
+            }
+          ]
+        }
+      }).equipment.items[0].containerId,
+      ""
+    );
+
+    const warningTextFor = (character) => {
+      return cleanArray(
+        character
+          ?.builder
+          ?.validation
+          ?.migrationWarnings
+      ).join("\n");
+    };
+
+    const rawEquipmentWarningCharacter =
+      normalizeCharacter({
+        equipment: {
+          items: [
+            {
+              id: "pack",
+              name: "Backpack",
+              isContainer: true,
+              equipped: true
+            },
+            {
+              id: "ring",
+              name: "Ring of Testing",
+              category: "magic-item",
+              isMagical: true,
+              requiresAttunement: true,
+              equipped: true,
+              attuned: true,
+              containerId: "pack"
+            },
+            {
+              id: "gem",
+              name: "Gem",
+              containerId: "missing"
+            }
+          ]
+        }
+      });
+
+    record(
+      "Container import migration warnings are recorded before repair",
+      {
+        equippedContainer:
+          warningTextFor(
+            rawEquipmentWarningCharacter
+          ).includes(
+            "equipped container"
+          ),
+        equippedContained:
+          warningTextFor(
+            rawEquipmentWarningCharacter
+          ).includes(
+            "equipped while stored"
+          ),
+        attunedContained:
+          warningTextFor(
+            rawEquipmentWarningCharacter
+          ).includes(
+            "attuned while stored"
+          ),
+        missingContainer:
+          warningTextFor(
+            rawEquipmentWarningCharacter
+          ).includes(
+            "referenced missing container"
+          )
+      },
+      {
+        equippedContainer: true,
+        equippedContained: true,
+        attunedContained: true,
+        missingContainer: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.showContainedItems = false;
+    creatorState.openContainerId = "";
+    creatorState.draft.equipment.items = [
+      normalizeSection15Item({
+        id: "panel-pack",
+        name: "Panel Test Pack",
+        isContainer: true
+      }),
+      normalizeSection15Item({
+        id: "panel-coin",
+        name: "Hidden Test Coin",
+        containerId: "panel-pack"
+      })
+    ];
+
+    record(
+      "Contained inventory hides from main list by default",
+      renderSection15Inventory()
+        .includes("Hidden Test Coin"),
+      false
+    );
+
+    creatorState.showContainedItems = true;
+
+    record(
+      "Contained inventory can show in main list",
+      renderSection15Inventory()
+        .includes("Hidden Test Coin"),
+      true
+    );
+
+    creatorState.openContainerId =
+      "panel-pack";
+
+    record(
+      "Open backpack panel lists contents",
+      renderSection15OpenContainerPanel()
+        .includes("Hidden Test Coin"),
+      true
+    );
+
+    moveSection15ItemToContainer(
+      1,
+      "",
+      null
+    );
+
+    record(
+      "Moving item out of backpack clears container",
+      creatorState.draft
+        .equipment
+        .items[1]
+        .containerId,
+      ""
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate(
+      "dragonborn"
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .draconicAncestry = "red";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    record(
+      "Dragonborn ancestry applies choice mechanics",
+      {
+        complete:
+          isSection17SpeciesComplete(
+            creatorState.draft
+          ),
+        resistance:
+          creatorState.draft
+            .species
+            .damageResistances[0],
+        trait:
+          creatorState.draft
+            .features
+            .speciesTraits
+            .some((trait) => {
+              return trait.name ===
+                "Red Dragon Ancestry";
+            })
+      },
+      {
+        complete: true,
+        resistance: "Fire",
+        trait: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate(
+      "half-elf"
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityOne = "dex";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityTwo = "con";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillOne = "perception";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillTwo = "stealth";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfLanguage = "Dwarvish";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    record(
+      "Half-Elf flexible bonuses apply",
+      {
+        complete:
+          isSection17SpeciesComplete(
+            creatorState.draft
+          ),
+        cha:
+          creatorState.draft
+            .abilities
+            .bonuses
+            .cha,
+        dex:
+          creatorState.draft
+            .abilities
+            .bonuses
+            .dex,
+        con:
+          creatorState.draft
+            .abilities
+            .bonuses
+            .con
+      },
+      {
+        complete: true,
+        cha: 2,
+        dex: 1,
+        con: 1
+      }
+    );
+
+    const multiclassSpellSourceCharacter =
+      createEmptyCharacter();
+
+    multiclassSpellSourceCharacter
+      .abilities
+      .scores
+      .int = 16;
+
+    multiclassSpellSourceCharacter
+      .abilities
+      .scores
+      .wis = 16;
+
+    multiclassSpellSourceCharacter
+      .combat
+      .proficiencyBonus = 2;
+
+    multiclassSpellSourceCharacter
+      .classProgression
+      .totalLevel = 4;
+
+    multiclassSpellSourceCharacter
+      .classProgression
+      .classes = [
+        {
+          classId: "wizard",
+          className: "Wizard",
+          level: 1,
+          templateSnapshot:
+            DEFAULT_CLASS_TEMPLATES.find(
+              (template) => {
+                return template.id ===
+                  "wizard";
+              }
+            )
+        },
+        {
+          classId: "cleric",
+          className: "Cleric",
+          level: 3,
+          templateSnapshot:
+            DEFAULT_CLASS_TEMPLATES.find(
+              (template) => {
+                return template.id ===
+                  "cleric";
+              }
+            )
+        }
+      ];
+
+    const ownerlessSpell =
+      normalizeSection16Spell({
+        id: "ownerless-spell",
+        name: "Ownerless Spell",
+        level: 1
+      });
+
+    const tooHighWizardSpell =
+      normalizeSection16Spell({
+        id: "too-high",
+        name: "Too High",
+        level: 3,
+        classId: "wizard"
+      });
+
+    const sourcedClericSpell =
+      normalizeSection16Spell({
+        id: "sourced-cleric",
+        name: "Sourced Cleric",
+        level: 1,
+        classId: "cleric"
+      });
+
+    record(
+      "Multiclass spell without source warns",
+      getSpellSourceWarning(
+        multiclassSpellSourceCharacter,
+        ownerlessSpell
+      ),
+      "Ownerless Spell needs a class source."
+    );
+
+    record(
+      "Spell source validates class level",
+      getSpellSourceWarning(
+        multiclassSpellSourceCharacter,
+        tooHighWizardSpell
+      ),
+      "Too High is above Wizard's available spell level."
+    );
+
+    record(
+      "Valid sourced spell has no source warning",
+      getSpellSourceWarning(
+        multiclassSpellSourceCharacter,
+        sourcedClericSpell
+      ),
+      ""
+    );
+
+    creatorState.draft =
+      cloneData(
+        multiclassSpellSourceCharacter
+      );
+
+    creatorState.draft
+      .magic
+      .customSpells = [
+        ownerlessSpell
+      ];
+
+    creatorState.draft
+      .magic
+      .knownSpellIds = [
+        "ownerless-spell"
+      ];
+
+    record(
+      "Review warns for ownerless multiclass spell",
+      getSection17Warnings()
+        .includes(
+          "Ownerless Spell needs a class source."
+        ),
+      true
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.draft
+      .identity
+      .name = "Review Clarity";
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 1;
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        {
+          classId: "wizard",
+          className: "Wizard",
+          level: 1,
+          templateSnapshot:
+            DEFAULT_CLASS_TEMPLATES.find(
+              (template) => {
+                return template.id ===
+                  "wizard";
+              }
+            )
+        }
+      ];
+
+    applySection13Scores({
+      str: 15,
+      dex: 10,
+      con: 12,
+      int: 16,
+      wis: 10,
+      cha: 10
+    });
+
+    setAbilityBonusSource(
+      "species:test",
+      {
+        str: 2
+      }
+    );
+
+    chooseSection14Background(
+      "criminal"
+    );
+
+    setSection14BackgroundChoiceList(
+      "toolProficiencies",
+      [
+        "Dice set",
+        "Thieves' tools"
+      ]
+    );
+
+    setSection14BackgroundChoiceList(
+      "languageProficiencies",
+      ["Infernal"]
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      creatorState.draft
+        .background
+        .featureChoices
+        .toolProficiencies,
+      "background:criminal"
+    );
+
+    setSourceProficiencyList(
+      "languages",
+      creatorState.draft
+        .background
+        .featureChoices
+        .languageProficiencies,
+      "background:criminal"
+    );
+
+    applySection14BackgroundPackage(
+      "criminal-pack"
+    );
+
+    creatorState.draft
+      .magic
+      .customSpells = [
+        normalizeSection16Spell({
+          id: "magic-missile",
+          name: "Magic Missile",
+          level: 1,
+          classId: "wizard"
+        })
+      ];
+
+    creatorState.draft
+      .magic
+      .knownSpellIds = [
+        "magic-missile"
+      ];
+
+    creatorState.draft
+      .magic
+      .innateSpells = [
+        normalizeSection16Spell(
+          {
+            id: "innate-light",
+            name: "Light",
+            level: 0,
+            source: "species:test",
+            innateSource:
+              "species:test",
+            innate: true,
+            spellcastingAbility:
+              "cha"
+          },
+          "species:test"
+        )
+      ];
+
+    creatorState.draft
+      .builder
+      .validation
+      .migrationWarnings = [
+        "Review imported container repairs."
+      ];
+
+    const reviewClarityHtml =
+      renderReviewStep();
+
+    record(
+      "Review screen shows clarified character details",
+      {
+        abilities:
+          [
+            "Base Score",
+            "Bonus Sources",
+            "species:test +2",
+            "Final Score"
+          ].every((text) => {
+            return reviewClarityHtml
+              .includes(text);
+          }),
+        backgroundItems:
+          reviewClarityHtml.includes(
+            "Background Items and Currency"
+          ) &&
+          reviewClarityHtml.includes(
+            "criminal-pack"
+          ) &&
+          reviewClarityHtml.includes(
+            "15 gp"
+          ),
+        exactChoices:
+          [
+            "Exact Tools, Instruments, and Gaming Sets",
+            "Dice set",
+            "Thieves&#039; tools",
+            "Exact Background Languages",
+            "Infernal"
+          ].every((text) => {
+            return reviewClarityHtml
+              .includes(text);
+          }),
+        spells:
+          reviewClarityHtml.includes(
+            "Class Spells"
+          ) &&
+          reviewClarityHtml.includes(
+            "Magic Missile"
+          ) &&
+          reviewClarityHtml.includes(
+            "Innate Species Spells"
+          ) &&
+          reviewClarityHtml.includes(
+            "Light"
+          ),
+        migration:
+          reviewClarityHtml.includes(
+            "Migration Warnings Requiring Review"
+          ) &&
+          reviewClarityHtml.includes(
+            "Review imported container repairs."
+          )
+      },
+      {
+        abilities: true,
+        backgroundItems: true,
+        exactChoices: true,
+        spells: true,
+        migration: true
+      }
+    );
+
+    const catalogHas = (ids) => {
+      return ids.every((id) => {
+        return DEFAULT_EQUIPMENT_CATALOG
+          .some((item) => {
+            return item.id === id;
+          });
+      });
+    };
+
+    const getTemplate = (templates, id) => {
+      return templates.find((template) => {
+        return template.id === id;
+      });
+    };
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate(
+      "half-elf"
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityOne = "cha";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityTwo = "dex";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillOne = "perception";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillTwo = "stealth";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfLanguage = "Dwarvish";
+
+    record(
+      "Half-Elf rejects Charisma flexible ability",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityOne = "dex";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityTwo = "dex";
+
+    record(
+      "Half-Elf rejects duplicate flexible ability",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityTwo = "con";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    record(
+      "Half-Elf grants exactly two chosen skills",
+      Object.values(
+        creatorState.draft
+          .proficiencies
+          .skills
+      )
+        .filter((entry) => {
+          return cleanArray(
+            entry.source
+          ).includes(
+            "species-choice:half-elf"
+          );
+        })
+        .length,
+      2
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate(
+      "half-elf"
+    );
+
+    record(
+      "Half-Elf blocks completion until choices are valid",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityOne = "dex";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityTwo = "luck";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillOne = "perception";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillTwo = "stealth";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfLanguage = "Dwarvish";
+
+    record(
+      "Half-Elf rejects invalid ability choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfAbilityTwo = "con";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillTwo = "not-a-skill";
+
+    record(
+      "Half-Elf rejects invalid skill choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillTwo = "perception";
+
+    record(
+      "Half-Elf rejects duplicate skill choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfSkillTwo = "stealth";
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfLanguage = "Elvish";
+
+    record(
+      "Half-Elf rejects non-additional language choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .halfElfLanguage = "Dwarvish";
+
+    record(
+      "Half-Elf completes with two abilities two skills and a language",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      true
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate(
+      "dragonborn"
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .draconicAncestry = "sparkle";
+
+    record(
+      "Dragonborn rejects invalid ancestry choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("elf");
+
+    record(
+      "Species with subraces require a valid subrace",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .subraceId = "moon-elf";
+
+    record(
+      "Species with subraces reject invalid subraces",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("dwarf");
+    chooseSection11Subrace("hill-dwarf");
+
+    record(
+      "Dwarf requires a valid tool choice",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .dwarfTool = "Thieves' tools";
+
+    record(
+      "Dwarf rejects invalid tool choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .dwarfTool = "Mason's tools";
+
+    record(
+      "Dwarf completes with a valid tool choice",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      true
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("dwarf");
+
+    creatorState.draft
+      .species
+      .choices
+      .dwarfTool = "Smith's tools";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    creatorState.draft
+      .species
+      .choices
+      .dwarfTool =
+        "Brewer's supplies";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    record(
+      "Dwarf tool choice replaces previous cleanly",
+      {
+        tools:
+          creatorState.draft
+            .proficiencies
+            .tools,
+        oldSource:
+          ensureProficiencySources(
+            creatorState.draft
+          )
+            .tools
+            ?.[
+              "Smith's tools"
+            ] || [],
+        newSource:
+          ensureProficiencySources(
+            creatorState.draft
+          )
+            .tools
+            ?.[
+              "Brewer's supplies"
+            ] || []
+      },
+      {
+        tools: [
+          "Brewer's supplies"
+        ],
+        oldSource: [],
+        newSource: [
+          "species-choice:dwarf"
+        ]
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("human");
+
+    record(
+      "Human requires an additional language",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .humanLanguage = "Common";
+
+    record(
+      "Human rejects non-additional language choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .humanLanguage = "Elvish";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    record(
+      "Human language uses species choice source",
+      ensureProficiencySources(
+        creatorState.draft
+      )
+        .languages
+        ?.Elvish || [],
+      ["species-choice:human"]
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("elf");
+    chooseSection11Subrace("high-elf");
+
+    record(
+      "High Elf requires language and cantrip choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfLanguage = "Common";
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfCantrip = "Fire Bolt";
+
+    record(
+      "High Elf rejects non-additional language choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfLanguage = "Dwarvish";
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfCantrip = "Eldritch Blast";
+
+    record(
+      "High Elf rejects non-Wizard cantrip choices",
+      isSection17SpeciesComplete(
+        creatorState.draft
+      ),
+      false
+    );
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfLanguage = "Dwarvish";
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfCantrip = "Fire Bolt";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    record(
+      "High Elf cantrip is innate Intelligence spell",
+      {
+        knownCantrips:
+          getSpellSelectionLimits(
+            creatorState.draft
+          ).knownCantripCount,
+        spell:
+          getSection16InnateSpells(
+            creatorState.draft
+          ).map((spell) => {
+            return {
+              name: spell.name,
+              ability:
+                spell.spellcastingAbility,
+              source: spell.source
+            };
+          })
+      },
+      {
+        knownCantrips: 0,
+        spell: [
+          {
+            name: "Fire Bolt",
+            ability: "int",
+            source:
+              "species-choice:high-elf"
+          }
+        ]
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    setSourceProficiencyList(
+      "tools",
+      ["Thieves' tools"],
+      "manual"
+    );
+
+    setSourceProficiencyList(
+      "languages",
+      ["Abyssal"],
+      "background:custom"
+    );
+
+    chooseSpeciesFromTemplate("dwarf");
+
+    creatorState.draft
+      .species
+      .choices
+      .dwarfTool = "Smith's tools";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    chooseSpeciesFromTemplate("human");
+
+    creatorState.draft
+      .species
+      .choices
+      .humanLanguage = "Elvish";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    const speciesChangeSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    record(
+      "Changing species removes only species-granted choices",
+      {
+        tools:
+          creatorState.draft
+            .proficiencies
+            .tools
+            .slice()
+            .sort(),
+        smithSource:
+          speciesChangeSources
+            .tools
+            ?.[
+              "Smith's tools"
+            ] || [],
+        manualToolSource:
+          speciesChangeSources
+            .tools
+            ?.[
+              "Thieves' tools"
+            ] || [],
+        languages:
+          creatorState.draft
+            .proficiencies
+            .languages
+            .slice()
+            .sort(),
+        backgroundLanguageSource:
+          speciesChangeSources
+            .languages
+            ?.Abyssal || [],
+        commonSource:
+          speciesChangeSources
+            .languages
+            ?.Common || [],
+        humanLanguageSource:
+          speciesChangeSources
+            .languages
+            ?.Elvish || []
+      },
+      {
+        tools: [
+          "Thieves' tools"
+        ],
+        smithSource: [],
+        manualToolSource: ["manual"],
+        languages: [
+          "Abyssal",
+          "Common",
+          "Elvish"
+        ],
+        backgroundLanguageSource: [
+          "background:custom"
+        ],
+        commonSource: [
+          "species:human"
+        ],
+        humanLanguageSource: [
+          "species-choice:human"
+        ]
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    setSourceProficiencyList(
+      "languages",
+      ["Abyssal"],
+      "manual"
+    );
+
+    chooseSpeciesFromTemplate("elf");
+    chooseSection11Subrace("high-elf");
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfLanguage = "Dwarvish";
+
+    creatorState.draft
+      .species
+      .choices
+      .highElfCantrip = "Fire Bolt";
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    chooseSection11Subrace("wood-elf");
+
+    const subraceChangeSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    record(
+      "Changing subrace removes only previous subrace choices",
+      {
+        languages:
+          creatorState.draft
+            .proficiencies
+            .languages
+            .slice()
+            .sort(),
+        oldLanguageSource:
+          subraceChangeSources
+            .languages
+            ?.Dwarvish || [],
+        manualLanguageSource:
+          subraceChangeSources
+            .languages
+            ?.Abyssal || [],
+        innateSpells:
+          getSection16InnateSpells(
+            creatorState.draft
+          ).map((spell) => {
+            return spell.name;
+          })
+      },
+      {
+        languages: [
+          "Abyssal",
+          "Common",
+          "Elvish"
+        ],
+        oldLanguageSource: [],
+        manualLanguageSource: [
+          "manual"
+        ],
+        innateSpells: []
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("elf");
+    chooseSection11Subrace("dark-elf");
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 1;
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        {
+          classId: "barbarian",
+          className: "Barbarian",
+          level: 1,
+          templateSnapshot:
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "barbarian"
+            )
+        }
+      ];
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    const darkElfLevelOneSpells =
+      getSection16InnateSpells(
+        creatorState.draft
+      ).map((spell) => {
+        return {
+          name: spell.name,
+          level: spell.level,
+          ability:
+            spell.spellcastingAbility,
+          source: spell.source
+        };
+      });
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 3;
+
+    creatorState.draft
+      .classProgression
+      .classes[0]
+      .level = 3;
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    const darkElfLevelThreeNames =
+      getSection16InnateSpells(
+        creatorState.draft
+      ).map((spell) => {
+        return spell.name;
+      });
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 5;
+
+    creatorState.draft
+      .classProgression
+      .classes[0]
+      .level = 5;
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    const darkElfLevelFive =
+      getSection16InnateSpells(
+        creatorState.draft
+      );
+
+    record(
+      "Dark Elf innate spells unlock by level",
+      {
+        levelOne:
+          darkElfLevelOneSpells,
+        levelThree:
+          darkElfLevelThreeNames,
+        levelFive:
+          darkElfLevelFive.map((spell) => {
+            return {
+              name: spell.name,
+              level: spell.level,
+              ability:
+                spell.spellcastingAbility,
+              source: spell.source
+            };
+          })
+      },
+      {
+        levelOne: [
+          {
+            name: "Dancing Lights",
+            level: 0,
+            ability: "cha",
+            source:
+              "subrace:dark-elf"
+          }
+        ],
+        levelThree: [
+          "Dancing Lights",
+          "Faerie Fire"
+        ],
+        levelFive: [
+          {
+            name: "Dancing Lights",
+            level: 0,
+            ability: "cha",
+            source:
+              "subrace:dark-elf"
+          },
+          {
+            name: "Faerie Fire",
+            level: 1,
+            ability: "cha",
+            source:
+              "subrace:dark-elf"
+          },
+          {
+            name: "Darkness",
+            level: 2,
+            ability: "cha",
+            source:
+              "subrace:dark-elf"
+          }
+        ]
+      }
+    );
+
+    const darkElfLimits =
+      getSpellSelectionLimits(
+        creatorState.draft
+      );
+
+    record(
+      "Dark Elf innate spells do not count against class spell limits",
+      {
+        knownCantrips:
+          darkElfLimits
+            .knownCantripCount,
+        knownLeveled:
+          darkElfLimits
+            .knownLeveledCount,
+        prepared:
+          darkElfLimits
+            .preparedCount,
+        slots:
+          getSpellcastingSummary(
+            creatorState.draft
+          ).classes.map((entry) => {
+            return entry.spellSlots || {};
+          })
+      },
+      {
+        knownCantrips: 0,
+        knownLeveled: 0,
+        prepared: 0,
+        slots: [{}]
+      }
+    );
+
+    const darkElfPayload =
+      createCharacterPayload(
+        creatorState.draft
+      );
+
+    const darkElfImported =
+      normalizeCharacter(
+        darkElfPayload
+      );
+
+    const darkElfDuplicated =
+      normalizeCharacter(
+        cloneData(creatorState.draft)
+      );
+
+    record(
+      "Dark Elf innate spells persist through save import and duplication",
+      {
+        payload:
+          darkElfPayload
+            .magic
+            .innateSpells
+            .map((spell) => {
+              return spell.name;
+            }),
+        imported:
+          darkElfImported
+            .magic
+            .innateSpells
+            .map((spell) => {
+              return spell.name;
+            }),
+        duplicated:
+          darkElfDuplicated
+            .magic
+            .innateSpells
+            .map((spell) => {
+              return spell.name;
+            })
+      },
+      {
+        payload: [
+          "Dancing Lights",
+          "Faerie Fire",
+          "Darkness"
+        ],
+        imported: [
+          "Dancing Lights",
+          "Faerie Fire",
+          "Darkness"
+        ],
+        duplicated: [
+          "Dancing Lights",
+          "Faerie Fire",
+          "Darkness"
+        ]
+      }
+    );
+
+    chooseSpeciesFromTemplate("human");
+
+    record(
+      "Changing species removes Dark Elf innate spells",
+      getSection16InnateSpells(
+        creatorState.draft
+      ).length,
+      0
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("gnome");
+    chooseSection11Subrace("forest-gnome");
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 1;
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        {
+          classId: "barbarian",
+          className: "Barbarian",
+          level: 1,
+          templateSnapshot:
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "barbarian"
+            )
+        }
+      ];
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    const forestGnomeLimits =
+      getSpellSelectionLimits(
+        creatorState.draft
+      );
+
+    record(
+      "Forest Gnome Minor Illusion is innate Intelligence spell",
+      {
+        spell:
+          getSection16InnateSpells(
+            creatorState.draft
+          ).map((spell) => {
+            return {
+              name: spell.name,
+              level: spell.level,
+              ability:
+                spell.spellcastingAbility,
+              source: spell.source
+            };
+          }),
+        knownCantrips:
+          forestGnomeLimits
+            .knownCantripCount,
+        knownLeveled:
+          forestGnomeLimits
+            .knownLeveledCount,
+        prepared:
+          forestGnomeLimits
+            .preparedCount,
+        slots:
+          getSpellcastingSummary(
+            creatorState.draft
+          ).classes.map((entry) => {
+            return entry.spellSlots || {};
+          })
+      },
+      {
+        spell: [
+          {
+            name: "Minor Illusion",
+            level: 0,
+            ability: "int",
+            source:
+              "subrace:forest-gnome"
+          }
+        ],
+        knownCantrips: 0,
+        knownLeveled: 0,
+        prepared: 0,
+        slots: [{}]
+      }
+    );
+
+    chooseSection11Subrace("rock-gnome");
+
+    record(
+      "Changing gnome subrace removes Forest Gnome innate spell",
+      getSection16InnateSpells(
+        creatorState.draft
+      ).length,
+      0
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("dwarf");
+    chooseSection11Subrace("hill-dwarf");
+
+    creatorState.draft
+      .abilities
+      .scores
+      .con = 10;
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 5;
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        {
+          classId: "fighter",
+          className: "Fighter",
+          level: 5,
+          templateSnapshot:
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "fighter"
+            )
+        }
+      ];
+
+    record(
+      "Hill Dwarf adds one HP per level",
+      calculateCharacterHp(
+        creatorState.draft
+      ),
+      {
+        ...calculateCharacterHp(
+          creatorState.draft
+        ),
+        maximumHp: 39,
+        speciesHpBonus: 5
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSpeciesFromTemplate("tiefling");
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 5;
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        {
+          classId: "barbarian",
+          className: "Barbarian",
+          level: 5,
+          templateSnapshot:
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "barbarian"
+            )
+        }
+      ];
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    record(
+      "Tiefling innate spells do not create class slots",
+      {
+        spells:
+          getSection16InnateSpells(
+            creatorState.draft
+          ).map((spell) => {
+            return {
+              name: spell.name,
+              level: spell.level,
+              ability:
+                spell.spellcastingAbility
+            };
+          }),
+        slots:
+          getSpellcastingSummary(
+            creatorState.draft
+          ).classes.map((entry) => {
+            return entry.spellSlots || {};
+          })
+      },
+      {
+        spells: [
+          {
+            name: "Thaumaturgy",
+            level: 0,
+            ability: "cha"
+          },
+          {
+            name: "Hellish Rebuke",
+            level: 1,
+            ability: "cha"
+          },
+          {
+            name: "Darkness",
+            level: 2,
+            ability: "cha"
+          }
+        ],
+        slots: [{}]
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection14Background(
+      "charlatan"
+    );
+
+    setSection14BackgroundChoiceList(
+      "toolProficiencies",
+      [
+        "Disguise kit",
+        "Forgery kit"
+      ]
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      creatorState.draft
+        .background
+        .featureChoices
+        .toolProficiencies,
+      "background:charlatan"
+    );
+
+    record(
+      "Background tool choices use background source",
+      ensureProficiencySources(
+        creatorState.draft
+      )
+        .tools
+        ?.[
+          "Disguise kit"
+        ] || [],
+      ["background:charlatan"]
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection14Background(
+      "criminal"
+    );
+
+    const criminalSkillSource =
+      "background:criminal";
+
+    [
+      "deception",
+      "stealth"
+    ].forEach((skillId) => {
+      const skill =
+        SKILL_DEFINITIONS.find(
+          (candidate) => {
+            return candidate.id ===
+              skillId;
+          }
+        );
+
+      setSection14SkillEntry(
+        skill,
+        {
+          proficient: true,
+          expertise: false,
+          source: [criminalSkillSource]
+        }
+      );
+    });
+
+    const criminalToolOptions =
+      getSection14BackgroundToolOptions(
+        getSelectedSection14Background()
+      );
+
+    record(
+      "Generic background tool choice expands to exact options",
+      {
+        generic:
+          criminalToolOptions.includes(
+            "One gaming set"
+          ),
+        dice:
+          criminalToolOptions.includes(
+            "Dice set"
+          ),
+        cards:
+          criminalToolOptions.includes(
+            "Playing card set"
+          ),
+        slotOneDice:
+          getSection14BackgroundToolOptionsForIndex(
+            getSelectedSection14Background(),
+            0
+          ).includes("Dice set"),
+        slotTwoDice:
+          getSection14BackgroundToolOptionsForIndex(
+            getSelectedSection14Background(),
+            1
+          ).includes("Dice set"),
+        slotTwoFixed:
+          getSection14BackgroundToolOptionsForIndex(
+            getSelectedSection14Background(),
+            1
+          ).includes(
+            "Thieves' tools"
+          )
+      },
+      {
+        generic: false,
+        dice: true,
+        cards: true,
+        slotOneDice: true,
+        slotTwoDice: false,
+        slotTwoFixed: true
+      }
+    );
+
+    setSection14BackgroundChoiceList(
+      "toolProficiencies",
+      [
+        "One gaming set",
+        "Thieves' tools"
+      ]
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      creatorState.draft
+        .background
+        .featureChoices
+        .toolProficiencies,
+      criminalSkillSource
+    );
+
+    record(
+      "Generic background tool value does not complete background",
+      {
+        valid:
+          countSection14ValidBackgroundToolChoices(),
+        complete:
+          isSection17BackgroundComplete(
+            creatorState.draft
+          )
+      },
+      {
+        valid: 1,
+        complete: false
+      }
+    );
+
+    setSection14BackgroundChoiceList(
+      "toolProficiencies",
+      [
+        "Dice set",
+        "Playing card set"
+      ]
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      creatorState.draft
+        .background
+        .featureChoices
+        .toolProficiencies,
+      criminalSkillSource
+    );
+
+    record(
+      "Background tool choices must match their exact slots",
+      {
+        valid:
+          countSection14ValidBackgroundToolChoices(),
+        complete:
+          isSection17BackgroundComplete(
+            creatorState.draft
+          )
+      },
+      {
+        valid: 1,
+        complete: false
+      }
+    );
+
+    setSection14BackgroundChoiceList(
+      "toolProficiencies",
+      [
+        "Dice set",
+        "Thieves' tools"
+      ]
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      creatorState.draft
+        .background
+        .featureChoices
+        .toolProficiencies,
+      criminalSkillSource
+    );
+
+    record(
+      "Exact background tool choices complete background",
+      {
+        valid:
+          countSection14ValidBackgroundToolChoices(),
+        complete:
+          isSection17BackgroundComplete(
+            creatorState.draft
+          ),
+        source:
+          ensureProficiencySources(
+            creatorState.draft
+          )
+            .tools
+            ?.[
+              "Dice set"
+            ] || []
+      },
+      {
+        valid: 2,
+        complete: true,
+        source: [criminalSkillSource]
+      }
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      ["Brewer's supplies"],
+      "manual"
+    );
+
+    setSection14BackgroundChoiceList(
+      "toolProficiencies",
+      [
+        "Playing card set",
+        "Thieves' tools"
+      ]
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      creatorState.draft
+        .background
+        .featureChoices
+        .toolProficiencies,
+      criminalSkillSource
+    );
+
+    record(
+      "Replacing background tool choice preserves manual tools",
+      {
+        tools:
+          creatorState.draft
+            .proficiencies
+            .tools
+            .slice()
+            .sort(),
+        oldSource:
+          ensureProficiencySources(
+            creatorState.draft
+          )
+            .tools
+            ?.[
+              "Dice set"
+            ] || [],
+        manualSource:
+          ensureProficiencySources(
+            creatorState.draft
+          )
+            .tools
+            ?.[
+              "Brewer's supplies"
+            ] || [],
+        newSource:
+          ensureProficiencySources(
+            creatorState.draft
+          )
+            .tools
+            ?.[
+              "Playing card set"
+            ] || []
+      },
+      {
+        tools: [
+          "Brewer's supplies",
+          "Playing card set",
+          "Thieves' tools"
+        ],
+        oldSource: [],
+        manualSource: ["manual"],
+        newSource: [criminalSkillSource]
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection14Background("acolyte");
+
+    setSection14BackgroundChoiceList(
+      "languageProficiencies",
+      ["Celestial", "Infernal"]
+    );
+
+    setSourceProficiencyList(
+      "languages",
+      creatorState.draft
+        .background
+        .featureChoices
+        .languageProficiencies,
+      "background:acolyte"
+    );
+
+    record(
+      "Background language choices use background source",
+      ensureProficiencySources(
+        creatorState.draft
+      )
+        .languages
+        ?.Celestial || [],
+      ["background:acolyte"]
+    );
+
+    applySection14BackgroundPackage(
+      "acolyte-pack"
+    );
+
+    const acolyteItemCount =
+      creatorState.draft
+        .equipment
+        .items
+        .filter((item) => {
+          return item.source ===
+            "background:acolyte";
+        })
+        .length;
+
+    applySection14BackgroundPackage(
+      "acolyte-pack"
+    );
+
+    record(
+      "Background equipment package does not duplicate",
+      {
+        items:
+          creatorState.draft
+            .equipment
+            .items
+            .filter((item) => {
+              return item.source ===
+                "background:acolyte";
+            })
+            .length,
+        gp:
+          creatorState.draft
+            .equipment
+            .currency
+            .gp
+      },
+      {
+        items: acolyteItemCount,
+        gp: 15
+      }
+    );
+
+    record(
+      "Background package currency is source tracked",
+      creatorState.draft
+        .equipment
+        .currencySources
+        ["background:acolyte"]
+        ?.[
+          "acolyte-pack"
+        ]
+        ?.gp || 0,
+      15
+    );
+
+    const withSection14Confirm = (
+      response,
+      action
+    ) => {
+      const hadWindow =
+        typeof window !== "undefined";
+
+      const previousConfirm =
+        hadWindow
+          ? window.confirm
+          : null;
+
+      let confirmMessage = "";
+
+      const confirmMock = (message) => {
+        confirmMessage =
+          String(message || "");
+
+        return response;
+      };
+
+      if (hadWindow) {
+        window.confirm = confirmMock;
+      } else {
+        globalThis.window = {
+          confirm: confirmMock
+        };
+      }
+
+      try {
+        action();
+      } finally {
+        if (hadWindow) {
+          window.confirm =
+            previousConfirm;
+        } else {
+          delete globalThis.window;
+        }
+      }
+
+      return confirmMessage;
+    };
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection14Background("acolyte");
+    applySection14BackgroundPackage(
+      "acolyte-pack"
+    );
+
+    const cancelItemCount =
+      creatorState.draft
+        .equipment
+        .items
+        .filter((item) => {
+          return item.source ===
+            "background:acolyte";
+        })
+        .length;
+
+    const cancelMessage =
+      withSection14Confirm(
+        false,
+        () => {
+          chooseSection14Background(
+            "charlatan"
+          );
+        }
+      );
+
+    record(
+      "Background replacement confirmation names items and currency",
+      {
+        asksAboutBoth:
+          cancelMessage.includes(
+            "items and currency"
+          ),
+        itemCount:
+          cancelMessage.includes(
+            `Items to remove: ${cancelItemCount}`
+          ),
+        currency:
+          cancelMessage.includes(
+            "Currency to remove: 15 gp"
+          ),
+        cancelKeeps:
+          cancelMessage.includes(
+            "Cancel keeps the existing background items and currency."
+          )
+      },
+      {
+        asksAboutBoth: true,
+        itemCount: true,
+        currency: true,
+        cancelKeeps: true
+      }
+    );
+
+    record(
+      "Canceling background replacement keeps old items and currency",
+      {
+        items:
+          creatorState.draft
+            .equipment
+            .items
+            .filter((item) => {
+              return item.source ===
+                "background:acolyte";
+            })
+            .length,
+        gp:
+          creatorState.draft
+            .equipment
+            .currency
+            .gp,
+        source:
+          creatorState.draft
+            .equipment
+            .currencySources
+            ["background:acolyte"]
+            ?.[
+              "acolyte-pack"
+            ]
+            ?.gp || 0
+      },
+      {
+        items: cancelItemCount,
+        gp: 15,
+        source: 15
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection14Background("acolyte");
+    applySection14BackgroundPackage(
+      "acolyte-pack"
+    );
+
+    withSection14Confirm(
+      true,
+      () => {
+        chooseSection14Background(
+          "charlatan"
+        );
+      }
+    );
+
+    record(
+      "Confirming background replacement removes old items and currency",
+      {
+        items:
+          creatorState.draft
+            .equipment
+            .items
+            .filter((item) => {
+              return item.source ===
+                "background:acolyte";
+            })
+            .length,
+        gp:
+          creatorState.draft
+            .equipment
+            .currency
+            .gp,
+        source:
+          Boolean(
+            creatorState.draft
+              .equipment
+              .currencySources
+              ["background:acolyte"]
+          )
+      },
+      {
+        items: 0,
+        gp: 0,
+        source: false
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection14Background("acolyte");
+    applySection14BackgroundPackage(
+      "acolyte-pack"
+    );
+
+    creatorState.draft
+      .equipment
+      .currency
+      .gp = 25;
+
+    removeSection14BackgroundEquipment(
+      "background:acolyte",
+      "acolyte-pack"
+    );
+
+    record(
+      "Removing background package preserves manual currency",
+      {
+        items:
+          creatorState.draft
+            .equipment
+            .items
+            .filter((item) => {
+              return item.source ===
+                "background:acolyte";
+            })
+            .length,
+        gp:
+          creatorState.draft
+            .equipment
+            .currency
+            .gp,
+        source:
+          Boolean(
+            creatorState.draft
+              .equipment
+              .currencySources
+              ["background:acolyte"]
+          )
+      },
+      {
+        items: 0,
+        gp: 10,
+        source: false
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection14Background("acolyte");
+    applySection14BackgroundPackage(
+      "acolyte-pack"
+    );
+
+    chooseSection14Background(
+      "charlatan"
+    );
+    applySection14BackgroundPackage(
+      "charlatan-pack"
+    );
+
+    removeSection14BackgroundEquipment(
+      "background:acolyte",
+      "acolyte-pack"
+    );
+
+    record(
+      "Removing one background package preserves other source currency",
+      {
+        gp:
+          creatorState.draft
+            .equipment
+            .currency
+            .gp,
+        acolyte:
+          Boolean(
+            creatorState.draft
+              .equipment
+              .currencySources
+              ["background:acolyte"]
+          ),
+        charlatan:
+          creatorState.draft
+            .equipment
+            .currencySources
+            ["background:charlatan"]
+            ?.[
+              "charlatan-pack"
+            ]
+            ?.gp || 0,
+        charlatanItems:
+          creatorState.draft
+            .equipment
+            .items
+            .filter((item) => {
+              return item.source ===
+                "background:charlatan";
+            })
+            .length
+      },
+      {
+        gp: 15,
+        acolyte: false,
+        charlatan: 15,
+        charlatanItems: 4
+      }
+    );
+
+    creatorState.draft =
+      normalizeCharacter({
+        background: {
+          id: "acolyte",
+          name: "Acolyte",
+          source: "template",
+          featureChoices: {
+            appliedEquipmentPackageIds: [
+              "acolyte-pack"
+            ]
+          }
+        },
+        equipment: {
+          currency: {
+            gp: 20
+          },
+          items: []
+        }
+      });
+
+    removeSection14BackgroundEquipment(
+      "background:acolyte",
+      "acolyte-pack"
+    );
+
+    record(
+      "Legacy background package currency is backfilled and removable",
+      {
+        gp:
+          creatorState.draft
+            .equipment
+            .currency
+            .gp,
+        source:
+          Boolean(
+            creatorState.draft
+              .equipment
+              .currencySources
+              ["background:acolyte"]
+          )
+      },
+      {
+        gp: 5,
+        source: false
+      }
+    );
+
+    const rolledMulticlass =
+      createEmptyCharacter();
+
+    rolledMulticlass
+      .abilities
+      .scores
+      .con = 14;
+
+    rolledMulticlass
+      .classProgression
+      .totalLevel = 5;
+
+    rolledMulticlass
+      .classProgression
+      .classes = [
+        {
+          classId: "fighter",
+          className: "Fighter",
+          level: 3,
+          templateSnapshot:
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "fighter"
+            )
+        },
+        {
+          classId: "wizard",
+          className: "Wizard",
+          level: 2,
+          templateSnapshot:
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "wizard"
+            )
+        }
+      ];
+
+    rolledMulticlass.combat
+      .hpCalculation = {
+        mode: "rolled",
+        levelOneValue: null,
+        laterLevelValues: [
+          6,
+          8,
+          10,
+          9
+        ],
+        manualOverride: null,
+        lastCalculatedConModifier: 2
+      };
+
+    const rolledHp =
+      calculateCharacterHp(
+        rolledMulticlass
+      );
+
+    record(
+      "Fighter 3 Wizard 2 rolled HP caps Wizard rolls",
+      {
+        hp: rolledHp.maximumHp,
+        rolls:
+          rolledHp.rolls.map((roll) => {
+            return {
+              level:
+                roll.characterLevel,
+              classId:
+                roll.classId,
+              hitDie:
+                roll.hitDie,
+              roll:
+                roll.roll
+            };
+          })
+      },
+      {
+        hp: 46,
+        rolls: [
+          {
+            level: 2,
+            classId: "fighter",
+            hitDie: "d10",
+            roll: 6
+          },
+          {
+            level: 3,
+            classId: "fighter",
+            hitDie: "d10",
+            roll: 8
+          },
+          {
+            level: 4,
+            classId: "wizard",
+            hitDie: "d6",
+            roll: 6
+          },
+          {
+            level: 5,
+            classId: "wizard",
+            hitDie: "d6",
+            roll: 6
+          }
+        ]
+      }
+    );
+
+    record(
+      "Old rolled HP migration warning is recorded",
+      warningTextFor(
+        rolledMulticlass
+      ).includes(
+        "Old rolled HP values were migrated"
+      ),
+      true
+    );
+
+    rolledMulticlass.combat
+      .hpCalculation
+      .laterLevelValues =
+        rolledHp.rolls;
+
+    creatorState.draft =
+      cloneData(
+        rolledMulticlass
+      );
+
+    const rolledHpLevelHtml =
+      renderLevelStep();
+
+    record(
+      "Rolled HP UI shows class and hit die for every level",
+      {
+        levelOne:
+          /Level 1[\s\S]*Fighter[\s\S]*d10/.test(
+            rolledHpLevelHtml
+          ),
+        levelFour:
+          /Level 4[\s\S]*Wizard[\s\S]*d6/.test(
+            rolledHpLevelHtml
+          ),
+        levelFive:
+          /Level 5[\s\S]*Wizard[\s\S]*d6/.test(
+            rolledHpLevelHtml
+          )
+      },
+      {
+        levelOne: true,
+        levelFour: true,
+        levelFive: true
+      }
+    );
+
+    record(
+      "Rolled HP UI caps inputs by each level hit die",
+      {
+        fighter:
+          /id="ccHpRollLevel-2"[\s\S]*max="10"/.test(
+            rolledHpLevelHtml
+          ),
+        wizard:
+          /id="ccHpRollLevel-4"[\s\S]*max="6"/.test(
+            rolledHpLevelHtml
+          )
+      },
+      {
+        fighter: true,
+        wizard: true
+      }
+    );
+
+    setSection13HpRollValue(4, 12);
+
+    record(
+      "Rolled HP input value is capped by active hit die",
+      calculateCharacterHp(
+        creatorState.draft
+      ).rolls.find((roll) => {
+        return roll.characterLevel === 4;
+      })?.roll,
+      6
+    );
+
+    const shiftedRolledMulticlass =
+      cloneData(
+        rolledMulticlass
+      );
+
+    shiftedRolledMulticlass
+      .classProgression
+      .classes[0]
+      .level = 2;
+
+    shiftedRolledMulticlass
+      .classProgression
+      .classes[1]
+      .level = 3;
+
+    shiftedRolledMulticlass
+      .classProgression
+      .totalLevel = 5;
+
+    const shiftedRollState =
+      getSection13HpRollState(
+        shiftedRolledMulticlass,
+        shiftedRolledMulticlass
+          .combat
+          .hpCalculation
+      );
+
+    record(
+      "Changing class levels preserves compatible rolled HP",
+      shiftedRollState
+        .activeRolls
+        .map((roll) => {
+          return {
+            level:
+              roll.characterLevel,
+            classId:
+              roll.classId,
+            roll:
+              roll.roll
+          };
+        }),
+      [
+        {
+          level: 2,
+          classId: "fighter",
+          roll: 6
+        },
+        {
+          level: 3,
+          classId: "wizard",
+          roll: 6
+        },
+        {
+          level: 4,
+          classId: "wizard",
+          roll: 6
+        },
+        {
+          level: 5,
+          classId: "wizard",
+          roll: 4
+        }
+      ]
+    );
+
+    record(
+      "Changed rolled HP levels show an adjustment warning",
+      shiftedRollState
+        .warnings
+        .some((warning) => {
+          return warning.includes(
+            "Level 3 now uses Wizard d6"
+          );
+        }),
+      true
+    );
+
+    const reducedRolledMulticlass =
+      cloneData(
+        rolledMulticlass
+      );
+
+    reducedRolledMulticlass
+      .classProgression
+      .classes[0]
+      .level = 3;
+
+    reducedRolledMulticlass
+      .classProgression
+      .classes[1]
+      .level = 0;
+
+    reducedRolledMulticlass
+      .classProgression
+      .totalLevel = 3;
+
+    const reducedRollState =
+      getSection13HpRollState(
+        reducedRolledMulticlass,
+        reducedRolledMulticlass
+          .combat
+          .hpCalculation
+      );
+
+    record(
+      "Removed rolled HP levels are reported as inactive",
+      reducedRollState
+        .inactiveRecords
+        .map((record) => {
+          return record.characterLevel;
+        }),
+      [
+        4,
+        5
+      ]
+    );
+
+    creatorState.draft =
+      cloneData(
+        reducedRolledMulticlass
+      );
+
+    setSection13HpRollValue(2, 7);
+
+    record(
+      "Editing active rolled HP preserves inactive removed levels",
+      creatorState.draft
+        .combat
+        .hpCalculation
+        .laterLevelValues
+        .filter((record) => {
+          return record.characterLevel > 3;
+        })
+        .map((record) => {
+          return record.characterLevel;
+        }),
+      [
+        4,
+        5
+      ]
+    );
+
+    const storedRollsBeforeConChange =
+      JSON.stringify(
+        rolledMulticlass
+          .combat
+          .hpCalculation
+          .laterLevelValues
+      );
+
+    rolledMulticlass
+      .abilities
+      .scores
+      .con = 16;
+
+    record(
+      "Constitution changes preserve multiclass HP rolls",
+      calculateCharacterHp(
+        rolledMulticlass
+      ).rolls.map((roll) => {
+        return roll.roll;
+      }),
+      [
+        6,
+        8,
+        6,
+        6
+      ]
+    );
+
+    record(
+      "Constitution changes never replace stored HP rolls",
+      JSON.stringify(
+        rolledMulticlass
+          .combat
+          .hpCalculation
+          .laterLevelValues
+      ),
+      storedRollsBeforeConChange
+    );
+
+    record(
+      "Imported equipped backpack normalizes unequipped",
+      normalizeCharacter({
+        equipment: {
+          items: [
+            {
+              id: "backpack",
+              name: "Backpack",
+              isContainer: true,
+              equipped: true
+            }
+          ]
+        }
+      }).equipment.items[0].equipped,
+      false
+    );
+
+    const containedArmorCharacter =
+      cloneData(fighterCharacter);
+
+    containedArmorCharacter
+      .abilities
+      .scores
+      .dex = 10;
+
+    containedArmorCharacter
+      .equipment
+      .items = [
+        normalizeSection15Item({
+          id: "pack",
+          name: "Pack",
+          isContainer: true
+        }),
+        normalizeSection15Item({
+          id: "mail",
+          name: "Chain Mail",
+          category: "armor",
+          armorCategory: "heavy armor",
+          baseArmorClass: 16,
+          equipped: true,
+          containerId: "pack"
+        })
+      ];
+
+    record(
+      "Contained armor does not affect AC",
+      calculateArmorClassOptions(
+        containedArmorCharacter
+      ).selected.total,
+      10
+    );
+
+    record(
+      "All standard armors are present",
+      catalogHas([
+        "padded-armor",
+        "leather-armor",
+        "studded-leather-armor",
+        "hide-armor",
+        "chain-shirt",
+        "scale-mail",
+        "breastplate",
+        "half-plate",
+        "ring-mail",
+        "chain-mail",
+        "splint-armor",
+        "plate-armor",
+        "shield"
+      ]),
+      true
+    );
+
+    record(
+      "All standard weapons are present",
+      catalogHas([
+        "club",
+        "dagger",
+        "greatclub",
+        "handaxe",
+        "javelin",
+        "light-hammer",
+        "mace",
+        "quarterstaff",
+        "sickle",
+        "spear",
+        "light-crossbow",
+        "dart",
+        "shortbow",
+        "sling",
+        "battleaxe",
+        "flail",
+        "glaive",
+        "greataxe",
+        "greatsword",
+        "halberd",
+        "lance",
+        "longsword",
+        "maul",
+        "morningstar",
+        "pike",
+        "rapier",
+        "scimitar",
+        "shortsword",
+        "trident",
+        "war-pick",
+        "warhammer",
+        "whip",
+        "blowgun",
+        "hand-crossbow",
+        "heavy-crossbow",
+        "longbow",
+        "net"
+      ]),
+      true
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    skipSection14Background();
+
+    record(
+      "Skipped background is complete",
+      isSection17BackgroundComplete(
+        creatorState.draft
+      ),
+      true
+    );
+
     const failed =
       results.filter((result) => {
         return !result.pass;
@@ -5235,6 +10368,201 @@ export function createCharacterCreator(options = {}) {
       results
     };
   }
+
+  const STANDARD_LANGUAGE_OPTIONS = Object.freeze([
+    "Common",
+    "Dwarvish",
+    "Elvish",
+    "Giant",
+    "Gnomish",
+    "Goblin",
+    "Halfling",
+    "Orc",
+    "Abyssal",
+    "Celestial",
+    "Draconic",
+    "Deep Speech",
+    "Infernal",
+    "Primordial",
+    "Sylvan",
+    "Undercommon"
+  ]);
+
+  const DWARF_TOOL_CHOICES = Object.freeze([
+    "Smith's tools",
+    "Brewer's supplies",
+    "Mason's tools"
+  ]);
+
+  const ARTISAN_TOOL_OPTIONS = Object.freeze([
+    "Alchemist's supplies",
+    "Brewer's supplies",
+    "Calligrapher's supplies",
+    "Carpenter's tools",
+    "Cartographer's tools",
+    "Cobbler's tools",
+    "Cook's utensils",
+    "Glassblower's tools",
+    "Jeweler's tools",
+    "Leatherworker's tools",
+    "Mason's tools",
+    "Painter's supplies",
+    "Potter's tools",
+    "Smith's tools",
+    "Tinker's tools",
+    "Weaver's tools",
+    "Woodcarver's tools"
+  ]);
+
+  const GAMING_SET_OPTIONS = Object.freeze([
+    "Dice set",
+    "Dragonchess set",
+    "Playing card set",
+    "Three-Dragon Ante set"
+  ]);
+
+  const MUSICAL_INSTRUMENT_OPTIONS = Object.freeze([
+    "Bagpipes",
+    "Drum",
+    "Dulcimer",
+    "Flute",
+    "Lute",
+    "Lyre",
+    "Horn",
+    "Pan flute",
+    "Shawm",
+    "Viol"
+  ]);
+
+  const GENERAL_TOOL_OPTIONS = Object.freeze([
+    "Disguise kit",
+    "Forgery kit",
+    "Herbalism kit",
+    "Navigator's tools",
+    "Poisoner's kit",
+    "Thieves' tools",
+    "Vehicles (land)",
+    "Vehicles (water)"
+  ]);
+
+  const WIZARD_CANTRIP_CHOICES_2014 = Object.freeze([
+    "Acid Splash",
+    "Blade Ward",
+    "Chill Touch",
+    "Dancing Lights",
+    "Fire Bolt",
+    "Friends",
+    "Light",
+    "Mage Hand",
+    "Mending",
+    "Message",
+    "Minor Illusion",
+    "Poison Spray",
+    "Prestidigitation",
+    "Ray of Frost",
+    "Shocking Grasp",
+    "True Strike"
+  ]);
+
+  const DARK_ELF_INNATE_SPELLS_2014 = Object.freeze([
+    {
+      id: "dark-elf-dancing-lights",
+      name: "Dancing Lights",
+      level: 0,
+      minimumLevel: 1,
+      castingTime: "1 action",
+      range: "120 feet",
+      duration: "Concentration, up to 1 minute",
+      components: "V, S, M",
+      source: "subrace:dark-elf",
+      summary:
+        "Drow Magic cantrip. Charisma is your spellcasting ability."
+    },
+    {
+      id: "dark-elf-faerie-fire",
+      name: "Faerie Fire",
+      level: 1,
+      minimumLevel: 3,
+      castingTime: "1 action",
+      range: "60 feet",
+      duration: "Concentration, up to 1 minute",
+      components: "V",
+      source: "subrace:dark-elf",
+      summary:
+        "Drow Magic spell, cast once per long rest. Charisma is your spellcasting ability."
+    },
+    {
+      id: "dark-elf-darkness",
+      name: "Darkness",
+      level: 2,
+      minimumLevel: 5,
+      castingTime: "1 action",
+      range: "60 feet",
+      duration: "Concentration, up to 10 minutes",
+      components: "V, M",
+      source: "subrace:dark-elf",
+      summary:
+        "Drow Magic spell, cast once per long rest. Charisma is your spellcasting ability."
+    }
+  ]);
+
+  const FOREST_GNOME_INNATE_SPELLS_2014 = Object.freeze([
+    {
+      id: "forest-gnome-minor-illusion",
+      name: "Minor Illusion",
+      level: 0,
+      minimumLevel: 1,
+      castingTime: "1 action",
+      range: "30 feet",
+      duration: "1 minute",
+      components: "S, M",
+      source: "subrace:forest-gnome",
+      summary:
+        "Natural Illusionist cantrip. Intelligence is your spellcasting ability."
+    }
+  ]);
+
+  const TIEFLING_INNATE_SPELLS_2014 = Object.freeze([
+    {
+      id: "tiefling-thaumaturgy",
+      name: "Thaumaturgy",
+      level: 0,
+      minimumLevel: 1,
+      castingTime: "1 action",
+      range: "30 feet",
+      duration: "Up to 1 minute",
+      components: "V",
+      source: "species:tiefling",
+      summary:
+        "Infernal Legacy cantrip."
+    },
+    {
+      id: "tiefling-hellish-rebuke",
+      name: "Hellish Rebuke",
+      level: 1,
+      minimumLevel: 3,
+      castingTime: "1 reaction",
+      range: "60 feet",
+      duration: "Instantaneous",
+      components: "V, S",
+      source: "species:tiefling",
+      summary:
+        "Infernal Legacy spell, cast once per long rest at 2nd level."
+    },
+    {
+      id: "tiefling-darkness",
+      name: "Darkness",
+      level: 2,
+      minimumLevel: 5,
+      castingTime: "1 action",
+      range: "60 feet",
+      duration: "Concentration, up to 10 minutes",
+      components: "V, M",
+      source: "species:tiefling",
+      summary:
+        "Infernal Legacy spell, cast once per long rest."
+    }
+  ]);
 
   const DEFAULT_CLASS_TEMPLATES = Object.freeze([
     createSrdClassTemplate({
@@ -5806,35 +11134,33 @@ export function createCharacterCreator(options = {}) {
       id: "human",
       name: "Human",
       source: "template",
-      summary: "A broad editable ancestry framework.",
+      summary: "Adaptable people with broad talents and no required subrace.",
       size: "medium",
       speed: 30,
-
-      abilityChoices: {
-        mode: "custom",
-        choices: []
+      abilityBonuses: {
+        str: 1,
+        dex: 1,
+        con: 1,
+        int: 1,
+        wis: 1,
+        cha: 1
       },
-
-      languages: [],
-      traits: []
-    },
-
-    {
-      schemaVersion: SPECIES_SCHEMA_VERSION,
-      id: "elf",
-      name: "Elf",
-      source: "template",
-      summary: "A graceful ancestry framework ready for your own traits.",
-      size: "medium",
-      speed: 30,
-
-      abilityChoices: {
-        mode: "custom",
-        choices: []
-      },
-
-      languages: [],
-      traits: []
+      languages: ["Common"],
+      traits: [
+        {
+          id: "human-ability-score-increase",
+          name: "Ability Score Increase",
+          summary: "Each ability score increases by 1.",
+          source: "species:human"
+        },
+        {
+          id: "human-language",
+          name: "Language",
+          summary: "Choose one additional language.",
+          source: "species:human"
+        }
+      ],
+      subraces: []
     },
 
     {
@@ -5842,89 +11168,844 @@ export function createCharacterCreator(options = {}) {
       id: "dwarf",
       name: "Dwarf",
       source: "template",
-      summary: "A sturdy ancestry framework ready for editable traits.",
+      summary: "Stout folk with resilience, darkvision, and clan traditions.",
       size: "medium",
       speed: 25,
-
-      abilityChoices: {
-        mode: "custom",
-        choices: []
+      abilityBonuses: {
+        con: 2
       },
-
-      languages: [],
-      traits: []
+      languages: ["Common", "Dwarvish"],
+      damageResistances: ["Poison"],
+      toolChoices: {
+        choose: 1,
+        from: DWARF_TOOL_CHOICES
+      },
+      traits: [
+        {
+          id: "dwarf-darkvision",
+          name: "Darkvision",
+          summary: "You can see in dim light within 60 feet as if it were bright light, and darkness as dim light.",
+          source: "species:dwarf"
+        },
+        {
+          id: "dwarf-resilience",
+          name: "Dwarven Resilience",
+          summary: "You have advantage on saves against poison and resistance to poison damage.",
+          source: "species:dwarf"
+        },
+        {
+          id: "dwarf-combat-training",
+          name: "Dwarven Combat Training",
+          summary: "You are trained with axes and hammers.",
+          source: "species:dwarf"
+        }
+      ],
+      weaponProficiencies: ["Battleaxes", "Handaxes", "Light hammers", "Warhammers"],
+      subraces: [
+        {
+          id: "hill-dwarf",
+          name: "Hill Dwarf",
+          abilityBonuses: {
+            wis: 1
+          },
+          traits: [
+            {
+              id: "hill-dwarf-toughness",
+              name: "Dwarven Toughness",
+              summary: "Your hit point maximum increases by 1 per level.",
+              source: "subrace:hill-dwarf"
+            }
+          ]
+        },
+        {
+          id: "mountain-dwarf",
+          name: "Mountain Dwarf",
+          abilityBonuses: {
+            str: 2
+          },
+          armorProficiencies: ["Light armor", "Medium armor"],
+          traits: [
+            {
+              id: "mountain-dwarf-armor-training",
+              name: "Dwarven Armor Training",
+              summary: "You are trained with light and medium armor.",
+              source: "subrace:mountain-dwarf"
+            }
+          ]
+        }
+      ]
     },
 
     {
       schemaVersion: SPECIES_SCHEMA_VERSION,
-      id: "custom-species",
-      name: "Custom Species",
+      id: "elf",
+      name: "Elf",
       source: "template",
-      summary: "A blank ancestry shell for original homebrew.",
+      summary: "Keen-sensed folk with trance, charm resistance, and darkvision.",
       size: "medium",
       speed: 30,
-
-      abilityChoices: {
-        mode: "custom",
-        choices: []
+      abilityBonuses: {
+        dex: 2
       },
+      languages: ["Common", "Elvish"],
+      skillProficiencies: ["Perception"],
+      traits: [
+        {
+          id: "elf-darkvision",
+          name: "Darkvision",
+          summary: "You can see in dim light within 60 feet as if it were bright light, and darkness as dim light.",
+          source: "species:elf"
+        },
+        {
+          id: "elf-keen-senses",
+          name: "Keen Senses",
+          summary: "You are proficient in Perception.",
+          source: "species:elf"
+        },
+        {
+          id: "elf-fey-ancestry",
+          name: "Fey Ancestry",
+          summary: "You have advantage on saves against being charmed, and magic cannot put you to sleep.",
+          source: "species:elf"
+        },
+        {
+          id: "elf-trance",
+          name: "Trance",
+          summary: "You rest through a four-hour meditative trance instead of sleeping.",
+          source: "species:elf"
+        }
+      ],
+      subraces: [
+        {
+          id: "high-elf",
+          name: "High Elf",
+          abilityBonuses: {
+            int: 1
+          },
+          weaponProficiencies: ["Longswords", "Shortswords", "Shortbows", "Longbows"],
+          traits: [
+            {
+              id: "high-elf-cantrip",
+              name: "Wizard Cantrip",
+              summary: "Choose one wizard cantrip. Intelligence is its spellcasting ability.",
+              source: "subrace:high-elf"
+            }
+          ]
+        },
+        {
+          id: "wood-elf",
+          name: "Wood Elf",
+          speed: 35,
+          abilityBonuses: {
+            wis: 1
+          },
+          weaponProficiencies: ["Longswords", "Shortswords", "Shortbows", "Longbows"],
+          traits: [
+            {
+              id: "wood-elf-fleet",
+              name: "Fleet of Foot",
+              summary: "Your walking speed is 35 feet.",
+              source: "subrace:wood-elf"
+            },
+            {
+              id: "wood-elf-mask",
+              name: "Mask of the Wild",
+              summary: "You can attempt to hide when lightly obscured by natural phenomena.",
+              source: "subrace:wood-elf"
+            }
+          ]
+        },
+        {
+          id: "dark-elf",
+          name: "Dark Elf",
+          abilityBonuses: {
+            cha: 1
+          },
+          darkvision: 120,
+          weaponProficiencies: ["Rapiers", "Shortswords", "Hand crossbows"],
+          traits: [
+            {
+              id: "dark-elf-superior-darkvision",
+              name: "Superior Darkvision",
+              summary: "Your darkvision range is 120 feet.",
+              source: "subrace:dark-elf"
+            },
+            {
+              id: "dark-elf-magic",
+              name: "Drow Magic",
+              summary: "You gain Dancing Lights at level 1, Faerie Fire at level 3, and Darkness at level 5. Charisma is your spellcasting ability.",
+              source: "subrace:dark-elf"
+            },
+            {
+              id: "dark-elf-sunlight-sensitivity",
+              name: "Sunlight Sensitivity",
+              summary: "Bright sunlight can hinder your attacks and sight-based Perception checks.",
+              source: "subrace:dark-elf"
+            }
+          ]
+        }
+      ]
+    },
 
-      languages: [],
-      traits: []
+    {
+      schemaVersion: SPECIES_SCHEMA_VERSION,
+      id: "halfling",
+      name: "Halfling",
+      source: "template",
+      summary: "Small, nimble folk with bravery and remarkable luck.",
+      size: "small",
+      speed: 25,
+      abilityBonuses: {
+        dex: 2
+      },
+      languages: ["Common", "Halfling"],
+      traits: [
+        {
+          id: "halfling-lucky",
+          name: "Lucky",
+          summary: "When you roll a 1 on an attack, ability check, or saving throw, you may reroll it.",
+          source: "species:halfling"
+        },
+        {
+          id: "halfling-brave",
+          name: "Brave",
+          summary: "You have advantage on saves against being frightened.",
+          source: "species:halfling"
+        },
+        {
+          id: "halfling-nimbleness",
+          name: "Halfling Nimbleness",
+          summary: "You can move through the space of a creature larger than you.",
+          source: "species:halfling"
+        }
+      ],
+      subraces: [
+        {
+          id: "lightfoot-halfling",
+          name: "Lightfoot Halfling",
+          abilityBonuses: {
+            cha: 1
+          },
+          traits: [
+            {
+              id: "lightfoot-naturally-stealthy",
+              name: "Naturally Stealthy",
+              summary: "You can attempt to hide behind creatures larger than you.",
+              source: "subrace:lightfoot-halfling"
+            }
+          ]
+        },
+        {
+          id: "stout-halfling",
+          name: "Stout Halfling",
+          abilityBonuses: {
+            con: 1
+          },
+          damageResistances: ["Poison"],
+          traits: [
+            {
+              id: "stout-resilience",
+              name: "Stout Resilience",
+              summary: "You have advantage on poison saves and resistance to poison damage.",
+              source: "subrace:stout-halfling"
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      schemaVersion: SPECIES_SCHEMA_VERSION,
+      id: "dragonborn",
+      name: "Dragonborn",
+      source: "template",
+      summary: "Draconic folk with a breath weapon and ancestry-linked resistance.",
+      size: "medium",
+      speed: 30,
+      abilityBonuses: {
+        str: 2,
+        cha: 1
+      },
+      languages: ["Common", "Draconic"],
+      damageResistances: ["Draconic ancestry choice"],
+      traits: [
+        {
+          id: "dragonborn-ancestry",
+          name: "Draconic Ancestry",
+          summary: "Choose a dragon ancestry to define your breath weapon damage type and resistance.",
+          source: "species:dragonborn"
+        },
+        {
+          id: "dragonborn-breath-weapon",
+          name: "Breath Weapon",
+          summary: "You can exhale destructive energy determined by your ancestry.",
+          source: "species:dragonborn"
+        }
+      ],
+      subraces: []
+    },
+
+    {
+      schemaVersion: SPECIES_SCHEMA_VERSION,
+      id: "gnome",
+      name: "Gnome",
+      source: "template",
+      summary: "Small, clever folk with darkvision and mental resilience.",
+      size: "small",
+      speed: 25,
+      abilityBonuses: {
+        int: 2
+      },
+      languages: ["Common", "Gnomish"],
+      traits: [
+        {
+          id: "gnome-darkvision",
+          name: "Darkvision",
+          summary: "You can see in dim light within 60 feet as if it were bright light, and darkness as dim light.",
+          source: "species:gnome"
+        },
+        {
+          id: "gnome-cunning",
+          name: "Gnome Cunning",
+          summary: "You have advantage on Intelligence, Wisdom, and Charisma saves against magic.",
+          source: "species:gnome"
+        }
+      ],
+      subraces: [
+        {
+          id: "forest-gnome",
+          name: "Forest Gnome",
+          abilityBonuses: {
+            dex: 1
+          },
+          traits: [
+            {
+              id: "forest-gnome-illusion",
+              name: "Natural Illusionist",
+              summary: "You know the Minor Illusion cantrip. Intelligence is your spellcasting ability.",
+              source: "subrace:forest-gnome"
+            },
+            {
+              id: "forest-gnome-small-beasts",
+              name: "Speak with Small Beasts",
+              summary: "You can communicate simple ideas with small beasts.",
+              source: "subrace:forest-gnome"
+            }
+          ]
+        },
+        {
+          id: "rock-gnome",
+          name: "Rock Gnome",
+          abilityBonuses: {
+            con: 1
+          },
+          toolProficiencies: ["Tinker's tools"],
+          traits: [
+            {
+              id: "rock-gnome-artificers-lore",
+              name: "Artificer's Lore",
+              summary: "You add extra knowledge to checks about magic, alchemy, and devices.",
+              source: "subrace:rock-gnome"
+            },
+            {
+              id: "rock-gnome-tinker",
+              name: "Tinker",
+              summary: "You can craft small clockwork devices using tinker's tools.",
+              source: "subrace:rock-gnome"
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      schemaVersion: SPECIES_SCHEMA_VERSION,
+      id: "half-elf",
+      name: "Half-Elf",
+      source: "template",
+      summary: "Charismatic folk with elven ancestry and flexible talents.",
+      size: "medium",
+      speed: 30,
+      abilityBonuses: {
+        cha: 2
+      },
+      abilityChoices: {
+        mode: "manual",
+        summary: "Choose two other abilities for +1 bonuses."
+      },
+      languages: ["Common", "Elvish"],
+      skillChoices: {
+        choose: 2,
+        from: SKILL_DEFINITIONS.map((skill) => {
+          return skill.name;
+        })
+      },
+      traits: [
+        {
+          id: "half-elf-darkvision",
+          name: "Darkvision",
+          summary: "You can see in dim light within 60 feet as if it were bright light, and darkness as dim light.",
+          source: "species:half-elf"
+        },
+        {
+          id: "half-elf-fey-ancestry",
+          name: "Fey Ancestry",
+          summary: "You have advantage on saves against being charmed, and magic cannot put you to sleep.",
+          source: "species:half-elf"
+        },
+        {
+          id: "half-elf-skill-versatility",
+          name: "Skill Versatility",
+          summary: "Choose two skill proficiencies.",
+          source: "species:half-elf"
+        }
+      ],
+      subraces: []
+    },
+
+    {
+      schemaVersion: SPECIES_SCHEMA_VERSION,
+      id: "half-orc",
+      name: "Half-Orc",
+      source: "template",
+      summary: "Powerful folk with endurance, darkvision, and ferocious strikes.",
+      size: "medium",
+      speed: 30,
+      abilityBonuses: {
+        str: 2,
+        con: 1
+      },
+      languages: ["Common", "Orc"],
+      skillProficiencies: ["Intimidation"],
+      traits: [
+        {
+          id: "half-orc-darkvision",
+          name: "Darkvision",
+          summary: "You can see in dim light within 60 feet as if it were bright light, and darkness as dim light.",
+          source: "species:half-orc"
+        },
+        {
+          id: "half-orc-menacing",
+          name: "Menacing",
+          summary: "You are proficient in Intimidation.",
+          source: "species:half-orc"
+        },
+        {
+          id: "half-orc-relentless-endurance",
+          name: "Relentless Endurance",
+          summary: "When dropped to 0 hit points but not killed outright, you can drop to 1 hit point instead.",
+          source: "species:half-orc"
+        },
+        {
+          id: "half-orc-savage-attacks",
+          name: "Savage Attacks",
+          summary: "Your weapon critical hits can add one extra weapon damage die.",
+          source: "species:half-orc"
+        }
+      ],
+      subraces: []
+    },
+
+    {
+      schemaVersion: SPECIES_SCHEMA_VERSION,
+      id: "tiefling",
+      name: "Tiefling",
+      source: "template",
+      summary: "Infernal-blooded folk with darkvision, fire resistance, and innate magic.",
+      size: "medium",
+      speed: 30,
+      abilityBonuses: {
+        int: 1,
+        cha: 2
+      },
+      languages: ["Common", "Infernal"],
+      damageResistances: ["Fire"],
+      traits: [
+        {
+          id: "tiefling-darkvision",
+          name: "Darkvision",
+          summary: "You can see in dim light within 60 feet as if it were bright light, and darkness as dim light.",
+          source: "species:tiefling"
+        },
+        {
+          id: "tiefling-hellish-resistance",
+          name: "Hellish Resistance",
+          summary: "You have resistance to fire damage.",
+          source: "species:tiefling"
+        },
+        {
+          id: "tiefling-infernal-legacy",
+          name: "Infernal Legacy",
+          summary: "You gain Thaumaturgy at level 1, Hellish Rebuke at level 3, and Darkness at level 5. Charisma is your spellcasting ability.",
+          source: "species:tiefling"
+        }
+      ],
+      subraces: []
     }
   ]);
 
   const DEFAULT_BACKGROUND_TEMPLATES = Object.freeze([
     {
       schemaVersion: BACKGROUND_SCHEMA_VERSION,
-      id: "wanderer",
-      name: "Wanderer",
+      id: "acolyte",
+      name: "Acolyte",
       source: "template",
-      summary: "A travel-focused background shell.",
-
+      summary: "Raised in service to a temple, shrine, or religious order.",
       skillChoices: {
         choose: 2,
-        from: []
+        from: ["Insight", "Religion"]
       },
-
       toolChoices: {
         choose: 0,
         from: []
       },
-
       languageChoices: {
-        choose: 1,
+        choose: 2,
         from: []
       },
-
-      equipmentPackageIds: [],
-      features: []
+      equipmentPackageIds: ["acolyte-pack"],
+      features: [
+        {
+          id: "shelter-of-the-faithful",
+          name: "Shelter of the Faithful",
+          summary: "You can seek modest aid from people who share your faith.",
+          source: "background:acolyte"
+        }
+      ],
+      personalityTraits: ["Idealistic", "Ritual-minded"],
+      ideals: ["Tradition", "Charity"],
+      bonds: ["Temple", "Sacred text"],
+      flaws: ["Judgmental", "Naive"]
     },
 
     {
       schemaVersion: BACKGROUND_SCHEMA_VERSION,
-      id: "scholar",
-      name: "Scholar",
+      id: "charlatan",
+      name: "Charlatan",
       source: "template",
-      summary: "A knowledge-focused background shell.",
-
+      summary: "A practiced deceiver with aliases, forged papers, and a quick exit plan.",
       skillChoices: {
         choose: 2,
+        from: ["Deception", "Sleight of Hand"]
+      },
+      toolChoices: {
+        choose: 2,
+        from: ["Disguise kit", "Forgery kit"]
+      },
+      languageChoices: {
+        choose: 0,
         from: []
       },
+      equipmentPackageIds: ["charlatan-pack"],
+      features: [
+        {
+          id: "false-identity",
+          name: "False Identity",
+          summary: "You maintain a convincing second identity with supporting papers.",
+          source: "background:charlatan"
+        }
+      ],
+      personalityTraits: ["Charming", "Careful liar"],
+      ideals: ["Independence", "Aspiration"],
+      bonds: ["Old mark", "Partner in crime"],
+      flaws: ["Greedy", "Overconfident"]
+    },
 
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "criminal",
+      name: "Criminal",
+      source: "template",
+      summary: "A former or current member of the underworld with contacts and practical skills.",
+      skillChoices: {
+        choose: 2,
+        from: ["Deception", "Stealth"]
+      },
+      toolChoices: {
+        choose: 2,
+        from: ["One gaming set", "Thieves' tools"]
+      },
+      languageChoices: {
+        choose: 0,
+        from: []
+      },
+      equipmentPackageIds: ["criminal-pack"],
+      features: [
+        {
+          id: "criminal-contact",
+          name: "Criminal Contact",
+          summary: "You know how to pass messages through a criminal network.",
+          source: "background:criminal"
+        }
+      ],
+      personalityTraits: ["Cautious", "Suspicious"],
+      ideals: ["Freedom", "Loyalty"],
+      bonds: ["Crew", "Debtor"],
+      flaws: ["Paranoid", "Vengeful"]
+    },
+
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "entertainer",
+      name: "Entertainer",
+      source: "template",
+      summary: "A performer who knows how to win a crowd and find a stage.",
+      skillChoices: {
+        choose: 2,
+        from: ["Acrobatics", "Performance"]
+      },
+      toolChoices: {
+        choose: 2,
+        from: ["Disguise kit", "One musical instrument"]
+      },
+      languageChoices: {
+        choose: 0,
+        from: []
+      },
+      equipmentPackageIds: ["entertainer-pack"],
+      features: [
+        {
+          id: "by-popular-demand",
+          name: "By Popular Demand",
+          summary: "You can often trade performance for lodging and attention.",
+          source: "background:entertainer"
+        }
+      ],
+      personalityTraits: ["Dramatic", "Warm"],
+      ideals: ["Creativity", "Fame"],
+      bonds: ["Old troupe", "Signature routine"],
+      flaws: ["Jealous", "Craves applause"]
+    },
+
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "folk-hero",
+      name: "Folk Hero",
+      source: "template",
+      summary: "A common-born local champion known for standing against danger.",
+      skillChoices: {
+        choose: 2,
+        from: ["Animal Handling", "Survival"]
+      },
+      toolChoices: {
+        choose: 2,
+        from: ["One artisan's tools", "Vehicles (land)"]
+      },
+      languageChoices: {
+        choose: 0,
+        from: []
+      },
+      equipmentPackageIds: ["folk-hero-pack"],
+      features: [
+        {
+          id: "rustic-hospitality",
+          name: "Rustic Hospitality",
+          summary: "Common folk are inclined to shelter you if doing so is not too dangerous.",
+          source: "background:folk-hero"
+        }
+      ],
+      personalityTraits: ["Plainspoken", "Protective"],
+      ideals: ["Fairness", "Community"],
+      bonds: ["Home village", "Family farm"],
+      flaws: ["Stubborn", "Distrusts authority"]
+    },
+
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "guild-artisan",
+      name: "Guild Artisan",
+      source: "template",
+      summary: "A trained craftsperson or merchant tied to a professional guild.",
+      skillChoices: {
+        choose: 2,
+        from: ["Insight", "Persuasion"]
+      },
+      toolChoices: {
+        choose: 1,
+        from: ["One artisan's tools"]
+      },
+      languageChoices: {
+        choose: 1,
+        from: []
+      },
+      equipmentPackageIds: ["guild-artisan-pack"],
+      features: [
+        {
+          id: "guild-membership",
+          name: "Guild Membership",
+          summary: "Your guild can provide contacts, dues-based aid, and professional standing.",
+          source: "background:guild-artisan"
+        }
+      ],
+      personalityTraits: ["Precise", "Proud"],
+      ideals: ["Craft", "Community"],
+      bonds: ["Guildhall", "Masterwork"],
+      flaws: ["Perfectionist", "Status-conscious"]
+    },
+
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "hermit",
+      name: "Hermit",
+      source: "template",
+      summary: "A secluded seeker shaped by isolation, study, or revelation.",
+      skillChoices: {
+        choose: 2,
+        from: ["Medicine", "Religion"]
+      },
+      toolChoices: {
+        choose: 1,
+        from: ["Herbalism kit"]
+      },
+      languageChoices: {
+        choose: 1,
+        from: []
+      },
+      equipmentPackageIds: ["hermit-pack"],
+      features: [
+        {
+          id: "discovery",
+          name: "Discovery",
+          summary: "Your isolation revealed a meaningful truth for the campaign.",
+          source: "background:hermit"
+        }
+      ],
+      personalityTraits: ["Quiet", "Reflective"],
+      ideals: ["Knowledge", "Self-mastery"],
+      bonds: ["Hidden place", "Revelation"],
+      flaws: ["Detached", "Blunt"]
+    },
+
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "noble",
+      name: "Noble",
+      source: "template",
+      summary: "A person of rank, title, or inherited influence.",
+      skillChoices: {
+        choose: 2,
+        from: ["History", "Persuasion"]
+      },
+      toolChoices: {
+        choose: 1,
+        from: ["One gaming set"]
+      },
+      languageChoices: {
+        choose: 1,
+        from: []
+      },
+      equipmentPackageIds: ["noble-pack"],
+      features: [
+        {
+          id: "position-of-privilege",
+          name: "Position of Privilege",
+          summary: "People tend to recognize your status and grant you access to high society.",
+          source: "background:noble"
+        }
+      ],
+      personalityTraits: ["Regal", "Measured"],
+      ideals: ["Responsibility", "Nobility"],
+      bonds: ["Family name", "Estate"],
+      flaws: ["Arrogant", "Sheltered"]
+    },
+
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "outlander",
+      name: "Outlander",
+      source: "template",
+      summary: "A wilderness traveler familiar with trails, omens, and harsh places.",
+      skillChoices: {
+        choose: 2,
+        from: ["Athletics", "Survival"]
+      },
+      toolChoices: {
+        choose: 1,
+        from: ["One musical instrument"]
+      },
+      languageChoices: {
+        choose: 1,
+        from: []
+      },
+      equipmentPackageIds: ["outlander-pack"],
+      features: [
+        {
+          id: "wanderer",
+          name: "Wanderer",
+          summary: "You remember maps and terrain well and can help find food and water in the wild.",
+          source: "background:outlander"
+        }
+      ],
+      personalityTraits: ["Restless", "Watchful"],
+      ideals: ["Change", "Nature"],
+      bonds: ["Tribe", "Homeland"],
+      flaws: ["Impulsive", "Distrustful"]
+    },
+
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "sage",
+      name: "Sage",
+      source: "template",
+      summary: "A scholar trained to research, reason, and preserve knowledge.",
+      skillChoices: {
+        choose: 2,
+        from: ["Arcana", "History"]
+      },
       toolChoices: {
         choose: 0,
         from: []
       },
-
       languageChoices: {
         choose: 2,
         from: []
       },
+      equipmentPackageIds: ["sage-pack"],
+      features: [
+        {
+          id: "researcher",
+          name: "Researcher",
+          summary: "When you do not know lore, you usually know where to look for it.",
+          source: "background:sage"
+        }
+      ],
+      personalityTraits: ["Curious", "Analytical"],
+      ideals: ["Knowledge", "Logic"],
+      bonds: ["Library", "Unanswered question"],
+      flaws: ["Pedantic", "Absent-minded"]
+    },
 
-      equipmentPackageIds: [],
-      features: []
+    {
+      schemaVersion: BACKGROUND_SCHEMA_VERSION,
+      id: "sailor",
+      name: "Sailor",
+      source: "template",
+      summary: "A ship-trained traveler used to weather, rigging, and crew life.",
+      skillChoices: {
+        choose: 2,
+        from: ["Athletics", "Perception"]
+      },
+      toolChoices: {
+        choose: 2,
+        from: ["Navigator's tools", "Vehicles (water)"]
+      },
+      languageChoices: {
+        choose: 0,
+        from: []
+      },
+      equipmentPackageIds: ["sailor-pack"],
+      features: [
+        {
+          id: "ships-passage",
+          name: "Ship's Passage",
+          summary: "You can usually secure passage for yourself and companions by calling on maritime ties.",
+          source: "background:sailor"
+        }
+      ],
+      personalityTraits: ["Blunt", "Practical"],
+      ideals: ["Freedom", "Crew"],
+      bonds: ["Ship", "Captain"],
+      flaws: ["Superstitious", "Reckless"]
     },
 
     {
@@ -5932,91 +12013,1337 @@ export function createCharacterCreator(options = {}) {
       id: "soldier",
       name: "Soldier",
       source: "template",
-      summary: "A military background shell.",
-
+      summary: "A trained combatant shaped by discipline, rank, and battlefield experience.",
       skillChoices: {
         choose: 2,
-        from: []
+        from: ["Athletics", "Intimidation"]
       },
-
       toolChoices: {
-        choose: 1,
-        from: []
+        choose: 2,
+        from: ["One gaming set", "Vehicles (land)"]
       },
-
       languageChoices: {
         choose: 0,
         from: []
       },
-
-      equipmentPackageIds: [],
-      features: []
+      equipmentPackageIds: ["soldier-pack"],
+      features: [
+        {
+          id: "military-rank",
+          name: "Military Rank",
+          summary: "Soldiers from your old organization recognize your authority and service.",
+          source: "background:soldier"
+        }
+      ],
+      personalityTraits: ["Disciplined", "Direct"],
+      ideals: ["Duty", "Nation"],
+      bonds: ["Unit", "Comrade"],
+      flaws: ["Rigid", "Haunted"]
     },
 
     {
       schemaVersion: BACKGROUND_SCHEMA_VERSION,
-      id: "custom-background",
-      name: "Custom Background",
+      id: "urchin",
+      name: "Urchin",
       source: "template",
-      summary: "A blank background shell for original history.",
-
+      summary: "A streetwise survivor who knows city routes, hiding places, and hard lessons.",
       skillChoices: {
         choose: 2,
-        from: []
+        from: ["Sleight of Hand", "Stealth"]
       },
-
       toolChoices: {
-        choose: 0,
-        from: []
+        choose: 2,
+        from: ["Disguise kit", "Thieves' tools"]
       },
-
       languageChoices: {
         choose: 0,
         from: []
       },
+      equipmentPackageIds: ["urchin-pack"],
+      features: [
+        {
+          id: "city-secrets",
+          name: "City Secrets",
+          summary: "You know urban shortcuts that can speed travel through settlements.",
+          source: "background:urchin"
+        }
+      ],
+      personalityTraits: ["Scrappy", "Observant"],
+      ideals: ["Independence", "People"],
+      bonds: ["Old neighborhood", "Found family"],
+      flaws: ["Distrustful", "Hoarding"]
+    }
+  ]);
 
-      equipmentPackageIds: [],
-      features: []
+  const DEFAULT_BACKGROUND_EQUIPMENT_PACKAGES = Object.freeze([
+    {
+      id: "acolyte-pack",
+      name: "Acolyte Equipment",
+      items: [
+        { name: "Holy Symbol", quantity: 1, weight: 1 },
+        { name: "Prayer Book", quantity: 1, weight: 5 },
+        { name: "Incense", quantity: 5, weight: 0 },
+        { name: "Vestments", quantity: 1, weight: 4 },
+        { catalogId: "common-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 15 }
+    },
+    {
+      id: "charlatan-pack",
+      name: "Charlatan Equipment",
+      items: [
+        { catalogId: "fine-clothes", quantity: 1 },
+        { catalogId: "disguise-kit", quantity: 1 },
+        { name: "Con Tools", quantity: 1, weight: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 15 }
+    },
+    {
+      id: "criminal-pack",
+      name: "Criminal Equipment",
+      items: [
+        { catalogId: "crowbar", quantity: 1 },
+        { catalogId: "common-clothes-dark", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 15 }
+    },
+    {
+      id: "entertainer-pack",
+      name: "Entertainer Equipment",
+      items: [
+        { catalogId: "musical-instrument", quantity: 1 },
+        { name: "Favor of an Admirer", quantity: 1, weight: 0 },
+        { catalogId: "costume-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 15 }
+    },
+    {
+      id: "folk-hero-pack",
+      name: "Folk Hero Equipment",
+      items: [
+        { catalogId: "artisan-tools", quantity: 1 },
+        { catalogId: "shovel", quantity: 1 },
+        { catalogId: "iron-pot", quantity: 1 },
+        { catalogId: "common-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 10 }
+    },
+    {
+      id: "guild-artisan-pack",
+      name: "Guild Artisan Equipment",
+      items: [
+        { catalogId: "artisan-tools", quantity: 1 },
+        { name: "Letter of Introduction", quantity: 1, weight: 0 },
+        { catalogId: "traveler-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 15 }
+    },
+    {
+      id: "hermit-pack",
+      name: "Hermit Equipment",
+      items: [
+        { catalogId: "scroll-case", quantity: 1 },
+        { catalogId: "winter-blanket", quantity: 1 },
+        { catalogId: "common-clothes", quantity: 1 },
+        { catalogId: "herbalism-kit", quantity: 1 }
+      ],
+      currency: { gp: 5 }
+    },
+    {
+      id: "noble-pack",
+      name: "Noble Equipment",
+      items: [
+        { catalogId: "fine-clothes", quantity: 1 },
+        { name: "Signet Ring", quantity: 1, weight: 0 },
+        { name: "Scroll of Pedigree", quantity: 1, weight: 0 },
+        { catalogId: "purse", quantity: 1 }
+      ],
+      currency: { gp: 25 }
+    },
+    {
+      id: "outlander-pack",
+      name: "Outlander Equipment",
+      items: [
+        { catalogId: "staff", quantity: 1 },
+        { catalogId: "hunting-trap", quantity: 1 },
+        { catalogId: "traveler-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 10 }
+    },
+    {
+      id: "sage-pack",
+      name: "Sage Equipment",
+      items: [
+        { catalogId: "ink-bottle", quantity: 1 },
+        { catalogId: "ink-pen", quantity: 1 },
+        { catalogId: "small-knife", quantity: 1 },
+        { name: "Letter from a Dead Colleague", quantity: 1, weight: 0 },
+        { catalogId: "common-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 10 }
+    },
+    {
+      id: "sailor-pack",
+      name: "Sailor Equipment",
+      items: [
+        { catalogId: "belaying-pin", quantity: 1 },
+        { catalogId: "silk-rope", quantity: 1 },
+        { name: "Lucky Charm", quantity: 1, weight: 0 },
+        { catalogId: "common-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 10 }
+    },
+    {
+      id: "soldier-pack",
+      name: "Soldier Equipment",
+      items: [
+        { name: "Insignia of Rank", quantity: 1, weight: 0 },
+        { name: "Trophy from Fallen Enemy", quantity: 1, weight: 0 },
+        { catalogId: "bone-dice-set", quantity: 1 },
+        { catalogId: "common-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 10 }
+    },
+    {
+      id: "urchin-pack",
+      name: "Urchin Equipment",
+      items: [
+        { catalogId: "small-knife", quantity: 1 },
+        { catalogId: "city-map", quantity: 1 },
+        { catalogId: "pet-mouse", quantity: 1 },
+        { name: "Token of Parents", quantity: 1, weight: 0 },
+        { catalogId: "common-clothes", quantity: 1 },
+        { catalogId: "belt-pouch", quantity: 1 }
+      ],
+      currency: { gp: 10 }
     }
   ]);
 
   const DEFAULT_EQUIPMENT_CATALOG = Object.freeze([
     {
-      id: "backpack",
-      name: "Backpack",
-      category: "adventuring-gear",
-      quantity: 1,
-      weight: null,
-      isContainer: true,
-      capacityWeight: 30,
-      source: "template",
-      notes: "Container entry with editable capacity."
-    },
-
-    {
-      id: "simple-weapon-placeholder",
-      name: "Simple Weapon",
-      category: "weapon",
-      quantity: 1,
-      weight: null,
-      weaponType: "simple melee",
-      attackAbility: "str",
-      damageDice: "1d6",
-      source: "template",
-      notes: "Choose or create the exact weapon later."
-    },
-
-    {
-      id: "armor-placeholder",
-      name: "Armor",
+      id: "padded-armor",
+      name: "Padded Armor",
       category: "armor",
+      cost: "5 gp",
       quantity: 1,
-      weight: null,
+      weight: 8,
       armorCategory: "light armor",
       baseArmorClass: 11,
       dexterityCap: null,
+      stealthDisadvantage: true,
+      source: "template"
+    },
+    {
+      id: "leather-armor",
+      name: "Leather Armor",
+      category: "armor",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 10,
+      armorCategory: "light armor",
+      baseArmorClass: 11,
+      dexterityCap: null,
+      source: "template"
+    },
+    {
+      id: "studded-leather-armor",
+      name: "Studded Leather Armor",
+      category: "armor",
+      cost: "45 gp",
+      quantity: 1,
+      weight: 13,
+      armorCategory: "light armor",
+      baseArmorClass: 12,
+      dexterityCap: null,
+      source: "template"
+    },
+    {
+      id: "hide-armor",
+      name: "Hide Armor",
+      category: "armor",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 12,
+      armorCategory: "medium armor",
+      baseArmorClass: 12,
+      dexterityCap: 2,
+      source: "template"
+    },
+    {
+      id: "chain-shirt",
+      name: "Chain Shirt",
+      category: "armor",
+      cost: "50 gp",
+      quantity: 1,
+      weight: 20,
+      armorCategory: "medium armor",
+      baseArmorClass: 13,
+      dexterityCap: 2,
+      source: "template"
+    },
+    {
+      id: "scale-mail",
+      name: "Scale Mail",
+      category: "armor",
+      cost: "50 gp",
+      quantity: 1,
+      weight: 45,
+      armorCategory: "medium armor",
+      baseArmorClass: 14,
+      dexterityCap: 2,
+      stealthDisadvantage: true,
+      source: "template"
+    },
+    {
+      id: "breastplate",
+      name: "Breastplate",
+      category: "armor",
+      cost: "400 gp",
+      quantity: 1,
+      weight: 20,
+      armorCategory: "medium armor",
+      baseArmorClass: 14,
+      dexterityCap: 2,
+      source: "template"
+    },
+    {
+      id: "half-plate",
+      name: "Half Plate",
+      category: "armor",
+      cost: "750 gp",
+      quantity: 1,
+      weight: 40,
+      armorCategory: "medium armor",
+      baseArmorClass: 15,
+      dexterityCap: 2,
+      stealthDisadvantage: true,
+      source: "template"
+    },
+    {
+      id: "ring-mail",
+      name: "Ring Mail",
+      category: "armor",
+      cost: "30 gp",
+      quantity: 1,
+      weight: 40,
+      armorCategory: "heavy armor",
+      baseArmorClass: 14,
+      dexterityCap: 0,
+      stealthDisadvantage: true,
+      source: "template"
+    },
+    {
+      id: "chain-mail",
+      name: "Chain Mail",
+      category: "armor",
+      cost: "75 gp",
+      quantity: 1,
+      weight: 55,
+      armorCategory: "heavy armor",
+      baseArmorClass: 16,
+      dexterityCap: 0,
+      strengthRequirement: 13,
+      stealthDisadvantage: true,
+      source: "template"
+    },
+    {
+      id: "splint-armor",
+      name: "Splint Armor",
+      category: "armor",
+      cost: "200 gp",
+      quantity: 1,
+      weight: 60,
+      armorCategory: "heavy armor",
+      baseArmorClass: 17,
+      dexterityCap: 0,
+      strengthRequirement: 15,
+      stealthDisadvantage: true,
+      source: "template"
+    },
+    {
+      id: "plate-armor",
+      name: "Plate Armor",
+      category: "armor",
+      cost: "1500 gp",
+      quantity: 1,
+      weight: 65,
+      armorCategory: "heavy armor",
+      baseArmorClass: 18,
+      dexterityCap: 0,
+      strengthRequirement: 15,
+      stealthDisadvantage: true,
+      source: "template"
+    },
+    {
+      id: "shield",
+      name: "Shield",
+      category: "shield",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 6,
+      armorCategory: "shield",
+      isShield: true,
+      source: "template"
+    },
+    {
+      id: "dagger",
+      name: "Dagger",
+      category: "weapon",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 1,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d4",
+      damageType: "piercing",
+      finesse: true,
+      light: true,
+      thrown: true,
+      rangeNormal: 20,
+      rangeLong: 60,
+      source: "template"
+    },
+    {
+      id: "mace",
+      name: "Mace",
+      category: "weapon",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 4,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d6",
+      damageType: "bludgeoning",
+      source: "template"
+    },
+    {
+      id: "quarterstaff",
+      name: "Quarterstaff",
+      category: "weapon",
+      cost: "2 sp",
+      quantity: 1,
+      weight: 4,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d6",
+      versatileDamageDice: "1d8",
+      damageType: "bludgeoning",
+      source: "template"
+    },
+    {
+      id: "shortbow",
+      name: "Shortbow",
+      category: "weapon",
+      cost: "25 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "simple ranged",
+      attackAbility: "dex",
+      damageDice: "1d6",
+      damageType: "piercing",
+      ranged: true,
+      ammunition: true,
+      twoHanded: true,
+      rangeNormal: 80,
+      rangeLong: 320,
+      source: "template"
+    },
+    {
+      id: "longsword",
+      name: "Longsword",
+      category: "weapon",
+      cost: "15 gp",
+      quantity: 1,
+      weight: 3,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d8",
+      versatileDamageDice: "1d10",
+      damageType: "slashing",
+      source: "template"
+    },
+    {
+      id: "rapier",
+      name: "Rapier",
+      category: "weapon",
+      cost: "25 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "martial melee",
+      attackAbility: "dex",
+      damageDice: "1d8",
+      damageType: "piercing",
+      finesse: true,
+      source: "template"
+    },
+    {
+      id: "greatsword",
+      name: "Greatsword",
+      category: "weapon",
+      cost: "50 gp",
+      quantity: 1,
+      weight: 6,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "2d6",
+      damageType: "slashing",
+      heavy: true,
+      twoHanded: true,
+      source: "template"
+    },
+    {
+      id: "longbow",
+      name: "Longbow",
+      category: "weapon",
+      cost: "50 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "martial ranged",
+      attackAbility: "dex",
+      damageDice: "1d8",
+      damageType: "piercing",
+      ranged: true,
+      ammunition: true,
+      heavy: true,
+      twoHanded: true,
+      rangeNormal: 150,
+      rangeLong: 600,
+      source: "template"
+    },
+    {
+      id: "backpack",
+      name: "Backpack",
+      category: "adventuring-gear",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 5,
+      isContainer: true,
+      capacityWeight: 30,
       source: "template",
-      notes: "Choose or create the exact armor later."
+      notes: "Container for carried gear."
+    },
+    {
+      id: "pouch",
+      name: "Pouch",
+      category: "adventuring-gear",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 1,
+      isContainer: true,
+      capacityWeight: 6,
+      source: "template"
+    },
+    {
+      id: "quiver",
+      name: "Quiver",
+      category: "adventuring-gear",
+      cost: "1 gp",
+      quantity: 1,
+      weight: 1,
+      isContainer: true,
+      capacityWeight: 2,
+      source: "template"
+    },
+    {
+      id: "arrows-20",
+      name: "Arrows (20)",
+      category: "adventuring-gear",
+      cost: "1 gp",
+      quantity: 20,
+      weight: 0.05,
+      source: "template"
+    },
+    {
+      id: "rope-hempen",
+      name: "Hempen Rope (50 ft.)",
+      category: "adventuring-gear",
+      cost: "1 gp",
+      quantity: 1,
+      weight: 10,
+      source: "template"
+    },
+    {
+      id: "torch",
+      name: "Torch",
+      category: "adventuring-gear",
+      cost: "1 cp",
+      quantity: 1,
+      weight: 1,
+      source: "template"
+    },
+    {
+      id: "rations",
+      name: "Rations (1 day)",
+      category: "adventuring-gear",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 2,
+      source: "template"
+    },
+    {
+      id: "waterskin",
+      name: "Waterskin",
+      category: "adventuring-gear",
+      cost: "2 sp",
+      quantity: 1,
+      weight: 5,
+      source: "template"
+    },
+    {
+      id: "club",
+      name: "Club",
+      category: "weapon",
+      cost: "1 sp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d4",
+      damageType: "bludgeoning",
+      light: true,
+      source: "template"
+    },
+    {
+      id: "greatclub",
+      name: "Greatclub",
+      category: "weapon",
+      cost: "2 sp",
+      quantity: 1,
+      weight: 10,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d8",
+      damageType: "bludgeoning",
+      twoHanded: true,
+      source: "template"
+    },
+    {
+      id: "handaxe",
+      name: "Handaxe",
+      category: "weapon",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d6",
+      damageType: "slashing",
+      light: true,
+      thrown: true,
+      rangeNormal: 20,
+      rangeLong: 60,
+      source: "template"
+    },
+    {
+      id: "javelin",
+      name: "Javelin",
+      category: "weapon",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d6",
+      damageType: "piercing",
+      thrown: true,
+      rangeNormal: 30,
+      rangeLong: 120,
+      source: "template"
+    },
+    {
+      id: "light-hammer",
+      name: "Light Hammer",
+      category: "weapon",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d4",
+      damageType: "bludgeoning",
+      light: true,
+      thrown: true,
+      rangeNormal: 20,
+      rangeLong: 60,
+      source: "template"
+    },
+    {
+      id: "sickle",
+      name: "Sickle",
+      category: "weapon",
+      cost: "1 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d4",
+      damageType: "slashing",
+      light: true,
+      source: "template"
+    },
+    {
+      id: "spear",
+      name: "Spear",
+      category: "weapon",
+      cost: "1 gp",
+      quantity: 1,
+      weight: 3,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d6",
+      versatileDamageDice: "1d8",
+      damageType: "piercing",
+      thrown: true,
+      rangeNormal: 20,
+      rangeLong: 60,
+      source: "template"
+    },
+    {
+      id: "light-crossbow",
+      name: "Light Crossbow",
+      category: "weapon",
+      cost: "25 gp",
+      quantity: 1,
+      weight: 5,
+      weaponType: "simple ranged",
+      attackAbility: "dex",
+      damageDice: "1d8",
+      damageType: "piercing",
+      ranged: true,
+      ammunition: true,
+      loading: true,
+      twoHanded: true,
+      rangeNormal: 80,
+      rangeLong: 320,
+      source: "template"
+    },
+    {
+      id: "dart",
+      name: "Dart",
+      category: "weapon",
+      cost: "5 cp",
+      quantity: 1,
+      weight: 0.25,
+      weaponType: "simple ranged",
+      attackAbility: "dex",
+      damageDice: "1d4",
+      damageType: "piercing",
+      finesse: true,
+      thrown: true,
+      ranged: true,
+      rangeNormal: 20,
+      rangeLong: 60,
+      source: "template"
+    },
+    {
+      id: "sling",
+      name: "Sling",
+      category: "weapon",
+      cost: "1 sp",
+      quantity: 1,
+      weight: 0,
+      weaponType: "simple ranged",
+      attackAbility: "dex",
+      damageDice: "1d4",
+      damageType: "bludgeoning",
+      ranged: true,
+      ammunition: true,
+      rangeNormal: 30,
+      rangeLong: 120,
+      source: "template"
+    },
+    {
+      id: "battleaxe",
+      name: "Battleaxe",
+      category: "weapon",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 4,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d8",
+      versatileDamageDice: "1d10",
+      damageType: "slashing",
+      source: "template"
+    },
+    {
+      id: "flail",
+      name: "Flail",
+      category: "weapon",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d8",
+      damageType: "bludgeoning",
+      source: "template"
+    },
+    {
+      id: "glaive",
+      name: "Glaive",
+      category: "weapon",
+      cost: "20 gp",
+      quantity: 1,
+      weight: 6,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d10",
+      damageType: "slashing",
+      heavy: true,
+      reach: true,
+      twoHanded: true,
+      source: "template"
+    },
+    {
+      id: "greataxe",
+      name: "Greataxe",
+      category: "weapon",
+      cost: "30 gp",
+      quantity: 1,
+      weight: 7,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d12",
+      damageType: "slashing",
+      heavy: true,
+      twoHanded: true,
+      source: "template"
+    },
+    {
+      id: "halberd",
+      name: "Halberd",
+      category: "weapon",
+      cost: "20 gp",
+      quantity: 1,
+      weight: 6,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d10",
+      damageType: "slashing",
+      heavy: true,
+      reach: true,
+      twoHanded: true,
+      source: "template"
+    },
+    {
+      id: "lance",
+      name: "Lance",
+      category: "weapon",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 6,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d12",
+      damageType: "piercing",
+      reach: true,
+      source: "template"
+    },
+    {
+      id: "maul",
+      name: "Maul",
+      category: "weapon",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 10,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "2d6",
+      damageType: "bludgeoning",
+      heavy: true,
+      twoHanded: true,
+      source: "template"
+    },
+    {
+      id: "morningstar",
+      name: "Morningstar",
+      category: "weapon",
+      cost: "15 gp",
+      quantity: 1,
+      weight: 4,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d8",
+      damageType: "piercing",
+      source: "template"
+    },
+    {
+      id: "pike",
+      name: "Pike",
+      category: "weapon",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 18,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d10",
+      damageType: "piercing",
+      heavy: true,
+      reach: true,
+      twoHanded: true,
+      source: "template"
+    },
+    {
+      id: "scimitar",
+      name: "Scimitar",
+      category: "weapon",
+      cost: "25 gp",
+      quantity: 1,
+      weight: 3,
+      weaponType: "martial melee",
+      attackAbility: "dex",
+      damageDice: "1d6",
+      damageType: "slashing",
+      finesse: true,
+      light: true,
+      source: "template"
+    },
+    {
+      id: "shortsword",
+      name: "Shortsword",
+      category: "weapon",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "martial melee",
+      attackAbility: "dex",
+      damageDice: "1d6",
+      damageType: "piercing",
+      finesse: true,
+      light: true,
+      source: "template"
+    },
+    {
+      id: "trident",
+      name: "Trident",
+      category: "weapon",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 4,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d6",
+      versatileDamageDice: "1d8",
+      damageType: "piercing",
+      thrown: true,
+      rangeNormal: 20,
+      rangeLong: 60,
+      source: "template"
+    },
+    {
+      id: "war-pick",
+      name: "War Pick",
+      category: "weapon",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d8",
+      damageType: "piercing",
+      source: "template"
+    },
+    {
+      id: "warhammer",
+      name: "Warhammer",
+      category: "weapon",
+      cost: "15 gp",
+      quantity: 1,
+      weight: 2,
+      weaponType: "martial melee",
+      attackAbility: "str",
+      damageDice: "1d8",
+      versatileDamageDice: "1d10",
+      damageType: "bludgeoning",
+      source: "template"
+    },
+    {
+      id: "whip",
+      name: "Whip",
+      category: "weapon",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 3,
+      weaponType: "martial melee",
+      attackAbility: "dex",
+      damageDice: "1d4",
+      damageType: "slashing",
+      finesse: true,
+      reach: true,
+      source: "template"
+    },
+    {
+      id: "blowgun",
+      name: "Blowgun",
+      category: "weapon",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 1,
+      weaponType: "martial ranged",
+      attackAbility: "dex",
+      damageDice: "1",
+      damageType: "piercing",
+      ranged: true,
+      ammunition: true,
+      loading: true,
+      rangeNormal: 25,
+      rangeLong: 100,
+      source: "template"
+    },
+    {
+      id: "hand-crossbow",
+      name: "Hand Crossbow",
+      category: "weapon",
+      cost: "75 gp",
+      quantity: 1,
+      weight: 3,
+      weaponType: "martial ranged",
+      attackAbility: "dex",
+      damageDice: "1d6",
+      damageType: "piercing",
+      ranged: true,
+      ammunition: true,
+      light: true,
+      loading: true,
+      rangeNormal: 30,
+      rangeLong: 120,
+      source: "template"
+    },
+    {
+      id: "heavy-crossbow",
+      name: "Heavy Crossbow",
+      category: "weapon",
+      cost: "50 gp",
+      quantity: 1,
+      weight: 18,
+      weaponType: "martial ranged",
+      attackAbility: "dex",
+      damageDice: "1d10",
+      damageType: "piercing",
+      ranged: true,
+      ammunition: true,
+      heavy: true,
+      loading: true,
+      twoHanded: true,
+      rangeNormal: 100,
+      rangeLong: 400,
+      source: "template"
+    },
+    {
+      id: "net",
+      name: "Net",
+      category: "weapon",
+      cost: "1 gp",
+      quantity: 1,
+      weight: 3,
+      weaponType: "martial ranged",
+      attackAbility: "dex",
+      damageDice: "",
+      damageType: "",
+      ranged: true,
+      thrown: true,
+      rangeNormal: 5,
+      rangeLong: 15,
+      source: "template"
+    },
+    {
+      id: "crossbow-bolts-20",
+      name: "Crossbow Bolts (20)",
+      category: "adventuring-gear",
+      cost: "1 gp",
+      quantity: 20,
+      weight: 0.075,
+      ammunition: true,
+      source: "template"
+    },
+    {
+      id: "sling-bullets-20",
+      name: "Sling Bullets (20)",
+      category: "adventuring-gear",
+      cost: "4 cp",
+      quantity: 20,
+      weight: 0.075,
+      ammunition: true,
+      source: "template"
+    },
+    {
+      id: "blowgun-needles-50",
+      name: "Blowgun Needles (50)",
+      category: "adventuring-gear",
+      cost: "1 gp",
+      quantity: 50,
+      weight: 0.02,
+      ammunition: true,
+      source: "template"
+    },
+    {
+      id: "belt-pouch",
+      name: "Belt Pouch",
+      category: "adventuring-gear",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 1,
+      isContainer: true,
+      capacityWeight: 6,
+      source: "template"
+    },
+    {
+      id: "purse",
+      name: "Purse",
+      category: "adventuring-gear",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 1,
+      isContainer: true,
+      capacityWeight: 6,
+      source: "template"
+    },
+    {
+      id: "common-clothes",
+      name: "Common Clothes",
+      category: "clothing",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 3,
+      source: "template"
+    },
+    {
+      id: "common-clothes-dark",
+      name: "Common Clothes, Dark",
+      category: "clothing",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 3,
+      source: "template"
+    },
+    {
+      id: "fine-clothes",
+      name: "Fine Clothes",
+      category: "clothing",
+      cost: "15 gp",
+      quantity: 1,
+      weight: 6,
+      source: "template"
+    },
+    {
+      id: "costume-clothes",
+      name: "Costume Clothes",
+      category: "clothing",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 4,
+      source: "template"
+    },
+    {
+      id: "traveler-clothes",
+      name: "Traveler's Clothes",
+      category: "clothing",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 4,
+      source: "template"
+    },
+    {
+      id: "disguise-kit",
+      name: "Disguise Kit",
+      category: "tool",
+      cost: "25 gp",
+      quantity: 1,
+      weight: 3,
+      source: "template"
+    },
+    {
+      id: "forgery-kit",
+      name: "Forgery Kit",
+      category: "tool",
+      cost: "15 gp",
+      quantity: 1,
+      weight: 5,
+      source: "template"
+    },
+    {
+      id: "thieves-tools",
+      name: "Thieves' Tools",
+      category: "tool",
+      cost: "25 gp",
+      quantity: 1,
+      weight: 1,
+      source: "template"
+    },
+    {
+      id: "herbalism-kit",
+      name: "Herbalism Kit",
+      category: "tool",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 3,
+      source: "template"
+    },
+    {
+      id: "artisan-tools",
+      name: "Artisan's Tools",
+      category: "tool",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 5,
+      source: "template",
+      notes: "Choose the specific artisan's tools granted by the background."
+    },
+    {
+      id: "musical-instrument",
+      name: "Musical Instrument",
+      category: "tool",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 3,
+      source: "template",
+      notes: "Choose the specific instrument granted by the background."
+    },
+    {
+      id: "bone-dice-set",
+      name: "Bone Dice Set",
+      category: "tool",
+      cost: "1 sp",
+      quantity: 1,
+      weight: 0,
+      source: "template"
+    },
+    {
+      id: "crowbar",
+      name: "Crowbar",
+      category: "adventuring-gear",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 5,
+      source: "template"
+    },
+    {
+      id: "shovel",
+      name: "Shovel",
+      category: "adventuring-gear",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 5,
+      source: "template"
+    },
+    {
+      id: "iron-pot",
+      name: "Iron Pot",
+      category: "adventuring-gear",
+      cost: "2 gp",
+      quantity: 1,
+      weight: 10,
+      source: "template"
+    },
+    {
+      id: "scroll-case",
+      name: "Scroll Case",
+      category: "adventuring-gear",
+      cost: "1 gp",
+      quantity: 1,
+      weight: 1,
+      source: "template"
+    },
+    {
+      id: "winter-blanket",
+      name: "Winter Blanket",
+      category: "adventuring-gear",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 3,
+      source: "template"
+    },
+    {
+      id: "staff",
+      name: "Staff",
+      category: "adventuring-gear",
+      cost: "5 sp",
+      quantity: 1,
+      weight: 4,
+      source: "template"
+    },
+    {
+      id: "hunting-trap",
+      name: "Hunting Trap",
+      category: "adventuring-gear",
+      cost: "5 gp",
+      quantity: 1,
+      weight: 25,
+      source: "template"
+    },
+    {
+      id: "ink-bottle",
+      name: "Bottle of Ink",
+      category: "adventuring-gear",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 0,
+      source: "template"
+    },
+    {
+      id: "ink-pen",
+      name: "Ink Pen",
+      category: "adventuring-gear",
+      cost: "2 cp",
+      quantity: 1,
+      weight: 0,
+      source: "template"
+    },
+    {
+      id: "small-knife",
+      name: "Small Knife",
+      category: "adventuring-gear",
+      cost: "2 sp",
+      quantity: 1,
+      weight: 0.5,
+      source: "template"
+    },
+    {
+      id: "belaying-pin",
+      name: "Belaying Pin",
+      category: "adventuring-gear",
+      cost: "1 sp",
+      quantity: 1,
+      weight: 2,
+      source: "template"
+    },
+    {
+      id: "silk-rope",
+      name: "Silk Rope (50 ft.)",
+      category: "adventuring-gear",
+      cost: "10 gp",
+      quantity: 1,
+      weight: 5,
+      source: "template"
+    },
+    {
+      id: "city-map",
+      name: "Map of Home City",
+      category: "adventuring-gear",
+      cost: "1 gp",
+      quantity: 1,
+      weight: 0,
+      source: "template"
+    },
+    {
+      id: "pet-mouse",
+      name: "Pet Mouse",
+      category: "adventuring-gear",
+      cost: "1 cp",
+      quantity: 1,
+      weight: 0,
+      source: "template"
     }
   ]);
 
@@ -6070,6 +13397,8 @@ export function createCharacterCreator(options = {}) {
     dirty: false,
     statusMessage: "Character creator foundation ready.",
     pendingContainerRemovalId: "",
+    openContainerId: "",
+    showContainedItems: false,
 
     characterCache: [],
     characterRoomCode: null,
@@ -7479,6 +14808,9 @@ export function createCharacterCreator(options = {}) {
       .proficiencyBonus =
         getGenericProficiencyBonus(level);
 
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
     applyCompatibilityAliases(
       creatorState.draft
     );
@@ -7517,18 +14849,9 @@ export function createCharacterCreator(options = {}) {
       .abilities
       .base[abilityId] = score;
 
-    creatorState.draft
-      .abilities
-      .scores[abilityId] = score;
-
-    creatorState.draft
-      .abilities
-      .modifiers =
-        calculateAbilityModifiers(
-          creatorState.draft
-            .abilities
-            .scores
-        );
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
 
     creatorState.draft.builder.validation = {
       ...(creatorState.draft.builder.validation || {}),
@@ -9373,6 +16696,59 @@ export function createCharacterCreator(options = {}) {
 // CHARACTER CREATOR SECTION 11 — BASICS / SPECIES
 // =====================================================
 
+  const SECTION11_DRAGONBORN_ANCESTRIES = Object.freeze([
+    {
+      id: "black",
+      name: "Black",
+      damageType: "Acid"
+    },
+    {
+      id: "blue",
+      name: "Blue",
+      damageType: "Lightning"
+    },
+    {
+      id: "brass",
+      name: "Brass",
+      damageType: "Fire"
+    },
+    {
+      id: "bronze",
+      name: "Bronze",
+      damageType: "Lightning"
+    },
+    {
+      id: "copper",
+      name: "Copper",
+      damageType: "Acid"
+    },
+    {
+      id: "gold",
+      name: "Gold",
+      damageType: "Fire"
+    },
+    {
+      id: "green",
+      name: "Green",
+      damageType: "Poison"
+    },
+    {
+      id: "red",
+      name: "Red",
+      damageType: "Fire"
+    },
+    {
+      id: "silver",
+      name: "Silver",
+      damageType: "Cold"
+    },
+    {
+      id: "white",
+      name: "White",
+      damageType: "Cold"
+    }
+  ]);
+
   function renderBasicsStep() {
     const identity =
       creatorState.draft.identity;
@@ -9555,7 +16931,12 @@ export function createCharacterCreator(options = {}) {
         .species
         .templateSnapshot;
 
-    if (selectedSpecies) {
+    if (
+      selectedSpecies &&
+      creatorState.draft
+        .species
+        .source !== "custom"
+    ) {
       const speciesId =
         makeSafeId(
           selectedSpecies.id ||
@@ -9586,7 +16967,824 @@ export function createCharacterCreator(options = {}) {
         .localeCompare(
           String(b.name || "")
         );
+      });
+  }
+
+  function getSection11SelectedSpeciesTemplate() {
+    const species =
+      creatorState.draft.species || {};
+
+    return (
+      species.templateSnapshot ||
+      getAllSpeciesTemplates()
+        .find((template) => {
+          return template.id === species.id;
+        }) ||
+      null
+    );
+  }
+
+  function getSection11SelectedSubrace(
+    species = getSection11SelectedSpeciesTemplate()
+  ) {
+    const subraceId =
+      cleanString(
+        creatorState.draft
+          .species
+          .choices
+          ?.subraceId
+      );
+
+    if (!subraceId) {
+      return null;
+    }
+
+    return (
+      (
+        Array.isArray(species?.subraces)
+          ? species.subraces
+          : []
+      ).find((subrace) => {
+        return subrace.id === subraceId;
+      }) ||
+      null
+    );
+  }
+
+  function clearSection11SpeciesMechanics() {
+    removeAbilityBonusSourcesByPrefix([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+
+    removeSkillProficiencySourcesByPrefix([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+
+    removeListProficiencySourcesByPrefix([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+
+    removeInnateSpellsBySourcePrefixes([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+  }
+
+  function addSection11SkillProficiencies(
+    skillNames,
+    sourceName
+  ) {
+    cleanArray(skillNames)
+      .forEach((skillName) => {
+        const skill =
+          SKILL_DEFINITIONS.find((item) => {
+            return (
+              item.id ===
+                makeSafeId(
+                  skillName,
+                  "skill"
+                ) ||
+              item.name.toLowerCase() ===
+                skillName.toLowerCase()
+            );
+          });
+
+        if (!skill) {
+          return;
+        }
+
+        const current =
+          getSection14SkillEntry(skill);
+
+        setSection14SkillEntry(
+          skill,
+          {
+            proficient: true,
+            expertise:
+              current.expertise === true,
+            source: [
+              ...new Set([
+                ...cleanArray(
+                  current.source
+                ),
+                sourceName
+              ])
+            ]
+          }
+        );
+      });
+  }
+
+  function applySection11MechanicBlock(
+    block,
+    sourceName
+  ) {
+    if (!block || !sourceName) {
+      return;
+    }
+
+    setAbilityBonusSource(
+      sourceName,
+      block.abilityBonuses || {}
+    );
+
+    setSourceProficiencyList(
+      "languages",
+      block.languages || [],
+      sourceName
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      block.toolProficiencies || [],
+      sourceName
+    );
+
+    setSourceProficiencyList(
+      "weapons",
+      block.weaponProficiencies || [],
+      sourceName
+    );
+
+    setSourceProficiencyList(
+      "armor",
+      block.armorProficiencies || [],
+      sourceName
+    );
+
+    addSection11SkillProficiencies(
+      block.skillProficiencies || [],
+      sourceName
+    );
+  }
+
+  function getSection11DragonbornAncestry() {
+    const ancestryId =
+      cleanString(
+        creatorState.draft
+          .species
+          .choices
+          ?.draconicAncestry
+      );
+
+    return (
+      SECTION11_DRAGONBORN_ANCESTRIES
+        .find((ancestry) => {
+          return ancestry.id === ancestryId;
+        }) ||
+      null
+    );
+  }
+
+  function getSection11ChoiceSource(
+    choiceId
+  ) {
+    return choiceId
+      ? `species-choice:${choiceId}`
+      : "";
+  }
+
+  function getSection11LanguageChoices({
+    exclude = []
+  } = {}) {
+    const excluded =
+      cleanArray(exclude)
+        .map((language) => {
+          return language.toLowerCase();
+        });
+
+    return [
+      {
+        value: "",
+        label: "Choose language"
+      },
+      ...STANDARD_LANGUAGE_OPTIONS
+        .filter((language) => {
+          return !excluded.includes(
+            language.toLowerCase()
+          );
+        })
+        .map((language) => {
+          return {
+            value: language,
+            label: language
+          };
+        })
+    ];
+  }
+
+  function getSection11SkillChoices() {
+    return [
+      {
+        value: "",
+        label: "Choose skill"
+      },
+      ...SKILL_DEFINITIONS.map((skill) => {
+        return {
+          value: skill.id,
+          label: skill.name
+        };
+      })
+    ];
+  }
+
+  function isSection11AbilityChoiceValid(
+    abilityId,
+    {
+      allowCharisma = true
+    } = {}
+  ) {
+    const cleanAbilityId =
+      cleanString(abilityId);
+
+    if (!cleanAbilityId) {
+      return false;
+    }
+
+    if (
+      !allowCharisma &&
+      cleanAbilityId === "cha"
+    ) {
+      return false;
+    }
+
+    return ABILITY_DEFINITIONS
+      .some((ability) => {
+        return ability.id === cleanAbilityId;
+      });
+  }
+
+  function isSection11SkillChoiceValid(
+    skillId
+  ) {
+    const cleanSkillId =
+      cleanString(skillId);
+
+    if (!cleanSkillId) {
+      return false;
+    }
+
+    return SKILL_DEFINITIONS
+      .some((skill) => {
+        return skill.id === cleanSkillId;
+      });
+  }
+
+  function isSection11LanguageChoiceValid(
+    language,
+    {
+      exclude = []
+    } = {}
+  ) {
+    const cleanLanguage =
+      cleanString(language);
+
+    if (!cleanLanguage) {
+      return false;
+    }
+
+    const excluded =
+      cleanArray(exclude)
+        .map((item) => {
+          return item.toLowerCase();
+        });
+
+    if (
+      excluded.includes(
+        cleanLanguage.toLowerCase()
+      )
+    ) {
+      return false;
+    }
+
+    return STANDARD_LANGUAGE_OPTIONS
+      .some((option) => {
+        return (
+          option.toLowerCase() ===
+          cleanLanguage.toLowerCase()
+        );
+      });
+  }
+
+  function removeInnateSpellsBySourcePrefixes(
+    prefixes
+  ) {
+    const cleanPrefixes =
+      cleanArray(prefixes);
+
+    if (!cleanPrefixes.length) {
+      return;
+    }
+
+    const magic =
+      creatorState.draft.magic;
+
+    magic.innateSpells =
+      (Array.isArray(magic.innateSpells)
+        ? magic.innateSpells
+        : []
+      ).filter((spell) => {
+        const source =
+          cleanString(
+            spell.source ||
+            spell.innateSource
+          );
+
+        return !cleanPrefixes.some(
+          (prefix) => {
+            return source.startsWith(prefix);
+          }
+        );
+      });
+  }
+
+  function setInnateSpellsForSource(
+    sourceName,
+    spells
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    if (!cleanSource) {
+      return;
+    }
+
+    const magic =
+      creatorState.draft.magic;
+
+    magic.innateSpells =
+      (Array.isArray(magic.innateSpells)
+        ? magic.innateSpells
+        : []
+      ).filter((spell) => {
+        return !sourceMatches(
+          spell.source ||
+          spell.innateSource,
+          cleanSource
+        );
+      });
+
+    (Array.isArray(spells) ? spells : [])
+      .forEach((spell) => {
+        magic.innateSpells.push(
+          normalizeSection16Spell(
+            {
+              ...spell,
+              id:
+                spell.id ||
+                makeSafeId(
+                  `${cleanSource}-${spell.name}`,
+                  "innate-spell"
+                ),
+              source: cleanSource,
+              innateSource: cleanSource,
+              innate: true,
+              manualOverride: true,
+              spellcastingAbility:
+                spell.spellcastingAbility || ""
+            },
+            cleanSource
+          )
+        );
+      });
+  }
+
+  function getSection11HalfElfAbilityChoices() {
+    const choices =
+      creatorState.draft
+        .species
+        .choices || {};
+
+    return [
+      cleanString(
+        choices.halfElfAbilityOne
+      ),
+      cleanString(
+        choices.halfElfAbilityTwo
+      )
+    ].filter((abilityId) => {
+      return isSection11AbilityChoiceValid(
+        abilityId
+      );
     });
+  }
+
+  function applySection11SpeciesChoiceMechanics(
+    traits
+  ) {
+    const speciesId =
+      cleanString(
+        creatorState.draft
+          .species
+          .id
+      );
+
+    if (speciesId === "half-elf") {
+      const abilityChoices =
+        getSection11HalfElfAbilityChoices();
+
+      const uniqueChoices = [
+        ...new Set(
+          abilityChoices.filter((abilityId) => {
+            return abilityId !== "cha";
+          })
+        )
+      ];
+
+      const bonusMap =
+        createAbilityMap(0);
+
+      if (uniqueChoices.length === 2) {
+        uniqueChoices.forEach((abilityId) => {
+          bonusMap[abilityId] += 1;
+        });
+      }
+
+      setAbilityBonusSource(
+        getSection11ChoiceSource(
+          "half-elf"
+        ),
+        bonusMap
+      );
+
+      const choiceSource =
+        getSection11ChoiceSource(
+          "half-elf"
+        );
+
+      const choices =
+        creatorState.draft
+          .species
+          .choices || {};
+
+      const selectedSkills = [
+        cleanString(
+          choices.halfElfSkillOne
+        ),
+        cleanString(
+          choices.halfElfSkillTwo
+        )
+      ]
+        .filter(Boolean)
+        .filter((skillId) => {
+          return isSection11SkillChoiceValid(
+            skillId
+          );
+        })
+        .map((skillId) => {
+          return SKILL_DEFINITIONS
+            .find((skill) => {
+              return skill.id === skillId;
+            })?.name || "";
+        })
+        .filter(Boolean);
+
+      if (
+        new Set(selectedSkills).size === 2
+      ) {
+        addSection11SkillProficiencies(
+          selectedSkills,
+          choiceSource
+        );
+      }
+
+      const language =
+        cleanString(
+          choices.halfElfLanguage
+        );
+
+      if (
+        isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        setSourceProficiencyList(
+          "languages",
+          [language],
+          choiceSource
+        );
+      }
+    }
+
+    if (speciesId === "dwarf") {
+      const tool =
+        cleanString(
+          creatorState.draft
+            .species
+            .choices
+            ?.dwarfTool
+        );
+
+      if (
+        DWARF_TOOL_CHOICES
+          .includes(tool)
+      ) {
+        setSourceProficiencyList(
+          "tools",
+          [tool],
+          getSection11ChoiceSource(
+            "dwarf"
+          )
+        );
+      }
+    }
+
+    if (speciesId === "human") {
+      const language =
+        cleanString(
+          creatorState.draft
+            .species
+            .choices
+            ?.humanLanguage
+        );
+
+      if (
+        isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: ["Common"]
+          }
+        )
+      ) {
+        setSourceProficiencyList(
+          "languages",
+          [language],
+          getSection11ChoiceSource(
+            "human"
+          )
+        );
+      }
+    }
+
+    const selectedSubrace =
+      getSection11SelectedSubrace();
+
+    if (
+      speciesId === "elf" &&
+      selectedSubrace?.id === "high-elf"
+    ) {
+      const choices =
+        creatorState.draft
+          .species
+          .choices || {};
+
+      const choiceSource =
+        getSection11ChoiceSource(
+          "high-elf"
+        );
+
+      const language =
+        cleanString(
+          choices.highElfLanguage
+        );
+
+      if (
+        isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        setSourceProficiencyList(
+          "languages",
+          [language],
+          choiceSource
+        );
+      }
+
+      const cantrip =
+        cleanString(
+          choices.highElfCantrip
+        );
+
+      if (
+        WIZARD_CANTRIP_CHOICES_2014
+          .includes(cantrip)
+      ) {
+        setInnateSpellsForSource(
+          choiceSource,
+          [
+            {
+              id:
+                `high-elf-${makeSafeId(
+                  cantrip,
+                  "cantrip"
+                )}`,
+              name: cantrip,
+              level: 0,
+              school: "Wizard cantrip",
+              spellcastingAbility: "int",
+              castingTime: "1 action",
+              range: "See spell",
+              duration: "See spell",
+              components: "",
+              summary:
+                "High Elf wizard cantrip."
+            }
+          ]
+        );
+      }
+    }
+
+    if (
+      speciesId === "elf" &&
+      selectedSubrace?.id === "dark-elf"
+    ) {
+      const level =
+        clampLevel(
+          creatorState.draft
+            .classProgression
+            .totalLevel || 1
+        );
+
+      setInnateSpellsForSource(
+        "subrace:dark-elf",
+        DARK_ELF_INNATE_SPELLS_2014
+          .filter((spell) => {
+            return level >=
+              safeNumber(
+                spell.minimumLevel,
+                1
+              );
+          })
+          .map((spell) => {
+            return {
+              ...spell,
+              spellcastingAbility: "cha"
+            };
+          })
+      );
+    }
+
+    if (
+      speciesId === "gnome" &&
+      selectedSubrace?.id === "forest-gnome"
+    ) {
+      setInnateSpellsForSource(
+        "subrace:forest-gnome",
+        FOREST_GNOME_INNATE_SPELLS_2014
+          .map((spell) => {
+            return {
+              ...spell,
+              spellcastingAbility: "int"
+            };
+          })
+      );
+    }
+
+    if (speciesId === "tiefling") {
+      const level =
+        clampLevel(
+          creatorState.draft
+            .classProgression
+            .totalLevel || 1
+        );
+
+      setInnateSpellsForSource(
+        "species:tiefling",
+        TIEFLING_INNATE_SPELLS_2014
+          .filter((spell) => {
+            return level >=
+              safeNumber(
+                spell.minimumLevel,
+                1
+              );
+          })
+          .map((spell) => {
+            return {
+              ...spell,
+              spellcastingAbility: "cha"
+            };
+          })
+      );
+    }
+
+    if (speciesId === "dragonborn") {
+      const ancestry =
+        getSection11DragonbornAncestry();
+
+      if (ancestry) {
+        traits.push({
+          id:
+            `dragonborn-${ancestry.id}-ancestry`,
+          name:
+            `${ancestry.name} Dragon Ancestry`,
+          summary:
+            `Your breath weapon and damage resistance use ${ancestry.damageType.toLowerCase()} damage.`,
+          source:
+            "species:dragonborn"
+        });
+
+        creatorState.draft
+          .species
+          .damageResistances =
+            [ancestry.damageType];
+      } else {
+        creatorState.draft
+          .species
+          .damageResistances = [];
+      }
+    }
+  }
+
+  function applySection11SpeciesMechanics() {
+    const species =
+      getSection11SelectedSpeciesTemplate();
+
+    if (!species) {
+      return;
+    }
+
+    const subrace =
+      getSection11SelectedSubrace(
+        species
+      );
+
+    const speciesSource =
+      getSpeciesSourceLabel(
+        species
+      );
+
+    const subraceSource =
+      getSubraceSourceLabel(
+        subrace
+      );
+
+    applySection11MechanicBlock(
+      species,
+      speciesSource
+    );
+
+    applySection11MechanicBlock(
+      subrace,
+      subraceSource
+    );
+
+    creatorState.draft.identity.size =
+      subrace?.size ||
+      species.size ||
+      "medium";
+
+    creatorState.draft
+      .combat
+      .speed
+      .walk =
+        Math.max(
+          0,
+          safeNumber(
+            subrace?.speed ??
+            species.speed,
+            30
+          )
+        );
+
+    const traits = [
+      ...(
+        Array.isArray(species.traits)
+          ? species.traits
+          : []
+      ),
+      ...(
+        Array.isArray(subrace?.traits)
+          ? subrace.traits
+          : []
+      )
+    ];
+
+    applySection11SpeciesChoiceMechanics(
+      traits
+    );
+
+    creatorState.draft
+      .species
+      .traits =
+        cloneData(traits);
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(traits);
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
   }
 
   function chooseSpeciesFromTemplate(
@@ -9601,6 +17799,8 @@ export function createCharacterCreator(options = {}) {
     if (!species) {
       return false;
     }
+
+    clearSection11SpeciesMechanics();
 
     creatorState.draft.species = {
       id: species.id,
@@ -9618,7 +17818,9 @@ export function createCharacterCreator(options = {}) {
       templateSnapshot:
         cloneData(species),
 
-      choices: {},
+      choices: {
+        subraceId: ""
+      },
 
       traits:
         cloneData(
@@ -9627,30 +17829,356 @@ export function createCharacterCreator(options = {}) {
         )
     };
 
-    creatorState.draft.identity.size =
-      species.size ||
-      "medium";
+    applySection11SpeciesMechanics();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function chooseSection11Subrace(
+    subraceId
+  ) {
+    const species =
+      getSection11SelectedSpeciesTemplate();
+
+    const subrace =
+      (
+        Array.isArray(species?.subraces)
+          ? species.subraces
+          : []
+      ).find((candidate) => {
+        return candidate.id === subraceId;
+      });
+
+    if (!species || !subrace) {
+      return false;
+    }
+
+    clearSection11SpeciesMechanics();
 
     creatorState.draft
-      .combat
-      .speed
-      .walk =
-        Math.max(
-          0,
-          safeNumber(
-            species.speed,
-            30
-          )
-        );
+      .species
+      .choices =
+        creatorState.draft
+          .species
+          .choices || {};
 
     creatorState.draft
-      .features
-      .speciesTraits =
-        cloneData(
-          creatorState.draft
-            .species
-            .traits
+      .species
+      .choices
+      .subraceId =
+        subrace.id;
+
+    creatorState.draft
+      .species
+      .choices
+      .subraceName =
+        subrace.name;
+
+    applySection11SpeciesMechanics();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applySection11SpeciesChoices() {
+    const speciesId =
+      cleanString(
+        creatorState.draft
+          .species
+          .id
+      );
+
+    creatorState.draft
+      .species
+      .choices =
+        creatorState.draft
+          .species
+          .choices || {};
+
+    if (speciesId === "dragonborn") {
+      const ancestryId =
+        cleanString(
+          $("ccDragonbornAncestry")
+            ?.value
         );
+
+      if (!ancestryId) {
+        alert(
+          "Choose a dragon ancestry."
+        );
+
+        return false;
+      }
+
+      const ancestry =
+        SECTION11_DRAGONBORN_ANCESTRIES
+          .find((candidate) => {
+            return candidate.id === ancestryId;
+          });
+
+      if (!ancestry) {
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .draconicAncestry =
+          ancestry.id;
+
+      creatorState.draft
+        .species
+        .choices
+        .draconicAncestryName =
+          ancestry.name;
+    }
+
+    if (speciesId === "half-elf") {
+      const firstAbility =
+        cleanString(
+          $("ccHalfElfAbilityOne")
+            ?.value
+        );
+
+      const secondAbility =
+        cleanString(
+          $("ccHalfElfAbilityTwo")
+            ?.value
+        );
+
+      if (
+        !isSection11AbilityChoiceValid(
+          firstAbility,
+          {
+            allowCharisma: false
+          }
+        ) ||
+        !isSection11AbilityChoiceValid(
+          secondAbility,
+          {
+            allowCharisma: false
+          }
+        ) ||
+        firstAbility === secondAbility ||
+        firstAbility === "cha" ||
+        secondAbility === "cha"
+      ) {
+        alert(
+          "Choose two different Half-Elf ability bonuses other than Charisma."
+        );
+
+        return false;
+      }
+
+      const firstSkill =
+        cleanString(
+          $("ccHalfElfSkillOne")
+            ?.value
+        );
+
+      const secondSkill =
+        cleanString(
+          $("ccHalfElfSkillTwo")
+            ?.value
+        );
+
+      if (
+        !isSection11SkillChoiceValid(
+          firstSkill
+        ) ||
+        !isSection11SkillChoiceValid(
+          secondSkill
+        ) ||
+        firstSkill === secondSkill
+      ) {
+        alert(
+          "Choose two different Half-Elf skill proficiencies."
+        );
+
+        return false;
+      }
+
+      const language =
+        cleanString(
+          $("ccHalfElfLanguage")
+            ?.value
+        );
+
+      if (
+        !isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        alert(
+          "Choose a Half-Elf additional language."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfAbilityOne =
+          firstAbility;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfAbilityTwo =
+          secondAbility;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfSkillOne =
+          firstSkill;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfSkillTwo =
+          secondSkill;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfLanguage =
+          language;
+    }
+
+    if (speciesId === "dwarf") {
+      const tool =
+        cleanString(
+          $("ccDwarfToolChoice")
+            ?.value
+        );
+
+      if (
+        !DWARF_TOOL_CHOICES
+          .includes(tool)
+      ) {
+        alert(
+          "Choose a Dwarf tool proficiency."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .dwarfTool =
+          tool;
+    }
+
+    if (speciesId === "human") {
+      const language =
+        cleanString(
+          $("ccHumanLanguage")
+            ?.value
+        );
+
+      if (
+        !isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: ["Common"]
+          }
+        )
+      ) {
+        alert(
+          "Choose a Human additional language."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .humanLanguage =
+          language;
+    }
+
+    if (
+      speciesId === "elf" &&
+      getSection11SelectedSubrace()?.id ===
+        "high-elf"
+    ) {
+      const language =
+        cleanString(
+          $("ccHighElfLanguage")
+            ?.value
+        );
+
+      const cantrip =
+        cleanString(
+          $("ccHighElfCantrip")
+            ?.value
+        );
+
+      if (
+        !isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        alert(
+          "Choose a High Elf additional language."
+        );
+
+        return false;
+      }
+
+      if (
+        !WIZARD_CANTRIP_CHOICES_2014
+          .includes(cantrip)
+      ) {
+        alert(
+          "Choose a High Elf wizard cantrip."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .highElfLanguage =
+          language;
+
+      creatorState.draft
+        .species
+        .choices
+        .highElfCantrip =
+          cantrip;
+    }
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
 
     applyCompatibilityAliases(
       creatorState.draft
@@ -9688,6 +18216,8 @@ export function createCharacterCreator(options = {}) {
               .traits
           )
         : [];
+
+    clearSection11SpeciesMechanics();
 
     creatorState.draft.species = {
       id: makeSafeId(
@@ -9903,6 +18433,353 @@ export function createCharacterCreator(options = {}) {
         })
         .join("");
 
+    const selectedSpeciesTemplate =
+      getSection11SelectedSpeciesTemplate();
+
+    const selectedSubrace =
+      getSection11SelectedSubrace(
+        selectedSpeciesTemplate
+      );
+
+    const subraceCards =
+      (
+        Array.isArray(
+          selectedSpeciesTemplate?.subraces
+        )
+          ? selectedSpeciesTemplate.subraces
+          : []
+      )
+        .map((subrace) => {
+          const selected =
+            selectedSubrace?.id ===
+            subrace.id;
+
+          const abilityText =
+            Object.entries(
+              subrace.abilityBonuses || {}
+            )
+              .filter(([, value]) => {
+                return safeNumber(value, 0) !== 0;
+              })
+              .map(([abilityId, value]) => {
+                return `${abilityId.toUpperCase()} ${formatSignedNumber(value)}`;
+              })
+              .join(", ");
+
+          return wizardChoiceCard(
+            subrace.name ||
+              "Unnamed Subrace",
+
+            `
+              <p>
+                ${
+                  abilityText
+                    ? `<b>Ability:</b> ${escapeHtml(abilityText)}`
+                    : "No ability bonus listed."
+                }
+              </p>
+            `,
+
+            selected
+              ? "Selected"
+              : "Choose Subrace",
+
+            "choose-subrace",
+
+            {
+              "subrace-id":
+                subrace.id
+            },
+
+            selected
+          );
+        })
+        .join("");
+
+    const abilityChoices =
+      ABILITY_DEFINITIONS.map((ability) => {
+        return {
+          value: ability.id,
+          label: ability.name
+        };
+      });
+
+    const halfElfAbilityChoices =
+      abilityChoices.filter((ability) => {
+        return ability.value !== "cha";
+      });
+
+    const dragonbornChoiceHtml =
+      selectedSpeciesId === "dragonborn"
+        ? `
+          <hr>
+
+          <h3>Draconic Ancestry</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Ancestry",
+              "ccDragonbornAncestry",
+              creatorState.draft
+                .species
+                .choices
+                ?.draconicAncestry ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose ancestry"
+                },
+                ...SECTION11_DRAGONBORN_ANCESTRIES
+                  .map((ancestry) => {
+                    return {
+                      value: ancestry.id,
+                      label:
+                        `${ancestry.name} (${ancestry.damageType})`
+                    };
+                  })
+              ]
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Ancestry
+            </button>
+          </div>
+        `
+        : "";
+
+    const halfElfChoiceHtml =
+      selectedSpeciesId === "half-elf"
+        ? `
+          <hr>
+
+          <h3>Half-Elf Ability Choices</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "First +1",
+              "ccHalfElfAbilityOne",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfAbilityOne ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose ability"
+                },
+                ...halfElfAbilityChoices
+              ]
+            )}
+
+            ${wizardSelect(
+              "Second +1",
+              "ccHalfElfAbilityTwo",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfAbilityTwo ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose ability"
+                },
+                ...halfElfAbilityChoices
+              ]
+            )}
+
+            ${wizardSelect(
+              "First Skill",
+              "ccHalfElfSkillOne",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfSkillOne ||
+                "",
+              getSection11SkillChoices()
+            )}
+
+            ${wizardSelect(
+              "Second Skill",
+              "ccHalfElfSkillTwo",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfSkillTwo ||
+                "",
+              getSection11SkillChoices()
+            )}
+
+            ${wizardSelect(
+              "Additional Language",
+              "ccHalfElfLanguage",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfLanguage ||
+                "",
+              getSection11LanguageChoices({
+                exclude: [
+                  "Common",
+                  "Elvish"
+                ]
+              })
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Half-Elf Choices
+            </button>
+          </div>
+        `
+        : "";
+
+    const dwarfChoiceHtml =
+      selectedSpeciesId === "dwarf"
+        ? `
+          <hr>
+
+          <h3>Dwarf Tool Choice</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Tool Proficiency",
+              "ccDwarfToolChoice",
+              creatorState.draft
+                .species
+                .choices
+                ?.dwarfTool ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose tool"
+                },
+                ...DWARF_TOOL_CHOICES.map((tool) => {
+                  return {
+                    value: tool,
+                    label: tool
+                  };
+                })
+              ]
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Dwarf Tool
+            </button>
+          </div>
+        `
+        : "";
+
+    const humanChoiceHtml =
+      selectedSpeciesId === "human"
+        ? `
+          <hr>
+
+          <h3>Human Language Choice</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Additional Language",
+              "ccHumanLanguage",
+              creatorState.draft
+                .species
+                .choices
+                ?.humanLanguage ||
+                "",
+              getSection11LanguageChoices({
+                exclude: ["Common"]
+              })
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Human Language
+            </button>
+          </div>
+        `
+        : "";
+
+    const highElfChoiceHtml =
+      selectedSpeciesId === "elf" &&
+      selectedSubrace?.id === "high-elf"
+        ? `
+          <hr>
+
+          <h3>High Elf Choices</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Additional Language",
+              "ccHighElfLanguage",
+              creatorState.draft
+                .species
+                .choices
+                ?.highElfLanguage ||
+                "",
+              getSection11LanguageChoices({
+                exclude: [
+                  "Common",
+                  "Elvish"
+                ]
+              })
+            )}
+
+            ${wizardSelect(
+              "Wizard Cantrip",
+              "ccHighElfCantrip",
+              creatorState.draft
+                .species
+                .choices
+                ?.highElfCantrip ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose cantrip"
+                },
+                ...WIZARD_CANTRIP_CHOICES_2014
+                  .map((cantrip) => {
+                    return {
+                      value: cantrip,
+                      label: cantrip
+                    };
+                  })
+              ]
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply High Elf Choices
+            </button>
+          </div>
+        `
+        : "";
+
     const traits =
       Array.isArray(
         creatorState.draft
@@ -9973,6 +18850,30 @@ export function createCharacterCreator(options = {}) {
       <div class="hg-character-choice-grid">
         ${speciesCards}
       </div>
+
+      ${
+        subraceCards
+          ? `
+            <hr>
+
+            <h3>Subrace</h3>
+
+            <div class="hg-character-choice-grid">
+              ${subraceCards}
+            </div>
+          `
+          : ""
+      }
+
+      ${dragonbornChoiceHtml}
+
+      ${dwarfChoiceHtml}
+
+      ${humanChoiceHtml}
+
+      ${highElfChoiceHtml}
+
+      ${halfElfChoiceHtml}
 
       <hr>
 
@@ -10150,6 +19051,48 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleChooseSubraceAction(
+    ...values
+  ) {
+    const button =
+      findSection11ActionElement(
+        ...values
+      );
+
+    const subraceId =
+      button?.dataset
+        ?.subraceId ||
+      "";
+
+    if (
+      chooseSection11Subrace(
+        subraceId
+      )
+    ) {
+      setStatus(
+        "Subrace selected: " +
+        (
+          getSection11SelectedSubrace()
+            ?.name ||
+          "Subrace"
+        ) +
+        "."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleApplySpeciesChoicesAction() {
+    if (applySection11SpeciesChoices()) {
+      setStatus(
+        "Species choices applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
   function handleUseCustomSpeciesAction() {
     if (applyCustomSpecies()) {
       setStatus(
@@ -10211,6 +19154,16 @@ export function createCharacterCreator(options = {}) {
   );
 
   registerCharacterCreatorAction(
+    "choose-subrace",
+    handleChooseSubraceAction
+  );
+
+  registerCharacterCreatorAction(
+    "apply-species-choices",
+    handleApplySpeciesChoicesAction
+  );
+
+  registerCharacterCreatorAction(
     "use-custom-species",
     handleUseCustomSpeciesAction
   );
@@ -10240,6 +19193,141 @@ export function createCharacterCreator(options = {}) {
     return Array.isArray(value)
       ? value.join(", ")
       : "";
+  }
+
+  function getSection12SkillPickerChoices() {
+    return [
+      {
+        value: "",
+        label: "Choose a skill"
+      },
+
+      ...SKILL_DEFINITIONS.map((skill) => {
+        return {
+          value: skill.name,
+          label: `${skill.name} (${skill.ability.toUpperCase()})`
+        };
+      })
+    ];
+  }
+
+  function getSection12CustomClassSkillNames() {
+    return parseSection12List(
+      $("ccCustomClassSkills")?.value
+    );
+  }
+
+  function setSection12CustomClassSkillNames(
+    skillNames
+  ) {
+    const field =
+      $("ccCustomClassSkills");
+
+    if (!field) {
+      return false;
+    }
+
+    const normalizedNames = [];
+    const seen = new Set();
+
+    cleanArray(skillNames)
+      .forEach((skillName) => {
+        const match =
+          SKILL_DEFINITIONS.find((skill) => {
+            return (
+              skill.name.toLowerCase() ===
+              skillName.toLowerCase()
+            );
+          });
+
+        const displayName =
+          match?.name ||
+          safeDisplayString(skillName);
+
+        const key =
+          displayName.toLowerCase();
+
+        if (displayName && !seen.has(key)) {
+          seen.add(key);
+          normalizedNames.push(displayName);
+        }
+      });
+
+    field.value =
+      formatSection12List(normalizedNames);
+
+    return true;
+  }
+
+  function updateSection12CustomClassSkillPicker(
+    mode
+  ) {
+    const picker =
+      $("ccCustomClassSkillPicker");
+
+    const selectedSkill =
+      safeDisplayString(
+        picker?.value
+      );
+
+    let skillNames =
+      getSection12CustomClassSkillNames();
+
+    if (mode === "add") {
+      if (!selectedSkill) {
+        alert(
+          "Choose a skill to add."
+        );
+
+        return false;
+      }
+
+      skillNames = [
+        ...skillNames,
+        selectedSkill
+      ];
+    }
+
+    if (mode === "remove") {
+      if (!selectedSkill) {
+        alert(
+          "Choose a skill to remove."
+        );
+
+        return false;
+      }
+
+      skillNames =
+        skillNames.filter((skillName) => {
+          return (
+            skillName.toLowerCase() !==
+            selectedSkill.toLowerCase()
+          );
+        });
+    }
+
+    if (mode === "add-all") {
+      skillNames = [
+        ...skillNames,
+        ...SKILL_DEFINITIONS.map((skill) => {
+          return skill.name;
+        })
+      ];
+    }
+
+    if (mode === "clear") {
+      skillNames = [];
+    }
+
+    if (
+      !setSection12CustomClassSkillNames(
+        skillNames
+      )
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
   function getSection12PrimaryClass() {
@@ -11236,6 +20324,9 @@ export function createCharacterCreator(options = {}) {
       };
     });
 
+    const skillPickerChoices =
+      getSection12SkillPickerChoices();
+
     return `
       <div class="hg-character-current-choice">
         <b>Current class:</b>
@@ -11362,8 +20453,18 @@ export function createCharacterCreator(options = {}) {
           }
         )}
 
+        ${wizardSelect(
+          "Skill Picker",
+          "ccCustomClassSkillPicker",
+          "",
+          skillPickerChoices,
+          {
+            wide: true
+          }
+        )}
+
         ${wizardField(
-          "Available Skills",
+          "Selected Available Skills",
           "ccCustomClassSkills",
 
           formatSection12List(
@@ -11374,10 +20475,46 @@ export function createCharacterCreator(options = {}) {
 
           {
             placeholder:
-              "Athletics, Arcana, Perception",
+              "Use the Skill Picker to add class skill options",
             wide: true
           }
         )}
+
+        <div class="hg-character-field hg-character-wide-field">
+          <label>
+            Skill Picker Actions
+          </label>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="add-custom-class-skill"
+            >
+              Add Skill
+            </button>
+
+            <button
+              type="button"
+              data-cc-action="remove-custom-class-skill"
+            >
+              Remove Skill
+            </button>
+
+            <button
+              type="button"
+              data-cc-action="add-all-custom-class-skills"
+            >
+              Add All Skills
+            </button>
+
+            <button
+              type="button"
+              data-cc-action="clear-custom-class-skills"
+            >
+              Clear Skills
+            </button>
+          </div>
+        </div>
 
         ${wizardField(
           "Armor Proficiencies",
@@ -11724,6 +20861,19 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleSection12CustomClassSkillPicker(
+    mode,
+    statusMessage
+  ) {
+    if (
+      updateSection12CustomClassSkillPicker(
+        mode
+      )
+    ) {
+      setStatus(statusMessage);
+    }
+  }
+
   function handleSection12ChooseSubclass(
     ...values
   ) {
@@ -11797,6 +20947,46 @@ export function createCharacterCreator(options = {}) {
   );
 
   registerCharacterCreatorAction(
+    "add-custom-class-skill",
+    () => {
+      handleSection12CustomClassSkillPicker(
+        "add",
+        "Skill added to custom class options."
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "remove-custom-class-skill",
+    () => {
+      handleSection12CustomClassSkillPicker(
+        "remove",
+        "Skill removed from custom class options."
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "add-all-custom-class-skills",
+    () => {
+      handleSection12CustomClassSkillPicker(
+        "add-all",
+        "All skills added to custom class options."
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "clear-custom-class-skills",
+    () => {
+      handleSection12CustomClassSkillPicker(
+        "clear",
+        "Custom class skill options cleared."
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
     "choose-subclass",
     handleSection12ChooseSubclass
   );
@@ -11851,6 +21041,78 @@ export function createCharacterCreator(options = {}) {
         )
       )
     );
+  }
+
+  function getSection13BaseAbilityScore(abilityId) {
+    return Math.max(
+      1,
+      Math.min(
+        30,
+        Math.round(
+          safeNumber(
+            creatorState.draft
+              .abilities
+              .base[abilityId],
+            10
+          )
+        )
+      )
+    );
+  }
+
+  function getSection13AbilityBonus(abilityId) {
+    return safeNumber(
+      creatorState.draft
+        .abilities
+        .bonuses?.[abilityId],
+      0
+    );
+  }
+
+  function renderSection13AbilityScoreDetails(
+    abilityId
+  ) {
+    const base =
+      getSection13BaseAbilityScore(
+        abilityId
+      );
+
+    const bonus =
+      getSection13AbilityBonus(
+        abilityId
+      );
+
+    const finalScore =
+      getSection13AbilityScore(
+        abilityId
+      );
+
+    const modifier =
+      calculateAbilityModifier(
+        finalScore
+      );
+
+    return `
+      <p class="small">
+        Base Score:
+        <b>${base}</b>
+
+        <br>
+
+        Species/Other Bonuses:
+        <b>${formatSignedNumber(bonus)}</b>
+
+        <br>
+
+        Final Score:
+        <b>${finalScore}</b>
+
+        <br>
+
+        Modifier:
+        <b>${formatSignedNumber(modifier)}</b>
+      </p>
+    `;
   }
 
   function setSection13AbilityMethod(method) {
@@ -11909,20 +21171,11 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft
         .abilities
         .base[ability.id] = score;
-
-      creatorState.draft
-        .abilities
-        .scores[ability.id] = score;
     });
 
-    creatorState.draft
-      .abilities
-      .modifiers =
-        calculateAbilityModifiers(
-          creatorState.draft
-            .abilities
-            .scores
-        );
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
 
     creatorState.draft.builder.validation = {
       ...(creatorState.draft.builder.validation || {}),
@@ -11995,7 +21248,7 @@ export function createCharacterCreator(options = {}) {
     }
 
     const currentScore =
-      getSection13AbilityScore(
+      getSection13BaseAbilityScore(
         abilityId
       );
 
@@ -12004,7 +21257,7 @@ export function createCharacterCreator(options = {}) {
         (ability) => {
           return (
             ability.id !== abilityId &&
-            getSection13AbilityScore(
+            getSection13BaseAbilityScore(
               ability.id
             ) === score
           );
@@ -12015,30 +21268,16 @@ export function createCharacterCreator(options = {}) {
       .abilities
       .base[abilityId] = score;
 
-    creatorState.draft
-      .abilities
-      .scores[abilityId] = score;
-
     if (otherAbility) {
       creatorState.draft
         .abilities
         .base[otherAbility.id] =
           currentScore;
-
-      creatorState.draft
-        .abilities
-        .scores[otherAbility.id] =
-          currentScore;
     }
 
-    creatorState.draft
-      .abilities
-      .modifiers =
-        calculateAbilityModifiers(
-          creatorState.draft
-            .abilities
-            .scores
-        );
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
 
     applyCompatibilityAliases(
       creatorState.draft
@@ -12075,7 +21314,7 @@ export function createCharacterCreator(options = {}) {
           8,
           Math.min(
             15,
-            getSection13AbilityScore(
+            getSection13BaseAbilityScore(
               ability.id
             )
           )
@@ -12103,7 +21342,7 @@ export function createCharacterCreator(options = {}) {
       8,
       Math.min(
         15,
-        getSection13AbilityScore(
+        getSection13BaseAbilityScore(
           abilityId
         )
       )
@@ -12149,18 +21388,9 @@ export function createCharacterCreator(options = {}) {
       .abilities
       .base[abilityId] = nextScore;
 
-    creatorState.draft
-      .abilities
-      .scores[abilityId] = nextScore;
-
-    creatorState.draft
-      .abilities
-      .modifiers =
-        calculateAbilityModifiers(
-          creatorState.draft
-            .abilities
-            .scores
-        );
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
 
     applyCompatibilityAliases(
       creatorState.draft
@@ -12282,28 +21512,9 @@ export function createCharacterCreator(options = {}) {
       return null;
     }
 
-    const level = clampLevel(
+    return calculateCharacterHp(
       creatorState.draft
-        .classProgression
-        .totalLevel
-    );
-
-    const hitDie =
-      getSection13HitDieSize();
-
-    const conModifier =
-      calculateAbilityModifier(
-        getSection13AbilityScore(
-          "con"
-        )
-      );
-
-    return calculateRuleFixedAverageHp({
-      hitDie,
-      level,
-      constitutionModifier:
-        conModifier
-    });
+    ).maximumHp;
   }
 
   function formatSection13HpRolls(
@@ -12312,7 +21523,11 @@ export function createCharacterCreator(options = {}) {
     return Array.isArray(values)
       ? values
           .map((value) => {
-            return safeNumber(value, 0);
+            return value &&
+              typeof value === "object" &&
+              !Array.isArray(value)
+              ? safeNumber(value.roll, 0)
+              : safeNumber(value, 0);
           })
           .filter((value) => {
             return value > 0;
@@ -12334,6 +21549,389 @@ export function createCharacterCreator(options = {}) {
       .filter((item) => {
         return item > 0;
       });
+  }
+
+  function createSection13HpRollRecord(
+    levelRecord,
+    roll
+  ) {
+    const dieSize =
+      getHitDieSize(
+        levelRecord?.hitDie
+      );
+
+    return {
+      characterLevel:
+        Math.max(
+          2,
+          Math.round(
+            safeNumber(
+              levelRecord?.characterLevel,
+              2
+            )
+          )
+        ),
+      classId:
+        cleanString(
+          levelRecord?.classId
+        ),
+      className:
+        cleanString(
+          levelRecord?.className,
+          "Class"
+        ),
+      hitDie:
+        cleanString(
+          levelRecord?.hitDie,
+          "d8"
+        ),
+      roll:
+        Math.max(
+          1,
+          Math.min(
+            dieSize,
+            Math.round(
+              safeNumber(
+                roll,
+                Math.floor(dieSize / 2) + 1
+              )
+            )
+          )
+        )
+    };
+  }
+
+  function getSection13HpRollState(
+    character = creatorState.draft,
+    hpCalculation =
+      normalizeHpCalculation(
+        character?.combat?.hpCalculation,
+        character?.combat?.maxHp
+      )
+  ) {
+    const levelRecords =
+      getCharacterLevelHitDieRecords(
+        character
+      );
+
+    const laterLevels =
+      levelRecords.slice(1);
+
+    const rawRecords =
+      getHpRollRawRecords(
+        hpCalculation.laterLevelValues
+      );
+
+    const activeRolls =
+      normalizeHpRollRecordsForCharacter(
+        hpCalculation.laterLevelValues,
+        character
+      );
+
+    const activeLevelNumbers =
+      new Set(
+        laterLevels.map((record) => {
+          return record.characterLevel;
+        })
+      );
+
+    const warnings = [];
+
+    rawRecords.forEach((rawRecord) => {
+      const activeLevel =
+        laterLevels.find((record) => {
+          return (
+            record.characterLevel ===
+            rawRecord.characterLevel
+          );
+        });
+
+      if (!activeLevel) {
+        warnings.push(
+          `Stored rolled HP for level ${rawRecord.characterLevel} is inactive after the current class level changes.`
+        );
+
+        return;
+      }
+
+      if (
+        !hpRollRawMatchesLevel(
+          rawRecord,
+          activeLevel
+        )
+      ) {
+        warnings.push(
+          `Level ${rawRecord.characterLevel} now uses ${activeLevel.className || "Class"} ${activeLevel.hitDie || "d8"}; the stored roll is adjusted to that Hit Die.`
+        );
+      }
+
+      const dieSize =
+        getHitDieSize(
+          activeLevel.hitDie
+        );
+
+      if (rawRecord.roll > dieSize) {
+        warnings.push(
+          `Level ${rawRecord.characterLevel} rolled HP is capped at ${activeLevel.hitDie || `d${dieSize}`}.`
+        );
+      }
+    });
+
+    return {
+      levelRecords,
+      laterLevels,
+      activeRolls,
+      rawRecords,
+      inactiveRecords:
+        rawRecords.filter((record) => {
+          return !activeLevelNumbers.has(
+            record.characterLevel
+          );
+        }),
+      warnings: [
+        ...new Set(warnings)
+      ]
+    };
+  }
+
+  function setSection13HpRollValue(
+    characterLevel,
+    rawValue
+  ) {
+    const hpCalculation =
+      normalizeHpCalculation(
+        creatorState.draft
+          .combat
+          .hpCalculation,
+        creatorState.draft
+          .combat
+          .maxHp
+      );
+
+    const levelNumber =
+      Math.max(
+        2,
+        Math.round(
+          safeNumber(characterLevel, 2)
+        )
+      );
+
+    const rollState =
+      getSection13HpRollState(
+        creatorState.draft,
+        hpCalculation
+      );
+
+    const levelRecord =
+      rollState.laterLevels.find(
+        (record) => {
+          return (
+            record.characterLevel ===
+            levelNumber
+          );
+        }
+      );
+
+    if (!levelRecord) {
+      return false;
+    }
+
+    const nextActiveRolls =
+      rollState.activeRolls.map(
+        (record) => {
+          if (
+            record.characterLevel !==
+            levelNumber
+          ) {
+            return record;
+          }
+
+          return createSection13HpRollRecord(
+            levelRecord,
+            rawValue
+          );
+        }
+      );
+
+    const activeLevels =
+      new Set(
+        rollState.laterLevels.map(
+          (record) => {
+            return record.characterLevel;
+          }
+        )
+      );
+
+    const inactiveRolls =
+      rollState.rawRecords
+        .filter((record) => {
+          return !activeLevels.has(
+            record.characterLevel
+          );
+        })
+        .map((record) => {
+          return {
+            characterLevel:
+              record.characterLevel,
+            classId:
+              record.classId,
+            className:
+              record.className,
+            hitDie:
+              record.hitDie,
+            roll:
+              record.roll
+          };
+        });
+
+    creatorState.draft
+      .combat
+      .hpCalculation = {
+        ...hpCalculation,
+        laterLevelValues: [
+          ...nextActiveRolls,
+          ...inactiveRolls
+        ]
+      };
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderSection13RolledHpInputs(
+    hpCalculation
+  ) {
+    const rollState =
+      getSection13HpRollState(
+        creatorState.draft,
+        hpCalculation
+      );
+
+    if (!rollState.levelRecords.length) {
+      return `
+        <div class="hg-character-placeholder">
+          Choose a class before entering rolled HP.
+        </div>
+      `;
+    }
+
+    const rollByLevel =
+      new Map(
+        rollState.activeRolls.map((roll) => {
+          return [
+            roll.characterLevel,
+            roll
+          ];
+        })
+      );
+
+    const warningHtml =
+      rollState.warnings.length
+        ? `
+          <div class="hg-character-warning">
+            ${rollState.warnings
+              .map((warning) => {
+                return `<p>${escapeHtml(warning)}</p>`;
+              })
+              .join("")}
+          </div>
+        `
+        : "";
+
+    return `
+      <hr>
+
+      <h3>Rolled HP by Level</h3>
+
+      ${warningHtml}
+
+      <div class="hg-character-choice-grid">
+        ${rollState.levelRecords
+          .map((levelRecord) => {
+            const dieSize =
+              getHitDieSize(
+                levelRecord.hitDie
+              );
+
+            const rollRecord =
+              rollByLevel.get(
+                levelRecord.characterLevel
+              );
+
+            const isFirstLevel =
+              levelRecord.characterLevel === 1;
+
+            return `
+              <article class="hg-character-choice-card">
+                <h3>
+                  Level ${levelRecord.characterLevel}
+                </h3>
+
+                <p>
+                  <b>Class:</b>
+                  ${escapeHtml(
+                    levelRecord.className ||
+                    "Class"
+                  )}
+
+                  <br>
+
+                  <b>Hit Die:</b>
+                  ${escapeHtml(
+                    levelRecord.hitDie ||
+                    "d8"
+                  )}
+                </p>
+
+                ${
+                  isFirstLevel
+                    ? `
+                      <p class="small">
+                        Level 1 uses the full Hit Die unless the Level 1 HP Override field is set.
+                      </p>
+                    `
+                    : `
+                      <div class="hg-character-field">
+                        <label for="ccHpRollLevel-${levelRecord.characterLevel}">
+                          Roll
+                        </label>
+
+                        <input
+                          id="ccHpRollLevel-${levelRecord.characterLevel}"
+                          type="number"
+                          min="1"
+                          max="${dieSize}"
+                          step="1"
+                          value="${escapeHtml(
+                            rollRecord?.roll ?? ""
+                          )}"
+                          data-hp-roll-level="${levelRecord.characterLevel}"
+                          data-hp-roll-hit-die="${escapeHtml(
+                            levelRecord.hitDie ||
+                            "d8"
+                          )}"
+                        >
+
+                        <p class="small">
+                          Enter 1-${dieSize}; this roll is capped by ${escapeHtml(
+                            levelRecord.hitDie ||
+                            `d${dieSize}`
+                          )}.
+                        </p>
+                      </div>
+                    `
+                }
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
   }
 
   function applySection13SuggestedHp() {
@@ -12366,17 +21964,17 @@ export function createCharacterCreator(options = {}) {
       .hpCalculation =
         normalizeHpCalculation(
           {
-            ...creatorState.draft
-              .combat
-              .hpCalculation,
-            lastCalculatedConModifier:
+          ...creatorState.draft
+            .combat
+            .hpCalculation,
+          lastCalculatedConModifier:
               calculateAbilityModifier(
                 getSection13AbilityScore(
                   "con"
                 )
               )
           },
-          suggestedHp
+          hpSummary.maximumHp
         );
 
     applyCompatibilityAliases(
@@ -12419,6 +22017,9 @@ export function createCharacterCreator(options = {}) {
         getGenericProficiencyBonus(
           level
         );
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
 
     if (
       selectedClass &&
@@ -12600,7 +22201,11 @@ export function createCharacterCreator(options = {}) {
         ${hpSummary.maximumHp}
 
         <span class="small">
-          (${escapeHtml(hpSummary.mode)}, ${escapeHtml(hpSummary.hitDie)})
+          (${escapeHtml(hpSummary.mode)}, ${escapeHtml(hpSummary.hitDie)}${
+            hpSummary.speciesHpBonus
+              ? `, Dwarven Toughness +${hpSummary.speciesHpBonus}`
+              : ""
+          })
         </span>
 
         <br>
@@ -12659,22 +22264,6 @@ export function createCharacterCreator(options = {}) {
             valueType: "number",
             extra:
               'min="1" step="1"'
-          }
-        )}
-
-        ${wizardField(
-          "Rolled HP Values",
-          "ccHpLaterLevelValues",
-          formatSection13HpRolls(
-            hpCalculation.laterLevelValues
-          ),
-          {
-            type: "textarea",
-            path:
-              "combat.hpCalculation.laterLevelValues",
-            placeholder:
-              "One roll per level after 1, comma-separated",
-            wide: true
           }
         )}
 
@@ -12802,6 +22391,14 @@ export function createCharacterCreator(options = {}) {
         )}
       </div>
 
+      ${
+        hpCalculation.mode === "rolled"
+          ? renderSection13RolledHpInputs(
+              hpCalculation
+            )
+          : ""
+      }
+
       <div class="hg-character-inline-actions">
         <button
           type="button"
@@ -12924,23 +22521,37 @@ export function createCharacterCreator(options = {}) {
 
   function renderSection13ManualAbilities() {
     return `
-      <div class="hg-character-field-grid three">
+      <div class="hg-character-choice-grid">
         ${ABILITY_DEFINITIONS.map(
           (ability) => {
-            return wizardField(
-              ability.name,
-              `ccAbility-${ability.id}`,
-              getSection13AbilityScore(
-                ability.id
-              ),
-              {
-                type: "number",
-                extra:
-                  `min="1" max="30" step="1" data-ability-id="${escapeHtml(
+            return `
+              <article class="hg-character-choice-card">
+                <h3>
+                  ${escapeHtml(
+                    ability.name
+                  )}
+                </h3>
+
+                ${wizardField(
+                  "Base Score",
+                  `ccAbility-${ability.id}`,
+                  getSection13BaseAbilityScore(
                     ability.id
-                  )}"`
-              }
-            );
+                  ),
+                  {
+                    type: "number",
+                    extra:
+                      `min="1" max="30" step="1" data-ability-id="${escapeHtml(
+                        ability.id
+                      )}"`
+                  }
+                )}
+
+                ${renderSection13AbilityScoreDetails(
+                  ability.id
+                )}
+              </article>
+            `;
           }
         ).join("")}
       </div>
@@ -12968,23 +22579,37 @@ export function createCharacterCreator(options = {}) {
         score already in use swaps the two abilities.
       </div>
 
-      <div class="hg-character-field-grid three">
+      <div class="hg-character-choice-grid">
         ${ABILITY_DEFINITIONS.map(
           (ability) => {
-            return wizardSelect(
-              ability.name,
-              `ccStandard-${ability.id}`,
-              getSection13AbilityScore(
-                ability.id
-              ),
-              choices,
-              {
-                extra:
-                  `data-standard-ability-id="${escapeHtml(
+            return `
+              <article class="hg-character-choice-card">
+                <h3>
+                  ${escapeHtml(
+                    ability.name
+                  )}
+                </h3>
+
+                ${wizardSelect(
+                  "Base Score",
+                  `ccStandard-${ability.id}`,
+                  getSection13BaseAbilityScore(
                     ability.id
-                  )}"`
-              }
-            );
+                  ),
+                  choices,
+                  {
+                    extra:
+                      `data-standard-ability-id="${escapeHtml(
+                        ability.id
+                      )}"`
+                  }
+                )}
+
+                ${renderSection13AbilityScoreDetails(
+                  ability.id
+                )}
+              </article>
+            `;
           }
         ).join("")}
       </div>
@@ -13021,12 +22646,12 @@ export function createCharacterCreator(options = {}) {
       <div class="hg-character-choice-grid">
         ${ABILITY_DEFINITIONS.map(
           (ability) => {
-            const score =
+            const baseScore =
               Math.max(
                 8,
                 Math.min(
                   15,
-                  getSection13AbilityScore(
+                  getSection13BaseAbilityScore(
                     ability.id
                   )
                 )
@@ -13034,7 +22659,7 @@ export function createCharacterCreator(options = {}) {
 
             const cost =
               SECTION13_POINT_BUY_COSTS[
-                score
+                baseScore
               ];
 
             return `
@@ -13046,16 +22671,34 @@ export function createCharacterCreator(options = {}) {
                 </h3>
 
                 <p>
-                  <b>Score:</b>
-                  ${score}
+                  <b>Base Score:</b>
+                  ${baseScore}
+
+                  <br>
+
+                  <b>Species/Other Bonuses:</b>
+                  ${formatSignedNumber(
+                    getSection13AbilityBonus(
+                      ability.id
+                    )
+                  )}
+
+                  <br>
+
+                  <b>Final Score:</b>
+                  ${getSection13AbilityScore(
+                    ability.id
+                  )}
 
                   <br>
 
                   <b>Modifier:</b>
-                  ${calculateAbilityModifier(
-                    score
-                  ) >= 0 ? "+" : ""}${calculateAbilityModifier(
-                    score
+                  ${formatSignedNumber(
+                    calculateAbilityModifier(
+                      getSection13AbilityScore(
+                        ability.id
+                      )
+                    )
                   )}
 
                   <br>
@@ -13071,7 +22714,7 @@ export function createCharacterCreator(options = {}) {
                     data-ability-id="${escapeHtml(
                       ability.id
                     )}"
-                    ${score <= 8 ? "disabled" : ""}
+                    ${baseScore <= 8 ? "disabled" : ""}
                   >
                     −
                   </button>
@@ -13082,7 +22725,7 @@ export function createCharacterCreator(options = {}) {
                     data-ability-id="${escapeHtml(
                       ability.id
                     )}"
-                    ${score >= 15 ? "disabled" : ""}
+                    ${baseScore >= 15 ? "disabled" : ""}
                   >
                     +
                   </button>
@@ -13149,7 +22792,7 @@ export function createCharacterCreator(options = {}) {
         Strength, Dexterity, Constitution,
         Intelligence, Wisdom, Charisma.
         After applying them, you can still edit the
-        scores manually below.
+        base scores manually below.
       </p>
 
       ${renderSection13ManualAbilities()}
@@ -13172,11 +22815,8 @@ export function createCharacterCreator(options = {}) {
               );
 
             const bonus =
-              safeNumber(
-                creatorState.draft
-                  .abilities
-                  .bonuses[ability.id],
-                0
+              getSection13AbilityBonus(
+                ability.id
               );
 
             return `
@@ -13188,17 +22828,25 @@ export function createCharacterCreator(options = {}) {
                 </h3>
 
                 <p>
-                  <b>${score}</b>
+                  <b>Base Score:</b>
+                  ${getSection13BaseAbilityScore(
+                    ability.id
+                  )}
 
                   <br>
 
-                  Modifier:
-                  ${modifier >= 0 ? "+" : ""}${modifier}
+                  <b>Species/Other Bonuses:</b>
+                  ${formatSignedNumber(bonus)}
 
                   <br>
 
-                  Bonus:
-                  ${bonus >= 0 ? "+" : ""}${bonus}
+                  <b>Final Score:</b>
+                  ${score}
+
+                  <br>
+
+                  <b>Modifier:</b>
+                  ${formatSignedNumber(modifier)}
                 </p>
               </article>
             `;
@@ -13476,6 +23124,20 @@ export function createCharacterCreator(options = {}) {
 
     if (
       target?.dataset
+        ?.hpRollLevel
+    ) {
+      setSection13HpRollValue(
+        target.dataset.hpRollLevel,
+        target.value
+      );
+
+      renderCreatorView();
+
+      return true;
+    }
+
+    if (
+      target?.dataset
         ?.draftPath ===
       "combat.hpCalculation.laterLevelValues"
     ) {
@@ -13735,6 +23397,12 @@ export function createCharacterCreator(options = {}) {
           raw.equipmentPackageIds
         ),
 
+      customEquipmentItems:
+        cleanArray(
+          raw.customEquipmentItems ||
+          raw.equipmentItems
+        ),
+
       features:
         Array.isArray(raw.features)
           ? cloneData(raw.features)
@@ -13780,7 +23448,15 @@ export function createCharacterCreator(options = {}) {
         .background
         .templateSnapshot;
 
-    if (selectedSnapshot) {
+    if (
+      selectedSnapshot &&
+      creatorState.draft
+        .background
+        .source !== "custom" &&
+      creatorState.draft
+        .background
+        .source !== "skipped"
+    ) {
       const normalized =
         normalizeSection14Background(
           selectedSnapshot,
@@ -13829,6 +23505,962 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function getSection14BackgroundChoiceList(
+    choiceKey
+  ) {
+    const background =
+      creatorState.draft.background;
+
+    background.featureChoices =
+      background.featureChoices || {};
+
+    background.featureChoices[choiceKey] =
+      cleanArray(
+        background.featureChoices[choiceKey]
+      );
+
+    return background.featureChoices[
+      choiceKey
+    ];
+  }
+
+  function setSection14BackgroundChoiceList(
+    choiceKey,
+    values
+  ) {
+    creatorState.draft
+      .background
+      .featureChoices =
+        creatorState.draft
+          .background
+          .featureChoices || {};
+
+    creatorState.draft
+      .background
+      .featureChoices[choiceKey] =
+        uniqueCleanArray(values);
+  }
+
+  function getSection14AllExactToolOptions() {
+    return uniqueCleanArray([
+      ...GENERAL_TOOL_OPTIONS,
+      ...ARTISAN_TOOL_OPTIONS,
+      ...GAMING_SET_OPTIONS,
+      ...MUSICAL_INSTRUMENT_OPTIONS
+    ]).sort((a, b) => {
+      return a.localeCompare(b);
+    });
+  }
+
+  function expandSection14ToolChoice(
+    option
+  ) {
+    const cleanOption =
+      cleanString(option);
+
+    const normalized =
+      cleanOption
+        .toLowerCase()
+        .replace(/[’']/g, "'");
+
+    if (!cleanOption) {
+      return [];
+    }
+
+    if (
+      normalized.includes(
+        "artisan"
+      ) &&
+      normalized.includes(
+        "musical"
+      )
+    ) {
+      return [
+        ...ARTISAN_TOOL_OPTIONS,
+        ...MUSICAL_INSTRUMENT_OPTIONS
+      ];
+    }
+
+    if (
+      normalized.includes(
+        "artisan"
+      )
+    ) {
+      return [
+        ...ARTISAN_TOOL_OPTIONS
+      ];
+    }
+
+    if (
+      normalized.includes(
+        "gaming set"
+      )
+    ) {
+      return [
+        ...GAMING_SET_OPTIONS
+      ];
+    }
+
+    if (
+      normalized.includes(
+        "musical instrument"
+      )
+    ) {
+      return [
+        ...MUSICAL_INSTRUMENT_OPTIONS
+      ];
+    }
+
+    return [cleanOption];
+  }
+
+  function getSection14BackgroundToolOptions(
+    background
+  ) {
+    const options =
+      cleanArray(
+        background?.toolChoices?.from
+      );
+
+    const sourceOptions =
+      options.length
+        ? options
+        : getSection14AllExactToolOptions();
+
+    return uniqueCleanArray(
+      sourceOptions.flatMap((option) => {
+        return expandSection14ToolChoice(
+          option
+        );
+      })
+    ).sort((a, b) => {
+      return a.localeCompare(b);
+    });
+  }
+
+  function getSection14BackgroundToolOptionsForIndex(
+    background,
+    index
+  ) {
+    const required =
+      Math.max(
+        0,
+        safeNumber(
+          background?.toolChoices?.choose,
+          0
+        )
+      );
+
+    const sourceOptions =
+      cleanArray(
+        background?.toolChoices?.from
+      );
+
+    if (
+      sourceOptions.length === required &&
+      index >= 0 &&
+      index < sourceOptions.length
+    ) {
+      return uniqueCleanArray(
+        expandSection14ToolChoice(
+          sourceOptions[index]
+        )
+      ).sort((a, b) => {
+        return a.localeCompare(b);
+      });
+    }
+
+    return getSection14BackgroundToolOptions(
+      background
+    );
+  }
+
+  function getSection14BackgroundLanguageOptions(
+    background
+  ) {
+    const options =
+      cleanArray(
+        background?.languageChoices?.from
+      );
+
+    return options.length
+      ? options
+      : STANDARD_LANGUAGE_OPTIONS;
+  }
+
+  function countSection14BackgroundSourceList(
+    category
+  ) {
+    const sourceName =
+      getBackgroundSourceLabel(
+        creatorState.draft.background
+      );
+
+    if (!sourceName) {
+      return 0;
+    }
+
+    const allSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    const categorySources =
+      allSources[category] || {};
+
+    return uniqueCleanArray(
+      creatorState.draft
+        .proficiencies[category]
+    ).filter((value) => {
+      return getStoredSources(
+        categorySources,
+        value,
+        []
+      ).includes(sourceName);
+    }).length;
+  }
+
+  function getSection14BackgroundSourceValues(
+    category
+  ) {
+    const sourceName =
+      getBackgroundSourceLabel(
+        creatorState.draft.background
+      );
+
+    if (!sourceName) {
+      return [];
+    }
+
+    const allSources =
+      ensureProficiencySources(
+        creatorState.draft
+      );
+
+    const categorySources =
+      allSources[category] || {};
+
+    return uniqueCleanArray(
+      creatorState.draft
+        .proficiencies[category]
+    ).filter((value) => {
+      return getStoredSources(
+        categorySources,
+        value,
+        []
+      ).includes(sourceName);
+    });
+  }
+
+  function countSection14ValidBackgroundToolChoices(
+    background =
+      getSelectedSection14Background()
+  ) {
+    const required =
+      Math.max(
+        0,
+        safeNumber(
+          background?.toolChoices?.choose,
+          0
+        )
+      );
+
+    const selectedChoices =
+      cleanArray(
+        creatorState.draft
+          .background
+          .featureChoices
+          ?.toolProficiencies
+      );
+
+    const sourcedTools =
+      new Set(
+        getSection14BackgroundSourceValues(
+          "tools"
+        )
+      );
+
+    const seen = new Set();
+    let validCount = 0;
+
+    for (
+      let index = 0;
+      index < required;
+      index += 1
+    ) {
+      const selected =
+        cleanString(
+          selectedChoices[index]
+        );
+
+      const validTools =
+        new Set(
+          getSection14BackgroundToolOptionsForIndex(
+            background,
+            index
+          )
+        );
+
+      if (
+        selected &&
+        !seen.has(selected) &&
+        sourcedTools.has(selected) &&
+        validTools.has(selected)
+      ) {
+        seen.add(selected);
+        validCount += 1;
+      }
+    }
+
+    return validCount;
+  }
+
+  function applySection14BackgroundChoices() {
+    const background =
+      getSelectedSection14Background();
+
+    const sourceName =
+      getBackgroundSourceLabel(
+        creatorState.draft.background
+      );
+
+    if (!background || !sourceName) {
+      alert(
+        "Choose a background first."
+      );
+
+      return false;
+    }
+
+    const toolRequired =
+      Math.max(
+        0,
+        safeNumber(
+          background.toolChoices?.choose,
+          0
+        )
+      );
+
+    const languageRequired =
+      Math.max(
+        0,
+        safeNumber(
+          background.languageChoices?.choose,
+          0
+        )
+      );
+
+    const toolChoices =
+      Array.from(
+        { length: toolRequired },
+        (_, index) => {
+          return cleanString(
+            $(`ccBackgroundToolChoice-${index}`)
+              ?.value
+          );
+        }
+      ).filter(Boolean);
+
+    const languageChoices =
+      Array.from(
+        { length: languageRequired },
+        (_, index) => {
+          return cleanString(
+            $(`ccBackgroundLanguageChoice-${index}`)
+              ?.value
+          );
+        }
+      ).filter(Boolean);
+
+    if (
+      toolChoices.length !== toolRequired ||
+      new Set(toolChoices).size !==
+        toolChoices.length ||
+      !toolChoices.every((tool, index) => {
+        return getSection14BackgroundToolOptionsForIndex(
+          background,
+          index
+        ).includes(tool);
+      })
+    ) {
+      alert(
+        "Choose the required exact background tool proficiencies."
+      );
+
+      return false;
+    }
+
+    if (
+      languageChoices.length !==
+        languageRequired ||
+      new Set(languageChoices).size !==
+        languageChoices.length
+    ) {
+      alert(
+        "Choose the required background languages."
+      );
+
+      return false;
+    }
+
+    setSection14BackgroundChoiceList(
+      "toolProficiencies",
+      toolChoices
+    );
+
+    setSection14BackgroundChoiceList(
+      "languageProficiencies",
+      languageChoices
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      toolChoices,
+      sourceName
+    );
+
+    setSourceProficiencyList(
+      "languages",
+      languageChoices,
+      sourceName
+    );
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function getSection14BackgroundPackages(
+    background
+  ) {
+    const packageIds =
+      cleanArray(
+        background?.equipmentPackageIds
+      );
+
+    const packages =
+      DEFAULT_BACKGROUND_EQUIPMENT_PACKAGES
+        .filter((pack) => {
+          return packageIds.includes(pack.id);
+        })
+        .map((pack) => cloneData(pack));
+
+    const customItems =
+      cleanArray(
+        background?.customEquipmentItems
+      );
+
+    if (customItems.length) {
+      packages.push({
+        id:
+          `${background.id}-custom-pack`,
+        name:
+          `${background.name} Equipment`,
+        items:
+          customItems.map((name) => {
+            return {
+              name,
+              quantity: 1,
+              weight: null
+            };
+          })
+      });
+    }
+
+    return packages;
+  }
+
+  function removeSection14BackgroundEquipment(
+    sourceName,
+    packageId = ""
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    if (!cleanSource) {
+      return;
+    }
+
+    const cleanPackageId =
+      cleanString(packageId);
+
+    creatorState.draft
+      .equipment
+      .items =
+        getSection15Inventory()
+          .filter((item) => {
+            if (item.source !== cleanSource) {
+              return true;
+            }
+
+            if (!cleanPackageId) {
+              return false;
+            }
+
+            return (
+              cleanString(
+                item.backgroundPackageId
+              ) !== cleanPackageId
+            );
+          });
+
+    removeSection14BackgroundCurrency(
+      cleanSource,
+      cleanPackageId
+    );
+
+    const currentSource =
+      getBackgroundSourceLabel(
+        creatorState.draft.background
+      );
+
+    if (currentSource === cleanSource) {
+      const choices =
+        creatorState.draft
+          .background
+          .featureChoices =
+            creatorState.draft
+              .background
+              .featureChoices || {};
+
+      choices.appliedEquipmentPackageIds =
+        cleanPackageId
+          ? cleanArray(
+              choices.appliedEquipmentPackageIds
+            ).filter((id) => {
+              return id !== cleanPackageId;
+            })
+          : [];
+    }
+  }
+
+  function getSection14BackgroundCurrencyGrant(
+    sourceName,
+    packageId
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    const cleanPackageId =
+      cleanString(packageId);
+
+    if (!cleanSource || !cleanPackageId) {
+      return null;
+    }
+
+    const sources =
+      ensureEquipmentCurrencySources(
+        creatorState.draft.equipment
+      );
+
+    return (
+      sources[cleanSource]?.[
+        cleanPackageId
+      ] || null
+    );
+  }
+
+  function hasSection14BackgroundCurrency(
+    sourceName
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    if (!cleanSource) {
+      return false;
+    }
+
+    const sources =
+      ensureEquipmentCurrencySources(
+        creatorState.draft.equipment
+      );
+
+    const packageMap =
+      sources[cleanSource] || {};
+
+    return Object.values(packageMap)
+      .some((currency) => {
+        return hasCurrencyValue(currency);
+      });
+  }
+
+  function formatSection14CurrencySummary(
+    currency
+  ) {
+    const clean =
+      normalizeCurrencyMap(currency);
+
+    const parts =
+      CURRENCY_DENOMINATIONS
+        .filter((coin) => {
+          return clean[coin] > 0;
+        })
+        .map((coin) => {
+          return `${clean[coin]} ${coin}`;
+        });
+
+    return parts.length
+      ? parts.join(", ")
+      : "none";
+  }
+
+  function getSection14BackgroundRemovalSummary(
+    sourceName
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    const itemCount =
+      getSection15Inventory()
+        .filter((item) => {
+          return item.source === cleanSource;
+        })
+        .length;
+
+    const sources =
+      ensureEquipmentCurrencySources(
+        creatorState.draft.equipment
+      );
+
+    const currency =
+      Object.values(
+        sources[cleanSource] || {}
+      ).reduce(
+        (total, packageCurrency) => {
+          return addCurrencyMaps(
+            total,
+            packageCurrency
+          );
+        },
+        normalizeCurrencyMap({})
+      );
+
+    return {
+      itemCount,
+      currency,
+      hasCurrency:
+        hasCurrencyValue(currency),
+      hasAnything:
+        itemCount > 0 ||
+        hasCurrencyValue(currency)
+    };
+  }
+
+  function addSection14BackgroundCurrency(
+    sourceName,
+    packageId,
+    currency
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    const cleanPackageId =
+      cleanString(packageId);
+
+    const cleanCurrency =
+      normalizeCurrencyMap(currency);
+
+    if (
+      !cleanSource ||
+      !cleanPackageId ||
+      !hasCurrencyValue(cleanCurrency)
+    ) {
+      return false;
+    }
+
+    const equipment =
+      creatorState.draft.equipment;
+
+    const manualCurrency =
+      getManualCurrencyBalance(
+        equipment
+      );
+
+    const sources =
+      ensureEquipmentCurrencySources(
+        equipment
+      );
+
+    sources[cleanSource] =
+      sources[cleanSource] || {};
+
+    if (
+      hasCurrencyValue(
+        sources[cleanSource][
+          cleanPackageId
+        ]
+      )
+    ) {
+      syncEquipmentCurrencyFromSources(
+        equipment,
+        manualCurrency
+      );
+
+      return false;
+    }
+
+    sources[cleanSource][
+      cleanPackageId
+    ] = cleanCurrency;
+
+    syncEquipmentCurrencyFromSources(
+      equipment,
+      manualCurrency
+    );
+
+    return true;
+  }
+
+  function removeSection14BackgroundCurrency(
+    sourceName,
+    packageId = ""
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    if (!cleanSource) {
+      return false;
+    }
+
+    const cleanPackageId =
+      cleanString(packageId);
+
+    const equipment =
+      creatorState.draft.equipment;
+
+    const manualCurrency =
+      getManualCurrencyBalance(
+        equipment
+      );
+
+    const sources =
+      ensureEquipmentCurrencySources(
+        equipment
+      );
+
+    if (!sources[cleanSource]) {
+      return false;
+    }
+
+    if (cleanPackageId) {
+      delete sources[cleanSource][
+        cleanPackageId
+      ];
+
+      if (
+        !Object.keys(
+          sources[cleanSource]
+        ).length
+      ) {
+        delete sources[cleanSource];
+      }
+    } else {
+      delete sources[cleanSource];
+    }
+
+    syncEquipmentCurrencyFromSources(
+      equipment,
+      manualCurrency
+    );
+
+    return true;
+  }
+
+  function handleSection14OldBackgroundEquipment(
+    sourceName
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    if (!cleanSource) {
+      return;
+    }
+
+    const removalSummary =
+      getSection14BackgroundRemovalSummary(
+        cleanSource
+      );
+
+    if (!removalSummary.hasAnything) {
+      return;
+    }
+
+    const removeOld =
+      typeof window !== "undefined" &&
+      typeof window.confirm === "function"
+        ? window.confirm(
+            [
+              "Remove items and currency granted by the previous background?",
+              "",
+              `Items to remove: ${removalSummary.itemCount}`,
+              `Currency to remove: ${formatSection14CurrencySummary(removalSummary.currency)}`,
+              "",
+              "OK removes only those previous-background items and currency.",
+              "Cancel keeps the existing background items and currency."
+            ].join("\n")
+          )
+        : false;
+
+    if (removeOld) {
+      removeSection14BackgroundEquipment(
+        cleanSource
+      );
+    }
+  }
+
+  function applySection14BackgroundPackage(
+    packageId
+  ) {
+    const background =
+      getSelectedSection14Background();
+
+    const sourceName =
+      getBackgroundSourceLabel(
+        creatorState.draft.background
+      );
+
+    if (!background || !sourceName) {
+      alert(
+        "Choose a background first."
+      );
+
+      return false;
+    }
+
+    const pack =
+      getSection14BackgroundPackages(
+        background
+      ).find((candidate) => {
+        return candidate.id === packageId;
+      });
+
+    if (!pack) {
+      return false;
+    }
+
+    const choices =
+      creatorState.draft
+        .background
+        .featureChoices =
+          creatorState.draft
+            .background
+            .featureChoices || {};
+
+    choices.appliedEquipmentPackageIds =
+      cleanArray(
+        choices.appliedEquipmentPackageIds
+      );
+
+    const alreadyApplied =
+      choices.appliedEquipmentPackageIds
+        .includes(pack.id);
+
+    const inventory =
+      getSection15Inventory();
+
+    (Array.isArray(pack.items)
+      ? pack.items
+      : []
+    ).forEach((packItem) => {
+      const catalogItem =
+        packItem.catalogId
+          ? getSection15Catalog()
+              .find((item) => {
+                return item.id ===
+                  packItem.catalogId;
+              })
+          : null;
+
+      const baseItem =
+        catalogItem ||
+        {
+          id:
+            makeSafeId(
+              packItem.name,
+              "background-item"
+            ),
+          name:
+            packItem.name ||
+            "Background Item",
+          category:
+            packItem.category ||
+            "adventuring-gear",
+          weight:
+            packItem.weight ?? null,
+          quantity:
+            packItem.quantity || 1
+        };
+
+      const grantKey =
+        `${pack.id}:${baseItem.id || baseItem.name}`;
+
+      const exists =
+        inventory.some((item) => {
+          return (
+            item.source === sourceName &&
+            item.backgroundGrantKey ===
+              grantKey
+          );
+        });
+
+      if (exists) {
+        return;
+      }
+
+      inventory.push(
+        normalizeSection15Item(
+          {
+            ...baseItem,
+            id:
+              makeSafeId(
+                `${sourceName}-${grantKey}`,
+                "background-item"
+              ),
+            quantity:
+              packItem.quantity ||
+              baseItem.quantity ||
+              1,
+            source: sourceName,
+            backgroundPackageId:
+              pack.id,
+            backgroundGrantKey:
+              grantKey
+          },
+          sourceName
+        )
+      );
+    });
+
+    if (!alreadyApplied) {
+      addSection14BackgroundCurrency(
+        sourceName,
+        pack.id,
+        pack.currency || {}
+      );
+
+      choices.appliedEquipmentPackageIds.push(
+        pack.id
+      );
+    } else if (
+      getSection14BackgroundCurrencyGrant(
+        sourceName,
+        pack.id
+      )
+    ) {
+      syncEquipmentCurrencyFromSources(
+        creatorState.draft.equipment
+      );
+    }
+
+    markDraftChanged();
+
+    return true;
+  }
+
   function chooseSection14Background(
     backgroundId
   ) {
@@ -13854,6 +24486,10 @@ export function createCharacterCreator(options = {}) {
       );
 
     if (oldBackgroundSource) {
+      handleSection14OldBackgroundEquipment(
+        oldBackgroundSource
+      );
+
       removeSkillProficiencySource(
         oldBackgroundSource
       );
@@ -13919,6 +24555,51 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
+  function skipSection14Background() {
+    const current =
+      creatorState.draft.background;
+
+    const oldBackgroundSource =
+      getBackgroundSourceLabel(
+        current
+      );
+
+    if (oldBackgroundSource) {
+      handleSection14OldBackgroundEquipment(
+        oldBackgroundSource
+      );
+
+      removeSkillProficiencySource(
+        oldBackgroundSource
+      );
+
+      removeListProficiencySource(
+        oldBackgroundSource
+      );
+    }
+
+    creatorState.draft.background = {
+      ...createEmptyCharacter()
+        .background,
+      source: "skipped",
+      featureChoices: {
+        skipped: true
+      }
+    };
+
+    creatorState.draft
+      .features
+      .backgroundFeatures = [];
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
   function applySection14CustomBackground() {
     const name =
       safeDisplayString(
@@ -13943,6 +24624,10 @@ export function createCharacterCreator(options = {}) {
       );
 
     if (oldBackgroundSource) {
+      handleSection14OldBackgroundEquipment(
+        oldBackgroundSource
+      );
+
       removeSkillProficiencySource(
         oldBackgroundSource
       );
@@ -14028,6 +24713,12 @@ export function createCharacterCreator(options = {}) {
           },
 
           equipmentPackageIds: [],
+
+          customEquipmentItems:
+            parseSection14List(
+              $("ccCustomBackgroundEquipment")
+                ?.value
+            ),
 
           features:
             cloneData(
@@ -14333,19 +25024,211 @@ export function createCharacterCreator(options = {}) {
         .source ===
       "custom";
 
+    const selectedToolChoices =
+      getSection14BackgroundChoiceList(
+        "toolProficiencies"
+      );
+
+    const selectedLanguageChoices =
+      getSection14BackgroundChoiceList(
+        "languageProficiencies"
+      );
+
+    const toolRequired =
+      Math.max(
+        0,
+        safeNumber(
+          selectedBackground
+            ?.toolChoices
+            ?.choose,
+          0
+        )
+      );
+
+    const languageRequired =
+      Math.max(
+        0,
+        safeNumber(
+          selectedBackground
+            ?.languageChoices
+            ?.choose,
+          0
+        )
+      );
+
+    const backgroundChoiceHtml =
+      selectedBackground &&
+      creatorState.draft
+        .background
+        .source !== "skipped"
+        ? `
+          <hr>
+
+          <h3>Background Choices</h3>
+
+          <div class="hg-character-field-grid three">
+            ${Array.from(
+              { length: toolRequired },
+              (_, index) => {
+                return wizardSelect(
+                  `Exact Tool Choice ${index + 1}`,
+                  `ccBackgroundToolChoice-${index}`,
+                  selectedToolChoices[index] ||
+                    "",
+                  [
+                    {
+                      value: "",
+                      label: "Choose exact tool"
+                    },
+                    ...getSection14BackgroundToolOptionsForIndex(
+                      selectedBackground,
+                      index
+                    ).map((tool) => {
+                      return {
+                        value: tool,
+                        label: tool
+                      };
+                    })
+                  ]
+                );
+              }
+            ).join("")}
+
+            ${Array.from(
+              { length: languageRequired },
+              (_, index) => {
+                return wizardSelect(
+                  `Language Choice ${index + 1}`,
+                  `ccBackgroundLanguageChoice-${index}`,
+                  selectedLanguageChoices[index] ||
+                    "",
+                  [
+                    {
+                      value: "",
+                      label: "Choose language"
+                    },
+                    ...getSection14BackgroundLanguageOptions(
+                      selectedBackground
+                    ).map((language) => {
+                      return {
+                        value: language,
+                        label: language
+                      };
+                    })
+                  ]
+                );
+              }
+            ).join("")}
+          </div>
+
+          ${
+            toolRequired ||
+            languageRequired
+              ? `
+                <div class="hg-character-inline-actions">
+                  <button
+                    type="button"
+                    data-cc-action="apply-background-choices"
+                  >
+                    Apply Background Choices
+                  </button>
+                </div>
+              `
+              : `
+                <div class="hg-character-placeholder">
+                  This background has no tool or language choices.
+                </div>
+              `
+          }
+        `
+        : "";
+
+    const backgroundPackages =
+      selectedBackground
+        ? getSection14BackgroundPackages(
+            selectedBackground
+          )
+        : [];
+
+    const backgroundPackageCards =
+      backgroundPackages
+        .map((pack) => {
+          return wizardChoiceCard(
+            pack.name || "Background Equipment",
+            `
+              <p>
+                ${
+                  (Array.isArray(pack.items)
+                    ? pack.items
+                    : []
+                  ).map((item) => {
+                    return escapeHtml(
+                      item.name ||
+                      item.catalogId ||
+                      "Item"
+                    );
+                  }).join(", ") ||
+                  "No package items listed."
+                }
+              </p>
+            `,
+            "Apply Package",
+            "apply-background-package",
+            {
+              "package-id": pack.id
+            },
+            cleanArray(
+              creatorState.draft
+                .background
+                .featureChoices
+                ?.appliedEquipmentPackageIds
+            ).includes(pack.id)
+          );
+        })
+        .join("");
+
     return `
       <div class="hg-character-current-choice">
         <b>Current background:</b>
 
         ${escapeHtml(
-          getSafeBackgroundName() ||
-          "None selected"
+          creatorState.draft
+            .background
+            .source === "skipped"
+            ? "No Background Selected"
+            : getSafeBackgroundName() ||
+              "None selected"
         )}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="skip-background"
+        >
+          Skip Background
+        </button>
       </div>
 
       <div class="hg-character-choice-grid">
         ${backgroundCards}
       </div>
+
+      ${backgroundChoiceHtml}
+
+      ${
+        backgroundPackages.length
+          ? `
+            <hr>
+
+            <h3>Background Equipment Packages</h3>
+
+            <div class="hg-character-choice-grid">
+              ${backgroundPackageCards}
+            </div>
+          `
+          : ""
+      }
 
       <hr>
 
@@ -14478,6 +25361,25 @@ export function createCharacterCreator(options = {}) {
           {
             placeholder:
               "Draconic, Elvish",
+
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "Equipment Package Items",
+          "ccCustomBackgroundEquipment",
+
+          customSelected
+            ? formatSection14List(
+                selectedBackground
+                  ?.customEquipmentItems
+              )
+            : "",
+
+          {
+            placeholder:
+              "Monster journal, silver badge, travel papers",
 
             wide: true
           }
@@ -14861,6 +25763,49 @@ export function createCharacterCreator(options = {}) {
     }).length;
   }
 
+  function countSection14ValidSkillSource(
+    sourceType
+  ) {
+    const sourceLabel =
+      getSection14SkillSourceLabel(
+        sourceType
+      );
+
+    if (!sourceLabel) {
+      return 0;
+    }
+
+    const choices =
+      sourceType === "class"
+        ? getSelectedClassTemplate()
+            ?.skillChoices || {}
+        : getSelectedSection14Background()
+            ?.skillChoices || {};
+
+    const allowed =
+      cleanArray(choices.from)
+        .map((name) => {
+          return name.toLowerCase();
+        });
+
+    return SKILL_DEFINITIONS.filter((skill) => {
+      if (
+        allowed.length &&
+        !allowed.includes(
+          skill.name.toLowerCase()
+        )
+      ) {
+        return false;
+      }
+
+      const entry =
+        getSection14SkillEntry(skill);
+
+      return cleanArray(entry.source)
+        .includes(sourceLabel);
+    }).length;
+  }
+
   function setSection14SkillEntry(
     skill,
     entry
@@ -15070,15 +26015,24 @@ export function createCharacterCreator(options = {}) {
         skill
       );
 
+    if (!current.proficient) {
+      if (typeof alert === "function") {
+        alert(
+          "Choose proficiency before adding expertise."
+        );
+      }
+
+      return false;
+    }
+
     setSection14SkillEntry(
       skill,
       {
-        proficient: true,
+        proficient:
+          current.proficient,
 
         expertise:
-          current.proficient
-            ? !current.expertise
-            : true,
+          !current.expertise,
 
         source:
           current.source.length
@@ -15435,6 +26389,9 @@ export function createCharacterCreator(options = {}) {
 
         <b>Class skill choices:</b>
 
+        ${countSection14ValidSkillSource(
+          "class"
+        )} /
         ${Math.max(
           0,
           safeNumber(
@@ -15447,6 +26404,9 @@ export function createCharacterCreator(options = {}) {
 
         <b>Background skill choices:</b>
 
+        ${countSection14ValidSkillSource(
+          "background"
+        )} /
         ${Math.max(
           0,
           safeNumber(
@@ -15648,12 +26608,59 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleSection14SkipBackground() {
+    if (skipSection14Background()) {
+      setStatus(
+        "Background skipped."
+      );
+
+      renderCreatorView();
+    }
+  }
+
   function handleSection14CustomBackground() {
     if (
       applySection14CustomBackground()
     ) {
       setStatus(
         "Custom background applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleSection14ApplyBackgroundChoices() {
+    if (
+      applySection14BackgroundChoices()
+    ) {
+      setStatus(
+        "Background choices applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleSection14ApplyBackgroundPackage(
+    ...values
+  ) {
+    const button =
+      findSection14ActionElement(
+        ...values
+      );
+
+    const packageId =
+      button?.dataset?.packageId ||
+      "";
+
+    if (
+      applySection14BackgroundPackage(
+        packageId
+      )
+    ) {
+      setStatus(
+        "Background equipment package applied."
       );
 
       renderCreatorView();
@@ -15783,8 +26790,23 @@ export function createCharacterCreator(options = {}) {
   );
 
   registerCharacterCreatorAction(
+    "skip-background",
+    handleSection14SkipBackground
+  );
+
+  registerCharacterCreatorAction(
     "use-custom-background",
     handleSection14CustomBackground
+  );
+
+  registerCharacterCreatorAction(
+    "apply-background-choices",
+    handleSection14ApplyBackgroundChoices
+  );
+
+  registerCharacterCreatorAction(
+    "apply-background-package",
+    handleSection14ApplyBackgroundPackage
   );
 
   registerCharacterCreatorAction(
@@ -15926,6 +26948,28 @@ export function createCharacterCreator(options = {}) {
       category.toLowerCase() === "shield" ||
       armorCategory.toLowerCase() === "shield";
 
+    const legacyMagicalBonus =
+      safeNumber(
+        raw.magicalBonus,
+        0
+      );
+
+    const legacyBonusLooksArmor =
+      legacyMagicalBonus !== 0 &&
+      (
+        isShield ||
+        baseArmorClass !== null ||
+        category.toLowerCase() === "armor"
+      );
+
+    const legacyBonusLooksWeapon =
+      legacyMagicalBonus !== 0 &&
+      (
+        category.toLowerCase() === "weapon" ||
+        cleanString(raw.weaponType) ||
+        cleanString(raw.damageDice)
+      );
+
     return {
       ...cloneData(raw),
 
@@ -15955,7 +26999,9 @@ export function createCharacterCreator(options = {}) {
         ),
 
       equipped:
-        raw.equipped === true,
+        raw.equipped === true &&
+        !cleanString(raw.containerId) &&
+        isContainer !== true,
 
       isMagical,
 
@@ -15963,7 +27009,9 @@ export function createCharacterCreator(options = {}) {
 
       attuned:
         requiresAttunement &&
-        raw.attuned === true,
+        raw.attuned === true &&
+        !cleanString(raw.containerId) &&
+        isContainer !== true,
 
       magicalBonus:
         safeNumber(
@@ -15982,7 +27030,11 @@ export function createCharacterCreator(options = {}) {
       magicalArmorClassBonus:
         safeNumber(
           raw.magicalArmorClassBonus ??
-          raw.magicalBonus,
+          (
+            legacyBonusLooksArmor
+              ? legacyMagicalBonus
+              : 0
+          ),
           0
         ),
 
@@ -16016,14 +27068,22 @@ export function createCharacterCreator(options = {}) {
       magicalAttackBonus:
         safeNumber(
           raw.magicalAttackBonus ??
-          raw.magicalBonus,
+          (
+            legacyBonusLooksWeapon
+              ? legacyMagicalBonus
+              : 0
+          ),
           0
         ),
 
       magicalDamageBonus:
         safeNumber(
           raw.magicalDamageBonus ??
-          raw.magicalBonus,
+          (
+            legacyBonusLooksWeapon
+              ? legacyMagicalBonus
+              : 0
+          ),
           0
         ),
 
@@ -16456,6 +27516,13 @@ export function createCharacterCreator(options = {}) {
           creatorState.pendingContainerRemovalId =
             "";
 
+          if (
+            creatorState.openContainerId ===
+            item.id
+          ) {
+            creatorState.openContainerId = "";
+          }
+
           markDraftChanged();
 
           return true;
@@ -16479,6 +27546,13 @@ export function createCharacterCreator(options = {}) {
 
       creatorState.pendingContainerRemovalId =
         "";
+
+      if (
+        creatorState.openContainerId ===
+        item.id
+      ) {
+        creatorState.openContainerId = "";
+      }
     } else {
       inventory.splice(
         index,
@@ -16884,6 +27958,48 @@ export function createCharacterCreator(options = {}) {
       item.attuned = true;
       markDraftChanged();
       return true;
+    }
+
+    if (
+      property === "equipped" &&
+      item.equipped !== true
+    ) {
+      if (item.isContainer === true) {
+        item.equipped = false;
+        markDraftChanged();
+        return false;
+      }
+
+      if (cleanString(item.containerId)) {
+        alert(
+          "Move the item out of its container before equipping it."
+        );
+
+        return false;
+      }
+
+      if (item.isShield === true) {
+        const otherShield =
+          getSection15Inventory()
+            .some((candidate, candidateIndex) => {
+              return (
+                candidateIndex !== index &&
+                candidate.equipped === true &&
+                candidate.isShield === true &&
+                !cleanString(
+                  candidate.containerId
+                )
+              );
+            });
+
+        if (otherShield) {
+          alert(
+            "Only one shield can provide an armor class bonus."
+          );
+
+          return false;
+        }
+      }
     }
 
     item[property] =
@@ -17399,11 +28515,297 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function renderSection15ContainerDestinationSelect(
+    inventory,
+    item,
+    index,
+    label = "Container"
+  ) {
+    const quantity =
+      Math.max(
+        1,
+        Math.round(
+          safeNumber(
+            item.quantity,
+            1
+          )
+        )
+      );
+
+    const containerOptions = [
+      {
+        id: "",
+        name: "General inventory"
+      },
+
+      ...inventory
+        .filter((candidate, candidateIndex) => {
+          return (
+            candidateIndex !== index &&
+            candidate.isContainer === true &&
+            !wouldCreateContainerCycle(
+              inventory,
+              item.id,
+              candidate.id
+            )
+          );
+        })
+        .map((candidate) => {
+          return {
+            id: candidate.id,
+            name:
+              candidate.name ||
+              "Container"
+          };
+        })
+    ];
+
+    return `
+      <div class="hg-character-field">
+        <label for="ccItemContainer-${index}">
+          ${escapeHtml(label)}
+        </label>
+
+        <select
+          id="ccItemContainer-${index}"
+          data-cc-action-change="move-item-container"
+          data-index="${index}"
+        >
+          ${containerOptions
+            .map((container) => {
+              return `
+                <option
+                  value="${escapeHtml(
+                    container.id
+                  )}"
+                  ${
+                    cleanString(
+                      item.containerId
+                    ) ===
+                    cleanString(
+                      container.id
+                    )
+                      ? "selected"
+                      : ""
+                  }
+                >
+                  ${escapeHtml(
+                    container.name
+                  )}
+                </option>
+              `;
+            })
+            .join("")}
+        </select>
+      </div>
+
+      <div class="hg-character-field">
+        <label for="ccItemMoveQuantity-${index}">
+          Move Quantity
+        </label>
+
+        <input
+          id="ccItemMoveQuantity-${index}"
+          type="number"
+          min="1"
+          max="${quantity}"
+          step="1"
+          value="${quantity}"
+        >
+      </div>
+    `;
+  }
+
+  function renderSection15OpenContainerPanel() {
+    const inventory =
+      getSection15Inventory();
+
+    const openContainerId =
+      cleanString(
+        creatorState.openContainerId
+      );
+
+    if (!openContainerId) {
+      return "";
+    }
+
+    const container =
+      inventory.find((item) => {
+        return (
+          item.id === openContainerId &&
+          item.isContainer === true
+        );
+      });
+
+    if (!container) {
+      creatorState.openContainerId = "";
+      return "";
+    }
+
+    const summary =
+      getContainerSummaries(inventory)
+        .find((entry) => {
+          return entry.id === openContainerId;
+        }) || {
+          contents: [],
+          capacityWeight: null,
+          knownWeight: 0,
+          unknownCount: 0,
+          overCapacity: false
+        };
+
+    const directContents =
+      getContainerContents(
+        inventory,
+        openContainerId
+      );
+
+    const contentCards =
+      directContents.length
+        ? directContents
+            .map((item) => {
+              const index =
+                inventory.findIndex((candidate) => {
+                  return candidate.id === item.id;
+                });
+
+              return `
+                <article class="hg-character-choice-card">
+                  <h3>
+                    ${escapeHtml(
+                      item.name ||
+                      "Unnamed Item"
+                    )}
+                  </h3>
+
+                  <p>
+                    <b>Quantity:</b>
+                    ${Math.max(
+                      1,
+                      Math.round(
+                        safeNumber(
+                          item.quantity,
+                          1
+                        )
+                      )
+                    )}
+                    <br>
+                    <b>Weight:</b>
+                    ${
+                      item.weight === null ||
+                      item.weight === undefined
+                        ? "Unknown"
+                        : `${safeNumber(
+                            item.weight,
+                            0
+                          )} lb. each`
+                    }
+                  </p>
+
+                  ${renderSection15ContainerDestinationSelect(
+                    inventory,
+                    item,
+                    index,
+                    "Move"
+                  )}
+
+                  <div class="hg-character-card-actions">
+                    <button
+                      type="button"
+                      data-cc-action="move-item-out-container"
+                      data-index="${index}"
+                    >
+                      Move Out
+                    </button>
+
+                    <button
+                      type="button"
+                      data-cc-action="remove-inventory-item"
+                      data-index="${index}"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </article>
+              `;
+            })
+            .join("")
+        : `
+          <div class="hg-character-placeholder">
+            This container is empty.
+          </div>
+        `;
+
+    return `
+      <section class="hg-character-current-choice">
+        <h3>
+          Open Container:
+          ${escapeHtml(
+            container.name ||
+            "Container"
+          )}
+        </h3>
+
+        <p>
+          <b>Direct contents:</b>
+          ${directContents.length}
+          <br>
+          <b>Used capacity:</b>
+          ${Number(
+            summary.knownWeight.toFixed(2)
+          )} lb.
+          /
+          ${
+            summary.capacityWeight === null
+              ? "No max"
+              : `${Number(
+                  summary.capacityWeight.toFixed(2)
+                )} lb.`
+          }
+          <br>
+          <b>Unknown weights:</b>
+          ${summary.unknownCount}
+        </p>
+
+        ${
+          summary.overCapacity
+            ? `
+              <div class="hg-character-warning">
+                This container is over capacity.
+              </div>
+            `
+            : ""
+        }
+
+        <div class="hg-character-inline-actions">
+          <button
+            type="button"
+            data-cc-action="close-container"
+          >
+            Close
+          </button>
+        </div>
+
+        <div class="hg-character-choice-grid">
+          ${contentCards}
+        </div>
+      </section>
+    `;
+  }
+
   function renderSection15Inventory() {
     const inventory =
       getSection15Inventory();
 
-    if (!inventory.length) {
+    const visibleInventory =
+      inventory.filter((item) => {
+        return (
+          creatorState.showContainedItems === true ||
+          !cleanString(item.containerId)
+        );
+      });
+
+    if (!visibleInventory.length) {
       return `
         <div class="hg-character-placeholder">
           Your inventory is empty. Add an item from the
@@ -17412,8 +28814,13 @@ export function createCharacterCreator(options = {}) {
       `;
     }
 
-    return inventory
-      .map((item, index) => {
+    return visibleInventory
+      .map((item) => {
+        const index =
+          inventory.findIndex((candidate) => {
+            return candidate.id === item.id;
+          });
+
         const quantity =
           Math.max(
             1,
@@ -17440,6 +28847,12 @@ export function createCharacterCreator(options = {}) {
                 quantity
               );
 
+        const isContainerOpen =
+          item.isContainer === true &&
+          cleanString(
+            creatorState.openContainerId
+          ) === cleanString(item.id);
+
         const weaponAttack =
           item.equipped === true &&
           (
@@ -17452,33 +28865,6 @@ export function createCharacterCreator(options = {}) {
                 item
               )
             : null;
-
-        const containerOptions = [
-          {
-            id: "",
-            name: "Not in a container"
-          },
-
-          ...inventory
-            .filter((candidate, candidateIndex) => {
-              return (
-                candidateIndex !== index &&
-                candidate.isContainer === true &&
-                !wouldCreateContainerCycle(
-                  inventory,
-                  item.id,
-                  candidate.id
-                )
-              );
-            })
-            .map((candidate) => {
-              return {
-                id: candidate.id,
-                name: candidate.name ||
-                  "Container"
-              };
-            })
-        ];
 
         const pendingRemoval =
           cleanString(
@@ -17554,9 +28940,13 @@ export function createCharacterCreator(options = {}) {
               <b>State:</b>
 
               ${
-                item.equipped
-                  ? "Equipped"
-                  : "Stored"
+                item.isContainer
+                  ? isContainerOpen
+                    ? "Open"
+                    : "Closed"
+                  : item.equipped
+                    ? "Equipped"
+                    : "Stored"
               }
 
               ${
@@ -17686,58 +29076,12 @@ export function createCharacterCreator(options = {}) {
                 : ""
             }
 
-            <div class="hg-character-field">
-              <label for="ccItemContainer-${index}">
-                Container
-              </label>
-
-              <select
-                id="ccItemContainer-${index}"
-                data-cc-action-change="move-item-container"
-                data-index="${index}"
-              >
-                ${containerOptions
-                  .map((container) => {
-                    return `
-                      <option
-                        value="${escapeHtml(
-                          container.id
-                        )}"
-                        ${
-                          cleanString(
-                            item.containerId
-                          ) ===
-                          cleanString(
-                            container.id
-                          )
-                            ? "selected"
-                            : ""
-                        }
-                      >
-                        ${escapeHtml(
-                          container.name
-                        )}
-                      </option>
-                    `;
-                  })
-                  .join("")}
-              </select>
-            </div>
-
-            <div class="hg-character-field">
-              <label for="ccItemMoveQuantity-${index}">
-                Move Quantity
-              </label>
-
-              <input
-                id="ccItemMoveQuantity-${index}"
-                type="number"
-                min="1"
-                max="${quantity}"
-                step="1"
-                value="${quantity}"
-              >
-            </div>
+            ${renderSection15ContainerDestinationSelect(
+              inventory,
+              item,
+              index,
+              "Container"
+            )}
 
             ${
               pendingRemoval
@@ -17842,6 +29186,11 @@ export function createCharacterCreator(options = {}) {
                 type="button"
                 data-cc-action="toggle-item-equipped"
                 data-index="${index}"
+                ${
+                  item.isContainer
+                    ? 'style="display:none" aria-hidden="true" disabled'
+                    : ""
+                }
               >
                 ${
                   item.equipped
@@ -17849,6 +29198,24 @@ export function createCharacterCreator(options = {}) {
                     : "Equip"
                 }
               </button>
+
+              ${
+                item.isContainer
+                  ? `
+                    <button
+                      type="button"
+                      data-cc-action="open-container"
+                      data-index="${index}"
+                    >
+                      ${
+                        isContainerOpen
+                          ? "Close"
+                          : "Open"
+                      }
+                    </button>
+                  `
+                  : ""
+              }
 
               <button
                 type="button"
@@ -18043,11 +29410,33 @@ export function createCharacterCreator(options = {}) {
           : ""
       }
 
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="skip-equipment"
+        >
+          No Starting Equipment
+        </button>
+
+        <button
+          type="button"
+          data-cc-action="toggle-contained-items"
+        >
+          ${
+            creatorState.showContainedItems
+              ? "Hide Contained Items"
+              : "Show Contained Items"
+          }
+        </button>
+      </div>
+
       <h3>Inventory</h3>
 
       <div class="hg-character-choice-grid">
         ${renderSection15Inventory()}
       </div>
+
+      ${renderSection15OpenContainerPanel()}
 
       <hr>
 
@@ -18532,6 +29921,101 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleSection15SkipEquipment() {
+    creatorState.draft
+      .equipment
+      .startingPackageId = "none";
+
+    markDraftChanged();
+
+    setStatus(
+      "Starting equipment skipped."
+    );
+
+    renderCreatorView();
+  }
+
+  function handleSection15ToggleContainedItems() {
+    creatorState.showContainedItems =
+      creatorState.showContainedItems !== true;
+
+    setStatus(
+      creatorState.showContainedItems
+        ? "Contained items are shown in the main inventory."
+        : "Contained items are hidden from the main inventory."
+    );
+
+    renderCreatorView();
+  }
+
+  function handleSection15OpenContainer(
+    ...values
+  ) {
+    const index =
+      getSection15ActionIndex(
+        ...values
+      );
+
+    const item =
+      getSection15Inventory()[index];
+
+    if (
+      !item ||
+      item.isContainer !== true
+    ) {
+      return;
+    }
+
+    const itemId =
+      cleanString(item.id);
+
+    creatorState.openContainerId =
+      creatorState.openContainerId === itemId
+        ? ""
+        : itemId;
+
+    setStatus(
+      creatorState.openContainerId
+        ? `${item.name || "Container"} opened.`
+        : "Container closed."
+    );
+
+    renderCreatorView();
+  }
+
+  function handleSection15CloseContainer() {
+    creatorState.openContainerId = "";
+
+    setStatus(
+      "Container closed."
+    );
+
+    renderCreatorView();
+  }
+
+  function handleSection15MoveItemOut(
+    ...values
+  ) {
+    const index =
+      getSection15ActionIndex(
+        ...values
+      );
+
+    if (
+      moveSection15ItemToContainer(
+        index,
+        "",
+        null
+      )
+    ) {
+      setStatus(
+        "Item moved to general inventory."
+      );
+
+      renderCreatorView();
+    }
+  }
+
   function handleSection15ChangeQuantity(
     amount,
     ...values
@@ -18734,6 +30218,21 @@ export function createCharacterCreator(options = {}) {
           )
         : null;
 
+    const itemBeforeMove =
+      getSection15Inventory()[index];
+
+    const movingIntoContainer =
+      Boolean(
+        cleanString(target.value)
+      );
+
+    const clearsEquippedState =
+      movingIntoContainer &&
+      (
+        itemBeforeMove?.equipped === true ||
+        itemBeforeMove?.attuned === true
+      );
+
     if (
       moveSection15ItemToContainer(
         index,
@@ -18742,7 +30241,9 @@ export function createCharacterCreator(options = {}) {
       )
     ) {
       setStatus(
-        "Container assignment updated."
+        clearsEquippedState
+          ? "Container assignment updated; stored items were unequipped and unattuned."
+          : "Container assignment updated."
       );
 
       renderCreatorView();
@@ -18764,6 +30265,31 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "add-custom-item",
     handleSection15AddCustomItem
+  );
+
+  registerCharacterCreatorAction(
+    "skip-equipment",
+    handleSection15SkipEquipment
+  );
+
+  registerCharacterCreatorAction(
+    "toggle-contained-items",
+    handleSection15ToggleContainedItems
+  );
+
+  registerCharacterCreatorAction(
+    "open-container",
+    handleSection15OpenContainer
+  );
+
+  registerCharacterCreatorAction(
+    "close-container",
+    handleSection15CloseContainer
+  );
+
+  registerCharacterCreatorAction(
+    "move-item-out-container",
+    handleSection15MoveItemOut
   );
 
   registerCharacterCreatorAction(
@@ -18896,10 +30422,52 @@ export function createCharacterCreator(options = {}) {
           raw.summary
         ),
 
+      summary:
+        safeDisplayString(
+          raw.summary ||
+          raw.description
+        ),
+
+      classId:
+        cleanString(
+          raw.classId ||
+          raw.spellcastingSourceId
+        ),
+
+      spellcastingSourceId:
+        cleanString(
+          raw.spellcastingSourceId ||
+          raw.classId
+        ),
+
       source:
         safeDisplayString(
           raw.source,
           fallbackSource
+        ),
+
+      innate:
+        raw.innate === true,
+
+      innateSource:
+        cleanString(
+          raw.innateSource
+        ),
+
+      minimumLevel:
+        Math.max(
+          1,
+          Math.round(
+            safeNumber(
+              raw.minimumLevel,
+              1
+            )
+          )
+        ),
+
+      spellcastingAbility:
+        cleanString(
+          raw.spellcastingAbility
         ),
 
       ritual:
@@ -18929,6 +30497,24 @@ export function createCharacterCreator(options = {}) {
     return creatorState.draft
       .magic
       .customSpells;
+  }
+
+  function getSection16InnateSpells(
+    character = creatorState.draft
+  ) {
+    const magic =
+      character?.magic || {};
+
+    return (
+      Array.isArray(magic.innateSpells)
+        ? magic.innateSpells
+        : []
+    ).map((spell) => {
+      return normalizeSection16Spell(
+        spell,
+        spell?.source || "innate"
+      );
+    });
   }
 
   function getSection16KnownSpellIds() {
@@ -18991,6 +30577,16 @@ export function createCharacterCreator(options = {}) {
 
     const spellLevel =
       safeNumber(spell?.level, 0);
+
+    const sourceWarning =
+      getSpellSourceWarning(
+        creatorState.draft,
+        spell
+      );
+
+    if (sourceWarning) {
+      return sourceWarning;
+    }
 
     if (
       spellLevel > 0 &&
@@ -19184,6 +30780,36 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    const spellcastingOptions =
+      getSpellcastingClassOptions(
+        creatorState.draft
+      );
+
+    const selectedClassId =
+      cleanString(
+        $("ccNewSpellClassId")
+          ?.value
+      ) ||
+      (
+        spellcastingOptions.length === 1
+          ? cleanString(
+              spellcastingOptions[0]
+                .classId
+            )
+          : ""
+      );
+
+    if (
+      spellcastingOptions.length > 1 &&
+      !selectedClassId
+    ) {
+      alert(
+        "Choose which class this spell belongs to."
+      );
+
+      return false;
+    }
+
     const spell =
       normalizeSection16Spell(
         {
@@ -19221,6 +30847,12 @@ export function createCharacterCreator(options = {}) {
           description:
             $("ccNewSpellDescription")
               ?.value,
+
+          classId:
+            selectedClassId,
+
+          spellcastingSourceId:
+            selectedClassId,
 
           source: "custom",
 
@@ -19686,6 +31318,26 @@ export function createCharacterCreator(options = {}) {
                 1
               )}`;
 
+        const sourceEntry =
+          getSpellcastingEntryForSpell(
+            creatorState.draft,
+            spell
+          );
+
+        const sourceId =
+          getSpellSourceId(spell);
+
+        const sourceLabel =
+          sourceEntry?.className ||
+          sourceId ||
+          "Needs review";
+
+        const sourceWarning =
+          getSpellSourceWarning(
+            creatorState.draft,
+            spell
+          );
+
         return `
           <article
             class="
@@ -19711,6 +31363,26 @@ export function createCharacterCreator(options = {}) {
                 spell.school ||
                 "Unknown"
               )}
+
+              <br>
+
+              <b>Class Source:</b>
+
+              ${escapeHtml(
+                sourceLabel
+              )}
+
+              ${
+                sourceWarning
+                  ? `
+                    <div class="hg-character-warning">
+                      ${escapeHtml(
+                        sourceWarning
+                      )}
+                    </div>
+                  `
+                  : ""
+              }
 
               <br>
 
@@ -19837,6 +31509,86 @@ export function createCharacterCreator(options = {}) {
                 Remove Spell
               </button>
             </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSection16InnateSpells() {
+    const spells =
+      getSection16InnateSpells();
+
+    if (!spells.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No innate species spells are currently recorded.
+        </div>
+      `;
+    }
+
+    return spells
+      .map((spell) => {
+        const spellLevel =
+          safeNumber(
+            spell.level,
+            0
+          ) === 0
+            ? "Cantrip"
+            : `Level ${safeNumber(
+                spell.level,
+                1
+              )}`;
+
+        return `
+          <article class="hg-character-choice-card selected">
+            <h3>
+              ${escapeHtml(
+                spell.name ||
+                "Unnamed Spell"
+              )}
+            </h3>
+
+            <p>
+              <b>${escapeHtml(
+                spellLevel
+              )}</b>
+
+              <br>
+
+              <b>Source:</b>
+
+              ${escapeHtml(
+                spell.source ||
+                spell.innateSource ||
+                "species"
+              )}
+
+              <br>
+
+              <b>Spellcasting Ability:</b>
+
+              ${escapeHtml(
+                cleanString(
+                  spell.spellcastingAbility
+                ).toUpperCase() ||
+                "None"
+              )}
+            </p>
+
+            ${
+              spell.summary ||
+              spell.description
+                ? `
+                  <p class="small">
+                    ${escapeHtml(
+                      spell.summary ||
+                      spell.description
+                    )}
+                  </p>
+                `
+                : ""
+            }
           </article>
         `;
       })
@@ -20037,6 +31789,25 @@ export function createCharacterCreator(options = {}) {
       };
     });
 
+    const spellClassChoices = [
+      {
+        value: "",
+        label: "Choose class source"
+      },
+
+      ...getSpellcastingClassOptions(
+        creatorState.draft
+      ).map((entry) => {
+        return {
+          value: entry.classId,
+          label:
+            entry.className ||
+            entry.classId ||
+            "Class"
+        };
+      })
+    ];
+
     const knownCount =
       getSection16KnownSpellIds()
         .length;
@@ -20047,6 +31818,11 @@ export function createCharacterCreator(options = {}) {
 
     const spellLimits =
       getSpellSelectionLimits(
+        creatorState.draft
+      );
+
+    const nonSpellcaster =
+      isCharacterNonSpellcaster(
         creatorState.draft
       );
 
@@ -20163,6 +31939,16 @@ export function createCharacterCreator(options = {}) {
         ${renderSection17SpellcastingSummary()}
       </div>
 
+      ${
+        nonSpellcaster
+          ? `
+            <div class="hg-character-placeholder">
+              This character is not a spellcaster. No spell selections are required.
+            </div>
+          `
+          : ""
+      }
+
       <h3>Spellcasting</h3>
 
       <div class="hg-character-field-grid three">
@@ -20247,6 +32033,14 @@ export function createCharacterCreator(options = {}) {
 
       <hr>
 
+      <h3>Innate Species Spells</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection16InnateSpells()}
+      </div>
+
+      <hr>
+
       <h3>Custom Spells</h3>
 
       <div class="hg-character-choice-grid">
@@ -20272,6 +32066,15 @@ export function createCharacterCreator(options = {}) {
           "ccNewSpellLevel",
           0,
           levelChoices
+        )}
+
+        ${wizardSelect(
+          "Class Source",
+          "ccNewSpellClassId",
+          spellClassChoices.length === 2
+            ? spellClassChoices[1].value
+            : "",
+          spellClassChoices
         )}
 
         ${wizardSelect(
@@ -20883,16 +32686,23 @@ export function createCharacterCreator(options = {}) {
   }
 
   function getSection17SpellCount() {
-    return Array.isArray(
-      creatorState.draft
-        .magic
-        .customSpells
-    )
-      ? creatorState.draft
-          .magic
-          .customSpells
-          .length
-      : 0;
+    return (
+      (
+        Array.isArray(
+          creatorState.draft
+            .magic
+            .customSpells
+        )
+          ? creatorState.draft
+              .magic
+              .customSpells
+              .length
+          : 0
+      ) +
+      getSection16InnateSpells(
+        creatorState.draft
+      ).length
+    );
   }
 
   function getSection17FeatureCount() {
@@ -21062,6 +32872,42 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
+    const equippedShields =
+      (Array.isArray(
+        draft.equipment.items
+      )
+        ? draft.equipment.items
+        : []
+      ).filter((item) => {
+        return (
+          item.equipped === true &&
+          item.isShield === true &&
+          !cleanString(item.containerId)
+        );
+      });
+
+    if (equippedShields.length > 1) {
+      warnings.push(
+        "More than one shield is equipped; only one shield can add to armor class."
+      );
+    }
+
+    (Array.isArray(
+      draft.equipment.items
+    )
+      ? draft.equipment.items
+      : []
+    ).forEach((item) => {
+      if (
+        cleanString(item.containerId) &&
+        item.equipped === true
+      ) {
+        warnings.push(
+          `${item.name || "An item"} is equipped while stored inside a container.`
+        );
+      }
+    });
+
     ABILITY_DEFINITIONS.forEach(
       (ability) => {
         const score =
@@ -21116,6 +32962,56 @@ export function createCharacterCreator(options = {}) {
     const selectedBackground =
       getSelectedSection14Background();
 
+    if (!isSection17SpeciesComplete(draft)) {
+      const species =
+        draft.species || {};
+
+      const template =
+        species.templateSnapshot ||
+        DEFAULT_SPECIES_TEMPLATES.find(
+          (item) => {
+            return item.id === species.id;
+          }
+        );
+
+      if (
+        Array.isArray(template?.subraces) &&
+        template.subraces.length > 0
+      ) {
+        warnings.push(
+          "Choose a subrace for the selected species."
+        );
+      } else if (species.id === "dragonborn") {
+        warnings.push(
+          "Choose a Dragonborn ancestry."
+        );
+      } else if (species.id === "half-elf") {
+        warnings.push(
+          "Choose Half-Elf ability, skill, and language choices."
+        );
+      } else if (species.id === "dwarf") {
+        warnings.push(
+          "Choose a Dwarf tool proficiency."
+        );
+      } else if (species.id === "human") {
+        warnings.push(
+          "Choose a Human additional language."
+        );
+      } else if (
+        species.id === "elf" &&
+        species.choices?.subraceId ===
+          "high-elf"
+      ) {
+        warnings.push(
+          "Choose a High Elf language and wizard cantrip."
+        );
+      } else {
+        warnings.push(
+          "Choose a species before finishing."
+        );
+      }
+    }
+
     const requiredClassSkills =
       Math.max(
         0,
@@ -21128,17 +33024,17 @@ export function createCharacterCreator(options = {}) {
       );
 
     const selectedClassSkills =
-      countSection14SkillSource(
+      countSection14ValidSkillSource(
         "class"
       );
 
     if (
       requiredClassSkills > 0 &&
-      selectedClassSkills <
+      selectedClassSkills !==
         requiredClassSkills
     ) {
       warnings.push(
-        `Choose ${requiredClassSkills} class skill proficiencies.`
+        `Choose exactly ${requiredClassSkills} valid class skill proficiencies.`
       );
     }
 
@@ -21154,17 +33050,69 @@ export function createCharacterCreator(options = {}) {
       );
 
     const selectedBackgroundSkills =
-      countSection14SkillSource(
+      countSection14ValidSkillSource(
         "background"
       );
 
     if (
       requiredBackgroundSkills > 0 &&
-      selectedBackgroundSkills <
+      selectedBackgroundSkills !==
         requiredBackgroundSkills
     ) {
       warnings.push(
-        `Choose ${requiredBackgroundSkills} background skill proficiencies.`
+        `Choose exactly ${requiredBackgroundSkills} valid background skill proficiencies.`
+      );
+    }
+
+    const requiredBackgroundTools =
+      Math.max(
+        0,
+        safeNumber(
+          selectedBackground
+            ?.toolChoices
+            ?.choose,
+          0
+        )
+      );
+
+    if (
+      requiredBackgroundTools > 0 &&
+      countSection14ValidBackgroundToolChoices(
+        selectedBackground
+      ) !== requiredBackgroundTools
+    ) {
+      warnings.push(
+        `Choose exactly ${requiredBackgroundTools} exact background tool proficienc${
+          requiredBackgroundTools === 1
+            ? "y"
+            : "ies"
+        }.`
+      );
+    }
+
+    const requiredBackgroundLanguages =
+      Math.max(
+        0,
+        safeNumber(
+          selectedBackground
+            ?.languageChoices
+            ?.choose,
+          0
+        )
+      );
+
+    if (
+      requiredBackgroundLanguages > 0 &&
+      countSection14BackgroundSourceList(
+        "languages"
+      ) !== requiredBackgroundLanguages
+    ) {
+      warnings.push(
+        `Choose exactly ${requiredBackgroundLanguages} background language${
+          requiredBackgroundLanguages === 1
+            ? ""
+            : "s"
+        }.`
       );
     }
 
@@ -21317,8 +33265,22 @@ export function createCharacterCreator(options = {}) {
         const spell =
           spellById.get(spellId);
 
+        if (!spell) {
+          return;
+        }
+
+        const sourceWarning =
+          getSpellSourceWarning(
+            draft,
+            spell
+          );
+
+        if (sourceWarning) {
+          warnings.push(sourceWarning);
+          return;
+        }
+
         if (
-          spell &&
           spellLimits.maxSpellLevel !== null &&
           safeNumber(spell.level, 0) >
             spellLimits.maxSpellLevel &&
@@ -21377,8 +33339,29 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderSection17Abilities() {
+    const bonusSources =
+      ensureAbilityBonusSources(
+        creatorState.draft
+      );
+
     return ABILITY_DEFINITIONS
       .map((ability) => {
+        const base =
+          safeNumber(
+            creatorState.draft
+              .abilities
+              .base?.[ability.id],
+            10
+          );
+
+        const bonus =
+          safeNumber(
+            creatorState.draft
+              .abilities
+              .bonuses?.[ability.id],
+            0
+          );
+
         const score =
           safeNumber(
             creatorState.draft
@@ -21401,13 +33384,49 @@ export function createCharacterCreator(options = {}) {
             </h3>
 
             <p>
-              <b>${score}</b>
+              <b>Base Score:</b>
+              ${base}
 
               <br>
 
-              ${formatSection17Modifier(
-                modifier
-              )}
+              <b>Bonus Total:</b>
+              ${formatSection17Modifier(bonus)}
+
+              <br>
+
+              <b>Bonus Sources:</b>
+              ${
+                Object.entries(bonusSources)
+                  .map(([sourceName, sourceMap]) => {
+                    const sourceBonus =
+                      safeNumber(
+                        sourceMap?.[ability.id],
+                        0
+                      );
+
+                    return sourceBonus
+                      ? `${sourceName} ${formatSection17Modifier(sourceBonus)}`
+                      : "";
+                  })
+                  .filter(Boolean)
+                  .map((sourceText) => {
+                    return escapeHtml(
+                      sourceText
+                    );
+                  })
+                  .join("<br>") ||
+                "None"
+              }
+
+              <br>
+
+              <b>Final Score:</b>
+              ${score}
+
+              <br>
+
+              <b>Modifier:</b>
+              ${formatSection17Modifier(modifier)}
             </p>
           </article>
         `;
@@ -21524,6 +33543,185 @@ export function createCharacterCreator(options = {}) {
         }
       </article>
     `;
+  }
+
+  function renderSection17BackgroundChoices() {
+    const background =
+      creatorState.draft.background || {};
+
+    const choices =
+      background.featureChoices || {};
+
+    const sourceTools =
+      getSection14BackgroundSourceValues(
+        "tools"
+      );
+
+    const sourceLanguages =
+      getSection14BackgroundSourceValues(
+        "languages"
+      );
+
+    const exactTools =
+      uniqueCleanArray([
+        ...cleanArray(
+          choices.toolProficiencies
+        ),
+        ...sourceTools
+      ]);
+
+    const exactLanguages =
+      uniqueCleanArray([
+        ...cleanArray(
+          choices.languageProficiencies
+        ),
+        ...sourceLanguages
+      ]);
+
+    return [
+      renderSection17List(
+        "Exact Tools, Instruments, and Gaming Sets",
+        exactTools,
+        "No exact background tool choices selected."
+      ),
+      renderSection17List(
+        "Exact Background Languages",
+        exactLanguages,
+        "No background language choices selected."
+      )
+    ].join("");
+  }
+
+  function renderSection17BackgroundGrants() {
+    const items =
+      getSection15Inventory()
+        .filter((item) => {
+          return cleanString(
+            item.source
+          ).startsWith("background:");
+        });
+
+    const currencySources =
+      ensureEquipmentCurrencySources(
+        creatorState.draft.equipment
+      );
+
+    const currencyCards =
+      Object.entries(currencySources)
+        .filter(([sourceName]) => {
+          return cleanString(sourceName)
+            .startsWith("background:");
+        })
+        .flatMap(([sourceName, packageMap]) => {
+          return Object.entries(
+            packageMap || {}
+          )
+            .filter(([, currency]) => {
+              return hasCurrencyValue(
+                currency
+              );
+            })
+            .map(([packageId, currency]) => {
+              return {
+                sourceName,
+                packageId,
+                currency
+              };
+            });
+        });
+
+    if (
+      !items.length &&
+      !currencyCards.length
+    ) {
+      return `
+        <div class="hg-character-placeholder">
+          No background-granted items or currency recorded.
+        </div>
+      `;
+    }
+
+    const itemCards =
+      items.map((item) => {
+        const quantity =
+          Math.max(
+            1,
+            Math.round(
+              safeNumber(
+                item.quantity,
+                1
+              )
+            )
+          );
+
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(
+                item.name ||
+                "Background Item"
+              )}
+            </h3>
+
+            <p>
+              <b>Quantity:</b>
+              ${quantity}
+
+              <br>
+
+              <b>Source:</b>
+              ${escapeHtml(
+                item.source || "background"
+              )}
+
+              ${
+                item.backgroundPackageId
+                  ? `
+                    <br>
+                    <b>Package:</b>
+                    ${escapeHtml(
+                      item.backgroundPackageId
+                    )}
+                  `
+                  : ""
+              }
+            </p>
+          </article>
+        `;
+      });
+
+    const currencyGrantCards =
+      currencyCards.map((grant) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>Background Currency</h3>
+
+            <p>
+              <b>Amount:</b>
+              ${escapeHtml(
+                formatSection14CurrencySummary(
+                  grant.currency
+                )
+              )}
+
+              <br>
+
+              <b>Source:</b>
+              ${escapeHtml(grant.sourceName)}
+
+              <br>
+
+              <b>Package:</b>
+              ${escapeHtml(grant.packageId)}
+            </p>
+          </article>
+        `;
+      });
+
+    return [
+      ...itemCards,
+      ...currencyGrantCards
+    ].join("");
   }
 
   function renderSection17SavingThrows() {
@@ -21944,6 +34142,164 @@ export function createCharacterCreator(options = {}) {
     ].join("");
   }
 
+  function renderSection17ClassSpells() {
+    const spells =
+      Array.isArray(
+        creatorState.draft
+          .magic
+          .customSpells
+      )
+        ? creatorState.draft
+            .magic
+            .customSpells
+        : [];
+
+    if (!spells.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No class spell records are currently listed.
+        </div>
+      `;
+    }
+
+    const knownIds =
+      cleanArray(
+        creatorState.draft
+          .magic
+          .knownSpellIds
+      );
+
+    const preparedIds =
+      cleanArray(
+        creatorState.draft
+          .magic
+          .preparedSpellIds
+      );
+
+    return spells
+      .map((spell) => {
+        const spellLevel =
+          safeNumber(
+            spell.level,
+            0
+          );
+
+        const known =
+          knownIds.includes(spell.id);
+
+        const prepared =
+          preparedIds.includes(spell.id);
+
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(
+                spell.name ||
+                "Unnamed Spell"
+              )}
+            </h3>
+
+            <p>
+              <b>Level:</b>
+              ${
+                spellLevel === 0
+                  ? "Cantrip"
+                  : spellLevel
+              }
+
+              <br>
+
+              <b>Status:</b>
+              ${
+                prepared
+                  ? "Prepared"
+                  : known
+                    ? "Known"
+                    : "Not selected"
+              }
+
+              ${
+                getSpellSourceId(spell)
+                  ? `
+                    <br>
+                    <b>Source:</b>
+                    ${escapeHtml(
+                      getSpellSourceId(spell)
+                    )}
+                  `
+                  : ""
+              }
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSection17InnateSpells() {
+    const spells =
+      getSection16InnateSpells(
+        creatorState.draft
+      );
+
+    if (!spells.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No innate species spells are currently listed.
+        </div>
+      `;
+    }
+
+    return spells
+      .map((spell) => {
+        const spellLevel =
+          safeNumber(
+            spell.level,
+            0
+          );
+
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(
+                spell.name ||
+                "Innate Spell"
+              )}
+            </h3>
+
+            <p>
+              <b>Level:</b>
+              ${
+                spellLevel === 0
+                  ? "Cantrip"
+                  : spellLevel
+              }
+
+              <br>
+
+              <b>Source:</b>
+              ${escapeHtml(
+                spell.source ||
+                spell.innateSource ||
+                "species"
+              )}
+
+              <br>
+
+              <b>Spellcasting Ability:</b>
+              ${escapeHtml(
+                cleanString(
+                  spell.spellcastingAbility
+                ).toUpperCase() ||
+                "None"
+              )}
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
   function renderSection17Inventory() {
     const items =
       Array.isArray(
@@ -22132,6 +34488,42 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function getSection17MigrationWarnings() {
+    return cleanArray(
+      creatorState.draft
+        ?.builder
+        ?.validation
+        ?.migrationWarnings
+    );
+  }
+
+  function renderSection17MigrationWarnings() {
+    const warnings =
+      getSection17MigrationWarnings();
+
+    if (!warnings.length) {
+      return "";
+    }
+
+    return `
+      <div class="hg-character-warning">
+        <b>Migration Warnings Requiring Review:</b>
+
+        <ul>
+          ${warnings
+            .map((warning) => {
+              return `
+                <li>
+                  ${escapeHtml(warning)}
+                </li>
+              `;
+            })
+            .join("")}
+        </ul>
+      </div>
+    `;
+  }
+
   function renderReviewStep() {
     syncSection17CompletedSteps();
 
@@ -22182,6 +34574,8 @@ export function createCharacterCreator(options = {}) {
       ${renderSection17Warnings(
         warnings
       )}
+
+      ${renderSection17MigrationWarnings()}
 
       <div class="hg-character-inline-actions">
         <button
@@ -22567,6 +34961,12 @@ export function createCharacterCreator(options = {}) {
         )}
       </div>
 
+      <h3>Exact Background Choices</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17BackgroundChoices()}
+      </div>
+
       <hr>
 
       <h3>Inventory</h3>
@@ -22645,6 +35045,14 @@ export function createCharacterCreator(options = {}) {
         )} PP
       </div>
 
+      <h3>Background Items and Currency</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17BackgroundGrants()}
+      </div>
+
+      <h3>All Inventory</h3>
+
       <div class="hg-character-choice-grid">
         ${renderSection17Inventory()}
       </div>
@@ -22660,9 +35068,28 @@ export function createCharacterCreator(options = {}) {
       <h3>Spells and Features</h3>
 
       <div class="hg-character-current-choice">
-        <b>Custom Spells:</b>
+        <b>Class Spell Records:</b>
 
-        ${getSection17SpellCount()}
+        ${
+          Array.isArray(
+            draft.magic
+              .customSpells
+          )
+            ? draft.magic
+                .customSpells
+                .length
+            : 0
+        }
+
+        <br>
+
+        <b>Innate Species Spells:</b>
+
+        ${
+          getSection16InnateSpells(
+            draft
+          ).length
+        }
 
         <br>
 
@@ -22701,9 +35128,25 @@ export function createCharacterCreator(options = {}) {
         ${getSection17FeatureCount()}
       </div>
 
+      <h3>Class Spells</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17ClassSpells()}
+      </div>
+
+      <h3>Innate Species Spells</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17InnateSpells()}
+      </div>
+
+      <h3>Spellcasting Rules</h3>
+
       <div class="hg-character-choice-grid">
         ${renderSection17SpellcastingSummary()}
       </div>
+
+      <h3>Features</h3>
 
       <div class="hg-character-choice-grid">
         ${renderSection17FeatureSummary()}
@@ -22833,11 +35276,186 @@ export function createCharacterCreator(options = {}) {
   function isSection17SpeciesComplete(
     character
   ) {
-    return Boolean(
-      getSafeSpeciesName(
+    if (
+      !getSafeSpeciesName(
         character
       )
-    );
+    ) {
+      return false;
+    }
+
+    const species =
+      character?.species || {};
+
+    if (
+      species.id === "dragonborn" &&
+      !SECTION11_DRAGONBORN_ANCESTRIES
+        .some((ancestry) => {
+          return (
+            ancestry.id ===
+            cleanString(
+              species.choices
+                ?.draconicAncestry
+            )
+          );
+        })
+    ) {
+      return false;
+    }
+
+    if (species.id === "half-elf") {
+      const choices = [
+        cleanString(
+          species.choices
+            ?.halfElfAbilityOne
+        ),
+        cleanString(
+          species.choices
+            ?.halfElfAbilityTwo
+        )
+      ];
+
+      if (
+        !isSection11AbilityChoiceValid(
+          choices[0],
+          {
+            allowCharisma: false
+          }
+        ) ||
+        !isSection11AbilityChoiceValid(
+          choices[1],
+          {
+            allowCharisma: false
+          }
+        ) ||
+        choices[0] === choices[1] ||
+        choices.includes("cha")
+      ) {
+        return false;
+      }
+
+      const skillChoices = [
+        cleanString(
+          species.choices
+            ?.halfElfSkillOne
+        ),
+        cleanString(
+          species.choices
+            ?.halfElfSkillTwo
+        )
+      ];
+
+      if (
+        !isSection11SkillChoiceValid(
+          skillChoices[0]
+        ) ||
+        !isSection11SkillChoiceValid(
+          skillChoices[1]
+        ) ||
+        skillChoices[0] ===
+          skillChoices[1]
+      ) {
+        return false;
+      }
+
+      if (
+        !isSection11LanguageChoiceValid(
+          species.choices
+            ?.halfElfLanguage,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        return false;
+      }
+    }
+
+    if (
+      species.id === "dwarf" &&
+      !DWARF_TOOL_CHOICES
+        .includes(
+          cleanString(
+            species.choices?.dwarfTool
+          )
+        )
+    ) {
+      return false;
+    }
+
+    if (
+      species.id === "human" &&
+      !isSection11LanguageChoiceValid(
+        species.choices?.humanLanguage,
+        {
+          exclude: ["Common"]
+        }
+      )
+    ) {
+      return false;
+    }
+
+    const template =
+      species.templateSnapshot ||
+      DEFAULT_SPECIES_TEMPLATES.find(
+        (item) => {
+          return item.id === species.id;
+        }
+      );
+
+    const subraces =
+      Array.isArray(template?.subraces)
+        ? template.subraces
+        : [];
+
+    if (!subraces.length) {
+      return true;
+    }
+
+    const selectedSubraceId =
+      cleanString(
+        species.choices?.subraceId
+      );
+
+    const selectedSubrace =
+      subraces.find((subrace) => {
+        return subrace.id === selectedSubraceId;
+      }) || null;
+
+    if (!selectedSubrace) {
+      return false;
+    }
+
+    if (
+      species.id === "elf" &&
+      species.choices?.subraceId ===
+        "high-elf"
+    ) {
+      return Boolean(
+        isSection11LanguageChoiceValid(
+          species.choices
+            ?.highElfLanguage,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        ) &&
+        WIZARD_CANTRIP_CHOICES_2014
+          .includes(
+            cleanString(
+              species.choices
+                ?.highElfCantrip
+            )
+          )
+      );
+    }
+
+    return true;
   }
 
   function isSection17ClassComplete(
@@ -22978,6 +35596,75 @@ export function createCharacterCreator(options = {}) {
     const background =
       character?.background || {};
 
+    if (background.source === "skipped") {
+      return true;
+    }
+
+    const selectedBackground =
+      getSelectedSection14Background();
+
+    if (selectedBackground) {
+      const requiredSkills =
+        Math.max(
+          0,
+          safeNumber(
+            selectedBackground
+              .skillChoices
+              ?.choose,
+            0
+          )
+        );
+
+      const requiredTools =
+        Math.max(
+          0,
+          safeNumber(
+            selectedBackground
+              .toolChoices
+              ?.choose,
+            0
+          )
+        );
+
+      const requiredLanguages =
+        Math.max(
+          0,
+          safeNumber(
+            selectedBackground
+              .languageChoices
+              ?.choose,
+            0
+          )
+        );
+
+      if (
+        requiredSkills > 0 &&
+        countSection14ValidSkillSource(
+          "background"
+        ) !== requiredSkills
+      ) {
+        return false;
+      }
+
+      if (
+        requiredTools > 0 &&
+        countSection14ValidBackgroundToolChoices(
+          selectedBackground
+        ) !== requiredTools
+      ) {
+        return false;
+      }
+
+      if (
+        requiredLanguages > 0 &&
+        countSection14BackgroundSourceList(
+          "languages"
+        ) !== requiredLanguages
+      ) {
+        return false;
+      }
+    }
+
     return Boolean(
       getSafeBackgroundName(character) ||
       background.templateSnapshot ||
@@ -23046,15 +35733,15 @@ export function createCharacterCreator(options = {}) {
 
     const classComplete =
       classRequired === 0 ||
-      countSection14SkillSource(
+      countSection14ValidSkillSource(
         "class"
-      ) >= classRequired;
+      ) === classRequired;
 
     const backgroundComplete =
       backgroundRequired === 0 ||
-      countSection14SkillSource(
+      countSection14ValidSkillSource(
         "background"
-      ) >= backgroundRequired;
+      ) === backgroundRequired;
 
     const expertiseValid =
       Object.values(
@@ -23080,6 +35767,13 @@ export function createCharacterCreator(options = {}) {
   ) {
     const equipment =
       character?.equipment || {};
+
+    if (
+      equipment.startingPackageId ===
+      "none"
+    ) {
+      return true;
+    }
 
     const currency =
       equipment.currency || {};
@@ -23107,8 +35801,88 @@ export function createCharacterCreator(options = {}) {
   function isSection17SpellsComplete(
     character
   ) {
+    if (
+      isCharacterNonSpellcaster(
+        character
+      )
+    ) {
+      return true;
+    }
+
     const magic =
       character?.magic || {};
+
+    const spellLimits =
+      getSpellSelectionLimits(
+        character
+      );
+
+    if (
+      spellLimits.cantripsKnownLimit !== null &&
+      spellLimits.knownCantripCount <
+        spellLimits.cantripsKnownLimit
+    ) {
+      return false;
+    }
+
+    if (
+      spellLimits.spellsKnownLimit !== null &&
+      spellLimits.knownLeveledCount <
+        spellLimits.spellsKnownLimit
+    ) {
+      return false;
+    }
+
+    if (
+      spellLimits.preparedLimit !== null &&
+      spellLimits.preparedCount <
+        spellLimits.preparedLimit
+    ) {
+      return false;
+    }
+
+    const spellById =
+      new Map(
+        (
+          Array.isArray(
+            magic.customSpells
+          )
+            ? magic.customSpells
+            : []
+        ).map((spell) => {
+          return [spell.id, spell];
+        })
+      );
+
+    const selectedSpellIds = [
+      ...new Set([
+        ...cleanArray(
+          magic.knownSpellIds
+        ),
+        ...cleanArray(
+          magic.preparedSpellIds
+        )
+      ])
+    ];
+
+    if (
+      selectedSpellIds.some((spellId) => {
+        const spell =
+          spellById.get(spellId);
+
+        return (
+          spell &&
+          Boolean(
+            getSpellSourceWarning(
+              character,
+              spell
+            )
+          )
+        );
+      })
+    ) {
+      return false;
+    }
 
     return Boolean(
       safeDisplayString(
@@ -23309,6 +36083,188 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function syncSection18DerivedValues(
+    character
+  ) {
+    recalculateAbilityTotals(
+      character
+    );
+
+    character.equipment.items =
+      repairContainerState(
+        character.equipment.items,
+        character
+      );
+
+    character.equipment.currency =
+      normalizeCurrencyMap(
+        character.equipment.currency
+      );
+
+    character.equipment.currencySources =
+      normalizeCurrencySourceMap(
+        character.equipment.currencySources
+      );
+
+    backfillBackgroundCurrencySources(
+      character
+    );
+
+    character.combat.proficiencyBonus =
+      getGenericProficiencyBonus(
+        character.classProgression
+          .totalLevel
+      );
+
+    const armorClass =
+      calculateArmorClassOptions(
+        character
+      ).selected;
+
+    character.combat.armorClass =
+      armorClass.total;
+
+    const hpSummary =
+      calculateCharacterHp(
+        character
+      );
+
+    character.combat.hpCalculation =
+      normalizeHpCalculation(
+        {
+          ...(character.combat
+            .hpCalculation || {}),
+
+          laterLevelValues:
+            character.combat
+              .hpCalculation
+              ?.mode === "rolled"
+              ? hpSummary.rolls
+              : character.combat
+                  .hpCalculation
+                  ?.laterLevelValues
+        },
+        character.combat.maxHp
+      );
+
+    character.combat.maxHp =
+      hpSummary.maximumHp;
+
+    character.combat.currentHp =
+      Math.min(
+        Math.max(
+          0,
+          safeNumber(
+            character.combat.currentHp,
+            hpSummary.maximumHp
+          )
+        ),
+        hpSummary.maximumHp
+      );
+
+    character.combat.hitDice =
+      calculateCharacterHitDice(
+        character
+      );
+
+    character.combat.initiative =
+      calculateCharacterInitiative(
+        character
+      ).total;
+
+    const spellSummary =
+      getSpellcastingSummary(
+        character
+      );
+
+    character.magic.slots =
+      cloneData(
+        spellSummary.multiclass
+          ?.spellSlots || {}
+      );
+
+    const pactMagic =
+      (
+        spellSummary.multiclass
+          ?.pactMagic || []
+      ).find((entry) => {
+        return safeNumber(
+          entry.slots,
+          0
+        ) > 0;
+      });
+
+    character.magic.pactMagic =
+      pactMagic
+        ? {
+            slots:
+              safeNumber(
+                pactMagic.slots,
+                0
+              ),
+            slotLevel:
+              safeNumber(
+                pactMagic.slotLevel,
+                0
+              )
+          }
+        : {
+            slots: 0,
+            slotLevel: 0
+          };
+
+    const primarySpellcaster =
+      spellSummary.classes.find((entry) => {
+        return (
+          cleanString(
+            entry.progressionType,
+            "none"
+          ) !== "none" ||
+          safeNumber(
+            entry.pactMagic?.slots,
+            0
+          ) > 0
+        );
+      });
+
+    if (primarySpellcaster) {
+      character.magic.spellcastingProgression =
+        primarySpellcaster
+          .progressionType;
+
+      character.magic.spellcastingAbility =
+        primarySpellcaster
+          .spellcastingAbility ||
+        character.magic
+          .spellcastingAbility ||
+        "";
+
+      character.magic.spellSaveDc =
+        primarySpellcaster
+          .spellSaveDc;
+
+      character.magic.spellAttackBonus =
+        primarySpellcaster
+          .spellAttackBonus;
+    } else if (
+      isCharacterNonSpellcaster(
+        character
+      )
+    ) {
+      character.magic.spellcastingProgression =
+        "none";
+      character.magic.spellcastingAbility = "";
+      character.magic.spellSaveDc = null;
+      character.magic.spellAttackBonus = null;
+    }
+
+    applyCompatibilityAliases(
+      character
+    );
+
+    return character;
+  }
+
   function prepareSection18Character(
     options = {}
   ) {
@@ -23340,6 +36296,10 @@ export function createCharacterCreator(options = {}) {
         creatorState.currentStepId ||
         "save"
     };
+
+    syncSection18DerivedValues(
+      character
+    );
 
     if (
       typeof syncSection17CompletedSteps ===
