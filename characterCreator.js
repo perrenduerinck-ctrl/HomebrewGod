@@ -74,6 +74,13 @@ export function createCharacterCreator(options = {}) {
       required: true
     },
     {
+      id: "level",
+      label: "Level / Advancement",
+      shortLabel: "Level",
+      description: "Set level, hit points, advancement, and class progression.",
+      required: true
+    },
+    {
       id: "class",
       label: "Class",
       shortLabel: "Class",
@@ -86,13 +93,6 @@ export function createCharacterCreator(options = {}) {
       shortLabel: "Subclass",
       description: "Choose a subclass when the selected class and level allow one.",
       required: false
-    },
-    {
-      id: "level",
-      label: "Level / Advancement",
-      shortLabel: "Level",
-      description: "Set level, hit points, advancement, and class progression.",
-      required: true
     },
     {
       id: "abilities",
@@ -257,11 +257,24 @@ export function createCharacterCreator(options = {}) {
 
       combat: {
         armorClass: 10,
+        armorClassMode: "auto",
+        selectedArmorClassMethod: "",
+        manualArmorClass: null,
+        armorClassBonus: 0,
         maxHp: 1,
         currentHp: 1,
         temporaryHp: 0,
         initiative: 0,
+        initiativeBonus: 0,
+        initiativeProficient: false,
         proficiencyBonus: 2,
+        hpCalculation: {
+          mode: "fixed",
+          levelOneValue: null,
+          laterLevelValues: [],
+          manualOverride: null,
+          lastCalculatedConModifier: 0
+        },
 
         speed: {
           walk: 30,
@@ -292,12 +305,18 @@ export function createCharacterCreator(options = {}) {
 
       magic: {
         spellcastingAbility: "",
+        spellcastingProgression: "none",
+        spellPreparation: "none",
         spellSaveDc: null,
         spellAttackBonus: null,
         knownSpellIds: [],
         preparedSpellIds: [],
         customSpells: [],
         slots: {},
+        pactMagic: {
+          slots: 0,
+          slotLevel: 0
+        },
         notes: ""
       },
 
@@ -1334,6 +1353,34 @@ export function createCharacterCreator(options = {}) {
           10
         ),
 
+        armorClassMode:
+          cleanString(
+            raw.combat?.armorClassMode,
+            "auto"
+          ) === "manual"
+            ? "manual"
+            : "auto",
+
+        selectedArmorClassMethod:
+          cleanString(
+            raw.combat?.selectedArmorClassMethod
+          ),
+
+        manualArmorClass:
+          raw.combat?.manualArmorClass === null ||
+          raw.combat?.manualArmorClass === undefined
+            ? null
+            : safeNumber(
+                raw.combat.manualArmorClass,
+                null
+              ),
+
+        armorClassBonus:
+          safeNumber(
+            raw.combat?.armorClassBonus,
+            0
+          ),
+
         maxHp: Math.max(
           1,
           safeNumber(
@@ -1370,10 +1417,25 @@ export function createCharacterCreator(options = {}) {
           0
         ),
 
+        initiativeBonus: safeNumber(
+          raw.combat?.initiativeBonus,
+          raw.combat?.initiative || 0
+        ),
+
+        initiativeProficient:
+          raw.combat?.initiativeProficient === true,
+
         proficiencyBonus: safeNumber(
           raw.combat?.proficiencyBonus,
           getGenericProficiencyBonus(totalLevel)
         ),
+
+        hpCalculation:
+          normalizeHpCalculation(
+            raw.combat?.hpCalculation,
+            raw.combat?.maxHp ??
+            raw.maxHp
+          ),
 
         speed: {
           ...empty.combat.speed,
@@ -1402,7 +1464,12 @@ export function createCharacterCreator(options = {}) {
         },
 
         items: Array.isArray(raw.equipment?.items)
-          ? cloneData(raw.equipment.items)
+          ? raw.equipment.items.map((item) => {
+              return normalizeSection15Item(
+                item,
+                item?.source || "import"
+              );
+            })
           : [],
 
         notes: cleanString(
@@ -1436,6 +1503,28 @@ export function createCharacterCreator(options = {}) {
         slots: cloneData(
           raw.magic?.slots || {}
         ),
+
+        pactMagic: {
+          ...empty.magic.pactMagic,
+          ...(
+            raw.magic?.pactMagic &&
+            typeof raw.magic.pactMagic === "object"
+              ? raw.magic.pactMagic
+              : {}
+          )
+        },
+
+        spellcastingProgression:
+          cleanString(
+            raw.magic?.spellcastingProgression,
+            "none"
+          ),
+
+        spellPreparation:
+          cleanString(
+            raw.magic?.spellPreparation,
+            "none"
+          ),
 
         notes: cleanString(
           raw.magic?.notes ||
@@ -1802,232 +1891,3913 @@ export function createCharacterCreator(options = {}) {
     }
   ]);
 
+  const SRD_2014_FULL_CASTER_SLOTS = Object.freeze({
+    1: [2, 0, 0, 0, 0, 0, 0, 0, 0],
+    2: [3, 0, 0, 0, 0, 0, 0, 0, 0],
+    3: [4, 2, 0, 0, 0, 0, 0, 0, 0],
+    4: [4, 3, 0, 0, 0, 0, 0, 0, 0],
+    5: [4, 3, 2, 0, 0, 0, 0, 0, 0],
+    6: [4, 3, 3, 0, 0, 0, 0, 0, 0],
+    7: [4, 3, 3, 1, 0, 0, 0, 0, 0],
+    8: [4, 3, 3, 2, 0, 0, 0, 0, 0],
+    9: [4, 3, 3, 3, 1, 0, 0, 0, 0],
+    10: [4, 3, 3, 3, 2, 0, 0, 0, 0],
+    11: [4, 3, 3, 3, 2, 1, 0, 0, 0],
+    12: [4, 3, 3, 3, 2, 1, 0, 0, 0],
+    13: [4, 3, 3, 3, 2, 1, 1, 0, 0],
+    14: [4, 3, 3, 3, 2, 1, 1, 0, 0],
+    15: [4, 3, 3, 3, 2, 1, 1, 1, 0],
+    16: [4, 3, 3, 3, 2, 1, 1, 1, 0],
+    17: [4, 3, 3, 3, 2, 1, 1, 1, 1],
+    18: [4, 3, 3, 3, 3, 1, 1, 1, 1],
+    19: [4, 3, 3, 3, 3, 2, 1, 1, 1],
+    20: [4, 3, 3, 3, 3, 2, 2, 1, 1]
+  });
+
+  const SRD_2014_PACT_MAGIC = Object.freeze({
+    1: { slots: 1, slotLevel: 1 },
+    2: { slots: 2, slotLevel: 1 },
+    3: { slots: 2, slotLevel: 2 },
+    4: { slots: 2, slotLevel: 2 },
+    5: { slots: 2, slotLevel: 3 },
+    6: { slots: 2, slotLevel: 3 },
+    7: { slots: 2, slotLevel: 4 },
+    8: { slots: 2, slotLevel: 4 },
+    9: { slots: 2, slotLevel: 5 },
+    10: { slots: 2, slotLevel: 5 },
+    11: { slots: 3, slotLevel: 5 },
+    12: { slots: 3, slotLevel: 5 },
+    13: { slots: 3, slotLevel: 5 },
+    14: { slots: 3, slotLevel: 5 },
+    15: { slots: 3, slotLevel: 5 },
+    16: { slots: 3, slotLevel: 5 },
+    17: { slots: 4, slotLevel: 5 },
+    18: { slots: 4, slotLevel: 5 },
+    19: { slots: 4, slotLevel: 5 },
+    20: { slots: 4, slotLevel: 5 }
+  });
+
+  const SRD_2014_STANDARD_ASI_LEVELS =
+    Object.freeze([4, 8, 12, 16, 19]);
+
+  const SRD_2014_FIGHTER_ASI_LEVELS =
+    Object.freeze([4, 6, 8, 12, 14, 16, 19]);
+
+  const SRD_2014_ROGUE_ASI_LEVELS =
+    Object.freeze([4, 8, 10, 12, 16, 19]);
+
+  const SRD_2014_SIZE_CARRY_MULTIPLIERS =
+    Object.freeze({
+      tiny: 0.5,
+      small: 1,
+      medium: 1,
+      large: 2,
+      huge: 4,
+      gargantuan: 8
+    });
+
+  function slotsArrayToObject(slots) {
+    const result = {};
+
+    (slots || []).forEach((count, index) => {
+      if (count > 0) {
+        result[index + 1] = count;
+      }
+    });
+
+    return result;
+  }
+
+  function getSrd2014SpellSlots(
+    progressionType,
+    classLevel
+  ) {
+    const level = clampLevel(classLevel);
+    let casterLevel = 0;
+
+    if (progressionType === "full-caster") {
+      casterLevel = level;
+    } else if (progressionType === "half-caster") {
+      casterLevel =
+        level < 2
+          ? 0
+          : Math.ceil(level / 2);
+    } else if (progressionType === "third-caster") {
+      casterLevel =
+        level < 3
+          ? 0
+          : Math.ceil(level / 3);
+    }
+
+    if (casterLevel < 1) {
+      return {};
+    }
+
+    return slotsArrayToObject(
+      SRD_2014_FULL_CASTER_SLOTS[
+        Math.max(1, Math.min(20, casterLevel))
+      ]
+    );
+  }
+
+  function getSrd2014PactMagic(classLevel) {
+    return {
+      ...(SRD_2014_PACT_MAGIC[
+        clampLevel(classLevel)
+      ] || { slots: 0, slotLevel: 0 })
+    };
+  }
+
+  function calculateSrd2014MulticlassSpellcasting(
+    classEntries = []
+  ) {
+    const entries =
+      Array.isArray(classEntries)
+        ? classEntries
+        : [];
+
+    const casterLevel =
+      entries.reduce((total, entry) => {
+        const level =
+          Math.max(
+            0,
+            Math.round(
+              safeNumber(entry?.level, 0)
+            )
+          );
+
+        const progression =
+          entry?.spellcastingProgression ||
+          entry?.progressionType ||
+          "none";
+
+        if (progression === "full-caster") {
+          return total + level;
+        }
+
+        if (progression === "half-caster") {
+          return total + Math.floor(level / 2);
+        }
+
+        if (progression === "third-caster") {
+          return total + Math.floor(level / 3);
+        }
+
+        return total;
+      }, 0);
+
+    const pactMagic =
+      entries
+        .filter((entry) => {
+          return (
+            (
+              entry?.spellcastingProgression ||
+              entry?.progressionType
+            ) === "pact-magic"
+          );
+        })
+        .map((entry) => {
+          return getSrd2014PactMagic(
+            entry?.level
+          );
+        });
+
+    return {
+      casterLevel:
+        Math.max(0, Math.min(20, casterLevel)),
+      spellSlots:
+        casterLevel > 0
+          ? slotsArrayToObject(
+              SRD_2014_FULL_CASTER_SLOTS[
+                Math.max(
+                  1,
+                  Math.min(20, casterLevel)
+                )
+              ]
+            )
+          : {},
+      pactMagic
+    };
+  }
+
+  function getProgressionValueByLevel(
+    values,
+    level,
+    fallback = 0
+  ) {
+    if (!values || typeof values !== "object") {
+      return fallback;
+    }
+
+    const cleanLevel = clampLevel(level);
+
+    if (
+      values[cleanLevel] !== undefined
+    ) {
+      return safeNumber(
+        values[cleanLevel],
+        fallback
+      );
+    }
+
+    const previousLevel =
+      Object.keys(values)
+        .map((key) => {
+          return safeNumber(key, 0);
+        })
+        .filter((key) => {
+          return key > 0 && key <= cleanLevel;
+        })
+        .sort((a, b) => {
+          return b - a;
+        })[0];
+
+    if (previousLevel) {
+      return safeNumber(
+        values[previousLevel],
+        fallback
+      );
+    }
+
+    return safeNumber(
+      values[cleanLevel],
+      fallback
+    );
+  }
+
+  function calculateRuleSkillModifier({
+    abilityModifier = 0,
+    proficiencyBonus = 0,
+    proficient = false,
+    expertise = false
+  } = {}) {
+    return (
+      safeNumber(abilityModifier, 0) +
+      (
+        proficient
+          ? safeNumber(proficiencyBonus, 0) *
+            (expertise ? 2 : 1)
+          : 0
+      )
+    );
+  }
+
+  function calculateRulePassiveScore(
+    skillModifier,
+    state = {}
+  ) {
+    return (
+      10 +
+      safeNumber(skillModifier, 0) +
+      (state.advantage ? 5 : 0) -
+      (state.disadvantage ? 5 : 0)
+    );
+  }
+
+  function calculateRuleFixedAverageHp({
+    hitDie,
+    level,
+    constitutionModifier,
+    levelOneValue = null
+  }) {
+    const dieSize =
+      Math.max(
+        1,
+        safeNumber(
+          String(hitDie || "d8").replace(/[^0-9]/g, ""),
+          8
+        )
+      );
+
+    const cleanLevel = clampLevel(level);
+    const conModifier =
+      safeNumber(constitutionModifier, 0);
+
+    const laterLevelHp =
+      Math.max(
+        1,
+        Math.floor(dieSize / 2) + 1 + conModifier
+      );
+
+    const firstLevelHp =
+      levelOneValue === null ||
+      levelOneValue === undefined
+        ? dieSize + conModifier
+        : safeNumber(
+            levelOneValue,
+            dieSize + conModifier
+          );
+
+    return Math.max(
+      1,
+      firstLevelHp +
+      Math.max(0, cleanLevel - 1) *
+        laterLevelHp
+    );
+  }
+
+  function calculateRuleSpellSaveDc({
+    proficiencyBonus,
+    abilityModifier,
+    bonus = 0
+  }) {
+    return (
+      8 +
+      safeNumber(proficiencyBonus, 0) +
+      safeNumber(abilityModifier, 0) +
+      safeNumber(bonus, 0)
+    );
+  }
+
+  function calculateRuleSpellAttackBonus({
+    proficiencyBonus,
+    abilityModifier,
+    bonus = 0
+  }) {
+    return (
+      safeNumber(proficiencyBonus, 0) +
+      safeNumber(abilityModifier, 0) +
+      safeNumber(bonus, 0)
+    );
+  }
+
+  function calculateRuleCarryingCapacity({
+    strength,
+    size = "medium"
+  }) {
+    const multiplier =
+      SRD_2014_SIZE_CARRY_MULTIPLIERS[
+        String(size || "medium").toLowerCase()
+      ] || 1;
+
+    const carryingCapacity =
+      Math.max(0, safeNumber(strength, 10)) *
+      15 *
+      multiplier;
+
+    return {
+      carryingCapacity,
+      pushDragLift:
+        carryingCapacity * 2,
+      sizeMultiplier: multiplier
+    };
+  }
+
+  function getAbilityDefinition(
+    abilityId
+  ) {
+    return (
+      ABILITY_DEFINITIONS.find((ability) => {
+        return ability.id === abilityId;
+      }) ||
+      ABILITY_DEFINITIONS.find((ability) => {
+        return (
+          ability.name.toLowerCase() ===
+          String(abilityId || "").toLowerCase()
+        );
+      }) ||
+      null
+    );
+  }
+
+  function getAbilityScore(
+    character,
+    abilityId
+  ) {
+    return safeNumber(
+      character
+        ?.abilities
+        ?.scores
+        ?.[abilityId],
+      10
+    );
+  }
+
+  function getCharacterProficiencyBonus(
+    character
+  ) {
+    return Math.max(
+      0,
+      safeNumber(
+        character
+          ?.combat
+          ?.proficiencyBonus,
+        getGenericProficiencyBonus(
+          character
+            ?.classProgression
+            ?.totalLevel
+        )
+      )
+    );
+  }
+
+  function calculateRuleSavingThrowModifier({
+    abilityModifier = 0,
+    proficiencyBonus = 0,
+    proficient = false,
+    bonus = 0
+  } = {}) {
+    return (
+      safeNumber(abilityModifier, 0) +
+      (
+        proficient
+          ? safeNumber(proficiencyBonus, 0)
+          : 0
+      ) +
+      safeNumber(bonus, 0)
+    );
+  }
+
+  function isSavingThrowProficient(
+    character,
+    abilityId
+  ) {
+    const ability =
+      getAbilityDefinition(abilityId);
+
+    const values =
+      cleanArray(
+        character
+          ?.proficiencies
+          ?.savingThrows
+      ).map((value) => {
+        return value.toLowerCase();
+      });
+
+    return Boolean(
+      ability &&
+      (
+        values.includes(ability.id.toLowerCase()) ||
+        values.includes(ability.name.toLowerCase())
+      )
+    );
+  }
+
+  function calculateCharacterSavingThrows(
+    character
+  ) {
+    const proficiencyBonus =
+      getCharacterProficiencyBonus(character);
+
+    const bonuses =
+      character
+        ?.combat
+        ?.savingThrowBonuses || {};
+
+    return ABILITY_DEFINITIONS.map((ability) => {
+      const abilityModifier =
+        calculateAbilityModifier(
+          getAbilityScore(
+            character,
+            ability.id
+          )
+        );
+
+      const proficient =
+        isSavingThrowProficient(
+          character,
+          ability.id
+        );
+
+      return {
+        id: ability.id,
+        name: ability.name,
+        abilityModifier,
+        proficient,
+        bonus:
+          safeNumber(
+            bonuses[ability.id],
+            0
+          ),
+        total:
+          calculateRuleSavingThrowModifier({
+            abilityModifier,
+            proficiencyBonus,
+            proficient,
+            bonus:
+              safeNumber(
+                bonuses[ability.id],
+                0
+              )
+          })
+      };
+    });
+  }
+
+  function getCharacterSkillEntry(
+    character,
+    skill
+  ) {
+    const skills =
+      character
+        ?.proficiencies
+        ?.skills || {};
+
+    return (
+      skills[skill.id] ||
+      skills[skill.name] ||
+      null
+    );
+  }
+
+  function calculateCharacterSkillModifier(
+    character,
+    skill
+  ) {
+    const entry =
+      getCharacterSkillEntry(
+        character,
+        skill
+      );
+
+    const abilityModifier =
+      calculateAbilityModifier(
+        getAbilityScore(
+          character,
+          skill.ability
+        )
+      );
+
+    return calculateRuleSkillModifier({
+      abilityModifier,
+      proficiencyBonus:
+        getCharacterProficiencyBonus(character),
+      proficient:
+        entry?.proficient === true,
+      expertise:
+        entry?.expertise === true &&
+        entry?.proficient === true
+    });
+  }
+
+  function calculateCharacterPassiveScores(
+    character
+  ) {
+    const wanted = [
+      "perception",
+      "investigation",
+      "insight"
+    ];
+
+    const passiveState =
+      character
+        ?.proficiencies
+        ?.passiveState || {};
+
+    return wanted.reduce((result, skillId) => {
+      const skill =
+        SKILL_DEFINITIONS.find((item) => {
+          return item.id === skillId;
+        });
+
+      if (!skill) {
+        return result;
+      }
+
+      const state =
+        passiveState[skillId] || {};
+
+      result[skillId] = {
+        name: `Passive ${skill.name}`,
+        skillModifier:
+          calculateCharacterSkillModifier(
+            character,
+            skill
+          ),
+        total:
+          calculateRulePassiveScore(
+            calculateCharacterSkillModifier(
+              character,
+              skill
+            ),
+            state
+          ),
+        advantage:
+          state.advantage === true,
+        disadvantage:
+          state.disadvantage === true
+      };
+
+      return result;
+    }, {});
+  }
+
+  function calculateCharacterInitiative(
+    character
+  ) {
+    const dexterityModifier =
+      calculateAbilityModifier(
+        getAbilityScore(character, "dex")
+      );
+
+    const proficiencyBonus =
+      character
+        ?.combat
+        ?.initiativeProficient === true
+        ? getCharacterProficiencyBonus(character)
+        : 0;
+
+    const bonus =
+      safeNumber(
+        character
+          ?.combat
+          ?.initiativeBonus,
+        character
+          ?.combat
+          ?.initiative || 0
+      );
+
+    return {
+      dexterityModifier,
+      proficiencyBonus,
+      bonus,
+      total:
+        dexterityModifier +
+        proficiencyBonus +
+        bonus
+    };
+  }
+
+  function normalizeHpCalculation(
+    rawCalculation,
+    fallbackManualValue = null
+  ) {
+    const raw =
+      rawCalculation &&
+      typeof rawCalculation === "object"
+        ? rawCalculation
+        : {};
+
+    const mode =
+      ["fixed", "rolled", "manual"].includes(
+        raw.mode
+      )
+        ? raw.mode
+        : "fixed";
+
+    return {
+      mode,
+      levelOneValue:
+        raw.levelOneValue === null ||
+        raw.levelOneValue === undefined
+          ? null
+          : Math.max(
+              1,
+              safeNumber(raw.levelOneValue, 1)
+            ),
+      laterLevelValues:
+        Array.isArray(raw.laterLevelValues)
+          ? raw.laterLevelValues.map((value) => {
+              return Math.max(
+                1,
+                safeNumber(value, 1)
+              );
+            })
+          : [],
+      manualOverride:
+        raw.manualOverride === null ||
+        raw.manualOverride === undefined
+          ? (
+              mode === "manual" &&
+              fallbackManualValue !== null &&
+              fallbackManualValue !== undefined
+                ? Math.max(
+                    1,
+                    safeNumber(
+                      fallbackManualValue,
+                      1
+                    )
+                  )
+                : null
+            )
+          : Math.max(
+              1,
+              safeNumber(raw.manualOverride, 1)
+            ),
+      lastCalculatedConModifier:
+        safeNumber(
+          raw.lastCalculatedConModifier,
+          0
+        )
+    };
+  }
+
+  function calculateRuleRolledHp({
+    hitDie,
+    level,
+    constitutionModifier,
+    rolls = [],
+    levelOneValue = null
+  }) {
+    const dieSize =
+      Math.max(
+        1,
+        safeNumber(
+          String(hitDie || "d8").replace(/[^0-9]/g, ""),
+          8
+        )
+      );
+
+    const cleanLevel = clampLevel(level);
+    const conModifier =
+      safeNumber(constitutionModifier, 0);
+
+    let total =
+      Math.max(
+        1,
+        levelOneValue === null ||
+        levelOneValue === undefined
+          ? dieSize + conModifier
+          : safeNumber(
+              levelOneValue,
+              dieSize + conModifier
+            )
+      );
+
+    for (let index = 2; index <= cleanLevel; index += 1) {
+      const roll =
+        Math.max(
+          1,
+          Math.min(
+            dieSize,
+            safeNumber(
+              rolls[index - 2],
+              Math.floor(dieSize / 2) + 1
+            )
+          )
+        );
+
+      total += Math.max(1, roll + conModifier);
+    }
+
+    return total;
+  }
+
+  function calculateRuleManualHp({
+    manualOverride
+  }) {
+    return Math.max(
+      1,
+      safeNumber(manualOverride, 1)
+    );
+  }
+
+  function resolveClassTemplateForEntry(
+    classEntry
+  ) {
+    if (!classEntry) {
+      return null;
+    }
+
+    if (classEntry.templateSnapshot) {
+      return normalizeClassTemplate(
+        classEntry.templateSnapshot,
+        classEntry.source || "character"
+      );
+    }
+
+    const classId =
+      cleanString(classEntry.classId);
+
+    const className =
+      cleanString(classEntry.className);
+
+    const templates = [
+      ...DEFAULT_CLASS_TEMPLATES,
+      ...(
+        Array.isArray(
+          creatorState?.roomClassCache
+        )
+          ? creatorState.roomClassCache
+          : []
+      )
+    ].map((template) => {
+      return normalizeClassTemplate(
+        template,
+        template?.source || "template"
+      );
+    });
+
+    return (
+      templates.find((template) => {
+        return template.id === classId;
+      }) ||
+      templates.find((template) => {
+        return (
+          template.name.toLowerCase() ===
+          className.toLowerCase()
+        );
+      }) ||
+      null
+    );
+  }
+
+  function getCharacterClassEntries(
+    character
+  ) {
+    return Array.isArray(
+      character
+        ?.classProgression
+        ?.classes
+    )
+      ? character.classProgression.classes
+      : [];
+  }
+
+  function calculateCharacterHitDice(
+    character
+  ) {
+    return getCharacterClassEntries(character)
+      .map((classEntry) => {
+        const template =
+          resolveClassTemplateForEntry(
+            classEntry
+          );
+
+        const level =
+          Math.max(
+            1,
+            Math.round(
+              safeNumber(
+                classEntry?.level,
+                character
+                  ?.classProgression
+                  ?.totalLevel || 1
+              )
+            )
+          );
+
+        return {
+          classId:
+            classEntry.classId ||
+            template?.id ||
+            "",
+          className:
+            classEntry.className ||
+            template?.name ||
+            "Class",
+          die:
+            template?.hitDie ||
+            classEntry.hitDie ||
+            "d8",
+          count: level
+        };
+      });
+  }
+
+  function calculateCharacterHp(
+    character
+  ) {
+    const primaryClass =
+      getCharacterClassEntries(character)[0];
+
+    const template =
+      resolveClassTemplateForEntry(
+        primaryClass
+      );
+
+    const level =
+      clampLevel(
+        character
+          ?.classProgression
+          ?.totalLevel ||
+        primaryClass?.level ||
+        1
+      );
+
+    const hitDie =
+      template?.hitDie ||
+      primaryClass?.hitDie ||
+      "d8";
+
+    const constitutionModifier =
+      calculateAbilityModifier(
+        getAbilityScore(character, "con")
+      );
+
+    const hpCalculation =
+      normalizeHpCalculation(
+        character?.combat?.hpCalculation,
+        character?.combat?.maxHp
+      );
+
+    let maximumHp;
+
+    if (hpCalculation.mode === "manual") {
+      maximumHp =
+        calculateRuleManualHp({
+          manualOverride:
+            hpCalculation.manualOverride ??
+            character?.combat?.maxHp
+        });
+    } else if (hpCalculation.mode === "rolled") {
+      maximumHp =
+        calculateRuleRolledHp({
+          hitDie,
+          level,
+          constitutionModifier,
+          levelOneValue:
+            hpCalculation.levelOneValue,
+          rolls:
+            hpCalculation.laterLevelValues
+        });
+    } else {
+      maximumHp =
+        calculateRuleFixedAverageHp({
+          hitDie,
+          level,
+          constitutionModifier,
+          levelOneValue:
+            hpCalculation.levelOneValue
+        });
+    }
+
+    return {
+      mode: hpCalculation.mode,
+      maximumHp,
+      hitDie,
+      level,
+      constitutionModifier,
+      manualOverride:
+        hpCalculation.manualOverride,
+      levelOneValue:
+        hpCalculation.levelOneValue,
+      rolls:
+        hpCalculation.laterLevelValues
+    };
+  }
+
+  function characterHasClass(
+    character,
+    classId
+  ) {
+    return getCharacterClassEntries(character)
+      .some((classEntry) => {
+        const template =
+          resolveClassTemplateForEntry(
+            classEntry
+          );
+
+        return (
+          classEntry?.classId === classId ||
+          template?.id === classId ||
+          String(
+            classEntry?.className ||
+            template?.name ||
+            ""
+          ).toLowerCase() ===
+            classId.toLowerCase()
+        );
+      });
+  }
+
+  function calculateArmorClassOptions(
+    character
+  ) {
+    const dexModifier =
+      calculateAbilityModifier(
+        getAbilityScore(character, "dex")
+      );
+
+    const conModifier =
+      calculateAbilityModifier(
+        getAbilityScore(character, "con")
+      );
+
+    const wisModifier =
+      calculateAbilityModifier(
+        getAbilityScore(character, "wis")
+      );
+
+    const inventory =
+      Array.isArray(
+        character?.equipment?.items
+      )
+        ? character.equipment.items
+        : [];
+
+    const equippedArmor =
+      inventory.filter((item) => {
+        return (
+          item.equipped === true &&
+          item.baseArmorClass &&
+          item.isShield !== true
+        );
+      });
+
+    const equippedShields =
+      inventory.filter((item) => {
+        return (
+          item.equipped === true &&
+          item.isShield === true
+        );
+      });
+
+    const shieldBonus =
+      equippedShields.reduce((total, item) => {
+        return (
+          total +
+          2 +
+          safeNumber(
+            item.magicalArmorClassBonus ??
+            item.magicalBonus,
+            0
+          )
+        );
+      }, 0);
+
+    const generalArmorClassBonus =
+      inventory.reduce((total, item) => {
+        if (item.equipped !== true) {
+          return total;
+        }
+
+        if (
+          item.isShield === true ||
+          item.baseArmorClass
+        ) {
+          return total;
+        }
+
+        return (
+          total +
+          safeNumber(
+            item.magicalArmorClassBonus,
+            0
+          )
+        );
+      }, 0) +
+      safeNumber(
+        character?.combat?.armorClassBonus,
+        0
+      );
+
+    const options = [];
+
+    const addOption = (
+      id,
+      label,
+      base,
+      details,
+      methodBonus = 0
+    ) => {
+      const extraBonus =
+        generalArmorClassBonus +
+        safeNumber(methodBonus, 0);
+
+      options.push({
+        id,
+        label,
+        total:
+          base +
+          shieldBonus +
+          extraBonus,
+        breakdown: [
+          details,
+          shieldBonus
+            ? `Shield +${shieldBonus}`
+            : "",
+          extraBonus
+            ? `Other AC bonus +${extraBonus}`
+            : ""
+        ].filter(Boolean).join(", ")
+      });
+    };
+
+    if (!equippedArmor.length) {
+      addOption(
+        "unarmored",
+        "Unarmored",
+        10 + dexModifier,
+        `10 + Dex ${formatSignedNumber(dexModifier)}`
+      );
+
+      if (characterHasClass(character, "barbarian")) {
+        addOption(
+          "barbarian-unarmored-defense",
+          "Barbarian Unarmored Defense",
+          10 + dexModifier + conModifier,
+          `10 + Dex ${formatSignedNumber(dexModifier)} + Con ${formatSignedNumber(conModifier)}`
+        );
+      }
+
+      if (
+        characterHasClass(character, "monk") &&
+        shieldBonus === 0
+      ) {
+        addOption(
+          "monk-unarmored-defense",
+          "Monk Unarmored Defense",
+          10 + dexModifier + wisModifier,
+          `10 + Dex ${formatSignedNumber(dexModifier)} + Wis ${formatSignedNumber(wisModifier)}`
+        );
+      }
+    }
+
+    equippedArmor.forEach((armor) => {
+      const armorCategory =
+        cleanString(
+          armor.armorCategory ||
+          armor.category
+        ).toLowerCase();
+
+      const base =
+        Math.max(
+          1,
+          safeNumber(
+            armor.baseArmorClass,
+            10
+          )
+        );
+
+      let dexBonus = 0;
+      let label = "Armor";
+
+      if (armorCategory.includes("light")) {
+        dexBonus = dexModifier;
+        label = "Light Armor";
+      } else if (armorCategory.includes("medium")) {
+        const cap =
+          armor.dexterityCap === null ||
+          armor.dexterityCap === undefined
+            ? 2
+            : safeNumber(
+                armor.dexterityCap,
+                2
+              );
+        dexBonus =
+          Math.min(dexModifier, cap);
+        label = "Medium Armor";
+      } else if (armorCategory.includes("heavy")) {
+        dexBonus = 0;
+        label = "Heavy Armor";
+      } else {
+        dexBonus = dexModifier;
+      }
+
+      addOption(
+        `armor:${armor.id}`,
+        `${label}: ${armor.name}`,
+        base + dexBonus,
+        `${base} + Dex ${formatSignedNumber(dexBonus)}`,
+        safeNumber(
+          armor.magicalArmorClassBonus ??
+          armor.magicalBonus,
+          0
+        )
+      );
+    });
+
+    const manualValue =
+      character?.combat?.manualArmorClass ??
+      character?.combat?.armorClass;
+
+    if (
+      character?.combat?.armorClassMode ===
+      "manual"
+    ) {
+      options.push({
+        id: "manual",
+        label: "Manual Override",
+        total:
+          Math.max(
+            0,
+            safeNumber(manualValue, 10)
+          ),
+        breakdown: "Manual AC override"
+      });
+    }
+
+    const selectedId =
+      character?.combat?.armorClassMode ===
+      "manual"
+        ? "manual"
+        : cleanString(
+            character
+              ?.combat
+              ?.selectedArmorClassMethod
+          );
+
+    const sorted =
+      options.sort((a, b) => {
+        return b.total - a.total;
+      });
+
+    const selected =
+      sorted.find((option) => {
+        return option.id === selectedId;
+      }) ||
+      sorted[0] ||
+      {
+        id: "unarmored",
+        label: "Unarmored",
+        total: 10 + dexModifier,
+        breakdown:
+          `10 + Dex ${formatSignedNumber(dexModifier)}`
+      };
+
+    return {
+      selected,
+      options: sorted
+    };
+  }
+
+  function formatSignedNumber(value) {
+    const number =
+      safeNumber(value, 0);
+
+    return number >= 0
+      ? `+${number}`
+      : String(number);
+  }
+
+  function getInventoryItemKnownWeight(item) {
+    if (
+      item?.weight === null ||
+      item?.weight === undefined ||
+      item?.weight === ""
+    ) {
+      return null;
+    }
+
+    return (
+      Math.max(0, safeNumber(item.weight, 0)) *
+      Math.max(
+        1,
+        Math.round(
+          safeNumber(item.quantity, 1)
+        )
+      )
+    );
+  }
+
+  function calculateInventoryWeightSummary(
+    items = []
+  ) {
+    return (Array.isArray(items) ? items : [])
+      .reduce(
+        (summary, item) => {
+          const weight =
+            getInventoryItemKnownWeight(item);
+
+          if (weight === null) {
+            summary.unknownCount += 1;
+          } else {
+            summary.knownWeight += weight;
+          }
+
+          return summary;
+        },
+        {
+          knownWeight: 0,
+          unknownCount: 0
+        }
+      );
+  }
+
+  function getContainerContents(
+    items,
+    containerId
+  ) {
+    return (Array.isArray(items) ? items : [])
+      .filter((item) => {
+        return (
+          cleanString(item.containerId) ===
+          cleanString(containerId)
+        );
+      });
+  }
+
+  function wouldCreateContainerCycle(
+    items,
+    itemId,
+    targetContainerId
+  ) {
+    const cleanItemId =
+      cleanString(itemId);
+
+    let currentId =
+      cleanString(targetContainerId);
+
+    const visited = new Set();
+
+    while (currentId) {
+      if (currentId === cleanItemId) {
+        return true;
+      }
+
+      if (visited.has(currentId)) {
+        return true;
+      }
+
+      visited.add(currentId);
+
+      const parent =
+        (Array.isArray(items) ? items : [])
+          .find((item) => {
+            return item.id === currentId;
+          });
+
+      currentId =
+        cleanString(parent?.containerId);
+    }
+
+    return false;
+  }
+
+  function getContainerSummaries(items = []) {
+    const inventory =
+      Array.isArray(items) ? items : [];
+
+    return inventory
+      .filter((item) => {
+        return item.isContainer === true;
+      })
+      .map((container) => {
+        const contents =
+          getContainerContents(
+            inventory,
+            container.id
+          );
+
+        const weight =
+          calculateInventoryWeightSummary(
+            contents
+          );
+
+        const capacity =
+          container.capacityWeight === null ||
+          container.capacityWeight === undefined
+            ? null
+            : Math.max(
+                0,
+                safeNumber(
+                  container.capacityWeight,
+                  0
+                )
+              );
+
+        return {
+          id: container.id,
+          name: container.name,
+          contents,
+          capacityWeight: capacity,
+          knownWeight:
+            weight.knownWeight,
+          unknownCount:
+            weight.unknownCount,
+          overCapacity:
+            capacity !== null &&
+            weight.unknownCount === 0 &&
+            weight.knownWeight > capacity,
+          uncertain:
+            weight.unknownCount > 0
+        };
+      });
+  }
+
+  function validateContainerState(items = []) {
+    const inventory =
+      Array.isArray(items) ? items : [];
+
+    const ids =
+      new Set(
+        inventory.map((item) => {
+          return item.id;
+        })
+      );
+
+    const warnings = [];
+
+    inventory.forEach((item) => {
+      const containerId =
+        cleanString(item.containerId);
+
+      if (!containerId) {
+        return;
+      }
+
+      if (!ids.has(containerId)) {
+        warnings.push(
+          `${item.name || "Item"} references a missing container.`
+        );
+      }
+
+      if (
+        wouldCreateContainerCycle(
+          inventory,
+          item.id,
+          containerId
+        )
+      ) {
+        warnings.push(
+          `${item.name || "Item"} has an invalid container loop.`
+        );
+      }
+    });
+
+    getContainerSummaries(inventory)
+      .forEach((container) => {
+        if (container.overCapacity) {
+          warnings.push(
+            `${container.name || "Container"} is over capacity.`
+          );
+        }
+      });
+
+    return warnings;
+  }
+
+  function splitInventoryStack(
+    items,
+    itemId,
+    quantity,
+    targetContainerId
+  ) {
+    const inventory =
+      cloneData(Array.isArray(items) ? items : []);
+
+    const index =
+      inventory.findIndex((item) => {
+        return item.id === itemId;
+      });
+
+    if (index < 0) {
+      return inventory;
+    }
+
+    const item =
+      inventory[index];
+
+    const currentQuantity =
+      Math.max(
+        1,
+        Math.round(
+          safeNumber(item.quantity, 1)
+        )
+      );
+
+    const moveQuantity =
+      Math.max(
+        1,
+        Math.min(
+          currentQuantity,
+          Math.round(
+            safeNumber(quantity, 1)
+          )
+        )
+      );
+
+    if (moveQuantity >= currentQuantity) {
+      item.containerId =
+        cleanString(targetContainerId);
+      return inventory;
+    }
+
+    item.quantity =
+      currentQuantity - moveQuantity;
+
+    inventory.push({
+      ...cloneData(item),
+      id:
+        makeSafeId(
+          `${item.id}-${Date.now()}-${Math.random()}`,
+          "split-item"
+        ),
+      quantity: moveQuantity,
+      containerId:
+        cleanString(targetContainerId)
+    });
+
+    return inventory;
+  }
+
+  function removeContainerPreserveContents(
+    items,
+    containerId
+  ) {
+    const cleanId =
+      cleanString(containerId);
+
+    return cloneData(
+      Array.isArray(items) ? items : []
+    )
+      .filter((item) => {
+        return item.id !== cleanId;
+      })
+      .map((item) => {
+        if (item.containerId === cleanId) {
+          return {
+            ...item,
+            containerId: ""
+          };
+        }
+
+        return item;
+      });
+  }
+
+  function removeContainerAndContents(
+    items,
+    containerId
+  ) {
+    const inventory =
+      cloneData(
+        Array.isArray(items) ? items : []
+      );
+
+    const cleanId =
+      cleanString(containerId);
+
+    const removedIds =
+      new Set([cleanId]);
+
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+
+      inventory.forEach((item) => {
+        if (
+          item.containerId &&
+          removedIds.has(item.containerId) &&
+          !removedIds.has(item.id)
+        ) {
+          removedIds.add(item.id);
+          changed = true;
+        }
+      });
+    }
+
+    return inventory.filter((item) => {
+      return !removedIds.has(item.id);
+    });
+  }
+
+  function isWeaponProficient(
+    character,
+    item
+  ) {
+    if (item.proficient === true) {
+      return true;
+    }
+
+    const proficiencies =
+      cleanArray(
+        character
+          ?.proficiencies
+          ?.weapons
+      ).map((value) => {
+        return value.toLowerCase();
+      });
+
+    const itemName =
+      cleanString(item.name).toLowerCase();
+
+    const weaponType =
+      cleanString(
+        item.weaponType
+      ).toLowerCase();
+
+    return (
+      proficiencies.includes(itemName) ||
+      (
+        weaponType.includes("simple") &&
+        proficiencies.includes("simple weapons")
+      ) ||
+      (
+        weaponType.includes("martial") &&
+        proficiencies.includes("martial weapons")
+      )
+    );
+  }
+
+  function calculateWeaponAttack(
+    character,
+    item
+  ) {
+    const strengthModifier =
+      calculateAbilityModifier(
+        getAbilityScore(character, "str")
+      );
+
+    const dexterityModifier =
+      calculateAbilityModifier(
+        getAbilityScore(character, "dex")
+      );
+
+    let abilityId =
+      cleanString(item.attackAbility);
+
+    if (!abilityId) {
+      if (item.finesse === true) {
+        abilityId =
+          dexterityModifier >= strengthModifier
+            ? "dex"
+            : "str";
+      } else if (item.ranged === true) {
+        abilityId = "dex";
+      } else {
+        abilityId = "str";
+      }
+    }
+
+    const abilityModifier =
+      abilityId === "dex"
+        ? dexterityModifier
+        : strengthModifier;
+
+    const proficient =
+      isWeaponProficient(character, item);
+
+    const proficiencyBonus =
+      proficient
+        ? getCharacterProficiencyBonus(character)
+        : 0;
+
+    const magicalAttackBonus =
+      safeNumber(
+        item.magicalAttackBonus ??
+        item.magicalBonus,
+        0
+      );
+
+    const magicalDamageBonus =
+      safeNumber(
+        item.magicalDamageBonus ??
+        item.magicalBonus,
+        0
+      );
+
+    return {
+      itemId: item.id,
+      name: item.name,
+      abilityId,
+      proficient,
+      attackBonus:
+        abilityModifier +
+        proficiencyBonus +
+        magicalAttackBonus,
+      damageModifier:
+        abilityModifier +
+        magicalDamageBonus,
+      damageDice:
+        cleanString(item.damageDice),
+      versatileDamageDice:
+        cleanString(item.versatileDamageDice),
+      breakdown:
+        `${abilityId.toUpperCase()} ${formatSignedNumber(abilityModifier)}${proficient ? ` + proficiency ${formatSignedNumber(proficiencyBonus)}` : ""}${magicalAttackBonus ? ` + magic ${formatSignedNumber(magicalAttackBonus)}` : ""}`
+    };
+  }
+
+  function calculateEquippedWeaponAttacks(
+    character
+  ) {
+    return (
+      Array.isArray(
+        character?.equipment?.items
+      )
+        ? character.equipment.items
+        : []
+    )
+      .filter((item) => {
+        return (
+          item.equipped === true &&
+          (
+            item.category === "weapon" ||
+            item.weaponType ||
+            item.damageDice
+          )
+        );
+      })
+      .map((item) => {
+        return calculateWeaponAttack(
+          character,
+          item
+        );
+      });
+  }
+
+  function getCharacterSpellcastingInfo(
+    character
+  ) {
+    return getCharacterClassEntries(character)
+      .map((classEntry) => {
+        const template =
+          resolveClassTemplateForEntry(
+            classEntry
+          );
+
+        const level =
+          Math.max(
+            0,
+            Math.round(
+              safeNumber(
+                classEntry?.level,
+                0
+              )
+            )
+          );
+
+        const progression =
+          cleanString(
+            classEntry?.spellcastingProgression ||
+            template?.spellcastingProgression ||
+            template?.progressionType,
+            "none"
+          );
+
+        const spellcastingAbility =
+          cleanString(
+            classEntry?.spellcastingAbility ||
+            template?.spellcastingAbility ||
+            character?.magic?.spellcastingAbility
+          );
+
+        const levelData =
+          template
+            ? getSection12LevelData(
+                template,
+                Math.max(1, level)
+              )
+            : null;
+
+        return {
+          classId:
+            classEntry.classId ||
+            template?.id ||
+            "",
+          className:
+            classEntry.className ||
+            template?.name ||
+            "Class",
+          level,
+          progressionType: progression,
+          spellcastingAbility,
+          spellPreparation:
+            classEntry?.spellPreparation ||
+            template?.spellPreparation ||
+            "none",
+          cantripsKnown:
+            levelData?.cantripsKnown ??
+            getProgressionValueByLevel(
+              template?.cantripsKnown,
+              level,
+              0
+            ),
+          spellsKnown:
+            levelData?.spellsKnown ??
+            getProgressionValueByLevel(
+              template?.spellsKnown,
+              level,
+              0
+            ),
+          spellSlots:
+            levelData?.spellSlots ||
+            getSrd2014SpellSlots(
+              progression,
+              level
+            ),
+          pactMagic:
+            levelData?.pactMagic ||
+            (
+              progression === "pact-magic"
+                ? getSrd2014PactMagic(level)
+                : { slots: 0, slotLevel: 0 }
+            )
+        };
+      });
+  }
+
+  function getPreparedSpellLimit(
+    character,
+    spellcastingInfo
+  ) {
+    const abilityModifier =
+      spellcastingInfo.spellcastingAbility
+        ? calculateAbilityModifier(
+            getAbilityScore(
+              character,
+              spellcastingInfo.spellcastingAbility
+            )
+          )
+        : 0;
+
+    if (
+      ["cleric", "druid", "wizard"].includes(
+        spellcastingInfo.classId
+      )
+    ) {
+      return Math.max(
+        1,
+        abilityModifier +
+        spellcastingInfo.level
+      );
+    }
+
+    if (spellcastingInfo.classId === "paladin") {
+      return Math.max(
+        1,
+        abilityModifier +
+        Math.floor(
+          spellcastingInfo.level / 2
+        )
+      );
+    }
+
+    return null;
+  }
+
+  function getSpellcastingSummary(
+    character
+  ) {
+    const info =
+      getCharacterSpellcastingInfo(character);
+
+    const multiclass =
+      calculateSrd2014MulticlassSpellcasting(
+        info
+      );
+
+    const proficiencyBonus =
+      getCharacterProficiencyBonus(character);
+
+    return {
+      classes:
+        info.map((entry) => {
+          const abilityModifier =
+            entry.spellcastingAbility
+              ? calculateAbilityModifier(
+                  getAbilityScore(
+                    character,
+                    entry.spellcastingAbility
+                  )
+                )
+              : null;
+
+          return {
+            ...entry,
+            spellSaveDc:
+              abilityModifier === null
+                ? null
+                : calculateRuleSpellSaveDc({
+                    proficiencyBonus,
+                    abilityModifier
+                  }),
+            spellAttackBonus:
+              abilityModifier === null
+                ? null
+                : calculateRuleSpellAttackBonus({
+                    proficiencyBonus,
+                    abilityModifier
+                  }),
+            preparedLimit:
+              getPreparedSpellLimit(
+                character,
+                entry
+              ),
+            maxSpellLevel:
+              Math.max(
+                0,
+                ...Object.keys(entry.spellSlots || {})
+                  .map((key) => {
+                    return safeNumber(key, 0);
+                  }),
+                safeNumber(
+                  entry.pactMagic?.slotLevel,
+                  0
+                )
+              )
+          };
+        }),
+      multiclass
+    };
+  }
+
+  function getSpellSelectionLimits(
+    character
+  ) {
+    const summary =
+      getSpellcastingSummary(character);
+
+    const customSpells =
+      Array.isArray(
+        character?.magic?.customSpells
+      )
+        ? character.magic.customSpells
+        : [];
+
+    const knownIds =
+      cleanArray(
+        character?.magic?.knownSpellIds
+      );
+
+    const preparedIds =
+      cleanArray(
+        character?.magic?.preparedSpellIds
+      );
+
+    const spellById =
+      new Map(
+        customSpells.map((spell) => {
+          return [spell.id, spell];
+        })
+      );
+
+    const countByLevel = (ids, levelTest) => {
+      return ids.reduce((total, id) => {
+        const spell =
+          spellById.get(id);
+
+        if (!spell) {
+          return total;
+        }
+
+        return levelTest(
+          safeNumber(spell.level, 0)
+        )
+          ? total + 1
+          : total;
+      }, 0);
+    };
+
+    const cantripsKnownLimit =
+      summary.classes.reduce((total, entry) => {
+        return (
+          total +
+          Math.max(
+            0,
+            safeNumber(
+              entry.cantripsKnown,
+              0
+            )
+          )
+        );
+      }, 0);
+
+    const spellsKnownLimit =
+      summary.classes.reduce((total, entry) => {
+        return (
+          total +
+          Math.max(
+            0,
+            safeNumber(
+              entry.spellsKnown,
+              0
+            )
+          )
+        );
+      }, 0);
+
+    const preparedLimit =
+      summary.classes.reduce((total, entry) => {
+        return entry.preparedLimit === null
+          ? total
+          : total +
+              Math.max(
+                0,
+                safeNumber(
+                  entry.preparedLimit,
+                  0
+                )
+              );
+      }, 0);
+
+    const maxSpellLevel =
+      Math.max(
+        0,
+        ...summary.classes.map((entry) => {
+          return safeNumber(
+            entry.maxSpellLevel,
+            0
+          );
+        })
+      );
+
+    return {
+      cantripsKnownLimit:
+        cantripsKnownLimit || null,
+      spellsKnownLimit:
+        spellsKnownLimit || null,
+      preparedLimit:
+        preparedLimit || null,
+      maxSpellLevel:
+        maxSpellLevel || null,
+      knownCantripCount:
+        countByLevel(
+          knownIds,
+          (level) => level === 0
+        ),
+      knownLeveledCount:
+        countByLevel(
+          knownIds,
+          (level) => level > 0
+        ),
+      preparedCount:
+        preparedIds.length,
+      knownIds,
+      preparedIds
+    };
+  }
+
+  function createSrdFeature(
+    classId,
+    level,
+    name
+  ) {
+    return {
+      id: `${classId}-${makeSafeId(name, "feature")}-${level}`,
+      name,
+      level,
+      summary:
+        `${name} is part of the SRD 5.1 ${classId} progression at level ${level}.`
+    };
+  }
+
+  function createSrdFeatureLevels({
+    classId,
+    featuresByLevel = {},
+    asiLevels = SRD_2014_STANDARD_ASI_LEVELS,
+    progressionType = "none",
+    cantripsKnown = {},
+    spellsKnown = {}
+  }) {
+    const levels = {};
+
+    for (let level = 1; level <= 20; level += 1) {
+      const featureNames = [
+        ...(featuresByLevel[level] || [])
+      ];
+
+      if (
+        asiLevels.includes(level) &&
+        !featureNames.includes(
+          "Ability Score Improvement"
+        )
+      ) {
+        featureNames.push(
+          "Ability Score Improvement"
+        );
+      }
+
+      levels[level] = {
+        proficiencyBonus:
+          getGenericProficiencyBonus(level),
+        features:
+          featureNames.map((name) => {
+            return createSrdFeature(
+              classId,
+              level,
+              name
+            );
+          })
+      };
+
+      const slots =
+        getSrd2014SpellSlots(
+          progressionType,
+          level
+        );
+
+      if (Object.keys(slots).length) {
+        levels[level].spellSlots = slots;
+      }
+
+      if (progressionType === "pact-magic") {
+        levels[level].pactMagic =
+          getSrd2014PactMagic(level);
+      }
+
+      const cantripCount =
+        getProgressionValueByLevel(
+          cantripsKnown,
+          level,
+          null
+        );
+
+      if (cantripCount !== null) {
+        levels[level].cantripsKnown =
+          cantripCount;
+      }
+
+      const spellsKnownCount =
+        getProgressionValueByLevel(
+          spellsKnown,
+          level,
+          null
+        );
+
+      if (spellsKnownCount !== null) {
+        levels[level].spellsKnown =
+          spellsKnownCount;
+      }
+    }
+
+    return levels;
+  }
+
+  function createSrdSubclass({
+    id,
+    name,
+    summary,
+    featuresByLevel = {}
+  }) {
+    return {
+      id,
+      name,
+      source: "template",
+      summary,
+      levels:
+        createSrdFeatureLevels({
+          classId: id,
+          featuresByLevel,
+          asiLevels: [],
+          progressionType: "none"
+        })
+    };
+  }
+
+  function createSrdClassTemplate(config) {
+    return {
+      schemaVersion: CLASS_SCHEMA_VERSION,
+      source: "template",
+      spellcastingProgression:
+        config.progressionType || "none",
+      spellcastingAbility:
+        config.spellcastingAbility || "",
+      spellPreparation:
+        config.spellPreparation || "none",
+      cantripsKnown:
+        cloneData(config.cantripsKnown || {}),
+      spellsKnown:
+        cloneData(config.spellsKnown || {}),
+      ...config,
+      levels:
+        createSrdFeatureLevels({
+          classId: config.id,
+          featuresByLevel:
+            config.featuresByLevel || {},
+          asiLevels:
+            config.asiLevels ||
+            SRD_2014_STANDARD_ASI_LEVELS,
+          progressionType:
+            config.progressionType || "none",
+          cantripsKnown:
+            config.cantripsKnown || {},
+          spellsKnown:
+            config.spellsKnown || {}
+        }),
+      subclasses:
+        Array.isArray(config.subclasses)
+          ? config.subclasses
+        : []
+    };
+  }
+
+  function runSrd2014RulesSelfTests() {
+    const results = [];
+
+    const record = (
+      name,
+      actual,
+      expected
+    ) => {
+      const pass =
+        JSON.stringify(actual) ===
+        JSON.stringify(expected);
+
+      results.push({
+        name,
+        pass,
+        actual,
+        expected
+      });
+    };
+
+    record(
+      "Ability modifier 8",
+      calculateAbilityModifier(8),
+      -1
+    );
+
+    record(
+      "Ability modifier 10",
+      calculateAbilityModifier(10),
+      0
+    );
+
+    record(
+      "Ability modifier 15",
+      calculateAbilityModifier(15),
+      2
+    );
+
+    record(
+      "Ability modifier 20",
+      calculateAbilityModifier(20),
+      5
+    );
+
+    record(
+      "Proficiency bonus levels",
+      [1, 5, 9, 13, 17].map(
+        getGenericProficiencyBonus
+      ),
+      [2, 3, 4, 5, 6]
+    );
+
+    record(
+      "Skill proficiency and expertise",
+      [
+        calculateRuleSkillModifier({
+          abilityModifier: 2,
+          proficiencyBonus: 3,
+          proficient: true
+        }),
+        calculateRuleSkillModifier({
+          abilityModifier: 2,
+          proficiencyBonus: 3,
+          proficient: true,
+          expertise: true
+        })
+      ],
+      [5, 8]
+    );
+
+    record(
+      "Passive Perception",
+      calculateRulePassiveScore(5),
+      15
+    );
+
+    record(
+      "Level 1 Fighter HP Con 14",
+      calculateRuleFixedAverageHp({
+        hitDie: "d10",
+        level: 1,
+        constitutionModifier: 2
+      }),
+      12
+    );
+
+    record(
+      "Level 1 Wizard HP Con 14",
+      calculateRuleFixedAverageHp({
+        hitDie: "d6",
+        level: 1,
+        constitutionModifier: 2
+      }),
+      8
+    );
+
+    record(
+      "Full caster level 5 slots",
+      getSrd2014SpellSlots(
+        "full-caster",
+        5
+      ),
+      { 1: 4, 2: 3, 3: 2 }
+    );
+
+    record(
+      "Half caster level 5 slots",
+      getSrd2014SpellSlots(
+        "half-caster",
+        5
+      ),
+      { 1: 4, 2: 2 }
+    );
+
+    record(
+      "Warlock pact magic level 5",
+      getSrd2014PactMagic(5),
+      { slots: 2, slotLevel: 3 }
+    );
+
+    record(
+      "Multiclass slots keep pact magic separate",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 3,
+          spellcastingProgression: "full-caster"
+        },
+        {
+          level: 2,
+          spellcastingProgression: "half-caster"
+        },
+        {
+          level: 5,
+          spellcastingProgression: "pact-magic"
+        }
+      ]),
+      {
+        casterLevel: 4,
+        spellSlots: { 1: 4, 2: 3 },
+        pactMagic: [{ slots: 2, slotLevel: 3 }]
+      }
+    );
+
+    record(
+      "Spell save and attack",
+      {
+        dc: calculateRuleSpellSaveDc({
+          proficiencyBonus: 3,
+          abilityModifier: 4
+        }),
+        attack: calculateRuleSpellAttackBonus({
+          proficiencyBonus: 3,
+          abilityModifier: 4
+        })
+      },
+      { dc: 15, attack: 7 }
+    );
+
+    record(
+      "Medium carrying capacity Strength 10",
+      calculateRuleCarryingCapacity({
+        strength: 10,
+        size: "medium"
+      }).carryingCapacity,
+      150
+    );
+
+    record(
+      "Large carrying capacity Strength 18",
+      calculateRuleCarryingCapacity({
+        strength: 18,
+        size: "large"
+      }),
+      {
+        carryingCapacity: 540,
+        pushDragLift: 1080,
+        sizeMultiplier: 2
+      }
+    );
+
+    record(
+      "Saving throw helper adds proficiency",
+      calculateRuleSavingThrowModifier({
+        abilityModifier: 3,
+        proficiencyBonus: 2,
+        proficient: true
+      }),
+      5
+    );
+
+    record(
+      "Saving throw helper adds flat bonus",
+      calculateRuleSavingThrowModifier({
+        abilityModifier: -1,
+        proficiencyBonus: 4,
+        proficient: true,
+        bonus: 2
+      }),
+      5
+    );
+
+    record(
+      "Passive advantage and disadvantage cancel",
+      calculateRulePassiveScore(
+        4,
+        {
+          advantage: true,
+          disadvantage: true
+        }
+      ),
+      14
+    );
+
+    record(
+      "Fixed HP respects level one override",
+      calculateRuleFixedAverageHp({
+        hitDie: "d8",
+        level: 3,
+        constitutionModifier: 2,
+        levelOneValue: 9
+      }),
+      23
+    );
+
+    record(
+      "Rolled HP uses supplied rolls",
+      calculateRuleRolledHp({
+        hitDie: "d10",
+        level: 4,
+        constitutionModifier: 2,
+        rolls: [5, 6, 7]
+      }),
+      36
+    );
+
+    record(
+      "Manual HP clamps to at least one",
+      calculateRuleManualHp({
+        manualOverride: 0
+      }),
+      1
+    );
+
+    record(
+      "Normalize manual HP fallback",
+      normalizeHpCalculation(
+        { mode: "manual" },
+        18
+      ).manualOverride,
+      18
+    );
+
+    const fighterTemplate =
+      DEFAULT_CLASS_TEMPLATES.find(
+        (template) => {
+          return template.id === "fighter";
+        }
+      );
+
+    const fighterCharacter =
+      createEmptyCharacter();
+
+    fighterCharacter.abilities.scores = {
+      str: 16,
+      dex: 14,
+      con: 14,
+      int: 10,
+      wis: 12,
+      cha: 8
+    };
+
+    fighterCharacter.identity.size =
+      "medium";
+
+    fighterCharacter.classProgression.totalLevel = 3;
+
+    fighterCharacter.classProgression.classes = [
+      {
+        classId: "fighter",
+        className: "Fighter",
+        level: 3,
+        templateSnapshot:
+          fighterTemplate
+      }
+    ];
+
+    fighterCharacter.proficiencies.savingThrows = [
+      "Strength",
+      "Constitution"
+    ];
+
+    fighterCharacter.proficiencies.weapons = [
+      "Simple weapons",
+      "Martial weapons"
+    ];
+
+    fighterCharacter.proficiencies.skills = {
+      perception: {
+        proficient: true,
+        expertise: false,
+        source: ["class"]
+      },
+      stealth: {
+        proficient: true,
+        expertise: true,
+        source: ["manual"]
+      }
+    };
+
+    fighterCharacter.proficiencies.passiveState = {
+      perception: {
+        advantage: true
+      }
+    };
+
+    fighterCharacter.combat.proficiencyBonus = 2;
+    fighterCharacter.combat.initiativeBonus = 1;
+    fighterCharacter.combat.initiativeProficient = true;
+    fighterCharacter.combat.hpCalculation = {
+      mode: "fixed",
+      levelOneValue: null,
+      laterLevelValues: [],
+      manualOverride: null,
+      lastCalculatedConModifier: 2
+    };
+
+    record(
+      "Character proficiency from level",
+      getCharacterProficiencyBonus(
+        fighterCharacter
+      ),
+      2
+    );
+
+    record(
+      "Character saving throw totals",
+      calculateCharacterSavingThrows(
+        fighterCharacter
+      )
+        .filter((save) => {
+          return [
+            "str",
+            "dex",
+            "con"
+          ].includes(save.id);
+        })
+        .map((save) => {
+          return save.total;
+        }),
+      [5, 2, 4]
+    );
+
+    record(
+      "Character skill modifier with expertise",
+      calculateCharacterSkillModifier(
+        fighterCharacter,
+        SKILL_DEFINITIONS.find((skill) => {
+          return skill.id === "stealth";
+        })
+      ),
+      6
+    );
+
+    record(
+      "Character passive perception with advantage",
+      calculateCharacterPassiveScores(
+        fighterCharacter
+      ).perception.total,
+      18
+    );
+
+    record(
+      "Character initiative with proficiency",
+      calculateCharacterInitiative(
+        fighterCharacter
+      ),
+      {
+        dexterityModifier: 2,
+        proficiencyBonus: 2,
+        bonus: 1,
+        total: 5
+      }
+    );
+
+    record(
+      "Character fixed HP summary",
+      calculateCharacterHp(
+        fighterCharacter
+      ).maximumHp,
+      28
+    );
+
+    record(
+      "Character hit dice summary",
+      calculateCharacterHitDice(
+        fighterCharacter
+      ).map((entry) => {
+        return {
+          die: entry.die,
+          count: entry.count
+        };
+      }),
+      [{ die: "d10", count: 3 }]
+    );
+
+    record(
+      "Unarmored armor class",
+      calculateArmorClassOptions(
+        fighterCharacter
+      ).selected.total,
+      12
+    );
+
+    const armoredCharacter =
+      cloneData(fighterCharacter);
+
+    armoredCharacter.equipment.items = [
+      normalizeSection15Item({
+        id: "studded",
+        name: "Studded Leather",
+        category: "armor",
+        equipped: true,
+        armorCategory: "light armor",
+        baseArmorClass: 12,
+        magicalArmorClassBonus: 1
+      }),
+      normalizeSection15Item({
+        id: "shield",
+        name: "Shield",
+        category: "shield",
+        equipped: true,
+        isShield: true,
+        magicalArmorClassBonus: 1
+      })
+    ];
+
+    record(
+      "Armor class with magic armor and shield",
+      calculateArmorClassOptions(
+        armoredCharacter
+      ).selected.total,
+      18
+    );
+
+    const barbarianCharacter =
+      cloneData(fighterCharacter);
+
+    barbarianCharacter.classProgression.classes = [
+      {
+        classId: "barbarian",
+        className: "Barbarian",
+        level: 3,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "barbarian";
+            }
+          )
+      }
+    ];
+
+    barbarianCharacter.abilities.scores.dex = 16;
+    barbarianCharacter.abilities.scores.con = 16;
+
+    record(
+      "Barbarian unarmored defense",
+      calculateArmorClassOptions(
+        barbarianCharacter
+      ).selected.total,
+      16
+    );
+
+    const monkCharacter =
+      cloneData(fighterCharacter);
+
+    monkCharacter.classProgression.classes = [
+      {
+        classId: "monk",
+        className: "Monk",
+        level: 3,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "monk";
+            }
+          )
+      }
+    ];
+
+    monkCharacter.abilities.scores.dex = 16;
+    monkCharacter.abilities.scores.wis = 14;
+
+    record(
+      "Monk unarmored defense",
+      calculateArmorClassOptions(
+        monkCharacter
+      ).selected.total,
+      15
+    );
+
+    const weaponCharacter =
+      cloneData(fighterCharacter);
+
+    weaponCharacter.equipment.items = [
+      normalizeSection15Item({
+        id: "shortsword",
+        name: "Shortsword",
+        category: "weapon",
+        equipped: true,
+        weaponType: "martial melee",
+        finesse: true,
+        damageDice: "1d6",
+        magicalBonus: 1
+      }),
+      normalizeSection15Item({
+        id: "bow",
+        name: "Shortbow",
+        category: "weapon",
+        equipped: true,
+        weaponType: "simple ranged",
+        ranged: true,
+        damageDice: "1d6"
+      })
+    ];
+
+    weaponCharacter.abilities.scores.dex = 18;
+
+    record(
+      "Weapon attack uses finesse and magic",
+      calculateWeaponAttack(
+        weaponCharacter,
+        weaponCharacter.equipment.items[0]
+      ),
+      {
+        itemId: "shortsword",
+        name: "Shortsword",
+        abilityId: "dex",
+        proficient: true,
+        attackBonus: 7,
+        damageModifier: 5,
+        damageDice: "1d6",
+        versatileDamageDice: "",
+        breakdown:
+          "DEX +4 + proficiency +2 + magic +1"
+      }
+    );
+
+    record(
+      "Equipped weapon attacks count",
+      calculateEquippedWeaponAttacks(
+        weaponCharacter
+      ).length,
+      2
+    );
+
+    const inventoryItems = [
+      normalizeSection15Item({
+        id: "pack",
+        name: "Pack",
+        quantity: 1,
+        weight: 5,
+        isContainer: true,
+        capacityWeight: 10
+      }),
+      normalizeSection15Item({
+        id: "rope",
+        name: "Rope",
+        quantity: 2,
+        weight: 5,
+        containerId: "pack"
+      }),
+      normalizeSection15Item({
+        id: "mystery",
+        name: "Mystery Box",
+        weight: null,
+        containerId: "pack"
+      })
+    ];
+
+    record(
+      "Inventory known and unknown weight",
+      calculateInventoryWeightSummary(
+        inventoryItems
+      ),
+      {
+        knownWeight: 15,
+        unknownCount: 1
+      }
+    );
+
+    record(
+      "Container summary detects uncertainty",
+      getContainerSummaries(
+        inventoryItems
+      ).map((container) => {
+        return {
+          knownWeight:
+            container.knownWeight,
+          unknownCount:
+            container.unknownCount,
+          uncertain:
+            container.uncertain
+        };
+      }),
+      [
+        {
+          knownWeight: 10,
+          unknownCount: 1,
+          uncertain: true
+        }
+      ]
+    );
+
+    record(
+      "Container validation detects over capacity",
+      validateContainerState([
+        normalizeSection15Item({
+          id: "bag",
+          name: "Bag",
+          isContainer: true,
+          capacityWeight: 4
+        }),
+        normalizeSection15Item({
+          id: "rock",
+          name: "Rock",
+          weight: 5,
+          containerId: "bag"
+        })
+      ]),
+      ["Bag is over capacity."]
+    );
+
+    record(
+      "Container cycle detection",
+      wouldCreateContainerCycle(
+        [
+          { id: "a", containerId: "b" },
+          { id: "b", containerId: "" }
+        ],
+        "b",
+        "a"
+      ),
+      true
+    );
+
+    record(
+      "Split inventory stack",
+      splitInventoryStack(
+        [
+          {
+            id: "arrow",
+            name: "Arrow",
+            quantity: 20,
+            containerId: ""
+          }
+        ],
+        "arrow",
+        5,
+        "quiver"
+      ).map((item) => {
+        return {
+          quantity: item.quantity,
+          containerId: item.containerId
+        };
+      }),
+      [
+        {
+          quantity: 15,
+          containerId: ""
+        },
+        {
+          quantity: 5,
+          containerId: "quiver"
+        }
+      ]
+    );
+
+    record(
+      "Removing container preserves contents",
+      removeContainerPreserveContents(
+        inventoryItems,
+        "pack"
+      ).map((item) => {
+        return {
+          id: item.id,
+          containerId: item.containerId
+        };
+      }),
+      [
+        {
+          id: "rope",
+          containerId: ""
+        },
+        {
+          id: "mystery",
+          containerId: ""
+        }
+      ]
+    );
+
+    const clericTemplate =
+      DEFAULT_CLASS_TEMPLATES.find(
+        (template) => {
+          return template.id === "cleric";
+        }
+      );
+
+    const clericCharacter =
+      createEmptyCharacter();
+
+    clericCharacter.abilities.scores = {
+      str: 10,
+      dex: 10,
+      con: 12,
+      int: 10,
+      wis: 16,
+      cha: 8
+    };
+
+    clericCharacter.classProgression.totalLevel = 5;
+    clericCharacter.combat.proficiencyBonus = 3;
+    clericCharacter.classProgression.classes = [
+      {
+        classId: "cleric",
+        className: "Cleric",
+        level: 5,
+        templateSnapshot:
+          clericTemplate
+      }
+    ];
+
+    record(
+      "Spellcasting summary cleric DC",
+      getSpellcastingSummary(
+        clericCharacter
+      ).classes[0].spellSaveDc,
+      14
+    );
+
+    record(
+      "Spellcasting summary cleric attack",
+      getSpellcastingSummary(
+        clericCharacter
+      ).classes[0].spellAttackBonus,
+      6
+    );
+
+    record(
+      "Prepared spell limit cleric",
+      getSpellcastingSummary(
+        clericCharacter
+      ).classes[0].preparedLimit,
+      8
+    );
+
+    record(
+      "Cleric level 5 slot summary",
+      getSpellcastingSummary(
+        clericCharacter
+      ).classes[0].spellSlots,
+      { 1: 4, 2: 3, 3: 2 }
+    );
+
+    record(
+      "Third caster level 7 slots",
+      getSrd2014SpellSlots(
+        "third-caster",
+        7
+      ),
+      { 1: 4, 2: 2 }
+    );
+
+    record(
+      "Half caster level 1 has no slots",
+      getSrd2014SpellSlots(
+        "half-caster",
+        1
+      ),
+      {}
+    );
+
+    const multiclassCaster =
+      createEmptyCharacter();
+
+    multiclassCaster.abilities.scores = {
+      str: 10,
+      dex: 10,
+      con: 12,
+      int: 16,
+      wis: 10,
+      cha: 14
+    };
+
+    multiclassCaster.classProgression.totalLevel = 12;
+    multiclassCaster.classProgression.classes = [
+      {
+        classId: "wizard",
+        className: "Wizard",
+        level: 3,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "wizard";
+            }
+          )
+      },
+      {
+        classId: "paladin",
+        className: "Paladin",
+        level: 4,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "paladin";
+            }
+          )
+      },
+      {
+        classId: "warlock",
+        className: "Warlock",
+        level: 5,
+        templateSnapshot:
+          DEFAULT_CLASS_TEMPLATES.find(
+            (template) => {
+              return template.id === "warlock";
+            }
+          )
+      }
+    ];
+
+    record(
+      "Multiclass spellcasting summary",
+      getSpellcastingSummary(
+        multiclassCaster
+      ).multiclass,
+      {
+        casterLevel: 5,
+        spellSlots: { 1: 4, 2: 3, 3: 2 },
+        pactMagic: [{ slots: 2, slotLevel: 3 }]
+      }
+    );
+
+    record(
+      "Paladin prepared spell limit",
+      getPreparedSpellLimit(
+        multiclassCaster,
+        {
+          classId: "paladin",
+          level: 5,
+          spellcastingAbility: "cha"
+        }
+      ),
+      4
+    );
+
+    const lightArmorCharacter =
+      cloneData(fighterCharacter);
+
+    lightArmorCharacter.equipment.items = [
+      normalizeSection15Item({
+        id: "leather",
+        name: "Leather",
+        category: "armor",
+        equipped: true,
+        armorCategory: "light armor",
+        baseArmorClass: 11
+      })
+    ];
+
+    record(
+      "Light armor AC",
+      calculateArmorClassOptions(
+        lightArmorCharacter
+      ).selected.total,
+      13
+    );
+
+    const mediumArmorCharacter =
+      cloneData(fighterCharacter);
+
+    mediumArmorCharacter.abilities.scores.dex = 18;
+    mediumArmorCharacter.equipment.items = [
+      normalizeSection15Item({
+        id: "scale",
+        name: "Scale Mail",
+        category: "armor",
+        equipped: true,
+        armorCategory: "medium armor",
+        baseArmorClass: 14,
+        dexterityCap: 2
+      })
+    ];
+
+    record(
+      "Medium armor Dexterity cap",
+      calculateArmorClassOptions(
+        mediumArmorCharacter
+      ).selected.total,
+      16
+    );
+
+    const heavyArmorCharacter =
+      cloneData(fighterCharacter);
+
+    heavyArmorCharacter.abilities.scores.dex = 18;
+    heavyArmorCharacter.equipment.items = [
+      normalizeSection15Item({
+        id: "chain",
+        name: "Chain Mail",
+        category: "armor",
+        equipped: true,
+        armorCategory: "heavy armor",
+        baseArmorClass: 16
+      })
+    ];
+
+    record(
+      "Heavy armor ignores Dexterity",
+      calculateArmorClassOptions(
+        heavyArmorCharacter
+      ).selected.total,
+      16
+    );
+
+    const shieldOnlyCharacter =
+      cloneData(fighterCharacter);
+
+    shieldOnlyCharacter.equipment.items = [
+      normalizeSection15Item({
+        id: "shield",
+        name: "Shield",
+        category: "shield",
+        equipped: true,
+        isShield: true
+      })
+    ];
+
+    record(
+      "Shield bonus",
+      calculateArmorClassOptions(
+        shieldOnlyCharacter
+      ).selected.total,
+      14
+    );
+
+    record(
+      "Armor prevents monk unarmored formula",
+      calculateArmorClassOptions({
+        ...monkCharacter,
+        equipment: {
+          items: [
+            normalizeSection15Item({
+              id: "leather",
+              name: "Leather",
+              category: "armor",
+              equipped: true,
+              armorCategory: "light armor",
+              baseArmorClass: 11
+            })
+          ]
+        }
+      }).options.some((option) => {
+        return (
+          option.id ===
+          "monk-unarmored-defense"
+        );
+      }),
+      false
+    );
+
+    const spellLimitCharacter =
+      cloneData(clericCharacter);
+
+    spellLimitCharacter.magic.customSpells = [
+      normalizeSection16Spell({
+        id: "guidance",
+        name: "Guidance",
+        level: 0
+      }),
+      normalizeSection16Spell({
+        id: "light",
+        name: "Light",
+        level: 0
+      }),
+      normalizeSection16Spell({
+        id: "bless",
+        name: "Bless",
+        level: 1
+      })
+    ];
+
+    spellLimitCharacter.magic.knownSpellIds = [
+      "guidance",
+      "light",
+      "bless"
+    ];
+
+    spellLimitCharacter.magic.preparedSpellIds = [
+      "bless"
+    ];
+
+    record(
+      "Spell selection limits",
+      {
+        cantrips:
+          getSpellSelectionLimits(
+            spellLimitCharacter
+          ).cantripsKnownLimit,
+        knownCantrips:
+          getSpellSelectionLimits(
+            spellLimitCharacter
+          ).knownCantripCount,
+        prepared:
+          getSpellSelectionLimits(
+            spellLimitCharacter
+          ).preparedCount,
+        maxLevel:
+          getSpellSelectionLimits(
+            spellLimitCharacter
+          ).maxSpellLevel
+      },
+      {
+        cantrips: 4,
+        knownCantrips: 2,
+        prepared: 1,
+        maxLevel: 3
+      }
+    );
+
+    record(
+      "Mundane item cannot stay attuned",
+      normalizeSection15Item({
+        id: "pack",
+        name: "Pack",
+        isMagical: false,
+        requiresAttunement: true,
+        attuned: true
+      }).attuned,
+      false
+    );
+
+    creatorState.draft.equipment.items = [
+      normalizeSection15Item({
+        id: "a",
+        name: "Ring A",
+        category: "magic-item",
+        isMagical: true,
+        requiresAttunement: true,
+        attuned: true
+      }),
+      normalizeSection15Item({
+        id: "b",
+        name: "Ring B",
+        category: "magic-item",
+        isMagical: true,
+        requiresAttunement: true,
+        attuned: true
+      }),
+      normalizeSection15Item({
+        id: "c",
+        name: "Ring C",
+        category: "magic-item",
+        isMagical: true,
+        requiresAttunement: true,
+        attuned: true
+      })
+    ];
+
+    record(
+      "Three-item attunement count",
+      getSection15AttunedItemCount(),
+      3
+    );
+
+    creatorState.draft.equipment.items = [
+      normalizeSection15Item({
+        id: "bag",
+        name: "Bag",
+        isContainer: true,
+        capacityWeight: 100
+      }),
+      normalizeSection15Item({
+        id: "arrows",
+        name: "Arrows",
+        quantity: 10,
+        weight: 0.05
+      })
+    ];
+
+    moveSection15ItemToContainer(
+      1,
+      "bag",
+      4
+    );
+
+    record(
+      "Container move splits stack",
+      creatorState.draft.equipment.items
+        .map((item) => {
+          return {
+            id: item.id === "arrows"
+              ? "arrows"
+              : item.id === "bag"
+                ? "bag"
+                : "split",
+            quantity: item.quantity,
+            containerId: item.containerId
+          };
+        }),
+      [
+        {
+          id: "bag",
+          quantity: 1,
+          containerId: ""
+        },
+        {
+          id: "arrows",
+          quantity: 6,
+          containerId: ""
+        },
+        {
+          id: "split",
+          quantity: 4,
+          containerId: "bag"
+        }
+      ]
+    );
+
+    creatorState.draft.equipment.items = [
+      normalizeSection15Item({
+        id: "pouch",
+        name: "Pouch",
+        isContainer: true
+      }),
+      normalizeSection15Item({
+        id: "coin",
+        name: "Coin",
+        containerId: "pouch"
+      })
+    ];
+
+    record(
+      "Container removal waits for explicit choice",
+      removeSection15Item(0),
+      "pending"
+    );
+
+    removeSection15Item(
+      0,
+      "inventory"
+    );
+
+    record(
+      "Container removal moves contents to inventory by choice",
+      creatorState.draft.equipment.items
+        .map((item) => {
+          return {
+            id: item.id,
+            containerId: item.containerId
+          };
+        }),
+      [
+        {
+          id: "coin",
+          containerId: ""
+        }
+      ]
+    );
+
+    const failed =
+      results.filter((result) => {
+        return !result.pass;
+      });
+
+    return {
+      passed: failed.length === 0,
+      total: results.length,
+      failed,
+      results
+    };
+  }
+
   const DEFAULT_CLASS_TEMPLATES = Object.freeze([
-    {
-      schemaVersion: CLASS_SCHEMA_VERSION,
-      id: "fighter",
-      name: "Fighter",
-      source: "template",
-      summary: "A flexible martial framework for weapon and armor focused characters.",
-      hitDie: "d10",
-      primaryAbilities: [
-        "Strength",
-        "Dexterity"
-      ],
-      savingThrows: [
-        "Strength",
-        "Constitution"
-      ],
-      armorProficiencies: [
-        "Light armor",
-        "Medium armor",
-        "Heavy armor",
-        "Shields"
-      ],
-      weaponProficiencies: [
-        "Simple weapons",
-        "Martial weapons"
-      ],
+    createSrdClassTemplate({
+      id: "barbarian",
+      name: "Barbarian",
+      summary: "A Strength-first warrior with rage, toughness, and primal path features.",
+      hitDie: "d12",
+      primaryAbilities: ["Strength"],
+      savingThrows: ["Strength", "Constitution"],
+      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
+      weaponProficiencies: ["Simple weapons", "Martial weapons"],
       toolProficiencies: [],
-
       skillChoices: {
         choose: 2,
-        from: [
-          "Acrobatics",
-          "Animal Handling",
-          "Athletics",
-          "History",
-          "Insight",
-          "Intimidation",
-          "Perception",
-          "Survival"
-        ]
+        from: ["Animal Handling", "Athletics", "Intimidation", "Nature", "Perception", "Survival"]
       },
-
       subclassLevel: 3,
-
-      levels: {
-        1: {
-          proficiencyBonus: 2,
-
-          features: [
-            {
-              id: "fighter-level-1-feature-slot",
-              name: "Level 1 Martial Feature",
-              summary: "Editable placeholder for your own rules text."
-            }
-          ]
-        }
+      featuresByLevel: {
+        1: ["Rage", "Unarmored Defense"],
+        2: ["Reckless Attack", "Danger Sense"],
+        3: ["Primal Path"],
+        5: ["Extra Attack", "Fast Movement"],
+        7: ["Feral Instinct"],
+        9: ["Brutal Critical"],
+        11: ["Relentless Rage"],
+        13: ["Brutal Critical Improvement"],
+        15: ["Persistent Rage"],
+        17: ["Brutal Critical Mastery"],
+        18: ["Indomitable Might"],
+        20: ["Primal Champion"]
       },
+      subclasses: [
+        createSrdSubclass({
+          id: "path-of-the-berserker",
+          name: "Path of the Berserker",
+          summary: "A rage path focused on direct offense and retaliation.",
+          featuresByLevel: {
+            3: ["Frenzy"],
+            6: ["Mindless Rage"],
+            10: ["Intimidating Presence"],
+            14: ["Retaliation"]
+          }
+        })
+      ]
+    }),
 
-      subclasses: []
-    },
-
-    {
-      schemaVersion: CLASS_SCHEMA_VERSION,
-      id: "wizard",
-      name: "Wizard",
-      source: "template",
-      summary: "An Intelligence-based spellcaster framework with editable progression.",
-      hitDie: "d6",
-      primaryAbilities: [
-        "Intelligence"
-      ],
-      savingThrows: [
-        "Intelligence",
-        "Wisdom"
-      ],
-      armorProficiencies: [],
-      weaponProficiencies: [
-        "Simple weapon placeholders"
-      ],
-      toolProficiencies: [],
-
-      skillChoices: {
-        choose: 2,
-        from: [
-          "Arcana",
-          "History",
-          "Insight",
-          "Investigation",
-          "Medicine",
-          "Religion"
-        ]
-      },
-
-      subclassLevel: 2,
-
-      levels: {
-        1: {
-          proficiencyBonus: 2,
-
-          features: [
-            {
-              id: "wizard-level-1-feature-slot",
-              name: "Level 1 Spellcasting Feature",
-              summary: "Editable placeholder for your own rules text."
-            }
-          ]
-        }
-      },
-
-      subclasses: []
-    },
-
-    {
-      schemaVersion: CLASS_SCHEMA_VERSION,
-      id: "rogue",
-      name: "Rogue",
-      source: "template",
-      summary: "A Dexterity and skill focused framework for precise characters.",
+    createSrdClassTemplate({
+      id: "bard",
+      name: "Bard",
+      summary: "A Charisma full caster with inspiration, expertise, and versatile support.",
       hitDie: "d8",
-      primaryAbilities: [
-        "Dexterity"
-      ],
-      savingThrows: [
-        "Dexterity",
-        "Intelligence"
-      ],
-      armorProficiencies: [
-        "Light armor"
-      ],
-      weaponProficiencies: [
-        "Simple weapons",
-        "Finesse weapon placeholders"
-      ],
-      toolProficiencies: [
-        "One editable tool proficiency"
-      ],
-
+      primaryAbilities: ["Charisma"],
+      savingThrows: ["Dexterity", "Charisma"],
+      armorProficiencies: ["Light armor"],
+      weaponProficiencies: ["Simple weapons", "Hand crossbows", "Longswords", "Rapiers", "Shortswords"],
+      toolProficiencies: ["Three musical instruments"],
       skillChoices: {
-        choose: 4,
-        from: [
-          "Acrobatics",
-          "Athletics",
-          "Deception",
-          "Insight",
-          "Intimidation",
-          "Investigation",
-          "Perception",
-          "Performance",
-          "Persuasion",
-          "Sleight of Hand",
-          "Stealth"
-        ]
+        choose: 3,
+        from: SKILL_DEFINITIONS.map((skill) => skill.name)
       },
-
       subclassLevel: 3,
-
-      levels: {
-        1: {
-          proficiencyBonus: 2,
-
-          features: [
-            {
-              id: "rogue-level-1-feature-slot",
-              name: "Level 1 Skill Feature",
-              summary: "Editable placeholder for your own rules text."
-            }
-          ]
-        }
+      progressionType: "full-caster",
+      spellcastingAbility: "cha",
+      spellPreparation: "known",
+      cantripsKnown: { 1: 2, 4: 3, 10: 4 },
+      spellsKnown: { 1: 4, 2: 5, 3: 6, 4: 7, 5: 8, 6: 9, 7: 10, 8: 11, 9: 12, 10: 14, 11: 15, 12: 15, 13: 16, 14: 18, 15: 19, 16: 19, 17: 20, 18: 22, 19: 22, 20: 22 },
+      featuresByLevel: {
+        1: ["Spellcasting", "Bardic Inspiration"],
+        2: ["Jack of All Trades", "Song of Rest"],
+        3: ["Bard College", "Expertise"],
+        5: ["Bardic Inspiration Improvement", "Font of Inspiration"],
+        6: ["Countercharm", "Bard College Feature"],
+        9: ["Song of Rest Improvement"],
+        10: ["Bardic Inspiration Improvement", "Expertise", "Magical Secrets"],
+        13: ["Song of Rest Improvement"],
+        14: ["Magical Secrets", "Bard College Feature"],
+        15: ["Bardic Inspiration Improvement"],
+        17: ["Song of Rest Improvement"],
+        18: ["Magical Secrets"],
+        20: ["Superior Inspiration"]
       },
+      subclasses: [
+        createSrdSubclass({
+          id: "college-of-lore",
+          name: "College of Lore",
+          summary: "A bard college focused on knowledge, cutting wit, and broader magic.",
+          featuresByLevel: {
+            3: ["Bonus Proficiencies", "Cutting Words"],
+            6: ["Additional Magical Secrets"],
+            14: ["Peerless Skill"]
+          }
+        })
+      ]
+    }),
 
-      subclasses: []
-    },
-
-    {
-      schemaVersion: CLASS_SCHEMA_VERSION,
+    createSrdClassTemplate({
       id: "cleric",
       name: "Cleric",
-      source: "template",
-      summary: "A Wisdom-based divine magic framework with editable domains.",
+      summary: "A Wisdom full caster with divine domains, Channel Divinity, and prepared spells.",
       hitDie: "d8",
-      primaryAbilities: [
-        "Wisdom"
-      ],
-      savingThrows: [
-        "Wisdom",
-        "Charisma"
-      ],
-      armorProficiencies: [
-        "Light armor",
-        "Medium armor",
-        "Shields"
-      ],
-      weaponProficiencies: [
-        "Simple weapons"
-      ],
+      primaryAbilities: ["Wisdom"],
+      savingThrows: ["Wisdom", "Charisma"],
+      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
+      weaponProficiencies: ["Simple weapons"],
       toolProficiencies: [],
-
       skillChoices: {
         choose: 2,
-        from: [
-          "History",
-          "Insight",
-          "Medicine",
-          "Persuasion",
-          "Religion"
-        ]
+        from: ["History", "Insight", "Medicine", "Persuasion", "Religion"]
       },
-
       subclassLevel: 1,
-
-      levels: {
-        1: {
-          proficiencyBonus: 2,
-
-          features: [
-            {
-              id: "cleric-level-1-feature-slot",
-              name: "Level 1 Divine Feature",
-              summary: "Editable placeholder for your own rules text."
-            }
-          ]
-        }
+      progressionType: "full-caster",
+      spellcastingAbility: "wis",
+      spellPreparation: "prepared",
+      cantripsKnown: { 1: 3, 4: 4, 10: 5 },
+      featuresByLevel: {
+        1: ["Spellcasting", "Divine Domain"],
+        2: ["Channel Divinity", "Divine Domain Feature"],
+        5: ["Destroy Undead"],
+        6: ["Channel Divinity Improvement", "Divine Domain Feature"],
+        8: ["Destroy Undead Improvement", "Divine Domain Feature"],
+        10: ["Divine Intervention"],
+        11: ["Destroy Undead Improvement"],
+        14: ["Destroy Undead Improvement"],
+        17: ["Destroy Undead Improvement", "Divine Domain Feature"],
+        18: ["Channel Divinity Improvement"],
+        20: ["Divine Intervention Improvement"]
       },
+      subclasses: [
+        createSrdSubclass({
+          id: "life-domain",
+          name: "Life Domain",
+          summary: "A divine domain focused on healing and protection.",
+          featuresByLevel: {
+            1: ["Domain Spells", "Bonus Proficiency", "Disciple of Life"],
+            2: ["Preserve Life"],
+            6: ["Blessed Healer"],
+            8: ["Divine Strike"],
+            17: ["Supreme Healing"]
+          }
+        })
+      ]
+    }),
 
-      subclasses: []
-    }
+    createSrdClassTemplate({
+      id: "druid",
+      name: "Druid",
+      summary: "A Wisdom full caster with Wild Shape and circle features.",
+      hitDie: "d8",
+      primaryAbilities: ["Wisdom"],
+      savingThrows: ["Intelligence", "Wisdom"],
+      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
+      weaponProficiencies: ["Clubs", "Daggers", "Darts", "Javelins", "Maces", "Quarterstaffs", "Scimitars", "Sickles", "Slings", "Spears"],
+      toolProficiencies: ["Herbalism kit"],
+      skillChoices: {
+        choose: 2,
+        from: ["Arcana", "Animal Handling", "Insight", "Medicine", "Nature", "Perception", "Religion", "Survival"]
+      },
+      subclassLevel: 2,
+      progressionType: "full-caster",
+      spellcastingAbility: "wis",
+      spellPreparation: "prepared",
+      cantripsKnown: { 1: 2, 4: 3, 10: 4 },
+      featuresByLevel: {
+        1: ["Druidic", "Spellcasting"],
+        2: ["Wild Shape", "Druid Circle"],
+        4: ["Wild Shape Improvement"],
+        6: ["Druid Circle Feature"],
+        8: ["Wild Shape Improvement"],
+        10: ["Druid Circle Feature"],
+        14: ["Druid Circle Feature"],
+        18: ["Timeless Body", "Beast Spells"],
+        20: ["Archdruid"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "circle-of-the-land",
+          name: "Circle of the Land",
+          summary: "A druid circle with expanded spell access and natural recovery.",
+          featuresByLevel: {
+            2: ["Bonus Cantrip", "Natural Recovery"],
+            3: ["Circle Spells"],
+            6: ["Land's Stride"],
+            10: ["Nature's Ward"],
+            14: ["Nature's Sanctuary"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "fighter",
+      name: "Fighter",
+      summary: "A martial class with broad weapon and armor training.",
+      hitDie: "d10",
+      primaryAbilities: ["Strength", "Dexterity"],
+      savingThrows: ["Strength", "Constitution"],
+      armorProficiencies: ["Light armor", "Medium armor", "Heavy armor", "Shields"],
+      weaponProficiencies: ["Simple weapons", "Martial weapons"],
+      toolProficiencies: [],
+      skillChoices: {
+        choose: 2,
+        from: ["Acrobatics", "Animal Handling", "Athletics", "History", "Insight", "Intimidation", "Perception", "Survival"]
+      },
+      subclassLevel: 3,
+      asiLevels: SRD_2014_FIGHTER_ASI_LEVELS,
+      featuresByLevel: {
+        1: ["Fighting Style", "Second Wind"],
+        2: ["Action Surge"],
+        3: ["Martial Archetype"],
+        5: ["Extra Attack"],
+        7: ["Martial Archetype Feature"],
+        9: ["Indomitable"],
+        10: ["Martial Archetype Feature"],
+        11: ["Extra Attack Improvement"],
+        13: ["Indomitable Improvement"],
+        15: ["Martial Archetype Feature"],
+        17: ["Action Surge Improvement", "Indomitable Improvement"],
+        18: ["Martial Archetype Feature"],
+        20: ["Extra Attack Mastery"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "champion",
+          name: "Champion",
+          summary: "A fighter archetype focused on simple, reliable martial improvements.",
+          featuresByLevel: {
+            3: ["Improved Critical"],
+            7: ["Remarkable Athlete"],
+            10: ["Additional Fighting Style"],
+            15: ["Superior Critical"],
+            18: ["Survivor"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "monk",
+      name: "Monk",
+      summary: "A Dexterity and Wisdom martial class using martial arts and ki.",
+      hitDie: "d8",
+      primaryAbilities: ["Dexterity", "Wisdom"],
+      savingThrows: ["Strength", "Dexterity"],
+      armorProficiencies: [],
+      weaponProficiencies: ["Simple weapons", "Shortswords"],
+      toolProficiencies: ["One artisan's tools or one musical instrument"],
+      skillChoices: {
+        choose: 2,
+        from: ["Acrobatics", "Athletics", "History", "Insight", "Religion", "Stealth"]
+      },
+      subclassLevel: 3,
+      featuresByLevel: {
+        1: ["Unarmored Defense", "Martial Arts"],
+        2: ["Ki", "Unarmored Movement"],
+        3: ["Monastic Tradition", "Deflect Missiles"],
+        4: ["Slow Fall"],
+        5: ["Extra Attack", "Stunning Strike"],
+        6: ["Ki-Empowered Strikes", "Monastic Tradition Feature"],
+        7: ["Evasion", "Stillness of Mind"],
+        9: ["Unarmored Movement Improvement"],
+        10: ["Purity of Body"],
+        11: ["Monastic Tradition Feature"],
+        13: ["Tongue of the Sun and Moon"],
+        14: ["Diamond Soul"],
+        15: ["Timeless Body"],
+        17: ["Monastic Tradition Feature"],
+        18: ["Empty Body"],
+        20: ["Perfect Self"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "way-of-the-open-hand",
+          name: "Way of the Open Hand",
+          summary: "A monastic tradition focused on control, recovery, and precise strikes.",
+          featuresByLevel: {
+            3: ["Open Hand Technique"],
+            6: ["Wholeness of Body"],
+            11: ["Tranquility"],
+            17: ["Quivering Palm"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "paladin",
+      name: "Paladin",
+      summary: "A Charisma half caster with martial armor, auras, and oath features.",
+      hitDie: "d10",
+      primaryAbilities: ["Strength", "Charisma"],
+      savingThrows: ["Wisdom", "Charisma"],
+      armorProficiencies: ["Light armor", "Medium armor", "Heavy armor", "Shields"],
+      weaponProficiencies: ["Simple weapons", "Martial weapons"],
+      toolProficiencies: [],
+      skillChoices: {
+        choose: 2,
+        from: ["Athletics", "Insight", "Intimidation", "Medicine", "Persuasion", "Religion"]
+      },
+      subclassLevel: 3,
+      progressionType: "half-caster",
+      spellcastingAbility: "cha",
+      spellPreparation: "prepared",
+      featuresByLevel: {
+        1: ["Divine Sense", "Lay on Hands"],
+        2: ["Fighting Style", "Spellcasting", "Divine Smite"],
+        3: ["Divine Health", "Sacred Oath"],
+        5: ["Extra Attack"],
+        6: ["Aura of Protection"],
+        7: ["Sacred Oath Feature"],
+        10: ["Aura of Courage"],
+        11: ["Improved Divine Smite"],
+        14: ["Cleansing Touch"],
+        15: ["Sacred Oath Feature"],
+        18: ["Aura Improvements"],
+        20: ["Sacred Oath Feature"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "oath-of-devotion",
+          name: "Oath of Devotion",
+          summary: "A sacred oath focused on protection, honesty, and radiant defense.",
+          featuresByLevel: {
+            3: ["Oath Spells", "Sacred Weapon", "Turn the Unholy"],
+            7: ["Aura of Devotion"],
+            15: ["Purity of Spirit"],
+            20: ["Holy Nimbus"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "ranger",
+      name: "Ranger",
+      summary: "A Dexterity or Strength half caster with exploration and hunting features.",
+      hitDie: "d10",
+      primaryAbilities: ["Dexterity", "Wisdom"],
+      savingThrows: ["Strength", "Dexterity"],
+      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
+      weaponProficiencies: ["Simple weapons", "Martial weapons"],
+      toolProficiencies: [],
+      skillChoices: {
+        choose: 3,
+        from: ["Animal Handling", "Athletics", "Insight", "Investigation", "Nature", "Perception", "Stealth", "Survival"]
+      },
+      subclassLevel: 3,
+      progressionType: "half-caster",
+      spellcastingAbility: "wis",
+      spellPreparation: "known",
+      spellsKnown: { 1: 0, 2: 2, 3: 3, 4: 3, 5: 4, 6: 4, 7: 5, 8: 5, 9: 6, 10: 6, 11: 7, 12: 7, 13: 8, 14: 8, 15: 9, 16: 9, 17: 10, 18: 10, 19: 11, 20: 11 },
+      featuresByLevel: {
+        1: ["Favored Enemy", "Natural Explorer"],
+        2: ["Fighting Style", "Spellcasting"],
+        3: ["Ranger Archetype", "Primeval Awareness"],
+        5: ["Extra Attack"],
+        6: ["Favored Enemy Improvement", "Natural Explorer Improvement"],
+        7: ["Ranger Archetype Feature"],
+        8: ["Land's Stride"],
+        10: ["Natural Explorer Improvement", "Hide in Plain Sight"],
+        11: ["Ranger Archetype Feature"],
+        14: ["Favored Enemy Improvement", "Vanish"],
+        15: ["Ranger Archetype Feature"],
+        18: ["Feral Senses"],
+        20: ["Foe Slayer"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "hunter",
+          name: "Hunter",
+          summary: "A ranger archetype focused on adaptable combat techniques.",
+          featuresByLevel: {
+            3: ["Hunter's Prey"],
+            7: ["Defensive Tactics"],
+            11: ["Multiattack"],
+            15: ["Superior Hunter's Defense"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "rogue",
+      name: "Rogue",
+      summary: "A Dexterity and skill class with expertise, sneak attack, and evasive features.",
+      hitDie: "d8",
+      primaryAbilities: ["Dexterity"],
+      savingThrows: ["Dexterity", "Intelligence"],
+      armorProficiencies: ["Light armor"],
+      weaponProficiencies: ["Simple weapons", "Hand crossbows", "Longswords", "Rapiers", "Shortswords"],
+      toolProficiencies: ["Thieves' tools"],
+      skillChoices: {
+        choose: 4,
+        from: ["Acrobatics", "Athletics", "Deception", "Insight", "Intimidation", "Investigation", "Perception", "Performance", "Persuasion", "Sleight of Hand", "Stealth"]
+      },
+      subclassLevel: 3,
+      asiLevels: SRD_2014_ROGUE_ASI_LEVELS,
+      featuresByLevel: {
+        1: ["Expertise", "Sneak Attack", "Thieves' Cant"],
+        2: ["Cunning Action"],
+        3: ["Roguish Archetype"],
+        5: ["Uncanny Dodge"],
+        6: ["Expertise"],
+        7: ["Evasion"],
+        9: ["Roguish Archetype Feature"],
+        11: ["Reliable Talent"],
+        13: ["Roguish Archetype Feature"],
+        14: ["Blindsense"],
+        15: ["Slippery Mind"],
+        17: ["Roguish Archetype Feature"],
+        18: ["Elusive"],
+        20: ["Stroke of Luck"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "thief",
+          name: "Thief",
+          summary: "A rogue archetype focused on agility, stealth, and item use.",
+          featuresByLevel: {
+            3: ["Fast Hands", "Second-Story Work"],
+            9: ["Supreme Sneak"],
+            13: ["Use Magic Device"],
+            17: ["Thief's Reflexes"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "sorcerer",
+      name: "Sorcerer",
+      summary: "A Charisma full caster using sorcery points and metamagic.",
+      hitDie: "d6",
+      primaryAbilities: ["Charisma"],
+      savingThrows: ["Constitution", "Charisma"],
+      armorProficiencies: [],
+      weaponProficiencies: ["Daggers", "Darts", "Slings", "Quarterstaffs", "Light crossbows"],
+      toolProficiencies: [],
+      skillChoices: {
+        choose: 2,
+        from: ["Arcana", "Deception", "Insight", "Intimidation", "Persuasion", "Religion"]
+      },
+      subclassLevel: 1,
+      progressionType: "full-caster",
+      spellcastingAbility: "cha",
+      spellPreparation: "known",
+      cantripsKnown: { 1: 4, 4: 5, 10: 6 },
+      spellsKnown: { 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 10: 11, 11: 12, 12: 12, 13: 13, 14: 13, 15: 14, 16: 14, 17: 15, 18: 15, 19: 15, 20: 15 },
+      featuresByLevel: {
+        1: ["Spellcasting", "Sorcerous Origin"],
+        2: ["Font of Magic"],
+        3: ["Metamagic"],
+        6: ["Sorcerous Origin Feature"],
+        10: ["Metamagic Improvement"],
+        14: ["Sorcerous Origin Feature"],
+        17: ["Metamagic Improvement"],
+        18: ["Sorcerous Origin Feature"],
+        20: ["Sorcerous Restoration"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "draconic-bloodline",
+          name: "Draconic Bloodline",
+          summary: "A sorcerous origin with draconic resilience and elemental affinity.",
+          featuresByLevel: {
+            1: ["Dragon Ancestor", "Draconic Resilience"],
+            6: ["Elemental Affinity"],
+            14: ["Dragon Wings"],
+            18: ["Draconic Presence"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "warlock",
+      name: "Warlock",
+      summary: "A Charisma pact caster with invocations, pact magic, and patron features.",
+      hitDie: "d8",
+      primaryAbilities: ["Charisma"],
+      savingThrows: ["Wisdom", "Charisma"],
+      armorProficiencies: ["Light armor"],
+      weaponProficiencies: ["Simple weapons"],
+      toolProficiencies: [],
+      skillChoices: {
+        choose: 2,
+        from: ["Arcana", "Deception", "History", "Intimidation", "Investigation", "Nature", "Religion"]
+      },
+      subclassLevel: 1,
+      progressionType: "pact-magic",
+      spellcastingAbility: "cha",
+      spellPreparation: "known",
+      cantripsKnown: { 1: 2, 4: 3, 10: 4 },
+      spellsKnown: { 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 10: 10, 11: 11, 12: 11, 13: 12, 14: 12, 15: 13, 16: 13, 17: 14, 18: 14, 19: 15, 20: 15 },
+      featuresByLevel: {
+        1: ["Otherworldly Patron", "Pact Magic"],
+        2: ["Eldritch Invocations"],
+        3: ["Pact Boon"],
+        6: ["Otherworldly Patron Feature"],
+        10: ["Otherworldly Patron Feature"],
+        11: ["Mystic Arcanum"],
+        13: ["Mystic Arcanum Improvement"],
+        14: ["Otherworldly Patron Feature"],
+        15: ["Mystic Arcanum Improvement"],
+        17: ["Mystic Arcanum Improvement"],
+        20: ["Eldritch Master"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "fiend-patron",
+          name: "The Fiend",
+          summary: "A patron option focused on temporary durability and destructive magic.",
+          featuresByLevel: {
+            1: ["Expanded Spell List", "Dark One's Blessing"],
+            6: ["Dark One's Own Luck"],
+            10: ["Fiendish Resilience"],
+            14: ["Hurl Through Hell"]
+          }
+        })
+      ]
+    }),
+
+    createSrdClassTemplate({
+      id: "wizard",
+      name: "Wizard",
+      summary: "An Intelligence full caster with spellbook preparation and arcane tradition features.",
+      hitDie: "d6",
+      primaryAbilities: ["Intelligence"],
+      savingThrows: ["Intelligence", "Wisdom"],
+      armorProficiencies: [],
+      weaponProficiencies: ["Daggers", "Darts", "Slings", "Quarterstaffs", "Light crossbows"],
+      toolProficiencies: [],
+      skillChoices: {
+        choose: 2,
+        from: ["Arcana", "History", "Insight", "Investigation", "Medicine", "Religion"]
+      },
+      subclassLevel: 2,
+      progressionType: "full-caster",
+      spellcastingAbility: "int",
+      spellPreparation: "spellbook-prepared",
+      cantripsKnown: { 1: 3, 4: 4, 10: 5 },
+      featuresByLevel: {
+        1: ["Spellcasting", "Arcane Recovery"],
+        2: ["Arcane Tradition"],
+        6: ["Arcane Tradition Feature"],
+        10: ["Arcane Tradition Feature"],
+        14: ["Arcane Tradition Feature"],
+        18: ["Spell Mastery"],
+        20: ["Signature Spells"]
+      },
+      subclasses: [
+        createSrdSubclass({
+          id: "school-of-evocation",
+          name: "School of Evocation",
+          summary: "An arcane tradition focused on shaping and strengthening evocation spells.",
+          featuresByLevel: {
+            2: ["Evocation Savant", "Sculpt Spells"],
+            6: ["Potent Cantrip"],
+            10: ["Empowered Evocation"],
+            14: ["Overchannel"]
+          }
+        })
+      ]
+    })
   ]);
 
   const DEFAULT_SPECIES_TEMPLATES = Object.freeze([
@@ -2217,8 +5987,10 @@ export function createCharacterCreator(options = {}) {
       category: "adventuring-gear",
       quantity: 1,
       weight: null,
+      isContainer: true,
+      capacityWeight: 30,
       source: "template",
-      notes: "Editable generic gear entry."
+      notes: "Container entry with editable capacity."
     },
 
     {
@@ -2227,6 +5999,9 @@ export function createCharacterCreator(options = {}) {
       category: "weapon",
       quantity: 1,
       weight: null,
+      weaponType: "simple melee",
+      attackAbility: "str",
+      damageDice: "1d6",
       source: "template",
       notes: "Choose or create the exact weapon later."
     },
@@ -2237,6 +6012,9 @@ export function createCharacterCreator(options = {}) {
       category: "armor",
       quantity: 1,
       weight: null,
+      armorCategory: "light armor",
+      baseArmorClass: 11,
+      dexterityCap: null,
       source: "template",
       notes: "Choose or create the exact armor later."
     }
@@ -2291,6 +6069,7 @@ export function createCharacterCreator(options = {}) {
     draft: createEmptyCharacter(),
     dirty: false,
     statusMessage: "Character creator foundation ready.",
+    pendingContainerRemovalId: "",
 
     characterCache: [],
     characterRoomCode: null,
@@ -2464,6 +6243,45 @@ export function createCharacterCreator(options = {}) {
           )
         )
       ),
+
+      spellcastingProgression:
+        cleanString(
+          raw.spellcastingProgression ||
+          raw.progressionType,
+          "none"
+        ),
+
+      progressionType:
+        cleanString(
+          raw.progressionType ||
+          raw.spellcastingProgression,
+          "none"
+        ),
+
+      spellcastingAbility:
+        cleanString(
+          raw.spellcastingAbility
+        ),
+
+      spellPreparation:
+        cleanString(
+          raw.spellPreparation,
+          "none"
+        ),
+
+      cantripsKnown:
+        raw.cantripsKnown &&
+        typeof raw.cantripsKnown === "object" &&
+        !Array.isArray(raw.cantripsKnown)
+          ? cloneData(raw.cantripsKnown)
+          : {},
+
+      spellsKnown:
+        raw.spellsKnown &&
+        typeof raw.spellsKnown === "object" &&
+        !Array.isArray(raw.spellsKnown)
+          ? cloneData(raw.spellsKnown)
+          : {},
 
       levels:
         raw.levels &&
@@ -3169,6 +6987,33 @@ export function createCharacterCreator(options = {}) {
         margin: 6px 0 0 0 !important;
       }
 
+      .hg-character-card-actions .hg-character-hidden-quantity-button {
+        display: none !important;
+      }
+
+      .hg-character-quantity-control {
+        display: inline-grid;
+        grid-template-columns: 32px minmax(34px, auto) 32px;
+        align-items: center;
+        gap: 4px;
+        margin: 6px 0 0 0;
+      }
+
+      .hg-character-choice-card .hg-character-quantity-control button {
+        width: 32px !important;
+        min-width: 32px !important;
+        height: 32px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        text-align: center;
+      }
+
+      .hg-character-quantity-control span {
+        min-width: 34px;
+        text-align: center;
+        font-weight: 700;
+      }
+
       .hg-character-current-choice {
         padding: 10px 12px;
         border-radius: 12px;
@@ -3374,8 +7219,11 @@ export function createCharacterCreator(options = {}) {
   function markDraftChanged() {
     creatorState.dirty = true;
     persistDraftToSession();
-    renderActionBar();
-    refreshBuilderChrome();
+
+    if (typeof document !== "undefined") {
+      renderActionBar();
+      refreshBuilderChrome();
+    }
   }
 
   function getDraftStorageKey() {
@@ -3386,6 +7234,10 @@ export function createCharacterCreator(options = {}) {
   }
 
   function persistDraftToSession() {
+    if (typeof sessionStorage === "undefined") {
+      return;
+    }
+
     try {
       sessionStorage.setItem(
         getDraftStorageKey(),
@@ -3686,6 +7538,16 @@ export function createCharacterCreator(options = {}) {
     applyCompatibilityAliases(
       creatorState.draft
     );
+
+    if (
+      creatorState.draft
+        .magic
+        .spellcastingAbility === abilityId
+    ) {
+      calculateSection16SpellcastingValues({
+        markDraft: false
+      });
+    }
 
     markDraftChanged();
     refreshSection13AbilitySummary();
@@ -6768,6 +10630,12 @@ export function createCharacterCreator(options = {}) {
           )
         );
 
+    const levelData =
+      getSection12LevelData(
+        classTemplate,
+        totalLevel
+      ) || {};
+
     creatorState.draft
       .combat
       .hitDice = [
@@ -6785,6 +10653,73 @@ export function createCharacterCreator(options = {}) {
           count: totalLevel
         }
       ];
+
+    const progressionType =
+      classTemplate.spellcastingProgression ||
+      classTemplate.progressionType ||
+      "none";
+
+    creatorState.draft
+      .magic
+      .spellcastingProgression =
+        progressionType;
+
+    creatorState.draft
+      .magic
+      .spellPreparation =
+        classTemplate.spellPreparation ||
+        "none";
+
+    if (classTemplate.spellcastingAbility) {
+      creatorState.draft
+        .magic
+        .spellcastingAbility =
+          classTemplate.spellcastingAbility;
+    } else if (progressionType === "none") {
+      creatorState.draft
+        .magic
+        .spellcastingAbility = "";
+    }
+
+    creatorState.draft
+      .magic
+      .slots =
+        cloneData(levelData.spellSlots || {});
+
+    creatorState.draft
+      .magic
+      .pactMagic =
+        cloneData(
+          levelData.pactMagic || {
+            slots: 0,
+            slotLevel: 0
+          }
+        );
+
+    calculateSection16SpellcastingValues({
+      markDraft: false
+    });
+
+    const suggestedHp =
+      calculateSection13SuggestedHp();
+
+    if (
+      suggestedHp !== null &&
+      safeNumber(
+        creatorState.draft
+          .combat
+          .maxHp,
+        1
+      ) <= 1
+    ) {
+      creatorState.draft
+        .combat
+        .maxHp = suggestedHp;
+
+      creatorState.draft
+        .combat
+        .currentHp = suggestedHp;
+    }
 
     refreshSelectedClassFeatures();
 
@@ -7998,6 +11933,16 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft
     );
 
+    if (
+      creatorState.draft
+        .magic
+        .spellcastingAbility
+    ) {
+      calculateSection16SpellcastingValues({
+        markDraft: false
+      });
+    }
+
     markDraftChanged();
     refreshSection13AbilitySummary();
   }
@@ -8330,6 +12275,13 @@ export function createCharacterCreator(options = {}) {
   }
 
   function calculateSection13SuggestedHp() {
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    if (!selectedClass) {
+      return null;
+    }
+
     const level = clampLevel(
       creatorState.draft
         .classProgression
@@ -8346,33 +12298,86 @@ export function createCharacterCreator(options = {}) {
         )
       );
 
-    const averagePerLevel =
-      Math.floor(hitDie / 2) + 1;
-
-    return Math.max(
-      1,
-      hitDie +
-      conModifier +
-      Math.max(0, level - 1) *
-      Math.max(
-        1,
-        averagePerLevel +
+    return calculateRuleFixedAverageHp({
+      hitDie,
+      level,
+      constitutionModifier:
         conModifier
-      )
-    );
+    });
+  }
+
+  function formatSection13HpRolls(
+    values
+  ) {
+    return Array.isArray(values)
+      ? values
+          .map((value) => {
+            return safeNumber(value, 0);
+          })
+          .filter((value) => {
+            return value > 0;
+          })
+          .join(", ")
+      : "";
+  }
+
+  function parseSection13HpRolls(
+    value
+  ) {
+    return String(value || "")
+      .split(/[\n,]+/)
+      .map((item) => {
+        return Math.round(
+          safeNumber(item.trim(), 0)
+        );
+      })
+      .filter((item) => {
+        return item > 0;
+      });
   }
 
   function applySection13SuggestedHp() {
-    const suggestedHp =
-      calculateSection13SuggestedHp();
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    if (!selectedClass) {
+      alert(
+        "Choose a class before calculating HP."
+      );
+
+      return null;
+    }
+
+    const hpSummary =
+      calculateCharacterHp(
+        creatorState.draft
+      );
 
     creatorState.draft
       .combat
-      .maxHp = suggestedHp;
+      .maxHp = hpSummary.maximumHp;
 
     creatorState.draft
       .combat
-      .currentHp = suggestedHp;
+      .currentHp = hpSummary.maximumHp;
+
+    creatorState.draft
+      .combat
+      .hpCalculation =
+        normalizeHpCalculation(
+          {
+            ...creatorState.draft
+              .combat
+              .hpCalculation,
+            lastCalculatedConModifier:
+              calculateAbilityModifier(
+                getSection13AbilityScore(
+                  "con"
+                )
+              )
+          },
+          suggestedHp
+        );
 
     applyCompatibilityAliases(
       creatorState.draft
@@ -8380,7 +12385,7 @@ export function createCharacterCreator(options = {}) {
 
     markDraftChanged();
 
-    return suggestedHp;
+    return hpSummary.maximumHp;
   }
 
   function refreshSection13LevelProgression() {
@@ -8439,15 +12444,9 @@ export function createCharacterCreator(options = {}) {
 
   function renderSection13HitDice() {
     const hitDice =
-      Array.isArray(
+      calculateCharacterHitDice(
         creatorState.draft
-          .combat
-          .hitDice
-      )
-        ? creatorState.draft
-            .combat
-            .hitDice
-        : [];
+      );
 
     if (!hitDice.length) {
       return `
@@ -8508,6 +12507,66 @@ export function createCharacterCreator(options = {}) {
     const suggestedHp =
       calculateSection13SuggestedHp();
 
+    const suggestedHpLabel =
+      suggestedHp === null
+        ? "Choose a class to calculate"
+        : suggestedHp;
+
+    const hpSummary =
+      calculateCharacterHp(draft);
+
+    const hpCalculation =
+      normalizeHpCalculation(
+        draft.combat.hpCalculation,
+        draft.combat.maxHp
+      );
+
+    const armorClass =
+      calculateArmorClassOptions(draft)
+        .selected;
+
+    const armorClassOptions =
+      calculateArmorClassOptions(draft)
+        .options;
+
+    const initiative =
+      calculateCharacterInitiative(draft);
+
+    const hpModeChoices = [
+      {
+        value: "fixed",
+        label: "Fixed Average"
+      },
+      {
+        value: "rolled",
+        label: "Rolled"
+      },
+      {
+        value: "manual",
+        label: "Manual Override"
+      }
+    ];
+
+    const armorClassModeChoices = [
+      {
+        value: "auto",
+        label: "Automatic"
+      },
+      {
+        value: "manual",
+        label: "Manual Override"
+      }
+    ];
+
+    const armorClassMethodChoices =
+      armorClassOptions.map((option) => {
+        return {
+          value: option.id,
+          label:
+            `${option.label} (${option.total})`
+        };
+      });
+
     return `
       <div class="hg-character-current-choice">
         <b>Current progression:</b>
@@ -8533,6 +12592,34 @@ export function createCharacterCreator(options = {}) {
             )
           )
         )}
+
+        <br>
+
+        <b>Calculated HP:</b>
+
+        ${hpSummary.maximumHp}
+
+        <span class="small">
+          (${escapeHtml(hpSummary.mode)}, ${escapeHtml(hpSummary.hitDie)})
+        </span>
+
+        <br>
+
+        <b>Calculated AC:</b>
+
+        ${armorClass.total}
+
+        <span class="small">
+          (${escapeHtml(armorClass.label)})
+        </span>
+
+        <br>
+
+        <b>Calculated Initiative:</b>
+
+        ${formatSection17Modifier(
+          initiative.total
+        )}
       </div>
 
       <div class="hg-character-field-grid three">
@@ -8545,6 +12632,65 @@ export function createCharacterCreator(options = {}) {
             valueType: "integer",
             extra:
               'min="1" max="20" step="1" data-level-input="true"'
+          }
+        )}
+
+        ${wizardSelect(
+          "HP Calculation",
+          "ccHpCalculationMode",
+          hpCalculation.mode,
+          hpModeChoices,
+          {
+            path:
+              "combat.hpCalculation.mode"
+          }
+        )}
+
+        ${wizardField(
+          "Level 1 HP Override",
+          "ccHpLevelOneValue",
+          hpCalculation.levelOneValue === null
+            ? ""
+            : hpCalculation.levelOneValue,
+          {
+            type: "number",
+            path:
+              "combat.hpCalculation.levelOneValue",
+            valueType: "number",
+            extra:
+              'min="1" step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Rolled HP Values",
+          "ccHpLaterLevelValues",
+          formatSection13HpRolls(
+            hpCalculation.laterLevelValues
+          ),
+          {
+            type: "textarea",
+            path:
+              "combat.hpCalculation.laterLevelValues",
+            placeholder:
+              "One roll per level after 1, comma-separated",
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "Manual HP Override",
+          "ccHpManualOverride",
+          hpCalculation.manualOverride === null
+            ? ""
+            : hpCalculation.manualOverride,
+          {
+            type: "number",
+            path:
+              "combat.hpCalculation.manualOverride",
+            valueType: "number",
+            extra:
+              'min="1" step="1"'
           }
         )}
 
@@ -8587,13 +12733,41 @@ export function createCharacterCreator(options = {}) {
           }
         )}
 
+        ${wizardSelect(
+          "Armor Class Mode",
+          "ccArmorClassMode",
+          draft.combat.armorClassMode,
+          armorClassModeChoices,
+          {
+            path:
+              "combat.armorClassMode"
+          }
+        )}
+
+        ${
+          armorClassMethodChoices.length
+            ? wizardSelect(
+                "AC Calculation",
+                "ccSelectedArmorClassMethod",
+                draft.combat.selectedArmorClassMethod ||
+                armorClass.id,
+                armorClassMethodChoices,
+                {
+                  path:
+                    "combat.selectedArmorClassMethod"
+                }
+              )
+            : ""
+        }
+
         ${wizardField(
-          "Armor Class",
-          "ccArmorClass",
+          "Manual AC",
+          "ccManualArmorClass",
+          draft.combat.manualArmorClass ??
           draft.combat.armorClass,
           {
             type: "number",
-            path: "combat.armorClass",
+            path: "combat.manualArmorClass",
             valueType: "number",
             extra:
               'min="0" step="1"'
@@ -8601,12 +12775,26 @@ export function createCharacterCreator(options = {}) {
         )}
 
         ${wizardField(
-          "Initiative Bonus",
-          "ccInitiativeBonus",
-          draft.combat.initiative,
+          "AC Bonus",
+          "ccArmorClassBonus",
+          draft.combat.armorClassBonus,
           {
             type: "number",
-            path: "combat.initiative",
+            path:
+              "combat.armorClassBonus",
+            valueType: "number",
+            extra:
+              'step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Initiative Bonus",
+          "ccInitiativeBonus",
+          draft.combat.initiativeBonus,
+          {
+            type: "number",
+            path: "combat.initiativeBonus",
             valueType: "number",
             extra:
               'step="1"'
@@ -8625,8 +12813,9 @@ export function createCharacterCreator(options = {}) {
         <button
           type="button"
           data-cc-action="calculate-character-hp"
+          ${suggestedHp === null ? "disabled" : ""}
         >
-          Use Suggested HP (${suggestedHp})
+          Apply Calculated HP (${hpSummary.maximumHp || suggestedHpLabel})
         </button>
       </div>
 
@@ -9155,6 +13344,16 @@ export function createCharacterCreator(options = {}) {
     const hp =
       applySection13SuggestedHp();
 
+    if (hp === null) {
+      setStatus(
+        "Choose a class before calculating suggested hit points."
+      );
+
+      renderCreatorView();
+
+      return;
+    }
+
     setStatus(
       `Suggested hit points applied: ${hp}.`
     );
@@ -9270,6 +13469,71 @@ export function createCharacterCreator(options = {}) {
         "Standard array assignment updated."
       );
 
+      renderCreatorView();
+
+      return true;
+    }
+
+    if (
+      target?.dataset
+        ?.draftPath ===
+      "combat.hpCalculation.laterLevelValues"
+    ) {
+      setDraftValue(
+        "combat.hpCalculation.laterLevelValues",
+        parseSection13HpRolls(
+          target.value
+        )
+      );
+
+      markDraftChanged();
+      renderCreatorView();
+
+      return true;
+    }
+
+    if (
+      [
+        "combat.hpCalculation.mode",
+        "combat.hpCalculation.levelOneValue",
+        "combat.hpCalculation.manualOverride",
+        "combat.armorClassMode",
+        "combat.selectedArmorClassMethod",
+        "combat.manualArmorClass",
+        "combat.armorClassBonus",
+        "combat.initiativeBonus"
+      ].includes(
+        target?.dataset?.draftPath
+      )
+    ) {
+      const path =
+        target.dataset.draftPath;
+
+      const blankMeansNull = [
+        "combat.hpCalculation.levelOneValue",
+        "combat.hpCalculation.manualOverride",
+        "combat.manualArmorClass"
+      ].includes(path);
+
+      if (
+        blankMeansNull &&
+        String(target.value || "").trim() === ""
+      ) {
+        setDraftValue(path, null);
+      } else {
+        setSimpleDraftField(
+          path,
+          target.value,
+          target.dataset.valueType ||
+          "string"
+        );
+      }
+
+      applyCompatibilityAliases(
+        creatorState.draft
+      );
+
+      markDraftChanged();
       renderCreatorView();
 
       return true;
@@ -11564,6 +15828,12 @@ export function createCharacterCreator(options = {}) {
         "Unnamed Item"
       );
 
+    const category =
+      safeDisplayString(
+        raw.category,
+        "miscellaneous"
+      );
+
     const quantity = Math.max(
       1,
       Math.round(
@@ -11587,6 +15857,75 @@ export function createCharacterCreator(options = {}) {
             )
           );
 
+    const isMagical =
+      raw.isMagical === true ||
+      safeDisplayString(raw.category)
+        .toLowerCase() === "magic-item";
+
+    const requiresAttunement =
+      isMagical &&
+      (
+        raw.requiresAttunement === true ||
+        raw.attuned === true
+      );
+
+    const isContainer =
+      raw.isContainer === true;
+
+    const capacityWeight =
+      raw.capacityWeight === null ||
+      raw.capacityWeight === undefined ||
+      raw.capacityWeight === ""
+        ? null
+        : Math.max(
+            0,
+            safeNumber(
+              raw.capacityWeight,
+              0
+            )
+          );
+
+    const armorCategory =
+      cleanString(
+        raw.armorCategory ||
+        (
+          raw.isShield === true ||
+          category.toLowerCase() === "shield"
+            ? "shield"
+            : category.toLowerCase() === "armor"
+              ? "light armor"
+              : ""
+        )
+      );
+
+    const baseArmorClass =
+      raw.baseArmorClass === null ||
+      raw.baseArmorClass === undefined ||
+      raw.baseArmorClass === ""
+        ? null
+        : Math.max(
+            0,
+            safeNumber(
+              raw.baseArmorClass,
+              10
+            )
+          );
+
+    const dexterityCap =
+      raw.dexterityCap === null ||
+      raw.dexterityCap === undefined ||
+      raw.dexterityCap === ""
+        ? null
+        : safeNumber(
+            raw.dexterityCap,
+            2
+          );
+
+    const isShield =
+      raw.isShield === true ||
+      category.toLowerCase() === "shield" ||
+      armorCategory.toLowerCase() === "shield";
+
     return {
       ...cloneData(raw),
 
@@ -11598,11 +15937,7 @@ export function createCharacterCreator(options = {}) {
 
       name,
 
-      category:
-        safeDisplayString(
-          raw.category,
-          "miscellaneous"
-        ),
+      category,
 
       quantity,
 
@@ -11622,8 +15957,85 @@ export function createCharacterCreator(options = {}) {
       equipped:
         raw.equipped === true,
 
+      isMagical,
+
+      requiresAttunement,
+
       attuned:
-        raw.attuned === true
+        requiresAttunement &&
+        raw.attuned === true,
+
+      magicalBonus:
+        safeNumber(
+          raw.magicalBonus,
+          0
+        ),
+
+      armorCategory,
+
+      baseArmorClass,
+
+      dexterityCap,
+
+      isShield,
+
+      magicalArmorClassBonus:
+        safeNumber(
+          raw.magicalArmorClassBonus ??
+          raw.magicalBonus,
+          0
+        ),
+
+      weaponType:
+        cleanString(raw.weaponType),
+
+      attackAbility:
+        cleanString(raw.attackAbility),
+
+      finesse:
+        raw.finesse === true,
+
+      ranged:
+        raw.ranged === true ||
+        cleanString(raw.weaponType)
+          .toLowerCase()
+          .includes("ranged"),
+
+      thrown:
+        raw.thrown === true,
+
+      proficient:
+        raw.proficient === true,
+
+      damageDice:
+        cleanString(raw.damageDice),
+
+      versatileDamageDice:
+        cleanString(raw.versatileDamageDice),
+
+      magicalAttackBonus:
+        safeNumber(
+          raw.magicalAttackBonus ??
+          raw.magicalBonus,
+          0
+        ),
+
+      magicalDamageBonus:
+        safeNumber(
+          raw.magicalDamageBonus ??
+          raw.magicalBonus,
+          0
+        ),
+
+      containerId:
+        cleanString(raw.containerId),
+
+      isContainer,
+
+      capacityWeight,
+
+      ownerCharacterId:
+        cleanString(raw.ownerCharacterId)
     };
   }
 
@@ -11639,6 +16051,19 @@ export function createCharacterCreator(options = {}) {
         .equipment
         .items = [];
     }
+
+    creatorState.draft
+      .equipment
+      .items =
+        creatorState.draft
+          .equipment
+          .items
+          .map((item) => {
+            return normalizeSection15Item(
+              item,
+              item?.source || "custom"
+            );
+          });
 
     return creatorState.draft
       .equipment
@@ -11792,6 +16217,69 @@ export function createCharacterCreator(options = {}) {
             )
           );
 
+    const capacityText =
+      $("ccNewItemCapacityWeight")
+        ?.value;
+
+    const capacityWeight =
+      capacityText === "" ||
+      capacityText === null ||
+      capacityText === undefined
+        ? null
+        : Math.max(
+            0,
+            safeNumber(
+              capacityText,
+              0
+            )
+          );
+
+    const baseArmorClassText =
+      $("ccNewItemBaseArmorClass")
+        ?.value;
+
+    const baseArmorClass =
+      baseArmorClassText === "" ||
+      baseArmorClassText === null ||
+      baseArmorClassText === undefined
+        ? null
+        : Math.max(
+            0,
+            safeNumber(
+              baseArmorClassText,
+              10
+            )
+          );
+
+    const dexterityCapText =
+      $("ccNewItemDexterityCap")
+        ?.value;
+
+    const dexterityCap =
+      dexterityCapText === "" ||
+      dexterityCapText === null ||
+      dexterityCapText === undefined
+        ? null
+        : safeNumber(
+            dexterityCapText,
+            2
+          );
+
+    const category =
+      $("ccNewItemCategory")
+        ?.value ||
+      "miscellaneous";
+
+    const isMagical =
+      $("ccNewItemMagical")
+        ?.checked === true ||
+      category === "magic-item";
+
+    const requiresAttunement =
+      isMagical &&
+      $("ccNewItemRequiresAttunement")
+        ?.checked === true;
+
     const item =
       normalizeSection15Item(
         {
@@ -11802,13 +16290,77 @@ export function createCharacterCreator(options = {}) {
 
           name,
 
-          category:
-            $("ccNewItemCategory")
-              ?.value ||
-            "miscellaneous",
+          category,
 
           quantity,
           weight,
+          capacityWeight,
+
+          armorCategory:
+            $("ccNewItemArmorCategory")
+              ?.value || "",
+
+          baseArmorClass,
+
+          dexterityCap,
+
+          isShield:
+            $("ccNewItemShield")
+              ?.checked === true ||
+            category === "shield",
+
+          magicalArmorClassBonus:
+            safeNumber(
+              $("ccNewItemMagicalArmorBonus")
+                ?.value,
+              0
+            ),
+
+          weaponType:
+            $("ccNewItemWeaponType")
+              ?.value || "",
+
+          attackAbility:
+            $("ccNewItemAttackAbility")
+              ?.value || "",
+
+          finesse:
+            $("ccNewItemFinesse")
+              ?.checked === true,
+
+          ranged:
+            $("ccNewItemRanged")
+              ?.checked === true,
+
+          thrown:
+            $("ccNewItemThrown")
+              ?.checked === true,
+
+          proficient:
+            $("ccNewItemProficient")
+              ?.checked === true,
+
+          damageDice:
+            $("ccNewItemDamageDice")
+              ?.value || "",
+
+          versatileDamageDice:
+            $("ccNewItemVersatileDamageDice")
+              ?.value || "",
+
+          magicalAttackBonus:
+            safeNumber(
+              $("ccNewItemMagicalAttackBonus")
+                ?.value,
+              0
+            ),
+
+          magicalDamageBonus:
+            safeNumber(
+              $("ccNewItemMagicalDamageBonus")
+                ?.value,
+              0
+            ),
 
           source: "custom",
 
@@ -11822,8 +16374,18 @@ export function createCharacterCreator(options = {}) {
             $("ccNewItemEquipped")
               ?.checked === true,
 
+          isMagical,
+
+          requiresAttunement,
+
           attuned:
+            requiresAttunement &&
             $("ccNewItemAttuned")
+              ?.checked === true
+          ,
+
+          isContainer:
+            $("ccNewItemContainer")
               ?.checked === true
         },
 
@@ -11838,7 +16400,10 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
-  function removeSection15Item(index) {
+  function removeSection15Item(
+    index,
+    removalMode = ""
+  ) {
     const inventory =
       getSection15Inventory();
 
@@ -11849,10 +16414,271 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
-    inventory.splice(
-      index,
-      1
+    const item =
+      inventory[index];
+
+    if (item?.isContainer === true) {
+      const contents =
+        getContainerContents(
+          inventory,
+          item.id
+        );
+
+      if (contents.length) {
+        const cleanChoice =
+          cleanString(
+            removalMode
+          ).toLowerCase();
+
+        if (!cleanChoice) {
+          creatorState.pendingContainerRemovalId =
+            item.id;
+
+          return "pending";
+        }
+
+        if (cleanChoice === "cancel") {
+          creatorState.pendingContainerRemovalId =
+            "";
+
+          return false;
+        }
+
+        if (cleanChoice === "delete") {
+          creatorState.draft
+            .equipment
+            .items =
+              removeContainerAndContents(
+                inventory,
+                item.id
+              );
+
+          creatorState.pendingContainerRemovalId =
+            "";
+
+          markDraftChanged();
+
+          return true;
+        }
+
+        if (cleanChoice !== "inventory") {
+          creatorState.pendingContainerRemovalId =
+            item.id;
+
+          return "pending";
+        }
+      }
+
+      creatorState.draft
+        .equipment
+        .items =
+          removeContainerPreserveContents(
+            inventory,
+            item.id
+          );
+
+      creatorState.pendingContainerRemovalId =
+        "";
+    } else {
+      inventory.splice(
+        index,
+        1
+      );
+    }
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function parseSection15ItemEditValue(
+    field,
+    rawValue,
+    valueType,
+    checked = false
+  ) {
+    if (valueType === "boolean") {
+      return checked === true;
+    }
+
+    if (valueType === "integer") {
+      return Math.max(
+        1,
+        Math.round(
+          safeNumber(
+            rawValue,
+            1
+          )
+        )
+      );
+    }
+
+    if (valueType === "number") {
+      const nullableFields =
+        new Set([
+          "weight",
+          "baseArmorClass",
+          "dexterityCap",
+          "capacityWeight"
+        ]);
+
+      if (
+        nullableFields.has(field) &&
+        cleanString(rawValue) === ""
+      ) {
+        return null;
+      }
+
+      return safeNumber(
+        rawValue,
+        0
+      );
+    }
+
+    return safeDisplayString(
+      rawValue
     );
+  }
+
+  function updateSection15InventoryItem(
+    index,
+    field,
+    rawValue,
+    valueType = "string",
+    checked = false
+  ) {
+    const inventory =
+      getSection15Inventory();
+
+    const item =
+      inventory[index];
+
+    if (!item) {
+      return false;
+    }
+
+    const editableFields =
+      new Set([
+        "name",
+        "category",
+        "quantity",
+        "weight",
+        "notes",
+        "equipped",
+        "isMagical",
+        "requiresAttunement",
+        "attuned",
+        "magicalBonus",
+        "armorCategory",
+        "baseArmorClass",
+        "dexterityCap",
+        "isShield",
+        "magicalArmorClassBonus",
+        "weaponType",
+        "attackAbility",
+        "finesse",
+        "ranged",
+        "thrown",
+        "proficient",
+        "damageDice",
+        "versatileDamageDice",
+        "magicalAttackBonus",
+        "magicalDamageBonus",
+        "isContainer",
+        "capacityWeight"
+      ]);
+
+    if (!editableFields.has(field)) {
+      return false;
+    }
+
+    const nextValue =
+      parseSection15ItemEditValue(
+        field,
+        rawValue,
+        valueType,
+        checked
+      );
+
+    if (
+      field === "attuned" &&
+      nextValue === true &&
+      item.attuned !== true &&
+      getSection15AttunedItemCount() >= 3
+    ) {
+      alert(
+        "A character can normally attune to no more than three items."
+      );
+
+      return false;
+    }
+
+    if (
+      field === "isContainer" &&
+      item.isContainer === true &&
+      nextValue !== true
+    ) {
+      inventory.forEach((candidate) => {
+        if (
+          cleanString(candidate.containerId) ===
+          cleanString(item.id)
+        ) {
+          candidate.containerId = "";
+        }
+      });
+
+      creatorState.pendingContainerRemovalId =
+        "";
+    }
+
+    item[field] =
+      nextValue;
+
+    if (
+      field === "attuned" &&
+      nextValue === true
+    ) {
+      item.isMagical = true;
+      item.requiresAttunement = true;
+    }
+
+    if (
+      field === "requiresAttunement" &&
+      nextValue === true
+    ) {
+      item.isMagical = true;
+    }
+
+    if (
+      field === "isMagical" &&
+      nextValue !== true
+    ) {
+      item.requiresAttunement = false;
+      item.attuned = false;
+    }
+
+    if (
+      field === "requiresAttunement" &&
+      nextValue !== true
+    ) {
+      item.attuned = false;
+    }
+
+    if (
+      field === "isShield" &&
+      nextValue === true
+    ) {
+      item.category =
+        item.category || "shield";
+
+      item.armorCategory = "shield";
+    }
+
+    inventory[index] =
+      normalizeSection15Item(
+        item,
+        item.source || "custom"
+      );
 
     markDraftChanged();
 
@@ -11900,6 +16726,117 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
+  function moveSection15ItemToContainer(
+    index,
+    targetContainerId,
+    quantity = null
+  ) {
+    const inventory =
+      getSection15Inventory();
+
+    const item =
+      inventory[index];
+
+    if (!item) {
+      return false;
+    }
+
+    const cleanTargetId =
+      cleanString(targetContainerId);
+
+    const currentQuantity =
+      Math.max(
+        1,
+        Math.round(
+          safeNumber(item.quantity, 1)
+        )
+      );
+
+    const moveQuantity =
+      quantity === null ||
+      quantity === undefined ||
+      quantity === ""
+        ? currentQuantity
+        : Math.max(
+            1,
+            Math.min(
+              currentQuantity,
+              Math.round(
+                safeNumber(
+                  quantity,
+                  currentQuantity
+                )
+              )
+            )
+          );
+
+    if (cleanTargetId) {
+      const targetContainer =
+        inventory.find((candidate) => {
+          return (
+            candidate.id === cleanTargetId &&
+            candidate.isContainer === true
+          );
+        });
+
+      if (!targetContainer) {
+        return false;
+      }
+
+      if (
+        wouldCreateContainerCycle(
+          inventory,
+          item.id,
+          cleanTargetId
+        )
+      ) {
+        alert(
+          "That container move would create an invalid loop."
+        );
+
+        return false;
+      }
+    }
+
+    const nextInventory =
+      splitInventoryStack(
+        inventory,
+        item.id,
+        moveQuantity,
+        cleanTargetId
+      );
+
+    const targetSummary =
+      cleanTargetId
+        ? getContainerSummaries(
+            nextInventory
+          ).find((container) => {
+            return (
+              container.id ===
+              cleanTargetId
+            );
+          })
+        : null;
+
+    if (
+      targetSummary?.overCapacity
+    ) {
+      alert(
+        "That move would exceed the container's known capacity."
+      );
+
+      return false;
+    }
+
+    creatorState.draft
+      .equipment
+      .items = nextInventory;
+
+    markDraftChanged();
+
+    return true;
+  }
+
   function toggleSection15ItemState(
     index,
     property
@@ -11918,6 +16855,35 @@ export function createCharacterCreator(options = {}) {
       ].includes(property)
     ) {
       return false;
+    }
+
+    if (property === "attuned") {
+      if (
+        !item.isMagical ||
+        !item.requiresAttunement
+      ) {
+        item.attuned = false;
+        markDraftChanged();
+        return false;
+      }
+
+      if (item.attuned === true) {
+        item.attuned = false;
+        markDraftChanged();
+        return true;
+      }
+
+      if (getSection15AttunedItemCount() >= 3) {
+        alert(
+          "A character can normally attune to no more than three items."
+        );
+
+        return false;
+      }
+
+      item.attuned = true;
+      markDraftChanged();
+      return true;
     }
 
     item[property] =
@@ -11977,6 +16943,30 @@ export function createCharacterCreator(options = {}) {
           )
         );
       }, 0);
+  }
+
+  function getSection15AttunedItemCount() {
+    return getSection15Inventory()
+      .filter((item) => {
+        return (
+          item.isMagical === true &&
+          item.requiresAttunement === true &&
+          item.attuned === true
+        );
+      })
+      .length;
+  }
+
+  function getSection15UnknownWeightCount() {
+    return getSection15Inventory()
+      .filter((item) => {
+        return (
+          item.weight === null ||
+          item.weight === undefined ||
+          item.weight === ""
+        );
+      })
+      .length;
   }
 
   function renderSection15Catalog() {
@@ -12055,6 +17045,360 @@ export function createCharacterCreator(options = {}) {
       .join("");
   }
 
+  function renderSection15ItemEditInput(
+    item,
+    index,
+    label,
+    field,
+    options = {}
+  ) {
+    const id =
+      `ccItemEdit-${index}-${field}`;
+
+    const value =
+      item[field] === null ||
+      item[field] === undefined
+        ? ""
+        : item[field];
+
+    return `
+      <div
+        class="hg-character-field${
+          options.wide === true
+            ? " hg-character-wide-field"
+            : ""
+        }"
+      >
+        <label for="${id}">
+          ${escapeHtml(label)}
+        </label>
+
+        <input
+          id="${id}"
+          type="${escapeHtml(
+            options.type || "text"
+          )}"
+          value="${escapeHtml(value)}"
+          data-cc-action-change="update-inventory-item"
+          data-index="${index}"
+          data-item-field="${escapeHtml(field)}"
+          data-value-type="${escapeHtml(
+            options.valueType || "string"
+          )}"
+          ${options.extra || ""}
+        >
+      </div>
+    `;
+  }
+
+  function renderSection15ItemEditTextarea(
+    item,
+    index,
+    label,
+    field
+  ) {
+    const id =
+      `ccItemEdit-${index}-${field}`;
+
+    return `
+      <div class="hg-character-field hg-character-wide-field">
+        <label for="${id}">
+          ${escapeHtml(label)}
+        </label>
+
+        <textarea
+          id="${id}"
+          data-cc-action-change="update-inventory-item"
+          data-index="${index}"
+          data-item-field="${escapeHtml(field)}"
+          data-value-type="string"
+        >${escapeHtml(item[field] || "")}</textarea>
+      </div>
+    `;
+  }
+
+  function renderSection15ItemEditCheckbox(
+    item,
+    index,
+    label,
+    field
+  ) {
+    const id =
+      `ccItemEdit-${index}-${field}`;
+
+    return `
+      <label class="hg-character-field">
+        <input
+          id="${id}"
+          type="checkbox"
+          data-cc-action-change="update-inventory-item"
+          data-index="${index}"
+          data-item-field="${escapeHtml(field)}"
+          data-value-type="boolean"
+          ${
+            item[field] === true
+              ? "checked"
+              : ""
+          }
+        >
+
+        ${escapeHtml(label)}
+      </label>
+    `;
+  }
+
+  function renderSection15ItemEditControls(
+    item,
+    index
+  ) {
+    return `
+      <details>
+        <summary>Edit Item Details</summary>
+
+        <div class="hg-character-field-grid three">
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Name",
+            "name"
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Category",
+            "category"
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Quantity",
+            "quantity",
+            {
+              type: "number",
+              valueType: "integer",
+              extra: 'min="1" step="1"'
+            }
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Weight",
+            "weight",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'min="0" step="0.01"'
+            }
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Magic Bonus",
+            "magicalBonus",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'step="1"'
+            }
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Container Capacity",
+            "capacityWeight",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'min="0" step="0.01"'
+            }
+          )}
+
+          ${renderSection15ItemEditTextarea(
+            item,
+            index,
+            "Notes",
+            "notes"
+          )}
+        </div>
+
+        <h4>Armor</h4>
+
+        <div class="hg-character-field-grid three">
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Armor Type",
+            "armorCategory"
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Base AC",
+            "baseArmorClass",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'min="0" step="1"'
+            }
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Dex Cap",
+            "dexterityCap",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'step="1"'
+            }
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "AC Magic Bonus",
+            "magicalArmorClassBonus",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'step="1"'
+            }
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Shield",
+            "isShield"
+          )}
+        </div>
+
+        <h4>Weapon</h4>
+
+        <div class="hg-character-field-grid three">
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Weapon Type",
+            "weaponType"
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Attack Ability",
+            "attackAbility"
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Damage Dice",
+            "damageDice"
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Versatile Dice",
+            "versatileDamageDice"
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Attack Magic Bonus",
+            "magicalAttackBonus",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'step="1"'
+            }
+          )}
+
+          ${renderSection15ItemEditInput(
+            item,
+            index,
+            "Damage Magic Bonus",
+            "magicalDamageBonus",
+            {
+              type: "number",
+              valueType: "number",
+              extra: 'step="1"'
+            }
+          )}
+        </div>
+
+        <h4>Flags</h4>
+
+        <div class="hg-character-field-grid three">
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Magical",
+            "isMagical"
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Requires Attunement",
+            "requiresAttunement"
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Attuned",
+            "attuned"
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Container",
+            "isContainer"
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Finesse",
+            "finesse"
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Ranged",
+            "ranged"
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Thrown",
+            "thrown"
+          )}
+
+          ${renderSection15ItemEditCheckbox(
+            item,
+            index,
+            "Proficient",
+            "proficient"
+          )}
+        </div>
+      </details>
+    `;
+  }
+
   function renderSection15Inventory() {
     const inventory =
       getSection15Inventory();
@@ -12095,6 +17439,53 @@ export function createCharacterCreator(options = {}) {
                 ) *
                 quantity
               );
+
+        const weaponAttack =
+          item.equipped === true &&
+          (
+            item.category === "weapon" ||
+            item.weaponType ||
+            item.damageDice
+          )
+            ? calculateWeaponAttack(
+                creatorState.draft,
+                item
+              )
+            : null;
+
+        const containerOptions = [
+          {
+            id: "",
+            name: "Not in a container"
+          },
+
+          ...inventory
+            .filter((candidate, candidateIndex) => {
+              return (
+                candidateIndex !== index &&
+                candidate.isContainer === true &&
+                !wouldCreateContainerCycle(
+                  inventory,
+                  item.id,
+                  candidate.id
+                )
+              );
+            })
+            .map((candidate) => {
+              return {
+                id: candidate.id,
+                name: candidate.name ||
+                  "Container"
+              };
+            })
+        ];
+
+        const pendingRemoval =
+          cleanString(
+            creatorState
+              .pendingContainerRemovalId
+          ) ===
+          cleanString(item.id);
 
         return `
           <article
@@ -12187,9 +17578,251 @@ export function createCharacterCreator(options = {}) {
                 : ""
             }
 
+            ${
+              item.isMagical ||
+              item.requiresAttunement ||
+              item.isContainer ||
+              item.magicalBonus
+                ? `
+                  <p class="small">
+                    ${
+                      item.isMagical
+                        ? "Magical"
+                        : "Mundane"
+                    }${
+                      item.requiresAttunement
+                        ? " - requires attunement"
+                        : ""
+                    }${
+                      item.magicalBonus
+                        ? ` - bonus +${safeNumber(
+                            item.magicalBonus,
+                            0
+                          )}`
+                        : ""
+                    }${
+                      item.isContainer
+                        ? ` - capacity ${
+                            item.capacityWeight === null
+                              ? "not set"
+                              : `${safeNumber(
+                                  item.capacityWeight,
+                                  0
+                                )} lb.`
+                          }`
+                        : ""
+                    }
+                  </p>
+                `
+                : ""
+            }
+
+            ${
+              item.baseArmorClass ||
+              item.isShield ||
+              item.armorCategory
+                ? `
+                  <p class="small">
+                    <b>Armor:</b>
+                    ${
+                      item.isShield
+                        ? "Shield"
+                        : escapeHtml(
+                            item.armorCategory ||
+                            "Armor"
+                          )
+                    }${
+                      item.baseArmorClass
+                        ? ` - base AC ${safeNumber(
+                            item.baseArmorClass,
+                            10
+                          )}`
+                        : ""
+                    }${
+                      item.magicalArmorClassBonus
+                        ? ` - AC bonus ${formatSignedNumber(
+                            item.magicalArmorClassBonus
+                          )}`
+                        : ""
+                    }
+                  </p>
+                `
+                : ""
+            }
+
+            ${
+              weaponAttack
+                ? `
+                  <p class="small">
+                    <b>Attack:</b>
+                    ${formatSection17Modifier(
+                      weaponAttack.attackBonus
+                    )}
+                    <br>
+                    <b>Damage:</b>
+                    ${escapeHtml(
+                      weaponAttack.damageDice ||
+                      "damage"
+                    )}
+                    ${formatSection17Modifier(
+                      weaponAttack.damageModifier
+                    )}
+                    ${
+                      weaponAttack.versatileDamageDice
+                        ? `
+                          <br>
+                          <b>Versatile:</b>
+                          ${escapeHtml(
+                            weaponAttack.versatileDamageDice
+                          )}
+                          ${formatSection17Modifier(
+                            weaponAttack.damageModifier
+                          )}
+                        `
+                        : ""
+                    }
+                  </p>
+                `
+                : ""
+            }
+
+            <div class="hg-character-field">
+              <label for="ccItemContainer-${index}">
+                Container
+              </label>
+
+              <select
+                id="ccItemContainer-${index}"
+                data-cc-action-change="move-item-container"
+                data-index="${index}"
+              >
+                ${containerOptions
+                  .map((container) => {
+                    return `
+                      <option
+                        value="${escapeHtml(
+                          container.id
+                        )}"
+                        ${
+                          cleanString(
+                            item.containerId
+                          ) ===
+                          cleanString(
+                            container.id
+                          )
+                            ? "selected"
+                            : ""
+                        }
+                      >
+                        ${escapeHtml(
+                          container.name
+                        )}
+                      </option>
+                    `;
+                  })
+                  .join("")}
+              </select>
+            </div>
+
+            <div class="hg-character-field">
+              <label for="ccItemMoveQuantity-${index}">
+                Move Quantity
+              </label>
+
+              <input
+                id="ccItemMoveQuantity-${index}"
+                type="number"
+                min="1"
+                max="${quantity}"
+                step="1"
+                value="${quantity}"
+              >
+            </div>
+
+            ${
+              pendingRemoval
+                ? `
+                  <div class="hg-character-warning">
+                    This container has contents. Move those contents to
+                    general inventory, delete the contents too, or cancel.
+
+                    <div class="hg-character-inline-actions">
+                      <button
+                        type="button"
+                        data-cc-action="resolve-container-removal"
+                        data-container-id="${escapeHtml(
+                          item.id
+                        )}"
+                        data-removal-mode="inventory"
+                      >
+                        Move Contents Out
+                      </button>
+
+                      <button
+                        type="button"
+                        data-cc-action="resolve-container-removal"
+                        data-container-id="${escapeHtml(
+                          item.id
+                        )}"
+                        data-removal-mode="delete"
+                      >
+                        Delete Contents
+                      </button>
+
+                      <button
+                        type="button"
+                        data-cc-action="resolve-container-removal"
+                        data-container-id="${escapeHtml(
+                          item.id
+                        )}"
+                        data-removal-mode="cancel"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                `
+                : ""
+            }
+
+            ${renderSection15ItemEditControls(
+              item,
+              index
+            )}
+
             <div class="hg-character-card-actions">
+              <div
+                class="hg-character-quantity-control"
+                aria-label="Quantity controls for ${escapeHtml(
+                  item.name || "item"
+                )}"
+              >
+                <button
+                  type="button"
+                  data-cc-action="decrease-item-quantity"
+                  data-index="${index}"
+                  aria-label="Decrease quantity"
+                >
+                  -
+                </button>
+
+                <span aria-label="Quantity">
+                  ${quantity}
+                </span>
+
+                <button
+                  type="button"
+                  data-cc-action="increase-item-quantity"
+                  data-index="${index}"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+
               <button
                 type="button"
+                class="hg-character-hidden-quantity-button"
                 data-cc-action="decrease-item-quantity"
                 data-index="${index}"
               >
@@ -12198,6 +17831,7 @@ export function createCharacterCreator(options = {}) {
 
               <button
                 type="button"
+                class="hg-character-hidden-quantity-button"
                 data-cc-action="increase-item-quantity"
                 data-index="${index}"
               >
@@ -12220,6 +17854,12 @@ export function createCharacterCreator(options = {}) {
                 type="button"
                 data-cc-action="toggle-item-attuned"
                 data-index="${index}"
+                ${
+                  item.isMagical &&
+                  item.requiresAttunement
+                    ? ""
+                    : 'style="display:none" aria-hidden="true" disabled'
+                }
               >
                 ${
                   item.attuned
@@ -12253,6 +17893,25 @@ export function createCharacterCreator(options = {}) {
 
     const totalWeight =
       getSection15TotalWeight();
+
+    const unknownWeightCount =
+      getSection15UnknownWeightCount();
+
+    const attunedCount =
+      getSection15AttunedItemCount();
+
+    const carrying =
+      calculateRuleCarryingCapacity({
+        strength:
+          creatorState.draft
+            .abilities
+            .scores
+            .str,
+        size:
+          creatorState.draft
+            .identity
+            .size
+      });
 
     const categories = [
       {
@@ -12293,6 +17952,42 @@ export function createCharacterCreator(options = {}) {
       }
     ];
 
+    const armorCategoryChoices = [
+      {
+        value: "",
+        label: "No Armor Type"
+      },
+      {
+        value: "light armor",
+        label: "Light Armor"
+      },
+      {
+        value: "medium armor",
+        label: "Medium Armor"
+      },
+      {
+        value: "heavy armor",
+        label: "Heavy Armor"
+      },
+      {
+        value: "shield",
+        label: "Shield"
+      }
+    ];
+
+    const attackAbilityChoices = [
+      {
+        value: "",
+        label: "Auto"
+      },
+      ...ABILITY_DEFINITIONS.map((ability) => {
+        return {
+          value: ability.id,
+          label: ability.name
+        };
+      })
+    ];
+
     return `
       <div class="hg-character-current-choice">
         <b>Total item count:</b>
@@ -12306,7 +18001,47 @@ export function createCharacterCreator(options = {}) {
         ${Number(
           totalWeight.toFixed(2)
         )} lb.
+
+        <br>
+
+        <b>Carrying capacity:</b>
+
+        ${Number(
+          carrying.carryingCapacity
+            .toFixed(2)
+        )} lb.
+
+        <br>
+
+        <b>Push, drag, lift:</b>
+
+        ${Number(
+          carrying.pushDragLift
+            .toFixed(2)
+        )} lb.
+
+        <br>
+
+        <b>Unknown weights:</b>
+
+        ${unknownWeightCount}
+
+        <br>
+
+        <b>Attunement:</b>
+
+        ${attunedCount} / 3
       </div>
+
+      ${
+        attunedCount >= 3
+          ? `
+            <div class="hg-character-warning">
+              The normal attunement limit is reached.
+            </div>
+          `
+          : ""
+      }
 
       <h3>Inventory</h3>
 
@@ -12376,6 +18111,128 @@ export function createCharacterCreator(options = {}) {
         )}
 
         ${wizardField(
+          "Container Capacity",
+          "ccNewItemCapacityWeight",
+          "",
+          {
+            type: "number",
+            valueType: "number",
+            placeholder:
+              "Optional",
+            extra:
+              'min="0" step="0.1"'
+          }
+        )}
+
+        ${wizardSelect(
+          "Armor Type",
+          "ccNewItemArmorCategory",
+          "",
+          armorCategoryChoices
+        )}
+
+        ${wizardField(
+          "Base Armor Class",
+          "ccNewItemBaseArmorClass",
+          "",
+          {
+            type: "number",
+            valueType: "number",
+            placeholder:
+              "Optional",
+            extra:
+              'min="0" step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Dexterity Cap",
+          "ccNewItemDexterityCap",
+          "",
+          {
+            type: "number",
+            valueType: "number",
+            placeholder:
+              "Medium armor usually 2",
+            extra:
+              'step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Magic AC Bonus",
+          "ccNewItemMagicalArmorBonus",
+          0,
+          {
+            type: "number",
+            valueType: "number",
+            extra:
+              'step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Weapon Type",
+          "ccNewItemWeaponType",
+          "",
+          {
+            placeholder:
+              "simple melee, martial ranged..."
+          }
+        )}
+
+        ${wizardSelect(
+          "Attack Ability",
+          "ccNewItemAttackAbility",
+          "",
+          attackAbilityChoices
+        )}
+
+        ${wizardField(
+          "Damage Dice",
+          "ccNewItemDamageDice",
+          "",
+          {
+            placeholder:
+              "1d8"
+          }
+        )}
+
+        ${wizardField(
+          "Versatile Dice",
+          "ccNewItemVersatileDamageDice",
+          "",
+          {
+            placeholder:
+              "1d10"
+          }
+        )}
+
+        ${wizardField(
+          "Magic Attack Bonus",
+          "ccNewItemMagicalAttackBonus",
+          0,
+          {
+            type: "number",
+            valueType: "number",
+            extra:
+              'step="1"'
+          }
+        )}
+
+        ${wizardField(
+          "Magic Damage Bonus",
+          "ccNewItemMagicalDamageBonus",
+          0,
+          {
+            type: "number",
+            valueType: "number",
+            extra:
+              'step="1"'
+          }
+        )}
+
+        ${wizardField(
           "Item Notes",
           "ccNewItemNotes",
           "",
@@ -12402,11 +18259,83 @@ export function createCharacterCreator(options = {}) {
 
         <label>
           <input
+            id="ccNewItemMagical"
+            type="checkbox"
+          >
+
+          Magical
+        </label>
+
+        <label>
+          <input
+            id="ccNewItemRequiresAttunement"
+            type="checkbox"
+          >
+
+          Requires attunement
+        </label>
+
+        <label>
+          <input
             id="ccNewItemAttuned"
             type="checkbox"
           >
 
           Start attuned
+        </label>
+
+        <label>
+          <input
+            id="ccNewItemContainer"
+            type="checkbox"
+          >
+
+          Container
+        </label>
+
+        <label>
+          <input
+            id="ccNewItemShield"
+            type="checkbox"
+          >
+
+          Shield
+        </label>
+
+        <label>
+          <input
+            id="ccNewItemFinesse"
+            type="checkbox"
+          >
+
+          Finesse
+        </label>
+
+        <label>
+          <input
+            id="ccNewItemRanged"
+            type="checkbox"
+          >
+
+          Ranged
+        </label>
+
+        <label>
+          <input
+            id="ccNewItemThrown"
+            type="checkbox"
+          >
+
+          Thrown
+        </label>
+
+        <label>
+          <input
+            id="ccNewItemProficient"
+            type="checkbox"
+          >
+
+          Proficient
         </label>
 
         <button
@@ -12634,13 +18563,92 @@ export function createCharacterCreator(options = {}) {
         ...values
       );
 
-    if (
+    const result =
       removeSection15Item(
         index
-      )
-    ) {
+      );
+
+    if (result === "pending") {
+      setStatus(
+        "Choose how to handle the container's contents."
+      );
+
+      renderCreatorView();
+
+      return;
+    }
+
+    if (result) {
       setStatus(
         "Item removed from inventory."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleSection15ResolveContainerRemoval(
+    ...values
+  ) {
+    const button =
+      findSection15ActionElement(
+        ...values
+      );
+
+    const containerId =
+      cleanString(
+        button?.dataset
+          ?.containerId
+      );
+
+    const removalMode =
+      cleanString(
+        button?.dataset
+          ?.removalMode
+      );
+
+    const inventory =
+      getSection15Inventory();
+
+    const index =
+      inventory.findIndex((item) => {
+        return (
+          cleanString(item.id) ===
+          containerId
+        );
+      });
+
+    const result =
+      removeSection15Item(
+        index,
+        removalMode
+      );
+
+    if (result === "pending") {
+      setStatus(
+        "Choose how to handle the container's contents."
+      );
+
+      renderCreatorView();
+
+      return;
+    }
+
+    if (removalMode === "cancel") {
+      setStatus(
+        "Container removal cancelled."
+      );
+
+      renderCreatorView();
+
+      return;
+    }
+
+    if (result) {
+      setStatus(
+        removalMode === "delete"
+          ? "Container and contents removed."
+          : "Container removed and contents moved to inventory."
       );
 
       renderCreatorView();
@@ -12670,6 +18678,77 @@ export function createCharacterCreator(options = {}) {
 
       renderCreatorView();
     }
+  }
+
+  function handleSection15Change(event) {
+    const target =
+      event?.target;
+
+    if (
+      target?.dataset
+        ?.ccActionChange !==
+      "move-item-container" &&
+      target?.dataset
+        ?.ccActionChange !==
+      "update-inventory-item"
+    ) {
+      return false;
+    }
+
+    const index =
+      Math.round(
+        safeNumber(
+          target.dataset.index,
+          -1
+        )
+      );
+
+    if (
+      target.dataset
+        .ccActionChange ===
+      "update-inventory-item"
+    ) {
+      if (
+        updateSection15InventoryItem(
+          index,
+          target.dataset.itemField,
+          target.value,
+          target.dataset.valueType,
+          target.checked
+        )
+      ) {
+        setStatus(
+          "Inventory item updated."
+        );
+
+        renderCreatorView();
+      }
+
+      return true;
+    }
+
+    const quantityInput =
+      typeof document !== "undefined"
+        ? document.getElementById(
+            `ccItemMoveQuantity-${index}`
+          )
+        : null;
+
+    if (
+      moveSection15ItemToContainer(
+        index,
+        target.value,
+        quantityInput?.value
+      )
+    ) {
+      setStatus(
+        "Container assignment updated."
+      );
+
+      renderCreatorView();
+    }
+
+    return true;
   }
 
   registerCharacterStepRenderer(
@@ -12730,6 +18809,15 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "remove-inventory-item",
     handleSection15RemoveItem
+  );
+
+  registerCharacterCreatorAction(
+    "resolve-container-removal",
+    handleSection15ResolveContainerRemoval
+  );
+
+  registerCharacterCreatorChangeHandler(
+    handleSection15Change
   );
 
 // =====================================================
@@ -12818,7 +18906,10 @@ export function createCharacterCreator(options = {}) {
         raw.ritual === true,
 
       concentration:
-        raw.concentration === true
+        raw.concentration === true,
+
+      manualOverride:
+        raw.manualOverride === true
     };
   }
 
@@ -12890,6 +18981,64 @@ export function createCharacterCreator(options = {}) {
       .includes(spellId);
   }
 
+  function getSection16KnownLimitWarning(
+    spell
+  ) {
+    const limits =
+      getSpellSelectionLimits(
+        creatorState.draft
+      );
+
+    const spellLevel =
+      safeNumber(spell?.level, 0);
+
+    if (
+      spellLevel > 0 &&
+      limits.maxSpellLevel !== null &&
+      spellLevel > limits.maxSpellLevel &&
+      spell?.manualOverride !== true
+    ) {
+      return "That spell is above the currently available spell level.";
+    }
+
+    if (
+      spellLevel === 0 &&
+      limits.cantripsKnownLimit !== null &&
+      limits.knownCantripCount >=
+        limits.cantripsKnownLimit
+    ) {
+      return "Known cantrips are already at the calculated limit.";
+    }
+
+    if (
+      spellLevel > 0 &&
+      limits.spellsKnownLimit !== null &&
+      limits.knownLeveledCount >=
+        limits.spellsKnownLimit
+    ) {
+      return "Known leveled spells are already at the calculated limit.";
+    }
+
+    return "";
+  }
+
+  function getSection16PreparedLimitWarning() {
+    const limits =
+      getSpellSelectionLimits(
+        creatorState.draft
+      );
+
+    if (
+      limits.preparedLimit !== null &&
+      limits.preparedCount >=
+        limits.preparedLimit
+    ) {
+      return "Prepared spells are already at the calculated limit.";
+    }
+
+    return "";
+  }
+
   function toggleSection16SpellKnown(
     spellId
   ) {
@@ -12932,6 +19081,16 @@ export function createCharacterCreator(options = {}) {
         );
       }
     } else {
+      const warning =
+        getSection16KnownLimitWarning(
+          spell
+        );
+
+      if (warning) {
+        alert(warning);
+        return false;
+      }
+
       knownSpellIds.push(
         spellId
       );
@@ -12963,6 +19122,16 @@ export function createCharacterCreator(options = {}) {
         spellId
       )
     ) {
+      const warning =
+        getSection16KnownLimitWarning(
+          spell
+        );
+
+      if (warning) {
+        alert(warning);
+        return false;
+      }
+
       knownSpellIds.push(
         spellId
       );
@@ -12982,6 +19151,14 @@ export function createCharacterCreator(options = {}) {
         1
       );
     } else {
+      const warning =
+        getSection16PreparedLimitWarning();
+
+      if (warning) {
+        alert(warning);
+        return false;
+      }
+
       preparedSpellIds.push(
         spellId
       );
@@ -13053,26 +19230,55 @@ export function createCharacterCreator(options = {}) {
 
           concentration:
             $("ccNewSpellConcentration")
+              ?.checked === true,
+
+          manualOverride:
+            $("ccNewSpellManualOverride")
               ?.checked === true
         },
 
         "custom"
       );
 
+    const startKnown =
+      $("ccNewSpellKnown")
+        ?.checked === true;
+
+    const startPrepared =
+      $("ccNewSpellPrepared")
+        ?.checked === true;
+
+    if (
+      startKnown ||
+      startPrepared
+    ) {
+      const warning =
+        getSection16KnownLimitWarning(
+          spell
+        );
+
+      if (warning) {
+        alert(warning);
+        return false;
+      }
+    }
+
+    if (startPrepared) {
+      const preparedWarning =
+        getSection16PreparedLimitWarning();
+
+      if (preparedWarning) {
+        alert(preparedWarning);
+        return false;
+      }
+    }
+
     getSection16CustomSpells()
       .push(spell);
 
     if (
-      $("ccNewSpellKnown")
-        ?.checked === true
-    ) {
-      getSection16KnownSpellIds()
-        .push(spell.id);
-    }
-
-    if (
-      $("ccNewSpellPrepared")
-        ?.checked === true
+      startKnown ||
+      startPrepared
     ) {
       const knownSpellIds =
         getSection16KnownSpellIds();
@@ -13086,7 +19292,9 @@ export function createCharacterCreator(options = {}) {
           spell.id
         );
       }
+    }
 
+    if (startPrepared) {
       getSection16PreparedSpellIds()
         .push(spell.id);
     }
@@ -13137,11 +19345,32 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
-  function calculateSection16SpellcastingValues() {
-    const abilityId =
+  function calculateSection16SpellcastingValues(
+    options = {}
+  ) {
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const classAbilityId =
+      selectedClass?.source !== "custom"
+        ? cleanString(
+            selectedClass?.spellcastingAbility
+          )
+        : "";
+
+    let abilityId =
       creatorState.draft
         .magic
         .spellcastingAbility;
+
+    if (classAbilityId) {
+      abilityId = classAbilityId;
+
+      creatorState.draft
+        .magic
+        .spellcastingAbility =
+          classAbilityId;
+    }
 
     const validAbility =
       ABILITY_DEFINITIONS.some(
@@ -13162,7 +19391,9 @@ export function createCharacterCreator(options = {}) {
         .magic
         .spellAttackBonus = null;
 
-      markDraftChanged();
+      if (options.markDraft !== false) {
+        markDraftChanged();
+      }
 
       return false;
     }
@@ -13198,17 +19429,22 @@ export function createCharacterCreator(options = {}) {
     creatorState.draft
       .magic
       .spellSaveDc =
-        8 +
-        abilityModifier +
-        proficiencyBonus;
+        calculateRuleSpellSaveDc({
+          proficiencyBonus,
+          abilityModifier
+        });
 
     creatorState.draft
       .magic
       .spellAttackBonus =
-        abilityModifier +
-        proficiencyBonus;
+        calculateRuleSpellAttackBonus({
+          proficiencyBonus,
+          abilityModifier
+        });
 
-    markDraftChanged();
+    if (options.markDraft !== false) {
+      markDraftChanged();
+    }
 
     return true;
   }
@@ -13737,6 +19973,19 @@ export function createCharacterCreator(options = {}) {
     const magic =
       creatorState.draft.magic;
 
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const classSpellcastingAbility =
+      selectedClass?.source !== "custom"
+        ? cleanString(
+            selectedClass?.spellcastingAbility
+          )
+        : "";
+
+    const spellcastingAbilityLocked =
+      Boolean(classSpellcastingAbility);
+
     const abilityChoices = [
       {
         value: "",
@@ -13796,17 +20045,56 @@ export function createCharacterCreator(options = {}) {
       getSection16PreparedSpellIds()
         .length;
 
+    const spellLimits =
+      getSpellSelectionLimits(
+        creatorState.draft
+      );
+
     return `
       <div class="hg-character-current-choice">
         <b>Known Spells:</b>
 
         ${knownCount}
 
+        ${
+          spellLimits.spellsKnownLimit === null
+            ? ""
+            : ` / ${spellLimits.spellsKnownLimit} leveled`
+        }
+
+        <br>
+
+        <b>Known Cantrips:</b>
+
+        ${spellLimits.knownCantripCount}
+
+        ${
+          spellLimits.cantripsKnownLimit === null
+            ? ""
+            : ` / ${spellLimits.cantripsKnownLimit}`
+        }
+
         <br>
 
         <b>Prepared Spells:</b>
 
         ${preparedCount}
+
+        ${
+          spellLimits.preparedLimit === null
+            ? ""
+            : ` / ${spellLimits.preparedLimit}`
+        }
+
+        <br>
+
+        <b>Maximum Spell Level:</b>
+
+        ${
+          spellLimits.maxSpellLevel === null
+            ? "None"
+            : spellLimits.maxSpellLevel
+        }
 
         <br>
 
@@ -13842,6 +20130,37 @@ export function createCharacterCreator(options = {}) {
                 0
               )}`
         }
+
+        <br>
+
+        <b>Progression:</b>
+
+        ${escapeHtml(
+          magic.spellcastingProgression ||
+          "none"
+        )}
+
+        ${
+          magic.pactMagic?.slots
+            ? `
+              <br>
+
+              <b>Pact Magic:</b>
+
+              ${safeNumber(
+                magic.pactMagic.slots,
+                0
+              )} slot(s), level ${safeNumber(
+                magic.pactMagic.slotLevel,
+                0
+              )}
+            `
+            : ""
+        }
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17SpellcastingSummary()}
       </div>
 
       <h3>Spellcasting</h3>
@@ -13851,6 +20170,7 @@ export function createCharacterCreator(options = {}) {
           "Spellcasting Ability",
           "ccSpellcastingAbility",
 
+          classSpellcastingAbility ||
           magic.spellcastingAbility ||
           "",
 
@@ -13858,7 +20178,12 @@ export function createCharacterCreator(options = {}) {
 
           {
             path:
-              "magic.spellcastingAbility"
+              "magic.spellcastingAbility",
+
+            extra:
+              spellcastingAbilityLocked
+                ? "disabled"
+                : ""
           }
         )}
 
@@ -14047,6 +20372,15 @@ export function createCharacterCreator(options = {}) {
           >
 
           Start prepared
+        </label>
+
+        <label>
+          <input
+            id="ccNewSpellManualOverride"
+            type="checkbox"
+          >
+
+          Manual spell-level override
         </label>
 
         <button
@@ -14506,168 +20840,46 @@ export function createCharacterCreator(options = {}) {
   function getSection17SkillModifier(
     skill
   ) {
-    const entry =
-      getSection17SkillEntry(
-        skill
-      );
-
-    const abilityModifier =
-      calculateAbilityModifier(
-        safeNumber(
-          creatorState.draft
-            .abilities
-            .scores[skill.ability],
-          10
-        )
-      );
-
-    if (
-      entry?.proficient !== true
-    ) {
-      return abilityModifier;
-    }
-
-    const multiplier =
-      entry.expertise === true
-        ? 2
-        : 1;
-
-    return (
-      abilityModifier +
-      getSection17ProficiencyBonus() *
-      multiplier
+    return calculateCharacterSkillModifier(
+      creatorState.draft,
+      skill
     );
   }
 
   function getSection17PassivePerception() {
-    const perception =
-      SKILL_DEFINITIONS.find(
-        (skill) => {
-          return (
-            skill.id ===
-            "perception"
-          );
-        }
-      );
-
-    if (!perception) {
-      return 10;
-    }
-
     return (
-      10 +
-      getSection17SkillModifier(
-        perception
-      )
+      calculateCharacterPassiveScores(
+        creatorState.draft
+      ).perception?.total || 10
     );
   }
 
   function getSection17Initiative() {
-    const dexterityModifier =
-      calculateAbilityModifier(
-        safeNumber(
-          creatorState.draft
-            .abilities
-            .scores
-            .dex,
-          10
-        )
-      );
-
-    return (
-      dexterityModifier +
-      safeNumber(
-        creatorState.draft
-          .combat
-          .initiative,
-        0
-      )
-    );
+    return calculateCharacterInitiative(
+      creatorState.draft
+    ).total;
   }
 
   function getSection17CarryingCapacity() {
-    const strength =
-      Math.max(
-        1,
-        safeNumber(
-          creatorState.draft
-            .abilities
-            .scores
-            .str,
-          10
-        )
-      );
-
-    const size =
-      String(
+    return calculateRuleCarryingCapacity({
+      strength:
+        creatorState.draft
+          .abilities
+          .scores
+          .str,
+      size:
         creatorState.draft
           .identity
-          .size ||
-        "medium"
-      ).toLowerCase();
-
-    const sizeMultiplier = {
-      tiny: 0.5,
-      small: 1,
-      medium: 1,
-      large: 2,
-      huge: 4,
-      gargantuan: 8
-    }[size] || 1;
-
-    return Math.round(
-      strength *
-      15 *
-      sizeMultiplier
-    );
+          .size
+    }).carryingCapacity;
   }
 
   function getSection17InventoryWeight() {
-    const items =
-      Array.isArray(
-        creatorState.draft
-          .equipment
-          .items
-      )
-        ? creatorState.draft
-            .equipment
-            .items
-        : [];
-
-    return items.reduce(
-      (total, item) => {
-        const weight =
-          item.weight === null ||
-          item.weight === undefined ||
-          item.weight === ""
-            ? 0
-            : Math.max(
-                0,
-                safeNumber(
-                  item.weight,
-                  0
-                )
-              );
-
-        const quantity =
-          Math.max(
-            1,
-            Math.round(
-              safeNumber(
-                item.quantity,
-                1
-              )
-            )
-          );
-
-        return (
-          total +
-          weight *
-          quantity
-        );
-      },
-      0
-    );
+    return calculateInventoryWeightSummary(
+      creatorState.draft
+        .equipment
+        .items
+    ).knownWeight;
   }
 
   function getSection17SpellCount() {
@@ -14764,6 +20976,89 @@ export function createCharacterCreator(options = {}) {
     ) {
       warnings.push(
         "Current hit points cannot be negative."
+      );
+    }
+
+    const hpSummary =
+      calculateCharacterHp(draft);
+
+    if (
+      hpSummary.mode === "rolled" &&
+      hpSummary.rolls.length <
+        Math.max(0, hpSummary.level - 1)
+    ) {
+      warnings.push(
+        "Rolled HP is missing one or more level-up rolls."
+      );
+    }
+
+    if (
+      hpSummary.mode === "manual" &&
+      (
+        hpSummary.manualOverride === null ||
+        hpSummary.manualOverride === undefined
+      )
+    ) {
+      warnings.push(
+        "Manual HP mode needs a manual HP value."
+      );
+    }
+
+    if (
+      draft.combat.armorClassMode ===
+        "manual" &&
+      safeNumber(
+        draft.combat.manualArmorClass,
+        0
+      ) < 1
+    ) {
+      warnings.push(
+        "Manual armor class must be at least 1."
+      );
+    }
+
+    const armorOptions =
+      calculateArmorClassOptions(draft)
+        .options;
+
+    const selectedArmorMethod =
+      cleanString(
+        draft.combat
+          .selectedArmorClassMethod
+      );
+
+    if (
+      draft.combat.armorClassMode !==
+        "manual" &&
+      selectedArmorMethod &&
+      !armorOptions.some((option) => {
+        return (
+          option.id === selectedArmorMethod
+        );
+      })
+    ) {
+      warnings.push(
+        "Selected armor class method is no longer valid."
+      );
+    }
+
+    const equippedArmor =
+      (Array.isArray(
+        draft.equipment.items
+      )
+        ? draft.equipment.items
+        : []
+      ).filter((item) => {
+        return (
+          item.equipped === true &&
+          item.baseArmorClass &&
+          item.isShield !== true
+        );
+      });
+
+    if (equippedArmor.length > 1) {
+      warnings.push(
+        "More than one armor item is equipped."
       );
     }
 
@@ -14933,6 +21228,107 @@ export function createCharacterCreator(options = {}) {
         }
       }
     );
+
+    const inventoryWeight =
+      calculateInventoryWeightSummary(
+        draft.equipment.items
+      );
+
+    const carrying =
+      calculateRuleCarryingCapacity({
+        strength:
+          draft.abilities.scores.str,
+        size:
+          draft.identity.size
+      });
+
+    if (
+      inventoryWeight.unknownCount === 0 &&
+      inventoryWeight.knownWeight >
+        carrying.carryingCapacity
+    ) {
+      warnings.push(
+        "Inventory weight exceeds carrying capacity."
+      );
+    }
+
+    if (
+      getSection15AttunedItemCount() > 3
+    ) {
+      warnings.push(
+        "More than three items are attuned."
+      );
+    }
+
+    validateContainerState(
+      draft.equipment.items
+    ).forEach((warning) => {
+      warnings.push(warning);
+    });
+
+    const spellLimits =
+      getSpellSelectionLimits(draft);
+
+    if (
+      spellLimits.cantripsKnownLimit !== null &&
+      spellLimits.knownCantripCount >
+        spellLimits.cantripsKnownLimit
+    ) {
+      warnings.push(
+        "Known cantrips exceed the calculated limit."
+      );
+    }
+
+    if (
+      spellLimits.spellsKnownLimit !== null &&
+      spellLimits.knownLeveledCount >
+        spellLimits.spellsKnownLimit
+    ) {
+      warnings.push(
+        "Known leveled spells exceed the calculated limit."
+      );
+    }
+
+    if (
+      spellLimits.preparedLimit !== null &&
+      spellLimits.preparedCount >
+        spellLimits.preparedLimit
+    ) {
+      warnings.push(
+        "Prepared spells exceed the calculated limit."
+      );
+    }
+
+    const spellById =
+      new Map(
+        (
+          Array.isArray(
+            draft.magic.customSpells
+          )
+            ? draft.magic.customSpells
+            : []
+        ).map((spell) => {
+          return [spell.id, spell];
+        })
+      );
+
+    [...knownIds, ...preparedIds]
+      .forEach((spellId) => {
+        const spell =
+          spellById.get(spellId);
+
+        if (
+          spell &&
+          spellLimits.maxSpellLevel !== null &&
+          safeNumber(spell.level, 0) >
+            spellLimits.maxSpellLevel &&
+          spell.manualOverride !== true
+        ) {
+          warnings.push(
+            `${spell.name || "A selected spell"} is above the calculated maximum spell level.`
+          );
+        }
+      });
 
     return [
       ...new Set(
@@ -15128,6 +21524,424 @@ export function createCharacterCreator(options = {}) {
         }
       </article>
     `;
+  }
+
+  function renderSection17SavingThrows() {
+    return calculateCharacterSavingThrows(
+      creatorState.draft
+    )
+      .map((save) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(save.name)}
+            </h3>
+
+            <p>
+              <b>
+                ${formatSection17Modifier(
+                  save.total
+                )}
+              </b>
+
+              <br>
+
+              ${
+                save.proficient
+                  ? "Proficient"
+                  : "Not proficient"
+              }
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSection17PassiveScores() {
+    const scores =
+      calculateCharacterPassiveScores(
+        creatorState.draft
+      );
+
+    return Object.values(scores)
+      .map((score) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(score.name)}
+            </h3>
+
+            <p>
+              <b>${score.total}</b>
+
+              <br>
+
+              Skill
+              ${formatSection17Modifier(
+                score.skillModifier
+              )}
+
+              ${
+                score.advantage
+                  ? "<br>Advantage +5"
+                  : ""
+              }
+
+              ${
+                score.disadvantage
+                  ? "<br>Disadvantage -5"
+                  : ""
+              }
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSection17HitDice() {
+    const hitDice =
+      calculateCharacterHitDice(
+        creatorState.draft
+      );
+
+    if (!hitDice.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No hit dice are currently recorded.
+        </div>
+      `;
+    }
+
+    return hitDice
+      .map((entry) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(
+                entry.className ||
+                "Class"
+              )}
+            </h3>
+
+            <p>
+              <b>
+                ${Math.max(
+                  1,
+                  safeNumber(
+                    entry.count,
+                    1
+                  )
+                )}
+                ${escapeHtml(
+                  entry.die || "d8"
+                )}
+              </b>
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSection17WeaponAttacks() {
+    const attacks =
+      calculateEquippedWeaponAttacks(
+        creatorState.draft
+      );
+
+    if (!attacks.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No equipped weapon attacks calculated.
+        </div>
+      `;
+    }
+
+    return attacks
+      .map((attack) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(attack.name)}
+            </h3>
+
+            <p>
+              <b>Attack:</b>
+              ${formatSection17Modifier(
+                attack.attackBonus
+              )}
+
+              <br>
+
+              <b>Damage:</b>
+              ${escapeHtml(
+                attack.damageDice || "damage"
+              )}
+              ${formatSection17Modifier(
+                attack.damageModifier
+              )}
+
+              <br>
+
+              ${escapeHtml(
+                attack.proficient
+                  ? "Proficient"
+                  : "Not proficient"
+              )}
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSection17ContainerSummary() {
+    const containers =
+      getContainerSummaries(
+        creatorState.draft
+          .equipment
+          .items
+      );
+
+    if (!containers.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No containers are recorded.
+        </div>
+      `;
+    }
+
+    return containers
+      .map((container) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(
+                container.name ||
+                "Container"
+              )}
+            </h3>
+
+            <p>
+              <b>Contents:</b>
+              ${container.contents.length}
+
+              <br>
+
+              <b>Known Weight:</b>
+              ${Number(
+                container.knownWeight.toFixed(2)
+              )} lb.
+
+              <br>
+
+              <b>Capacity:</b>
+              ${
+                container.capacityWeight === null
+                  ? "Not set"
+                  : `${Number(
+                      container.capacityWeight
+                        .toFixed(2)
+                    )} lb.`
+              }
+
+              ${
+                container.unknownCount
+                  ? `<br>${container.unknownCount} unknown item weight(s)`
+                  : ""
+              }
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSection17SpellcastingSummary() {
+    const summary =
+      getSpellcastingSummary(
+        creatorState.draft
+      );
+
+    if (!summary.classes.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No class spellcasting progression is recorded.
+        </div>
+      `;
+    }
+
+    const combinedSlotText =
+      Object.entries(
+        summary.multiclass?.spellSlots || {}
+      )
+        .map(([level, slots]) => {
+          return `L${level}: ${slots}`;
+        })
+        .join(", ");
+
+    const pactText =
+      Array.isArray(
+        summary.multiclass?.pactMagic
+      )
+        ? summary.multiclass.pactMagic
+            .filter((pact) => {
+              return safeNumber(
+                pact.slots,
+                0
+              ) > 0;
+            })
+            .map((pact) => {
+              return `${safeNumber(
+                pact.slots,
+                0
+              )} slot(s), level ${safeNumber(
+                pact.slotLevel,
+                0
+              )}`;
+            })
+            .join("; ")
+        : "";
+
+    const combinedCard = `
+      <article class="hg-character-choice-card">
+        <h3>Combined Spell Slots</h3>
+
+        <p>
+          <b>Caster Level:</b>
+          ${safeNumber(
+            summary.multiclass?.casterLevel,
+            0
+          )}
+
+          <br>
+
+          <b>Normal Slots:</b>
+          ${escapeHtml(
+            combinedSlotText ||
+            "None"
+          )}
+
+          <br>
+
+          <b>Pact Magic:</b>
+          ${escapeHtml(
+            pactText ||
+            "None"
+          )}
+        </p>
+      </article>
+    `;
+
+    const classCards =
+      summary.classes.map((entry) => {
+        const slotText =
+          Object.entries(
+            entry.spellSlots || {}
+          )
+            .map(([level, slots]) => {
+              return `L${level}: ${slots}`;
+            })
+            .join(", ");
+
+        return `
+          <article class="hg-character-choice-card">
+            <h3>
+              ${escapeHtml(
+                entry.className ||
+                "Spellcaster"
+              )}
+            </h3>
+
+            <p>
+              <b>Progression:</b>
+              ${escapeHtml(
+                entry.progressionType ||
+                "none"
+              )}
+
+              <br>
+
+              <b>Ability:</b>
+              ${escapeHtml(
+                entry.spellcastingAbility ||
+                "None"
+              )}
+
+              ${
+                entry.spellSaveDc === null
+                  ? ""
+                  : `
+                    <br>
+                    <b>DC:</b>
+                    ${entry.spellSaveDc}
+                  `
+              }
+
+              ${
+                entry.spellAttackBonus === null
+                  ? ""
+                  : `
+                    <br>
+                    <b>Attack:</b>
+                    ${formatSection17Modifier(
+                      entry.spellAttackBonus
+                    )}
+                  `
+              }
+
+              ${
+                entry.preparedLimit === null
+                  ? ""
+                  : `
+                    <br>
+                    <b>Prepared Limit:</b>
+                    ${entry.preparedLimit}
+                  `
+              }
+
+              ${
+                entry.spellsKnown
+                  ? `
+                    <br>
+                    <b>Known Limit:</b>
+                    ${entry.spellsKnown}
+                  `
+                  : ""
+              }
+
+              ${
+                slotText
+                  ? `
+                    <br>
+                    <b>Slots:</b>
+                    ${escapeHtml(slotText)}
+                  `
+                  : ""
+              }
+
+              ${
+                entry.pactMagic?.slots
+                  ? `
+                    <br>
+                    <b>Pact:</b>
+                    ${entry.pactMagic.slots}
+                    slot(s), level
+                    ${entry.pactMagic.slotLevel}
+                  `
+                  : ""
+              }
+            </p>
+          </article>
+        `;
+      });
+
+    return [
+      combinedCard,
+      ...classCards
+    ].join("");
   }
 
   function renderSection17Inventory() {
@@ -15336,11 +22150,26 @@ export function createCharacterCreator(options = {}) {
     const inventoryWeight =
       getSection17InventoryWeight();
 
+    const inventoryWeightSummary =
+      calculateInventoryWeightSummary(
+        draft.equipment.items
+      );
+
     const carryingCapacity =
       getSection17CarryingCapacity();
 
     const initiative =
       getSection17Initiative();
+
+    const initiativeSummary =
+      calculateCharacterInitiative(draft);
+
+    const armorClass =
+      calculateArmorClassOptions(draft)
+        .selected;
+
+    const hpSummary =
+      calculateCharacterHp(draft);
 
     const proficiencyBonus =
       getSection17ProficiencyBonus();
@@ -15502,12 +22331,22 @@ export function createCharacterCreator(options = {}) {
 
           <p>
             <b>
-              ${safeNumber(
-                draft.combat
-                  .armorClass,
-                10
-              )}
+              ${armorClass.total}
             </b>
+
+            <br>
+
+            ${escapeHtml(
+              armorClass.label
+            )}
+
+            <br>
+
+            <span class="small">
+              ${escapeHtml(
+                armorClass.breakdown
+              )}
+            </span>
           </p>
         </article>
 
@@ -15522,15 +22361,24 @@ export function createCharacterCreator(options = {}) {
                 0
               )}
               /
-              ${Math.max(
-                1,
-                safeNumber(
-                  draft.combat
-                    .maxHp,
-                  1
-                )
-              )}
+              ${hpSummary.maximumHp}
             </b>
+
+            <br>
+
+            <span class="small">
+              ${escapeHtml(
+                hpSummary.mode
+              )}
+              HP,
+              ${escapeHtml(
+                hpSummary.hitDie
+              )},
+              Con
+              ${formatSection17Modifier(
+                hpSummary.constitutionModifier
+              )}
+            </span>
 
             ${
               safeNumber(
@@ -15562,6 +22410,29 @@ export function createCharacterCreator(options = {}) {
                 initiative
               )}
             </b>
+
+            <br>
+
+            <span class="small">
+              Dex
+              ${formatSection17Modifier(
+                initiativeSummary.dexterityModifier
+              )}
+              ${
+                initiativeSummary.proficiencyBonus
+                  ? `, proficiency ${formatSection17Modifier(
+                      initiativeSummary.proficiencyBonus
+                    )}`
+                  : ""
+              }
+              ${
+                initiativeSummary.bonus
+                  ? `, bonus ${formatSection17Modifier(
+                      initiativeSummary.bonus
+                    )}`
+                  : ""
+              }
+            </span>
           </p>
         </article>
 
@@ -15609,10 +22480,42 @@ export function createCharacterCreator(options = {}) {
 
       <hr>
 
+      <h3>Hit Dice</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17HitDice()}
+      </div>
+
+      <hr>
+
+      <h3>Equipped Weapon Attacks</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17WeaponAttacks()}
+      </div>
+
+      <hr>
+
       <h3>Ability Scores</h3>
 
       <div class="hg-character-choice-grid">
         ${renderSection17Abilities()}
+      </div>
+
+      <hr>
+
+      <h3>Saving Throws</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17SavingThrows()}
+      </div>
+
+      <hr>
+
+      <h3>Passive Scores</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17PassiveScores()}
       </div>
 
       <hr>
@@ -15672,9 +22575,17 @@ export function createCharacterCreator(options = {}) {
         <b>Recorded Weight:</b>
 
         ${Number(
-          inventoryWeight.toFixed(2)
+          inventoryWeightSummary
+            .knownWeight
+            .toFixed(2)
         )}
         lb.
+
+        <br>
+
+        <b>Unknown Weights:</b>
+
+        ${inventoryWeightSummary.unknownCount}
 
         <br>
 
@@ -15682,6 +22593,12 @@ export function createCharacterCreator(options = {}) {
 
         ${carryingCapacity}
         lb.
+
+        <br>
+
+        <b>Attunement:</b>
+
+        ${getSection15AttunedItemCount()} / 3
 
         <br>
 
@@ -15732,6 +22649,12 @@ export function createCharacterCreator(options = {}) {
         ${renderSection17Inventory()}
       </div>
 
+      <h3>Containers</h3>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17ContainerSummary()}
+      </div>
+
       <hr>
 
       <h3>Spells and Features</h3>
@@ -15776,6 +22699,10 @@ export function createCharacterCreator(options = {}) {
         <b>Total Features:</b>
 
         ${getSection17FeatureCount()}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection17SpellcastingSummary()}
       </div>
 
       <div class="hg-character-choice-grid">
@@ -18008,6 +24935,9 @@ export function createCharacterCreator(options = {}) {
     connectListeners:
       connectSection19PermanentListeners,
     cleanupListeners:
-      cleanupSection19PermanentListeners
+      cleanupSection19PermanentListeners,
+
+    runRulesSelfTests:
+      runSrd2014RulesSelfTests
   };
 }
