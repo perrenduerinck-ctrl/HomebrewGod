@@ -14,6 +14,7 @@ export function createCharacterCreator(options = {}) {
     db: options.db,
     doc: options.doc,
     collection: options.collection,
+    getDoc: options.getDoc,
     addDoc: options.addDoc,
     updateDoc: options.updateDoc,
     deleteDoc: options.deleteDoc,
@@ -22,7 +23,17 @@ export function createCharacterCreator(options = {}) {
 
     getCurrentRoomCode: options.getCurrentRoomCode,
     getCurrentRoomData: options.getCurrentRoomData,
-    getCurrentIsDM: options.getCurrentIsDM
+    getCurrentIsDM: options.getCurrentIsDM,
+
+    uploadCharacterPortrait:
+      options.uploadCharacterPortrait ||
+      options.uploadPortrait ||
+      options.uploadImage,
+
+    deleteCharacterPortrait:
+      options.deleteCharacterPortrait ||
+      options.deletePortrait ||
+      options.deleteImage
   };
 
   const CHARACTER_SCHEMA_VERSION = 4;
@@ -402,6 +413,64 @@ export function createCharacterCreator(options = {}) {
     return clean || fallback;
   }
 
+  function normalizeCharacterImageValue(
+    rawImage,
+    owner = {}
+  ) {
+    const emptyImage = {
+      url: "",
+      publicId: ""
+    };
+
+    if (typeof rawImage === "string") {
+      return {
+        ...emptyImage,
+        url: cleanString(rawImage)
+      };
+    }
+
+    const imageObject =
+      rawImage &&
+      typeof rawImage === "object" &&
+      !Array.isArray(rawImage)
+        ? rawImage
+        : {};
+
+    const legacyOwner =
+      owner &&
+      typeof owner === "object"
+        ? owner
+        : {};
+
+    return {
+      ...emptyImage,
+
+      url: cleanString(
+        imageObject.url ||
+        imageObject.downloadUrl ||
+        imageObject.downloadURL ||
+        imageObject.download_url ||
+        imageObject.secureUrl ||
+        imageObject.secure_url ||
+        imageObject.src ||
+        legacyOwner.imageUrl ||
+        legacyOwner.imageURL ||
+        legacyOwner.portraitUrl ||
+        legacyOwner.portraitURL ||
+        legacyOwner.avatarUrl ||
+        legacyOwner.avatarURL
+      ),
+
+      publicId: cleanString(
+        imageObject.publicId ||
+        imageObject.publicID ||
+        imageObject.public_id ||
+        imageObject.storagePath ||
+        imageObject.path
+      )
+    };
+  }
+
   function cleanArray(value) {
     if (!Array.isArray(value)) {
       return [];
@@ -452,6 +521,495 @@ export function createCharacterCreator(options = {}) {
           message
         ])
       ];
+  }
+
+  function isPlainObject(value) {
+    return (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    );
+  }
+
+  function normalizeImportSourceList(value) {
+    if (Array.isArray(value)) {
+      return uniqueCleanArray(value);
+    }
+
+    if (typeof value === "string") {
+      return uniqueCleanArray([value]);
+    }
+
+    return [];
+  }
+
+  function hasMalformedSourceValue(value) {
+    return (
+      value !== null &&
+      value !== undefined &&
+      value !== "" &&
+      !Array.isArray(value) &&
+      typeof value !== "string"
+    );
+  }
+
+  function cleanImportSourceLabel(
+    value,
+    fallback = "import"
+  ) {
+    const sources =
+      normalizeImportSourceList(value);
+
+    return (
+      sources[0] ||
+      cleanString(fallback, "import")
+    );
+  }
+
+  function addLegacyImportWarning(
+    character,
+    warning
+  ) {
+    addMigrationWarning(
+      character,
+      `Import audit: ${warning}`
+    );
+  }
+
+  function collectMalformedSourceValues(
+    value,
+    path = "source",
+    results = []
+  ) {
+    if (hasMalformedSourceValue(value)) {
+      results.push(path);
+      return results;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        if (hasMalformedSourceValue(entry)) {
+          results.push(`${path}[${index}]`);
+        }
+      });
+    }
+
+    return results;
+  }
+
+  function auditLegacyImportedCharacter(
+    raw,
+    character
+  ) {
+    if (
+      !raw ||
+      typeof raw !== "object" ||
+      Array.isArray(raw)
+    ) {
+      return;
+    }
+
+    const idValues =
+      uniqueCleanArray([
+        raw.id,
+        raw.docId,
+        raw.firestoreDocumentId
+      ]);
+
+    if (idValues.length > 1) {
+      addLegacyImportWarning(
+        character,
+        "conflicting saved character IDs were found; this draft should be reviewed before updating an existing saved character."
+      );
+    }
+
+    const rawClassProgression =
+      raw.classProgression;
+
+    if (
+      rawClassProgression &&
+      !isPlainObject(rawClassProgression)
+    ) {
+      addLegacyImportWarning(
+        character,
+        "class progression was not an object, so legacy class fields were used where possible."
+      );
+    }
+
+    const rawClassesValue =
+      rawClassProgression?.classes;
+
+    if (
+      rawClassesValue !== undefined &&
+      !Array.isArray(rawClassesValue)
+    ) {
+      addLegacyImportWarning(
+        character,
+        "class progression classes were not a list and were ignored."
+      );
+    }
+
+    const rawClassEntries =
+      Array.isArray(rawClassesValue)
+        ? rawClassesValue
+        : [];
+
+    const validClassEntries =
+      rawClassEntries.filter((entry) => {
+        return isPlainObject(entry);
+      });
+
+    if (
+      rawClassEntries.length >
+      validClassEntries.length
+    ) {
+      addLegacyImportWarning(
+        character,
+        "one or more malformed class records were ignored."
+      );
+    }
+
+    const legacyClassFields =
+      Boolean(
+        raw.classId ||
+        raw.className ||
+        raw.subclassName ||
+        raw.selectedClassSnapshot ||
+        raw.builder?.selectedClassId ||
+        raw.builder?.selectedClassSnapshot
+      );
+
+    if (
+      !validClassEntries.length &&
+      legacyClassFields
+    ) {
+      addLegacyImportWarning(
+        character,
+        "legacy class fields were migrated into the current class progression format."
+      );
+    }
+
+    const classLevelTotal =
+      validClassEntries.reduce(
+        (sum, classEntry) => {
+          return (
+            sum +
+            Math.max(
+              0,
+              Math.round(
+                safeNumber(
+                  classEntry?.level,
+                  0
+                )
+              )
+            )
+          );
+        },
+        0
+      );
+
+    const rawTotalLevel =
+      Math.round(
+        safeNumber(
+          rawClassProgression?.totalLevel,
+          0
+        )
+      );
+
+    if (
+      validClassEntries.length > 1 &&
+      classLevelTotal > 0 &&
+      rawTotalLevel > 0 &&
+      rawTotalLevel !== classLevelTotal
+    ) {
+      character.classProgression.totalLevel =
+        clampLevel(classLevelTotal);
+
+      addLegacyImportWarning(
+        character,
+        "multiclass total level did not match the class levels and was recalculated from the preserved class records."
+      );
+    }
+
+    if (
+      validClassEntries.some((classEntry) => {
+        return (
+          !cleanString(
+            classEntry.classId ||
+            classEntry.id
+          ) &&
+          !cleanString(
+            classEntry.className ||
+            classEntry.name
+          ) &&
+          !classEntry.templateSnapshot
+        );
+      })
+    ) {
+      addLegacyImportWarning(
+        character,
+        "one or more class records were missing class identity details."
+      );
+    }
+
+    if (
+      validClassEntries.some((classEntry) => {
+        return hasMalformedSourceValue(
+          classEntry.source
+        );
+      })
+    ) {
+      character.classProgression.classes =
+        character.classProgression.classes.map(
+          (classEntry) => {
+            return {
+              ...classEntry,
+              source:
+                cleanImportSourceLabel(
+                  classEntry.source,
+                  "import"
+                )
+            };
+          }
+        );
+
+      addLegacyImportWarning(
+        character,
+        "malformed class source data was replaced with import-safe source labels."
+      );
+    }
+
+    const equipment =
+      raw.equipment;
+
+    if (typeof equipment === "string") {
+      addLegacyImportWarning(
+        character,
+        "legacy free-text equipment was moved into equipment notes."
+      );
+    } else if (
+      equipment !== undefined &&
+      equipment !== null &&
+      !isPlainObject(equipment)
+    ) {
+      addLegacyImportWarning(
+        character,
+        "equipment data was malformed and only recoverable fields were kept."
+      );
+    }
+
+    if (raw.equipmentText) {
+      addLegacyImportWarning(
+        character,
+        "legacy equipment text was preserved in equipment notes."
+      );
+    }
+
+    const rawItems =
+      equipment?.items;
+
+    if (
+      rawItems !== undefined &&
+      !Array.isArray(rawItems)
+    ) {
+      addLegacyImportWarning(
+        character,
+        "equipment items were not a list and were ignored."
+      );
+    }
+
+    const validItems =
+      Array.isArray(rawItems)
+        ? rawItems.filter((item) => {
+            return isPlainObject(item);
+          })
+        : [];
+
+    if (
+      Array.isArray(rawItems) &&
+      rawItems.length > validItems.length
+    ) {
+      addLegacyImportWarning(
+        character,
+        "one or more malformed equipment items were ignored."
+      );
+    }
+
+    if (
+      validItems.some((item) => {
+        return !cleanString(item.id);
+      })
+    ) {
+      addLegacyImportWarning(
+        character,
+        "one or more equipment items had missing IDs, so new stable import IDs were generated."
+      );
+    }
+
+    const itemIds =
+      validItems
+        .map((item) => {
+          return cleanString(item.id);
+        })
+        .filter(Boolean);
+
+    if (
+      new Set(itemIds).size !== itemIds.length
+    ) {
+      addLegacyImportWarning(
+        character,
+        "duplicate equipment item IDs were found; container links and equipped states should be reviewed."
+      );
+    }
+
+    const itemIdSet =
+      new Set(itemIds);
+
+    if (
+      validItems.some((item) => {
+        const containerId =
+          cleanString(item.containerId);
+
+        return (
+          containerId &&
+          !itemIdSet.has(containerId)
+        );
+      })
+    ) {
+      addLegacyImportWarning(
+        character,
+        "one or more equipment container references pointed to missing items and were repaired."
+      );
+    }
+
+    if (
+      validItems.some((item) => {
+        return hasMalformedSourceValue(
+          item.source
+        );
+      })
+    ) {
+      character.equipment.items =
+        character.equipment.items.map((item) => {
+          return {
+            ...item,
+            source:
+              cleanImportSourceLabel(
+                item.source,
+                "import"
+              )
+          };
+        });
+
+      addLegacyImportWarning(
+        character,
+        "malformed equipment source data was replaced with import-safe source labels."
+      );
+    }
+
+    if (
+      validItems.some((item) => {
+        return (
+          item.source === undefined ||
+          item.source === null ||
+          item.source === ""
+        );
+      })
+    ) {
+      addLegacyImportWarning(
+        character,
+        "one or more equipment items had no source and were tagged as imported items."
+      );
+    }
+
+    const proficiencySources =
+      raw.proficiencies?.sources;
+
+    if (
+      proficiencySources !== undefined &&
+      !isPlainObject(proficiencySources)
+    ) {
+      addLegacyImportWarning(
+        character,
+        "proficiency source data was malformed and was normalized where possible."
+      );
+    }
+
+    if (isPlainObject(proficiencySources)) {
+      const malformedPaths = [];
+      const stringPaths = [];
+
+      Object.entries(proficiencySources)
+        .forEach(([category, sourceMap]) => {
+          if (!isPlainObject(sourceMap)) {
+            malformedPaths.push(category);
+            return;
+          }
+
+          Object.entries(sourceMap)
+            .forEach(([value, sources]) => {
+              if (typeof sources === "string") {
+                stringPaths.push(
+                  `${category}.${value}`
+                );
+              }
+
+              collectMalformedSourceValues(
+                sources,
+                `${category}.${value}`,
+                malformedPaths
+              );
+            });
+        });
+
+      if (stringPaths.length) {
+        addLegacyImportWarning(
+          character,
+          "legacy string proficiency sources were migrated to source lists."
+        );
+      }
+
+      if (malformedPaths.length) {
+        addLegacyImportWarning(
+          character,
+          "malformed proficiency source entries were ignored or replaced with safe defaults."
+        );
+      }
+    }
+
+    const skillEntries =
+      raw.proficiencies?.skills &&
+      isPlainObject(raw.proficiencies.skills)
+        ? Object.values(raw.proficiencies.skills)
+        : [];
+
+    if (
+      skillEntries.some((entry) => {
+        return (
+          isPlainObject(entry) &&
+          typeof entry.source === "string"
+        );
+      })
+    ) {
+      addLegacyImportWarning(
+        character,
+        "legacy string skill sources were migrated to source lists."
+      );
+    }
+
+    if (
+      skillEntries.some((entry) => {
+        return (
+          isPlainObject(entry) &&
+          hasMalformedSourceValue(entry.source)
+        );
+      })
+    ) {
+      addLegacyImportWarning(
+        character,
+        "malformed skill source data was replaced with safe legacy source tags."
+      );
+    }
   }
 
   function ensureProficiencySources(character) {
@@ -1880,7 +2438,10 @@ export function createCharacterCreator(options = {}) {
             ),
 
             source: cleanString(
-              classEntry?.source,
+              cleanImportSourceLabel(
+                classEntry?.source,
+                "template"
+              ),
               "template"
             ),
 
@@ -2015,10 +2576,14 @@ export function createCharacterCreator(options = {}) {
           raw.name
         ),
 
-        image: {
-          ...empty.identity.image,
-          ...(raw.identity?.image || {})
-        }
+        image: normalizeCharacterImageValue(
+          raw.identity?.image ||
+          raw.image,
+          {
+            ...(raw || {}),
+            ...(raw.identity || {})
+          }
+        )
       },
 
       species: {
@@ -2032,7 +2597,12 @@ export function createCharacterCreator(options = {}) {
         name: speciesName,
 
         source: cleanString(
-          speciesObject?.source,
+          cleanImportSourceLabel(
+            speciesObject?.source,
+            speciesObject
+              ? "template"
+              : "custom"
+          ),
           speciesObject
             ? "template"
             : "custom"
@@ -2105,7 +2675,12 @@ export function createCharacterCreator(options = {}) {
         name: backgroundName,
 
         source: cleanString(
-          backgroundObject?.source,
+          cleanImportSourceLabel(
+            backgroundObject?.source,
+            backgroundObject
+              ? "template"
+              : "custom"
+          ),
           backgroundObject
             ? "template"
             : "custom"
@@ -2303,7 +2878,10 @@ export function createCharacterCreator(options = {}) {
           ? raw.equipment.items.map((item) => {
               return normalizeSection15Item(
                 item,
-                item?.source || "import"
+                cleanImportSourceLabel(
+                  item?.source,
+                  "import"
+                )
               );
             })
           : [],
@@ -2465,6 +3043,39 @@ export function createCharacterCreator(options = {}) {
       });
     }
 
+    auditLegacyImportedCharacter(
+      raw,
+      normalized
+    );
+
+    if (
+      !isPlainObject(
+        normalized.proficiencies.skills
+      )
+    ) {
+      normalized.proficiencies.skills = {};
+    }
+
+    Object.keys(
+      normalized.proficiencies.skills
+    ).forEach((skillName) => {
+      const entry =
+        normalized.proficiencies
+          .skills[skillName];
+
+      if (isPlainObject(entry)) {
+        return;
+      }
+
+      normalized.proficiencies
+        .skills[skillName] = {
+          proficient: Boolean(entry),
+          expertise: false,
+          source:
+            entry ? ["legacy"] : []
+        };
+    });
+
     const primaryClassSource =
       getClassSourceLabel(
         getPrimaryClassEntry(
@@ -2489,7 +3100,9 @@ export function createCharacterCreator(options = {}) {
       }
 
       const sources =
-        cleanArray(entry.source);
+        normalizeImportSourceList(
+          entry.source
+        );
 
       entry.source =
         sources.length
@@ -2515,6 +3128,14 @@ export function createCharacterCreator(options = {}) {
             : [];
     });
 
+    if (
+      !isPlainObject(
+        normalized.proficiencies.sources
+      )
+    ) {
+      normalized.proficiencies.sources = {};
+    }
+
     [
       "savingThrows",
       "armor",
@@ -2531,12 +3152,17 @@ export function createCharacterCreator(options = {}) {
         typeof sourceMap !== "object" ||
         Array.isArray(sourceMap)
       ) {
+        if (sourceMap !== undefined) {
+          normalized.proficiencies
+            .sources[category] = {};
+        }
+
         return;
       }
 
       Object.keys(sourceMap).forEach((value) => {
         sourceMap[value] =
-          cleanArray(
+          normalizeImportSourceList(
             sourceMap[value]
           ).map((source) => {
             if (
@@ -5843,6 +6469,197 @@ export function createCharacterCreator(options = {}) {
   function runSrd2014RulesSelfTests() {
     const results = [];
 
+    const storageSnapshot = (() => {
+      try {
+        const targets =
+          getDraftStorageTargets();
+
+        return {
+          available:
+            targets.length > 0,
+          targets:
+            targets.map((target) => {
+              const value =
+                target.storage.getItem(
+                  target.key
+                );
+
+              return {
+                ...target,
+                hadValue:
+                  value !== null,
+                value
+              };
+            })
+        };
+      } catch (error) {
+        return {
+          available: false,
+          targets: []
+        };
+      }
+    })();
+
+    const getSelfTestStateSnapshot = () => {
+      return {
+        viewMode:
+          creatorState.viewMode,
+        currentStepId:
+          creatorState.currentStepId,
+        currentStepIndex:
+          creatorState.currentStepIndex,
+        currentCharacterId:
+          creatorState.currentCharacterId,
+        draft:
+          cloneData(creatorState.draft),
+        dirty:
+          creatorState.dirty,
+        isSaving:
+          creatorState.isSaving,
+        busyAction:
+          creatorState.busyAction,
+        statusMessage:
+          creatorState.statusMessage,
+        pendingContainerRemovalId:
+          creatorState.pendingContainerRemovalId,
+        openContainerId:
+          creatorState.openContainerId,
+        showContainedItems:
+          creatorState.showContainedItems,
+        characterCache:
+          cloneData(
+            creatorState.characterCache
+          ),
+        characterRoomCode:
+          creatorState.characterRoomCode,
+        roomClassCache:
+          cloneData(
+            creatorState.roomClassCache
+          ),
+        classRoomCode:
+          creatorState.classRoomCode,
+        roomSpeciesCache:
+          cloneData(
+            creatorState.roomSpeciesCache
+          ),
+        roomBackgroundCache:
+          cloneData(
+            creatorState.roomBackgroundCache
+          )
+      };
+    };
+
+    const applySelfTestStateSnapshot = (
+      stateSnapshot
+    ) => {
+      creatorState.viewMode =
+        stateSnapshot.viewMode;
+      creatorState.currentStepId =
+        stateSnapshot.currentStepId;
+      creatorState.currentStepIndex =
+        stateSnapshot.currentStepIndex;
+      creatorState.currentCharacterId =
+        stateSnapshot.currentCharacterId;
+      creatorState.draft =
+        cloneData(stateSnapshot.draft);
+      creatorState.dirty =
+        stateSnapshot.dirty;
+      creatorState.isSaving =
+        stateSnapshot.isSaving;
+      creatorState.busyAction =
+        stateSnapshot.busyAction;
+      creatorState.statusMessage =
+        stateSnapshot.statusMessage;
+      creatorState.pendingContainerRemovalId =
+        stateSnapshot.pendingContainerRemovalId;
+      creatorState.openContainerId =
+        stateSnapshot.openContainerId;
+      creatorState.showContainedItems =
+        stateSnapshot.showContainedItems;
+      creatorState.characterCache =
+        cloneData(
+          stateSnapshot.characterCache
+        );
+      creatorState.characterRoomCode =
+        stateSnapshot.characterRoomCode;
+      creatorState.roomClassCache =
+        cloneData(
+          stateSnapshot.roomClassCache
+        );
+      creatorState.classRoomCode =
+        stateSnapshot.classRoomCode;
+      creatorState.roomSpeciesCache =
+        cloneData(
+          stateSnapshot.roomSpeciesCache
+        );
+      creatorState.roomBackgroundCache =
+        cloneData(
+          stateSnapshot.roomBackgroundCache
+        );
+    };
+
+    const createIsolatedSelfTestState = () => {
+      return {
+        viewMode: "builder",
+        currentStepId: "basics",
+        currentStepIndex: 0,
+        currentCharacterId: null,
+        draft: createEmptyCharacter(),
+        dirty: false,
+        isSaving: false,
+        busyAction: "",
+        statusMessage:
+          "Running isolated character creator self-tests.",
+        pendingContainerRemovalId: "",
+        openContainerId: "",
+        showContainedItems: false,
+        characterCache: [],
+        characterRoomCode: null,
+        roomClassCache: [],
+        classRoomCode: null,
+        roomSpeciesCache: [],
+        roomBackgroundCache: []
+      };
+    };
+
+    const stateSnapshot =
+      getSelfTestStateSnapshot();
+
+    const restoreSelfTestState = () => {
+      applySelfTestStateSnapshot(
+        stateSnapshot
+      );
+
+      if (
+        storageSnapshot.available
+      ) {
+        storageSnapshot.targets
+          .forEach((target) => {
+            try {
+              if (target.hadValue) {
+                target.storage.setItem(
+                  target.key,
+                  target.value
+                );
+              } else {
+                target.storage.removeItem(
+                  target.key
+                );
+              }
+            } catch (error) {
+              console.warn(
+                "Could not restore stored character draft after self-tests:",
+                error
+              );
+            }
+          });
+          }
+    };
+
+    applySelfTestStateSnapshot(
+      createIsolatedSelfTestState()
+    );
+
     const record = (
       name,
       actual,
@@ -5859,6 +6676,977 @@ export function createCharacterCreator(options = {}) {
         expected
       });
     };
+
+    const createSelfTestStorage = (
+      options = {}
+    ) => {
+      const values = new Map(
+        Object.entries(
+          options.seed || {}
+        )
+      );
+
+      const metrics = {
+        setCount: 0,
+        removeCount: 0
+      };
+
+      return {
+        values,
+        metrics,
+
+        getItem(key) {
+          return values.has(key)
+            ? values.get(key)
+            : null;
+        },
+
+        setItem(key, value) {
+          if (options.throwOnSet) {
+            throw options.throwOnSet;
+          }
+
+          metrics.setCount += 1;
+
+          values.set(
+            key,
+            String(value)
+          );
+        },
+
+        removeItem(key) {
+          metrics.removeCount += 1;
+          values.delete(key);
+        }
+      };
+    };
+
+    const createSelfTestStorageTargets = (
+      sessionStorageMock,
+      persistentStorageMock
+    ) => {
+      return [
+        {
+          name: "session",
+          label: "this browser tab",
+          persistent: false,
+          key: getDraftStorageKey(),
+          storage: sessionStorageMock
+        },
+        {
+          name: "persistent",
+          label:
+            "local browser backup",
+          persistent: true,
+          key: getPersistentDraftStorageKey(),
+          storage: persistentStorageMock
+        }
+      ];
+    };
+
+    const withMutedConsoleWarn = (
+      action
+    ) => {
+      const originalWarn =
+        console.warn;
+
+      console.warn = () => {};
+
+      try {
+        return action();
+      } finally {
+        console.warn =
+          originalWarn;
+      }
+    };
+
+    try {
+    record(
+      "Self-tests start from isolated creator state",
+      {
+        viewMode:
+          creatorState.viewMode,
+        currentCharacterId:
+          creatorState.currentCharacterId,
+        dirty:
+          creatorState.dirty,
+        busyAction:
+          creatorState.busyAction,
+        openContainerId:
+          creatorState.openContainerId,
+        showContainedItems:
+          creatorState.showContainedItems,
+        characterCache:
+          creatorState.characterCache.length,
+        roomClassCache:
+          creatorState.roomClassCache.length,
+        draftName:
+          getSafeCharacterName(
+            creatorState.draft
+          )
+      },
+      {
+        viewMode: "builder",
+        currentCharacterId: null,
+        dirty: false,
+        busyAction: "",
+        openContainerId: "",
+        showContainedItems: false,
+        characterCache: 0,
+        roomClassCache: 0,
+        draftName: ""
+      }
+    );
+
+    const portraitUrl =
+      "https://example.com/portrait.png";
+
+    const portraitSet =
+      setSection11Portrait(
+        {
+          url: portraitUrl,
+          publicId: "portrait-public-id"
+        },
+        {
+          render: false,
+          status: false
+        }
+      );
+
+    const portraitBasicsHtml =
+      renderBasicsStep();
+
+    const storedPortraitAfterSet =
+      getSection11Portrait();
+
+    const normalizedStringPortrait =
+      normalizeCharacter({
+        identity: {
+          name: "String Portrait",
+          image:
+            "https://example.com/string-portrait.png"
+        }
+      }).identity.image;
+
+    const portraitCleared =
+      clearSection11Portrait({
+        render: false,
+        status: false
+      });
+
+    record(
+      "Basics portrait workflow stores images and renders replacement controls",
+      {
+        set:
+          portraitSet,
+        url:
+          storedPortraitAfterSet.url,
+        publicIdRendered:
+          portraitBasicsHtml.includes(
+            "portrait-public-id"
+          ),
+        urlAction:
+          portraitBasicsHtml.includes(
+            'data-cc-action="set-portrait-url"'
+          ),
+        uploadInput:
+          portraitBasicsHtml.includes(
+            'data-cc-portrait-upload="true"'
+          ),
+        removeAction:
+          portraitBasicsHtml.includes(
+            'data-cc-action="remove-portrait"'
+          ),
+        normalizedStringUrl:
+          normalizedStringPortrait.url,
+        cleared:
+          portraitCleared,
+        clearedUrl:
+          creatorState.draft
+            .identity
+            .image
+            .url
+      },
+      {
+        set: true,
+        url: portraitUrl,
+        publicIdRendered: true,
+        urlAction: true,
+        uploadInput: true,
+        removeAction: true,
+        normalizedStringUrl:
+          "https://example.com/string-portrait.png",
+        cleared: true,
+        clearedUrl: ""
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.dirty = false;
+
+    const busySaveStarted =
+      beginCharacterBusyAction(
+        "save-character"
+      );
+
+    const overlappingDeleteBlocked =
+      blockCharacterBusyAction(
+        "delete-character"
+      );
+
+    const busySaveHtml =
+      renderSaveStep();
+
+    const busyLibraryCard =
+      createCharacterLibraryCard({
+        id: "busy-test-character",
+        identity: {
+          name: "Busy Test"
+        }
+      });
+
+    record(
+      "Character busy state blocks overlapping operations and disables controls",
+      {
+        started:
+          busySaveStarted,
+        blocked:
+          overlappingDeleteBlocked,
+        busyAction:
+          creatorState.busyAction,
+        isSaving:
+          creatorState.isSaving,
+        saveButtonDisabled:
+          /data-cc-action="save-character"[\s\S]*disabled/.test(
+            busySaveHtml
+          ),
+        importFileDisabled:
+          /id="ccSaveImportInput"[\s\S]*disabled/.test(
+            busySaveHtml
+          ),
+        importTextDisabled:
+          /data-cc-action="import-json-text"[\s\S]*disabled/.test(
+            busySaveHtml
+          ),
+        libraryDeleteDisabled:
+          /data-cc-action="delete-character"[\s\S]*disabled/.test(
+            busyLibraryCard
+          )
+      },
+      {
+        started: true,
+        blocked: true,
+        busyAction: "save-character",
+        isSaving: true,
+        saveButtonDisabled: true,
+        importFileDisabled: true,
+        importTextDisabled: true,
+        libraryDeleteDisabled: true
+      }
+    );
+
+    endCharacterBusyAction(
+      "save-character"
+    );
+
+    record(
+      "Character busy state clears after operation",
+      {
+        busyAction:
+          creatorState.busyAction,
+        isSaving:
+          creatorState.isSaving,
+        busy:
+          isCharacterCreatorBusy()
+      },
+      {
+        busyAction: "",
+        isSaving: false,
+        busy: false
+      }
+    );
+
+    const captureSection18ValidationError = (
+      action
+    ) => {
+      try {
+        action();
+        return "";
+      } catch (error) {
+        return error?.message || String(error);
+      }
+    };
+
+    const validFirestoreCharacterData = {
+      sheetType: "character",
+      roomCode: "TEST",
+      identity: {
+        name: "Validated Character"
+      }
+    };
+
+    record(
+      "Firestore mutation validation accepts current-room character records",
+      {
+        snapshotExists:
+          section18SnapshotExists({
+            exists() {
+              return true;
+            },
+            data() {
+              return validFirestoreCharacterData;
+            }
+          }),
+        typedCharacter:
+          captureSection18ValidationError(() => {
+            validateSection18FirestoreRecord({
+              characterId: "character-doc-id",
+              data: validFirestoreCharacterData,
+              roomCode: "TEST",
+              actionLabel: "update"
+            });
+          }),
+        legacyCharacter:
+          captureSection18ValidationError(() => {
+            validateSection18FirestoreRecord({
+              characterId: "legacy-doc-id",
+              data: {
+                identity: {
+                  name: "Legacy Character"
+                },
+                classProgression: {
+                  totalLevel: 1,
+                  classes: []
+                }
+              },
+              roomCode: "TEST",
+              actionLabel: "delete"
+            });
+          })
+      },
+      {
+        snapshotExists: true,
+        typedCharacter: "",
+        legacyCharacter: ""
+      }
+    );
+
+    record(
+      "Firestore mutation validation blocks missing, wrong-room, and wrong-type records",
+      {
+        missingDocument:
+          !section18SnapshotExists({
+            exists() {
+              return false;
+            },
+            data() {
+              return validFirestoreCharacterData;
+            }
+          }),
+        wrongRoom:
+          captureSection18ValidationError(() => {
+            validateSection18FirestoreRecord({
+              characterId: "character-doc-id",
+              data: {
+                ...validFirestoreCharacterData,
+                roomCode: "OTHER"
+              },
+              roomCode: "TEST",
+              actionLabel: "update"
+            });
+          }).includes(
+            "belongs to room OTHER"
+          ),
+        wrongType:
+          captureSection18ValidationError(() => {
+            validateSection18FirestoreRecord({
+              characterId: "character-doc-id",
+              data: {
+                sheetType: "class",
+                roomCode: "TEST",
+                name: "Not a Character"
+              },
+              roomCode: "TEST",
+              actionLabel: "delete"
+            });
+          }).includes(
+            "not a character record"
+          ),
+        wrongDocumentId:
+          captureSection18ValidationError(() => {
+            validateSection18FirestoreRecord({
+              characterId: "character-doc-id",
+              data: {
+                ...validFirestoreCharacterData,
+                firestoreDocumentId:
+                  "other-doc-id"
+              },
+              roomCode: "TEST",
+              actionLabel: "update"
+            });
+          }).includes(
+            "stored document ID"
+          )
+      },
+      {
+        missingDocument: true,
+        wrongRoom: true,
+        wrongType: true,
+        wrongDocumentId: true
+      }
+    );
+
+    record(
+      "Firestore stale-tab conflict validation blocks older saves and deletes",
+      {
+        matchingRevision:
+          captureSection18ValidationError(() => {
+            validateSection18NoRemoteConflict({
+              data: {
+                builder: {
+                  lastSavedAtMillis: 2000
+                }
+              },
+              expectedRevisionMillis: 2000,
+              actionLabel: "update"
+            });
+          }),
+        staleUpdate:
+          captureSection18ValidationError(() => {
+            validateSection18NoRemoteConflict({
+              data: {
+                builder: {
+                  lastSavedAtMillis: 3000
+                }
+              },
+              expectedRevisionMillis: 2000,
+              actionLabel: "update"
+            });
+          }).includes(
+            "changed in another tab or window"
+          ),
+        unknownLocalRevision:
+          captureSection18ValidationError(() => {
+            validateSection18NoRemoteConflict({
+              data: {
+                updatedAtMillis: 3000
+              },
+              expectedRevisionMillis: 0,
+              actionLabel: "delete"
+            });
+          }).includes(
+            "does not know which saved version"
+          )
+      },
+      {
+        matchingRevision: "",
+        staleUpdate: true,
+        unknownLocalRevision: true
+      }
+    );
+
+    const timestampOnlyFirestoreRecord =
+      normalizeSection19CharacterRecord({
+        docId: "timestamp-only-character",
+        sheetType: "character",
+        roomCode: "TEST",
+        identity: {
+          name: "Timestamp Only"
+        },
+        updatedAt: {
+          toMillis() {
+            return 4321;
+          }
+        }
+      });
+
+    record(
+      "Firestore timestamp-only characters get a local conflict revision",
+      timestampOnlyFirestoreRecord
+        .builder
+        .lastSavedAtMillis,
+      4321
+    );
+
+    const sessionStorageMock =
+      createSelfTestStorage();
+
+    const persistentStorageMock =
+      createSelfTestStorage();
+
+    const draftStorageTargets =
+      createSelfTestStorageTargets(
+        sessionStorageMock,
+        persistentStorageMock
+      );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.draft.identity.name =
+      "Persistent Draft";
+
+    creatorState.currentCharacterId =
+      "stored-character-id";
+
+    creatorState.currentStepId =
+      "species";
+
+    creatorState.dirty = true;
+
+    persistDraftToSession(
+      draftStorageTargets
+    );
+
+    const sessionStoredDraft =
+      JSON.parse(
+        sessionStorageMock.getItem(
+          getDraftStorageKey()
+        )
+      );
+
+    const persistentStoredDraft =
+      JSON.parse(
+        persistentStorageMock.getItem(
+          getPersistentDraftStorageKey()
+        )
+      );
+
+    record(
+      "Dirty draft is stored in session and local browser backup",
+      {
+        sessionName:
+          sessionStoredDraft
+            .draft
+            .identity
+            .name,
+        persistentName:
+          persistentStoredDraft
+            .draft
+            .identity
+            .name,
+        sessionDirty:
+          sessionStoredDraft.dirty,
+        persistentDirty:
+          persistentStoredDraft.dirty
+      },
+      {
+        sessionName:
+          "Persistent Draft",
+        persistentName:
+          "Persistent Draft",
+        sessionDirty: true,
+        persistentDirty: true
+      }
+    );
+
+    creatorState.dirty = false;
+
+    persistDraftToSession(
+      draftStorageTargets
+    );
+
+    record(
+      "Clean draft clears persistent unsaved backup",
+      {
+        session:
+          Boolean(
+            sessionStorageMock.getItem(
+              getDraftStorageKey()
+            )
+          ),
+        persistent:
+          persistentStorageMock.getItem(
+            getPersistentDraftStorageKey()
+          )
+      },
+      {
+        session: true,
+        persistent: null
+      }
+    );
+
+    sessionStorageMock.removeItem(
+      getDraftStorageKey()
+    );
+
+    persistentStorageMock.setItem(
+      getPersistentDraftStorageKey(),
+      JSON.stringify({
+        version: 2,
+        persistedAtMillis: 100,
+        draft: {
+          ...createEmptyCharacter(),
+          identity: {
+            ...createEmptyCharacter()
+              .identity,
+            name:
+              "Recovered Persistent Draft"
+          }
+        },
+        currentCharacterId:
+          "recovered-character-id",
+        currentStepId:
+          "background",
+        dirty: true
+      })
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.currentCharacterId =
+      null;
+
+    creatorState.currentStepId =
+      "basics";
+
+    creatorState.dirty = false;
+
+    const restoredPersistentDraft =
+      restoreDraftFromSession(
+        draftStorageTargets
+      );
+
+    record(
+      "Draft restore can recover from local browser backup",
+      {
+        restored:
+          restoredPersistentDraft,
+        name:
+          creatorState.draft
+            .identity
+            .name,
+        currentCharacterId:
+          creatorState.currentCharacterId,
+        currentStepId:
+          creatorState.currentStepId,
+        dirty:
+          creatorState.dirty
+      },
+      {
+        restored: true,
+        name:
+          "Recovered Persistent Draft",
+        currentCharacterId:
+          "recovered-character-id",
+        currentStepId: "background",
+        dirty: true
+      }
+    );
+
+    const quotaError =
+      new Error(
+        "Draft storage full"
+      );
+
+    quotaError.name =
+      "QuotaExceededError";
+
+    const quotaSessionStorage =
+      createSelfTestStorage();
+
+    const quotaPersistentStorage =
+      createSelfTestStorage({
+        throwOnSet: quotaError
+      });
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.draft.identity.name =
+      "Large Draft";
+
+    creatorState.currentStepId =
+      "equipment";
+
+    creatorState.dirty = true;
+
+    creatorState.statusMessage = "";
+
+    withMutedConsoleWarn(() => {
+      persistDraftToSession(
+        createSelfTestStorageTargets(
+          quotaSessionStorage,
+          quotaPersistentStorage
+        )
+      );
+    });
+
+    record(
+      "Storage quota failure warns while preserving session draft",
+      {
+        sessionSaved:
+          Boolean(
+            quotaSessionStorage.getItem(
+              getDraftStorageKey()
+            )
+          ),
+        persistentSaved:
+          Boolean(
+            quotaPersistentStorage.getItem(
+              getPersistentDraftStorageKey()
+            )
+          ),
+        warning:
+          creatorState.statusMessage
+            .includes(
+              "Browser autosave could not keep this draft"
+            )
+      },
+      {
+        sessionSaved: true,
+        persistentSaved: false,
+        warning: true
+      }
+    );
+
+    const debounceSessionStorage =
+      createSelfTestStorage();
+
+    const debouncePersistentStorage =
+      createSelfTestStorage();
+
+    const debounceTargets =
+      createSelfTestStorageTargets(
+        debounceSessionStorage,
+        debouncePersistentStorage
+      );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.dirty = true;
+    creatorState.currentStepId =
+      "basics";
+
+    creatorState.draft.identity.name =
+      "First Debounced Draft";
+
+    scheduleDraftPersistence(
+      debounceTargets,
+      {
+        delayMillis: 999999
+      }
+    );
+
+    creatorState.draft.identity.name =
+      "Latest Debounced Draft";
+
+    scheduleDraftPersistence(
+      debounceTargets,
+      {
+        delayMillis: 999999
+      }
+    );
+
+    const debounceWritesBeforeFlush = {
+      session:
+        debounceSessionStorage
+          .metrics
+          .setCount,
+      persistent:
+        debouncePersistentStorage
+          .metrics
+          .setCount
+    };
+
+    flushPendingDraftPersistence();
+
+    const debounceStoredDraft =
+      JSON.parse(
+        debounceSessionStorage.getItem(
+          getDraftStorageKey()
+        )
+      );
+
+    record(
+      "Draft autosave debounce coalesces frequent edits",
+      {
+        beforeFlush:
+          debounceWritesBeforeFlush,
+        afterFlush: {
+          session:
+            debounceSessionStorage
+              .metrics
+              .setCount,
+          persistent:
+            debouncePersistentStorage
+              .metrics
+              .setCount
+        },
+        storedName:
+          debounceStoredDraft
+            .draft
+            .identity
+            .name,
+        pending:
+          Boolean(
+            draftPersistenceRuntime
+              .timerId
+          )
+      },
+      {
+        beforeFlush: {
+          session: 0,
+          persistent: 0
+        },
+        afterFlush: {
+          session: 1,
+          persistent: 1
+        },
+        storedName:
+          "Latest Debounced Draft",
+        pending: false
+      }
+    );
+
+    const immediateSessionStorage =
+      createSelfTestStorage();
+
+    const immediatePersistentStorage =
+      createSelfTestStorage();
+
+    const immediateTargets =
+      createSelfTestStorageTargets(
+        immediateSessionStorage,
+        immediatePersistentStorage
+      );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.dirty = true;
+    creatorState.currentStepId =
+      "class";
+
+    creatorState.draft.identity.name =
+      "Pending Draft";
+
+    scheduleDraftPersistence(
+      immediateTargets,
+      {
+        delayMillis: 999999
+      }
+    );
+
+    creatorState.draft.identity.name =
+      "Immediate Draft";
+
+    persistDraftToSession(
+      immediateTargets
+    );
+
+    const immediateStoredDraft =
+      JSON.parse(
+        immediateSessionStorage.getItem(
+          getDraftStorageKey()
+        )
+      );
+
+    record(
+      "Immediate draft persistence cancels pending autosave",
+      {
+        sessionWrites:
+          immediateSessionStorage
+            .metrics
+            .setCount,
+        persistentWrites:
+          immediatePersistentStorage
+            .metrics
+            .setCount,
+        storedName:
+          immediateStoredDraft
+            .draft
+            .identity
+            .name,
+        pending:
+          Boolean(
+            draftPersistenceRuntime
+              .timerId
+          )
+      },
+      {
+        sessionWrites: 1,
+        persistentWrites: 1,
+        storedName:
+          "Immediate Draft",
+        pending: false
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    creatorState.draft.identity.name =
+      "Backup Warning Draft";
+
+    creatorState.dirty = true;
+
+    const dirtySaveHtml =
+      renderSaveStep();
+
+    creatorState.dirty = false;
+
+    const cleanSaveHtml =
+      renderSaveStep();
+
+    record(
+      "Dirty save screen warns browser autosave is temporary and offers JSON backup",
+      {
+        warning:
+          dirtySaveHtml.includes(
+            "Browser autosave is temporary"
+          ),
+        backupButton:
+          dirtySaveHtml.includes(
+            'data-cc-action="download-draft-backup"'
+          ),
+        cleanWarning:
+          cleanSaveHtml.includes(
+            "Browser autosave is temporary"
+          )
+      },
+      {
+        warning: true,
+        backupButton: true,
+        cleanWarning: false
+      }
+    );
+
+    creatorState.dirty = true;
+
+    let unloadPrevented = false;
+
+    const unloadEvent = {
+      returnValue: null,
+
+      preventDefault() {
+        unloadPrevented = true;
+      }
+    };
+
+    handleDraftBeforeUnload(
+      unloadEvent
+    );
+
+    record(
+      "Unsaved dirty draft warns before page unload",
+      {
+        prevented:
+          unloadPrevented,
+        returnValue:
+          unloadEvent.returnValue
+      },
+      {
+        prevented: true,
+        returnValue: ""
+      }
+    );
+
+    creatorState.dirty = false;
 
     record(
       "Ability modifier 8",
@@ -7009,6 +8797,184 @@ export function createCharacterCreator(options = {}) {
       ]
     );
 
+    const riskyLegacyImport =
+      normalizeCharacter({
+        id: "old-internal-id",
+        docId: "firestore-doc-id",
+        firestoreDocumentId:
+          "other-firestore-doc-id",
+        name: "Risky Legacy Import",
+        classProgression: {
+          totalLevel: 4,
+          classes: [
+            {
+              classId: "fighter",
+              className: "Fighter",
+              level: 2,
+              source: {
+                bad: true
+              }
+            },
+            null,
+            {
+              classId: "wizard",
+              className: "Wizard",
+              level: 1,
+              source: ["template"]
+            }
+          ]
+        },
+        equipment: {
+          items: [
+            {
+              id: "pack",
+              name: "Pack",
+              isContainer: true,
+              source: {
+                bad: true
+              }
+            },
+            {
+              id: "sword",
+              name: "Sword",
+              containerId: "missing-pack"
+            },
+            {
+              id: "sword",
+              name: "Duplicate Sword"
+            },
+            {
+              name: "Nameless Old Item"
+            }
+          ],
+          currencySources: "old-money"
+        },
+        equipmentText:
+          "Old free-text gear",
+        proficiencies: {
+          skills: {
+            athletics: {
+              proficient: true,
+              source: "class"
+            },
+            stealth: {
+              proficient: true,
+              source: {
+                bad: true
+              }
+            }
+          },
+          sources: {
+            armor: {
+              "Heavy Armor": "class",
+              "Broken Armor": {
+                bad: true
+              }
+            },
+            tools: "broken-tools"
+          }
+        }
+      });
+
+    const riskyLegacyWarnings =
+      cleanArray(
+        riskyLegacyImport
+          .builder
+          .validation
+          .migrationWarnings
+      );
+
+    record(
+      "Import audit warns and repairs risky legacy character data",
+      {
+        idWarning:
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "conflicting saved character IDs"
+            );
+          }),
+        classWarning:
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "malformed class records"
+            );
+          }) &&
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "multiclass total level"
+            );
+          }),
+        equipmentWarning:
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "duplicate equipment item IDs"
+            );
+          }) &&
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "container references pointed to missing"
+            );
+          }) &&
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "malformed equipment source"
+            );
+          }),
+        sourceWarning:
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "legacy string proficiency sources"
+            );
+          }) &&
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "legacy string skill sources"
+            );
+          }) &&
+          riskyLegacyWarnings.some((warning) => {
+            return warning.includes(
+              "malformed skill source"
+            );
+          }),
+        totalLevel:
+          riskyLegacyImport
+            .classProgression
+            .totalLevel,
+        skillSource:
+          riskyLegacyImport
+            .proficiencies
+            .skills
+            .athletics
+            .source,
+        armorSource:
+          riskyLegacyImport
+            .proficiencies
+            .sources
+            .armor["Heavy Armor"],
+        toolsSourceMap:
+          riskyLegacyImport
+            .proficiencies
+            .sources
+            .tools,
+        equipmentSource:
+          riskyLegacyImport
+            .equipment
+            .items[0]
+            .source
+      },
+      {
+        idWarning: true,
+        classWarning: true,
+        equipmentWarning: true,
+        sourceWarning: true,
+        totalLevel: 3,
+        skillSource: ["class:fighter"],
+        armorSource: ["class:fighter"],
+        toolsSourceMap: {},
+        equipmentSource: "import"
+      }
+    );
+
     record(
       "All core 2014 species are present",
       [
@@ -8042,6 +10008,88 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    const staleInternalSnapshotRecords =
+      readSection19SnapshotRecords({
+        docs: [
+          {
+            id: "real-firestore-doc-id",
+            data() {
+              return {
+                id: "stale-internal-id",
+                identity: {
+                  name:
+                    "Document ID Test"
+                }
+              };
+            }
+          }
+        ]
+      });
+
+    const staleInternalIdCharacter =
+      normalizeSection19CharacterRecord(
+        staleInternalSnapshotRecords[0]
+      );
+
+    record(
+      "Firestore snapshot reader keeps real document ID available",
+      {
+        snapshotId:
+          staleInternalSnapshotRecords[0]
+            .id,
+        snapshotDocId:
+          staleInternalSnapshotRecords[0]
+            .docId
+      },
+      {
+        snapshotId: "stale-internal-id",
+        snapshotDocId:
+          "real-firestore-doc-id"
+      }
+    );
+
+    creatorState.characterCache = [
+      staleInternalIdCharacter
+    ];
+
+    record(
+      "Loaded character uses Firestore document ID over stale internal ID",
+      {
+        id:
+          staleInternalIdCharacter.id,
+        docId:
+          staleInternalIdCharacter.docId,
+        firestoreDocumentId:
+          staleInternalIdCharacter
+            .firestoreDocumentId,
+        internalDataId:
+          staleInternalIdCharacter
+            .internalDataId,
+        foundByRealId:
+          Boolean(
+            findCachedCharacter(
+              "real-firestore-doc-id"
+            )
+          ),
+        foundByStaleId:
+          Boolean(
+            findCachedCharacter(
+              "stale-internal-id"
+            )
+          )
+      },
+      {
+        id: "real-firestore-doc-id",
+        docId: "real-firestore-doc-id",
+        firestoreDocumentId:
+          "real-firestore-doc-id",
+        internalDataId:
+          "stale-internal-id",
+        foundByRealId: true,
+        foundByStaleId: false
+      }
+    );
+
     const catalogHas = (ids) => {
       return ids.every((id) => {
         return DEFAULT_EQUIPMENT_CATALOG
@@ -8056,6 +10104,198 @@ export function createCharacterCreator(options = {}) {
         return template.id === id;
       });
     };
+
+    const multiclassUiDraft =
+      createEmptyCharacter();
+
+    multiclassUiDraft.identity.name =
+      "Multiclass UI Test";
+
+    multiclassUiDraft.classProgression.totalLevel =
+      5;
+
+    multiclassUiDraft.classProgression.classes = [
+      {
+        classId: "fighter",
+        className: "Fighter",
+        source: "srd-2014",
+        level: 3,
+        subclassName: "Champion",
+        hitDie: "d10",
+        choices: {
+          fightingStyle: "Defense"
+        },
+        templateSnapshot:
+          cloneData(
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "fighter"
+            )
+          )
+      },
+      {
+        classId: "wizard",
+        className: "Wizard",
+        source: "srd-2014",
+        level: 2,
+        subclassName: "Evocation",
+        hitDie: "d6",
+        choices: {
+          spellbook: "Imported"
+        },
+        templateSnapshot:
+          cloneData(
+            getTemplate(
+              DEFAULT_CLASS_TEMPLATES,
+              "wizard"
+            )
+          )
+      }
+    ];
+
+    creatorState.draft =
+      normalizeCharacter(multiclassUiDraft);
+
+    const multiclassClassHtml =
+      renderClassStep();
+
+    const multiclassLevelHtml =
+      renderLevelStep();
+
+    const multiclassReviewHtml =
+      renderReviewStep();
+
+    const multiclassWarnings =
+      getSection17Warnings();
+
+    record(
+      "Multiclass class and level screens are read-only summaries",
+      {
+        classLocked:
+          multiclassClassHtml.includes(
+            "Multiclass editing is read-only"
+          ),
+        noClassButtons:
+          !multiclassClassHtml.includes(
+            "Choose Class"
+          ),
+        fighterSummary:
+          multiclassClassHtml.includes(
+            "Fighter"
+          ) &&
+          multiclassClassHtml.includes(
+            "Level 3"
+          ) &&
+          multiclassClassHtml.includes(
+            "Defense"
+          ),
+        wizardSummary:
+          multiclassClassHtml.includes(
+            "Wizard"
+          ) &&
+          multiclassClassHtml.includes(
+            "Level 2"
+          ) &&
+          multiclassClassHtml.includes(
+            "Imported"
+          ),
+        levelOrder:
+          multiclassLevelHtml.includes(
+            "Level-by-Level Class Order"
+          ) &&
+          multiclassLevelHtml.includes(
+            "Character Level 4"
+          ) &&
+          multiclassLevelHtml.includes(
+            "data-multiclass-locked=\"true\""
+          ),
+        reviewWarning:
+          multiclassWarnings.some((warning) => {
+            return warning.includes(
+              "Multiclass class and level editing is read-only"
+            );
+          }),
+        reviewSummary:
+          multiclassReviewHtml.includes(
+            "Multiclass Summary"
+          ) &&
+          multiclassReviewHtml.includes(
+            "Level-by-Level Class Order"
+          )
+      },
+      {
+        classLocked: true,
+        noClassButtons: true,
+        fighterSummary: true,
+        wizardSummary: true,
+        levelOrder: true,
+        reviewWarning: true,
+        reviewSummary: true
+      }
+    );
+
+    const multiclassClassSnapshot =
+      JSON.stringify(
+        creatorState.draft
+          .classProgression
+          .classes
+      );
+
+    const multiclassTotalLevel =
+      creatorState.draft
+        .classProgression
+        .totalLevel;
+
+    const originalAlert =
+      typeof globalThis !== "undefined"
+        ? globalThis.alert
+        : undefined;
+
+    if (typeof globalThis !== "undefined") {
+      globalThis.alert = undefined;
+    }
+
+    let blockedClassChange = null;
+    let blockedLevelChange = null;
+
+    try {
+      blockedClassChange =
+        selectClassTemplate("rogue");
+
+      blockedLevelChange =
+        setCharacterLevel(6);
+    } finally {
+      if (typeof globalThis !== "undefined") {
+        globalThis.alert = originalAlert;
+      }
+    }
+
+    record(
+      "Multiclass edit attempts preserve class progression",
+      {
+        classChange:
+          blockedClassChange,
+        levelChange:
+          blockedLevelChange,
+        classesUnchanged:
+          JSON.stringify(
+            creatorState.draft
+              .classProgression
+              .classes
+          ) === multiclassClassSnapshot,
+        totalLevel:
+          creatorState.draft
+            .classProgression
+            .totalLevel
+      },
+      {
+        classChange: false,
+        levelChange: false,
+        classesUnchanged: true,
+        totalLevel:
+          multiclassTotalLevel
+      }
+    );
 
     creatorState.draft =
       createEmptyCharacter();
@@ -10367,6 +12607,9 @@ export function createCharacterCreator(options = {}) {
       failed,
       results
     };
+    } finally {
+      restoreSelfTestState();
+    }
   }
 
   const STANDARD_LANGUAGE_OPTIONS = Object.freeze([
@@ -13395,6 +15638,8 @@ export function createCharacterCreator(options = {}) {
     currentCharacterId: null,
     draft: createEmptyCharacter(),
     dirty: false,
+    isSaving: false,
+    busyAction: "",
     statusMessage: "Character creator foundation ready.",
     pendingContainerRemovalId: "",
     openContainerId: "",
@@ -13411,6 +15656,147 @@ export function createCharacterCreator(options = {}) {
     roomSpeciesCache: [],
     roomBackgroundCache: []
   };
+
+  const DRAFT_AUTOSAVE_DEBOUNCE_MS = 600;
+
+  const draftPersistenceRuntime = {
+    timerId: null,
+    targets: null
+  };
+
+  const CHARACTER_BUSY_ACTIONS = new Set([
+    "new-character",
+    "edit-character",
+    "duplicate-character",
+    "delete-character",
+    "save-character",
+    "save-copy",
+    "import-json-file",
+    "import-json-text",
+    "upload-portrait"
+  ]);
+
+  const CHARACTER_SAVE_BUSY_ACTIONS =
+    new Set([
+      "save-character",
+      "save-copy"
+    ]);
+
+  function getCharacterBusyLabel(
+    action = creatorState.busyAction
+  ) {
+    switch (action) {
+      case "new-character":
+        return "Starting a new character";
+
+      case "edit-character":
+        return "Opening character";
+
+      case "duplicate-character":
+        return "Duplicating character";
+
+      case "delete-character":
+        return "Deleting character";
+
+      case "save-copy":
+        return "Saving character copy";
+
+      case "import-json-file":
+      case "import-json-text":
+        return "Importing character";
+
+      case "upload-portrait":
+        return "Uploading portrait";
+
+      case "save-character":
+      default:
+        return "Saving character";
+    }
+  }
+
+  function isCharacterCreatorBusy() {
+    return Boolean(
+      creatorState.busyAction ||
+      creatorState.isSaving
+    );
+  }
+
+  function isCharacterBusyAction(action) {
+    return CHARACTER_BUSY_ACTIONS.has(
+      String(action || "").trim()
+    );
+  }
+
+  function blockCharacterBusyAction(action) {
+    if (
+      !isCharacterCreatorBusy() ||
+      !isCharacterBusyAction(action)
+    ) {
+      return false;
+    }
+
+    setStatus(
+      `${getCharacterBusyLabel()} is already in progress.`
+    );
+
+    if (typeof document !== "undefined") {
+      renderCreatorView();
+    }
+
+    return true;
+  }
+
+  function beginCharacterBusyAction(action) {
+    const cleanAction =
+      String(action || "").trim();
+
+    if (blockCharacterBusyAction(cleanAction)) {
+      return false;
+    }
+
+    creatorState.busyAction =
+      cleanAction;
+
+    creatorState.isSaving =
+      CHARACTER_SAVE_BUSY_ACTIONS.has(
+        cleanAction
+      );
+
+    setStatus(
+      `${getCharacterBusyLabel(cleanAction)}...`
+    );
+
+    if (typeof document !== "undefined") {
+      renderCreatorView();
+    }
+
+    return true;
+  }
+
+  function endCharacterBusyAction(action) {
+    const cleanAction =
+      String(action || "").trim();
+
+    if (
+      !cleanAction ||
+      creatorState.busyAction === cleanAction
+    ) {
+      creatorState.busyAction = "";
+    }
+
+    if (
+      !creatorState.busyAction ||
+      CHARACTER_SAVE_BUSY_ACTIONS.has(
+        cleanAction
+      )
+    ) {
+      creatorState.isSaving = false;
+    }
+
+    if (typeof document !== "undefined") {
+      renderCreatorView();
+    }
+  }
 
   function refreshElements() {
     C.screen = $("characterCreatorScreen");
@@ -13460,6 +15846,10 @@ export function createCharacterCreator(options = {}) {
 
   function setStatus(message) {
     creatorState.statusMessage = String(message || "");
+
+    if (typeof document === "undefined") {
+      return;
+    }
 
     refreshElements();
 
@@ -13738,6 +16128,361 @@ export function createCharacterCreator(options = {}) {
         .classes
         .length > 1
     );
+  }
+
+  function getMulticlassSummaryEntries(
+    character = creatorState.draft
+  ) {
+    return getCharacterClassEntries(character)
+      .map((classEntry, index) => {
+        const template =
+          resolveClassTemplateForEntry(
+            classEntry
+          );
+
+        const className =
+          safeDisplayString(
+            classEntry?.className,
+            safeDisplayString(
+              template?.name,
+              `Class ${index + 1}`
+            )
+          );
+
+        return {
+          classEntry,
+          template,
+          className,
+          classLevel:
+            Math.max(
+              0,
+              Math.round(
+                safeNumber(
+                  classEntry?.level,
+                  0
+                )
+              )
+            ),
+          subclassName:
+            safeDisplayString(
+              classEntry?.subclassName,
+              ""
+            ),
+          hitDie:
+            safeDisplayString(
+              template?.hitDie,
+              safeDisplayString(
+                classEntry?.hitDie,
+                "d8"
+              )
+            ),
+          source:
+            safeDisplayString(
+              classEntry?.source,
+              safeDisplayString(
+                template?.source,
+                "character"
+              )
+            ),
+          primaryAbilities:
+            formatSection12List(
+              template?.primaryAbilities ||
+              classEntry?.primaryAbilities
+            ) ||
+            "Not specified",
+          savingThrows:
+            formatSection12List(
+              template?.savingThrows ||
+              classEntry?.savingThrows
+            ) ||
+            "Not specified",
+          subclassLevel:
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  template?.subclassLevel ||
+                  classEntry?.subclassLevel,
+                  3
+                )
+              )
+            )
+        };
+      });
+  }
+
+  function formatMulticlassStoredChoiceValue(value) {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => {
+          return formatMulticlassStoredChoiceValue(
+            item
+          );
+        })
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    if (
+      value &&
+      typeof value === "object"
+    ) {
+      return Object.entries(value)
+        .map(([key, entryValue]) => {
+          return `${key}: ${formatMulticlassStoredChoiceValue(entryValue)}`;
+        })
+        .filter((text) => {
+          return cleanString(text);
+        })
+        .join("; ");
+    }
+
+    return safeDisplayString(value, "");
+  }
+
+  function renderMulticlassStoredChoices(
+    classEntry
+  ) {
+    const groups = [
+      [
+        "Choices",
+        classEntry?.choices
+      ],
+      [
+        "Level Choices",
+        classEntry?.levelChoices
+      ],
+      [
+        "Selections",
+        classEntry?.selections
+      ],
+      [
+        "Class Features",
+        classEntry?.features
+      ]
+    ].filter(([, value]) => {
+      return (
+        value &&
+        (
+          Array.isArray(value)
+            ? value.length > 0
+            : typeof value === "object"
+            ? Object.keys(value).length > 0
+            : cleanString(value)
+        )
+      );
+    });
+
+    if (!groups.length) {
+      return "";
+    }
+
+    return `
+      <p>
+        <b>Stored Class Choices:</b>
+      </p>
+
+      <ul>
+        ${groups
+          .map(([label, value]) => {
+            return `
+              <li>
+                ${escapeHtml(label)}:
+                ${escapeHtml(
+                  formatMulticlassStoredChoiceValue(
+                    value
+                  ) ||
+                  "Recorded"
+                )}
+              </li>
+            `;
+          })
+          .join("")}
+      </ul>
+    `;
+  }
+
+  function renderMulticlassReadOnlyNotice(
+    contextLabel = "class and level"
+  ) {
+    return `
+      <div class="hg-character-warning">
+        <b>Multiclass editing is read-only:</b>
+        This character has more than one class. The existing multiclass
+        data is preserved, but ${escapeHtml(contextLabel)} changes are
+        locked until the full multiclass editor is available.
+      </div>
+    `;
+  }
+
+  function renderMulticlassClassSummary(
+    character = creatorState.draft
+  ) {
+    const entries =
+      getMulticlassSummaryEntries(character);
+
+    if (entries.length <= 1) {
+      return "";
+    }
+
+    const totalLevel =
+      entries.reduce(
+        (sum, entry) => {
+          return sum + entry.classLevel;
+        },
+        0
+      );
+
+    return `
+      <h3>Multiclass Summary</h3>
+
+      <div class="hg-character-current-choice">
+        <b>Total Character Level:</b>
+        ${clampLevel(
+          character
+            ?.classProgression
+            ?.totalLevel ||
+          totalLevel ||
+          1
+        )}
+
+        <br>
+
+        Class levels and class-specific advancement choices are preserved.
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${entries
+          .map((entry) => {
+            return `
+              <article class="hg-character-choice-card">
+                <h3>
+                  ${escapeHtml(entry.className)}
+                  Level ${entry.classLevel}
+                </h3>
+
+                <p>
+                  <b>Subclass:</b>
+                  ${escapeHtml(
+                    entry.subclassName ||
+                    "None recorded"
+                  )}
+
+                  <br>
+
+                  <b>Hit Die:</b>
+                  ${escapeHtml(entry.hitDie)}
+
+                  <br>
+
+                  <b>Primary Abilities:</b>
+                  ${escapeHtml(
+                    entry.primaryAbilities
+                  )}
+
+                  <br>
+
+                  <b>Saving Throws:</b>
+                  ${escapeHtml(
+                    entry.savingThrows
+                  )}
+
+                  <br>
+
+                  <b>Subclass Unlock:</b>
+                  Level ${entry.subclassLevel}
+
+                  <br>
+
+                  <b>Source:</b>
+                  ${escapeHtml(entry.source)}
+                </p>
+
+                ${renderMulticlassStoredChoices(
+                  entry.classEntry
+                )}
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
+  function renderMulticlassLevelBreakdown(
+    character = creatorState.draft
+  ) {
+    const records =
+      getCharacterLevelHitDieRecords(character);
+
+    if (records.length <= 1) {
+      return "";
+    }
+
+    const classLevelCounts = {};
+
+    const levelCards =
+      records
+        .map((record) => {
+          const classKey =
+            record.classId ||
+            record.className ||
+            "class";
+
+          classLevelCounts[classKey] =
+            (classLevelCounts[classKey] || 0) + 1;
+
+          return {
+            ...record,
+            classLevel:
+              classLevelCounts[classKey]
+          };
+        })
+        .map((record) => {
+          return `
+            <article class="hg-character-choice-card">
+              <h3>
+                Character Level ${record.characterLevel}
+              </h3>
+
+              <p>
+                <b>Class:</b>
+                ${escapeHtml(
+                  record.className ||
+                  "Class"
+                )}
+
+                <br>
+
+                <b>Class Level:</b>
+                ${record.classLevel}
+
+                <br>
+
+                <b>Hit Die:</b>
+                ${escapeHtml(
+                  record.hitDie ||
+                  "d8"
+                )}
+              </p>
+            </article>
+          `;
+        })
+        .join("");
+
+    return `
+      <h3>Level-by-Level Class Order</h3>
+
+      <div class="hg-character-current-choice">
+        This is the preserved order used for hit dice and HP calculations.
+        Adding, removing, reordering, or assigning new class levels is not
+        available in this creator yet.
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${levelCards}
+      </div>
+    `;
   }
 
   function recalculateClassTotalLevel(
@@ -14023,7 +16768,8 @@ export function createCharacterCreator(options = {}) {
   const wizardRuntime = {
     shellBuilt: false,
     eventsConnected: false,
-    popstateConnected: false
+    popstateConnected: false,
+    draftPersistenceLifecycleConnected: false
   };
 
   function refreshWizardElements() {
@@ -14285,6 +17031,68 @@ export function createCharacterCreator(options = {}) {
         grid-column: 1 / -1;
       }
 
+      .hg-character-portrait-panel {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(116, 138, 255, 0.18);
+        background: rgba(255, 255, 255, 0.022);
+      }
+
+      .hg-character-portrait-frame {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: 12px;
+        border: 1px solid rgba(116, 138, 255, 0.22);
+        background: rgba(8, 12, 25, 0.7);
+        color: #aeb8df;
+        text-align: center;
+      }
+
+      .hg-character-portrait-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .hg-character-portrait-placeholder {
+        padding: 12px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .hg-character-portrait-controls {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .hg-character-portrait-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .hg-character-portrait-actions button,
+      .hg-character-portrait-actions .fileButtonLabel {
+        margin: 0 !important;
+      }
+
+      .hg-character-portrait-meta {
+        color: #aeb8df;
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+
       .hg-character-choice-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -14442,6 +17250,14 @@ export function createCharacterCreator(options = {}) {
         .hg-character-step-footer {
           flex-direction: column;
         }
+
+        .hg-character-portrait-panel {
+          grid-template-columns: 1fr;
+        }
+
+        .hg-character-portrait-frame {
+          max-width: 220px;
+        }
       }
     `;
 
@@ -14547,7 +17363,7 @@ export function createCharacterCreator(options = {}) {
 
   function markDraftChanged() {
     creatorState.dirty = true;
-    persistDraftToSession();
+    scheduleDraftPersistence();
 
     if (typeof document !== "undefined") {
       renderActionBar();
@@ -14562,42 +17378,371 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
-  function persistDraftToSession() {
-    if (typeof sessionStorage === "undefined") {
+  function getPersistentDraftStorageKey() {
+    return (
+      "homebrewGodCharacterDraftBackup:" +
+      (getRoomCode() || "no-room")
+    );
+  }
+
+  function getBrowserStorage(name) {
+    try {
+      const storage =
+        globalThis?.[name];
+
+      if (
+        storage &&
+        typeof storage.getItem === "function" &&
+        typeof storage.setItem === "function" &&
+        typeof storage.removeItem === "function"
+      ) {
+        return storage;
+      }
+    } catch (error) {
+      return null;
+    }
+
+    return null;
+  }
+
+  function getDraftStorageTargets() {
+    return [
+      {
+        name: "session",
+        label: "this browser tab",
+        persistent: false,
+        key: getDraftStorageKey(),
+        storage:
+          getBrowserStorage(
+            "sessionStorage"
+          )
+      },
+      {
+        name: "persistent",
+        label: "local browser backup",
+        persistent: true,
+        key: getPersistentDraftStorageKey(),
+        storage:
+          getBrowserStorage(
+            "localStorage"
+          )
+      }
+    ].filter((target) => {
+      return Boolean(target.storage);
+    });
+  }
+
+  function createDraftStorageRecord() {
+    return {
+      version: 2,
+      persistedAtMillis: Date.now(),
+      draft: creatorState.draft,
+      currentCharacterId:
+        creatorState.currentCharacterId,
+      currentStepId:
+        creatorState.currentStepId,
+      dirty: creatorState.dirty
+    };
+  }
+
+  function isDraftStorageQuotaError(error) {
+    return (
+      error?.name === "QuotaExceededError" ||
+      error?.name ===
+        "NS_ERROR_DOM_QUOTA_REACHED" ||
+      error?.code === 22 ||
+      error?.code === 1014
+    );
+  }
+
+  function warnDraftStorageFailure(
+    target,
+    error
+  ) {
+    console.warn(
+      `Could not store character draft in ${target.label}:`,
+      error
+    );
+
+    if (isDraftStorageQuotaError(error)) {
+      setStatus(
+        "Browser autosave could not keep this draft. Download a JSON backup before closing the page."
+      );
+    }
+  }
+
+  function clearPendingDraftPersistence() {
+    if (
+      draftPersistenceRuntime.timerId &&
+      typeof clearTimeout === "function"
+    ) {
+      clearTimeout(
+        draftPersistenceRuntime.timerId
+      );
+    }
+
+    draftPersistenceRuntime.timerId =
+      null;
+
+    draftPersistenceRuntime.targets =
+      null;
+  }
+
+  function flushPendingDraftPersistence() {
+    const targets =
+      draftPersistenceRuntime.targets ||
+      getDraftStorageTargets();
+
+    if (
+      draftPersistenceRuntime.timerId &&
+      typeof clearTimeout === "function"
+    ) {
+      clearTimeout(
+        draftPersistenceRuntime.timerId
+      );
+    }
+
+    draftPersistenceRuntime.timerId =
+      null;
+
+    draftPersistenceRuntime.targets =
+      null;
+
+    if (targets.length) {
+      persistDraftToSession(
+        targets,
+        {
+          fromScheduledFlush: true
+        }
+      );
+    }
+  }
+
+  function scheduleDraftPersistence(
+    targets = getDraftStorageTargets(),
+    options = {}
+  ) {
+    if (!targets.length) {
       return;
     }
 
-    try {
-      sessionStorage.setItem(
-        getDraftStorageKey(),
-        JSON.stringify({
-          draft: creatorState.draft,
-          currentCharacterId:
-            creatorState.currentCharacterId,
-          currentStepId:
-            creatorState.currentStepId,
-          dirty: creatorState.dirty
-        })
+    const delayMillis =
+      Math.max(
+        0,
+        safeNumber(
+          options.delayMillis,
+          DRAFT_AUTOSAVE_DEBOUNCE_MS
+        )
       );
+
+    if (
+      draftPersistenceRuntime.timerId &&
+      typeof clearTimeout === "function"
+    ) {
+      clearTimeout(
+        draftPersistenceRuntime.timerId
+      );
+    }
+
+    draftPersistenceRuntime.targets =
+      targets;
+
+    if (
+      delayMillis <= 0 ||
+      typeof setTimeout !== "function"
+    ) {
+      flushPendingDraftPersistence();
+      return;
+    }
+
+    draftPersistenceRuntime.timerId =
+      setTimeout(() => {
+        flushPendingDraftPersistence();
+      }, delayMillis);
+  }
+
+  function handleDraftBeforeUnload(event) {
+    flushPendingDraftPersistence();
+
+    if (creatorState.dirty !== true) {
+      return;
+    }
+
+    if (event?.preventDefault) {
+      event.preventDefault();
+    }
+
+    if (event) {
+      event.returnValue = "";
+    }
+  }
+
+  function connectDraftPersistenceLifecycle() {
+    if (
+      typeof window === "undefined" ||
+      wizardRuntime
+        .draftPersistenceLifecycleConnected
+    ) {
+      return;
+    }
+
+    wizardRuntime
+      .draftPersistenceLifecycleConnected =
+        true;
+
+    window.addEventListener(
+      "pagehide",
+      flushPendingDraftPersistence
+    );
+
+    window.addEventListener(
+      "beforeunload",
+      handleDraftBeforeUnload
+    );
+  }
+
+  function disconnectDraftPersistenceLifecycle() {
+    if (typeof window !== "undefined") {
+      window.removeEventListener(
+        "pagehide",
+        flushPendingDraftPersistence
+      );
+
+      window.removeEventListener(
+        "beforeunload",
+        handleDraftBeforeUnload
+      );
+    }
+
+    wizardRuntime
+      .draftPersistenceLifecycleConnected =
+        false;
+
+    flushPendingDraftPersistence();
+  }
+
+  function persistDraftToSession(
+    targets = getDraftStorageTargets(),
+    options = {}
+  ) {
+    if (options.fromScheduledFlush !== true) {
+      clearPendingDraftPersistence();
+    }
+
+    if (!targets.length) {
+      return;
+    }
+
+    const record =
+      createDraftStorageRecord();
+
+    const text =
+      JSON.stringify(record);
+
+    try {
+      targets.forEach((target) => {
+        if (
+          target.persistent &&
+          record.dirty !== true
+        ) {
+          target.storage.removeItem(
+            target.key
+          );
+
+          return;
+        }
+
+        try {
+          target.storage.setItem(
+            target.key,
+            text
+          );
+        } catch (error) {
+          warnDraftStorageFailure(
+            target,
+            error
+          );
+        }
+      });
     } catch (error) {
       console.warn(
-        "Could not store character draft in this tab:",
+        "Could not prepare character draft storage:",
         error
       );
     }
   }
 
-  function restoreDraftFromSession() {
+  function readDraftStorageRecord(target) {
     try {
-      const text = sessionStorage.getItem(
-        getDraftStorageKey()
-      );
+      const text =
+        target.storage.getItem(
+          target.key
+        );
 
       if (!text) {
-        return false;
+        return null;
       }
 
       const stored = JSON.parse(text);
+
+      if (
+        !stored ||
+        typeof stored !== "object" ||
+        !stored.draft
+      ) {
+        return null;
+      }
+
+      return {
+        ...stored,
+        storageName: target.name,
+        persistent:
+          target.persistent === true,
+        persistedAtMillis:
+          safeNumber(
+            stored.persistedAtMillis,
+            target.persistent ? 1 : 2
+          )
+      };
+    } catch (error) {
+      console.warn(
+        `Could not read character draft from ${target.label}:`,
+        error
+      );
+
+      return null;
+    }
+  }
+
+  function chooseStoredDraftRecord(records) {
+    return records
+      .filter(Boolean)
+      .sort((a, b) => {
+        return (
+          safeNumber(
+            b.persistedAtMillis,
+            0
+          ) -
+          safeNumber(
+            a.persistedAtMillis,
+            0
+          )
+        );
+      })[0] || null;
+  }
+
+  function restoreDraftFromSession(
+    targets = getDraftStorageTargets()
+  ) {
+    try {
+      const stored =
+        chooseStoredDraftRecord(
+          targets.map(readDraftStorageRecord)
+        );
+
+      if (!stored) {
+        return false;
+      }
 
       creatorState.draft =
         sanitizeDraftStrings(stored.draft);
@@ -14612,6 +17757,15 @@ export function createCharacterCreator(options = {}) {
         stored.currentStepId || "basics"
       );
 
+      if (
+        stored.persistent &&
+        stored.dirty === true
+      ) {
+        setStatus(
+          "Restored an unsaved character draft from local browser storage. Save it or download a JSON backup; browser storage is not permanent."
+        );
+      }
+
       return true;
     } catch (error) {
       console.warn(
@@ -14623,17 +17777,24 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
-  function clearStoredDraft() {
-    try {
-      sessionStorage.removeItem(
-        getDraftStorageKey()
-      );
-    } catch (error) {
-      console.warn(
-        "Could not clear stored character draft:",
-        error
-      );
-    }
+  function clearStoredDraft(
+    targets = getDraftStorageTargets()
+  ) {
+    clearPendingDraftPersistence();
+
+    targets
+      .forEach((target) => {
+        try {
+          target.storage.removeItem(
+            target.key
+          );
+        } catch (error) {
+          console.warn(
+            `Could not clear stored character draft from ${target.label}:`,
+            error
+          );
+        }
+      });
   }
 
   function useSpeciesTemplate(speciesId) {
@@ -14897,7 +18058,7 @@ export function createCharacterCreator(options = {}) {
     }
 
     setDraftValue(path, value);
-    persistDraftToSession();
+    scheduleDraftPersistence();
     renderActionBar();
     refreshBuilderChrome();
   }
@@ -15564,6 +18725,7 @@ export function createCharacterCreator(options = {}) {
 
         <button
           type="button"
+          id="characterWizardSaveCopyButton"
           data-cc-action="save-copy"
         >
           Save Another Copy
@@ -15617,14 +18779,52 @@ export function createCharacterCreator(options = {}) {
     const saveButton =
       $("characterWizardSaveButton");
 
-    if (!saveButton) {
-      return;
+    const saveCopyButton =
+      $("characterWizardSaveCopyButton");
+
+    const importInput =
+      $("characterWizardImportInput");
+
+    const newButton =
+      C.actionBar
+        ? C.actionBar.querySelector(
+            '[data-cc-action="new-character"]'
+          )
+        : null;
+
+    const isBusy =
+      isCharacterCreatorBusy();
+
+    const busyLabel =
+      getCharacterBusyLabel();
+
+    if (newButton) {
+      newButton.disabled = isBusy;
     }
 
-    saveButton.textContent =
-      creatorState.currentCharacterId
-        ? "Update Character"
-        : "Save New Character";
+    if (importInput) {
+      importInput.disabled = isBusy;
+    }
+
+    if (saveButton) {
+      saveButton.disabled = isBusy;
+
+      saveButton.textContent =
+        isBusy
+          ? `${busyLabel}...`
+          : creatorState.currentCharacterId
+            ? "Update Character"
+            : "Save New Character";
+    }
+
+    if (saveCopyButton) {
+      saveCopyButton.disabled = isBusy;
+
+      saveCopyButton.textContent =
+        isBusy
+          ? `${busyLabel}...`
+          : "Save Another Copy";
+    }
   }
 
   function isStepComplete(stepId) {
@@ -15818,6 +19018,12 @@ export function createCharacterCreator(options = {}) {
         100
       );
 
+    const isBusy =
+      isCharacterCreatorBusy();
+
+    const busyLabel =
+      getCharacterBusyLabel();
+
     W.root.innerHTML = `
       <div class="hg-character-builder-header">
         <div>
@@ -15926,11 +19132,18 @@ export function createCharacterCreator(options = {}) {
                 <button
                   type="button"
                   data-cc-action="save-character"
+                  ${
+                    isBusy
+                      ? "disabled"
+                      : ""
+                  }
                 >
                   ${
-                    creatorState.currentCharacterId
-                      ? "Update"
-                      : "Save Draft"
+                    isBusy
+                      ? `${busyLabel}...`
+                      : creatorState.currentCharacterId
+                        ? "Update"
+                        : "Save Draft"
                   }
                 </button>
 
@@ -16003,6 +19216,10 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    if (blockCharacterBusyAction(action)) {
+      return true;
+    }
+
     await handler({
       action,
       button,
@@ -16026,6 +19243,10 @@ export function createCharacterCreator(options = {}) {
 
     const action =
       button.dataset.ccAction;
+
+    if (blockCharacterBusyAction(action)) {
+      return;
+    }
 
     if (action === "library") {
       navigateToLibrary();
@@ -16383,6 +19604,10 @@ export function createCharacterCreator(options = {}) {
         character
       );
 
+    const disabled =
+      !characterId ||
+      isCharacterCreatorBusy();
+
     return `
       <article class="hg-character-card">
         ${
@@ -16424,7 +19649,7 @@ export function createCharacterCreator(options = {}) {
             data-character-id="${escapeHtml(
               characterId
             )}"
-            ${characterId ? "" : "disabled"}
+            ${disabled ? "disabled" : ""}
           >
             Edit
           </button>
@@ -16435,7 +19660,7 @@ export function createCharacterCreator(options = {}) {
             data-character-id="${escapeHtml(
               characterId
             )}"
-            ${characterId ? "" : "disabled"}
+            ${disabled ? "disabled" : ""}
           >
             Duplicate
           </button>
@@ -16446,9 +19671,14 @@ export function createCharacterCreator(options = {}) {
             data-character-id="${escapeHtml(
               characterId
             )}"
-            ${characterId ? "" : "disabled"}
+            ${disabled ? "disabled" : ""}
           >
-            Delete
+            ${
+              creatorState.busyAction ===
+              "delete-character"
+                ? "Deleting..."
+                : "Delete"
+            }
           </button>
         </div>
       </article>
@@ -16470,6 +19700,11 @@ export function createCharacterCreator(options = {}) {
         <button
           type="button"
           data-cc-action="new-character"
+          ${
+            isCharacterCreatorBusy()
+              ? "disabled"
+              : ""
+          }
         >
           Start Character
         </button>
@@ -16526,6 +19761,11 @@ export function createCharacterCreator(options = {}) {
         <button
           type="button"
           data-cc-action="new-character"
+          ${
+            isCharacterCreatorBusy()
+              ? "disabled"
+              : ""
+          }
         >
           New Character
         </button>
@@ -16555,6 +19795,14 @@ export function createCharacterCreator(options = {}) {
   function openCharacterFromLibrary(
     characterId
   ) {
+    if (
+      blockCharacterBusyAction(
+        "edit-character"
+      )
+    ) {
+      return false;
+    }
+
     const character =
       findCachedCharacter(
         characterId
@@ -16578,6 +19826,15 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    if (
+      !beginCharacterBusyAction(
+        "edit-character"
+      )
+    ) {
+      return false;
+    }
+
+    try {
     const requestedStep =
       getStepById(
         character?.builder?.currentStep ||
@@ -16611,11 +19868,24 @@ export function createCharacterCreator(options = {}) {
     );
 
     return true;
+    } finally {
+      endCharacterBusyAction(
+        "edit-character"
+      );
+    }
   }
 
   function duplicateCharacterFromLibrary(
     characterId
   ) {
+    if (
+      blockCharacterBusyAction(
+        "duplicate-character"
+      )
+    ) {
+      return false;
+    }
+
     const character =
       findCachedCharacter(
         characterId
@@ -16639,6 +19909,15 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    if (
+      !beginCharacterBusyAction(
+        "duplicate-character"
+      )
+    ) {
+      return false;
+    }
+
+    try {
     duplicateIntoDraft(
       character
     );
@@ -16665,6 +19944,11 @@ export function createCharacterCreator(options = {}) {
     );
 
     return true;
+    } finally {
+      endCharacterBusyAction(
+        "duplicate-character"
+      );
+    }
   }
 
   registerCharacterLibraryRenderer(
@@ -16749,6 +20033,623 @@ export function createCharacterCreator(options = {}) {
     }
   ]);
 
+  const SECTION11_EMBEDDED_PORTRAIT_MAX_BYTES =
+    512 * 1024;
+
+  const SECTION11_UPLOADED_PORTRAIT_MAX_BYTES =
+    8 * 1024 * 1024;
+
+  function getSection11Portrait(
+    character = creatorState.draft
+  ) {
+    return normalizeCharacterImageValue(
+      character?.identity?.image,
+      character?.identity || {}
+    );
+  }
+
+  function hasSection11PortraitUploadHook() {
+    return (
+      typeof deps.uploadCharacterPortrait ===
+      "function"
+    );
+  }
+
+  function isSection11PortraitUrlAllowed(url) {
+    const cleanUrl =
+      cleanString(url);
+
+    if (!cleanUrl) {
+      return false;
+    }
+
+    if (/^data:image\//i.test(cleanUrl)) {
+      return true;
+    }
+
+    try {
+      const parsedUrl =
+        new URL(
+          cleanUrl,
+          typeof window !== "undefined"
+            ? window.location.href
+            : "https://example.invalid/"
+        );
+
+      return (
+        parsedUrl.protocol === "http:" ||
+        parsedUrl.protocol === "https:"
+      );
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function formatSection11PortraitBytes(bytes) {
+    const size =
+      safeNumber(bytes, 0);
+
+    if (size >= 1024 * 1024) {
+      return `${Math.round(size / 1024 / 1024)} MB`;
+    }
+
+    return `${Math.max(1, Math.round(size / 1024))} KB`;
+  }
+
+  function isSection11PortraitFile(file) {
+    if (!file) {
+      return false;
+    }
+
+    const type =
+      cleanString(file.type)
+        .toLowerCase();
+
+    if (type.startsWith("image/")) {
+      return true;
+    }
+
+    return /\.(avif|gif|jpe?g|png|webp)$/i.test(
+      cleanString(file.name)
+    );
+  }
+
+  function readSection11PortraitFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      if (typeof FileReader === "undefined") {
+        reject(
+          new Error(
+            "Portrait file reading is not available in this browser."
+          )
+        );
+
+        return;
+      }
+
+      const reader =
+        new FileReader();
+
+      reader.addEventListener(
+        "load",
+        () => {
+          resolve(
+            cleanString(reader.result)
+          );
+        }
+      );
+
+      reader.addEventListener(
+        "error",
+        () => {
+          reject(
+            reader.error ||
+            new Error(
+              "The selected portrait could not be read."
+            )
+          );
+        }
+      );
+
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function setSection11Portrait(
+    imageData,
+    options = {}
+  ) {
+    const image =
+      normalizeCharacterImageValue(
+        imageData
+      );
+
+    if (!image.url) {
+      setStatus(
+        "Choose a portrait image first."
+      );
+
+      return false;
+    }
+
+    if (
+      !isSection11PortraitUrlAllowed(
+        image.url
+      )
+    ) {
+      setStatus(
+        "Portrait must be an image URL."
+      );
+
+      return false;
+    }
+
+    if (
+      !creatorState.draft.identity ||
+      typeof creatorState.draft.identity !==
+        "object"
+    ) {
+      creatorState.draft.identity = {
+        ...createEmptyCharacter().identity
+      };
+    }
+
+    creatorState.draft.identity.image = {
+      url: image.url,
+      publicId: image.publicId
+    };
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    if (options.status !== false) {
+      setStatus(
+        options.status ||
+        "Portrait updated."
+      );
+    }
+
+    if (options.render !== false) {
+      renderCreatorView();
+    }
+
+    return true;
+  }
+
+  function clearSection11Portrait(
+    options = {}
+  ) {
+    const current =
+      getSection11Portrait();
+
+    if (!current.url && !current.publicId) {
+      if (options.status !== false) {
+        setStatus(
+          "No portrait is selected."
+        );
+      }
+
+      return false;
+    }
+
+    creatorState.draft.identity =
+      creatorState.draft.identity ||
+      {
+        ...createEmptyCharacter().identity
+      };
+
+    creatorState.draft.identity.image = {
+      url: "",
+      publicId: ""
+    };
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    if (options.status !== false) {
+      setStatus(
+        options.status ||
+        "Portrait removed."
+      );
+    }
+
+    if (options.render !== false) {
+      renderCreatorView();
+    }
+
+    return true;
+  }
+
+  async function cleanupSection11PreviousPortrait(
+    previousImage,
+    nextImage = {}
+  ) {
+    const previousPublicId =
+      cleanString(previousImage?.publicId);
+
+    if (
+      !previousPublicId ||
+      previousPublicId ===
+        cleanString(nextImage?.publicId) ||
+      typeof deps.deleteCharacterPortrait !==
+        "function"
+    ) {
+      return true;
+    }
+
+    try {
+      await deps.deleteCharacterPortrait(
+        previousPublicId,
+        {
+          roomCode: getRoomCode(),
+          characterId:
+            creatorState.currentCharacterId,
+          previousImage,
+          nextImage
+        }
+      );
+
+      return true;
+    } catch (error) {
+      console.warn(
+        "Could not remove previous character portrait:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  async function replaceSection11Portrait(
+    imageData,
+    statusMessage
+  ) {
+    const previousImage =
+      getSection11Portrait();
+
+    const nextImage =
+      normalizeCharacterImageValue(
+        imageData
+      );
+
+    const updated =
+      setSection11Portrait(
+        nextImage,
+        {
+          render: false,
+          status:
+            statusMessage ||
+            "Portrait updated."
+        }
+      );
+
+    if (!updated) {
+      return false;
+    }
+
+    const cleanedUp =
+      await cleanupSection11PreviousPortrait(
+        previousImage,
+        nextImage
+      );
+
+    if (!cleanedUp) {
+      setStatus(
+        "Portrait updated. Previous hosted image could not be removed."
+      );
+    }
+
+    renderCreatorView();
+
+    return true;
+  }
+
+  async function removeSection11Portrait() {
+    const previousImage =
+      getSection11Portrait();
+
+    const removed =
+      clearSection11Portrait({
+        render: false,
+        status: "Portrait removed."
+      });
+
+    if (!removed) {
+      renderCreatorView();
+      return false;
+    }
+
+    const cleanedUp =
+      await cleanupSection11PreviousPortrait(
+        previousImage,
+        {}
+      );
+
+    if (!cleanedUp) {
+      setStatus(
+        "Portrait removed. Previous hosted image could not be removed."
+      );
+    }
+
+    renderCreatorView();
+
+    return true;
+  }
+
+  async function createSection11PortraitFromFile(
+    file
+  ) {
+    if (!file) {
+      throw new Error(
+        "Choose a portrait image first."
+      );
+    }
+
+    if (!isSection11PortraitFile(file)) {
+      throw new Error(
+        "Portrait file must be an image."
+      );
+    }
+
+    const hasUploadHook =
+      hasSection11PortraitUploadHook();
+
+    const maxBytes =
+      hasUploadHook
+        ? SECTION11_UPLOADED_PORTRAIT_MAX_BYTES
+        : SECTION11_EMBEDDED_PORTRAIT_MAX_BYTES;
+
+    if (
+      safeNumber(file.size, 0) > maxBytes
+    ) {
+      throw new Error(
+        hasUploadHook
+          ? `Portrait image must be ${formatSection11PortraitBytes(maxBytes)} or smaller.`
+          : `Portrait image must be ${formatSection11PortraitBytes(maxBytes)} or smaller without hosted uploads.`
+      );
+    }
+
+    if (hasUploadHook) {
+      const uploadResult =
+        await deps.uploadCharacterPortrait(
+          file,
+          {
+            roomCode: getRoomCode(),
+            characterId:
+              creatorState.currentCharacterId,
+            character: creatorState.draft,
+            previousImage:
+              getSection11Portrait()
+          }
+        );
+
+      const uploadedImage =
+        normalizeCharacterImageValue(
+          uploadResult
+        );
+
+      if (!uploadedImage.url) {
+        throw new Error(
+          "Portrait upload did not return an image URL."
+        );
+      }
+
+      return uploadedImage;
+    }
+
+    const dataUrl =
+      await readSection11PortraitFileAsDataUrl(
+        file
+      );
+
+    return {
+      url: dataUrl,
+      publicId: ""
+    };
+  }
+
+  async function uploadSection11PortraitFile(
+    file
+  ) {
+    if (!file) {
+      return false;
+    }
+
+    if (
+      !beginCharacterBusyAction(
+        "upload-portrait"
+      )
+    ) {
+      return false;
+    }
+
+    try {
+      const image =
+        await createSection11PortraitFromFile(
+          file
+        );
+
+      await replaceSection11Portrait(
+        image,
+        "Portrait updated."
+      );
+
+      return true;
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "Portrait could not be uploaded."
+      );
+
+      if (typeof document !== "undefined") {
+        renderCreatorView();
+      }
+
+      return false;
+    } finally {
+      endCharacterBusyAction(
+        "upload-portrait"
+      );
+    }
+  }
+
+  function renderSection11PortraitPanel() {
+    const portrait =
+      getSection11Portrait();
+
+    const imageUrl =
+      cleanString(portrait.url);
+
+    const publicId =
+      cleanString(portrait.publicId);
+
+    const isBusy =
+      isCharacterCreatorBusy();
+
+    const isUploading =
+      creatorState.busyAction ===
+      "upload-portrait";
+
+    return `
+      <article class="hg-character-portrait-panel">
+        <div class="hg-character-portrait-frame">
+          ${
+            imageUrl
+              ? `
+                <img
+                  src="${escapeHtml(imageUrl)}"
+                  alt="${escapeHtml(
+                    getSafeCharacterName() ||
+                    "Character portrait"
+                  )}"
+                >
+              `
+              : `
+                <div class="hg-character-portrait-placeholder">
+                  No portrait selected
+                </div>
+              `
+          }
+        </div>
+
+        <div class="hg-character-portrait-controls">
+          ${wizardField(
+            "Portrait Image URL",
+            "ccPortraitUrl",
+            imageUrl,
+            {
+              placeholder:
+                "https://example.com/portrait.png",
+              extra:
+                isBusy
+                  ? "disabled"
+                  : ""
+            }
+          )}
+
+          <div class="hg-character-portrait-actions">
+            <button
+              type="button"
+              data-cc-action="set-portrait-url"
+              ${isBusy ? "disabled" : ""}
+            >
+              Use URL
+            </button>
+
+            <label class="fileButtonLabel">
+              ${
+                isUploading
+                  ? "Uploading..."
+                  : "Choose Image"
+              }
+
+              <input
+                id="characterImageUploadInput"
+                type="file"
+                accept="image/*,.avif,.gif,.jpg,.jpeg,.png,.webp"
+                data-cc-portrait-upload="true"
+                ${isBusy ? "disabled" : ""}
+              >
+            </label>
+
+            <button
+              type="button"
+              data-cc-action="remove-portrait"
+              ${
+                !imageUrl || isBusy
+                  ? "disabled"
+                  : ""
+              }
+            >
+              Remove Portrait
+            </button>
+          </div>
+
+          ${
+            publicId
+              ? `
+                <div class="hg-character-portrait-meta">
+                  Stored ID:
+                  ${escapeHtml(publicId)}
+                </div>
+              `
+              : ""
+          }
+        </div>
+      </article>
+    `;
+  }
+
+  async function handleSection11SetPortraitUrl() {
+    const input =
+      typeof document !== "undefined"
+        ? document.getElementById(
+            "ccPortraitUrl"
+          )
+        : null;
+
+    await replaceSection11Portrait(
+      {
+        url: input?.value || "",
+        publicId: ""
+      },
+      "Portrait URL updated."
+    );
+  }
+
+  async function handleSection11RemovePortrait() {
+    await removeSection11Portrait();
+  }
+
+  async function handleSection11PortraitChange({
+    target
+  }) {
+    if (
+      target?.dataset
+        ?.ccPortraitUpload !==
+      "true"
+    ) {
+      return false;
+    }
+
+    const file =
+      target.files?.[0] ||
+      null;
+
+    await uploadSection11PortraitFile(
+      file
+    );
+
+    target.value = "";
+
+    return true;
+  }
+
   function renderBasicsStep() {
     const identity =
       creatorState.draft.identity;
@@ -16772,6 +20673,8 @@ export function createCharacterCreator(options = {}) {
 
     return `
       <div class="hg-character-field-grid">
+        ${renderSection11PortraitPanel()}
+
         ${wizardField(
           "Character Name",
           "ccCharacterName",
@@ -19149,6 +23052,16 @@ export function createCharacterCreator(options = {}) {
   );
 
   registerCharacterCreatorAction(
+    "set-portrait-url",
+    handleSection11SetPortraitUrl
+  );
+
+  registerCharacterCreatorAction(
+    "remove-portrait",
+    handleSection11RemovePortrait
+  );
+
+  registerCharacterCreatorAction(
     "choose-species",
     handleChooseSpeciesAction
   );
@@ -19176,6 +23089,10 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "remove-species-trait",
     handleRemoveSpeciesTraitAction
+  );
+
+  registerCharacterCreatorChangeHandler(
+    handleSection11PortraitChange
   );
 
 // =====================================================
@@ -19501,7 +23418,7 @@ export function createCharacterCreator(options = {}) {
       name,
 
       source:
-        safeDisplayString(
+        cleanImportSourceLabel(
           raw.source,
           fallbackSource
         ),
@@ -20194,6 +24111,18 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderClassStep() {
+    if (isMulticlassDraft()) {
+      return `
+        ${renderMulticlassReadOnlyNotice(
+          "class selection"
+        )}
+
+        ${renderMulticlassClassSummary()}
+
+        ${renderMulticlassLevelBreakdown()}
+      `;
+    }
+
     const primaryClass =
       getSection12PrimaryClass();
 
@@ -22097,6 +26026,9 @@ export function createCharacterCreator(options = {}) {
     const draft =
       creatorState.draft;
 
+    const isMulticlass =
+      isMulticlassDraft(draft);
+
     const level = clampLevel(
       draft.classProgression
         .totalLevel
@@ -22169,6 +26101,24 @@ export function createCharacterCreator(options = {}) {
       });
 
     return `
+      ${
+        isMulticlass
+          ? `
+            ${renderMulticlassReadOnlyNotice(
+              "level and advancement"
+            )}
+
+            ${renderMulticlassClassSummary(
+              draft
+            )}
+
+            ${renderMulticlassLevelBreakdown(
+              draft
+            )}
+          `
+          : ""
+      }
+
       <div class="hg-character-current-choice">
         <b>Current progression:</b>
 
@@ -22236,7 +26186,11 @@ export function createCharacterCreator(options = {}) {
             type: "number",
             valueType: "integer",
             extra:
-              'min="1" max="20" step="1" data-level-input="true"'
+              `min="1" max="20" step="1" data-level-input="true"${
+                isMulticlass
+                  ? ' disabled data-multiclass-locked="true"'
+                  : ""
+              }`
           }
         )}
 
@@ -22403,6 +26357,7 @@ export function createCharacterCreator(options = {}) {
         <button
           type="button"
           data-cc-action="refresh-level-progression"
+          ${isMulticlass ? "disabled" : ""}
         >
           Refresh Level Progression
         </button>
@@ -32740,6 +36695,12 @@ export function createCharacterCreator(options = {}) {
     const draft =
       creatorState.draft;
 
+    if (isMulticlassDraft(draft)) {
+      warnings.push(
+        "Multiclass class and level editing is read-only in this creator. Existing multiclass data will be preserved, but adding, removing, reordering, and assigning new class levels is locked."
+      );
+    }
+
     const level =
       clampLevel(
         draft.classProgression
@@ -34577,6 +38538,20 @@ export function createCharacterCreator(options = {}) {
 
       ${renderSection17MigrationWarnings()}
 
+      ${
+        isMulticlassDraft(draft)
+          ? `
+            ${renderMulticlassClassSummary(
+              draft
+            )}
+
+            ${renderMulticlassLevelBreakdown(
+              draft
+            )}
+          `
+          : ""
+      }
+
       <div class="hg-character-inline-actions">
         <button
           type="button"
@@ -36083,6 +40058,302 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function hasSection18FirestoreReadTool() {
+    return typeof deps.getDoc === "function";
+  }
+
+  function getSection18DocumentSnapshotData(
+    snapshot
+  ) {
+    if (
+      snapshot &&
+      typeof snapshot.data === "function"
+    ) {
+      return snapshot.data() || {};
+    }
+
+    if (isPlainObject(snapshot?.data)) {
+      return snapshot.data;
+    }
+
+    return {};
+  }
+
+  function section18SnapshotExists(
+    snapshot
+  ) {
+    if (
+      snapshot &&
+      typeof snapshot.exists === "function"
+    ) {
+      return snapshot.exists();
+    }
+
+    if (
+      snapshot &&
+      typeof snapshot.exists === "boolean"
+    ) {
+      return snapshot.exists;
+    }
+
+    return Boolean(
+      snapshot &&
+      Object.keys(
+        getSection18DocumentSnapshotData(
+          snapshot
+        )
+      ).length > 0
+    );
+  }
+
+  function getSection18RecordRoomCode(
+    data
+  ) {
+    return cleanString(
+      data?.roomCode ||
+      data?.roomId ||
+      data?.room ||
+      ""
+    ).toUpperCase();
+  }
+
+  function getSection18RecordType(
+    data
+  ) {
+    return cleanString(
+      data?.sheetType ||
+      data?.recordType ||
+      data?.type ||
+      data?.kind ||
+      ""
+    ).toLowerCase();
+  }
+
+  function isSection18CharacterRecordData(
+    data
+  ) {
+    if (!isPlainObject(data)) {
+      return false;
+    }
+
+    const recordType =
+      getSection18RecordType(data);
+
+    if (recordType) {
+      return [
+        "character",
+        "charactersheet",
+        "character-sheet"
+      ].includes(recordType);
+    }
+
+    return (
+      isPlainObject(data.identity) ||
+      isPlainObject(data.classProgression) ||
+      isPlainObject(data.abilities) ||
+      isPlainObject(data.proficiencies) ||
+      isPlainObject(data.combat) ||
+      cleanString(data.name) ||
+      cleanString(data.className)
+    );
+  }
+
+  function getSection18TimestampMillis(
+    value
+  ) {
+    if (
+      value &&
+      typeof value.toMillis === "function"
+    ) {
+      return safeNumber(
+        value.toMillis(),
+        0
+      );
+    }
+
+    if (value instanceof Date) {
+      return safeNumber(
+        value.getTime(),
+        0
+      );
+    }
+
+    if (
+      value &&
+      typeof value === "object" &&
+      Number.isFinite(Number(value.seconds))
+    ) {
+      return (
+        Number(value.seconds) * 1000 +
+        Math.floor(
+          safeNumber(value.nanoseconds, 0) /
+          1000000
+        )
+      );
+    }
+
+    return safeNumber(value, 0);
+  }
+
+  function getSection18RecordRevisionMillis(
+    data
+  ) {
+    const builderSavedAt =
+      safeNumber(
+        data?.builder?.lastSavedAtMillis,
+        0
+      );
+
+    if (builderSavedAt > 0) {
+      return builderSavedAt;
+    }
+
+    const updatedAtMillis =
+      safeNumber(
+        data?.updatedAtMillis,
+        0
+      );
+
+    if (updatedAtMillis > 0) {
+      return updatedAtMillis;
+    }
+
+    return getSection18TimestampMillis(
+      data?.updatedAt
+    );
+  }
+
+  function validateSection18NoRemoteConflict({
+    data,
+    expectedRevisionMillis,
+    actionLabel
+  }) {
+    const remoteRevisionMillis =
+      getSection18RecordRevisionMillis(data);
+
+    const localRevisionMillis =
+      safeNumber(
+        expectedRevisionMillis,
+        0
+      );
+
+    if (
+      remoteRevisionMillis > 0 &&
+      localRevisionMillis <= 0
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this character because this tab does not know which saved version it loaded. Reload the character library before trying again.`
+      );
+    }
+
+    if (
+      remoteRevisionMillis > 0 &&
+      localRevisionMillis > 0 &&
+      remoteRevisionMillis >
+        localRevisionMillis
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this character because it was changed in another tab or window after this tab loaded it. Reload the character library before saving again.`
+      );
+    }
+
+    return true;
+  }
+
+  function validateSection18FirestoreRecord({
+    characterId,
+    data,
+    roomCode,
+    actionLabel
+  }) {
+    if (
+      !isSection18CharacterRecordData(data)
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this document because it is not a character record.`
+      );
+    }
+
+    const recordRoomCode =
+      getSection18RecordRoomCode(data);
+
+    if (
+      recordRoomCode &&
+      recordRoomCode !== roomCode
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this character because it belongs to room ${recordRoomCode}, not ${roomCode}.`
+      );
+    }
+
+    const explicitDocId =
+      cleanString(
+        data.firestoreDocumentId ||
+        data.docId
+      );
+
+    if (
+      explicitDocId &&
+      explicitDocId !== characterId
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this character because its stored document ID does not match the selected character.`
+      );
+    }
+
+    return true;
+  }
+
+  async function getValidatedSection18CharacterDocument(
+    characterId,
+    actionLabel
+  ) {
+    if (!hasSection18FirestoreReadTool()) {
+      throw new Error(
+        "The character creator is missing Firestore document validation tools."
+      );
+    }
+
+    const roomCode = getRoomCode();
+    const characterDocument =
+      getSection18CharacterDocument(
+        characterId
+      );
+
+    const snapshot =
+      await deps.getDoc(
+        characterDocument
+      );
+
+    if (
+      !section18SnapshotExists(snapshot)
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this character because the saved document no longer exists. Reload the library and try again.`
+      );
+    }
+
+    const data =
+      getSection18DocumentSnapshotData(
+        snapshot
+      );
+
+    validateSection18FirestoreRecord({
+      characterId: String(
+        characterId || ""
+      ).trim(),
+      data,
+      roomCode,
+      actionLabel
+    });
+
+    return {
+      ref: characterDocument,
+      data,
+      snapshot
+    };
+  }
+
   function syncSection18DerivedValues(
     character
   ) {
@@ -36329,58 +40600,90 @@ export function createCharacterCreator(options = {}) {
     const saveAsNew =
       options.asNew === true;
 
-    const copyName =
-      options.copyName === true;
+    const busyAction =
+      saveAsNew
+        ? "save-copy"
+        : "save-character";
 
-    const character =
-      prepareSection18Character({
-        copyName
-      });
-
-    const characterName =
-      getSafeCharacterName(
-        character
-      );
-
-    if (!characterName) {
-      alert(
-        "Enter a character name before saving."
-      );
-
-      navigateToStep(
-        "basics"
-      );
-
+    if (
+      !beginCharacterBusyAction(
+        busyAction
+      )
+    ) {
       return false;
     }
 
-    const roomCode =
-      getRoomCode();
-
-    const savedAtMillis =
-      Date.now();
-
-    character.builder = {
-      ...(character.builder || {}),
-      lastSavedAtMillis:
-        savedAtMillis
-    };
-
-    const characterPayload =
-      createCharacterPayload(
-        character
+    try {
+      setStatus(
+        `${getCharacterBusyLabel(
+          busyAction
+        )}...`
       );
 
-    const timestamp =
-      deps.serverTimestamp();
+      if (typeof document !== "undefined") {
+        renderCreatorView();
+      }
 
-    const firestorePayload = {
-      ...characterPayload,
-      roomCode,
-      updatedAt: timestamp
-    };
+      const copyName =
+        options.copyName === true;
 
-    try {
+      const expectedRevisionMillis =
+        saveAsNew
+          ? 0
+          : getSection18RecordRevisionMillis(
+              creatorState.draft
+            );
+
+      const character =
+        prepareSection18Character({
+          copyName
+        });
+
+      const characterName =
+        getSafeCharacterName(
+          character
+        );
+
+      if (!characterName) {
+        alert(
+          "Enter a character name before saving."
+        );
+
+        navigateToStep(
+          "basics"
+        );
+
+        return false;
+      }
+
+      const roomCode =
+        getRoomCode();
+
+      const savedAtMillis =
+        Date.now();
+
+      character.builder = {
+        ...(character.builder || {}),
+        lastSavedAtMillis:
+          savedAtMillis
+      };
+
+      const characterPayload =
+        createCharacterPayload(
+          character
+        );
+
+      const timestamp =
+        deps.serverTimestamp();
+
+      const firestorePayload = {
+        ...characterPayload,
+        roomCode,
+        updatedAtMillis:
+          savedAtMillis,
+        updatedAt: timestamp
+      };
+
       let savedId =
         saveAsNew
           ? null
@@ -36388,10 +40691,20 @@ export function createCharacterCreator(options = {}) {
               .currentCharacterId;
 
       if (savedId) {
+        const validatedDocument =
+          await getValidatedSection18CharacterDocument(
+            savedId,
+            "update"
+          );
+
+        validateSection18NoRemoteConflict({
+          data: validatedDocument.data,
+          expectedRevisionMillis,
+          actionLabel: "update"
+        });
+
         await deps.updateDoc(
-          getSection18CharacterDocument(
-            savedId
-          ),
+          validatedDocument.ref,
 
           firestorePayload
         );
@@ -36439,8 +40752,6 @@ export function createCharacterCreator(options = {}) {
           : `${getSafeCharacterName()} was saved.`
       );
 
-      renderCreatorView();
-
       return true;
     } catch (error) {
       console.error(
@@ -36452,18 +40763,33 @@ export function createCharacterCreator(options = {}) {
         "The character could not be saved."
       );
 
-      alert(
+      const message =
         error?.message ||
-        "The character could not be saved."
-      );
+        "The character could not be saved.";
+
+      if (typeof alert === "function") {
+        alert(message);
+      }
 
       return false;
+    } finally {
+      endCharacterBusyAction(
+        busyAction
+      );
     }
   }
 
   async function deleteSection18Character(
     characterId
   ) {
+    if (
+      blockCharacterBusyAction(
+        "delete-character"
+      )
+    ) {
+      return false;
+    }
+
     const cleanId = String(
       characterId || ""
     ).trim();
@@ -36471,6 +40797,17 @@ export function createCharacterCreator(options = {}) {
     const character =
       findCachedCharacter(
         cleanId
+      );
+
+    const expectedRevisionMillis =
+      getSection18RecordRevisionMillis(
+        character ||
+        (
+          creatorState.currentCharacterId ===
+            cleanId
+            ? creatorState.draft
+            : {}
+        )
       );
 
     if (!cleanId) {
@@ -36503,11 +40840,29 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    if (
+      !beginCharacterBusyAction(
+        "delete-character"
+      )
+    ) {
+      return false;
+    }
+
     try {
+      const validatedDocument =
+        await getValidatedSection18CharacterDocument(
+          cleanId,
+          "delete"
+        );
+
+      validateSection18NoRemoteConflict({
+        data: validatedDocument.data,
+        expectedRevisionMillis,
+        actionLabel: "delete"
+      });
+
       await deps.deleteDoc(
-        getSection18CharacterDocument(
-          cleanId
-        )
+        validatedDocument.ref
       );
 
       creatorState.characterCache =
@@ -36564,6 +40919,10 @@ export function createCharacterCreator(options = {}) {
       );
 
       return false;
+    } finally {
+      endCharacterBusyAction(
+        "delete-character"
+      );
     }
   }
 
@@ -36649,10 +41008,17 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
-  function exportSection18Json() {
+  function exportSection18Json(
+    options = {}
+  ) {
     try {
+      flushPendingDraftPersistence();
+
       const jsonText =
         getSection18JsonText();
+
+      const backup =
+        options.backup === true;
 
       const blob = new Blob(
         [jsonText],
@@ -36679,7 +41045,11 @@ export function createCharacterCreator(options = {}) {
         `${makeSafeFileName(
           getSafeCharacterName() ||
           "character"
-        )}.json`;
+        )}${
+          backup
+            ? "-draft-backup"
+            : ""
+        }.json`;
 
       document.body.appendChild(
         link
@@ -36695,7 +41065,9 @@ export function createCharacterCreator(options = {}) {
       }, 0);
 
       setStatus(
-        "Character JSON exported."
+        backup
+          ? "Draft backup JSON downloaded."
+          : "Character JSON exported."
       );
 
       return true;
@@ -36806,6 +41178,14 @@ export function createCharacterCreator(options = {}) {
   function importSection18JsonText(
     jsonText
   ) {
+    if (
+      !beginCharacterBusyAction(
+        "import-json-text"
+      )
+    ) {
+      return false;
+    }
+
     try {
       const character =
         parseSection18ImportedCharacter(
@@ -36831,6 +41211,10 @@ export function createCharacterCreator(options = {}) {
       );
 
       return false;
+    } finally {
+      endCharacterBusyAction(
+        "import-json-text"
+      );
     }
   }
 
@@ -36841,12 +41225,25 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    if (
+      !beginCharacterBusyAction(
+        "import-json-file"
+      )
+    ) {
+      return false;
+    }
+
     try {
       const jsonText =
         await file.text();
 
-      return importSection18JsonText(
-        jsonText
+      const character =
+        parseSection18ImportedCharacter(
+          jsonText
+        );
+
+      return useSection18ImportedCharacter(
+        character
       );
     } catch (error) {
       console.error(
@@ -36864,6 +41261,10 @@ export function createCharacterCreator(options = {}) {
       );
 
       return false;
+    } finally {
+      endCharacterBusyAction(
+        "import-json-file"
+      );
     }
   }
 
@@ -36936,11 +41337,31 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function renderSection18BackupNotice() {
+    if (creatorState.dirty !== true) {
+      return "";
+    }
+
+    return `
+      <div class="hg-character-warning">
+        Browser autosave is temporary. Save this character to the room
+        or download a JSON backup before closing, switching browsers,
+        clearing site data, or using private browsing.
+      </div>
+    `;
+  }
+
   function renderSaveStep() {
     const isExisting = Boolean(
       creatorState
         .currentCharacterId
     );
+
+    const isBusy =
+      isCharacterCreatorBusy();
+
+    const busyLabel =
+      getCharacterBusyLabel();
 
     const characterName =
       getSafeCharacterName() ||
@@ -36948,6 +41369,7 @@ export function createCharacterCreator(options = {}) {
 
     return `
       ${renderSection18Warnings()}
+      ${renderSection18BackupNotice()}
 
       <div class="hg-character-choice-grid">
         <article class="hg-character-choice-card selected">
@@ -36980,7 +41402,9 @@ export function createCharacterCreator(options = {}) {
             <b>Draft State:</b>
 
             ${
-              creatorState.dirty
+              isBusy
+                ? `${busyLabel}...`
+                : creatorState.dirty
                 ? "Unsaved changes"
                 : "Saved"
             }
@@ -37054,9 +41478,12 @@ export function createCharacterCreator(options = {}) {
         <button
           type="button"
           data-cc-action="save-character"
+          ${isBusy ? "disabled" : ""}
         >
           ${
-            isExisting
+            isBusy
+              ? `${busyLabel}...`
+              : isExisting
               ? "Update Character"
               : "Save New Character"
           }
@@ -37065,8 +41492,13 @@ export function createCharacterCreator(options = {}) {
         <button
           type="button"
           data-cc-action="save-copy"
+          ${isBusy ? "disabled" : ""}
         >
-          Save as Separate Copy
+          ${
+            isBusy
+              ? `${busyLabel}...`
+              : "Save as Separate Copy"
+          }
         </button>
 
         <button
@@ -37101,6 +41533,13 @@ export function createCharacterCreator(options = {}) {
         >
           Export JSON File
         </button>
+
+        <button
+          type="button"
+          data-cc-action="download-draft-backup"
+        >
+          Download Draft Backup
+        </button>
       </div>
 
       <hr>
@@ -37121,6 +41560,7 @@ export function createCharacterCreator(options = {}) {
             type="file"
             accept="application/json,.json"
             data-cc-import-file="true"
+            ${isBusy ? "disabled" : ""}
           >
         </label>
       </div>
@@ -37139,6 +41579,11 @@ export function createCharacterCreator(options = {}) {
             placeholder:
               "Paste a previously exported character here...",
 
+            extra:
+              isBusy
+                ? "disabled"
+                : "",
+
             wide: true
           }
         )}
@@ -37148,8 +41593,13 @@ export function createCharacterCreator(options = {}) {
         <button
           type="button"
           data-cc-action="import-json-text"
+          ${isBusy ? "disabled" : ""}
         >
-          Import Pasted JSON
+          ${
+            isBusy
+              ? `${busyLabel}...`
+              : "Import Pasted JSON"
+          }
         </button>
       </div>
     `;
@@ -37172,14 +41622,14 @@ export function createCharacterCreator(options = {}) {
   }
 
   async function handleSection18Save() {
-    await saveSection18Character({
+    return await saveSection18Character({
       asNew: false,
       copyName: false
     });
   }
 
   async function handleSection18SaveCopy() {
-    await saveSection18Character({
+    return await saveSection18Character({
       asNew: true,
 
       copyName: Boolean(
@@ -37204,6 +41654,12 @@ export function createCharacterCreator(options = {}) {
 
   function handleSection18ExportJson() {
     exportSection18Json();
+  }
+
+  function handleSection18DownloadDraftBackup() {
+    exportSection18Json({
+      backup: true
+    });
   }
 
   async function handleSection18ImportFile({
@@ -37302,6 +41758,11 @@ export function createCharacterCreator(options = {}) {
   );
 
   registerCharacterCreatorAction(
+    "download-draft-backup",
+    handleSection18DownloadDraftBackup
+  );
+
+  registerCharacterCreatorAction(
     "import-json-file",
     handleSection18ImportFile
   );
@@ -37389,10 +41850,60 @@ export function createCharacterCreator(options = {}) {
   function normalizeSection19CharacterRecord(
     record
   ) {
-    return normalizeCharacter({
-      ...record,
-      id: record.id || record.docId
-    });
+    const firestoreDocumentId =
+      cleanString(
+        record?.docId ||
+        record?.firestoreDocumentId ||
+        record?.id
+      );
+
+    const internalDataId =
+      cleanString(record?.id);
+
+    const normalized =
+      normalizeCharacter({
+        ...record,
+        id: firestoreDocumentId
+      });
+
+    normalized.id =
+      firestoreDocumentId;
+
+    normalized.docId =
+      firestoreDocumentId;
+
+    normalized.firestoreDocumentId =
+      firestoreDocumentId;
+
+    if (
+      internalDataId &&
+      internalDataId !== firestoreDocumentId
+    ) {
+      normalized.internalDataId =
+        internalDataId;
+    }
+
+    const recordRevisionMillis =
+      getSection18RecordRevisionMillis(
+        record
+      );
+
+    if (
+      recordRevisionMillis > 0 &&
+      !safeNumber(
+        normalized.builder
+          ?.lastSavedAtMillis,
+        0
+      )
+    ) {
+      normalized.builder =
+        normalized.builder || {};
+
+      normalized.builder.lastSavedAtMillis =
+        recordRevisionMillis;
+    }
+
+    return normalized;
   }
 
   function normalizeSection19ClassRecord(
@@ -37752,6 +42263,7 @@ export function createCharacterCreator(options = {}) {
 
     refreshElements();
     ensureWizardStyles();
+    connectDraftPersistenceLifecycle();
     connectPopstateRouting();
     connectSection19PermanentListeners();
 
@@ -37773,6 +42285,7 @@ export function createCharacterCreator(options = {}) {
   function cleanupSection20CharacterCreator() {
     wizardRuntime.destroyed = true;
 
+    disconnectDraftPersistenceLifecycle();
     disconnectWizardEvents();
     disconnectSection20Routing();
     cleanupSection19PermanentListeners();
@@ -37890,6 +42403,8 @@ export function createCharacterCreator(options = {}) {
     saveCopy: handleSection18SaveCopy,
     copyJson: copySection18Json,
     exportJson: exportSection18Json,
+    downloadDraftBackup:
+      handleSection18DownloadDraftBackup,
     importJson: importSection18JsonText,
 
     connectListeners:
