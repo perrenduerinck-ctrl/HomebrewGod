@@ -19,11 +19,20 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   updateDoc,
   addDoc,
   deleteDoc,
   collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  startAfter,
   onSnapshot,
+  runTransaction,
+  writeBatch,
+  deleteField,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -45,6 +54,8 @@ const firebaseConfig = {
 
 const cloudName = "dkezxpnl6";
 const uploadPreset = "homebrewgod_maps";
+const cloudinaryDeleteEndpoint = "";
+const CLOUDINARY_DELETE_TOKEN_MAX_AGE_MS = 9 * 60 * 1000;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -94,6 +105,7 @@ const E = {
   roomCodeText: $("roomCodeText"),
   copyRoomCodeButton: $("copyRoomCodeButton"),
   saveThisRoomButton: $("saveThisRoomButton"),
+  deleteRoomButton: $("deleteRoomButton"),
   yourRoleText: $("yourRoleText"),
   playersList: $("playersList"),
 
@@ -163,9 +175,22 @@ let currentRoomCode = null;
 let currentRoomData = null;
 let currentIsDM = false;
 let currentMapId = null;
+let displayedSharedMapUrl = null;
 
 let latestMapsSnapshot = null;
 let latestActivePlayersSnapshot = null;
+let latestPuzzleTiles = null;
+let savedRoomDocs = [];
+let savedRoomsLastDoc = null;
+let savedRoomsHasMore = false;
+let savedRoomsLoadingMore = false;
+let roomMapsLastDoc = null;
+let roomMapsHasMore = false;
+let roomMapsLoadingMore = false;
+let roomMapsPaginationRoomCode = null;
+let isMigratingLegacyPuzzleTiles = false;
+let legacyPuzzleTileMigrationPromise = null;
+let hasMigratedLegacyPuzzleTiles = false;
 
 let battleZoom = 1;
 
@@ -173,20 +198,59 @@ let stopListeningToMyRooms = null;
 let stopListeningToRoom = null;
 let stopListeningToPlayers = null;
 let stopListeningToMaps = null;
+let stopListeningToPuzzleTiles = null;
 
 let tokenSystem = null;
 let characterCreatorSystem = null;
 
-let activeSessionId = sessionStorage.getItem("homebrewGodSessionId");
+let activeSessionId = makeActiveSessionId();
 let activeSessionRoomCode = null;
+let activeSessionRole = null;
+let activePlayerHeartbeatTimer = null;
+const staleActivePlayerCleanupAttempts = new Map();
 
-if (!activeSessionId) {
-  activeSessionId = crypto.randomUUID();
-  sessionStorage.setItem("homebrewGodSessionId", activeSessionId);
+const ACTIVE_PLAYER_HEARTBEAT_MS = 25000;
+const ACTIVE_PLAYER_STALE_MS = 120000;
+const ACTIVE_PLAYER_CLEANUP_RETRY_MS = 60000;
+const COLLECTION_PAGE_SIZE = 20;
+const PUZZLE_COORDINATE_LIMIT = 50;
+const PUZZLE_MAX_GRID_SPAN = 12;
+const ROOM_DELETE_BATCH_SIZE = 400;
+const ROOM_OWNED_SUBCOLLECTIONS = [
+  "players",
+  "maps",
+  "puzzleTiles",
+  "tokens",
+  "characters",
+  "activePlayers"
+];
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_UPLOAD_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/avif"
+]);
+const ALLOWED_IMAGE_UPLOAD_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "avif"
+]);
+
+function makeActiveSessionId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+
+  return String(Date.now()) + "-" + Math.random().toString(36).slice(2);
 }
 
 const startupParams = new URLSearchParams(window.location.search);
-const startupRoomCode = startupParams.get("room");
+const startupRoomCode = String(startupParams.get("room") || "").trim().toUpperCase();
 const startupView = startupParams.get("view");
 let alreadyUsedStartupLink = false;
 
@@ -199,15 +263,25 @@ function showScreen(screenName) {
   E.lobbyScreen.classList.add("hidden");
   E.roomDashboardScreen.classList.add("hidden");
   E.battleMapScreen.classList.add("hidden");
+  E.monsterCreatorScreen.classList.add("hidden");
+  E.characterCreatorScreen.classList.add("hidden");
 
   if (screenName === "auth") E.authScreen.classList.remove("hidden");
   if (screenName === "lobby") E.lobbyScreen.classList.remove("hidden");
   if (screenName === "room") E.roomDashboardScreen.classList.remove("hidden");
   if (screenName === "battle") E.battleMapScreen.classList.remove("hidden");
+  if (screenName === "monsterCreator") E.monsterCreatorScreen.classList.remove("hidden");
+  if (screenName === "characterCreator") E.characterCreatorScreen.classList.remove("hidden");
 }
 
 function text(el, value) {
   if (el) el.textContent = value;
+}
+
+function addOptionalEventListener(element, eventName, handler) {
+  if (element) {
+    element.addEventListener(eventName, handler);
+  }
 }
 
 function normalizeRoomCode(code) {
@@ -230,20 +304,24 @@ function clearRoomListeners() {
   if (stopListeningToRoom) stopListeningToRoom();
   if (stopListeningToPlayers) stopListeningToPlayers();
   if (stopListeningToMaps) stopListeningToMaps();
+  if (stopListeningToPuzzleTiles) stopListeningToPuzzleTiles();
 
   stopListeningToRoom = null;
   stopListeningToPlayers = null;
   stopListeningToMaps = null;
+  stopListeningToPuzzleTiles = null;
   latestActivePlayersSnapshot = null;
+  latestPuzzleTiles = null;
+  roomMapsLastDoc = null;
+  roomMapsHasMore = false;
+  roomMapsLoadingMore = false;
+  roomMapsPaginationRoomCode = null;
+  hasMigratedLegacyPuzzleTiles = false;
+  staleActivePlayerCleanupAttempts.clear();
 }
 
 function getSafeMapName(fileName) {
   return fileName || "Current Battle Map";
-}
-
-function freshUrl(url) {
-  if (!url) return "";
-  return url + (url.includes("?") ? "&" : "?") + "homebrewGodCacheBust=" + Date.now();
 }
 
 function setDmControlsVisible(isVisible) {
@@ -254,32 +332,86 @@ function setDmControlsVisible(isVisible) {
     if (isVisible) el.classList.remove("hidden");
     else el.classList.add("hidden");
   });
+
+  if (E.deleteRoomButton) {
+    const canDeleteRoom =
+      !!isVisible &&
+      !!currentUser &&
+      !!currentRoomCode &&
+      !!currentRoomData &&
+      currentRoomData.dmUid === currentUser.uid;
+
+    E.deleteRoomButton.classList.toggle("hidden", !canDeleteRoom);
+  }
+}
+
+function normalizeCurrentMapData(mapData) {
+  if (!mapData || !mapData.url) {
+    return null;
+  }
+
+  const normalizedMap = {
+    id: mapData.id || null,
+    name: mapData.name || "Current Battle Map",
+    url: mapData.url,
+    publicId: mapData.publicId || null,
+    deleteToken: mapData.deleteToken || null,
+    deleteTokenCreatedAtMillis: mapData.deleteTokenCreatedAtMillis || null,
+    savedToLibrary: mapData.savedToLibrary === true
+  };
+
+  if (mapData.puzzleTileKey) {
+    normalizedMap.puzzleTileKey = mapData.puzzleTileKey;
+  }
+
+  return normalizedMap;
+}
+
+function withoutLegacyCurrentMapFields(room, mapData) {
+  const nextRoom = {
+    ...(room || {}),
+    currentMap: normalizeCurrentMapData(mapData)
+  };
+
+  delete nextRoom.currentMapUrl;
+  delete nextRoom.currentMapName;
+  delete nextRoom.currentMapId;
+  delete nextRoom.currentMapPublicId;
+  delete nextRoom.currentMapDeleteToken;
+  delete nextRoom.currentMapDeleteTokenCreatedAtMillis;
+  delete nextRoom.currentMapSavedToLibrary;
+
+  return nextRoom;
+}
+
+function legacyCurrentMapFieldDeletions() {
+  return {
+    currentMapUrl: deleteField(),
+    currentMapName: deleteField(),
+    currentMapId: deleteField(),
+    currentMapPublicId: deleteField(),
+    currentMapDeleteToken: deleteField(),
+    currentMapDeleteTokenCreatedAtMillis: deleteField(),
+    currentMapSavedToLibrary: deleteField()
+  };
 }
 
 function buildMapFromRoomFields(room) {
   if (!room) return null;
 
-  if (room.currentMap && room.currentMap.url) {
-    return {
-      id: room.currentMap.id || null,
-      name: room.currentMap.name || room.currentMapName || "Current Battle Map",
-      url: room.currentMap.url,
-      publicId: room.currentMap.publicId || room.currentMapPublicId || null,
-      savedToLibrary: room.currentMap.savedToLibrary === true
-    };
+  if (Object.prototype.hasOwnProperty.call(room, "currentMap")) {
+    return normalizeCurrentMapData(room.currentMap);
   }
 
-  if (room.currentMapUrl) {
-    return {
-      id: room.currentMapId || null,
-      name: room.currentMapName || "Current Battle Map",
-      url: room.currentMapUrl,
-      publicId: room.currentMapPublicId || null,
-      savedToLibrary: room.currentMapSavedToLibrary === true
-    };
-  }
-
-  return null;
+  return normalizeCurrentMapData({
+    id: room.currentMapId || null,
+    name: room.currentMapName || "Current Battle Map",
+    url: room.currentMapUrl || null,
+    publicId: room.currentMapPublicId || null,
+    deleteToken: room.currentMapDeleteToken || null,
+    deleteTokenCreatedAtMillis: room.currentMapDeleteTokenCreatedAtMillis || null,
+    savedToLibrary: room.currentMapSavedToLibrary === true
+  });
 }
 
 // =====================================================
@@ -323,7 +455,7 @@ function showLoggedIn(user) {
   showScreen("lobby");
 }
 
-E.guestButton.addEventListener("click", async function () {
+addOptionalEventListener(E.guestButton, "click", async function () {
   try {
     const name = E.guestNameInput.value.trim() || "Guest";
     const result = await signInAnonymously(auth);
@@ -334,7 +466,7 @@ E.guestButton.addEventListener("click", async function () {
   }
 });
 
-E.signupButton.addEventListener("click", async function () {
+addOptionalEventListener(E.signupButton, "click", async function () {
   try {
     const name = E.signupNameInput.value.trim();
     const email = E.signupEmailInput.value.trim();
@@ -353,7 +485,7 @@ E.signupButton.addEventListener("click", async function () {
   }
 });
 
-E.loginButton.addEventListener("click", async function () {
+addOptionalEventListener(E.loginButton, "click", async function () {
   try {
     const email = E.loginEmailInput.value.trim();
     const password = E.loginPasswordInput.value;
@@ -370,7 +502,7 @@ E.loginButton.addEventListener("click", async function () {
   }
 });
 
-E.logoutButton.addEventListener("click", async function () {
+addOptionalEventListener(E.logoutButton, "click", async function () {
   try {
     await removeActivePlayerSession();
     await signOut(auth);
@@ -400,7 +532,32 @@ function listenToMyRooms() {
   if (!currentUser) return;
   if (stopListeningToMyRooms) stopListeningToMyRooms();
 
-  stopListeningToMyRooms = onSnapshot(collection(db, "users", currentUser.uid, "rooms"), function (snap) {
+  savedRoomDocs = [];
+  savedRoomsLastDoc = null;
+  savedRoomsHasMore = false;
+  savedRoomsLoadingMore = false;
+
+  const roomsQuery = query(
+    collection(db, "users", currentUser.uid, "rooms"),
+    orderBy("updatedAt", "desc"),
+    limit(COLLECTION_PAGE_SIZE)
+  );
+
+  stopListeningToMyRooms = onSnapshot(roomsQuery, {
+    includeMetadataChanges: true
+  }, function (snap) {
+    if (snap.metadata.hasPendingWrites) {
+      return;
+    }
+
+    savedRoomDocs = snap.docs;
+    savedRoomsLastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    savedRoomsHasMore = snap.docs.length === COLLECTION_PAGE_SIZE;
+
+    if (!E.myRoomsList) {
+      return;
+    }
+
     E.myRoomsList.innerHTML = "";
 
     if (snap.empty) {
@@ -441,9 +598,139 @@ function listenToMyRooms() {
 
       E.myRoomsList.appendChild(div);
     });
+
+    appendSavedRoomsPaginationButton();
   }, function (error) {
-    E.myRoomsList.textContent = "Could not load saved rooms: " + error.message;
+    text(E.myRoomsList, "Could not load saved rooms: " + error.message);
   });
+}
+
+function appendSavedRoomsPaginationButton() {
+  if (!E.myRoomsList) {
+    return;
+  }
+
+  const existingButton = document.getElementById("savedRoomsLoadMoreButton");
+
+  if (existingButton) {
+    existingButton.remove();
+  }
+
+  if (!savedRoomsHasMore) {
+    return;
+  }
+
+  const loadMoreButton = document.createElement("button");
+  loadMoreButton.id = "savedRoomsLoadMoreButton";
+  loadMoreButton.type = "button";
+  loadMoreButton.textContent = savedRoomsLoadingMore ? "Loading..." : "Load More Rooms";
+  loadMoreButton.disabled = savedRoomsLoadingMore;
+  loadMoreButton.addEventListener("click", loadMoreMyRooms);
+  E.myRoomsList.appendChild(loadMoreButton);
+}
+
+function appendSavedRoomRow(roomDoc) {
+  if (!E.myRoomsList) {
+    return;
+  }
+
+  const room = roomDoc.data();
+  const roomCode = roomDoc.id;
+  const div = document.createElement("div");
+  div.className = "row";
+
+  const title = document.createElement("div");
+  title.className = "row-title";
+  title.textContent = (room.roomName || "Unnamed Room") + " - " + roomCode;
+
+  const role = document.createElement("div");
+  role.className = "small";
+  role.textContent = "Role: " + (room.role || "player");
+
+  const openButton = document.createElement("button");
+  openButton.textContent = "Open Room";
+  openButton.addEventListener("click", function () {
+    openRoom(roomCode, "room");
+  });
+
+  const removeButton = document.createElement("button");
+  removeButton.textContent = "Remove From My List";
+  removeButton.addEventListener("click", async function () {
+    if (!confirm("Remove this room from your saved list? The room itself will still exist.")) return;
+    if (!currentUser) return;
+
+    try {
+      await deleteDoc(doc(db, "users", currentUser.uid, "rooms", roomCode));
+      savedRoomDocs = savedRoomDocs.filter(function (savedRoomDoc) {
+        return savedRoomDoc.id !== roomCode;
+      });
+      div.remove();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  div.appendChild(title);
+  div.appendChild(role);
+  div.appendChild(openButton);
+  div.appendChild(removeButton);
+  E.myRoomsList.appendChild(div);
+}
+
+async function loadMoreMyRooms() {
+  if (
+    !currentUser ||
+    !savedRoomsLastDoc ||
+    !savedRoomsHasMore ||
+    savedRoomsLoadingMore
+  ) {
+    return;
+  }
+
+  const userId = currentUser.uid;
+  const cursor = savedRoomsLastDoc;
+  savedRoomsLoadingMore = true;
+  appendSavedRoomsPaginationButton();
+
+  try {
+    const nextPage = await getDocs(query(
+      collection(db, "users", userId, "rooms"),
+      orderBy("updatedAt", "desc"),
+      startAfter(cursor),
+      limit(COLLECTION_PAGE_SIZE)
+    ));
+
+    if (!currentUser || currentUser.uid !== userId) {
+      return;
+    }
+
+    const existingButton = document.getElementById("savedRoomsLoadMoreButton");
+    if (existingButton) existingButton.remove();
+
+    const knownRoomIds = new Set(savedRoomDocs.map(function (roomDoc) {
+      return roomDoc.id;
+    }));
+    const newRoomDocs = nextPage.docs.filter(function (roomDoc) {
+      return !knownRoomIds.has(roomDoc.id);
+    });
+
+    newRoomDocs.forEach(appendSavedRoomRow);
+    savedRoomDocs = savedRoomDocs.concat(newRoomDocs);
+
+    if (nextPage.docs.length > 0) {
+      savedRoomsLastDoc = nextPage.docs[nextPage.docs.length - 1];
+    }
+
+    savedRoomsHasMore = nextPage.docs.length === COLLECTION_PAGE_SIZE;
+  } catch (error) {
+    text(E.roomStatusText, "Could not load more saved rooms: " + error.message);
+  } finally {
+    savedRoomsLoadingMore = false;
+
+    if (currentUser && currentUser.uid === userId) {
+      appendSavedRoomsPaginationButton();
+    }
+  }
 }
 
 // =====================================================
@@ -452,24 +739,43 @@ function listenToMyRooms() {
 
 async function createRoom() {
   const roomName = E.roomNameInput.value.trim() || "Unnamed Room";
-  const roomCode = makeRoomCode();
+  let roomCode = null;
 
-  await setDoc(doc(db, "rooms", roomCode), {
-    roomCode,
-    roomName,
-    dmUid: currentUser.uid,
-    dmName: currentUser.displayName || "Unnamed",
-    currentMap: null,
-    currentMapUrl: null,
-    currentMapName: null,
-    currentMapId: null,
-    currentMapPublicId: null,
-    currentMapSavedToLibrary: false,
-    puzzleTiles: [],
-    activePuzzleTileKey: null,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidateCode = makeRoomCode();
+    const roomRef = doc(db, "rooms", candidateCode);
+
+    const created = await runTransaction(db, async function (transaction) {
+      const roomSnap = await transaction.get(roomRef);
+
+      if (roomSnap.exists()) {
+        return false;
+      }
+
+      transaction.set(roomRef, {
+        roomCode: candidateCode,
+        roomName,
+        dmUid: currentUser.uid,
+        dmName: currentUser.displayName || "Unnamed",
+        currentMap: null,
+        puzzleTiles: [],
+        activePuzzleTileKey: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      return true;
+    });
+
+    if (created) {
+      roomCode = candidateCode;
+      break;
+    }
+  }
+
+  if (!roomCode) {
+    throw new Error("Could not generate a unique room code. Please try again.");
+  }
 
   await savePlayerHistory(roomCode, "dm");
   await saveRoomToMyRooms(roomCode, roomName, "dm");
@@ -495,6 +801,12 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
   }
 
   const roomData = roomSnap.data();
+
+  if (roomData.deletingAt) {
+    alert("This room is being permanently deleted.");
+    return;
+  }
+
   const finalRole = roomData.dmUid === currentUser.uid ? "dm" : wantedRole;
 
   await savePlayerHistory(cleanCode, finalRole);
@@ -509,17 +821,31 @@ function openRoom(roomCode, screenToShow = "room") {
   currentRoomCode = cleanCode;
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
+  latestPuzzleTiles = null;
+  hasMigratedLegacyPuzzleTiles = false;
 
   clearRoomListeners();
 
-  stopListeningToRoom = onSnapshot(doc(db, "rooms", cleanCode), async function (roomSnap) {
+  stopListeningToRoom = onSnapshot(doc(db, "rooms", cleanCode), {
+    includeMetadataChanges: true
+  }, async function (roomSnap) {
+    if (roomSnap.metadata.hasPendingWrites) {
+      return;
+    }
+
     if (!roomSnap.exists()) {
       alert("This room was deleted or does not exist.");
       await leaveCurrentRoomView();
       return;
     }
 
-    const room = roomSnap.data();
+    const room = mergeRoomWithPuzzleTileDocs(roomSnap.data());
+
+    if (room.deletingAt && room.dmUid !== currentUser.uid) {
+      alert("This room is being permanently deleted by the DM.");
+      await leaveCurrentRoomView();
+      return;
+    }
 
     currentRoomData = room;
     currentIsDM = room.dmUid === currentUser.uid;
@@ -532,19 +858,34 @@ function openRoom(roomCode, screenToShow = "room") {
 
     setDmControlsVisible(currentIsDM);
 
-    await setActivePlayerSession(cleanCode, currentIsDM ? "dm" : "player");
+    if (room.deletingAt && currentIsDM) {
+      text(E.roomStatusText, "Room deletion is incomplete. Use Delete Room Permanently to retry.");
+    }
 
-    showSharedMap(buildMapFromRoomFields(room));
-    renderPuzzleBoard(room);
+    const nextActiveSessionRole = currentIsDM ? "dm" : "player";
+
+    if (activeSessionRoomCode !== cleanCode) {
+      await setActivePlayerSession(cleanCode, nextActiveSessionRole);
+    } else if (activeSessionRole !== nextActiveSessionRole) {
+      activeSessionRole = nextActiveSessionRole;
+      await touchActivePlayerSession();
+    }
+
+    showSharedMap(buildMapFromRoomFields(currentRoomData));
+    renderPuzzleBoard(currentRoomData);
+    maybeMigrateLegacyPuzzleTilesToSubcollection();
 
     if (latestMapsSnapshot) renderRoomMaps(latestMapsSnapshot);
     if (latestActivePlayersSnapshot) renderPlayers(latestActivePlayersSnapshot);
+
+    openStartupViewIfNeeded();
   }, function (error) {
     alert("Room listener failed: " + error.message);
   });
 
   listenToPlayers(cleanCode);
   listenToRoomMaps(cleanCode);
+  listenToPuzzleTiles(cleanCode);
 
   if (screenToShow === "battle") {
     showScreen("battle");
@@ -575,7 +916,195 @@ async function leaveCurrentRoomView() {
   showScreen("lobby");
 }
 
-E.createRoomButton.addEventListener("click", async () => {
+function ensureRoomDeletionControl() {
+  if (!E.deleteRoomButton) {
+    const parent = E.saveThisRoomButton && E.saveThisRoomButton.parentElement;
+
+    if (!parent) {
+      return;
+    }
+
+    E.deleteRoomButton = document.createElement("button");
+    E.deleteRoomButton.id = "deleteRoomButton";
+    E.deleteRoomButton.type = "button";
+    E.deleteRoomButton.textContent = "Delete Room Permanently";
+    E.deleteRoomButton.className = E.saveThisRoomButton.className;
+    parent.appendChild(E.deleteRoomButton);
+  }
+
+  E.deleteRoomButton.classList.add("hidden");
+
+  if (E.deleteRoomButton.dataset.listenerReady !== "true") {
+    E.deleteRoomButton.dataset.listenerReady = "true";
+    E.deleteRoomButton.addEventListener("click", deleteCurrentRoomPermanently);
+  }
+}
+
+function rememberRoomCloudinaryAsset(assetMap, asset) {
+  const identity = getAssetIdentity(asset);
+
+  if (!identity.publicId && !identity.url) {
+    return;
+  }
+
+  const assetKey = identity.publicId || identity.url;
+
+  if (!assetMap.has(assetKey)) {
+    assetMap.set(assetKey, {
+      ...asset,
+      publicId: identity.publicId || null,
+      url: identity.url || null
+    });
+  }
+}
+
+async function deleteRoomSubcollectionInBatches(roomCode, subcollectionName, onDocument) {
+  const subcollectionRef = collection(db, "rooms", roomCode, subcollectionName);
+
+  while (true) {
+    const page = await getDocs(query(
+      subcollectionRef,
+      limit(ROOM_DELETE_BATCH_SIZE)
+    ));
+
+    if (page.empty) {
+      return;
+    }
+
+    const batch = writeBatch(db);
+
+    page.docs.forEach(function (documentSnapshot) {
+      if (onDocument) {
+        onDocument(documentSnapshot);
+      }
+
+      batch.delete(documentSnapshot.ref);
+    });
+
+    await batch.commit();
+  }
+}
+
+function resetDeletedRoomState() {
+  currentRoomCode = null;
+  currentRoomData = null;
+  currentIsDM = false;
+  currentMapId = null;
+  displayedSharedMapUrl = null;
+  latestMapsSnapshot = null;
+  latestActivePlayersSnapshot = null;
+  latestPuzzleTiles = null;
+  setDmControlsVisible(false);
+  showScreen("lobby");
+}
+
+async function deleteCurrentRoomPermanently() {
+  if (
+    !currentUser ||
+    !currentRoomCode ||
+    !currentRoomData ||
+    !currentIsDM ||
+    currentRoomData.dmUid !== currentUser.uid
+  ) {
+    alert("Only the room DM can permanently delete this room.");
+    return;
+  }
+
+  const roomCode = currentRoomCode;
+  const userId = currentUser.uid;
+  const typedCode = prompt(
+    "Type the room code " + roomCode + " to permanently delete this room and its history."
+  );
+
+  if (normalizeRoomCode(typedCode) !== roomCode) {
+    alert("Room deletion cancelled. The room code did not match.");
+    return;
+  }
+
+  const roomRef = doc(db, "rooms", roomCode);
+  const roomAssets = new Map();
+  rememberRoomCloudinaryAsset(
+    roomAssets,
+    buildMapFromRoomFields(currentRoomData)
+  );
+
+  if (E.deleteRoomButton) {
+    E.deleteRoomButton.disabled = true;
+  }
+
+  text(E.roomStatusText, "Deleting room data and player history...");
+
+  try {
+    await removeActivePlayerSession();
+    clearRoomListeners();
+
+    await updateDoc(roomRef, {
+      deletingAt: serverTimestamp()
+    });
+
+    for (const subcollectionName of ROOM_OWNED_SUBCOLLECTIONS) {
+      const shouldCollectAssets =
+        subcollectionName === "maps" || subcollectionName === "puzzleTiles";
+
+      await deleteRoomSubcollectionInBatches(
+        roomCode,
+        subcollectionName,
+        shouldCollectAssets
+          ? function (documentSnapshot) {
+              rememberRoomCloudinaryAsset(roomAssets, documentSnapshot.data());
+            }
+          : null
+      );
+    }
+
+    await deleteDoc(roomRef);
+
+    try {
+      await deleteDoc(doc(db, "users", userId, "rooms", roomCode));
+    } catch (error) {
+      console.warn("Room deleted, but its saved-room shortcut could not be removed:", error);
+    }
+
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, null);
+    currentRoomData.puzzleTiles = [];
+    latestMapsSnapshot = [];
+
+    for (const asset of roomAssets.values()) {
+      await deleteCloudinaryAssetIfUnreferenced(asset, {
+        ignoreCurrentMap: true,
+        reason: "delete-room"
+      });
+    }
+
+    resetDeletedRoomState();
+    text(E.roomStatusText, "Room permanently deleted.");
+  } catch (error) {
+    try {
+      const remainingRoom = await getDoc(roomRef);
+
+      if (remainingRoom.exists()) {
+        await updateDoc(roomRef, {
+          deletingAt: deleteField()
+        });
+        openRoom(roomCode, "room");
+      } else {
+        resetDeletedRoomState();
+      }
+    } catch (recoveryError) {
+      console.warn("Could not restore the room after an incomplete deletion:", recoveryError);
+    }
+
+    alert("Room deletion did not finish: " + error.message);
+  } finally {
+    if (E.deleteRoomButton) {
+      E.deleteRoomButton.disabled = false;
+    }
+  }
+}
+
+ensureRoomDeletionControl();
+
+addOptionalEventListener(E.createRoomButton, "click", async () => {
   try {
     await createRoom();
   } catch (error) {
@@ -583,7 +1112,7 @@ E.createRoomButton.addEventListener("click", async () => {
   }
 });
 
-E.joinRoomButton.addEventListener("click", async () => {
+addOptionalEventListener(E.joinRoomButton, "click", async () => {
   try {
     if (!E.joinRoomCodeInput.value.trim()) {
       alert("Enter a room code.");
@@ -597,16 +1126,16 @@ E.joinRoomButton.addEventListener("click", async () => {
   }
 });
 
-E.backToLobbyButton.addEventListener("click", leaveCurrentRoomView);
+addOptionalEventListener(E.backToLobbyButton, "click", leaveCurrentRoomView);
 
-E.copyRoomCodeButton.addEventListener("click", async () => {
+addOptionalEventListener(E.copyRoomCodeButton, "click", async () => {
   if (!currentRoomCode) return;
 
   await navigator.clipboard.writeText(currentRoomCode);
   alert("Room code copied.");
 });
 
-E.saveThisRoomButton.addEventListener("click", async () => {
+addOptionalEventListener(E.saveThisRoomButton, "click", async () => {
   try {
     if (!currentRoomCode || !currentRoomData) {
       alert("Open a room first.");
@@ -641,6 +1170,96 @@ async function savePlayerHistory(roomCode, role) {
   }, { merge: true });
 }
 
+function getActivePlayerTimestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.seconds === "number") {
+    return (value.seconds * 1000) + Math.floor((value.nanoseconds || 0) / 1000000);
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function isActivePlayerStale(player, sessionId) {
+  if (sessionId === activeSessionId && activeSessionRoomCode) {
+    return false;
+  }
+
+  const lastSeenMillis = getActivePlayerTimestampMillis(
+    player.lastSeenAt || player.joinedAt
+  );
+
+  if (!lastSeenMillis) {
+    return false;
+  }
+
+  return Date.now() - lastSeenMillis > ACTIVE_PLAYER_STALE_MS;
+}
+
+async function touchActivePlayerSession() {
+  if (!currentUser || !activeSessionRoomCode) return;
+
+  try {
+    await setDoc(doc(db, "rooms", activeSessionRoomCode, "activePlayers", activeSessionId), {
+      sessionId: activeSessionId,
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || "Unnamed",
+      role: activeSessionRole || (currentIsDM ? "dm" : "player"),
+      lastSeenAt: serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.warn("Could not update active player heartbeat:", error);
+  }
+}
+
+function startActivePlayerHeartbeat() {
+  if (activePlayerHeartbeatTimer) {
+    return;
+  }
+
+  activePlayerHeartbeatTimer = window.setInterval(
+    touchActivePlayerSession,
+    ACTIVE_PLAYER_HEARTBEAT_MS
+  );
+}
+
+function stopActivePlayerHeartbeat() {
+  if (!activePlayerHeartbeatTimer) {
+    return;
+  }
+
+  window.clearInterval(activePlayerHeartbeatTimer);
+  activePlayerHeartbeatTimer = null;
+}
+
+function cleanupStaleActivePlayerSession(roomCode, sessionId) {
+  const cleanCode = normalizeRoomCode(roomCode);
+
+  if (!cleanCode || !sessionId) {
+    return;
+  }
+
+  const cleanupKey = cleanCode + "/" + sessionId;
+  const now = Date.now();
+  const lastAttempt = staleActivePlayerCleanupAttempts.get(cleanupKey) || 0;
+
+  if (now - lastAttempt < ACTIVE_PLAYER_CLEANUP_RETRY_MS) {
+    return;
+  }
+
+  staleActivePlayerCleanupAttempts.set(cleanupKey, now);
+
+  deleteDoc(doc(db, "rooms", cleanCode, "activePlayers", sessionId))
+    .then(function () {
+      staleActivePlayerCleanupAttempts.delete(cleanupKey);
+    })
+    .catch(function (error) {
+      console.warn("Could not remove stale active player session:", error);
+    });
+}
+
 async function setActivePlayerSession(roomCode, role) {
   if (!currentUser || !roomCode) return;
 
@@ -650,27 +1269,45 @@ async function setActivePlayerSession(roomCode, role) {
     await removeActivePlayerSession();
   }
 
-  activeSessionRoomCode = cleanCode;
+  const nextRole = role || "player";
+  const sessionRef = doc(db, "rooms", cleanCode, "activePlayers", activeSessionId);
 
-  await setDoc(doc(db, "rooms", cleanCode, "activePlayers", activeSessionId), {
-    sessionId: activeSessionId,
-    uid: currentUser.uid,
-    displayName: currentUser.displayName || "Unnamed",
-    role: role || "player",
-    joinedAt: serverTimestamp()
-  }, { merge: true });
+  await runTransaction(db, async function (transaction) {
+    const sessionSnap = await transaction.get(sessionRef);
+    const sessionData = {
+      sessionId: activeSessionId,
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || "Unnamed",
+      role: nextRole,
+      lastSeenAt: serverTimestamp()
+    };
+
+    if (!sessionSnap.exists()) {
+      sessionData.joinedAt = serverTimestamp();
+    }
+
+    transaction.set(sessionRef, sessionData, { merge: true });
+  });
+
+  activeSessionRoomCode = cleanCode;
+  activeSessionRole = nextRole;
+  startActivePlayerHeartbeat();
 }
 
 async function removeActivePlayerSession() {
-  if (!activeSessionRoomCode) return;
+  const roomCodeToRemove = activeSessionRoomCode;
+
+  stopActivePlayerHeartbeat();
+  activeSessionRoomCode = null;
+  activeSessionRole = null;
+
+  if (!roomCodeToRemove) return;
 
   try {
-    await deleteDoc(doc(db, "rooms", activeSessionRoomCode, "activePlayers", activeSessionId));
+    await deleteDoc(doc(db, "rooms", roomCodeToRemove, "activePlayers", activeSessionId));
   } catch (error) {
     console.warn("Could not remove active player session:", error);
   }
-
-  activeSessionRoomCode = null;
 }
 
 function listenToPlayers(roomCode) {
@@ -698,6 +1335,11 @@ function renderPlayers(playersSnap) {
 
   playersSnap.forEach(function (playerDoc) {
     const player = playerDoc.data();
+
+    if (isActivePlayerStale(player, playerDoc.id)) {
+      cleanupStaleActivePlayerSession(currentRoomCode, playerDoc.id);
+      return;
+    }
 
     if (!player.uid) return;
 
@@ -745,11 +1387,50 @@ function renderPlayers(playersSnap) {
 // APP SECTION 9 — CLOUDINARY UPLOAD
 // =====================================================
 
-async function uploadMapToCloudinary(file) {
+function getCloudinaryAssetMetadata(cloudinaryResult) {
+  const deleteToken = cloudinaryResult.delete_token || null;
+
+  return {
+    publicId: cloudinaryResult.public_id || null,
+    deleteToken,
+    deleteTokenCreatedAtMillis: deleteToken ? Date.now() : null
+  };
+}
+
+function validateImageUploadFile(file) {
+  if (!file) {
+    throw new Error("Choose an image file first.");
+  }
+
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    throw new Error("The selected image file is empty or unreadable.");
+  }
+
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    throw new Error("Image files must be 10 MB or smaller.");
+  }
+
+  const mimeType = String(file.type || "").trim().toLowerCase();
+  const fileNameParts = String(file.name || "").toLowerCase().split(".");
+  const extension = fileNameParts.length > 1 ? fileNameParts.pop() : "";
+  const hasSupportedType = ALLOWED_IMAGE_UPLOAD_TYPES.has(mimeType);
+  const hasFallbackExtension =
+    !mimeType && ALLOWED_IMAGE_UPLOAD_EXTENSIONS.has(extension);
+
+  if (!hasSupportedType && !hasFallbackExtension) {
+    throw new Error("Use a JPEG, PNG, WebP, GIF, or AVIF image.");
+  }
+}
+
+async function postCloudinaryUpload(file, requestDeleteToken) {
   const formData = new FormData();
 
   formData.append("file", file);
   formData.append("upload_preset", uploadPreset);
+
+  if (requestDeleteToken) {
+    formData.append("return_delete_token", "true");
+  }
 
   const response = await fetch(
     "https://api.cloudinary.com/v1_1/" + cloudName + "/image/upload",
@@ -767,33 +1448,280 @@ async function uploadMapToCloudinary(file) {
   return await response.json();
 }
 
+function isDeleteTokenUploadParameterUnsupported(error) {
+  const message = String(error && error.message ? error.message : "").toLowerCase();
+
+  return (
+    message.includes("return_delete_token") ||
+    (message.includes("delete_token") && message.includes("unsigned")) ||
+    (message.includes("unsupported") && message.includes("delete"))
+  );
+}
+
+async function uploadMapToCloudinary(file) {
+  validateImageUploadFile(file);
+
+  try {
+    return await postCloudinaryUpload(file, true);
+  } catch (error) {
+    if (!isDeleteTokenUploadParameterUnsupported(error)) {
+      throw error;
+    }
+
+    return await postCloudinaryUpload(file, false);
+  }
+}
+
+function getAssetIdentity(asset) {
+  if (!asset) {
+    return {
+      publicId: "",
+      url: ""
+    };
+  }
+
+  return {
+    publicId: String(asset.publicId || asset.public_id || "").trim(),
+    url: String(asset.url || asset.secure_url || "").trim()
+  };
+}
+
+function assetsMatch(left, right) {
+  const leftIdentity = getAssetIdentity(left);
+  const rightIdentity = getAssetIdentity(right);
+
+  if (leftIdentity.publicId && rightIdentity.publicId) {
+    return leftIdentity.publicId === rightIdentity.publicId;
+  }
+
+  return Boolean(leftIdentity.url && rightIdentity.url && leftIdentity.url === rightIdentity.url);
+}
+
+function hasFreshCloudinaryDeleteToken(asset) {
+  if (!asset || !asset.deleteToken || !asset.deleteTokenCreatedAtMillis) {
+    return false;
+  }
+
+  return Date.now() - asset.deleteTokenCreatedAtMillis < CLOUDINARY_DELETE_TOKEN_MAX_AGE_MS;
+}
+
+async function isCloudinaryAssetStillReferenced(asset, options = {}) {
+  if (!asset || (!asset.publicId && !asset.url)) {
+    return false;
+  }
+
+  const currentMap = buildMapFromRoomFields(currentRoomData || {});
+
+  if (!options.ignoreCurrentMap && assetsMatch(asset, currentMap)) {
+    return true;
+  }
+
+  const puzzleTiles = getPuzzleTiles(currentRoomData || {});
+
+  if (
+    puzzleTiles.some(function (tile) {
+      return tile.key !== options.ignorePuzzleTileKey && assetsMatch(asset, tile);
+    })
+  ) {
+    return true;
+  }
+
+  if (latestMapsSnapshot) {
+    let isReferenced = false;
+
+    latestMapsSnapshot.forEach(function (mapDoc) {
+      if (mapDoc.id === options.ignoreSavedMapId) {
+        return;
+      }
+
+      if (assetsMatch(asset, mapDoc.data())) {
+        isReferenced = true;
+      }
+    });
+
+    if (isReferenced) {
+      return true;
+    }
+  }
+
+  if (!currentRoomCode) {
+    return asset.savedToLibrary === true;
+  }
+
+  const mapsRef = collection(db, "rooms", currentRoomCode, "maps");
+  const identityFields = [];
+
+  if (asset.publicId) {
+    identityFields.push(["publicId", asset.publicId]);
+  }
+
+  if (asset.url) {
+    identityFields.push(["url", asset.url]);
+  }
+
+  for (const identityField of identityFields) {
+    const matchingMaps = await getDocs(query(
+      mapsRef,
+      where(identityField[0], "==", identityField[1]),
+      limit(2)
+    ));
+
+    const hasMatchingMap = matchingMaps.docs.some(function (mapDoc) {
+      return (
+        mapDoc.id !== options.ignoreSavedMapId &&
+        assetsMatch(asset, mapDoc.data())
+      );
+    });
+
+    if (hasMatchingMap) {
+      return true;
+    }
+  }
+
+  if (!latestMapsSnapshot && asset.savedToLibrary === true) {
+    return true;
+  }
+
+  return false;
+}
+
+async function deleteCloudinaryAssetWithToken(deleteToken) {
+  const formData = new FormData();
+  formData.append("token", deleteToken);
+
+  const response = await fetch(
+    "https://api.cloudinary.com/v1_1/" + cloudName + "/delete_by_token",
+    {
+      method: "POST",
+      body: formData
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error("Cloudinary delete failed: " + errorText);
+  }
+
+  return await response.json();
+}
+
+async function deleteCloudinaryAssetWithEndpoint(asset, reason) {
+  if (!cloudinaryDeleteEndpoint) {
+    return false;
+  }
+
+  const response = await fetch(cloudinaryDeleteEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      cloudName,
+      publicId: asset.publicId || null,
+      url: asset.url || null,
+      roomCode: currentRoomCode || null,
+      reason: reason || "delete"
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error("Cloudinary delete endpoint failed: " + errorText);
+  }
+
+  return true;
+}
+
+async function deleteCloudinaryAssetIfUnreferenced(asset, options = {}) {
+  if (!asset || (!asset.publicId && !asset.url)) {
+    return "No Cloudinary asset metadata found.";
+  }
+
+  try {
+    if (await isCloudinaryAssetStillReferenced(asset, options)) {
+      return "Cloudinary image kept because another room reference still uses it.";
+    }
+
+    if (await deleteCloudinaryAssetWithEndpoint(asset, options.reason)) {
+      return "Cloudinary image deleted.";
+    }
+
+    if (hasFreshCloudinaryDeleteToken(asset)) {
+      await deleteCloudinaryAssetWithToken(asset.deleteToken);
+      return "Cloudinary image deleted.";
+    }
+
+    console.warn(
+      "Cloudinary image was not deleted. Configure a secure delete endpoint or use a fresh delete token.",
+      asset.publicId || asset.url
+    );
+    return "Cloudinary image was not deleted; no secure delete path was available.";
+  } catch (error) {
+    console.warn("Could not delete Cloudinary image:", error);
+    return "Cloudinary image deletion failed.";
+  }
+}
+
 
 // =====================================================
 // APP SECTION 10 — SAVED MAP LIBRARY
 // =====================================================
 
 function listenToRoomMaps(roomCode) {
-  stopListeningToMaps = onSnapshot(
+  if (stopListeningToMaps) {
+    stopListeningToMaps();
+  }
+
+  latestMapsSnapshot = [];
+  roomMapsLastDoc = null;
+  roomMapsHasMore = false;
+  roomMapsLoadingMore = false;
+  roomMapsPaginationRoomCode = roomCode;
+
+  const mapsQuery = query(
     collection(db, "rooms", roomCode, "maps"),
+    orderBy("createdAt", "desc"),
+    limit(COLLECTION_PAGE_SIZE)
+  );
+
+  stopListeningToMaps = onSnapshot(
+    mapsQuery,
+    { includeMetadataChanges: true },
     function (mapsSnap) {
-      latestMapsSnapshot = mapsSnap;
-      renderRoomMaps(mapsSnap);
+      if (
+        mapsSnap.metadata.hasPendingWrites ||
+        currentRoomCode !== roomCode
+      ) {
+        return;
+      }
+
+      latestMapsSnapshot = mapsSnap.docs;
+      roomMapsLastDoc = mapsSnap.docs.length > 0
+        ? mapsSnap.docs[mapsSnap.docs.length - 1]
+        : null;
+      roomMapsHasMore = mapsSnap.docs.length === COLLECTION_PAGE_SIZE;
+      renderRoomMaps(latestMapsSnapshot);
     },
     function (error) {
-      E.roomMapsList.textContent = "Could not load saved maps: " + error.message;
+      text(E.roomMapsList, "Could not load saved maps: " + error.message);
     }
   );
 }
 
-function renderRoomMaps(mapsSnap) {
+function renderRoomMaps(mapDocs) {
+  if (!E.roomMapsList) {
+    return;
+  }
+
+  const docs = Array.isArray(mapDocs) ? mapDocs : [];
   E.roomMapsList.innerHTML = "";
 
-  if (mapsSnap.empty) {
+  if (docs.length === 0) {
     E.roomMapsList.textContent = "No saved maps in this room yet. Upload a new map as DM.";
     return;
   }
 
-  mapsSnap.forEach(function (mapDoc) {
+  docs.forEach(function (mapDoc) {
     const map = mapDoc.data();
     const mapId = mapDoc.id;
 
@@ -837,6 +1765,74 @@ function renderRoomMaps(mapsSnap) {
 
     E.roomMapsList.appendChild(div);
   });
+
+  if (roomMapsHasMore) {
+    const loadMoreButton = document.createElement("button");
+    loadMoreButton.type = "button";
+    loadMoreButton.textContent = roomMapsLoadingMore ? "Loading..." : "Load More Maps";
+    loadMoreButton.disabled = roomMapsLoadingMore;
+    loadMoreButton.addEventListener("click", loadMoreRoomMaps);
+    E.roomMapsList.appendChild(loadMoreButton);
+  }
+}
+
+async function loadMoreRoomMaps() {
+  if (
+    !currentRoomCode ||
+    !roomMapsLastDoc ||
+    !roomMapsHasMore ||
+    roomMapsLoadingMore
+  ) {
+    return;
+  }
+
+  const roomCode = currentRoomCode;
+  const cursor = roomMapsLastDoc;
+  roomMapsLoadingMore = true;
+  renderRoomMaps(latestMapsSnapshot || []);
+
+  try {
+    const nextPage = await getDocs(query(
+      collection(db, "rooms", roomCode, "maps"),
+      orderBy("createdAt", "desc"),
+      startAfter(cursor),
+      limit(COLLECTION_PAGE_SIZE)
+    ));
+
+    if (
+      currentRoomCode !== roomCode ||
+      roomMapsPaginationRoomCode !== roomCode
+    ) {
+      return;
+    }
+
+    const loadedMaps = latestMapsSnapshot || [];
+    const knownMapIds = new Set(loadedMaps.map(function (mapDoc) {
+      return mapDoc.id;
+    }));
+    const newMapDocs = nextPage.docs.filter(function (mapDoc) {
+      return !knownMapIds.has(mapDoc.id);
+    });
+
+    latestMapsSnapshot = loadedMaps.concat(newMapDocs);
+
+    if (nextPage.docs.length > 0) {
+      roomMapsLastDoc = nextPage.docs[nextPage.docs.length - 1];
+    }
+
+    roomMapsHasMore = nextPage.docs.length === COLLECTION_PAGE_SIZE;
+  } catch (error) {
+    text(E.mapUploadStatus, "Could not load more saved maps: " + error.message);
+  } finally {
+    roomMapsLoadingMore = false;
+
+    if (
+      currentRoomCode === roomCode &&
+      roomMapsPaginationRoomCode === roomCode
+    ) {
+      renderRoomMaps(latestMapsSnapshot || []);
+    }
+  }
 }
 
 async function saveMapToRoomLibrary(mapData) {
@@ -849,6 +1845,8 @@ async function saveMapToRoomLibrary(mapData) {
     name: mapData.name || "Unnamed Map",
     url: mapData.url,
     publicId: mapData.publicId || null,
+    deleteToken: mapData.deleteToken || null,
+    deleteTokenCreatedAtMillis: mapData.deleteTokenCreatedAtMillis || null,
     createdAt: serverTimestamp()
   });
 
@@ -862,34 +1860,11 @@ async function setCurrentRoomMap(mapData) {
   }
 
   const roomRef = doc(db, "rooms", currentRoomCode);
-
-  if (!mapData || !mapData.url) {
-    await updateDoc(roomRef, {
-      currentMap: null,
-      currentMapUrl: null,
-      currentMapName: null,
-      currentMapId: null,
-      currentMapPublicId: null,
-      currentMapSavedToLibrary: false,
-      updatedAt: serverTimestamp()
-    });
-
-    return;
-  }
+  const currentMap = normalizeCurrentMapData(mapData);
 
   await updateDoc(roomRef, {
-    currentMap: {
-      id: mapData.id || null,
-      name: mapData.name || "Current Battle Map",
-      url: mapData.url,
-      publicId: mapData.publicId || null,
-      savedToLibrary: mapData.savedToLibrary === true
-    },
-    currentMapUrl: mapData.url,
-    currentMapName: mapData.name || "Current Battle Map",
-    currentMapId: mapData.id || null,
-    currentMapPublicId: mapData.publicId || null,
-    currentMapSavedToLibrary: mapData.savedToLibrary === true,
+    currentMap,
+    ...legacyCurrentMapFieldDeletions(),
     updatedAt: serverTimestamp()
   });
 }
@@ -915,6 +1890,8 @@ async function useSavedMap(mapId) {
       name: map.name || "Unnamed Map",
       url: map.url,
       publicId: map.publicId || null,
+      deleteToken: map.deleteToken || null,
+      deleteTokenCreatedAtMillis: map.deleteTokenCreatedAtMillis || null,
       savedToLibrary: true
     };
 
@@ -934,16 +1911,51 @@ async function forgetSavedMap(mapId) {
       return;
     }
 
-    if (!confirm("Forget this map from the room list? This does not delete it from Cloudinary.")) {
+    const mapSnap = await getDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
+
+    if (!mapSnap.exists()) {
+      alert("Map not found.");
+      return;
+    }
+
+    const mapData = mapSnap.data();
+    const mapToForget = {
+      id: mapId,
+      name: mapData.name || "Unnamed Map",
+      url: mapData.url,
+      publicId: mapData.publicId || null,
+      deleteToken: mapData.deleteToken || null,
+      deleteTokenCreatedAtMillis: mapData.deleteTokenCreatedAtMillis || null,
+      savedToLibrary: true
+    };
+
+    if (!confirm("Forget this map from the room list? The Cloudinary image will be deleted if no other room reference uses it.")) {
       return;
     }
 
     await deleteDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
 
+    if (Array.isArray(latestMapsSnapshot)) {
+      latestMapsSnapshot = latestMapsSnapshot.filter(function (mapDoc) {
+        return mapDoc.id !== mapId;
+      });
+      renderRoomMaps(latestMapsSnapshot);
+    }
+
     if (currentMapId === mapId) {
       await setCurrentRoomMap(null);
+
+      currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, null);
+
       showSharedMap(null);
     }
+
+    const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(mapToForget, {
+      ignoreSavedMapId: mapId,
+      reason: "forget-saved-map"
+    });
+
+    text(E.mapUploadStatus, "Map forgotten. " + cleanupMessage);
   } catch (error) {
     alert(error.message);
   }
@@ -959,6 +1971,7 @@ function showSharedMap(currentMap) {
 
   if (!map) {
     currentMapId = null;
+    displayedSharedMapUrl = null;
 
     text(E.currentMapNameText, "None");
     text(E.battleMapNameText, "None");
@@ -993,7 +2006,17 @@ function showSharedMap(currentMap) {
   text(E.currentMapNameText, mapLabel);
   text(E.battleMapNameText, mapLabel);
 
-  const imageUrl = freshUrl(map.url);
+  if (
+    displayedSharedMapUrl === map.url &&
+    E.roomMapPreviewImage.getAttribute("src") &&
+    E.battleMapImage.getAttribute("src")
+  ) {
+    return;
+  }
+
+  displayedSharedMapUrl = map.url;
+
+  const imageUrl = map.url;
 
   text(E.noRoomMapPreviewText, "Loading map preview...");
   E.noRoomMapPreviewText.style.display = "block";
@@ -1031,7 +2054,7 @@ function showSharedMap(currentMap) {
   E.battleMapImage.src = imageUrl;
 }
 
-E.uploadRoomMapButton.addEventListener("click", async function () {
+addOptionalEventListener(E.uploadRoomMapButton, "click", async function () {
   try {
     if (!currentRoomCode) {
       alert("Create or join a room first.");
@@ -1054,11 +2077,14 @@ E.uploadRoomMapButton.addEventListener("click", async function () {
     E.uploadRoomMapButton.disabled = true;
 
     const cloudinaryResult = await uploadMapToCloudinary(file);
+    const cloudinaryAsset = getCloudinaryAssetMetadata(cloudinaryResult);
 
     const newMap = {
       name: getSafeMapName(file.name),
       url: cloudinaryResult.secure_url,
-      publicId: cloudinaryResult.public_id
+      publicId: cloudinaryAsset.publicId,
+      deleteToken: cloudinaryAsset.deleteToken,
+      deleteTokenCreatedAtMillis: cloudinaryAsset.deleteTokenCreatedAtMillis
     };
 
     const mapId = await saveMapToRoomLibrary(newMap);
@@ -1068,20 +2094,14 @@ E.uploadRoomMapButton.addEventListener("click", async function () {
       name: newMap.name,
       url: newMap.url,
       publicId: newMap.publicId,
+      deleteToken: newMap.deleteToken,
+      deleteTokenCreatedAtMillis: newMap.deleteTokenCreatedAtMillis,
       savedToLibrary: true
     };
 
     await setCurrentRoomMap(savedMap);
 
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      currentMap: savedMap,
-      currentMapUrl: savedMap.url,
-      currentMapName: savedMap.name,
-      currentMapId: savedMap.id,
-      currentMapPublicId: savedMap.publicId,
-      currentMapSavedToLibrary: true
-    };
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, savedMap);
 
     showSharedMap(savedMap);
 
@@ -1095,12 +2115,19 @@ E.uploadRoomMapButton.addEventListener("click", async function () {
   }
 });
 
-E.removeRoomMapButton.addEventListener("click", async function () {
+addOptionalEventListener(E.removeRoomMapButton, "click", async function () {
   try {
     if (!currentRoomCode) return;
 
     if (!currentIsDM) {
       alert("Only the DM can remove the room map.");
+      return;
+    }
+
+    const mapToRemove = buildMapFromRoomFields(currentRoomData || {});
+
+    if (!mapToRemove || !mapToRemove.url) {
+      alert("There is no current shared map to remove.");
       return;
     }
 
@@ -1110,24 +2137,22 @@ E.removeRoomMapButton.addEventListener("click", async function () {
 
     await setCurrentRoomMap(null);
 
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      currentMap: null,
-      currentMapUrl: null,
-      currentMapName: null,
-      currentMapId: null,
-      currentMapPublicId: null,
-      currentMapSavedToLibrary: false
-    };
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, null);
 
     showSharedMap(null);
-    text(E.mapUploadStatus, "Current map removed.");
+
+    const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(mapToRemove, {
+      ignoreCurrentMap: true,
+      reason: "remove-current-map"
+    });
+
+    text(E.mapUploadStatus, "Current map removed. " + cleanupMessage);
   } catch (error) {
     alert(error.message);
   }
 });
 
-E.saveCurrentMapButton.addEventListener("click", async function () {
+addOptionalEventListener(E.saveCurrentMapButton, "click", async function () {
   try {
     if (!currentRoomCode || !currentIsDM) {
       alert("Only the DM can save the current map.");
@@ -1149,7 +2174,9 @@ E.saveCurrentMapButton.addEventListener("click", async function () {
     const mapId = await saveMapToRoomLibrary({
       name: currentMap.name || "Recovered Current Map",
       url: currentMap.url,
-      publicId: currentMap.publicId || null
+      publicId: currentMap.publicId || null,
+      deleteToken: currentMap.deleteToken || null,
+      deleteTokenCreatedAtMillis: currentMap.deleteTokenCreatedAtMillis || null
     });
 
     const savedMap = {
@@ -1157,20 +2184,14 @@ E.saveCurrentMapButton.addEventListener("click", async function () {
       name: currentMap.name || "Recovered Current Map",
       url: currentMap.url,
       publicId: currentMap.publicId || null,
+      deleteToken: currentMap.deleteToken || null,
+      deleteTokenCreatedAtMillis: currentMap.deleteTokenCreatedAtMillis || null,
       savedToLibrary: true
     };
 
     await setCurrentRoomMap(savedMap);
 
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      currentMap: savedMap,
-      currentMapUrl: savedMap.url,
-      currentMapName: savedMap.name,
-      currentMapId: savedMap.id,
-      currentMapPublicId: savedMap.publicId,
-      currentMapSavedToLibrary: true
-    };
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, savedMap);
 
     showSharedMap(savedMap);
     text(E.mapUploadStatus, "Current map saved to room library.");
@@ -1181,6 +2202,8 @@ E.saveCurrentMapButton.addEventListener("click", async function () {
 
 if (E.updateBattleMapButton) {
   E.updateBattleMapButton.addEventListener("click", async function () {
+    let uploadedCurrentOnlyMap = null;
+
     try {
       if (!currentRoomCode) {
         alert("Create or join a room first.");
@@ -1202,33 +2225,54 @@ if (E.updateBattleMapButton) {
       text(E.battleMapUpdateStatus, "Uploading current-only battle map...");
       E.updateBattleMapButton.disabled = true;
 
+      const previousMap = buildMapFromRoomFields(currentRoomData || {});
+
       const cloudinaryResult = await uploadMapToCloudinary(file);
+      const cloudinaryAsset = getCloudinaryAssetMetadata(cloudinaryResult);
 
       const currentOnlyMap = {
         id: null,
         name: getSafeMapName(file.name),
         url: cloudinaryResult.secure_url,
-        publicId: cloudinaryResult.public_id,
+        publicId: cloudinaryAsset.publicId,
+        deleteToken: cloudinaryAsset.deleteToken,
+        deleteTokenCreatedAtMillis: cloudinaryAsset.deleteTokenCreatedAtMillis,
         savedToLibrary: false
       };
 
+      uploadedCurrentOnlyMap = currentOnlyMap;
+
       await setCurrentRoomMap(currentOnlyMap);
 
-      currentRoomData = {
-        ...(currentRoomData || {}),
-        currentMap: currentOnlyMap,
-        currentMapUrl: currentOnlyMap.url,
-        currentMapName: currentOnlyMap.name,
-        currentMapId: null,
-        currentMapPublicId: currentOnlyMap.publicId,
-        currentMapSavedToLibrary: false
-      };
+      currentRoomData = withoutLegacyCurrentMapFields(
+        currentRoomData,
+        currentOnlyMap
+      );
 
       showSharedMap(currentOnlyMap);
+      uploadedCurrentOnlyMap = null;
 
-      text(E.battleMapUpdateStatus, "Battle map updated for everyone. Not saved to Saved Maps.");
+      let cleanupMessage = "";
+
+      if (previousMap && !assetsMatch(previousMap, currentOnlyMap)) {
+        cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(previousMap, {
+          reason: "replace-current-only-map"
+        });
+      }
+
+      text(
+        E.battleMapUpdateStatus,
+        "Battle map updated for everyone. Not saved to Saved Maps." +
+          (cleanupMessage ? " Previous image: " + cleanupMessage : "")
+      );
       E.battleMapUploadInput.value = "";
     } catch (error) {
+      if (uploadedCurrentOnlyMap) {
+        await deleteCloudinaryAssetIfUnreferenced(uploadedCurrentOnlyMap, {
+          reason: "failed-current-only-map-update"
+        });
+      }
+
       text(E.battleMapUpdateStatus, "Battle map update failed.");
       alert(error.message);
     } finally {
@@ -1324,6 +2368,10 @@ function ensureBattleManagerPolishStyles() {
       position: relative;
       z-index: 2;
       isolation: isolate;
+    }
+
+    #puzzleMapBoard {
+      --puzzle-tile-size: 320px;
     }
 
     #puzzleMapControls .battleEditorInner,
@@ -1457,6 +2505,10 @@ function ensureBattleManagerPolishStyles() {
     }
 
     @media (max-width: 900px) {
+      #puzzleMapBoard {
+        --puzzle-tile-size: 240px;
+      }
+
       .map-tile,
       .puzzle-grid-empty-cell {
         width: 240px;
@@ -1478,9 +2530,11 @@ function ensureBattleManagerPolishStyles() {
 
 function syncBattleManagerVisibility() {
   const showDmTools = !!currentIsDM;
+  const showCharacterCreatorLauncher = !!currentUser && !!currentRoomCode;
+  const showBattleManager = showDmTools || showCharacterCreatorLauncher;
 
   if (E.battleManagerBar) {
-    E.battleManagerBar.classList.toggle("hidden", !showDmTools);
+    E.battleManagerBar.classList.toggle("hidden", !showBattleManager);
   }
 
   if (E.puzzleMapControls) {
@@ -1492,7 +2546,21 @@ function syncBattleManagerVisibility() {
   }
 
   if (E.creatorLauncherControls) {
-    E.creatorLauncherControls.classList.toggle("hidden", !showDmTools);
+    E.creatorLauncherControls.classList.toggle(
+      "hidden",
+      !showCharacterCreatorLauncher
+    );
+  }
+
+  if (E.openCharacterCreatorButton) {
+    E.openCharacterCreatorButton.classList.toggle(
+      "hidden",
+      !showCharacterCreatorLauncher
+    );
+  }
+
+  if (E.openMonsterCreatorButton) {
+    E.openMonsterCreatorButton.classList.toggle("hidden", !showDmTools);
   }
 }
 
@@ -1554,6 +2622,138 @@ function getPuzzleTiles(room) {
     });
 }
 
+function mergeRoomWithPuzzleTileDocs(room) {
+  const safeRoom = room || {};
+  const legacyTiles = getPuzzleTiles(safeRoom);
+  const shouldUseTileDocs =
+    Array.isArray(latestPuzzleTiles) &&
+    (latestPuzzleTiles.length > 0 ||
+      legacyTiles.length === 0 ||
+      hasMigratedLegacyPuzzleTiles);
+
+  return {
+    ...safeRoom,
+    puzzleTiles: shouldUseTileDocs ? latestPuzzleTiles : legacyTiles
+  };
+}
+
+function getPuzzleTileCollection(roomCode) {
+  return collection(db, "rooms", roomCode, "puzzleTiles");
+}
+
+function getPuzzleTileDocument(roomCode, tileKey) {
+  return doc(db, "rooms", roomCode, "puzzleTiles", tileKey);
+}
+
+function listenToPuzzleTiles(roomCode) {
+  if (stopListeningToPuzzleTiles) {
+    stopListeningToPuzzleTiles();
+  }
+
+  stopListeningToPuzzleTiles = onSnapshot(
+    getPuzzleTileCollection(roomCode),
+    { includeMetadataChanges: true },
+    function (tilesSnap) {
+      if (tilesSnap.metadata.hasPendingWrites) {
+        return;
+      }
+
+      const tiles = [];
+
+      tilesSnap.forEach(function (tileDoc) {
+        tiles.push({
+          ...tileDoc.data(),
+          key: tileDoc.data().key || tileDoc.id
+        });
+      });
+
+      latestPuzzleTiles = getPuzzleTiles({ puzzleTiles: tiles });
+
+      if (currentRoomData) {
+        currentRoomData = mergeRoomWithPuzzleTileDocs(currentRoomData);
+        renderPuzzleBoard(currentRoomData);
+      }
+
+      maybeMigrateLegacyPuzzleTilesToSubcollection();
+    },
+    function (error) {
+      text(E.puzzleMapStatus, "Could not load puzzle tiles: " + error.message);
+    }
+  );
+}
+
+async function maybeMigrateLegacyPuzzleTilesToSubcollection(throwOnFailure = false) {
+  if (isMigratingLegacyPuzzleTiles) {
+    if (throwOnFailure && legacyPuzzleTileMigrationPromise) {
+      await legacyPuzzleTileMigrationPromise;
+    }
+
+    return;
+  }
+
+  if (
+    !currentRoomCode ||
+    !currentIsDM ||
+    !currentRoomData
+  ) {
+    return;
+  }
+
+  const legacyTiles = getPuzzleTiles(currentRoomData);
+
+  if (
+    legacyTiles.length === 0 ||
+    (Array.isArray(latestPuzzleTiles) && latestPuzzleTiles.length > 0)
+  ) {
+    return;
+  }
+
+  const migrationRoomCode = currentRoomCode;
+
+  isMigratingLegacyPuzzleTiles = true;
+  legacyPuzzleTileMigrationPromise = (async function () {
+    for (const tile of legacyTiles) {
+      await setDoc(
+        getPuzzleTileDocument(migrationRoomCode, tile.key),
+        tile,
+        { merge: true }
+      );
+    }
+
+    await updateDoc(doc(db, "rooms", migrationRoomCode), {
+      puzzleTiles: [],
+      updatedAt: serverTimestamp()
+    });
+
+    latestPuzzleTiles = legacyTiles;
+    hasMigratedLegacyPuzzleTiles = true;
+
+    if (currentRoomCode === migrationRoomCode && currentRoomData) {
+      currentRoomData = {
+        ...currentRoomData,
+        puzzleTiles: legacyTiles
+      };
+    }
+  })();
+
+  try {
+    await legacyPuzzleTileMigrationPromise;
+  } catch (error) {
+    console.warn("Could not migrate puzzle tiles to subcollection:", error);
+
+    if (throwOnFailure) {
+      throw error;
+    }
+  } finally {
+    isMigratingLegacyPuzzleTiles = false;
+    legacyPuzzleTileMigrationPromise = null;
+  }
+}
+
+async function ensurePuzzleTilesStoredInSubcollection() {
+  await maybeMigrateLegacyPuzzleTilesToSubcollection(true);
+}
+
 function getPuzzleViewMode(room) {
   if (!room || room.puzzleViewMode !== "focus") {
     return "board";
@@ -1588,6 +2788,8 @@ function puzzleTileToCurrentMap(tile) {
     name: tile.name || "Puzzle Tile",
     url: tile.url,
     publicId: tile.publicId || null,
+    deleteToken: tile.deleteToken || null,
+    deleteTokenCreatedAtMillis: tile.deleteTokenCreatedAtMillis || null,
     savedToLibrary: false,
     puzzleTileKey: tile.key
   };
@@ -1623,6 +2825,52 @@ function getPuzzleBounds(tiles) {
   };
 }
 
+function assertPuzzlePositionAllowed(tiles, tileKey, x, y) {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) {
+    throw new Error("Puzzle tile coordinates must be whole numbers.");
+  }
+
+  if (
+    Math.abs(x) > PUZZLE_COORDINATE_LIMIT ||
+    Math.abs(y) > PUZZLE_COORDINATE_LIMIT
+  ) {
+    throw new Error(
+      "Puzzle tile coordinates must stay between -" +
+      PUZZLE_COORDINATE_LIMIT +
+      " and " +
+      PUZZLE_COORDINATE_LIMIT +
+      "."
+    );
+  }
+
+  const nextTilePositions = tiles
+    .filter(function (tile) {
+      return tile.key !== tileKey;
+    })
+    .map(function (tile) {
+      return { x: tile.x, y: tile.y };
+    });
+
+  nextTilePositions.push({ x, y });
+
+  const bounds = getPuzzleBounds(nextTilePositions);
+  const columnCount = bounds.maxX - bounds.minX + 1;
+  const rowCount = bounds.maxY - bounds.minY + 1;
+
+  if (
+    columnCount > PUZZLE_MAX_GRID_SPAN ||
+    rowCount > PUZZLE_MAX_GRID_SPAN
+  ) {
+    throw new Error(
+      "Puzzle tiles must stay within a " +
+      PUZZLE_MAX_GRID_SPAN +
+      " by " +
+      PUZZLE_MAX_GRID_SPAN +
+      " board area."
+    );
+  }
+}
+
 function tileExistsAtPosition(tiles, x, y, exceptKey) {
   const key = makeTileKey(x, y);
 
@@ -1631,29 +2879,127 @@ function tileExistsAtPosition(tiles, x, y, exceptKey) {
   });
 }
 
-async function updateRoomWithPuzzleTiles(tiles, activeTile, viewMode) {
-  if (!currentRoomCode) {
-    return;
+function getPuzzleTileByKey(tiles, tileKey) {
+  return tiles.find(function (tile) {
+    return tile.key === tileKey;
+  }) || null;
+}
+
+function getTargetPositionForNewTileFromTiles(tiles, direction, baseTile) {
+  if (tiles.length === 0) {
+    return {
+      x: 0,
+      y: 0
+    };
   }
 
+  const activeTile = baseTile || tiles[0];
+
+  let x = activeTile.x;
+  let y = activeTile.y;
+
+  if (direction === "north") y -= 1;
+  if (direction === "south") y += 1;
+  if (direction === "east") x += 1;
+  if (direction === "west") x -= 1;
+
+  return {
+    x,
+    y
+  };
+}
+
+function buildPuzzleRoomStateFields(tiles, activeTile, viewMode, includeUpdatedAt) {
   const safeActiveTile = activeTile || null;
   const safeViewMode = viewMode === "focus" ? "focus" : "board";
   const activeMap = safeActiveTile ? puzzleTileToCurrentMap(safeActiveTile) : null;
 
-  await updateDoc(doc(db, "rooms", currentRoomCode), {
-    puzzleTiles: tiles,
+  const fields = {
     activePuzzleTileKey: safeActiveTile ? safeActiveTile.key : null,
     puzzleViewMode: safeViewMode,
+    currentMap: normalizeCurrentMapData(activeMap)
+  };
 
-    currentMap: activeMap,
-    currentMapUrl: activeMap ? activeMap.url : null,
-    currentMapName: activeMap ? activeMap.name : null,
-    currentMapId: activeMap ? activeMap.id : null,
-    currentMapPublicId: activeMap ? activeMap.publicId : null,
-    currentMapSavedToLibrary: false,
+  if (includeUpdatedAt) {
+    Object.assign(fields, legacyCurrentMapFieldDeletions());
+    fields.updatedAt = serverTimestamp();
+  }
 
-    updatedAt: serverTimestamp()
+  return fields;
+}
+
+async function updateRoomWithPuzzleTiles(mutatePuzzleState) {
+  if (!currentRoomCode) {
+    return null;
+  }
+
+  const roomRef = doc(db, "rooms", currentRoomCode);
+  let finalResult = null;
+
+  await runTransaction(db, async function (transaction) {
+    const roomSnap = await transaction.get(roomRef);
+
+    if (!roomSnap.exists()) {
+      throw new Error("Room not found.");
+    }
+
+    const latestRoom = roomSnap.data() || {};
+    const mergedRoom = mergeRoomWithPuzzleTileDocs(latestRoom);
+    const latestTiles = getPuzzleTiles(mergedRoom);
+    const mutation = await mutatePuzzleState({
+      room: mergedRoom,
+      tiles: latestTiles,
+      transaction,
+      roomRef
+    }) || {};
+
+    const nextTiles = getPuzzleTiles({
+      puzzleTiles: mutation.tiles || latestTiles
+    });
+
+    const requestedActiveKey = mutation.activeTile ? mutation.activeTile.key : null;
+    const nextActiveTile =
+      requestedActiveKey
+        ? getPuzzleTileByKey(nextTiles, requestedActiveKey)
+        : null;
+
+    const nextViewMode = mutation.viewMode === "focus" ? "focus" : "board";
+    const updateFields = buildPuzzleRoomStateFields(
+      nextTiles,
+      nextActiveTile,
+      nextViewMode,
+      true
+    );
+
+    transaction.update(roomRef, updateFields);
+
+    const localFields = buildPuzzleRoomStateFields(
+      nextTiles,
+      nextActiveTile,
+      nextViewMode,
+      false
+    );
+
+    finalResult = {
+      ...mutation,
+      tiles: nextTiles,
+      activeTile: nextActiveTile,
+      viewMode: nextViewMode,
+      room: {
+        ...withoutLegacyCurrentMapFields(mergedRoom, nextActiveTile ? puzzleTileToCurrentMap(nextActiveTile) : null),
+        puzzleTiles: nextTiles,
+        ...localFields
+      }
+    };
   });
+
+  if (finalResult && finalResult.room) {
+    latestPuzzleTiles = finalResult.tiles;
+    hasMigratedLegacyPuzzleTiles = true;
+    currentRoomData = finalResult.room;
+  }
+
+  return finalResult;
 }
 
 
@@ -1766,34 +3112,22 @@ function renderPuzzleBoard(room) {
   E.puzzleMapBoard.innerHTML = "";
 
   const bounds = getPuzzleBounds(tiles);
-  const tileLookup = new Map();
-
-  tiles.forEach(function (tile) {
-    tileLookup.set(makeTileKey(tile.x, tile.y), tile);
-  });
-
   E.puzzleMapBoard.style.gridTemplateColumns =
-    "repeat(" + (bounds.maxX - bounds.minX + 1) + ", auto)";
+    "repeat(" +
+    (bounds.maxX - bounds.minX + 1) +
+    ", var(--puzzle-tile-size))";
 
   E.puzzleMapBoard.style.gridTemplateRows =
-    "repeat(" + (bounds.maxY - bounds.minY + 1) + ", auto)";
+    "repeat(" +
+    (bounds.maxY - bounds.minY + 1) +
+    ", var(--puzzle-tile-size))";
 
-  for (let y = bounds.minY; y <= bounds.maxY; y++) {
-    for (let x = bounds.minX; x <= bounds.maxX; x++) {
-      const key = makeTileKey(x, y);
-      const tile = tileLookup.get(key);
-
-      if (!tile) {
-        const emptyCell = document.createElement("div");
-        emptyCell.className = "puzzle-grid-empty-cell";
-        emptyCell.title = "Empty grid spot " + key;
-        E.puzzleMapBoard.appendChild(emptyCell);
-        continue;
-      }
-
-      E.puzzleMapBoard.appendChild(createPuzzleTileElement(tile, activeTile));
-    }
-  }
+  tiles.forEach(function (tile) {
+    const tileElement = createPuzzleTileElement(tile, activeTile);
+    tileElement.style.gridColumn = String(tile.x - bounds.minX + 1);
+    tileElement.style.gridRow = String(tile.y - bounds.minY + 1);
+    E.puzzleMapBoard.appendChild(tileElement);
+  });
 
   keepTokenLayerReadyForExternalFile();
   notifyExternalTokenSystem(safeRoom);
@@ -1871,31 +3205,13 @@ function centerPuzzleBoardNow() {
 
 function getTargetPositionForNewTile(direction) {
   const tiles = getPuzzleTiles(currentRoomData || {});
-
-  if (tiles.length === 0) {
-    return {
-      x: 0,
-      y: 0
-    };
-  }
-
   const activeTile = getActivePuzzleTile(currentRoomData || {}) || tiles[0];
-
-  let x = activeTile.x;
-  let y = activeTile.y;
-
-  if (direction === "north") y -= 1;
-  if (direction === "south") y += 1;
-  if (direction === "east") x += 1;
-  if (direction === "west") x -= 1;
-
-  return {
-    x,
-    y
-  };
+  return getTargetPositionForNewTileFromTiles(tiles, direction, activeTile);
 }
 
 async function addPuzzleTile(direction) {
+  let uploadedPuzzleTile = null;
+
   try {
     if (!currentRoomCode) {
       alert("Create or join a room first.");
@@ -1912,9 +3228,16 @@ async function addPuzzleTile(direction) {
       return;
     }
 
+    await ensurePuzzleTilesStoredInSubcollection();
+
     const file = E.puzzleTileUploadInput.files[0];
-    const oldTiles = getPuzzleTiles(currentRoomData || {});
+    const roomWithTiles = mergeRoomWithPuzzleTileDocs(currentRoomData || {});
+    const oldTiles = getPuzzleTiles(roomWithTiles);
+    const baseTile = getActivePuzzleTile(roomWithTiles) || oldTiles[0] || null;
+    const baseTileKey = baseTile ? baseTile.key : null;
     const target = getTargetPositionForNewTile(direction);
+
+    assertPuzzlePositionAllowed(oldTiles, null, target.x, target.y);
 
     if (tileExistsAtPosition(oldTiles, target.x, target.y, null)) {
       alert("That puzzle grid spot is already taken. Focus another tile or move one first.");
@@ -1931,37 +3254,78 @@ async function addPuzzleTile(direction) {
     disablePuzzleButtons(true);
 
     const cloudinaryResult = await uploadMapToCloudinary(file);
-    const key = makeTileKey(target.x, target.y);
+    const cloudinaryAsset = getCloudinaryAssetMetadata(cloudinaryResult);
 
-    const newTile = {
-      key,
-      x: target.x,
-      y: target.y,
+    uploadedPuzzleTile = {
       name: getSafeMapName(file.name),
       url: cloudinaryResult.secure_url,
-      publicId: cloudinaryResult.public_id,
-      locked: true,
-      createdAtMillis: Date.now()
+      publicId: cloudinaryAsset.publicId,
+      deleteToken: cloudinaryAsset.deleteToken,
+      deleteTokenCreatedAtMillis: cloudinaryAsset.deleteTokenCreatedAtMillis,
+      savedToLibrary: false
     };
 
-    const newTiles = oldTiles.concat(newTile);
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const latestTiles = state.tiles;
+      const latestBaseTile =
+        baseTileKey
+          ? getPuzzleTileByKey(latestTiles, baseTileKey)
+          : null;
+      const transactionTarget = getTargetPositionForNewTileFromTiles(
+        latestTiles,
+        direction,
+        latestBaseTile || getActivePuzzleTile(state.room) || latestTiles[0] || null
+      );
 
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      puzzleTiles: newTiles,
-      activePuzzleTileKey: newTile.key,
-      puzzleViewMode: "board",
-      currentMap: puzzleTileToCurrentMap(newTile),
-      currentMapUrl: newTile.url,
-      currentMapName: newTile.name,
-      currentMapId: newTile.key,
-      currentMapPublicId: newTile.publicId,
-      currentMapSavedToLibrary: false
-    };
+      assertPuzzlePositionAllowed(
+        latestTiles,
+        null,
+        transactionTarget.x,
+        transactionTarget.y
+      );
 
-    await updateRoomWithPuzzleTiles(newTiles, newTile, "board");
+      if (
+        tileExistsAtPosition(
+          latestTiles,
+          transactionTarget.x,
+          transactionTarget.y,
+          null
+        )
+      ) {
+        throw new Error("That puzzle grid spot is already taken. Try again from the updated board.");
+      }
 
-    renderPuzzleBoard(currentRoomData);
+      const key = makeTileKey(transactionTarget.x, transactionTarget.y);
+      const targetTileRef = getPuzzleTileDocument(currentRoomCode, key);
+      const targetTileSnap = await state.transaction.get(targetTileRef);
+
+      if (targetTileSnap.exists()) {
+        throw new Error("That puzzle grid spot is already taken. Try again from the updated board.");
+      }
+
+      const newTile = {
+        ...uploadedPuzzleTile,
+        key,
+        x: transactionTarget.x,
+        y: transactionTarget.y,
+        locked: true,
+        createdAtMillis: Date.now()
+      };
+
+      state.transaction.set(targetTileRef, newTile);
+
+      return {
+        tiles: latestTiles.concat(newTile),
+        activeTile: newTile,
+        viewMode: "board",
+        addedTile: newTile,
+        previousTileCount: latestTiles.length
+      };
+    });
+
+    uploadedPuzzleTile = null;
+
+    renderPuzzleBoard(transactionResult.room);
 
     if (E.puzzleTileUploadInput) {
       E.puzzleTileUploadInput.value = "";
@@ -1973,11 +3337,17 @@ async function addPuzzleTile(direction) {
 
     text(
       E.puzzleMapStatus,
-      oldTiles.length === 0
+      transactionResult.previousTileCount === 0
         ? "First puzzle tile placed at center 0,0."
-        : "Puzzle tile added " + direction + " at " + key + "."
+        : "Puzzle tile added " + direction + " at " + transactionResult.addedTile.key + "."
     );
   } catch (error) {
+    if (uploadedPuzzleTile) {
+      await deleteCloudinaryAssetIfUnreferenced(uploadedPuzzleTile, {
+        reason: "failed-puzzle-tile-add"
+      });
+    }
+
     text(E.puzzleMapStatus, "Puzzle tile upload failed.");
     alert(error.message);
   } finally {
@@ -1996,34 +3366,32 @@ async function focusPuzzleTile(tileKey) {
       return;
     }
 
-    const tiles = getPuzzleTiles(currentRoomData || {});
-    const tile = tiles.find(function (item) {
-      return item.key === tileKey;
+    await ensurePuzzleTilesStoredInSubcollection();
+
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const tileRef = getPuzzleTileDocument(currentRoomCode, tileKey);
+      const tileSnap = await state.transaction.get(tileRef);
+
+      if (!tileSnap.exists()) {
+        throw new Error("Puzzle tile not found.");
+      }
+
+      const tile = getPuzzleTiles({
+        puzzleTiles: [{ ...tileSnap.data(), key: tileSnap.data().key || tileKey }]
+      })[0];
+
+      return {
+        tiles: state.tiles,
+        activeTile: tile,
+        viewMode: "focus",
+        focusedTile: tile
+      };
     });
 
-    if (!tile) {
-      alert("Puzzle tile not found.");
-      return;
-    }
-
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      puzzleTiles: tiles,
-      activePuzzleTileKey: tile.key,
-      puzzleViewMode: "focus",
-      currentMap: puzzleTileToCurrentMap(tile),
-      currentMapUrl: tile.url,
-      currentMapName: tile.name,
-      currentMapId: tile.key,
-      currentMapPublicId: tile.publicId || null,
-      currentMapSavedToLibrary: false
-    };
-
-    await updateRoomWithPuzzleTiles(tiles, tile, "focus");
-
+    const tile = transactionResult.focusedTile;
     showSingleBattleMapView();
     showSharedMap(puzzleTileToCurrentMap(tile));
-    renderPuzzleBoard(currentRoomData);
+    renderPuzzleBoard(transactionResult.room);
 
     text(E.puzzleMapStatus, "Focused on tile " + tile.key + ". Press Center Board to return.");
   } catch (error) {
@@ -2037,22 +3405,34 @@ async function showFullPuzzleBoard() {
       return;
     }
 
-    const tiles = getPuzzleTiles(currentRoomData || {});
-    const activeTile = getActivePuzzleTile(currentRoomData || {});
+    const roomRef = doc(db, "rooms", currentRoomCode);
+    let transactionRoomData = null;
 
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      puzzleTiles: tiles,
-      activePuzzleTileKey: activeTile ? activeTile.key : null,
-      puzzleViewMode: "board"
-    };
+    await runTransaction(db, async function (transaction) {
+      const roomSnap = await transaction.get(roomRef);
 
-    await updateDoc(doc(db, "rooms", currentRoomCode), {
-      puzzleViewMode: "board",
-      activePuzzleTileKey: activeTile ? activeTile.key : null,
-      updatedAt: serverTimestamp()
+      if (!roomSnap.exists()) {
+        throw new Error("Room not found.");
+      }
+
+      const latestRoom = mergeRoomWithPuzzleTileDocs(roomSnap.data() || {});
+      const activeTile = getActivePuzzleTile(latestRoom);
+      const activeTileKey = activeTile ? activeTile.key : null;
+
+      transaction.update(roomRef, {
+        puzzleViewMode: "board",
+        activePuzzleTileKey: activeTileKey,
+        updatedAt: serverTimestamp()
+      });
+
+      transactionRoomData = {
+        ...latestRoom,
+        activePuzzleTileKey: activeTileKey,
+        puzzleViewMode: "board"
+      };
     });
 
+    currentRoomData = transactionRoomData;
     renderPuzzleBoard(currentRoomData);
 
     setTimeout(function () {
@@ -2072,39 +3452,58 @@ async function deletePuzzleTile(tileKey) {
       return;
     }
 
-    if (!confirm("Delete this puzzle tile from the board? This does not delete the image from Cloudinary.")) {
+    if (!confirm("Delete this puzzle tile from the board? The Cloudinary image will be deleted if no other room reference uses it.")) {
       return;
     }
 
-    const oldTiles = getPuzzleTiles(currentRoomData || {});
-    const newTiles = oldTiles.filter(function (tile) {
-      return tile.key !== tileKey;
+    await ensurePuzzleTilesStoredInSubcollection();
+
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const tileRef = getPuzzleTileDocument(currentRoomCode, tileKey);
+      const tileSnap = await state.transaction.get(tileRef);
+
+      if (!tileSnap.exists()) {
+        throw new Error("Puzzle tile not found.");
+      }
+
+      const tileToDelete = getPuzzleTiles({
+        puzzleTiles: [{ ...tileSnap.data(), key: tileSnap.data().key || tileKey }]
+      })[0];
+
+      state.transaction.delete(tileRef);
+
+      const newTiles = state.tiles.filter(function (tile) {
+        return tile.key !== tileKey;
+      });
+
+      const previousActiveTile = getPuzzleTileByKey(
+        newTiles,
+        state.room.activePuzzleTileKey
+      );
+      const newActiveTile = previousActiveTile || (newTiles.length > 0 ? newTiles[0] : null);
+
+      return {
+        tiles: newTiles,
+        activeTile: newActiveTile,
+        viewMode: "board",
+        deletedTile: tileToDelete
+      };
     });
 
-    const newActiveTile = newTiles.length > 0 ? newTiles[0] : null;
-
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      puzzleTiles: newTiles,
-      activePuzzleTileKey: newActiveTile ? newActiveTile.key : null,
-      puzzleViewMode: "board",
-      currentMap: newActiveTile ? puzzleTileToCurrentMap(newActiveTile) : null,
-      currentMapUrl: newActiveTile ? newActiveTile.url : null,
-      currentMapName: newActiveTile ? newActiveTile.name : null,
-      currentMapId: newActiveTile ? newActiveTile.key : null,
-      currentMapPublicId: newActiveTile ? newActiveTile.publicId || null : null,
-      currentMapSavedToLibrary: false
-    };
-
-    await updateRoomWithPuzzleTiles(newTiles, newActiveTile, "board");
-
-    if (newActiveTile) {
-      showSharedMap(puzzleTileToCurrentMap(newActiveTile));
+    if (transactionResult.activeTile) {
+      showSharedMap(puzzleTileToCurrentMap(transactionResult.activeTile));
+    } else {
+      showSharedMap(null);
     }
 
-    renderPuzzleBoard(currentRoomData);
+    renderPuzzleBoard(transactionResult.room);
 
-    text(E.puzzleMapStatus, "Puzzle tile deleted.");
+    const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(transactionResult.deletedTile, {
+      ignorePuzzleTileKey: tileKey,
+      reason: "delete-puzzle-tile"
+    });
+
+    text(E.puzzleMapStatus, "Puzzle tile deleted. " + cleanupMessage);
   } catch (error) {
     alert(error.message);
   }
@@ -2121,63 +3520,78 @@ async function movePuzzleTileTo(tileKey, newX, newY) {
       return;
     }
 
-    const oldTiles = getPuzzleTiles(currentRoomData || {});
-    const oldTile = oldTiles.find(function (tile) {
-      return tile.key === tileKey;
+    await ensurePuzzleTilesStoredInSubcollection();
+
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const oldTileRef = getPuzzleTileDocument(currentRoomCode, tileKey);
+      const oldTileSnap = await state.transaction.get(oldTileRef);
+
+      if (!oldTileSnap.exists()) {
+        throw new Error("Tile not found.");
+      }
+
+      const oldTile = getPuzzleTiles({
+        puzzleTiles: [{ ...oldTileSnap.data(), key: oldTileSnap.data().key || tileKey }]
+      })[0];
+
+      if (oldTile.x === newX && oldTile.y === newY) {
+        return {
+          tiles: state.tiles,
+          activeTile: oldTile,
+          viewMode: "board",
+          movedTile: oldTile,
+          didMove: false
+        };
+      }
+
+      assertPuzzlePositionAllowed(state.tiles, tileKey, newX, newY);
+
+      if (tileExistsAtPosition(state.tiles, newX, newY, tileKey)) {
+        throw new Error("That grid spot is already taken. Tile snapped back.");
+      }
+
+      const newKey = makeTileKey(newX, newY);
+      const newTileRef = getPuzzleTileDocument(currentRoomCode, newKey);
+      const newTileSnap = await state.transaction.get(newTileRef);
+
+      if (newTileSnap.exists()) {
+        throw new Error("That grid spot is already taken. Tile snapped back.");
+      }
+
+      const movedTile = {
+        ...oldTile,
+        key: newKey,
+        x: newX,
+        y: newY,
+        movedAtMillis: Date.now()
+      };
+
+      const newTiles = state.tiles.map(function (tile) {
+        return tile.key === tileKey ? movedTile : tile;
+      });
+
+      state.transaction.delete(oldTileRef);
+      state.transaction.set(newTileRef, movedTile);
+
+      return {
+        tiles: newTiles,
+        activeTile: movedTile,
+        viewMode: "board",
+        movedTile,
+        didMove: true
+      };
     });
 
-    if (!oldTile) {
-      text(E.puzzleMapStatus, "Tile not found.");
-      renderPuzzleBoard(currentRoomData);
-      return;
-    }
+    renderPuzzleBoard(transactionResult.room);
 
-    if (oldTile.x === newX && oldTile.y === newY) {
-      text(E.puzzleMapStatus, "Tile stayed locked in place.");
-      renderPuzzleBoard(currentRoomData);
-      return;
-    }
-
-    if (tileExistsAtPosition(oldTiles, newX, newY, tileKey)) {
-      text(E.puzzleMapStatus, "That grid spot is already taken. Tile snapped back.");
-      renderPuzzleBoard(currentRoomData);
-      return;
-    }
-
-    const newKey = makeTileKey(newX, newY);
-
-    const movedTile = {
-      ...oldTile,
-      key: newKey,
-      x: newX,
-      y: newY,
-      movedAtMillis: Date.now()
-    };
-
-    const newTiles = oldTiles.map(function (tile) {
-      return tile.key === tileKey ? movedTile : tile;
-    });
-
-    currentRoomData = {
-      ...(currentRoomData || {}),
-      puzzleTiles: newTiles,
-      activePuzzleTileKey: movedTile.key,
-      puzzleViewMode: "board",
-      currentMap: puzzleTileToCurrentMap(movedTile),
-      currentMapUrl: movedTile.url,
-      currentMapName: movedTile.name,
-      currentMapId: movedTile.key,
-      currentMapPublicId: movedTile.publicId || null,
-      currentMapSavedToLibrary: false
-    };
-
-    await updateRoomWithPuzzleTiles(newTiles, movedTile, "board");
-
-    renderPuzzleBoard(currentRoomData);
-
-    text(E.puzzleMapStatus, "Tile moved and locked at " + movedTile.key + ".");
+    text(
+      E.puzzleMapStatus,
+      transactionResult.didMove
+        ? "Tile moved and locked at " + transactionResult.movedTile.key + "."
+        : "Tile stayed locked in place."
+    );
   } catch (error) {
-    alert(error.message);
+    text(E.puzzleMapStatus, error.message);
     renderPuzzleBoard(currentRoomData || {});
   }
 }
@@ -2412,11 +3826,17 @@ function showAnyMainScreen(screenName) {
 }
 
 function applyBattleZoom() {
-  if (!E.battleMapImage) {
-    return;
+  const scale = "scale(" + battleZoom + ")";
+
+  if (E.battleMapImage) {
+    E.battleMapImage.style.transform = scale;
   }
 
-  E.battleMapImage.style.transform = "scale(" + battleZoom + ")";
+  if (E.puzzleMapBoard) {
+    E.puzzleMapBoard.style.transform = scale;
+    E.puzzleMapBoard.style.transformOrigin = "top left";
+  }
+
   text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
 }
 
@@ -2569,6 +3989,10 @@ function openStartupViewIfNeeded() {
     return;
   }
 
+  if (!currentRoomData) {
+    return;
+  }
+
   alreadyUsedStartupLink = true;
 
   if (startupView === "battle") {
@@ -2593,6 +4017,20 @@ function openStartupViewIfNeeded() {
 // =====================================================
 // APP SECTION 13E — PAGE LEAVE CLEANUP
 // =====================================================
+
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) {
+    touchActivePlayerSession();
+  }
+});
+
+window.addEventListener("focus", function () {
+  touchActivePlayerSession();
+});
+
+window.addEventListener("pageshow", function () {
+  touchActivePlayerSession();
+});
 
 window.addEventListener("pagehide", function () {
   removeActivePlayerSession();
@@ -2628,12 +4066,5 @@ onAuthStateChanged(auth, async function (user) {
       "player",
       startupScreen
     );
-
-    // openRoom starts the room listener, then this switches to the requested tool tab.
-    setTimeout(function () {
-      if (typeof openStartupViewIfNeeded === "function") {
-        openStartupViewIfNeeded();
-      }
-    }, 150);
   }
 });
