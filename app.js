@@ -1428,10 +1428,6 @@ async function postCloudinaryUpload(file, requestDeleteToken) {
   formData.append("file", file);
   formData.append("upload_preset", uploadPreset);
 
-  if (requestDeleteToken) {
-    formData.append("return_delete_token", "true");
-  }
-
   const response = await fetch(
     "https://api.cloudinary.com/v1_1/" + cloudName + "/image/upload",
     {
@@ -1448,28 +1444,9 @@ async function postCloudinaryUpload(file, requestDeleteToken) {
   return await response.json();
 }
 
-function isDeleteTokenUploadParameterUnsupported(error) {
-  const message = String(error && error.message ? error.message : "").toLowerCase();
-
-  return (
-    message.includes("return_delete_token") ||
-    (message.includes("delete_token") && message.includes("unsigned")) ||
-    (message.includes("unsupported") && message.includes("delete"))
-  );
-}
-
 async function uploadMapToCloudinary(file) {
   validateImageUploadFile(file);
-
-  try {
-    return await postCloudinaryUpload(file, true);
-  } catch (error) {
-    if (!isDeleteTokenUploadParameterUnsupported(error)) {
-      throw error;
-    }
-
-    return await postCloudinaryUpload(file, false);
-  }
+  return await postCloudinaryUpload(file, false);
 }
 
 function getAssetIdentity(asset) {
