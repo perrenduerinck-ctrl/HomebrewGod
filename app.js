@@ -1953,13 +1953,18 @@ function showSharedMap(currentMap) {
     text(E.currentMapNameText, "None");
     text(E.battleMapNameText, "None");
 
-    E.roomMapPreviewImage.onload = null;
-    E.roomMapPreviewImage.onerror = null;
-    E.roomMapPreviewImage.removeAttribute("src");
-    E.roomMapPreviewImage.style.display = "none";
+    if (E.roomMapPreviewImage) {
+      E.roomMapPreviewImage.onload = null;
+      E.roomMapPreviewImage.onerror = null;
+      E.roomMapPreviewImage.removeAttribute("src");
+      E.roomMapPreviewImage.style.display = "none";
+    }
 
     text(E.noRoomMapPreviewText, "No shared map loaded yet.");
-    E.noRoomMapPreviewText.style.display = "block";
+
+    if (E.noRoomMapPreviewText) {
+      E.noRoomMapPreviewText.style.display = "block";
+    }
 
     E.battleMapImage.onload = null;
     E.battleMapImage.onerror = null;
@@ -1985,7 +1990,7 @@ function showSharedMap(currentMap) {
 
   if (
     displayedSharedMapUrl === map.url &&
-    E.roomMapPreviewImage.getAttribute("src") &&
+    (!E.roomMapPreviewImage || E.roomMapPreviewImage.getAttribute("src")) &&
     E.battleMapImage.getAttribute("src")
   ) {
     return;
@@ -1995,22 +2000,34 @@ function showSharedMap(currentMap) {
 
   const imageUrl = map.url;
 
-  text(E.noRoomMapPreviewText, "Loading map preview...");
-  E.noRoomMapPreviewText.style.display = "block";
-  E.roomMapPreviewImage.style.display = "none";
+  if (E.roomMapPreviewImage) {
+    text(E.noRoomMapPreviewText, "Loading map preview...");
 
-  E.roomMapPreviewImage.onload = function () {
-    E.noRoomMapPreviewText.style.display = "none";
-    E.roomMapPreviewImage.style.display = "block";
-  };
+    if (E.noRoomMapPreviewText) {
+      E.noRoomMapPreviewText.style.display = "block";
+    }
 
-  E.roomMapPreviewImage.onerror = function () {
     E.roomMapPreviewImage.style.display = "none";
-    text(E.noRoomMapPreviewText, "Map preview failed to load.");
-    E.noRoomMapPreviewText.style.display = "block";
-  };
 
-  E.roomMapPreviewImage.src = imageUrl;
+    E.roomMapPreviewImage.onload = function () {
+      if (E.noRoomMapPreviewText) {
+        E.noRoomMapPreviewText.style.display = "none";
+      }
+
+      E.roomMapPreviewImage.style.display = "block";
+    };
+
+    E.roomMapPreviewImage.onerror = function () {
+      E.roomMapPreviewImage.style.display = "none";
+      text(E.noRoomMapPreviewText, "Map preview failed to load.");
+
+      if (E.noRoomMapPreviewText) {
+        E.noRoomMapPreviewText.style.display = "block";
+      }
+    };
+
+    E.roomMapPreviewImage.src = imageUrl;
+  }
 
   text(E.noBattleMapText, "Loading battle map...");
   E.noBattleMapText.style.display = "block";
