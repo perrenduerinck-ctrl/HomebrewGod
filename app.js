@@ -3188,15 +3188,24 @@ function getTargetPositionForNewTile(direction) {
 
 async function addPuzzleTile(direction) {
   let uploadedPuzzleTile = null;
+  let puzzleFailureStage = "DM preflight check";
+  let attemptedPuzzleTilePath = currentRoomCode
+    ? "rooms/" + currentRoomCode + "/puzzleTiles/{tileKey}"
+    : null;
+  let attemptedRoomPath = currentRoomCode
+    ? "rooms/" + currentRoomCode
+    : null;
 
   try {
-    if (!currentRoomCode) {
-      alert("Create or join a room first.");
-      return;
-    }
+    const isConfirmedRoomDM = !!(
+      currentUser &&
+      currentRoomCode &&
+      currentRoomData &&
+      currentRoomData.dmUid === currentUser.uid
+    );
 
-    if (!currentIsDM) {
-      alert("Only the DM can add puzzle map tiles.");
+    if (!isConfirmedRoomDM) {
+      alert("Only the room DM can add puzzle tiles. Reopen the room or create a new room as this account.");
       return;
     }
 
@@ -3205,6 +3214,7 @@ async function addPuzzleTile(direction) {
       return;
     }
 
+    puzzleFailureStage = "legacy puzzle tile migration";
     await ensurePuzzleTilesStoredInSubcollection();
 
     const file = E.puzzleTileUploadInput.files[0];
@@ -3213,6 +3223,12 @@ async function addPuzzleTile(direction) {
     const baseTile = getActivePuzzleTile(roomWithTiles) || oldTiles[0] || null;
     const baseTileKey = baseTile ? baseTile.key : null;
     const target = getTargetPositionForNewTile(direction);
+    attemptedPuzzleTilePath =
+      "rooms/" +
+      currentRoomCode +
+      "/puzzleTiles/" +
+      makeTileKey(target.x, target.y);
+    attemptedRoomPath = "rooms/" + currentRoomCode;
 
     assertPuzzlePositionAllowed(oldTiles, null, target.x, target.y);
 
@@ -3230,6 +3246,7 @@ async function addPuzzleTile(direction) {
 
     disablePuzzleButtons(true);
 
+    puzzleFailureStage = "Cloudinary upload";
     const cloudinaryResult = await uploadMapToCloudinary(file);
     const cloudinaryAsset = getCloudinaryAssetMetadata(cloudinaryResult);
 
@@ -3242,6 +3259,7 @@ async function addPuzzleTile(direction) {
       savedToLibrary: false
     };
 
+    puzzleFailureStage = "Firestore puzzle tile transaction";
     const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
       const latestTiles = state.tiles;
       const latestBaseTile =
@@ -3273,6 +3291,8 @@ async function addPuzzleTile(direction) {
       }
 
       const key = makeTileKey(transactionTarget.x, transactionTarget.y);
+      attemptedPuzzleTilePath =
+        "rooms/" + currentRoomCode + "/puzzleTiles/" + key;
       const targetTileRef = getPuzzleTileDocument(currentRoomCode, key);
       const targetTileSnap = await state.transaction.get(targetTileRef);
 
@@ -3319,14 +3339,68 @@ async function addPuzzleTile(direction) {
         : "Puzzle tile added " + direction + " at " + transactionResult.addedTile.key + "."
     );
   } catch (error) {
+    const currentUserUid = currentUser ? currentUser.uid : null;
+    const roomDmUid = currentRoomData ? currentRoomData.dmUid : null;
+    const isCurrentUserRoomDM = !!(
+      currentUserUid &&
+      roomDmUid &&
+      roomDmUid === currentUserUid
+    );
+    const errorMessage = String(
+      error && error.message ? error.message : error || "Unknown error"
+    );
+
+    console.error("Puzzle tile operation failed.", {
+      stage: puzzleFailureStage,
+      currentRoomCode,
+      "currentUser.uid": currentUserUid,
+      currentIsDM,
+      "currentRoomData.dmUid": roomDmUid,
+      "currentRoomData.dmUid === currentUser.uid": isCurrentUserRoomDM,
+      permissionChecks: {
+        hasCurrentUser: !!currentUser,
+        hasCurrentRoomCode: !!currentRoomCode,
+        hasCurrentRoomData: !!currentRoomData,
+        currentIsDM,
+        roomDmUidMatchesCurrentUser: isCurrentUserRoomDM
+      },
+      attemptedPuzzleTilePath,
+      attemptedRoomPath,
+      firestoreWritesAttempted: [
+        attemptedPuzzleTilePath,
+        attemptedRoomPath
+      ],
+      firebaseErrorCode: error && error.code ? error.code : null,
+      firebaseError: error
+    });
+    console.error("Full puzzle tile Firebase error:", error);
+
     if (uploadedPuzzleTile) {
-      await deleteCloudinaryAssetIfUnreferenced(uploadedPuzzleTile, {
-        reason: "failed-puzzle-tile-add"
-      });
+      try {
+        const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(
+          uploadedPuzzleTile,
+          { reason: "failed-puzzle-tile-add" }
+        );
+        console.warn("Puzzle tile upload cleanup result:", cleanupMessage);
+      } catch (cleanupError) {
+        console.warn(
+          "Could not clean up the uploaded puzzle tile image:",
+          cleanupError
+        );
+      }
     }
 
-    text(E.puzzleMapStatus, "Puzzle tile upload failed.");
-    alert(error.message);
+    const isPermissionError =
+      (error && error.code === "permission-denied") ||
+      errorMessage
+        .toLowerCase()
+        .includes("insufficient permissions");
+    const userMessage = isPermissionError
+      ? "Puzzle tile could not be saved. You may not be the room DM, or Firestore rules may not be published."
+      : "Puzzle tile could not be saved: " + errorMessage;
+
+    text(E.puzzleMapStatus, userMessage);
+    alert(userMessage);
   } finally {
     disablePuzzleButtons(false);
   }
