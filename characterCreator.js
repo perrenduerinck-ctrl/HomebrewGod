@@ -9,6 +9,9 @@
 // CHARACTER CREATOR SECTION 1 — MODULE / DEPENDENCIES
 // =====================================================
 
+import { DEFAULT_CLASSES } from "./defaultClasses.js";
+import { DEFAULT_FEATS } from "./defaultFeats.js";
+
 export function createCharacterCreator(options = {}) {
   const deps = {
     db: options.db,
@@ -242,6 +245,10 @@ export function createCharacterCreator(options = {}) {
         totalLevel: 1,
         classes: []
       },
+
+      classData: null,
+      classChoices: {},
+      feats: [],
 
       abilities: {
         method: "manual",
@@ -487,6 +494,137 @@ export function createCharacterCreator(options = {}) {
         cleanArray(value)
       )
     ];
+  }
+
+  function normalizeClassChoiceMap(value) {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value)
+    ) {
+      return {};
+    }
+
+    return Object.entries(value).reduce(
+      (choices, [featureId, selectedValues]) => {
+        const id = cleanString(featureId);
+        const values = uniqueCleanArray(
+          Array.isArray(selectedValues)
+            ? selectedValues
+            : [selectedValues]
+        );
+
+        if (id && values.length) {
+          choices[id] = values;
+        }
+
+        return choices;
+      },
+      {}
+    );
+  }
+
+  function normalizeFeatIds(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        value
+          .map((feat) => {
+            const rawId = cleanString(
+              typeof feat === "string"
+                ? feat
+                : feat?.id || feat?.name
+            );
+
+            if (!rawId) {
+              return "";
+            }
+
+            const knownFeat = DEFAULT_FEATS.find((entry) => {
+              return (
+                entry.id === rawId ||
+                entry.name.toLowerCase() === rawId.toLowerCase()
+              );
+            });
+
+            return knownFeat?.id || rawId;
+          })
+          .filter(Boolean)
+      )
+    ];
+  }
+
+  function findDefaultClassDefinition(classId, className = "") {
+    const normalizedId = makeSafeId(
+      classId || className,
+      ""
+    );
+
+    return (
+      DEFAULT_CLASSES[normalizedId] ||
+      Object.values(DEFAULT_CLASSES).find((classData) => {
+        return (
+          classData.name.toLowerCase() ===
+          cleanString(className).toLowerCase()
+        );
+      }) ||
+      null
+    );
+  }
+
+  function getDefaultClassFeaturesThroughLevel(
+    classData,
+    level
+  ) {
+    if (!classData) {
+      return [];
+    }
+
+    const totalLevel = clampLevel(level);
+
+    return Object.entries(
+      classData.featuresByLevel || {}
+    )
+      .sort((a, b) => safeNumber(a[0]) - safeNumber(b[0]))
+      .flatMap(([levelKey, features]) => {
+        const unlockedLevel = Math.max(
+          1,
+          Math.round(safeNumber(levelKey, 1))
+        );
+
+        if (
+          unlockedLevel > totalLevel ||
+          !Array.isArray(features)
+        ) {
+          return [];
+        }
+
+        return features.map((feature) => {
+          const name = cleanString(
+            typeof feature === "string"
+              ? feature
+              : feature?.name,
+            "Unnamed Feature"
+          );
+
+          return {
+            ...(typeof feature === "object"
+              ? cloneData(feature)
+              : {}),
+            id: makeSafeId(
+              typeof feature === "object"
+                ? feature?.id || name
+                : name,
+              "class-feature"
+            ),
+            name,
+            level: unlockedLevel
+          };
+        });
+      });
   }
 
   function addMigrationWarning(
@@ -2207,6 +2345,14 @@ export function createCharacterCreator(options = {}) {
     const primaryClass = getPrimaryClassEntry(clean);
     const walkSpeed = safeNumber(clean.combat?.speed?.walk, 30);
 
+    clean.classChoices = normalizeClassChoiceMap(
+      clean.classChoices ||
+      primaryClass?.choices?.classFeatures ||
+      clean.classData?.selectedChoices
+    );
+
+    clean.feats = normalizeFeatIds(clean.feats);
+
     clean.name = cleanString(clean.identity?.name);
     clean.race = cleanString(clean.species?.name);
 
@@ -2231,6 +2377,59 @@ export function createCharacterCreator(options = {}) {
       primaryClass?.level ||
       1
     );
+
+    const defaultClass = findDefaultClassDefinition(
+      primaryClass?.classId,
+      primaryClass?.className
+    );
+
+    if (primaryClass) {
+      primaryClass.choices = {
+        ...(primaryClass.choices || {}),
+        classFeatures: cloneData(clean.classChoices)
+      };
+
+      if (defaultClass) {
+        primaryClass.classId = defaultClass.id;
+        primaryClass.className = defaultClass.name;
+        primaryClass.source = "template";
+        primaryClass.templateSnapshot = null;
+
+        clean.classId = defaultClass.id;
+        clean.className = defaultClass.name;
+        clean.selectedClassSnapshot = null;
+      }
+    }
+
+    const collectedFeatureIds = defaultClass
+      ? getDefaultClassFeaturesThroughLevel(
+          defaultClass,
+          clean.level
+        ).map((feature) => feature.id)
+      : (
+          Array.isArray(clean.features?.classFeatures)
+            ? clean.features.classFeatures
+            : []
+        )
+          .filter((feature) => feature?.source !== "subclass")
+          .map((feature) => cleanString(feature?.id))
+          .filter(Boolean);
+
+    clean.classData = primaryClass
+      ? {
+          classId: clean.classId,
+          className: clean.className,
+          level: clean.level,
+          hitDie: defaultClass
+            ? defaultClass.hitDie
+            : cleanString(
+                primaryClass?.templateSnapshot?.hitDie,
+                "d8"
+              ),
+          selectedChoices: cloneData(clean.classChoices),
+          features: collectedFeatureIds
+        }
+      : null;
 
     clean.armorClass = safeNumber(
       clean.combat?.armorClass,
@@ -2318,12 +2517,14 @@ export function createCharacterCreator(options = {}) {
     const legacyClassName =
       cleanString(
         raw.className ||
+        raw.classData?.className ||
         legacyClassSnapshot?.name
       );
 
     const legacyClassId =
       cleanString(
         raw.classId ||
+        raw.classData?.classId ||
         rawBuilder.selectedClassId ||
         legacyClassSnapshot?.id ||
         (
@@ -2367,7 +2568,10 @@ export function createCharacterCreator(options = {}) {
                 fallbackClassName ||
                 "Custom Class",
               source: "template",
-              level: raw.level || 1,
+              level:
+                raw.classData?.level ||
+                raw.level ||
+                1,
               subclassId: "",
               subclassName: raw.subclassName,
               templateSnapshot:
@@ -2397,6 +2601,7 @@ export function createCharacterCreator(options = {}) {
     const totalLevel = clampLevel(
       raw.classProgression?.totalLevel ||
       classLevelTotal ||
+      raw.classData?.level ||
       raw.level ||
       rawClassEntry?.level ||
       1
@@ -2627,6 +2832,20 @@ export function createCharacterCreator(options = {}) {
         classes:
           normalizedClassList
       },
+
+      classData:
+        raw.classData &&
+        typeof raw.classData === "object"
+          ? cloneData(raw.classData)
+          : null,
+
+      classChoices: normalizeClassChoiceMap(
+        raw.classChoices ||
+        raw.classData?.selectedChoices ||
+        rawClassEntry?.choices?.classFeatures
+      ),
+
+      feats: normalizeFeatIds(raw.feats),
 
       abilities: {
         method: cleanString(
@@ -6337,17 +6556,21 @@ export function createCharacterCreator(options = {}) {
     const levels = {};
 
     for (let level = 1; level <= 20; level += 1) {
-      const featureNames = [
+      const featureDefinitions = [
         ...(featuresByLevel[level] || [])
       ];
 
       if (
         asiLevels.includes(level) &&
-        !featureNames.includes(
-          "Ability Score Improvement"
-        )
+        !featureDefinitions.some((feature) => {
+          return (
+            typeof feature === "string"
+              ? feature
+              : feature?.name
+          ) === "Ability Score Improvement";
+        })
       ) {
-        featureNames.push(
+        featureDefinitions.push(
           "Ability Score Improvement"
         );
       }
@@ -6356,12 +6579,39 @@ export function createCharacterCreator(options = {}) {
         proficiencyBonus:
           getGenericProficiencyBonus(level),
         features:
-          featureNames.map((name) => {
-            return createSrdFeature(
-              classId,
-              level,
-              name
+          featureDefinitions.map((feature) => {
+            if (typeof feature === "string") {
+              return createSrdFeature(
+                classId,
+                level,
+                feature
+              );
+            }
+
+            const name = cleanString(
+              feature?.name,
+              "Unnamed Feature"
             );
+
+            return {
+              ...cloneData(feature),
+              id: makeSafeId(
+                feature?.id ||
+                `${classId}-${name}`,
+                "class-feature"
+              ),
+              name,
+              level,
+              type: cleanString(
+                feature?.type,
+                "feature"
+              ),
+              summary: cleanString(
+                feature?.summary ||
+                feature?.description,
+                `${name} is gained at level ${level}.`
+              )
+            };
           })
       };
 
@@ -6464,6 +6714,60 @@ export function createCharacterCreator(options = {}) {
           ? config.subclasses
         : []
     };
+  }
+
+  function createDefaultClassTemplate(classData) {
+    const raw = classData || {};
+
+    return createSrdClassTemplate({
+      id: raw.id,
+      name: raw.name,
+      summary:
+        raw.summary ||
+        `${raw.name || "This class"} progression and proficiencies.`,
+      hitDie: `d${safeNumber(raw.hitDie, 8)}`,
+      primaryAbilities: cloneData(
+        raw.primaryAbility || []
+      ),
+      savingThrows: cloneData(
+        raw.savingThrows || []
+      ),
+      armorProficiencies: cloneData(
+        raw.armorProficiencies || []
+      ),
+      weaponProficiencies: cloneData(
+        raw.weaponProficiencies || []
+      ),
+      toolProficiencies: cloneData(
+        raw.toolProficiencies || []
+      ),
+      skillChoices: cloneData(
+        raw.skillChoices || {}
+      ),
+      subclassLevel: safeNumber(
+        raw.subclassLevel,
+        3
+      ),
+      progressionType:
+        raw.progressionType || "none",
+      spellcastingAbility:
+        raw.spellcastingAbility || "",
+      spellPreparation:
+        raw.spellPreparation || "none",
+      cantripsKnown: cloneData(
+        raw.cantripsKnown || {}
+      ),
+      spellsKnown: cloneData(
+        raw.spellsKnown || {}
+      ),
+      featuresByLevel: cloneData(
+        raw.featuresByLevel || {}
+      ),
+      asiLevels: [],
+      subclasses: cloneData(
+        raw.subclasses || []
+      )
+    });
   }
 
   function runSrd2014RulesSelfTests() {
@@ -12807,7 +13111,7 @@ export function createCharacterCreator(options = {}) {
     }
   ]);
 
-  const DEFAULT_CLASS_TEMPLATES = Object.freeze([
+  const LEGACY_DEFAULT_CLASS_TEMPLATES = Object.freeze([
     createSrdClassTemplate({
       id: "barbarian",
       name: "Barbarian",
@@ -13370,6 +13674,12 @@ export function createCharacterCreator(options = {}) {
       ]
     })
   ]);
+
+  const DEFAULT_CLASS_TEMPLATES = Object.freeze(
+    Object.values(DEFAULT_CLASSES).map((classData) => {
+      return createDefaultClassTemplate(classData);
+    })
+  );
 
   const DEFAULT_SPECIES_TEMPLATES = Object.freeze([
     {
@@ -16052,7 +16362,10 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft
     );
 
-    if (primaryClass?.templateSnapshot) {
+    if (
+      primaryClass?.templateSnapshot &&
+      !classMap.has(primaryClass.classId)
+    ) {
       const normalized = normalizeClassTemplate(
         primaryClass.templateSnapshot,
         "character"
@@ -16586,9 +16899,22 @@ export function createCharacterCreator(options = {}) {
         totalLevel,
       subclassId: "",
       subclassName: "",
-      templateSnapshot: cloneData(selectedClass),
+      templateSnapshot:
+        findDefaultClassDefinition(
+          selectedClass.id,
+          selectedClass.name
+        )
+          ? null
+          : cloneData(selectedClass),
       choices: {}
     };
+
+    creatorState.draft.classChoices =
+      oldPrimaryClass?.classId === selectedClass.id
+        ? normalizeClassChoiceMap(
+            creatorState.draft.classChoices
+          )
+        : {};
 
     creatorState.draft
       .classProgression
@@ -16629,6 +16955,14 @@ export function createCharacterCreator(options = {}) {
 
   function replaceDraft(character, options = {}) {
     creatorState.draft = normalizeCharacter(character);
+
+    if (
+      getPrimaryClassEntry(creatorState.draft) &&
+      !isMulticlassDraft(creatorState.draft)
+    ) {
+      refreshSelectedClassFeatures();
+      applyCompatibilityAliases(creatorState.draft);
+    }
 
     creatorState.currentCharacterId =
       options.characterId ||
@@ -17971,6 +18305,10 @@ export function createCharacterCreator(options = {}) {
 
     clearSection11SpeciesMechanics();
     applySection11SpeciesMechanics();
+
+    if (primaryClass) {
+      refreshSelectedClassFeatures();
+    }
 
     applyCompatibilityAliases(
       creatorState.draft
@@ -24110,6 +24448,225 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
+  function getSection12ClassFeaturesThroughLevel() {
+    const primaryClass = getSection12PrimaryClass();
+    const defaultClass = findDefaultClassDefinition(
+      primaryClass?.classId,
+      primaryClass?.className
+    );
+    const totalLevel = clampLevel(
+      creatorState.draft.classProgression.totalLevel
+    );
+
+    if (defaultClass) {
+      return getDefaultClassFeaturesThroughLevel(
+        defaultClass,
+        totalLevel
+      );
+    }
+
+    return collectSection12Features(
+      getSelectedClassTemplate(),
+      totalLevel,
+      "class"
+    );
+  }
+
+  function getSection12FeatureChoiceOptions(feature) {
+    const explicitOptions = uniqueCleanArray(
+      feature?.options
+    );
+
+    if (explicitOptions.length) {
+      return explicitOptions;
+    }
+
+    const optionSource = cleanString(
+      feature?.optionSource
+    );
+
+    if (optionSource === "subclasses") {
+      return getSection12SubclassTemplates().map(
+        (subclass) => subclass.name
+      );
+    }
+
+    if (
+      optionSource === "proficientSkills" ||
+      optionSource === "proficientSkillsOrThievesTools"
+    ) {
+      const skillOptions = Object.entries(
+        creatorState.draft.proficiencies.skills || {}
+      )
+        .filter(([, entry]) => entry?.proficient === true)
+        .map(([skillName]) => skillName);
+
+      if (
+        optionSource === "proficientSkillsOrThievesTools" &&
+        !skillOptions.includes("Thieves' Tools")
+      ) {
+        skillOptions.push("Thieves' Tools");
+      }
+
+      return uniqueCleanArray(skillOptions);
+    }
+
+    return [];
+  }
+
+  function toggleSection12ClassFeatureChoice(
+    featureId,
+    option
+  ) {
+    const feature = getSection12ClassFeaturesThroughLevel()
+      .find((entry) => entry.id === featureId);
+    const options = getSection12FeatureChoiceOptions(feature);
+
+    if (
+      feature?.type !== "choice" ||
+      !options.includes(option)
+    ) {
+      return false;
+    }
+
+    const chooseCount = Math.max(
+      1,
+      Math.round(safeNumber(feature.choose, 1))
+    );
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+    const selected = choices[featureId] || [];
+
+    if (selected.includes(option)) {
+      choices[featureId] = selected.filter(
+        (value) => value !== option
+      );
+    } else if (chooseCount === 1) {
+      choices[featureId] = [option];
+    } else if (selected.length < chooseCount) {
+      choices[featureId] = [...selected, option];
+    } else {
+      choices[featureId] = [
+        ...selected.slice(1),
+        option
+      ];
+    }
+
+    if (!choices[featureId].length) {
+      delete choices[featureId];
+    }
+
+    creatorState.draft.classChoices = choices;
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderSection12SelectedClassDetails() {
+    const selectedClass = getSelectedClassTemplate();
+
+    if (!selectedClass) {
+      return "";
+    }
+
+    const features = getSection12ClassFeaturesThroughLevel();
+    const selectedChoices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+    const skillChoices = selectedClass.skillChoices || {};
+
+    const featureCards = features.map((feature) => {
+      const choiceOptions =
+        feature.type === "choice"
+          ? getSection12FeatureChoiceOptions(feature)
+          : [];
+      const featureSelections = selectedChoices[feature.id] || [];
+      const chooseCount = Math.max(
+        1,
+        Math.round(safeNumber(feature.choose, 1))
+      );
+
+      return `
+        <article class="hg-character-choice-card">
+          <h3>${escapeHtml(feature.name)}</h3>
+
+          <p class="small">
+            Level ${safeNumber(feature.level, 1)}
+            ${feature.summary
+              ? `<br>${escapeHtml(feature.summary)}`
+              : ""}
+          </p>
+
+          ${feature.type === "choice"
+            ? `
+              <p><b>Choose ${chooseCount}:</b></p>
+
+              ${choiceOptions.length
+                ? `
+                  <div class="hg-character-inline-actions">
+                    ${choiceOptions.map((option) => {
+                      const selected = featureSelections.includes(option);
+
+                      return `
+                        <button
+                          type="button"
+                          class="${selected ? "selected" : ""}"
+                          data-cc-action="toggle-class-feature-choice"
+                          data-feature-id="${escapeHtml(feature.id)}"
+                          data-option="${escapeHtml(option)}"
+                        >
+                          ${selected ? "Remove" : "Choose"}
+                          ${escapeHtml(option)}
+                        </button>
+                      `;
+                    }).join("")}
+                  </div>
+                `
+                : `
+                  <p class="small">
+                    Options become available after the related subclass or proficiency choices are made.
+                  </p>
+                `}
+            `
+            : ""}
+        </article>
+      `;
+    }).join("");
+
+    return `
+      <hr>
+
+      <h3>${escapeHtml(selectedClass.name)} Details</h3>
+
+      <div class="hg-character-choice-grid">
+        <article class="hg-character-choice-card selected">
+          <h3>Class Proficiencies</h3>
+
+          <p>
+            <b>Hit Die:</b> ${escapeHtml(selectedClass.hitDie || "d8")}
+            <br><b>Saving Throws:</b> ${escapeHtml(formatSection12List(selectedClass.savingThrows) || "None")}
+            <br><b>Armor:</b> ${escapeHtml(formatSection12List(selectedClass.armorProficiencies) || "None")}
+            <br><b>Weapons:</b> ${escapeHtml(formatSection12List(selectedClass.weaponProficiencies) || "None")}
+            <br><b>Tools:</b> ${escapeHtml(formatSection12List(selectedClass.toolProficiencies) || "None")}
+            <br><b>Skill Choices:</b> Choose ${safeNumber(skillChoices.choose, 0)} from ${escapeHtml(formatSection12List(skillChoices.from) || "none")}
+          </p>
+        </article>
+      </div>
+
+      <h3>Class Features Through Level ${clampLevel(creatorState.draft.classProgression.totalLevel)}</h3>
+
+      <div class="hg-character-choice-grid">
+        ${featureCards || `
+          <div class="hg-character-placeholder">
+            No class features are defined through this level.
+          </div>
+        `}
+      </div>
+    `;
+  }
+
   function renderClassStep() {
     if (isMulticlassDraft()) {
       return `
@@ -24283,6 +24840,8 @@ export function createCharacterCreator(options = {}) {
       <div class="hg-character-choice-grid">
         ${classCards}
       </div>
+
+      ${renderSection12SelectedClassDetails()}
 
       <hr>
 
@@ -24790,6 +25349,22 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleSection12ClassFeatureChoice(
+    ...values
+  ) {
+    const button = findSection12ActionElement(...values);
+
+    if (
+      toggleSection12ClassFeatureChoice(
+        button?.dataset?.featureId || "",
+        button?.dataset?.option || ""
+      )
+    ) {
+      setStatus("Class feature choice updated.");
+      renderCreatorView();
+    }
+  }
+
   function handleSection12CustomClassSkillPicker(
     mode,
     statusMessage
@@ -24873,6 +25448,11 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "use-custom-class",
     handleSection12CustomClass
+  );
+
+  registerCharacterCreatorAction(
+    "toggle-class-feature-choice",
+    handleSection12ClassFeatureChoice
   );
 
   registerCharacterCreatorAction(
@@ -35676,6 +36256,76 @@ export function createCharacterCreator(options = {}) {
       .join("");
   }
 
+  function getSection16SelectedFeats() {
+    const featIds = normalizeFeatIds(
+      creatorState.draft.feats
+    );
+
+    return featIds.map((featId) => {
+      return (
+        DEFAULT_FEATS.find((feat) => feat.id === featId) ||
+        {
+          id: featId,
+          name: featId,
+          summary: "This feat is not in the current default feat catalog."
+        }
+      );
+    });
+  }
+
+  function toggleSection16Feat(featId) {
+    const feat = DEFAULT_FEATS.find((entry) => {
+      return entry.id === featId;
+    });
+
+    if (!feat) {
+      return false;
+    }
+
+    const selectedIds = normalizeFeatIds(
+      creatorState.draft.feats
+    );
+
+    creatorState.draft.feats = selectedIds.includes(featId)
+      ? selectedIds.filter((id) => id !== featId)
+      : [...selectedIds, featId];
+
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderSection16FeatPicker() {
+    const selectedIds = new Set(
+      normalizeFeatIds(creatorState.draft.feats)
+    );
+
+    return DEFAULT_FEATS.map((feat) => {
+      const selected = selectedIds.has(feat.id);
+
+      return `
+        <article class="hg-character-choice-card ${selected ? "selected" : ""}">
+          <h3>${escapeHtml(feat.name)}</h3>
+
+          <p class="small">
+            ${escapeHtml(feat.summary || "No summary provided.")}
+          </p>
+
+          <div class="hg-character-card-actions">
+            <button
+              type="button"
+              data-cc-action="toggle-default-feat"
+              data-feat-id="${escapeHtml(feat.id)}"
+            >
+              ${selected ? "Remove Feat" : "Add Feat"}
+            </button>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
   function renderSpellsStep() {
     const magic =
       creatorState.draft.magic;
@@ -36151,6 +36801,25 @@ export function createCharacterCreator(options = {}) {
 
       <hr>
 
+      <h3>Feats</h3>
+
+      <div class="hg-character-current-choice">
+        <b>Selected feats:</b>
+        ${getSection16SelectedFeats().length
+          ? escapeHtml(
+              getSection16SelectedFeats()
+                .map((feat) => feat.name)
+                .join(", ")
+            )
+          : "None"}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection16FeatPicker()}
+      </div>
+
+      <hr>
+
       <h3>Class Features</h3>
 
       <div class="hg-character-choice-grid">
@@ -36448,6 +37117,21 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleSection16ToggleFeat(
+    ...values
+  ) {
+    const button = findSection16ActionElement(...values);
+
+    if (
+      toggleSection16Feat(
+        button?.dataset?.featId || ""
+      )
+    ) {
+      setStatus("Feat selection updated.");
+      renderCreatorView();
+    }
+  }
+
   function handleSection16RemoveFeature(
     ...values
   ) {
@@ -36525,6 +37209,11 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "add-custom-feature",
     handleSection16AddFeature
+  );
+
+  registerCharacterCreatorAction(
+    "toggle-default-feat",
+    handleSection16ToggleFeat
   );
 
   registerCharacterCreatorAction(
@@ -38485,6 +39174,94 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function renderSection17ClassAndFeatSummary() {
+    const draft = creatorState.draft;
+    const primaryClass = getPrimaryClassEntry(draft);
+    const defaultClass = findDefaultClassDefinition(
+      primaryClass?.classId,
+      primaryClass?.className
+    );
+    const selectedClass = getSelectedClassTemplate();
+    const level = clampLevel(
+      draft.classProgression.totalLevel
+    );
+    const features = defaultClass
+      ? getDefaultClassFeaturesThroughLevel(defaultClass, level)
+      : (
+          Array.isArray(draft.features.classFeatures)
+            ? draft.features.classFeatures.filter(
+                (feature) => feature?.source !== "subclass"
+              )
+            : []
+        );
+    const featureById = new Map(
+      features.map((feature) => [feature.id, feature])
+    );
+    const classChoices = normalizeClassChoiceMap(
+      draft.classChoices
+    );
+    const choiceEntries = Object.entries(classChoices);
+    const feats = getSection16SelectedFeats();
+
+    return `
+      <h3>Class and Feats</h3>
+
+      <div class="hg-character-choice-grid">
+        <article class="hg-character-choice-card">
+          <h3>${escapeHtml(primaryClass?.className || "No Class")}</h3>
+
+          <p>
+            <b>Level:</b> ${level}
+            <br><b>Hit Die:</b> ${escapeHtml(selectedClass?.hitDie || draft.classData?.hitDie || "Not set")}
+            <br><b>Saving Throws:</b> ${escapeHtml(formatSection12List(selectedClass?.savingThrows) || "None")}
+          </p>
+        </article>
+
+        <article class="hg-character-choice-card">
+          <h3>Class Features</h3>
+
+          <p>
+            ${features.length
+              ? features.map((feature) => {
+                  return `Level ${safeNumber(feature.level, 1)}: ${escapeHtml(feature.name)}`;
+                }).join("<br>")
+              : "None recorded."}
+          </p>
+        </article>
+
+        <article class="hg-character-choice-card">
+          <h3>Class Choices</h3>
+
+          <p>
+            ${choiceEntries.length
+              ? choiceEntries.map(([featureId, values]) => {
+                  const featureName = featureById.get(featureId)?.name || featureId;
+                  return `<b>${escapeHtml(featureName)}:</b> ${escapeHtml(values.join(", "))}`;
+                }).join("<br>")
+              : "None selected."}
+          </p>
+        </article>
+
+        <article class="hg-character-choice-card">
+          <h3>Feats</h3>
+
+          ${feats.length
+            ? feats.map((feat) => {
+                return `
+                  <p>
+                    <b>${escapeHtml(feat.name)}</b>
+                    <br><span class="small">${escapeHtml(feat.summary || "")}</span>
+                  </p>
+                `;
+              }).join("")
+            : "<p>None selected.</p>"}
+        </article>
+      </div>
+
+      <hr>
+    `;
+  }
+
   function renderReviewStep() {
     syncSection17CompletedSteps();
 
@@ -38691,6 +39468,8 @@ export function createCharacterCreator(options = {}) {
       </div>
 
       <hr>
+
+      ${renderSection17ClassAndFeatSummary()}
 
       <h3>Combat Summary</h3>
 
