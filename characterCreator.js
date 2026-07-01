@@ -81,38 +81,10 @@ export function createCharacterCreator(options = {}) {
       required: true
     },
     {
-      id: "species",
-      label: "Species / Race",
-      shortLabel: "Species",
-      description: "Choose an ancestry template and make any ancestry-based choices.",
-      required: true
-    },
-    {
-      id: "level",
-      label: "Level / Advancement",
-      shortLabel: "Level",
-      description: "Set level, hit points, advancement, and class progression.",
-      required: true
-    },
-    {
       id: "class",
       label: "Class",
       shortLabel: "Class",
       description: "Choose a class from default, room, or imported templates.",
-      required: true
-    },
-    {
-      id: "subclass",
-      label: "Subclass",
-      shortLabel: "Subclass",
-      description: "Choose a subclass when the selected class and level allow one.",
-      required: false
-    },
-    {
-      id: "abilities",
-      label: "Ability Scores",
-      shortLabel: "Abilities",
-      description: "Use manual entry, standard array, point buy, or rolled scores.",
       required: true
     },
     {
@@ -123,10 +95,17 @@ export function createCharacterCreator(options = {}) {
       required: false
     },
     {
-      id: "skills",
-      label: "Skills / Proficiencies",
-      shortLabel: "Skills",
-      description: "Choose skills, saves, languages, tools, armor, and weapon training.",
+      id: "species",
+      label: "Species / Race",
+      shortLabel: "Species",
+      description: "Choose an ancestry template and make any ancestry-based choices.",
+      required: true
+    },
+    {
+      id: "abilities",
+      label: "Ability Scores",
+      shortLabel: "Abilities",
+      description: "Use manual entry, standard array, point buy, or rolled scores.",
       required: true
     },
     {
@@ -3728,6 +3707,8 @@ export function createCharacterCreator(options = {}) {
 
     if (progressionType === "full-caster") {
       casterLevel = level;
+    } else if (progressionType === "artificer") {
+      casterLevel = Math.ceil(level / 2);
     } else if (progressionType === "half-caster") {
       casterLevel =
         level < 2
@@ -3788,6 +3769,10 @@ export function createCharacterCreator(options = {}) {
 
         if (progression === "half-caster") {
           return total + Math.floor(level / 2);
+        }
+
+        if (progression === "artificer") {
+          return total + Math.ceil(level / 2);
         }
 
         if (progression === "third-caster") {
@@ -6110,6 +6095,12 @@ export function createCharacterCreator(options = {}) {
             classEntry?.spellPreparation ||
             template?.spellPreparation ||
             "none",
+          preparedSpellsFormula:
+            cloneData(
+              classEntry?.preparedSpellsFormula ||
+              template?.preparedSpellsFormula ||
+              null
+            ),
           cantripsKnown:
             levelData?.cantripsKnown ??
             getProgressionValueByLevel(
@@ -6154,6 +6145,27 @@ export function createCharacterCreator(options = {}) {
             )
           )
         : 0;
+
+    const formula =
+      spellcastingInfo.preparedSpellsFormula;
+
+    if (
+      formula &&
+      typeof formula === "object"
+    ) {
+      const levelValue =
+        spellcastingInfo.level *
+        safeNumber(formula.levelFactor, 0);
+      const roundedLevel =
+        formula.round === "ceil"
+          ? Math.ceil(levelValue)
+          : Math.floor(levelValue);
+
+      return Math.max(
+        safeNumber(formula.minimum, 1),
+        abilityModifier + roundedLevel
+      );
+    }
 
     if (
       ["cleric", "druid", "wizard"].includes(
@@ -6760,10 +6772,24 @@ export function createCharacterCreator(options = {}) {
       spellsKnown: cloneData(
         raw.spellsKnown || {}
       ),
+      preparedSpellsFormula: cloneData(
+        raw.preparedSpellsFormula || null
+      ),
+      infusionsKnownByLevel: cloneData(
+        raw.infusionsKnownByLevel || {}
+      ),
+      infusedItemsByLevel: cloneData(
+        raw.infusedItemsByLevel || {}
+      ),
+      infusions: cloneData(
+        raw.infusions || []
+      ),
       featuresByLevel: cloneData(
         raw.featuresByLevel || {}
       ),
-      asiLevels: [],
+      asiLevels: cloneData(
+        raw.asiLevels || []
+      ),
       subclasses: cloneData(
         raw.subclasses || []
       )
@@ -13111,570 +13137,6 @@ export function createCharacterCreator(options = {}) {
     }
   ]);
 
-  const LEGACY_DEFAULT_CLASS_TEMPLATES = Object.freeze([
-    createSrdClassTemplate({
-      id: "barbarian",
-      name: "Barbarian",
-      summary: "A Strength-first warrior with rage, toughness, and primal path features.",
-      hitDie: "d12",
-      primaryAbilities: ["Strength"],
-      savingThrows: ["Strength", "Constitution"],
-      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
-      weaponProficiencies: ["Simple weapons", "Martial weapons"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 2,
-        from: ["Animal Handling", "Athletics", "Intimidation", "Nature", "Perception", "Survival"]
-      },
-      subclassLevel: 3,
-      featuresByLevel: {
-        1: ["Rage", "Unarmored Defense"],
-        2: ["Reckless Attack", "Danger Sense"],
-        3: ["Primal Path"],
-        5: ["Extra Attack", "Fast Movement"],
-        7: ["Feral Instinct"],
-        9: ["Brutal Critical"],
-        11: ["Relentless Rage"],
-        13: ["Brutal Critical Improvement"],
-        15: ["Persistent Rage"],
-        17: ["Brutal Critical Mastery"],
-        18: ["Indomitable Might"],
-        20: ["Primal Champion"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "path-of-the-berserker",
-          name: "Path of the Berserker",
-          summary: "A rage path focused on direct offense and retaliation.",
-          featuresByLevel: {
-            3: ["Frenzy"],
-            6: ["Mindless Rage"],
-            10: ["Intimidating Presence"],
-            14: ["Retaliation"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "bard",
-      name: "Bard",
-      summary: "A Charisma full caster with inspiration, expertise, and versatile support.",
-      hitDie: "d8",
-      primaryAbilities: ["Charisma"],
-      savingThrows: ["Dexterity", "Charisma"],
-      armorProficiencies: ["Light armor"],
-      weaponProficiencies: ["Simple weapons", "Hand crossbows", "Longswords", "Rapiers", "Shortswords"],
-      toolProficiencies: ["Three musical instruments"],
-      skillChoices: {
-        choose: 3,
-        from: SKILL_DEFINITIONS.map((skill) => skill.name)
-      },
-      subclassLevel: 3,
-      progressionType: "full-caster",
-      spellcastingAbility: "cha",
-      spellPreparation: "known",
-      cantripsKnown: { 1: 2, 4: 3, 10: 4 },
-      spellsKnown: { 1: 4, 2: 5, 3: 6, 4: 7, 5: 8, 6: 9, 7: 10, 8: 11, 9: 12, 10: 14, 11: 15, 12: 15, 13: 16, 14: 18, 15: 19, 16: 19, 17: 20, 18: 22, 19: 22, 20: 22 },
-      featuresByLevel: {
-        1: ["Spellcasting", "Bardic Inspiration"],
-        2: ["Jack of All Trades", "Song of Rest"],
-        3: ["Bard College", "Expertise"],
-        5: ["Bardic Inspiration Improvement", "Font of Inspiration"],
-        6: ["Countercharm", "Bard College Feature"],
-        9: ["Song of Rest Improvement"],
-        10: ["Bardic Inspiration Improvement", "Expertise", "Magical Secrets"],
-        13: ["Song of Rest Improvement"],
-        14: ["Magical Secrets", "Bard College Feature"],
-        15: ["Bardic Inspiration Improvement"],
-        17: ["Song of Rest Improvement"],
-        18: ["Magical Secrets"],
-        20: ["Superior Inspiration"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "college-of-lore",
-          name: "College of Lore",
-          summary: "A bard college focused on knowledge, cutting wit, and broader magic.",
-          featuresByLevel: {
-            3: ["Bonus Proficiencies", "Cutting Words"],
-            6: ["Additional Magical Secrets"],
-            14: ["Peerless Skill"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "cleric",
-      name: "Cleric",
-      summary: "A Wisdom full caster with divine domains, Channel Divinity, and prepared spells.",
-      hitDie: "d8",
-      primaryAbilities: ["Wisdom"],
-      savingThrows: ["Wisdom", "Charisma"],
-      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
-      weaponProficiencies: ["Simple weapons"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 2,
-        from: ["History", "Insight", "Medicine", "Persuasion", "Religion"]
-      },
-      subclassLevel: 1,
-      progressionType: "full-caster",
-      spellcastingAbility: "wis",
-      spellPreparation: "prepared",
-      cantripsKnown: { 1: 3, 4: 4, 10: 5 },
-      featuresByLevel: {
-        1: ["Spellcasting", "Divine Domain"],
-        2: ["Channel Divinity", "Divine Domain Feature"],
-        5: ["Destroy Undead"],
-        6: ["Channel Divinity Improvement", "Divine Domain Feature"],
-        8: ["Destroy Undead Improvement", "Divine Domain Feature"],
-        10: ["Divine Intervention"],
-        11: ["Destroy Undead Improvement"],
-        14: ["Destroy Undead Improvement"],
-        17: ["Destroy Undead Improvement", "Divine Domain Feature"],
-        18: ["Channel Divinity Improvement"],
-        20: ["Divine Intervention Improvement"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "life-domain",
-          name: "Life Domain",
-          summary: "A divine domain focused on healing and protection.",
-          featuresByLevel: {
-            1: ["Domain Spells", "Bonus Proficiency", "Disciple of Life"],
-            2: ["Preserve Life"],
-            6: ["Blessed Healer"],
-            8: ["Divine Strike"],
-            17: ["Supreme Healing"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "druid",
-      name: "Druid",
-      summary: "A Wisdom full caster with Wild Shape and circle features.",
-      hitDie: "d8",
-      primaryAbilities: ["Wisdom"],
-      savingThrows: ["Intelligence", "Wisdom"],
-      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
-      weaponProficiencies: ["Clubs", "Daggers", "Darts", "Javelins", "Maces", "Quarterstaffs", "Scimitars", "Sickles", "Slings", "Spears"],
-      toolProficiencies: ["Herbalism kit"],
-      skillChoices: {
-        choose: 2,
-        from: ["Arcana", "Animal Handling", "Insight", "Medicine", "Nature", "Perception", "Religion", "Survival"]
-      },
-      subclassLevel: 2,
-      progressionType: "full-caster",
-      spellcastingAbility: "wis",
-      spellPreparation: "prepared",
-      cantripsKnown: { 1: 2, 4: 3, 10: 4 },
-      featuresByLevel: {
-        1: ["Druidic", "Spellcasting"],
-        2: ["Wild Shape", "Druid Circle"],
-        4: ["Wild Shape Improvement"],
-        6: ["Druid Circle Feature"],
-        8: ["Wild Shape Improvement"],
-        10: ["Druid Circle Feature"],
-        14: ["Druid Circle Feature"],
-        18: ["Timeless Body", "Beast Spells"],
-        20: ["Archdruid"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "circle-of-the-land",
-          name: "Circle of the Land",
-          summary: "A druid circle with expanded spell access and natural recovery.",
-          featuresByLevel: {
-            2: ["Bonus Cantrip", "Natural Recovery"],
-            3: ["Circle Spells"],
-            6: ["Land's Stride"],
-            10: ["Nature's Ward"],
-            14: ["Nature's Sanctuary"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "fighter",
-      name: "Fighter",
-      summary: "A martial class with broad weapon and armor training.",
-      hitDie: "d10",
-      primaryAbilities: ["Strength", "Dexterity"],
-      savingThrows: ["Strength", "Constitution"],
-      armorProficiencies: ["Light armor", "Medium armor", "Heavy armor", "Shields"],
-      weaponProficiencies: ["Simple weapons", "Martial weapons"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 2,
-        from: ["Acrobatics", "Animal Handling", "Athletics", "History", "Insight", "Intimidation", "Perception", "Survival"]
-      },
-      subclassLevel: 3,
-      asiLevels: SRD_2014_FIGHTER_ASI_LEVELS,
-      featuresByLevel: {
-        1: ["Fighting Style", "Second Wind"],
-        2: ["Action Surge"],
-        3: ["Martial Archetype"],
-        5: ["Extra Attack"],
-        7: ["Martial Archetype Feature"],
-        9: ["Indomitable"],
-        10: ["Martial Archetype Feature"],
-        11: ["Extra Attack Improvement"],
-        13: ["Indomitable Improvement"],
-        15: ["Martial Archetype Feature"],
-        17: ["Action Surge Improvement", "Indomitable Improvement"],
-        18: ["Martial Archetype Feature"],
-        20: ["Extra Attack Mastery"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "champion",
-          name: "Champion",
-          summary: "A fighter archetype focused on simple, reliable martial improvements.",
-          featuresByLevel: {
-            3: ["Improved Critical"],
-            7: ["Remarkable Athlete"],
-            10: ["Additional Fighting Style"],
-            15: ["Superior Critical"],
-            18: ["Survivor"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "monk",
-      name: "Monk",
-      summary: "A Dexterity and Wisdom martial class using martial arts and ki.",
-      hitDie: "d8",
-      primaryAbilities: ["Dexterity", "Wisdom"],
-      savingThrows: ["Strength", "Dexterity"],
-      armorProficiencies: [],
-      weaponProficiencies: ["Simple weapons", "Shortswords"],
-      toolProficiencies: ["One artisan's tools or one musical instrument"],
-      skillChoices: {
-        choose: 2,
-        from: ["Acrobatics", "Athletics", "History", "Insight", "Religion", "Stealth"]
-      },
-      subclassLevel: 3,
-      featuresByLevel: {
-        1: ["Unarmored Defense", "Martial Arts"],
-        2: ["Ki", "Unarmored Movement"],
-        3: ["Monastic Tradition", "Deflect Missiles"],
-        4: ["Slow Fall"],
-        5: ["Extra Attack", "Stunning Strike"],
-        6: ["Ki-Empowered Strikes", "Monastic Tradition Feature"],
-        7: ["Evasion", "Stillness of Mind"],
-        9: ["Unarmored Movement Improvement"],
-        10: ["Purity of Body"],
-        11: ["Monastic Tradition Feature"],
-        13: ["Tongue of the Sun and Moon"],
-        14: ["Diamond Soul"],
-        15: ["Timeless Body"],
-        17: ["Monastic Tradition Feature"],
-        18: ["Empty Body"],
-        20: ["Perfect Self"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "way-of-the-open-hand",
-          name: "Way of the Open Hand",
-          summary: "A monastic tradition focused on control, recovery, and precise strikes.",
-          featuresByLevel: {
-            3: ["Open Hand Technique"],
-            6: ["Wholeness of Body"],
-            11: ["Tranquility"],
-            17: ["Quivering Palm"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "paladin",
-      name: "Paladin",
-      summary: "A Charisma half caster with martial armor, auras, and oath features.",
-      hitDie: "d10",
-      primaryAbilities: ["Strength", "Charisma"],
-      savingThrows: ["Wisdom", "Charisma"],
-      armorProficiencies: ["Light armor", "Medium armor", "Heavy armor", "Shields"],
-      weaponProficiencies: ["Simple weapons", "Martial weapons"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 2,
-        from: ["Athletics", "Insight", "Intimidation", "Medicine", "Persuasion", "Religion"]
-      },
-      subclassLevel: 3,
-      progressionType: "half-caster",
-      spellcastingAbility: "cha",
-      spellPreparation: "prepared",
-      featuresByLevel: {
-        1: ["Divine Sense", "Lay on Hands"],
-        2: ["Fighting Style", "Spellcasting", "Divine Smite"],
-        3: ["Divine Health", "Sacred Oath"],
-        5: ["Extra Attack"],
-        6: ["Aura of Protection"],
-        7: ["Sacred Oath Feature"],
-        10: ["Aura of Courage"],
-        11: ["Improved Divine Smite"],
-        14: ["Cleansing Touch"],
-        15: ["Sacred Oath Feature"],
-        18: ["Aura Improvements"],
-        20: ["Sacred Oath Feature"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "oath-of-devotion",
-          name: "Oath of Devotion",
-          summary: "A sacred oath focused on protection, honesty, and radiant defense.",
-          featuresByLevel: {
-            3: ["Oath Spells", "Sacred Weapon", "Turn the Unholy"],
-            7: ["Aura of Devotion"],
-            15: ["Purity of Spirit"],
-            20: ["Holy Nimbus"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "ranger",
-      name: "Ranger",
-      summary: "A Dexterity or Strength half caster with exploration and hunting features.",
-      hitDie: "d10",
-      primaryAbilities: ["Dexterity", "Wisdom"],
-      savingThrows: ["Strength", "Dexterity"],
-      armorProficiencies: ["Light armor", "Medium armor", "Shields"],
-      weaponProficiencies: ["Simple weapons", "Martial weapons"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 3,
-        from: ["Animal Handling", "Athletics", "Insight", "Investigation", "Nature", "Perception", "Stealth", "Survival"]
-      },
-      subclassLevel: 3,
-      progressionType: "half-caster",
-      spellcastingAbility: "wis",
-      spellPreparation: "known",
-      spellsKnown: { 1: 0, 2: 2, 3: 3, 4: 3, 5: 4, 6: 4, 7: 5, 8: 5, 9: 6, 10: 6, 11: 7, 12: 7, 13: 8, 14: 8, 15: 9, 16: 9, 17: 10, 18: 10, 19: 11, 20: 11 },
-      featuresByLevel: {
-        1: ["Favored Enemy", "Natural Explorer"],
-        2: ["Fighting Style", "Spellcasting"],
-        3: ["Ranger Archetype", "Primeval Awareness"],
-        5: ["Extra Attack"],
-        6: ["Favored Enemy Improvement", "Natural Explorer Improvement"],
-        7: ["Ranger Archetype Feature"],
-        8: ["Land's Stride"],
-        10: ["Natural Explorer Improvement", "Hide in Plain Sight"],
-        11: ["Ranger Archetype Feature"],
-        14: ["Favored Enemy Improvement", "Vanish"],
-        15: ["Ranger Archetype Feature"],
-        18: ["Feral Senses"],
-        20: ["Foe Slayer"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "hunter",
-          name: "Hunter",
-          summary: "A ranger archetype focused on adaptable combat techniques.",
-          featuresByLevel: {
-            3: ["Hunter's Prey"],
-            7: ["Defensive Tactics"],
-            11: ["Multiattack"],
-            15: ["Superior Hunter's Defense"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "rogue",
-      name: "Rogue",
-      summary: "A Dexterity and skill class with expertise, sneak attack, and evasive features.",
-      hitDie: "d8",
-      primaryAbilities: ["Dexterity"],
-      savingThrows: ["Dexterity", "Intelligence"],
-      armorProficiencies: ["Light armor"],
-      weaponProficiencies: ["Simple weapons", "Hand crossbows", "Longswords", "Rapiers", "Shortswords"],
-      toolProficiencies: ["Thieves' tools"],
-      skillChoices: {
-        choose: 4,
-        from: ["Acrobatics", "Athletics", "Deception", "Insight", "Intimidation", "Investigation", "Perception", "Performance", "Persuasion", "Sleight of Hand", "Stealth"]
-      },
-      subclassLevel: 3,
-      asiLevels: SRD_2014_ROGUE_ASI_LEVELS,
-      featuresByLevel: {
-        1: ["Expertise", "Sneak Attack", "Thieves' Cant"],
-        2: ["Cunning Action"],
-        3: ["Roguish Archetype"],
-        5: ["Uncanny Dodge"],
-        6: ["Expertise"],
-        7: ["Evasion"],
-        9: ["Roguish Archetype Feature"],
-        11: ["Reliable Talent"],
-        13: ["Roguish Archetype Feature"],
-        14: ["Blindsense"],
-        15: ["Slippery Mind"],
-        17: ["Roguish Archetype Feature"],
-        18: ["Elusive"],
-        20: ["Stroke of Luck"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "thief",
-          name: "Thief",
-          summary: "A rogue archetype focused on agility, stealth, and item use.",
-          featuresByLevel: {
-            3: ["Fast Hands", "Second-Story Work"],
-            9: ["Supreme Sneak"],
-            13: ["Use Magic Device"],
-            17: ["Thief's Reflexes"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "sorcerer",
-      name: "Sorcerer",
-      summary: "A Charisma full caster using sorcery points and metamagic.",
-      hitDie: "d6",
-      primaryAbilities: ["Charisma"],
-      savingThrows: ["Constitution", "Charisma"],
-      armorProficiencies: [],
-      weaponProficiencies: ["Daggers", "Darts", "Slings", "Quarterstaffs", "Light crossbows"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 2,
-        from: ["Arcana", "Deception", "Insight", "Intimidation", "Persuasion", "Religion"]
-      },
-      subclassLevel: 1,
-      progressionType: "full-caster",
-      spellcastingAbility: "cha",
-      spellPreparation: "known",
-      cantripsKnown: { 1: 4, 4: 5, 10: 6 },
-      spellsKnown: { 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 10: 11, 11: 12, 12: 12, 13: 13, 14: 13, 15: 14, 16: 14, 17: 15, 18: 15, 19: 15, 20: 15 },
-      featuresByLevel: {
-        1: ["Spellcasting", "Sorcerous Origin"],
-        2: ["Font of Magic"],
-        3: ["Metamagic"],
-        6: ["Sorcerous Origin Feature"],
-        10: ["Metamagic Improvement"],
-        14: ["Sorcerous Origin Feature"],
-        17: ["Metamagic Improvement"],
-        18: ["Sorcerous Origin Feature"],
-        20: ["Sorcerous Restoration"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "draconic-bloodline",
-          name: "Draconic Bloodline",
-          summary: "A sorcerous origin with draconic resilience and elemental affinity.",
-          featuresByLevel: {
-            1: ["Dragon Ancestor", "Draconic Resilience"],
-            6: ["Elemental Affinity"],
-            14: ["Dragon Wings"],
-            18: ["Draconic Presence"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "warlock",
-      name: "Warlock",
-      summary: "A Charisma pact caster with invocations, pact magic, and patron features.",
-      hitDie: "d8",
-      primaryAbilities: ["Charisma"],
-      savingThrows: ["Wisdom", "Charisma"],
-      armorProficiencies: ["Light armor"],
-      weaponProficiencies: ["Simple weapons"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 2,
-        from: ["Arcana", "Deception", "History", "Intimidation", "Investigation", "Nature", "Religion"]
-      },
-      subclassLevel: 1,
-      progressionType: "pact-magic",
-      spellcastingAbility: "cha",
-      spellPreparation: "known",
-      cantripsKnown: { 1: 2, 4: 3, 10: 4 },
-      spellsKnown: { 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 10: 10, 11: 11, 12: 11, 13: 12, 14: 12, 15: 13, 16: 13, 17: 14, 18: 14, 19: 15, 20: 15 },
-      featuresByLevel: {
-        1: ["Otherworldly Patron", "Pact Magic"],
-        2: ["Eldritch Invocations"],
-        3: ["Pact Boon"],
-        6: ["Otherworldly Patron Feature"],
-        10: ["Otherworldly Patron Feature"],
-        11: ["Mystic Arcanum"],
-        13: ["Mystic Arcanum Improvement"],
-        14: ["Otherworldly Patron Feature"],
-        15: ["Mystic Arcanum Improvement"],
-        17: ["Mystic Arcanum Improvement"],
-        20: ["Eldritch Master"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "fiend-patron",
-          name: "The Fiend",
-          summary: "A patron option focused on temporary durability and destructive magic.",
-          featuresByLevel: {
-            1: ["Expanded Spell List", "Dark One's Blessing"],
-            6: ["Dark One's Own Luck"],
-            10: ["Fiendish Resilience"],
-            14: ["Hurl Through Hell"]
-          }
-        })
-      ]
-    }),
-
-    createSrdClassTemplate({
-      id: "wizard",
-      name: "Wizard",
-      summary: "An Intelligence full caster with spellbook preparation and arcane tradition features.",
-      hitDie: "d6",
-      primaryAbilities: ["Intelligence"],
-      savingThrows: ["Intelligence", "Wisdom"],
-      armorProficiencies: [],
-      weaponProficiencies: ["Daggers", "Darts", "Slings", "Quarterstaffs", "Light crossbows"],
-      toolProficiencies: [],
-      skillChoices: {
-        choose: 2,
-        from: ["Arcana", "History", "Insight", "Investigation", "Medicine", "Religion"]
-      },
-      subclassLevel: 2,
-      progressionType: "full-caster",
-      spellcastingAbility: "int",
-      spellPreparation: "spellbook-prepared",
-      cantripsKnown: { 1: 3, 4: 4, 10: 5 },
-      featuresByLevel: {
-        1: ["Spellcasting", "Arcane Recovery"],
-        2: ["Arcane Tradition"],
-        6: ["Arcane Tradition Feature"],
-        10: ["Arcane Tradition Feature"],
-        14: ["Arcane Tradition Feature"],
-        18: ["Spell Mastery"],
-        20: ["Signature Spells"]
-      },
-      subclasses: [
-        createSrdSubclass({
-          id: "school-of-evocation",
-          name: "School of Evocation",
-          summary: "An arcane tradition focused on shaping and strengthening evocation spells.",
-          featuresByLevel: {
-            2: ["Evocation Savant", "Sculpt Spells"],
-            6: ["Potent Cantrip"],
-            10: ["Empowered Evocation"],
-            14: ["Overchannel"]
-          }
-        })
-      ]
-    })
-  ]);
-
   const DEFAULT_CLASS_TEMPLATES = Object.freeze(
     Object.values(DEFAULT_CLASSES).map((classData) => {
       return createDefaultClassTemplate(classData);
@@ -16311,6 +15773,30 @@ export function createCharacterCreator(options = {}) {
         !Array.isArray(raw.spellsKnown)
           ? cloneData(raw.spellsKnown)
           : {},
+
+      preparedSpellsFormula:
+        raw.preparedSpellsFormula &&
+        typeof raw.preparedSpellsFormula === "object" &&
+        !Array.isArray(raw.preparedSpellsFormula)
+          ? cloneData(raw.preparedSpellsFormula)
+          : null,
+
+      infusionsKnownByLevel:
+        raw.infusionsKnownByLevel &&
+        typeof raw.infusionsKnownByLevel === "object"
+          ? cloneData(raw.infusionsKnownByLevel)
+          : {},
+
+      infusedItemsByLevel:
+        raw.infusedItemsByLevel &&
+        typeof raw.infusedItemsByLevel === "object"
+          ? cloneData(raw.infusedItemsByLevel)
+          : {},
+
+      infusions:
+        Array.isArray(raw.infusions)
+          ? cloneData(raw.infusions)
+          : [],
 
       levels:
         raw.levels &&
@@ -23907,6 +23393,9 @@ export function createCharacterCreator(options = {}) {
         ...subclassFeatures
       ];
 
+    syncSection12AsiChoicesForLevel();
+    syncSection12ArtificerInfusionsForLevel();
+
     return creatorState.draft
       .features
       .classFeatures;
@@ -24564,6 +24053,868 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
+  function getSection12AsiChoiceState(featureId) {
+    const values = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    )[featureId] || [];
+
+    return {
+      mode: values.includes("mode:feat")
+        ? "feat"
+        : values.includes("mode:asi")
+          ? "asi"
+          : "",
+      abilities: values
+        .filter((value) => value.startsWith("ability:"))
+        .map((value) => value.split(":")[1])
+        .filter(Boolean),
+      featId: cleanString(
+        values.find((value) => value.startsWith("feat:"))
+      ).slice("feat:".length)
+    };
+  }
+
+  function formatSection12ClassChoiceValues(values) {
+    const cleanValues = Array.isArray(values) ? values : [];
+
+    if (
+      cleanValues.some((value) => {
+        return value.startsWith("known:") || value.startsWith("active:");
+      })
+    ) {
+      const selectedClass = getSelectedClassTemplate();
+      const infusionMap = new Map(
+        (selectedClass?.infusions || []).map((infusion) => {
+          return [infusion.id, infusion.name];
+        })
+      );
+      const namesForPrefix = (prefix) => cleanValues
+        .filter((value) => value.startsWith(prefix))
+        .map((value) => {
+          const id = value.slice(prefix.length);
+          return infusionMap.get(id) || id;
+        });
+      const known = namesForPrefix("known:");
+      const active = namesForPrefix("active:");
+
+      return [
+        `Known: ${known.length ? known.join(", ") : "None"}`,
+        `Infused: ${active.length ? active.join(", ") : "None"}`
+      ].join("; ");
+    }
+
+    if (cleanValues.includes("mode:feat")) {
+      const featId = cleanString(
+        cleanValues.find((value) => value.startsWith("feat:"))
+      ).slice("feat:".length);
+      const feat = DEFAULT_FEATS.find((entry) => entry.id === featId);
+
+      return feat ? `Feat: ${feat.name}` : "Feat not selected";
+    }
+
+    if (cleanValues.includes("mode:asi")) {
+      const abilityCounts = {};
+
+      cleanValues
+        .filter((value) => value.startsWith("ability:"))
+        .forEach((value) => {
+          const abilityId = value.split(":")[1];
+          abilityCounts[abilityId] = (abilityCounts[abilityId] || 0) + 1;
+        });
+
+      const summary = Object.entries(abilityCounts)
+        .map(([abilityId, amount]) => {
+          const name = ABILITY_DEFINITIONS.find(
+            (ability) => ability.id === abilityId
+          )?.name || abilityId.toUpperCase();
+
+          return `${name} +${amount}`;
+        });
+
+      return summary.length
+        ? `Ability Scores: ${summary.join(", ")}`
+        : "Ability scores not selected";
+    }
+
+    return cleanValues.join(", ");
+  }
+
+  function getSection12AsiFeature(featureId) {
+    return getSection12ClassFeaturesThroughLevel()
+      .find((feature) => {
+        return (
+          feature.id === featureId &&
+          feature.optionSource === "asiOrFeat"
+        );
+      }) || null;
+  }
+
+  function setSection12AsiBonusSource(
+    featureId,
+    abilities = []
+  ) {
+    const bonusMap = createAbilityMap(0);
+
+    abilities.forEach((abilityId) => {
+      if (Object.hasOwn(bonusMap, abilityId)) {
+        bonusMap[abilityId] += 1;
+      }
+    });
+
+    setAbilityBonusSource(
+      `class-asi:${featureId}`,
+      bonusMap
+    );
+  }
+
+  function removeSection12AsiFeatIfUnused(featId) {
+    const cleanFeatId = cleanString(featId);
+
+    if (!cleanFeatId) {
+      return;
+    }
+
+    const stillUsed = Object.values(
+      normalizeClassChoiceMap(
+        creatorState.draft.classChoices
+      )
+    ).some((values) => {
+      return values.includes(`feat:${cleanFeatId}`);
+    });
+
+    if (!stillUsed) {
+      creatorState.draft.feats = normalizeFeatIds(
+        creatorState.draft.feats
+      ).filter((id) => id !== cleanFeatId);
+    }
+  }
+
+  function setSection12AsiMode(featureId, mode) {
+    if (
+      !getSection12AsiFeature(featureId) ||
+      !["asi", "feat"].includes(mode)
+    ) {
+      return false;
+    }
+
+    const previous = getSection12AsiChoiceState(featureId);
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+
+    choices[featureId] = [`mode:${mode}`];
+    creatorState.draft.classChoices = choices;
+
+    setSection12AsiBonusSource(featureId, []);
+    removeSection12AsiFeatIfUnused(previous.featId);
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function adjustSection12AsiAbility(
+    featureId,
+    abilityId,
+    delta
+  ) {
+    if (
+      !getSection12AsiFeature(featureId) ||
+      !ABILITY_DEFINITIONS.some((ability) => ability.id === abilityId)
+    ) {
+      return false;
+    }
+
+    const state = getSection12AsiChoiceState(featureId);
+    const abilities = [...state.abilities];
+    const amount = Math.sign(safeNumber(delta, 0));
+
+    if (amount > 0) {
+      const currentCount = abilities.filter(
+        (id) => id === abilityId
+      ).length;
+      const currentScore = safeNumber(
+        creatorState.draft.abilities.scores[abilityId],
+        10
+      );
+      const scoreWithoutThisAsi = currentScore - currentCount;
+
+      if (
+        abilities.length >= 2 ||
+        scoreWithoutThisAsi + currentCount >= 20
+      ) {
+        return false;
+      }
+
+      abilities.push(abilityId);
+    } else if (amount < 0) {
+      const index = abilities.lastIndexOf(abilityId);
+
+      if (index < 0) {
+        return false;
+      }
+
+      abilities.splice(index, 1);
+    } else {
+      return false;
+    }
+
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+
+    choices[featureId] = [
+      "mode:asi",
+      ...abilities.map((id, index) => {
+        return `ability:${id}:${index + 1}`;
+      })
+    ];
+
+    creatorState.draft.classChoices = choices;
+    setSection12AsiBonusSource(featureId, abilities);
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function getFeatPrerequisiteResult(
+    feat,
+    character = creatorState.draft
+  ) {
+    const requirements = Array.isArray(feat?.prerequisites)
+      ? feat.prerequisites
+      : [];
+    const reasons = [];
+
+    requirements.forEach((requirement) => {
+      const type = cleanString(requirement?.type);
+
+      if (type === "spellcasting") {
+        const canCast = getCharacterSpellcastingInfo(character)
+          .some((entry) => {
+            return (
+              entry.progressionType !== "none" ||
+              safeNumber(entry.pactMagic?.slots, 0) > 0
+            );
+          });
+
+        if (!canCast) {
+          reasons.push("Requires spellcasting");
+        }
+        return;
+      }
+
+      if (type === "level" || type === "minimumLevel") {
+        const minimum = Math.max(
+          1,
+          safeNumber(
+            requirement.minimum ?? requirement.value ?? requirement.level,
+            1
+          )
+        );
+        const level = clampLevel(
+          character?.classProgression?.totalLevel || character?.level || 1
+        );
+
+        if (level < minimum) {
+          reasons.push(`Requires level ${minimum}`);
+        }
+        return;
+      }
+
+      if (type === "abilityMinimum" || type === "ability") {
+        const abilityId = cleanString(requirement.ability).toLowerCase();
+        const minimum = safeNumber(
+          requirement.minimum ?? requirement.value,
+          13
+        );
+        const score = safeNumber(
+          character?.abilities?.scores?.[abilityId],
+          0
+        );
+
+        if (!abilityId || score < minimum) {
+          reasons.push(
+            `Requires ${abilityId ? abilityId.toUpperCase() : "an ability"} ${minimum}`
+          );
+        }
+        return;
+      }
+
+      if (type === "class") {
+        const allowedIds = uniqueCleanArray(
+          requirement.classIds || requirement.from || []
+        ).map((id) => makeSafeId(id, ""));
+        const hasClass = getCharacterClassEntries(character)
+          .some((entry) => allowedIds.includes(makeSafeId(entry.classId, "")));
+
+        if (!hasClass) {
+          reasons.push(
+            `Requires class: ${allowedIds.join(", ") || "specified class"}`
+          );
+        }
+        return;
+      }
+
+      if (type) {
+        reasons.push(`Unsupported prerequisite: ${type}`);
+      }
+    });
+
+    return {
+      met: reasons.length === 0,
+      reasons
+    };
+  }
+
+  function getFeatPrerequisiteLabel(feat) {
+    const result = getFeatPrerequisiteResult(feat);
+
+    if (!Array.isArray(feat?.prerequisites) || !feat.prerequisites.length) {
+      return "No prerequisite";
+    }
+
+    return result.met
+      ? "Prerequisites met"
+      : result.reasons.join("; ");
+  }
+
+  function setSection12AsiFeat(featureId, featId) {
+    if (!getSection12AsiFeature(featureId)) {
+      return false;
+    }
+
+    const cleanFeatId = cleanString(featId);
+
+    const selectedFeat = DEFAULT_FEATS.find((feat) => {
+      return feat.id === cleanFeatId;
+    });
+
+    if (cleanFeatId && !selectedFeat) {
+      return false;
+    }
+
+    if (
+      selectedFeat &&
+      !getFeatPrerequisiteResult(selectedFeat).met
+    ) {
+      return false;
+    }
+
+    const previous = getSection12AsiChoiceState(featureId);
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+
+    choices[featureId] = [
+      "mode:feat",
+      ...(cleanFeatId ? [`feat:${cleanFeatId}`] : [])
+    ];
+
+    creatorState.draft.classChoices = choices;
+    setSection12AsiBonusSource(featureId, []);
+    removeSection12AsiFeatIfUnused(previous.featId);
+
+    if (cleanFeatId) {
+      creatorState.draft.feats = [
+        ...new Set([
+          ...normalizeFeatIds(creatorState.draft.feats),
+          cleanFeatId
+        ])
+      ];
+    }
+
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function syncSection12AsiChoicesForLevel() {
+    const availableIds = new Set(
+      getSection12ClassFeaturesThroughLevel()
+        .filter((feature) => feature.optionSource === "asiOrFeat")
+        .map((feature) => feature.id)
+    );
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+    const removedFeatIds = [];
+
+    removeAbilityBonusSourcesByPrefix([
+      "class-asi:"
+    ]);
+
+    Object.keys(choices).forEach((featureId) => {
+      const values = choices[featureId];
+      const isAsiChoice = values.some((value) => {
+        return (
+          value.startsWith("mode:") ||
+          value.startsWith("ability:") ||
+          value.startsWith("feat:")
+        );
+      });
+
+      if (!isAsiChoice) {
+        return;
+      }
+
+      if (!availableIds.has(featureId)) {
+        values.forEach((value) => {
+          if (value.startsWith("feat:")) {
+            removedFeatIds.push(value.slice("feat:".length));
+          }
+        });
+        delete choices[featureId];
+        setSection12AsiBonusSource(featureId, []);
+        return;
+      }
+
+      const stateAbilities = values
+        .filter((value) => value.startsWith("ability:"))
+        .map((value) => value.split(":")[1])
+        .filter(Boolean);
+
+      setSection12AsiBonusSource(featureId, stateAbilities);
+    });
+
+    creatorState.draft.classChoices = choices;
+    removedFeatIds.forEach(removeSection12AsiFeatIfUnused);
+  }
+
+  function renderSection12AsiChoice(feature) {
+    const state = getSection12AsiChoiceState(feature.id);
+    const pointsUsed = state.abilities.length;
+
+    return `
+      <p><b>Advancement Choice:</b></p>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          class="${state.mode === "asi" ? "selected" : ""}"
+          data-cc-action="set-asi-mode"
+          data-feature-id="${escapeHtml(feature.id)}"
+          data-mode="asi"
+        >
+          Ability Scores
+        </button>
+
+        <button
+          type="button"
+          class="${state.mode === "feat" ? "selected" : ""}"
+          data-cc-action="set-asi-mode"
+          data-feature-id="${escapeHtml(feature.id)}"
+          data-mode="feat"
+        >
+          Feat
+        </button>
+      </div>
+
+      ${state.mode === "asi"
+        ? `
+          <p class="small"><b>${2 - pointsUsed}</b> increase(s) remaining</p>
+
+          <div class="hg-character-field-grid three">
+            ${ABILITY_DEFINITIONS.map((ability) => {
+              const count = state.abilities.filter(
+                (id) => id === ability.id
+              ).length;
+              const score = safeNumber(
+                creatorState.draft.abilities.scores[ability.id],
+                10
+              );
+
+              return `
+                <div class="hg-character-field">
+                  <label>${escapeHtml(ability.name)} +${count}</label>
+                  <div class="hg-character-inline-actions">
+                    <button
+                      type="button"
+                      data-cc-action="adjust-asi-ability"
+                      data-feature-id="${escapeHtml(feature.id)}"
+                      data-ability-id="${escapeHtml(ability.id)}"
+                      data-delta="-1"
+                      ${count ? "" : "disabled"}
+                      aria-label="Decrease ${escapeHtml(ability.name)}"
+                    >-</button>
+                    <button
+                      type="button"
+                      data-cc-action="adjust-asi-ability"
+                      data-feature-id="${escapeHtml(feature.id)}"
+                      data-ability-id="${escapeHtml(ability.id)}"
+                      data-delta="1"
+                      ${pointsUsed >= 2 || score >= 20 ? "disabled" : ""}
+                      aria-label="Increase ${escapeHtml(ability.name)}"
+                    >+</button>
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `
+        : state.mode === "feat"
+          ? `
+            <div class="hg-character-field">
+              <label>Feat</label>
+              <select
+                data-cc-action-change="choose-asi-feat"
+                data-feature-id="${escapeHtml(feature.id)}"
+              >
+                <option value="">Choose a feat</option>
+                ${DEFAULT_FEATS.map((feat) => {
+                  const prerequisite = getFeatPrerequisiteResult(feat);
+
+                  return `
+                    <option
+                      value="${escapeHtml(feat.id)}"
+                      ${state.featId === feat.id ? "selected" : ""}
+                      ${prerequisite.met || state.featId === feat.id ? "" : "disabled"}
+                    >${escapeHtml(feat.name)}${prerequisite.met ? "" : " (prerequisite not met)"}</option>
+                  `;
+                }).join("")}
+              </select>
+            </div>
+          `
+          : ""}
+    `;
+  }
+
+  function getSection12ArtificerInfusionState(
+    featureId = "infuse-item"
+  ) {
+    const values = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    )[featureId] || [];
+
+    return {
+      knownIds: values
+        .filter((value) => value.startsWith("known:"))
+        .map((value) => value.slice("known:".length)),
+      activeIds: values
+        .filter((value) => value.startsWith("active:"))
+        .map((value) => value.slice("active:".length))
+    };
+  }
+
+  function getSection12ArtificerInfusionContext() {
+    const selectedClass = getSelectedClassTemplate();
+    const level = clampLevel(
+      creatorState.draft.classProgression.totalLevel
+    );
+
+    if (selectedClass?.id !== "artificer") {
+      return null;
+    }
+
+    return {
+      selectedClass,
+      level,
+      knownLimit: getProgressionValueByLevel(
+        selectedClass.infusionsKnownByLevel,
+        level,
+        0
+      ),
+      activeLimit: getProgressionValueByLevel(
+        selectedClass.infusedItemsByLevel,
+        level,
+        0
+      ),
+      available: (selectedClass.infusions || []).filter((infusion) => {
+        return safeNumber(infusion.minimumLevel, 2) <= level;
+      })
+    };
+  }
+
+  function saveSection12ArtificerInfusionState(
+    state,
+    featureId = "infuse-item"
+  ) {
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+    const values = [
+      ...state.knownIds.map((id) => `known:${id}`),
+      ...state.activeIds.map((id) => `active:${id}`)
+    ];
+
+    if (values.length) {
+      choices[featureId] = values;
+    } else {
+      delete choices[featureId];
+    }
+
+    creatorState.draft.classChoices = choices;
+  }
+
+  function syncSection12ArtificerInfusionsForLevel() {
+    const context = getSection12ArtificerInfusionContext();
+    const state = getSection12ArtificerInfusionState();
+
+    if (!context) {
+      saveSection12ArtificerInfusionState({
+        knownIds: [],
+        activeIds: []
+      });
+      return;
+    }
+
+    const availableIds = new Set(
+      context.available.map((infusion) => infusion.id)
+    );
+    const knownIds = state.knownIds
+      .filter((id) => availableIds.has(id))
+      .slice(0, context.knownLimit);
+    const knownSet = new Set(knownIds);
+    const activeIds = state.activeIds
+      .filter((id) => knownSet.has(id))
+      .slice(0, context.activeLimit);
+
+    saveSection12ArtificerInfusionState({
+      knownIds,
+      activeIds
+    });
+  }
+
+  function toggleSection12ArtificerInfusion(
+    infusionId,
+    mode
+  ) {
+    const context = getSection12ArtificerInfusionContext();
+
+    if (
+      !context ||
+      !context.available.some((infusion) => infusion.id === infusionId)
+    ) {
+      return false;
+    }
+
+    const state = getSection12ArtificerInfusionState();
+
+    if (mode === "known") {
+      if (state.knownIds.includes(infusionId)) {
+        state.knownIds = state.knownIds.filter((id) => id !== infusionId);
+        state.activeIds = state.activeIds.filter((id) => id !== infusionId);
+      } else if (state.knownIds.length < context.knownLimit) {
+        state.knownIds.push(infusionId);
+      } else {
+        return false;
+      }
+    } else if (mode === "active") {
+      if (!state.knownIds.includes(infusionId)) {
+        return false;
+      }
+
+      if (state.activeIds.includes(infusionId)) {
+        state.activeIds = state.activeIds.filter((id) => id !== infusionId);
+      } else if (state.activeIds.length < context.activeLimit) {
+        state.activeIds.push(infusionId);
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+
+    saveSection12ArtificerInfusionState(state);
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderSection12ArtificerInfusions(feature) {
+    const context = getSection12ArtificerInfusionContext();
+
+    if (!context) {
+      return "";
+    }
+
+    const state = getSection12ArtificerInfusionState(feature.id);
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Infusions Known:</b> ${state.knownIds.length} / ${context.knownLimit}
+        <br><b>Infused Items:</b> ${state.activeIds.length} / ${context.activeLimit}
+      </div>
+
+      <div class="hg-character-field-grid">
+        ${context.available.map((infusion) => {
+          const known = state.knownIds.includes(infusion.id);
+          const active = state.activeIds.includes(infusion.id);
+
+          return `
+            <div class="hg-character-field">
+              <h3>${escapeHtml(infusion.name)}</h3>
+              <p class="small">
+                Level ${safeNumber(infusion.minimumLevel, 2)}+
+                <br>${escapeHtml(infusion.summary || "")}
+              </p>
+              <div class="hg-character-card-actions">
+                <button
+                  type="button"
+                  data-cc-action="toggle-artificer-infusion-known"
+                  data-infusion-id="${escapeHtml(infusion.id)}"
+                >${known ? "Forget" : "Learn"}</button>
+
+                ${known
+                  ? `
+                    <button
+                      type="button"
+                      data-cc-action="toggle-artificer-infusion-active"
+                      data-infusion-id="${escapeHtml(infusion.id)}"
+                    >${active ? "Remove Infusion" : "Infuse Item"}</button>
+                  `
+                  : ""}
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function getSection12FeatureMechanicLines(feature) {
+    const classLevel = clampLevel(
+      creatorState.draft.classProgression.totalLevel
+    );
+    const lines = [];
+    const resourceData =
+      feature?.resource &&
+      typeof feature.resource === "object"
+        ? feature.resource
+        : {};
+    const uses = resourceData.uses ??
+      getProgressionValueByLevel(
+        resourceData.usesByLevel,
+        classLevel,
+        null
+      );
+    const recharge = resourceData.recharge ||
+      getProgressionValueByLevel(
+        resourceData.rechargeByLevel,
+        classLevel,
+        ""
+      );
+    const die = resourceData.die ||
+      getProgressionValueByLevel(
+        resourceData.dieByLevel,
+        classLevel,
+        ""
+      );
+
+    if (uses !== null && uses !== undefined && uses !== "") {
+      lines.push(`Uses: ${uses}`);
+    }
+
+    if (recharge) {
+      lines.push(`Recharge: ${recharge}`);
+    }
+
+    if (die) {
+      lines.push(`Die: ${die}`);
+    }
+
+    if (resourceData.usesAbility) {
+      lines.push(`Uses: ${String(resourceData.usesAbility).toUpperCase()} modifier`);
+    }
+
+    if (resourceData.pool?.formula) {
+      const formula = cleanString(resourceData.pool.formula);
+      const multiplierMatch = formula.match(/^classLevel\s*\*\s*(\d+)$/i);
+      const poolValue = multiplierMatch
+        ? classLevel * safeNumber(multiplierMatch[1], 1)
+        : formula === "classLevel"
+          ? classLevel
+          : formula;
+
+      lines.push(`Pool: ${poolValue}`);
+    }
+
+    (Array.isArray(feature?.effects) ? feature.effects : [])
+      .forEach((effect) => {
+        if (effect.type === "spellcasting") {
+          lines.push(
+            `Spellcasting: ${String(effect.ability || "").toUpperCase()} (${effect.progression || "none"})`
+          );
+        }
+
+        if (effect.type === "armorClassFormula") {
+          const abilities = (effect.abilities || [])
+            .map((ability) => String(ability).toUpperCase())
+            .join(" + ");
+          lines.push(`AC: ${safeNumber(effect.base, 10)} + ${abilities}`);
+        }
+
+        if (effect.type === "speedBonus") {
+          lines.push(`${effect.movement || "walk"} speed: +${safeNumber(effect.value, 0)} ft.`);
+        }
+
+        if (effect.type === "speedBonusByLevel") {
+          const value = getProgressionValueByLevel(
+            effect.values,
+            classLevel,
+            0
+          );
+          lines.push(`${effect.movement || "walk"} speed: +${safeNumber(value, 0)} ft.`);
+        }
+
+        if (effect.type === "extraAttack") {
+          lines.push(`Attacks per Attack action: ${safeNumber(effect.attacks, 1)}`);
+        }
+
+        if (effect.type === "sneakAttack") {
+          lines.push(
+            `Sneak Attack: ${getProgressionValueByLevel(effect.diceByLevel, classLevel, "1d6")}`
+          );
+        }
+
+        if (effect.type === "rage") {
+          lines.push(
+            `Rage damage: +${getProgressionValueByLevel(effect.damageBonusByLevel, classLevel, 2)}`
+          );
+        }
+
+        if (effect.type === "resourcePool" && effect.formula) {
+          const multiplierMatch = String(effect.formula)
+            .match(/^classLevel\s*\*\s*(\d+)$/i);
+          const value = multiplierMatch
+            ? classLevel * safeNumber(multiplierMatch[1], 1)
+            : effect.formula === "classLevel"
+              ? classLevel
+              : effect.formula;
+          lines.push(`${effect.name || "Resource"}: ${value}`);
+        }
+
+        if (effect.type === "infusions") {
+          lines.push(
+            `Infusions known: ${getProgressionValueByLevel(effect.knownByLevel, classLevel, 0)}`
+          );
+          lines.push(
+            `Infused items: ${getProgressionValueByLevel(effect.activeByLevel, classLevel, 0)}`
+          );
+        }
+      });
+
+    return [...new Set(lines)];
+  }
+
+  function renderSection12FeatureMechanics(feature) {
+    const lines = getSection12FeatureMechanicLines(feature);
+
+    if (!lines.length) {
+      return "";
+    }
+
+    return `
+      <p class="small">
+        <b>Mechanics:</b><br>
+        ${lines.map((line) => escapeHtml(line)).join("<br>")}
+      </p>
+    `;
+  }
+
   function renderSection12SelectedClassDetails() {
     const selectedClass = getSelectedClassTemplate();
 
@@ -24599,7 +24950,13 @@ export function createCharacterCreator(options = {}) {
               : ""}
           </p>
 
-          ${feature.type === "choice"
+          ${renderSection12FeatureMechanics(feature)}
+
+          ${feature.customType === "artificerInfusions"
+            ? renderSection12ArtificerInfusions(feature)
+            : feature.optionSource === "asiOrFeat"
+            ? renderSection12AsiChoice(feature)
+            : feature.type === "choice"
             ? `
               <p><b>Choose ${chooseCount}:</b></p>
 
@@ -24685,6 +25042,25 @@ export function createCharacterCreator(options = {}) {
 
     const selectedClass =
       getSelectedClassTemplate();
+
+    const selectedClassLevel = clampLevel(
+      creatorState.draft.classProgression.totalLevel
+    );
+
+    const subclassUnlockLevel = Math.max(
+      1,
+      Math.round(
+        safeNumber(
+          selectedClass?.subclassLevel,
+          3
+        )
+      )
+    );
+
+    const subclassUnlocked = Boolean(
+      selectedClass &&
+      selectedClassLevel >= subclassUnlockLevel
+    );
 
     const selectedClassId =
       primaryClass?.classId || "";
@@ -24841,7 +25217,38 @@ export function createCharacterCreator(options = {}) {
         ${classCards}
       </div>
 
+      ${selectedClass
+        ? `
+          <hr>
+
+          <h3>Class Level and Advancement</h3>
+
+          ${renderLevelStep()}
+        `
+        : `
+          <div class="hg-character-placeholder">
+            Choose a class to set its level and advancement.
+          </div>
+        `}
+
       ${renderSection12SelectedClassDetails()}
+
+      ${selectedClass
+        ? `
+          <hr>
+
+          <h3>Subclass</h3>
+
+          ${subclassUnlocked
+            ? renderSubclassStep()
+            : `
+              <div class="hg-character-warning">
+                ${escapeHtml(selectedClass.name)} unlocks subclass selection at level ${subclassUnlockLevel}.
+                Current class level: ${selectedClassLevel}.
+              </div>
+            `}
+        `
+        : ""}
 
       <hr>
 
@@ -25104,6 +25511,13 @@ export function createCharacterCreator(options = {}) {
         )
       );
 
+    const currentLevel = clampLevel(
+      creatorState.draft.classProgression.totalLevel
+    );
+
+    const subclassUnlocked =
+      currentLevel >= subclassLevel;
+
     if (!primaryClass) {
       return `
         <div class="hg-character-warning">
@@ -25178,9 +25592,9 @@ export function createCharacterCreator(options = {}) {
       </div>
 
       <div class="hg-character-warning">
-        This class normally gains its subclass at level
-        ${subclassLevel}. You may choose it early while
-        planning the character.
+        ${subclassUnlocked
+          ? `Subclass selection is unlocked at level ${subclassLevel}.`
+          : `This class gains its subclass at level ${subclassLevel}. Current class level: ${currentLevel}.`}
       </div>
 
       <div class="hg-character-choice-grid">
@@ -25365,6 +25779,72 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleSection12AsiAction(
+    action,
+    ...values
+  ) {
+    const button = findSection12ActionElement(...values);
+    const featureId = button?.dataset?.featureId || "";
+    let changed = false;
+
+    if (action === "mode") {
+      changed = setSection12AsiMode(
+        featureId,
+        button?.dataset?.mode || ""
+      );
+    }
+
+    if (action === "ability") {
+      changed = adjustSection12AsiAbility(
+        featureId,
+        button?.dataset?.abilityId || "",
+        button?.dataset?.delta || 0
+      );
+    }
+
+    if (changed) {
+      setStatus("ASI / feat choice updated.");
+      renderCreatorView();
+    }
+  }
+
+  function handleSection12AsiChange({ target }) {
+    if (
+      target?.dataset?.ccActionChange !== "choose-asi-feat"
+    ) {
+      return false;
+    }
+
+    if (
+      setSection12AsiFeat(
+        target.dataset.featureId || "",
+        target.value
+      )
+    ) {
+      setStatus("ASI feat choice updated.");
+      renderCreatorView();
+    }
+
+    return true;
+  }
+
+  function handleSection12ArtificerInfusion(
+    mode,
+    ...values
+  ) {
+    const button = findSection12ActionElement(...values);
+
+    if (
+      toggleSection12ArtificerInfusion(
+        button?.dataset?.infusionId || "",
+        mode
+      )
+    ) {
+      setStatus("Artificer infusions updated.");
+      renderCreatorView();
+    }
+  }
+
   function handleSection12CustomClassSkillPicker(
     mode,
     statusMessage
@@ -25453,6 +25933,38 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "toggle-class-feature-choice",
     handleSection12ClassFeatureChoice
+  );
+
+  registerCharacterCreatorAction(
+    "set-asi-mode",
+    (...values) => {
+      handleSection12AsiAction("mode", ...values);
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "adjust-asi-ability",
+    (...values) => {
+      handleSection12AsiAction("ability", ...values);
+    }
+  );
+
+  registerCharacterCreatorChangeHandler(
+    handleSection12AsiChange
+  );
+
+  registerCharacterCreatorAction(
+    "toggle-artificer-infusion-known",
+    (...values) => {
+      handleSection12ArtificerInfusion("known", ...values);
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "toggle-artificer-infusion-active",
+    (...values) => {
+      handleSection12ArtificerInfusion("active", ...values);
+    }
   );
 
   registerCharacterCreatorAction(
@@ -36235,6 +36747,8 @@ export function createCharacterCreator(options = {}) {
                 : ""
             }
 
+            ${renderSection12FeatureMechanics(feature)}
+
             ${
               removable
                 ? `
@@ -36286,6 +36800,13 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft.feats
     );
 
+    if (
+      !selectedIds.includes(featId) &&
+      !getFeatPrerequisiteResult(feat).met
+    ) {
+      return false;
+    }
+
     creatorState.draft.feats = selectedIds.includes(featId)
       ? selectedIds.filter((id) => id !== featId)
       : [...selectedIds, featId];
@@ -36303,6 +36824,7 @@ export function createCharacterCreator(options = {}) {
 
     return DEFAULT_FEATS.map((feat) => {
       const selected = selectedIds.has(feat.id);
+      const prerequisite = getFeatPrerequisiteResult(feat);
 
       return `
         <article class="hg-character-choice-card ${selected ? "selected" : ""}">
@@ -36310,6 +36832,8 @@ export function createCharacterCreator(options = {}) {
 
           <p class="small">
             ${escapeHtml(feat.summary || "No summary provided.")}
+            <br><b>Prerequisite:</b>
+            ${escapeHtml(getFeatPrerequisiteLabel(feat))}
           </p>
 
           <div class="hg-character-card-actions">
@@ -36317,6 +36841,7 @@ export function createCharacterCreator(options = {}) {
               type="button"
               data-cc-action="toggle-default-feat"
               data-feat-id="${escapeHtml(feat.id)}"
+              ${selected || prerequisite.met ? "" : "disabled"}
             >
               ${selected ? "Remove Feat" : "Add Feat"}
             </button>
@@ -39236,7 +39761,7 @@ export function createCharacterCreator(options = {}) {
             ${choiceEntries.length
               ? choiceEntries.map(([featureId, values]) => {
                   const featureName = featureById.get(featureId)?.name || featureId;
-                  return `<b>${escapeHtml(featureName)}:</b> ${escapeHtml(values.join(", "))}`;
+                  return `<b>${escapeHtml(featureName)}:</b> ${escapeHtml(formatSection12ClassChoiceValues(values))}`;
                 }).join("<br>")
               : "None selected."}
           </p>
