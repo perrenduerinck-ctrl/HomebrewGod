@@ -1,4 +1,6 @@
-export const DEFAULT_FEATS = [
+export const DEFAULT_FEAT_SCHEMA_VERSION = 1;
+
+const RAW_DEFAULT_FEATS = [
   {
     id: "tough",
     name: "Tough",
@@ -157,3 +159,99 @@ export const DEFAULT_FEATS = [
     ]
   }
 ];
+
+const normalizeFeatId = (value) => String(value || "")
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "");
+
+const normalizeFeatRecord = (rawFeat) => {
+  const raw = rawFeat || {};
+
+  return Object.freeze({
+    ...raw,
+    schemaVersion: DEFAULT_FEAT_SCHEMA_VERSION,
+    id: normalizeFeatId(raw.id || raw.name),
+    name: String(raw.name || "Unnamed Feat").trim(),
+    summary: String(raw.summary || "").trim(),
+    prerequisites: Object.freeze(
+      Array.isArray(raw.prerequisites)
+        ? raw.prerequisites.map((requirement) => {
+            return Object.freeze({ ...(requirement || {}) });
+          })
+        : []
+    ),
+    effects: Object.freeze(
+      Array.isArray(raw.effects)
+        ? raw.effects.map((effect) => {
+            return Object.freeze({ ...(effect || {}) });
+          })
+        : []
+    )
+  });
+};
+
+export function validateDefaultFeatCollection(feats) {
+  const entries = Array.isArray(feats) ? feats : [];
+  const errors = [];
+  const ids = new Set();
+
+  entries.forEach((feat, index) => {
+    const id = normalizeFeatId(feat?.id || feat?.name);
+    const name = String(feat?.name || "").trim();
+
+    if (!id) {
+      errors.push(`Feat ${index + 1} is missing an id.`);
+    } else if (ids.has(id)) {
+      errors.push(`Duplicate feat id: ${id}.`);
+    } else {
+      ids.add(id);
+    }
+
+    if (!name) {
+      errors.push(`Feat ${id || index + 1} is missing a name.`);
+    }
+
+    if (!Array.isArray(feat?.prerequisites)) {
+      errors.push(`Feat ${id || index + 1} prerequisites must be an array.`);
+    }
+
+    if (!Array.isArray(feat?.effects)) {
+      errors.push(`Feat ${id || index + 1} effects must be an array.`);
+    }
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+const normalizedDefaultFeats = RAW_DEFAULT_FEATS.map(
+  normalizeFeatRecord
+);
+
+const defaultFeatValidation = validateDefaultFeatCollection(
+  normalizedDefaultFeats
+);
+
+if (!defaultFeatValidation.valid) {
+  throw new Error(
+    `Invalid default feat data: ${defaultFeatValidation.errors.join(" ")}`
+  );
+}
+
+export const DEFAULT_FEATS = Object.freeze(
+  normalizedDefaultFeats
+);
+
+export const DEFAULT_FEAT_MAP = Object.freeze(
+  Object.fromEntries(
+    DEFAULT_FEATS.map((feat) => [feat.id, feat])
+  )
+);
+
+export function getDefaultFeatById(featId) {
+  return DEFAULT_FEAT_MAP[normalizeFeatId(featId)] || null;
+}
