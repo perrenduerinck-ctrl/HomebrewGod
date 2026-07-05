@@ -799,7 +799,7 @@ export const DEFAULT_CLASSES = {
         }
       ],
       2: [
-        // TODO: Build full Artificer infusion picker later.
+        // Structured infusion choices are rendered by the character creator.
         {
           id: "infuse-item",
           name: "Infuse Item",
@@ -1245,7 +1245,22 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
       name: "Oath of Devotion",
       summary: "A sacred oath centered on courage, compassion, honor, and duty.",
       featuresByLevel: {
-        3: [sf("devotion-oath-spells", "Oath Spells"), sf("devotion-channel-divinity", "Channel Divinity")],
+        3: [
+          sf("devotion-oath-spells", "Oath Spells"),
+          sf(
+            "devotion-channel-divinity",
+            "Channel Divinity",
+            "Use a limited sacred-oath channel option.",
+            {
+              type: "resource",
+              resource: {
+                name: "Channel Divinity",
+                uses: 1,
+                recharge: "shortOrLongRest"
+              }
+            }
+          )
+        ],
         7: [sf("devotion-aura", "Aura of Devotion")],
         15: [sf("devotion-purity-of-spirit", "Purity of Spirit")],
         20: [sf("devotion-holy-nimbus", "Holy Nimbus")]
@@ -1452,6 +1467,7 @@ const addClassFeatureMechanics = (
 
 addClassFeatureMechanics("barbarian", "rage", {
   resource: {
+    name: "Rage",
     recharge: "longRest",
     usesByLevel: { 1: 2, 3: 3, 6: 4, 12: 5, 17: 6, 20: "unlimited" }
   },
@@ -1488,7 +1504,9 @@ addClassFeatureMechanics("barbarian", "fast-movement", {
 
 addClassFeatureMechanics("bard", "bardic-inspiration", {
   resource: {
+    name: "Bardic Inspiration",
     usesAbility: "cha",
+    minimum: 1,
     rechargeByLevel: { 1: "longRest", 5: "shortOrLongRest" },
     dieByLevel: { 1: "d6", 5: "d8", 10: "d10", 15: "d12" }
   }
@@ -1507,13 +1525,14 @@ addClassFeatureMechanics("monk", "unarmored-defense-monk", {
 
 addClassFeatureMechanics("monk", "ki", {
   resource: {
+    name: "Ki / Discipline Points",
     pool: { formula: "classLevel" },
     recharge: "shortOrLongRest"
   },
   effects: [
     {
       type: "resourcePool",
-      name: "Ki Points",
+      name: "Ki / Discipline Points",
       formula: "classLevel"
     }
   ]
@@ -1532,6 +1551,7 @@ addClassFeatureMechanics("monk", "unarmored-movement", {
 
 addClassFeatureMechanics("paladin", "lay-on-hands", {
   resource: {
+    name: "Lay on Hands",
     pool: { formula: "classLevel * 5" },
     recharge: "longRest"
   },
@@ -1555,6 +1575,7 @@ addClassFeatureMechanics("artificer", "infuse-item", {
     }
   ],
   placeholder: {
+    status: "picker",
     knownInfusions: [],
     activeInfusions: []
   }
@@ -1562,6 +1583,7 @@ addClassFeatureMechanics("artificer", "infuse-item", {
 
 addClassFeatureMechanics("cleric", "channel-divinity", {
   resource: {
+    name: "Channel Divinity",
     usesByLevel: { 2: 1, 6: 2, 18: 3 },
     recharge: "shortOrLongRest"
   }
