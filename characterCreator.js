@@ -146,6 +146,11 @@ export function createCharacterCreator(options = {}) {
     return BUILDER_STEPS.find((step) => step.id === stepId) || BUILDER_STEPS[0];
   }
 
+  function getExactBuilderStepById(stepId) {
+    const cleanStepId = String(stepId || "").trim();
+    return BUILDER_STEPS.find((step) => step.id === cleanStepId) || null;
+  }
+
   function getStepIndex(stepId) {
     return BUILDER_STEP_INDEX.has(stepId)
       ? BUILDER_STEP_INDEX.get(stepId)
@@ -3827,13 +3832,29 @@ export function createCharacterCreator(options = {}) {
 
     const cleanLevel = clampLevel(level);
 
+    const readValue = (key) => {
+      const value = values[key];
+
+      if (value === undefined || value === null) {
+        return fallback;
+      }
+
+      if (
+        typeof fallback === "number" &&
+        typeof value === "string" &&
+        value.trim() !== "" &&
+        Number.isFinite(Number(value))
+      ) {
+        return Number(value);
+      }
+
+      return value;
+    };
+
     if (
       values[cleanLevel] !== undefined
     ) {
-      return safeNumber(
-        values[cleanLevel],
-        fallback
-      );
+      return readValue(cleanLevel);
     }
 
     const previousLevel =
@@ -3849,16 +3870,10 @@ export function createCharacterCreator(options = {}) {
         })[0];
 
     if (previousLevel) {
-      return safeNumber(
-        values[previousLevel],
-        fallback
-      );
+      return readValue(previousLevel);
     }
 
-    return safeNumber(
-      values[cleanLevel],
-      fallback
-    );
+    return fallback;
   }
 
   function calculateRuleSkillModifier({
@@ -3915,14 +3930,16 @@ export function createCharacterCreator(options = {}) {
         Math.floor(dieSize / 2) + 1 + conModifier
       );
 
-    const firstLevelHp =
+    const firstLevelHp = Math.max(
+      1,
       levelOneValue === null ||
       levelOneValue === undefined
         ? dieSize + conModifier
         : safeNumber(
             levelOneValue,
             dieSize + conModifier
-          );
+          )
+    );
 
     return Math.max(
       1,
@@ -4012,18 +4029,10 @@ export function createCharacterCreator(options = {}) {
   function getCharacterProficiencyBonus(
     character
   ) {
-    return Math.max(
-      0,
-      safeNumber(
-        character
-          ?.combat
-          ?.proficiencyBonus,
-        getGenericProficiencyBonus(
-          character
-            ?.classProgression
-            ?.totalLevel
-        )
-      )
+    return getGenericProficiencyBonus(
+      character
+        ?.classProgression
+        ?.totalLevel
     );
   }
 
@@ -5008,8 +5017,11 @@ export function createCharacterCreator(options = {}) {
             ) {
               classTotal +=
                 characterLevelIndex === 0
-                  ? entryDieSize +
-                    constitutionModifier
+                  ? Math.max(
+                      1,
+                      entryDieSize +
+                      constitutionModifier
+                    )
                   : Math.max(
                       1,
                       Math.floor(
@@ -5249,10 +5261,13 @@ export function createCharacterCreator(options = {}) {
 
       let dexBonus = 0;
       let label = "Armor";
+      let details = "";
 
       if (armorCategory.includes("light")) {
         dexBonus = dexModifier;
         label = "Light Armor";
+        details =
+          `${base} + Dex ${formatSignedNumber(dexBonus)}`;
       } else if (armorCategory.includes("medium")) {
         const cap =
           armor.dexterityCap === null ||
@@ -5265,18 +5280,23 @@ export function createCharacterCreator(options = {}) {
         dexBonus =
           Math.min(dexModifier, cap);
         label = "Medium Armor";
+        details =
+          `${base} + Dex ${formatSignedNumber(dexBonus)} (maximum +${cap})`;
       } else if (armorCategory.includes("heavy")) {
         dexBonus = 0;
         label = "Heavy Armor";
+        details = `${base} (no Dex modifier)`;
       } else {
         dexBonus = dexModifier;
+        details =
+          `${base} + Dex ${formatSignedNumber(dexBonus)}`;
       }
 
       addOption(
         `armor:${armor.id}`,
         `${label}: ${armor.name}`,
         base + dexBonus,
-        `${base} + Dex ${formatSignedNumber(dexBonus)}`,
+        details,
         safeNumber(
           armor.magicalArmorClassBonus,
           0
@@ -16812,6 +16832,43 @@ export function createCharacterCreator(options = {}) {
         min-height: 420px;
       }
 
+      .hg-character-beginner-note {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-left: 3px solid rgba(88, 166, 255, 0.72);
+        background: rgba(88, 166, 255, 0.08);
+        color: #dfe6ff;
+      }
+
+      .hg-character-beginner-note strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .hg-character-beginner-note p {
+        margin: 0;
+        color: #aeb8df;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .hg-character-future-features {
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(116, 138, 255, 0.16);
+      }
+
+      .hg-character-future-features summary {
+        cursor: pointer;
+        color: #dfe6ff;
+        font-weight: bold;
+      }
+
+      .hg-character-future-features > p {
+        margin: 8px 0 0;
+        color: #aeb8df;
+      }
+
       .hg-character-field-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -17096,6 +17153,15 @@ export function createCharacterCreator(options = {}) {
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  function beginnerNote(title, body) {
+    return `
+      <div class="hg-character-beginner-note">
+        <strong>${escapeHtml(title)}</strong>
+        <p>${escapeHtml(body)}</p>
+      </div>
+    `;
   }
 
   function safeDisplayString(value, fallback = "") {
@@ -18203,7 +18269,14 @@ export function createCharacterCreator(options = {}) {
   let characterLibraryRenderer = null;
 
   function registerCharacterStepRenderer(stepId, renderer) {
-    const step = getStepById(stepId);
+    const step = getExactBuilderStepById(stepId);
+
+    if (!step) {
+      console.warn(
+        `Skipping renderer for removed character step: ${stepId}`
+      );
+      return;
+    }
 
     if (typeof renderer !== "function") {
       throw new TypeError(
@@ -18215,7 +18288,14 @@ export function createCharacterCreator(options = {}) {
   }
 
   function registerCharacterStepCompletion(stepId, checker) {
-    const step = getStepById(stepId);
+    const step = getExactBuilderStepById(stepId);
+
+    if (!step) {
+      console.warn(
+        `Skipping completion check for removed character step: ${stepId}`
+      );
+      return;
+    }
 
     if (typeof checker !== "function") {
       throw new TypeError(
@@ -18224,6 +18304,30 @@ export function createCharacterCreator(options = {}) {
     }
 
     characterStepCompletionChecks.set(step.id, checker);
+  }
+
+  function runCharacterStepRegistrationAudit() {
+    if (characterStepRenderers.get("basics") !== renderBasicsStep) {
+      console.error(
+        "Character Creator registration error: basics renderer was overwritten."
+      );
+    }
+
+    if (characterStepRenderers.get("class") !== renderClassStep) {
+      console.warn(
+        "Character Creator warning: class renderer is not renderClassStep."
+      );
+    }
+
+    ["skills", "level", "subclass"].forEach((removedStepId) => {
+      const stepStillExists = getExactBuilderStepById(removedStepId);
+
+      if (!stepStillExists && characterStepRenderers.has(removedStepId)) {
+        console.warn(
+          `Removed character step is still registered: ${removedStepId}`
+        );
+      }
+    });
   }
 
   function registerCharacterCreatorAction(action, handler) {
@@ -20496,6 +20600,11 @@ export function createCharacterCreator(options = {}) {
     });
 
     return `
+      ${beginnerNote(
+        "Character Identity",
+        "Start with who your character is. Name, age, pronouns, deity, and appearance are mostly story details. Size can matter for some rules, but most player characters are Small or Medium."
+      )}
+
       <div class="hg-character-field-grid">
         ${renderSection11PortraitPanel()}
 
@@ -22134,7 +22243,32 @@ export function createCharacterCreator(options = {}) {
                   species.speed,
                   30
                 )
-              )} ft.
+                )} ft.
+            </p>
+
+            <p>
+              <b>Languages:</b>
+
+              ${escapeHtml(
+                formatSection12List(
+                  species.languages
+                ) || "None listed"
+              )}
+
+              <br>
+
+              <b>Traits:</b>
+
+              ${escapeHtml(
+                formatSection12List(
+                  (Array.isArray(species.traits)
+                    ? species.traits
+                    : [])
+                    .map((trait) => {
+                      return trait?.name || trait;
+                    })
+                ) || "None listed"
+              )}
             </p>
           `;
 
@@ -22204,6 +22338,31 @@ export function createCharacterCreator(options = {}) {
                     ? `<b>Ability:</b> ${escapeHtml(abilityText)}`
                     : "No ability bonus listed."
                 }
+              </p>
+
+              <p>
+                <b>Languages:</b>
+
+                ${escapeHtml(
+                  formatSection12List(
+                    subrace.languages
+                  ) || "No additional languages"
+                )}
+
+                <br>
+
+                <b>Traits:</b>
+
+                ${escapeHtml(
+                  formatSection12List(
+                    (Array.isArray(subrace.traits)
+                      ? subrace.traits
+                      : [])
+                      .map((trait) => {
+                        return trait?.name || trait;
+                      })
+                  ) || "No additional traits"
+                )}
               </p>
             `,
 
@@ -22565,6 +22724,11 @@ export function createCharacterCreator(options = {}) {
     });
 
     return `
+      ${beginnerNote(
+        "Species / Race",
+        "Species / Race gives natural traits like size, speed, senses, special abilities, and sometimes ability score bonuses."
+      )}
+
       <div class="hg-character-current-choice">
         <b>Current species:</b>
 
@@ -23947,18 +24111,81 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft.classProgression.totalLevel
     );
 
-    if (defaultClass) {
-      return getDefaultClassFeaturesThroughLevel(
+    const classFeatures = defaultClass
+      ? getDefaultClassFeaturesThroughLevel(
         defaultClass,
         totalLevel
+      )
+      : collectSection12Features(
+          getSelectedClassTemplate(),
+          totalLevel,
+          "class"
+        );
+
+    const subclassFeatures =
+      collectSection12Features(
+      getSelectedSection12Subclass(),
+      totalLevel,
+      "subclass"
+    );
+
+    return [
+      ...classFeatures,
+      ...subclassFeatures
+    ].sort((a, b) => {
+      return (
+        safeNumber(a.level, 1) -
+          safeNumber(b.level, 1) ||
+        String(a.name).localeCompare(
+          String(b.name)
+        )
       );
+    });
+  }
+
+  function getSection12FutureClassFeatures() {
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    if (!selectedClass) {
+      return [];
     }
 
-    return collectSection12Features(
-      getSelectedClassTemplate(),
-      totalLevel,
+    const currentLevel = clampLevel(
+      creatorState.draft
+        .classProgression
+        .totalLevel
+    );
+
+    const classFeatures = collectSection12Features(
+      selectedClass,
+      20,
       "class"
     );
+
+    const subclassFeatures =
+      collectSection12Features(
+        getSelectedSection12Subclass(),
+        20,
+        "subclass"
+      );
+
+    return [
+      ...classFeatures,
+      ...subclassFeatures
+    ]
+      .filter((feature) => {
+        return feature.level > currentLevel;
+      })
+      .sort((a, b) => {
+        return (
+          safeNumber(a.level, 1) -
+            safeNumber(b.level, 1) ||
+          String(a.name).localeCompare(
+            String(b.name)
+          )
+        );
+      });
   }
 
   function getSection12FeatureChoiceOptions(feature) {
@@ -24775,6 +25002,43 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function formatSection12Recharge(value) {
+    const cleanValue = cleanString(value);
+
+    const labels = {
+      longRest: "Long rest",
+      shortRest: "Short rest",
+      shortOrLongRest: "Short or long rest",
+      turn: "Start of turn"
+    };
+
+    return labels[cleanValue] || cleanValue;
+  }
+
+  function evaluateSection12ClassLevelFormula(
+    formula,
+    classLevel
+  ) {
+    const cleanFormula = cleanString(formula);
+
+    const multiplierMatch = cleanFormula.match(
+      /^classLevel\s*\*\s*(\d+)$/i
+    );
+
+    if (multiplierMatch) {
+      return (
+        classLevel *
+        safeNumber(multiplierMatch[1], 1)
+      );
+    }
+
+    if (cleanFormula === "classLevel") {
+      return classLevel;
+    }
+
+    return cleanFormula;
+  }
+
   function getSection12FeatureMechanicLines(feature) {
     const classLevel = clampLevel(
       creatorState.draft.classProgression.totalLevel
@@ -24809,7 +25073,11 @@ export function createCharacterCreator(options = {}) {
     }
 
     if (recharge) {
-      lines.push(`Recharge: ${recharge}`);
+      lines.push(
+        `Recharge: ${formatSection12Recharge(
+          recharge
+        )}`
+      );
     }
 
     if (die) {
@@ -24817,19 +25085,51 @@ export function createCharacterCreator(options = {}) {
     }
 
     if (resourceData.usesAbility) {
-      lines.push(`Uses: ${String(resourceData.usesAbility).toUpperCase()} modifier`);
+      const abilityId = String(
+        resourceData.usesAbility
+      ).slice(0, 3).toLowerCase();
+
+      const abilityModifier =
+        calculateAbilityModifier(
+          getAbilityScore(
+            creatorState.draft,
+            abilityId
+          )
+        );
+
+      const abilityUses = Math.max(
+        safeNumber(
+          resourceData.minimum,
+          1
+        ),
+        abilityModifier
+      );
+
+      lines.push(
+        `Uses: ${abilityUses} (${abilityId.toUpperCase()} modifier)`
+      );
     }
 
     if (resourceData.pool?.formula) {
-      const formula = cleanString(resourceData.pool.formula);
-      const multiplierMatch = formula.match(/^classLevel\s*\*\s*(\d+)$/i);
-      const poolValue = multiplierMatch
-        ? classLevel * safeNumber(multiplierMatch[1], 1)
-        : formula === "classLevel"
-          ? classLevel
-          : formula;
+      const poolValue =
+        evaluateSection12ClassLevelFormula(
+          resourceData.pool.formula,
+          classLevel
+        );
 
       lines.push(`Pool: ${poolValue}`);
+    } else if (resourceData.perLevel) {
+      lines.push(
+        `Pool: ${classLevel * safeNumber(
+          resourceData.perLevel,
+          1
+        )}`
+      );
+    } else if (
+      cleanString(resourceData.scalesWith)
+        .toLowerCase() === "level"
+    ) {
+      lines.push(`Pool: ${classLevel}`);
     }
 
     (Array.isArray(feature?.effects) ? feature.effects : [])
@@ -24877,13 +25177,11 @@ export function createCharacterCreator(options = {}) {
         }
 
         if (effect.type === "resourcePool" && effect.formula) {
-          const multiplierMatch = String(effect.formula)
-            .match(/^classLevel\s*\*\s*(\d+)$/i);
-          const value = multiplierMatch
-            ? classLevel * safeNumber(multiplierMatch[1], 1)
-            : effect.formula === "classLevel"
-              ? classLevel
-              : effect.formula;
+          const value =
+            evaluateSection12ClassLevelFormula(
+              effect.formula,
+              classLevel
+            );
           lines.push(`${effect.name || "Resource"}: ${value}`);
         }
 
@@ -24912,6 +25210,70 @@ export function createCharacterCreator(options = {}) {
         <b>Mechanics:</b><br>
         ${lines.map((line) => escapeHtml(line)).join("<br>")}
       </p>
+    `;
+  }
+
+  function renderSection12FutureFeatures() {
+    const futureFeatures =
+      getSection12FutureClassFeatures();
+
+    if (!futureFeatures.length) {
+      return "";
+    }
+
+    const featuresByLevel = new Map();
+
+    futureFeatures.forEach((feature) => {
+      const level = Math.max(
+        1,
+        Math.round(
+          safeNumber(feature.level, 1)
+        )
+      );
+
+      if (!featuresByLevel.has(level)) {
+        featuresByLevel.set(level, []);
+      }
+
+      featuresByLevel
+        .get(level)
+        .push(feature);
+    });
+
+    const levelCards = Array.from(
+      featuresByLevel.entries()
+    )
+      .map(([level, features]) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>Level ${level}</h3>
+
+            <p>
+              ${features
+                .map((feature) => {
+                  return escapeHtml(feature.name);
+                })
+                .join("<br>")}
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+
+    return `
+      <details class="hg-character-future-features">
+        <summary>
+          Future Features (${futureFeatures.length})
+        </summary>
+
+        <p class="small">
+          These features unlock after your current class level.
+        </p>
+
+        <div class="hg-character-choice-grid">
+          ${levelCards}
+        </div>
+      </details>
     `;
   }
 
@@ -25003,6 +25365,7 @@ export function createCharacterCreator(options = {}) {
 
           <p>
             <b>Hit Die:</b> ${escapeHtml(selectedClass.hitDie || "d8")}
+            <br><b>Primary Ability:</b> ${escapeHtml(formatSection12List(selectedClass.primaryAbilities) || "None specified")}
             <br><b>Saving Throws:</b> ${escapeHtml(formatSection12List(selectedClass.savingThrows) || "None")}
             <br><b>Armor:</b> ${escapeHtml(formatSection12List(selectedClass.armorProficiencies) || "None")}
             <br><b>Weapons:</b> ${escapeHtml(formatSection12List(selectedClass.weaponProficiencies) || "None")}
@@ -25021,12 +25384,19 @@ export function createCharacterCreator(options = {}) {
           </div>
         `}
       </div>
+
+      ${renderSection12FutureFeatures()}
     `;
   }
 
   function renderClassStep() {
     if (isMulticlassDraft()) {
       return `
+        ${beginnerNote(
+          "Choosing a Class",
+          "Class is your biggest rules choice. It decides your hit die, armor and weapon training, saving throws, class features, and sometimes spellcasting. Your level belongs here because each level unlocks new class features."
+        )}
+
         ${renderMulticlassReadOnlyNotice(
           "class selection"
         )}
@@ -25190,6 +25560,11 @@ export function createCharacterCreator(options = {}) {
       getSection12SkillPickerChoices();
 
     return `
+      ${beginnerNote(
+        "Choosing a Class",
+        "Class is your biggest rules choice. It decides your hit die, armor and weapon training, saving throws, class features, and sometimes spellcasting. Your level belongs here because each level unlocks new class features."
+      )}
+
       <div class="hg-character-current-choice">
         <b>Current class:</b>
 
@@ -25231,24 +25606,38 @@ export function createCharacterCreator(options = {}) {
           </div>
         `}
 
-      ${renderSection12SelectedClassDetails()}
+      ${selectedClass
+        ? `
+          <hr>
+
+          ${subclassUnlocked
+            ? `
+              <h3>Subclass</h3>
+
+              ${renderSubclassStep()}
+            `
+            : `
+              <div class="hg-character-current-choice">
+                <b>Subclass:</b>
+                Unlocks at class level ${subclassUnlockLevel}.
+              </div>
+            `}
+        `
+        : ""}
 
       ${selectedClass
         ? `
           <hr>
 
-          <h3>Subclass</h3>
+          <h3>Class Skill Choices</h3>
 
-          ${subclassUnlocked
-            ? renderSubclassStep()
-            : `
-              <div class="hg-character-warning">
-                ${escapeHtml(selectedClass.name)} unlocks subclass selection at level ${subclassUnlockLevel}.
-                Current class level: ${selectedClassLevel}.
-              </div>
-            `}
+          ${renderSection14ProficiencyGuide()}
+
+          ${renderSection14SourceSkillChoices("class")}
         `
         : ""}
+
+      ${renderSection12SelectedClassDetails()}
 
       <hr>
 
@@ -27114,6 +27503,131 @@ export function createCharacterCreator(options = {}) {
       .join("");
   }
 
+  function renderSection13HpGuide() {
+    const draft = creatorState.draft;
+
+    const level = clampLevel(
+      draft.classProgression.totalLevel
+    );
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const hitDie =
+      selectedClass?.hitDie || "d8";
+
+    const dieSize = getHitDieSize(hitDie);
+
+    const constitutionModifier =
+      calculateAbilityModifier(
+        getAbilityScore(draft, "con")
+      );
+
+    const levelOneHp = Math.max(
+      1,
+      dieSize + constitutionModifier
+    );
+
+    const fixedDieAverage =
+      Math.floor(dieSize / 2) + 1;
+
+    const fixedLaterGain = Math.max(
+      1,
+      fixedDieAverage +
+      constitutionModifier
+    );
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Level 1 HP:</b>
+        Hit die maximum (${dieSize}) + Constitution modifier
+        (${formatSignedNumber(
+          constitutionModifier
+        )}) = ${levelOneHp} HP.
+
+        <br>
+
+        <b>Later Levels:</b>
+        Choose the fixed average or enter a roll for each level.
+        Die averages are d6 = 4, d8 = 5, d10 = 6, and d12 = 7.
+        Add your Constitution modifier each level; the minimum gain
+        is 1 HP per level. Your current fixed gain is
+        ${fixedLaterGain} HP per later level.
+
+        <br>
+
+        <b>Hit Dice:</b>
+        A single-class level ${level} character has ${level}
+        ${escapeHtml(hitDie)} hit ${level === 1 ? "die" : "dice"}.
+        Hit-dice count equals class level. Single-class creation is
+        the primary workflow for now.
+      </div>
+    `;
+  }
+
+  function renderSection13ArmorClassGuide() {
+    const draft = creatorState.draft;
+
+    const dexterityModifier =
+      calculateAbilityModifier(
+        getAbilityScore(draft, "dex")
+      );
+
+    const constitutionModifier =
+      calculateAbilityModifier(
+        getAbilityScore(draft, "con")
+      );
+
+    const wisdomModifier =
+      calculateAbilityModifier(
+        getAbilityScore(draft, "wis")
+      );
+
+    const armorClass =
+      calculateArmorClassOptions(draft)
+        .selected;
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Armor Class Basics:</b>
+        Unarmored AC = 10 + Dexterity modifier
+        (${formatSignedNumber(
+          dexterityModifier
+        )}). Light armor = armor base + full Dexterity modifier.
+        Medium armor = armor base + Dexterity modifier, maximum +2.
+        Heavy armor uses its armor base with no Dexterity modifier.
+
+        <br>
+
+        <b>Shields:</b>
+        An equipped shield adds +2 AC before any magical bonus.
+
+        <br>
+
+        <b>Class Defenses:</b>
+        Barbarian Unarmored Defense = 10 + Dexterity
+        (${formatSignedNumber(
+          dexterityModifier
+        )}) + Constitution (${formatSignedNumber(
+          constitutionModifier
+        )}). Monk Unarmored Defense = 10 + Dexterity
+        (${formatSignedNumber(
+          dexterityModifier
+        )}) + Wisdom (${formatSignedNumber(
+          wisdomModifier
+        )}) and cannot use a shield.
+
+        <br>
+
+        <b>Current AC:</b>
+        ${armorClass.total} using
+        ${escapeHtml(armorClass.label)}
+        (${escapeHtml(armorClass.breakdown)}).
+        Manual override remains available in the AC controls below.
+      </div>
+    `;
+  }
+
   function renderLevelStep() {
     const draft =
       creatorState.draft;
@@ -27211,6 +27725,10 @@ export function createCharacterCreator(options = {}) {
           : ""
       }
 
+      ${renderSection13HpGuide()}
+
+      ${renderSection13ArmorClassGuide()}
+
       <div class="hg-character-current-choice">
         <b>Current progression:</b>
 
@@ -27227,12 +27745,8 @@ export function createCharacterCreator(options = {}) {
 
         +${Math.max(
           0,
-          safeNumber(
-            draft.combat
-              .proficiencyBonus,
-            getGenericProficiencyBonus(
-              level
-            )
+          getCharacterProficiencyBonus(
+            draft
           )
         )}
 
@@ -27271,7 +27785,7 @@ export function createCharacterCreator(options = {}) {
 
       <div class="hg-character-field-grid three">
         ${wizardField(
-          "Character Level",
+          "Class Level",
           "ccCharacterLevel",
           level,
           {
@@ -27900,6 +28414,140 @@ export function createCharacterCreator(options = {}) {
           }
         ).join("")}
       </div>
+
+      ${renderSection13DerivedMechanics()}
+    `;
+  }
+
+  function renderSection13MechanicsGuide() {
+    return `
+      <div class="hg-character-current-choice">
+        <b>Standard Array:</b> 15, 14, 13, 12, 10, 8.
+        Assign each number once.
+
+        <br>
+
+        <b>Manual Entry:</b> Enter each base score directly.
+        Ability modifiers update automatically using
+        (score - 10) divided by 2, rounded down.
+
+        <br>
+
+        <b>Proficiency Bonus by Total Level:</b>
+        levels 1-4: +2; 5-8: +3; 9-12: +4;
+        13-16: +5; 17-20: +6.
+
+        <br>
+
+        <b>Common formulas:</b>
+        Initiative = Dexterity modifier + bonuses.
+        Passive Perception = 10 + Perception bonus.
+        Spell save DC = 8 + proficiency bonus + spellcasting
+        ability modifier. Spell attack = proficiency bonus +
+        spellcasting ability modifier.
+      </div>
+    `;
+  }
+
+  function renderSection13DerivedMechanics() {
+    const draft = creatorState.draft;
+
+    const totalLevel = clampLevel(
+      draft.classProgression.totalLevel
+    );
+
+    const proficiencyBonus =
+      getGenericProficiencyBonus(totalLevel);
+
+    const initiative =
+      calculateCharacterInitiative(draft);
+
+    const passivePerception =
+      calculateCharacterPassiveScores(
+        draft
+      ).perception || {
+        skillModifier: 0,
+        total: 10
+      };
+
+    const spellcastingClasses =
+      getSpellcastingSummary(draft)
+        .classes
+        .filter((entry) => {
+          return (
+            entry.spellSaveDc !== null &&
+            entry.spellAttackBonus !== null
+          );
+        });
+
+    const spellcastingSummary =
+      spellcastingClasses.length
+        ? spellcastingClasses
+            .map((entry) => {
+              return `
+                <b>${escapeHtml(entry.className)}:</b>
+                DC ${entry.spellSaveDc}, attack
+                ${formatSignedNumber(
+                  entry.spellAttackBonus
+                )}
+              `;
+            })
+            .join("<br>")
+        : "No spellcasting ability selected.";
+
+    return `
+      <hr>
+
+      <h3>Calculated Mechanics</h3>
+
+      <div class="hg-character-choice-grid">
+        <article class="hg-character-choice-card">
+          <h3>Proficiency Bonus</h3>
+
+          <p>
+            <b>${formatSignedNumber(proficiencyBonus)}</b>
+            at total level ${totalLevel}
+          </p>
+        </article>
+
+        <article class="hg-character-choice-card">
+          <h3>Initiative</h3>
+
+          <p>
+            <b>${formatSignedNumber(initiative.total)}</b>
+
+            <br>
+
+            Dexterity ${formatSignedNumber(
+              initiative.dexterityModifier
+            )} + bonuses ${formatSignedNumber(
+              initiative.proficiencyBonus +
+              initiative.bonus
+            )}
+          </p>
+        </article>
+
+        <article class="hg-character-choice-card">
+          <h3>Passive Perception</h3>
+
+          <p>
+            <b>${passivePerception.total}</b>
+
+            <br>
+
+            10 + Perception
+            ${formatSignedNumber(
+              passivePerception.skillModifier
+            )}
+          </p>
+        </article>
+
+        <article class="hg-character-choice-card">
+          <h3>Spellcasting</h3>
+
+          <p>${spellcastingSummary}</p>
+        </article>
+      </div>
     `;
   }
 
@@ -27960,6 +28608,13 @@ export function createCharacterCreator(options = {}) {
     }
 
     return `
+      ${beginnerNote(
+        "Ability Scores",
+        "Ability scores are your core stats. The modifier is the number added to most rolls. Constitution helps HP, Dexterity often helps Armor Class and initiative, and your class usually has one or two most important abilities."
+      )}
+
+      ${renderSection13MechanicsGuide()}
+
       <div class="hg-character-field-grid">
         ${wizardSelect(
           "Ability Score Method",
@@ -30235,6 +30890,11 @@ export function createCharacterCreator(options = {}) {
         .join("");
 
     return `
+      ${beginnerNote(
+        "Choosing a Background",
+        "Background is what your character was before adventuring. It usually gives skill proficiencies, tools or languages, starting gear, and a story feature."
+      )}
+
       <div class="hg-character-current-choice">
         <b>Current background:</b>
 
@@ -30262,6 +30922,23 @@ export function createCharacterCreator(options = {}) {
       </div>
 
       ${backgroundChoiceHtml}
+
+      ${selectedBackground &&
+        creatorState.draft.background.source !== "skipped"
+        ? `
+          <hr>
+
+          <h3>Background Skills and Proficiencies</h3>
+
+          ${renderSection14ProficiencyGuide()}
+
+          ${renderSection14SourceSkillChoices(
+            "background"
+          )}
+        `
+        : ""}
+
+      ${renderSection14ExpertiseChoices()}
 
       ${
         backgroundPackages.length
@@ -31113,14 +31790,8 @@ export function createCharacterCreator(options = {}) {
       );
 
     const proficiencyBonus =
-      Math.max(
-        0,
-        safeNumber(
-          creatorState.draft
-            .combat
-            .proficiencyBonus,
-          2
-        )
+      getCharacterProficiencyBonus(
+        creatorState.draft
       );
 
     if (!entry.proficient) {
@@ -31182,6 +31853,202 @@ export function createCharacterCreator(options = {}) {
     markDraftChanged();
 
     return true;
+  }
+
+  function renderSection14ProficiencyGuide() {
+    return `
+      <div class="hg-character-current-choice">
+        <b>How proficiency works:</b>
+        Your proficiency bonus is added when you are trained.
+        Expertise doubles that bonus. Saving throw proficiency
+        comes mostly from your class. Armor, weapon, tool, and
+        language proficiencies are separate from skills.
+      </div>
+    `;
+  }
+
+  function renderSection14SourceSkillChoices(
+    sourceType
+  ) {
+    const isClass = sourceType === "class";
+
+    const sourceTemplate = isClass
+      ? getSelectedClassTemplate()
+      : getSelectedSection14Background();
+
+    if (!sourceTemplate) {
+      return `
+        <div class="hg-character-placeholder">
+          Choose a ${isClass ? "class" : "background"}
+          before selecting its skills.
+        </div>
+      `;
+    }
+
+    const skillChoices =
+      sourceTemplate.skillChoices || {};
+
+    const required = Math.max(
+      0,
+      Math.round(
+        safeNumber(skillChoices.choose, 0)
+      )
+    );
+
+    if (!required) {
+      return `
+        <div class="hg-character-placeholder">
+          This ${isClass ? "class" : "background"}
+          does not grant a skill choice.
+        </div>
+      `;
+    }
+
+    const allowedNames = cleanArray(
+      skillChoices.from
+    ).map((name) => {
+      return String(name).toLowerCase();
+    });
+
+    const sourceLabel =
+      getSection14SkillSourceLabel(
+        sourceType
+      );
+
+    const availableSkills =
+      SKILL_DEFINITIONS.filter((skill) => {
+        return (
+          !allowedNames.length ||
+          allowedNames.includes(
+            skill.name.toLowerCase()
+          )
+        );
+      });
+
+    const skillCards = availableSkills
+      .map((skill) => {
+        const entry =
+          getSection14SkillEntry(skill);
+
+        const selected = Boolean(
+          sourceLabel &&
+          entry.source.includes(sourceLabel)
+        );
+
+        const modifier =
+          getSection14SkillModifier(skill);
+
+        return `
+          <article class="hg-character-choice-card ${selected ? "selected" : ""}">
+            <h3>${escapeHtml(skill.name)}</h3>
+
+            <p>
+              <b>Ability:</b>
+              ${escapeHtml(
+                String(skill.ability).toUpperCase()
+              )}
+
+              <br>
+
+              <b>Current modifier:</b>
+              ${modifier >= 0 ? "+" : ""}${modifier}
+            </p>
+
+            <div class="hg-character-card-actions">
+              <button
+                type="button"
+                data-cc-action="toggle-skill-proficiency"
+                data-skill-id="${escapeHtml(skill.id)}"
+                data-skill-source="${escapeHtml(sourceType)}"
+              >
+                ${selected ? "Remove" : "Choose"}
+              </button>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>${isClass ? "Class" : "Background"} skill choices:</b>
+        ${countSection14ValidSkillSource(sourceType)} / ${required}
+
+        <br>
+
+        <b>Proficiency Bonus:</b>
+        +${Math.max(
+          0,
+          getCharacterProficiencyBonus(
+            creatorState.draft
+          )
+        )}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${skillCards}
+      </div>
+    `;
+  }
+
+  function renderSection14ExpertiseChoices() {
+    const proficientSkills =
+      SKILL_DEFINITIONS.filter((skill) => {
+        return getSection14SkillEntry(
+          skill
+        ).proficient;
+      });
+
+    return `
+      <hr>
+
+      <h3>Expertise</h3>
+
+      <p class="small">
+        Expertise doubles the proficiency bonus for a trained
+        skill. Choose it only when a feature grants expertise.
+      </p>
+
+      <div class="hg-character-choice-grid">
+        ${proficientSkills.length
+          ? proficientSkills
+              .map((skill) => {
+                const entry =
+                  getSection14SkillEntry(skill);
+
+                return `
+                  <article class="hg-character-choice-card ${entry.expertise ? "selected" : ""}">
+                    <h3>${escapeHtml(skill.name)}</h3>
+
+                    <p>
+                      ${entry.expertise
+                        ? "Expertise selected"
+                        : "Proficient"}
+                    </p>
+
+                    <div class="hg-character-card-actions">
+                      <button
+                        type="button"
+                        data-cc-action="toggle-skill-expertise"
+                        data-skill-id="${escapeHtml(skill.id)}"
+                      >
+                        ${entry.expertise
+                          ? "Remove Expertise"
+                          : "Add Expertise"}
+                      </button>
+                    </div>
+                  </article>
+                `;
+              })
+              .join("")
+          : `
+            <div class="hg-character-placeholder">
+              Choose at least one skill proficiency before
+              assigning expertise.
+            </div>
+          `}
+      </div>
+    `;
   }
 
   function renderSkillsStep() {
@@ -34403,6 +35270,11 @@ export function createCharacterCreator(options = {}) {
     ];
 
     return `
+      ${beginnerNote(
+        "Equipment",
+        "Equipment is your gear, weapons, armor, and money. Armor can change Armor Class, weapons affect attacks, and starting packages are the easiest choice for new players."
+      )}
+
       <div class="hg-character-current-choice">
         <b>Total item count:</b>
 
@@ -36091,18 +36963,8 @@ export function createCharacterCreator(options = {}) {
       );
 
     const proficiencyBonus =
-      Math.max(
-        0,
-        safeNumber(
-          creatorState.draft
-            .combat
-            .proficiencyBonus,
-          getGenericProficiencyBonus(
-            creatorState.draft
-              .classProgression
-              .totalLevel
-          )
-        )
+      getCharacterProficiencyBonus(
+        creatorState.draft
       );
 
     creatorState.draft
@@ -36851,6 +37713,91 @@ export function createCharacterCreator(options = {}) {
     }).join("");
   }
 
+  function formatSection16ProgressionLabel(
+    progressionType
+  ) {
+    const labels = {
+      "full-caster": "Full caster",
+      "half-caster": "Half caster (Paladin / Ranger)",
+      artificer: "Artificer half caster",
+      "third-caster": "One-third caster",
+      "pact-magic": "Pact Magic",
+      none: "No class spellcasting"
+    };
+
+    const cleanType = cleanString(
+      progressionType,
+      "none"
+    );
+
+    return labels[cleanType] || cleanType;
+  }
+
+  function renderSection16BeginnerGuide() {
+    const summary = getSpellcastingSummary(
+      creatorState.draft
+    );
+
+    const spellcaster = summary.classes.find(
+      (entry) => {
+        return (
+          entry.progressionType !== "none" ||
+          Boolean(entry.spellcastingAbility)
+        );
+      }
+    );
+
+    const ability = spellcaster
+      ?.spellcastingAbility ||
+      creatorState.draft.magic
+        .spellcastingAbility;
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Spellcasting Ability:</b>
+        ${escapeHtml(
+          ability
+            ? getSection13AbilityName(ability)
+            : "None selected"
+        )}. This ability sets spell attacks and spell save DC.
+
+        <br>
+
+        <b>Cantrips:</b>
+        Cantrips do not use spell slots. Leveled spells use spell
+        slots when cast. <b>Prepared casters</b> choose which spells
+        are ready each day. <b>Known casters</b> have a fixed list of
+        spells they know.
+
+        <br>
+
+        <b>Spell Numbers:</b>
+        Spell save DC = 8 + proficiency bonus + spellcasting ability
+        modifier. Spell attack bonus = proficiency bonus + spellcasting
+        ability modifier.
+
+        <br>
+
+        <b>Spell Slots:</b>
+        Slots power leveled spells. Warlock Pact Magic uses separate
+        pact slots and slot levels. Paladin and Ranger begin normal
+        half-caster slots at level 2; Artificer begins at level 1 and
+        uses its own rounded-up half-caster progression.
+
+        <br>
+
+        <b>Current Progression:</b>
+        ${escapeHtml(
+          formatSection16ProgressionLabel(
+            spellcaster?.progressionType ||
+            creatorState.draft.magic
+              .spellcastingProgression
+          )
+        )}.
+      </div>
+    `;
+  }
+
   function renderSpellsStep() {
     const magic =
       creatorState.draft.magic;
@@ -36938,10 +37885,6 @@ export function createCharacterCreator(options = {}) {
       })
     ];
 
-    const knownCount =
-      getSection16KnownSpellIds()
-        .length;
-
     const preparedCount =
       getSection16PreparedSpellIds()
         .length;
@@ -36956,11 +37899,64 @@ export function createCharacterCreator(options = {}) {
         creatorState.draft
       );
 
+    const spellcastingSummary =
+      getSpellcastingSummary(
+        creatorState.draft
+      );
+
+    const primarySpellcaster =
+      spellcastingSummary.classes.find(
+        (entry) => {
+          return (
+            entry.progressionType !== "none" ||
+            Boolean(entry.spellcastingAbility)
+          );
+        }
+      );
+
+    const displayedSpellcastingAbility =
+      primarySpellcaster
+        ?.spellcastingAbility ||
+      classSpellcastingAbility ||
+      magic.spellcastingAbility;
+
+    const displayedSpellSaveDc =
+      primarySpellcaster?.spellSaveDc ??
+      magic.spellSaveDc;
+
+    const displayedSpellAttackBonus =
+      primarySpellcaster
+        ?.spellAttackBonus ??
+      magic.spellAttackBonus;
+
+    const displayedPactMagic =
+      primarySpellcaster?.pactMagic ||
+      magic.pactMagic;
+
     return `
+      ${beginnerNote(
+        "Spells and Features",
+        "Features are special abilities from your class, species, background, or feats. Spells only appear if your character has spellcasting or magic features."
+      )}
+
+      ${renderSection16BeginnerGuide()}
+
       <div class="hg-character-current-choice">
+        <b>Spellcasting Ability:</b>
+
+        ${escapeHtml(
+          displayedSpellcastingAbility
+            ? getSection13AbilityName(
+                displayedSpellcastingAbility
+              )
+            : "None"
+        )}
+
+        <br>
+
         <b>Known Spells:</b>
 
-        ${knownCount}
+        ${spellLimits.knownLeveledCount}
 
         ${
           spellLimits.spellsKnownLimit === null
@@ -37007,11 +38003,11 @@ export function createCharacterCreator(options = {}) {
         <b>Spell Save DC:</b>
 
         ${
-          magic.spellSaveDc === null ||
-          magic.spellSaveDc === undefined
+          displayedSpellSaveDc === null ||
+          displayedSpellSaveDc === undefined
             ? "Not calculated"
             : safeNumber(
-                magic.spellSaveDc,
+                displayedSpellSaveDc,
                 0
               )
         }
@@ -37021,18 +38017,18 @@ export function createCharacterCreator(options = {}) {
         <b>Spell Attack Bonus:</b>
 
         ${
-          magic.spellAttackBonus === null ||
-          magic.spellAttackBonus === undefined
+          displayedSpellAttackBonus === null ||
+          displayedSpellAttackBonus === undefined
             ? "Not calculated"
             : `${
                 safeNumber(
-                  magic.spellAttackBonus,
+                  displayedSpellAttackBonus,
                   0
                 ) >= 0
                   ? "+"
                   : ""
               }${safeNumber(
-                magic.spellAttackBonus,
+                displayedSpellAttackBonus,
                 0
               )}`
         }
@@ -37042,22 +38038,25 @@ export function createCharacterCreator(options = {}) {
         <b>Progression:</b>
 
         ${escapeHtml(
-          magic.spellcastingProgression ||
-          "none"
+          formatSection16ProgressionLabel(
+            primarySpellcaster
+              ?.progressionType ||
+            magic.spellcastingProgression
+          )
         )}
 
         ${
-          magic.pactMagic?.slots
+          displayedPactMagic?.slots
             ? `
               <br>
 
               <b>Pact Magic:</b>
 
               ${safeNumber(
-                magic.pactMagic.slots,
+                displayedPactMagic.slots,
                 0
               )} slot(s), level ${safeNumber(
-                magic.pactMagic.slotLevel,
+                displayedPactMagic.slotLevel,
                 0
               )}
             `
@@ -37780,16 +38779,8 @@ export function createCharacterCreator(options = {}) {
   function getSection17ProficiencyBonus() {
     return Math.max(
       0,
-      safeNumber(
+      getCharacterProficiencyBonus(
         creatorState.draft
-          .combat
-          .proficiencyBonus,
-
-        getGenericProficiencyBonus(
-          creatorState.draft
-            .classProgression
-            .totalLevel
-        )
       )
     );
   }
@@ -38610,27 +39601,7 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderSection17Skills() {
-    const proficientSkills =
-      SKILL_DEFINITIONS
-        .filter((skill) => {
-          return (
-            getSection17SkillEntry(
-              skill
-            )?.proficient === true
-          );
-        });
-
-    if (
-      !proficientSkills.length
-    ) {
-      return `
-        <div class="hg-character-placeholder">
-          No skill proficiencies selected.
-        </div>
-      `;
-    }
-
-    return proficientSkills
+    return SKILL_DEFINITIONS
       .map((skill) => {
         const entry =
           getSection17SkillEntry(
@@ -38668,9 +39639,11 @@ export function createCharacterCreator(options = {}) {
               <br>
 
               ${
-                entry.expertise === true
+                entry?.expertise === true
                   ? "Expertise"
-                  : "Proficient"
+                  : entry?.proficient === true
+                    ? "Proficient"
+                    : "Not proficient"
               }
             </p>
           </article>
@@ -39276,6 +40249,16 @@ export function createCharacterCreator(options = {}) {
               }
 
               ${
+                entry.cantripsKnown
+                  ? `
+                    <br>
+                    <b>Cantrips Known:</b>
+                    ${entry.cantripsKnown}
+                  `
+                  : ""
+              }
+
+              ${
                 entry.spellsKnown
                   ? `
                     <br>
@@ -39702,23 +40685,12 @@ export function createCharacterCreator(options = {}) {
   function renderSection17ClassAndFeatSummary() {
     const draft = creatorState.draft;
     const primaryClass = getPrimaryClassEntry(draft);
-    const defaultClass = findDefaultClassDefinition(
-      primaryClass?.classId,
-      primaryClass?.className
-    );
     const selectedClass = getSelectedClassTemplate();
     const level = clampLevel(
       draft.classProgression.totalLevel
     );
-    const features = defaultClass
-      ? getDefaultClassFeaturesThroughLevel(defaultClass, level)
-      : (
-          Array.isArray(draft.features.classFeatures)
-            ? draft.features.classFeatures.filter(
-                (feature) => feature?.source !== "subclass"
-              )
-            : []
-        );
+    const features =
+      getSection12ClassFeaturesThroughLevel();
     const featureById = new Map(
       features.map((feature) => [feature.id, feature])
     );
@@ -39729,7 +40701,7 @@ export function createCharacterCreator(options = {}) {
     const feats = getSection16SelectedFeats();
 
     return `
-      <h3>Class and Feats</h3>
+      <h3>Class, Level, and Feats</h3>
 
       <div class="hg-character-choice-grid">
         <article class="hg-character-choice-card">
@@ -39834,6 +40806,11 @@ export function createCharacterCreator(options = {}) {
         .currency;
 
     return `
+      ${beginnerNote(
+        "Review Your Character",
+        "Review is where you check the sheet before saving. Look for missing choices, then confirm Armor Class, hit points, proficiency bonus, initiative, skills, features, and spells."
+      )}
+
       ${renderSection17Warnings(
         warnings
       )}
@@ -39877,15 +40854,16 @@ export function createCharacterCreator(options = {}) {
           </h3>
 
           <p>
+            <b>Name:</b>
             ${escapeHtml(
-              getSafeSpeciesName() ||
-              "No species"
+              getSafeCharacterName() ||
+              "Unnamed Character"
             )}
 
             <br>
 
+            <b>Class and Level:</b>
             Level ${level}
-
             ${escapeHtml(
               getSafeClassName() ||
               "No class"
@@ -39894,27 +40872,28 @@ export function createCharacterCreator(options = {}) {
             ${
               getSafeSubclassName()
                 ? `
-                  <br>
-
-                  ${escapeHtml(
+                  (${escapeHtml(
                     getSafeSubclassName()
-                  )}
+                  )})
                 `
                 : ""
             }
 
-            ${
-              getSafeBackgroundName()
-                ? `
-                  <br>
+            <br>
 
-                  Background:
-                  ${escapeHtml(
-                    getSafeBackgroundName()
-                  )}
-                `
-                : ""
-            }
+            <b>Background:</b>
+            ${escapeHtml(
+              getSafeBackgroundName() ||
+              "No background"
+            )}
+
+            <br>
+
+            <b>Species:</b>
+            ${escapeHtml(
+              getSafeSpeciesName() ||
+              "No species"
+            )}
           </p>
         </article>
 
@@ -40110,7 +41089,7 @@ export function createCharacterCreator(options = {}) {
         </article>
 
         <article class="hg-character-choice-card">
-          <h3>Proficiency</h3>
+          <h3>Proficiency Bonus</h3>
 
           <p>
             <b>
@@ -40132,7 +41111,7 @@ export function createCharacterCreator(options = {}) {
         </article>
 
         <article class="hg-character-choice-card">
-          <h3>Walking Speed</h3>
+          <h3>Speed</h3>
 
           <p>
             <b>
@@ -40147,6 +41126,36 @@ export function createCharacterCreator(options = {}) {
               )}
               ft.
             </b>
+
+            ${safeNumber(
+              draft.combat.speed.climb,
+              0
+            ) > 0
+              ? `<br>Climb: ${safeNumber(
+                  draft.combat.speed.climb,
+                  0
+                )} ft.`
+              : ""}
+
+            ${safeNumber(
+              draft.combat.speed.swim,
+              0
+            ) > 0
+              ? `<br>Swim: ${safeNumber(
+                  draft.combat.speed.swim,
+                  0
+                )} ft.`
+              : ""}
+
+            ${safeNumber(
+              draft.combat.speed.fly,
+              0
+            ) > 0
+              ? `<br>Fly: ${safeNumber(
+                  draft.combat.speed.fly,
+                  0
+                )} ft.`
+              : ""}
           </p>
         </article>
       </div>
@@ -40193,7 +41202,7 @@ export function createCharacterCreator(options = {}) {
 
       <hr>
 
-      <h3>Proficient Skills</h3>
+      <h3>Skills</h3>
 
       <div class="hg-character-choice-grid">
         ${renderSection17Skills()}
@@ -40248,7 +41257,7 @@ export function createCharacterCreator(options = {}) {
 
       <hr>
 
-      <h3>Inventory</h3>
+      <h3>Equipment</h3>
 
       <div class="hg-character-current-choice">
         <b>Recorded Weight:</b>
@@ -40330,7 +41339,7 @@ export function createCharacterCreator(options = {}) {
         ${renderSection17BackgroundGrants()}
       </div>
 
-      <h3>All Inventory</h3>
+      <h3>All Equipment</h3>
 
       <div class="hg-character-choice-grid">
         ${renderSection17Inventory()}
@@ -40425,7 +41434,7 @@ export function createCharacterCreator(options = {}) {
         ${renderSection17SpellcastingSummary()}
       </div>
 
-      <h3>Features</h3>
+      <h3>Class Features, Species Traits, and Background Features</h3>
 
       <div class="hg-character-choice-grid">
         ${renderSection17FeatureSummary()}
@@ -42672,6 +43681,11 @@ export function createCharacterCreator(options = {}) {
       "Unnamed Character";
 
     return `
+      ${beginnerNote(
+        "Save and Back Up",
+        "Save stores this character in the room. Duplicate makes a separate copy. Export/import JSON is useful as a backup."
+      )}
+
       ${renderSection18Warnings()}
       ${renderSection18BackupNotice()}
 
@@ -43035,6 +44049,8 @@ export function createCharacterCreator(options = {}) {
     "save",
     isSection18SaveComplete
   );
+
+  runCharacterStepRegistrationAudit();
 
   registerCharacterCreatorAction(
     "save-character",
