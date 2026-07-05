@@ -37,7 +37,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 import { createTokenSystem } from "./tokens.js";
-import { createCharacterCreator } from "./characterCreator.js";
+import { createCharacterCreator } from "./characterCreator.fixed.js";
 // =====================================================
 // APP SECTION 2 — FIREBASE / CLOUDINARY CONFIG
 // =====================================================
@@ -3931,6 +3931,7 @@ function initCharacterCreatorSystem() {
     db,
     doc,
     collection,
+    getDoc,
     addDoc,
     updateDoc,
     deleteDoc,
