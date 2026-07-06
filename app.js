@@ -36,7 +36,11 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
+import { createTokenSystem } from "./tokens.js";
 import { createCharacterCreator } from "./characterCreator.fixed.js";
+
+console.log("Homebrew God app.js loaded");
+
 // =====================================================
 // APP SECTION 2 — FIREBASE / CLOUDINARY CONFIG
 // =====================================================
@@ -59,26 +63,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-console.log("Homebrew God app.js loaded");
-
-const tokenSystemModulePromise = import("./tokens.js")
-  .then(function (module) {
-    if (typeof module.createTokenSystem !== "function") {
-      throw new TypeError(
-        "tokens.js does not export createTokenSystem."
-      );
-    }
-
-    return module.createTokenSystem;
-  })
-  .catch(function (error) {
-    console.error(
-      "Token system module could not load. Login will continue, but token tools are unavailable:",
-      error
-    );
-
-    return null;
-  });
+console.log("Firebase initialized");
 
 // =====================================================
 // APP SECTION 3 — PAGE ELEMENTS / STATE
@@ -3842,11 +3827,7 @@ if (E.centerPuzzleBoardButton) {
 // APP SECTION 12J — TOKEN SYSTEM CONNECTION
 // =====================================================
 
-tokenSystemModulePromise.then(function (createTokenSystem) {
-  if (!createTokenSystem || tokenSystem) {
-    return;
-  }
-
+if (!tokenSystem) {
   tokenSystem = createTokenSystem({
     db,
     doc,
@@ -3880,7 +3861,7 @@ tokenSystemModulePromise.then(function (createTokenSystem) {
     getPuzzleViewMode,
     buildMapFromRoomFields
   });
-});
+}
 
 
 // =====================================================
@@ -4136,11 +4117,10 @@ window.addEventListener("pagehide", function () {
 // ?room=ROOMCODE&view=characterCreator
 // =====================================================
 
+console.log("Registering auth listener");
+
 onAuthStateChanged(auth, async function (user) {
-  console.log(
-    "Auth state changed:",
-    user ? user.uid : "no user"
-  );
+  console.log("Auth state changed:", user ? user.uid : "no user");
 
   currentUser = user;
 
