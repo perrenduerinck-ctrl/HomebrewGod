@@ -36,7 +36,6 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens.js";
 import { createCharacterCreator } from "./characterCreator.fixed.js";
 // =====================================================
 // APP SECTION 2 — FIREBASE / CLOUDINARY CONFIG
@@ -61,6 +60,25 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 console.log("Homebrew God app.js loaded");
+
+const tokenSystemModulePromise = import("./tokens.js")
+  .then(function (module) {
+    if (typeof module.createTokenSystem !== "function") {
+      throw new TypeError(
+        "tokens.js does not export createTokenSystem."
+      );
+    }
+
+    return module.createTokenSystem;
+  })
+  .catch(function (error) {
+    console.error(
+      "Token system module could not load. Login will continue, but token tools are unavailable:",
+      error
+    );
+
+    return null;
+  });
 
 // =====================================================
 // APP SECTION 3 — PAGE ELEMENTS / STATE
@@ -3824,7 +3842,11 @@ if (E.centerPuzzleBoardButton) {
 // APP SECTION 12J — TOKEN SYSTEM CONNECTION
 // =====================================================
 
-if (!tokenSystem) {
+tokenSystemModulePromise.then(function (createTokenSystem) {
+  if (!createTokenSystem || tokenSystem) {
+    return;
+  }
+
   tokenSystem = createTokenSystem({
     db,
     doc,
@@ -3858,7 +3880,7 @@ if (!tokenSystem) {
     getPuzzleViewMode,
     buildMapFromRoomFields
   });
-}
+});
 
 
 // =====================================================
@@ -4127,8 +4149,17 @@ onAuthStateChanged(auth, async function (user) {
     return;
   }
 
-  await saveUserDoc(user);
   showLoggedIn(user);
+
+  try {
+    await saveUserDoc(user);
+  } catch (error) {
+    console.error(
+      "Authenticated, but the user profile could not be saved to Firestore:",
+      error
+    );
+  }
+
   listenToMyRooms();
 
   if (!alreadyUsedStartupLink && startupRoomCode) {
