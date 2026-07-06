@@ -60,6 +60,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+console.log("Homebrew God app.js loaded");
+
 // =====================================================
 // APP SECTION 3 — PAGE ELEMENTS / STATE
 // =====================================================
@@ -4113,6 +4115,11 @@ window.addEventListener("pagehide", function () {
 // =====================================================
 
 onAuthStateChanged(auth, async function (user) {
+  console.log(
+    "Auth state changed:",
+    user ? user.uid : "no user"
+  );
+
   currentUser = user;
 
   if (!user) {
