@@ -1,3 +1,9 @@
+import {
+  getDefaultSubclassesForClass,
+  mergeDefaultSubclassCollections
+} from "./defaultSubclasses.js";
+import { applyDefaultClassFeatureRules } from "./defaultClassFeatureRules.js";
+
 export const DEFAULT_CLASSES = {
   barbarian: {
     id: "barbarian",
@@ -835,6 +841,209 @@ export const DEFAULT_CLASSES = {
   }
 };
 
+export const DEFAULT_MULTICLASS_RULES = {
+  barbarian: {
+    prerequisites: {
+      all: [{ ability: "str", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Shields"],
+      weapons: ["Simple Weapons", "Martial Weapons"],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  bard: {
+    prerequisites: {
+      all: [{ ability: "cha", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor"],
+      weapons: [],
+      tools: [],
+      skillChoices: { choose: 1 },
+      toolChoices: {
+        choose: 1,
+        label: "musical instrument"
+      }
+    }
+  },
+
+  cleric: {
+    prerequisites: {
+      all: [{ ability: "wis", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor", "Medium Armor", "Shields"],
+      weapons: [],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  druid: {
+    prerequisites: {
+      all: [{ ability: "wis", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor", "Medium Armor", "Shields"],
+      weapons: [],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  fighter: {
+    prerequisites: {
+      all: [],
+      any: [
+        { ability: "str", minimum: 13 },
+        { ability: "dex", minimum: 13 }
+      ]
+    },
+    proficiencies: {
+      armor: ["Light Armor", "Medium Armor", "Shields"],
+      weapons: ["Simple Weapons", "Martial Weapons"],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  monk: {
+    prerequisites: {
+      all: [
+        { ability: "dex", minimum: 13 },
+        { ability: "wis", minimum: 13 }
+      ],
+      any: []
+    },
+    proficiencies: {
+      armor: [],
+      weapons: ["Simple Weapons", "Shortswords"],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  paladin: {
+    prerequisites: {
+      all: [
+        { ability: "str", minimum: 13 },
+        { ability: "cha", minimum: 13 }
+      ],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor", "Medium Armor", "Shields"],
+      weapons: ["Simple Weapons", "Martial Weapons"],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  ranger: {
+    prerequisites: {
+      all: [
+        { ability: "dex", minimum: 13 },
+        { ability: "wis", minimum: 13 }
+      ],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor", "Medium Armor", "Shields"],
+      weapons: ["Simple Weapons", "Martial Weapons"],
+      tools: [],
+      skillChoices: { choose: 1 }
+    }
+  },
+
+  rogue: {
+    prerequisites: {
+      all: [{ ability: "dex", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor"],
+      weapons: [],
+      tools: ["Thieves' Tools"],
+      skillChoices: { choose: 1 }
+    }
+  },
+
+  sorcerer: {
+    prerequisites: {
+      all: [{ ability: "cha", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: [],
+      weapons: [],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  warlock: {
+    prerequisites: {
+      all: [{ ability: "cha", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor"],
+      weapons: ["Simple Weapons"],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  wizard: {
+    prerequisites: {
+      all: [{ ability: "int", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: [],
+      weapons: [],
+      tools: [],
+      skillChoices: { choose: 0, from: [] }
+    }
+  },
+
+  artificer: {
+    prerequisites: {
+      all: [{ ability: "int", minimum: 13 }],
+      any: []
+    },
+    proficiencies: {
+      armor: ["Light Armor", "Medium Armor", "Shields"],
+      weapons: [],
+      tools: ["Thieves' Tools", "Tinker's Tools"],
+      skillChoices: { choose: 0, from: [] }
+    }
+  }
+};
+
+Object.entries(DEFAULT_MULTICLASS_RULES).forEach(
+  ([classId, rules]) => {
+    const classData = DEFAULT_CLASSES[classId];
+
+    if (!classData) {
+      return;
+    }
+
+    classData.multiclassPrerequisites =
+      rules.prerequisites;
+
+    classData.multiclassProficiencies =
+      rules.proficiencies;
+  }
+);
+
 const progressionFeature = (
   id,
   name,
@@ -1127,12 +1336,24 @@ const defineSubclass = ({
   id,
   name,
   summary,
-  featuresByLevel
+  description = summary,
+  featuresByLevel,
+  expandedSpells = {},
+  choices = [],
+  resources = [],
+  effects = [],
+  ...metadata
 }) => ({
+  ...metadata,
   id,
   name,
   source: "template",
   summary,
+  description,
+  expandedSpells,
+  choices,
+  resources,
+  effects,
   levels: Object.fromEntries(
     Array.from({ length: 20 }, (_, index) => {
       const level = index + 1;
@@ -1148,6 +1369,20 @@ const defineSubclass = ({
 });
 
 const sf = subclassDataFeature;
+
+const specialistSpell = (id, name) => ({
+  id,
+  name,
+  alwaysPrepared: true,
+  countsAgainstPreparedLimit: false
+});
+
+const expandedListSpell = (id, name) => ({
+  id,
+  name,
+  alwaysPrepared: false,
+  countsAgainstPreparedLimit: true
+});
 
 const DEFAULT_SUBCLASS_TEMPLATES = {
   barbarian: [
@@ -1182,6 +1417,13 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
       id: "life-domain",
       name: "Life Domain",
       summary: "A divine domain devoted to healing, endurance, and preserving life.",
+      expandedSpells: {
+        1: [specialistSpell("bless", "Bless"), specialistSpell("cure-wounds", "Cure Wounds")],
+        3: [specialistSpell("lesser-restoration", "Lesser Restoration"), specialistSpell("spiritual-weapon", "Spiritual Weapon")],
+        5: [specialistSpell("beacon-of-hope", "Beacon of Hope"), specialistSpell("revivify", "Revivify")],
+        7: [specialistSpell("death-ward", "Death Ward"), specialistSpell("guardian-of-faith", "Guardian of Faith")],
+        9: [specialistSpell("mass-cure-wounds", "Mass Cure Wounds"), specialistSpell("raise-dead", "Raise Dead")]
+      },
       featuresByLevel: {
         1: [sf("life-bonus-proficiency", "Bonus Proficiency"), sf("life-disciple-of-life", "Disciple of Life")],
         2: [sf("life-preserve-life", "Channel Divinity: Preserve Life", "Restore health to nearby creatures.", { type: "resource", resource: { recharge: "shortOrLongRest" } })],
@@ -1222,6 +1464,29 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
         15: [sf("champion-superior-critical", "Superior Critical")],
         18: [sf("champion-survivor", "Survivor")]
       }
+    }),
+    defineSubclass({
+      id: "eldritch-knight",
+      name: "Eldritch Knight",
+      summary: "A martial archetype that combines Fighter training with Intelligence-based Wizard magic.",
+      progressionType: "third-caster",
+      spellcastingProgression: "third-caster",
+      spellcastingAbility: "int",
+      spellPreparation: "known",
+      spellListClassId: "wizard",
+      cantripsKnown: { 3: 2, 10: 3 },
+      spellsKnown: { 3: 3, 4: 4, 7: 5, 8: 6, 10: 7, 11: 8, 13: 9, 14: 10, 16: 11, 19: 12, 20: 13 },
+      spellSchoolRestrictions: {
+        default: ["abjuration", "evocation"],
+        unrestrictedSpellLevelsAtClassLevels: [3, 8, 14, 20]
+      },
+      featuresByLevel: {
+        3: [sf("eldritch-knight-spellcasting", "Spellcasting"), sf("eldritch-knight-weapon-bond", "Weapon Bond")],
+        7: [sf("eldritch-knight-war-magic", "War Magic")],
+        10: [sf("eldritch-knight-eldritch-strike", "Eldritch Strike")],
+        15: [sf("eldritch-knight-arcane-charge", "Arcane Charge")],
+        18: [sf("eldritch-knight-improved-war-magic", "Improved War Magic")]
+      }
     })
   ],
 
@@ -1244,6 +1509,13 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
       id: "oath-of-devotion",
       name: "Oath of Devotion",
       summary: "A sacred oath centered on courage, compassion, honor, and duty.",
+      expandedSpells: {
+        3: [specialistSpell("protection-from-evil-and-good", "Protection from Evil and Good"), specialistSpell("sanctuary", "Sanctuary")],
+        5: [specialistSpell("lesser-restoration", "Lesser Restoration"), specialistSpell("zone-of-truth", "Zone of Truth")],
+        9: [specialistSpell("beacon-of-hope", "Beacon of Hope"), specialistSpell("dispel-magic", "Dispel Magic")],
+        13: [specialistSpell("freedom-of-movement", "Freedom of Movement"), specialistSpell("guardian-of-faith", "Guardian of Faith")],
+        17: [specialistSpell("commune", "Commune"), specialistSpell("flame-strike", "Flame Strike")]
+      },
       featuresByLevel: {
         3: [
           sf("devotion-oath-spells", "Oath Spells"),
@@ -1293,6 +1565,29 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
         13: [sf("thief-use-magic-device", "Use Magic Device")],
         17: [sf("thief-reflexes", "Thief's Reflexes")]
       }
+    }),
+    defineSubclass({
+      id: "arcane-trickster",
+      name: "Arcane Trickster",
+      summary: "A roguish archetype that combines stealth and legerdemain with Intelligence-based Wizard magic.",
+      progressionType: "third-caster",
+      spellcastingProgression: "third-caster",
+      spellcastingAbility: "int",
+      spellPreparation: "known",
+      spellListClassId: "wizard",
+      cantripsKnown: { 3: 3, 10: 4 },
+      spellsKnown: { 3: 3, 4: 4, 7: 5, 8: 6, 10: 7, 11: 8, 13: 9, 14: 10, 16: 11, 19: 12, 20: 13 },
+      spellSchoolRestrictions: {
+        default: ["enchantment", "illusion"],
+        unrestrictedSpellLevelsAtClassLevels: [3, 8, 14, 20],
+        requiredCantripIds: ["mage-hand"]
+      },
+      featuresByLevel: {
+        3: [sf("arcane-trickster-spellcasting", "Spellcasting"), sf("arcane-trickster-mage-hand-legerdemain", "Mage Hand Legerdemain")],
+        9: [sf("arcane-trickster-magical-ambush", "Magical Ambush")],
+        13: [sf("arcane-trickster-versatile-trickster", "Versatile Trickster")],
+        17: [sf("arcane-trickster-spell-thief", "Spell Thief")]
+      }
     })
   ],
 
@@ -1315,6 +1610,13 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
       id: "the-fiend",
       name: "The Fiend",
       summary: "An otherworldly patron that grants destructive power and infernal resilience.",
+      expandedSpells: {
+        1: [expandedListSpell("burning-hands", "Burning Hands"), expandedListSpell("command", "Command")],
+        3: [expandedListSpell("blindness-deafness", "Blindness/Deafness"), expandedListSpell("scorching-ray", "Scorching Ray")],
+        5: [expandedListSpell("fireball", "Fireball"), expandedListSpell("stinking-cloud", "Stinking Cloud")],
+        7: [expandedListSpell("fire-shield", "Fire Shield"), expandedListSpell("wall-of-fire", "Wall of Fire")],
+        9: [expandedListSpell("flame-strike", "Flame Strike"), expandedListSpell("hallow", "Hallow")]
+      },
       featuresByLevel: {
         1: [sf("fiend-dark-ones-blessing", "Dark One's Blessing")],
         6: [sf("fiend-dark-ones-own-luck", "Dark One's Own Luck")],
@@ -1343,11 +1645,709 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
       id: "alchemist",
       name: "Alchemist",
       summary: "An artificer specialist who creates restorative and transformative mixtures.",
+      description: "Alchemists combine magical reagents with artificer spellcraft. Their elixirs support allies, their focus improves healing and elemental spell damage, and their later reagents provide restoration and resistance.",
+      expandedSpells: {
+        3: [
+          specialistSpell("healing-word", "Healing Word"),
+          specialistSpell("ray-of-sickness", "Ray of Sickness")
+        ],
+        5: [
+          specialistSpell("flaming-sphere", "Flaming Sphere"),
+          specialistSpell("melfs-acid-arrow", "Melf's Acid Arrow")
+        ],
+        9: [
+          specialistSpell("gaseous-form", "Gaseous Form"),
+          specialistSpell("mass-healing-word", "Mass Healing Word")
+        ],
+        13: [
+          specialistSpell("blight", "Blight"),
+          specialistSpell("death-ward", "Death Ward")
+        ],
+        17: [
+          specialistSpell("cloudkill", "Cloudkill"),
+          specialistSpell("raise-dead", "Raise Dead")
+        ]
+      },
+      choices: [
+        {
+          id: "alchemist-experimental-elixir-effect",
+          name: "Experimental Elixir Effect",
+          featureId: "experimental-elixir",
+          unlockLevel: 3,
+          choose: 1,
+          selectionMode: "perUse",
+          options: [
+            { id: "healing", name: "Healing", effect: { type: "healing", formula: "2d4 + int" } },
+            { id: "swiftness", name: "Swiftness", effect: { type: "speedBonus", movement: "walk", value: 10, duration: "1 hour" } },
+            { id: "resilience", name: "Resilience", effect: { type: "armorClassBonus", value: 1, duration: "10 minutes" } },
+            { id: "boldness", name: "Boldness", effect: { type: "rollBonus", dice: "1d4", appliesTo: ["attackRolls", "savingThrows"], duration: "1 minute" } },
+            { id: "flight", name: "Flight", effect: { type: "movementMode", movement: "fly", speed: 10, duration: "10 minutes" } },
+            { id: "transformation", name: "Transformation", effect: { type: "spellEffect", spellId: "alter-self", duration: "10 minutes", concentration: false } }
+          ]
+        }
+      ],
+      resources: [
+        {
+          id: "alchemist-free-elixirs",
+          name: "Free Experimental Elixirs",
+          sourceFeatureId: "experimental-elixir",
+          usesByLevel: { 3: 1, 6: 2, 15: 3 },
+          recharge: "longRest",
+          additionalUses: { cost: "spellSlot", usesPerSlot: 1 }
+        },
+        {
+          id: "alchemist-restorative-reagents",
+          name: "Restorative Reagents: Lesser Restoration",
+          sourceFeatureId: "restorative-reagents",
+          uses: "Intelligence modifier",
+          minimum: 1,
+          recharge: "longRest"
+        },
+        {
+          id: "alchemist-chemical-mastery-greater-restoration",
+          name: "Chemical Mastery: Greater Restoration",
+          sourceFeatureId: "chemical-mastery",
+          uses: 1,
+          recharge: "longRest"
+        },
+        {
+          id: "alchemist-chemical-mastery-heal",
+          name: "Chemical Mastery: Heal",
+          sourceFeatureId: "chemical-mastery",
+          uses: 1,
+          recharge: "longRest"
+        }
+      ],
+      effects: [
+        { type: "toolProficiency", tools: ["Alchemist's Supplies"] },
+        { type: "alwaysPreparedSpells", source: "expandedSpells" },
+        {
+          type: "spellRollBonus",
+          ability: "int",
+          appliesTo: ["acid", "fire", "necrotic", "poison", "healing"],
+          oncePerSpell: true,
+          requires: { spellcastingFocus: "Alchemist's Supplies" }
+        },
+        { type: "damageResistance", damageTypes: ["acid", "poison"], unlockLevel: 15 },
+        { type: "conditionImmunity", conditions: ["poisoned"], unlockLevel: 15 }
+      ],
       featuresByLevel: {
-        3: [sf("alchemist-tool-proficiency", "Tool Proficiency"), sf("alchemist-spells", "Alchemist Spells"), sf("experimental-elixir", "Experimental Elixir")],
-        5: [sf("alchemical-savant", "Alchemical Savant")],
-        9: [sf("restorative-reagents", "Restorative Reagents")],
-        15: [sf("chemical-mastery", "Chemical Mastery")]
+        3: [
+          sf(
+            "alchemist-tool-proficiency",
+            "Tool Proficiency",
+            "Gain proficiency with alchemist's supplies; if already proficient, gain another artisan tool proficiency.",
+            {
+              effects: [
+                { type: "toolProficiency", tools: ["Alchemist's Supplies"], duplicateFallback: "artisanToolChoice" }
+              ]
+            }
+          ),
+          sf(
+            "alchemist-spells",
+            "Alchemist Spells",
+            "Alchemist spells are always prepared at the listed artificer levels and do not count against the normal prepared-spell limit.",
+            {
+              effects: [{ type: "alwaysPreparedSpells", source: "expandedSpells" }]
+            }
+          ),
+          sf(
+            "experimental-elixir",
+            "Experimental Elixir",
+            "Create magical elixirs after a long rest, or expend an artificer spell slot to create an elixir with a chosen effect.",
+            {
+              resource: {
+                name: "Free Experimental Elixirs",
+                usesByLevel: { 3: 1, 6: 2, 15: 3 },
+                recharge: "longRest"
+              },
+              effects: [
+                {
+                  type: "experimentalElixir",
+                  options: {
+                    healing: { type: "healing", formula: "2d4 + int" },
+                    swiftness: { type: "speedBonus", movement: "walk", value: 10, duration: "1 hour" },
+                    resilience: { type: "armorClassBonus", value: 1, duration: "10 minutes" },
+                    boldness: { type: "rollBonus", dice: "1d4", appliesTo: ["attackRolls", "savingThrows"], duration: "1 minute" },
+                    flight: { type: "movementMode", movement: "fly", speed: 10, duration: "10 minutes" },
+                    transformation: { type: "spellEffect", spellId: "alter-self", duration: "10 minutes", concentration: false }
+                  },
+                  additionalUseCost: "spellSlot"
+                }
+              ]
+            }
+          )
+        ],
+        5: [
+          sf(
+            "alchemical-savant",
+            "Alchemical Savant",
+            "Add your Intelligence modifier to one qualifying damage or healing roll of an artificer spell cast through alchemist's supplies.",
+            {
+              effects: [
+                {
+                  type: "spellRollBonus",
+                  ability: "int",
+                  appliesTo: ["acid", "fire", "necrotic", "poison", "healing"],
+                  oncePerSpell: true,
+                  requires: { spellcastingFocus: "Alchemist's Supplies" }
+                }
+              ]
+            }
+          )
+        ],
+        9: [
+          sf(
+            "restorative-reagents",
+            "Restorative Reagents",
+            "Experimental elixirs also grant temporary hit points, and you can cast Lesser Restoration a limited number of times without a spell slot.",
+            {
+              resource: {
+                name: "Lesser Restoration",
+                usesAbility: "Intelligence",
+                minimum: 1,
+                recharge: "longRest"
+              },
+              effects: [
+                { type: "temporaryHitPoints", formula: "2d6 + int", trigger: "experimentalElixirConsumed" },
+                { type: "freeSpellCast", spellId: "lesser-restoration", ignoresSpellSlot: true }
+              ]
+            }
+          )
+        ],
+        15: [
+          sf(
+            "chemical-mastery",
+            "Chemical Mastery",
+            "Gain resistance to acid and poison damage, immunity to the poisoned condition, and limited slot-free restoration magic.",
+            {
+              effects: [
+                { type: "damageResistance", damageTypes: ["acid", "poison"] },
+                { type: "conditionImmunity", conditions: ["poisoned"] },
+                { type: "freeSpellCast", spellId: "greater-restoration", uses: 1, recharge: "longRest" },
+                { type: "freeSpellCast", spellId: "heal", uses: 1, recharge: "longRest" }
+              ]
+            }
+          )
+        ]
+      }
+    }),
+
+    defineSubclass({
+      id: "armorer",
+      name: "Armorer",
+      summary: "An artificer specialist who turns a suit of armor into a customizable arcane platform.",
+      description: "Armorers bind magic into a personal suit of arcane armor. Guardian configurations protect the front line, while Infiltrator configurations improve speed, stealth, and ranged attacks.",
+      expandedSpells: {
+        3: [
+          specialistSpell("magic-missile", "Magic Missile"),
+          specialistSpell("thunderwave", "Thunderwave")
+        ],
+        5: [
+          specialistSpell("mirror-image", "Mirror Image"),
+          specialistSpell("shatter", "Shatter")
+        ],
+        9: [
+          specialistSpell("hypnotic-pattern", "Hypnotic Pattern"),
+          specialistSpell("lightning-bolt", "Lightning Bolt")
+        ],
+        13: [
+          specialistSpell("fire-shield", "Fire Shield"),
+          specialistSpell("greater-invisibility", "Greater Invisibility")
+        ],
+        17: [
+          specialistSpell("passwall", "Passwall"),
+          specialistSpell("wall-of-force", "Wall of Force")
+        ]
+      },
+      choices: [
+        {
+          id: "armorer-armor-model",
+          name: "Arcane Armor Model",
+          featureId: "armor-model",
+          unlockLevel: 3,
+          choose: 1,
+          selectionMode: "shortOrLongRest",
+          options: [
+            {
+              id: "guardian",
+              name: "Guardian",
+              grants: ["Thunder Gauntlets", "Defensive Field"]
+            },
+            {
+              id: "infiltrator",
+              name: "Infiltrator",
+              grants: ["Lightning Launcher", "Powered Steps", "Dampening Field"]
+            }
+          ]
+        }
+      ],
+      resources: [
+        {
+          id: "armorer-defensive-field",
+          name: "Defensive Field",
+          sourceFeatureId: "armor-model",
+          uses: "proficiency bonus",
+          recharge: "longRest",
+          requiresChoice: "guardian"
+        },
+        {
+          id: "armorer-perfect-guardian",
+          name: "Perfected Guardian Reaction",
+          sourceFeatureId: "perfected-armor",
+          uses: "proficiency bonus",
+          recharge: "longRest",
+          requiresChoice: "guardian"
+        }
+      ],
+      effects: [
+        { type: "armorProficiency", armor: ["Heavy Armor"] },
+        { type: "toolProficiency", tools: ["Smith's Tools"] },
+        { type: "alwaysPreparedSpells", source: "expandedSpells" },
+        { type: "extraAttack", attacks: 2, unlockLevel: 5 },
+        { type: "infusionCapacityBonus", value: 2, requires: { target: "arcaneArmor" }, unlockLevel: 9 }
+      ],
+      featuresByLevel: {
+        3: [
+          sf(
+            "armorer-tools-of-the-trade",
+            "Tools of the Trade",
+            "Gain proficiency with heavy armor and smith's tools; an existing smith's-tools proficiency becomes another artisan tool choice.",
+            {
+              effects: [
+                { type: "armorProficiency", armor: ["Heavy Armor"] },
+                { type: "toolProficiency", tools: ["Smith's Tools"], duplicateFallback: "artisanToolChoice" }
+              ]
+            }
+          ),
+          sf(
+            "armorer-spells",
+            "Armorer Spells",
+            "Armorer spells are always prepared at the listed artificer levels and do not count against the normal prepared-spell limit.",
+            { effects: [{ type: "alwaysPreparedSpells", source: "expandedSpells" }] }
+          ),
+          sf(
+            "arcane-armor",
+            "Arcane Armor",
+            "Transform worn armor into a spellcasting focus that ignores its Strength requirement and functions as a unified magical suit.",
+            {
+              effects: [
+                { type: "ignoreArmorStrengthRequirement", target: "arcaneArmor" },
+                { type: "spellcastingFocus", target: "arcaneArmor", classId: "artificer" },
+                { type: "armorCannotBeRemovedAgainstWill", target: "arcaneArmor" },
+                { type: "prostheticArmor", target: "arcaneArmor" }
+              ]
+            }
+          ),
+          sf(
+            "armor-model",
+            "Armor Model",
+            "Configure your Arcane Armor as Guardian or Infiltrator, gaining the model's weapon and defensive or mobility benefits.",
+            {
+              type: "choice",
+              choose: 1,
+              options: ["Guardian", "Infiltrator"],
+              choiceId: "armorer-armor-model",
+              effects: [
+                {
+                  type: "armorModel",
+                  model: "guardian",
+                  weapon: { id: "thunder-gauntlets", damage: "1d8", damageType: "thunder", attackAbility: "int" },
+                  onHit: { targetAttackDisadvantageAgainstOthersUntil: "startOfYourNextTurn" },
+                  defensiveField: { temporaryHitPoints: "artificerLevel", action: "bonusAction", uses: "proficiency bonus", recharge: "longRest" }
+                },
+                {
+                  type: "armorModel",
+                  model: "infiltrator",
+                  weapon: { id: "lightning-launcher", damage: "1d6", damageType: "lightning", bonusDamageOncePerTurn: "1d6", attackAbility: "int" },
+                  stealthAdvantage: true,
+                  cancelsArmorStealthDisadvantage: true
+                },
+                { type: "speedBonus", movement: "walk", value: 5, requires: { choiceId: "armorer-armor-model", option: "infiltrator" } }
+              ]
+            }
+          )
+        ],
+        5: [
+          sf(
+            "armorer-extra-attack",
+            "Extra Attack",
+            "Attack twice, instead of once, when you take the Attack action.",
+            { effects: [{ type: "extraAttack", attacks: 2 }] }
+          )
+        ],
+        9: [
+          sf(
+            "armor-modifications",
+            "Armor Modifications",
+            "Treat the Arcane Armor's separate pieces as infusion targets and maintain two additional infusions when both are on the armor.",
+            {
+              effects: [
+                { type: "arcaneArmorInfusionSlots", parts: ["chest", "boots", "helmet", "specialWeapon"] },
+                { type: "infusionCapacityBonus", value: 2, requires: { target: "arcaneArmor" } }
+              ]
+            }
+          )
+        ],
+        15: [
+          sf(
+            "perfected-armor",
+            "Perfected Armor",
+            "Guardian armor can pull and expose nearby enemies; Infiltrator armor marks creatures hit by its launcher for follow-up attacks.",
+            {
+              effects: [
+                {
+                  type: "perfectedArmor",
+                  model: "guardian",
+                  action: "reaction",
+                  range: 30,
+                  save: { ability: "str", dc: "artificerSpellSaveDc" },
+                  pullDistance: 30,
+                  meleeAttackAsPartOfReactionWhenWithin: 5,
+                  uses: "proficiency bonus",
+                  recharge: "longRest"
+                },
+                {
+                  type: "perfectedArmor",
+                  model: "infiltrator",
+                  trigger: "lightningLauncherHit",
+                  glimmerDuration: "startOfYourNextTurn",
+                  dimLightRadius: 5,
+                  attacksAgainstArmorerDisadvantage: true,
+                  nextAttackAdvantage: true,
+                  nextHitBonusDamage: "1d6 lightning"
+                }
+              ]
+            }
+          )
+        ]
+      }
+    }),
+
+    defineSubclass({
+      id: "artillerist",
+      name: "Artillerist",
+      summary: "An artificer specialist who channels destructive and protective magic through arcane artillery.",
+      description: "Artillerists create temporary Eldritch Cannons and use an Arcane Firearm to amplify artificer spells. Their later improvements increase cannon output, enable detonation, and fortify nearby allies.",
+      expandedSpells: {
+        3: [
+          specialistSpell("shield", "Shield"),
+          specialistSpell("thunderwave", "Thunderwave")
+        ],
+        5: [
+          specialistSpell("scorching-ray", "Scorching Ray"),
+          specialistSpell("shatter", "Shatter")
+        ],
+        9: [
+          specialistSpell("fireball", "Fireball"),
+          specialistSpell("wind-wall", "Wind Wall")
+        ],
+        13: [
+          specialistSpell("ice-storm", "Ice Storm"),
+          specialistSpell("wall-of-fire", "Wall of Fire")
+        ],
+        17: [
+          specialistSpell("cone-of-cold", "Cone of Cold"),
+          specialistSpell("wall-of-force", "Wall of Force")
+        ]
+      },
+      choices: [
+        {
+          id: "artillerist-cannon-type",
+          name: "Eldritch Cannon Type",
+          featureId: "eldritch-cannon",
+          unlockLevel: 3,
+          choose: 1,
+          selectionMode: "perCreation",
+          options: [
+            { id: "flamethrower", name: "Flamethrower", effect: { area: "15-foot cone", damageByLevel: { 3: "2d8 fire", 9: "3d8 fire" }, save: { ability: "dex", onSuccess: "half" } } },
+            { id: "force-ballista", name: "Force Ballista", effect: { range: 120, damageByLevel: { 3: "2d8 force", 9: "3d8 force" }, push: 5 } },
+            { id: "protector", name: "Protector", effect: { radius: 10, temporaryHitPoints: "1d8 + int" } }
+          ]
+        }
+      ],
+      resources: [
+        {
+          id: "artillerist-free-cannon",
+          name: "Free Eldritch Cannon Creation",
+          sourceFeatureId: "eldritch-cannon",
+          uses: 1,
+          recharge: "longRest",
+          additionalUses: { cost: "spellSlot", minimumLevel: 1, usesPerSlot: 1 }
+        }
+      ],
+      effects: [
+        { type: "toolProficiency", tools: ["Woodcarver's Tools"] },
+        { type: "alwaysPreparedSpells", source: "expandedSpells" },
+        { type: "eldritchCannonObject", armorClass: 18, hitPoints: "artificerLevel * 5", damageImmunities: ["poison", "psychic"], conditionImmunities: ["all"] },
+        { type: "artificerSpellDamageBonus", dice: "1d8", unlockLevel: 5, requires: { focus: "arcaneFirearm" } },
+        { type: "halfCoverAura", radius: 10, source: "eldritchCannon", unlockLevel: 15 }
+      ],
+      featuresByLevel: {
+        3: [
+          sf(
+            "artillerist-tool-proficiency",
+            "Tool Proficiency",
+            "Gain proficiency with woodcarver's tools; if already proficient, gain another artisan tool proficiency.",
+            {
+              effects: [
+                { type: "toolProficiency", tools: ["Woodcarver's Tools"], duplicateFallback: "artisanToolChoice" }
+              ]
+            }
+          ),
+          sf(
+            "artillerist-spells",
+            "Artillerist Spells",
+            "Artillerist spells are always prepared at the listed artificer levels and do not count against the normal prepared-spell limit.",
+            { effects: [{ type: "alwaysPreparedSpells", source: "expandedSpells" }] }
+          ),
+          sf(
+            "eldritch-cannon",
+            "Eldritch Cannon",
+            "Create a temporary Flamethrower, Force Ballista, or Protector cannon and activate it with a bonus action.",
+            {
+              type: "choice",
+              choose: 1,
+              options: ["Flamethrower", "Force Ballista", "Protector"],
+              choiceId: "artillerist-cannon-type",
+              resource: {
+                name: "Free Eldritch Cannon Creation",
+                uses: 1,
+                recharge: "longRest"
+              },
+              effects: [
+                {
+                  type: "eldritchCannonObject",
+                  sizeChoice: ["Tiny", "Small"],
+                  armorClass: 18,
+                  hitPoints: "artificerLevel * 5",
+                  damageImmunities: ["poison", "psychic"],
+                  conditionImmunities: ["all"],
+                  duration: "1 hour",
+                  repair: { spellId: "mending", healing: "2d6" }
+                },
+                { type: "eldritchCannon", cannon: "flamethrower", action: "bonusAction", area: "15-foot cone", damageByLevel: { 3: "2d8 fire", 9: "3d8 fire" }, save: { ability: "dex", onSuccess: "half" } },
+                { type: "eldritchCannon", cannon: "force-ballista", action: "bonusAction", range: 120, damageByLevel: { 3: "2d8 force", 9: "3d8 force" }, push: 5 },
+                { type: "eldritchCannon", cannon: "protector", action: "bonusAction", radius: 10, temporaryHitPoints: "1d8 + int" }
+              ]
+            }
+          )
+        ],
+        5: [
+          sf(
+            "arcane-firearm",
+            "Arcane Firearm",
+            "Turn a wand, staff, or rod into a focus that adds 1d8 to one damage roll of an artificer spell cast through it.",
+            {
+              effects: [
+                { type: "artificerSpellDamageBonus", dice: "1d8", oncePerSpell: true, requires: { focus: "arcaneFirearm" } }
+              ]
+            }
+          )
+        ],
+        9: [
+          sf(
+            "explosive-cannon",
+            "Explosive Cannon",
+            "Increase damaging cannon rolls by 1d8 and gain the option to detonate a nearby cannon for force damage.",
+            {
+              effects: [
+                { type: "eldritchCannonDamageBonus", dice: "1d8", cannonTypes: ["flamethrower", "force-ballista"] },
+                { type: "eldritchCannonDetonation", action: "action", range: 60, radius: 20, damage: "3d8 force", save: { ability: "dex", onSuccess: "half" } }
+              ]
+            }
+          )
+        ],
+        15: [
+          sf(
+            "fortified-position",
+            "Fortified Position",
+            "Create two cannons with one creation and grant half cover to creatures near a cannon.",
+            {
+              effects: [
+                { type: "eldritchCannonLimit", maximum: 2, createTogether: true, oneSpellSlotPerAdditionalCannon: true, commandTogether: true },
+                { type: "halfCoverAura", radius: 10, source: "eldritchCannon" }
+              ]
+            }
+          )
+        ]
+      }
+    }),
+
+    defineSubclass({
+      id: "battle-smith",
+      name: "Battle Smith",
+      summary: "An artificer specialist who fights beside a durable Steel Defender using magically enhanced weapons.",
+      description: "Battle Smiths combine martial training with magical engineering. Intelligence guides their magical weapon attacks, a Steel Defender protects the party, and Arcane Jolt turns successful hits into force damage or healing.",
+      expandedSpells: {
+        3: [
+          specialistSpell("heroism", "Heroism"),
+          specialistSpell("shield", "Shield")
+        ],
+        5: [
+          specialistSpell("branding-smite", "Branding Smite"),
+          specialistSpell("warding-bond", "Warding Bond")
+        ],
+        9: [
+          specialistSpell("aura-of-vitality", "Aura of Vitality"),
+          specialistSpell("conjure-barrage", "Conjure Barrage")
+        ],
+        13: [
+          specialistSpell("aura-of-purity", "Aura of Purity"),
+          specialistSpell("fire-shield", "Fire Shield")
+        ],
+        17: [
+          specialistSpell("banishing-smite", "Banishing Smite"),
+          specialistSpell("mass-cure-wounds", "Mass Cure Wounds")
+        ]
+      },
+      choices: [
+        {
+          id: "battle-smith-arcane-jolt-use",
+          name: "Arcane Jolt Effect",
+          featureId: "arcane-jolt",
+          unlockLevel: 9,
+          choose: 1,
+          selectionMode: "perHit",
+          options: [
+            { id: "force-damage", name: "Force Damage", effect: { type: "bonusDamage", diceByLevel: { 9: "2d6", 15: "4d6" }, damageType: "force" } },
+            { id: "restore-hit-points", name: "Restore Hit Points", effect: { type: "healing", diceByLevel: { 9: "2d6", 15: "4d6" }, range: 30 } }
+          ]
+        }
+      ],
+      resources: [
+        {
+          id: "battle-smith-steel-defender",
+          name: "Steel Defender",
+          sourceFeatureId: "steel-defender",
+          type: "companion",
+          maximum: 1,
+          recovery: { spellId: "mending", healing: "2d6" }
+        },
+        {
+          id: "battle-smith-steel-defender-repair",
+          name: "Steel Defender: Repair",
+          sourceFeatureId: "steel-defender",
+          uses: 3,
+          recharge: "longRest"
+        },
+        {
+          id: "battle-smith-arcane-jolt",
+          name: "Arcane Jolt",
+          sourceFeatureId: "arcane-jolt",
+          uses: "proficiency bonus",
+          recharge: "longRest"
+        }
+      ],
+      effects: [
+        { type: "toolProficiency", tools: ["Smith's Tools"] },
+        { type: "weaponProficiency", weapons: ["Martial Weapons"] },
+        { type: "alwaysPreparedSpells", source: "expandedSpells" },
+        { type: "attackAbilityOverride", ability: "int", requires: { magicWeapon: true } },
+        { type: "companion", companionId: "steel-defender", hitPoints: "2 + int + (artificerLevel * 5)", armorClass: 15 },
+        { type: "extraAttack", attacks: 2, unlockLevel: 5 }
+      ],
+      featuresByLevel: {
+        3: [
+          sf(
+            "battle-smith-tool-proficiency",
+            "Tool Proficiency",
+            "Gain proficiency with smith's tools; if already proficient, gain another artisan tool proficiency.",
+            {
+              effects: [
+                { type: "toolProficiency", tools: ["Smith's Tools"], duplicateFallback: "artisanToolChoice" }
+              ]
+            }
+          ),
+          sf(
+            "battle-smith-spells",
+            "Battle Smith Spells",
+            "Battle Smith spells are always prepared at the listed artificer levels and do not count against the normal prepared-spell limit.",
+            { effects: [{ type: "alwaysPreparedSpells", source: "expandedSpells" }] }
+          ),
+          sf(
+            "battle-ready",
+            "Battle Ready",
+            "Gain martial-weapon proficiency and use Intelligence for attacks and damage with magical weapons.",
+            {
+              effects: [
+                { type: "weaponProficiency", weapons: ["Martial Weapons"] },
+                { type: "attackAbilityOverride", ability: "int", appliesTo: "magicWeapons" }
+              ]
+            }
+          ),
+          sf(
+            "steel-defender",
+            "Steel Defender",
+            "Create one construct companion that acts after your turn, follows bonus-action commands, and can impose disadvantage with Deflect Attack.",
+            {
+              effects: [
+                {
+                  type: "companion",
+                  companionId: "steel-defender",
+                  maximum: 1,
+                  armorClass: 15,
+                  hitPoints: "2 + int + (artificerLevel * 5)",
+                  speed: { walk: 40 },
+                  abilities: { str: 14, dex: 12, con: 14, int: 4, wis: 10, cha: 6 },
+                  damageImmunities: ["poison"],
+                  conditionImmunities: ["charmed", "exhaustion", "poisoned"],
+                  initiative: "afterOwner",
+                  commandAction: "bonusAction",
+                  repair: { spellId: "mending", healing: "2d6" },
+                  repairAction: { uses: 3, healing: "2d8 + proficiencyBonus", recharge: "longRest" },
+                  attack: { id: "force-empowered-rend", attackBonus: "artificerSpellAttack", damage: "1d8 + proficiencyBonus", damageType: "force" },
+                  reaction: { id: "deflect-attack", range: 5, effect: "disadvantage", excludesAttacksAgainstSelf: true }
+                }
+              ]
+            }
+          )
+        ],
+        5: [
+          sf(
+            "battle-smith-extra-attack",
+            "Extra Attack",
+            "Attack twice, instead of once, when you take the Attack action.",
+            { effects: [{ type: "extraAttack", attacks: 2 }] }
+          )
+        ],
+        9: [
+          sf(
+            "arcane-jolt",
+            "Arcane Jolt",
+            "Once per turn after a magical-weapon or Steel Defender hit, deal extra force damage or restore hit points to a nearby creature.",
+            {
+              resource: {
+                name: "Arcane Jolt",
+                uses: "proficiency bonus",
+                recharge: "longRest"
+              },
+              effects: [
+                {
+                  type: "arcaneJolt",
+                  trigger: "magicWeaponOrSteelDefenderHit",
+                  oncePerTurn: true,
+                  diceByLevel: { 9: "2d6", 15: "4d6" },
+                  options: ["forceDamage", "healing"],
+                  healingRange: 30
+                }
+              ]
+            }
+          )
+        ],
+        15: [
+          sf(
+            "improved-defender",
+            "Improved Defender",
+            "Increase Arcane Jolt to 4d6 and cause Deflect Attack to damage the attacker.",
+            {
+              effects: [
+                { type: "arcaneJoltImprovement", dice: "4d6" },
+                { type: "steelDefenderReactionDamage", reaction: "deflectAttack", damage: "1d4 + int", damageType: "force" }
+              ]
+            }
+          )
+        ]
       }
     })
   ]
@@ -1360,9 +2360,19 @@ Object.entries(DEFAULT_CLASSES).forEach(([classId, classData]) => {
     ...(CLASS_ASI_LEVELS[classId] || STANDARD_ASI_LEVELS)
   ];
 
-  classData.subclasses = [
-    ...(DEFAULT_SUBCLASS_TEMPLATES[classId] || [])
-  ];
+  const nameListSubclasses = getDefaultSubclassesForClass(classId);
+  const detailedSubclasses = (
+    DEFAULT_SUBCLASS_TEMPLATES[classId] || []
+  ).map((subclass) => ({
+    ...subclass,
+    classId
+  }));
+
+  classData.subclasses = mergeDefaultSubclassCollections(
+    nameListSubclasses,
+    detailedSubclasses,
+    { classId }
+  );
 
   classData.featuresByLevel = Object.fromEntries(
     Array.from({ length: 20 }, (_, index) => {
@@ -1635,3 +2645,7 @@ Object.values(DEFAULT_CLASSES).forEach((classData) => {
       ];
     });
 });
+
+// Apply the structured choice, resource, and conditional-combat rules only
+// after the complete level-20 and subclass catalogs have been assembled.
+applyDefaultClassFeatureRules(DEFAULT_CLASSES);
