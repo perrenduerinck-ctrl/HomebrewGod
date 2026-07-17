@@ -3835,6 +3835,9 @@ if (!tokenSystem) {
     addDoc,
     updateDoc,
     deleteDoc,
+    getDocs,
+    query,
+    where,
     onSnapshot,
     serverTimestamp,
 
@@ -3953,6 +3956,38 @@ function initCharacterCreatorSystem() {
 
     getCurrentIsDM: function () {
       return currentIsDM;
+    },
+
+    createCharacterLinkedToken: function (character) {
+      if (
+        !tokenSystem ||
+        typeof tokenSystem.createCharacterLinkedToken !== "function"
+      ) {
+        throw new Error(
+          "The token system is not ready."
+        );
+      }
+
+      return tokenSystem.createCharacterLinkedToken(
+        character
+      );
+    },
+
+    syncLinkedCharacterTokens: function (character) {
+      if (
+        !tokenSystem ||
+        typeof tokenSystem.syncLinkedCharacterTokens !== "function"
+      ) {
+        return {
+          characterId:
+            character?.id || null,
+          updatedCount: 0
+        };
+      }
+
+      return tokenSystem.syncLinkedCharacterTokens(
+        character
+      );
     }
   });
 }
