@@ -1,4 +1,7 @@
-export const DEFAULT_FEAT_SCHEMA_VERSION = 1;
+import { FEAT_NAME_LIST } from "./defaultFeatNames.js";
+import { DEFAULT_FEAT_RULES } from "./defaultFeatRules.js";
+
+export const DEFAULT_FEAT_SCHEMA_VERSION = 2;
 
 const RAW_DEFAULT_FEATS = [
   {
@@ -166,6 +169,121 @@ const normalizeFeatId = (value) => String(value || "")
   .replace(/[^a-z0-9]+/g, "-")
   .replace(/^-+|-+$/g, "");
 
+const createNameListPlaceholder = (name) => ({
+  id: normalizeFeatId(name),
+  name,
+  summary: "Description not filled in yet.",
+  description: "Add this feat's full table description here.",
+  source: "name-list",
+  prerequisites: [],
+  effects: [],
+  choices: [],
+  tags: []
+});
+
+const getStructuredEntryKey = (entry) => {
+  if (!entry || typeof entry !== "object") {
+    return String(entry);
+  }
+
+  const type = String(entry.type || "record");
+
+  if (type === "abilityChoice") {
+    return type;
+  }
+
+  if (type === "savingThrowProficiencyFromAbilityChoice") {
+    return type;
+  }
+
+  if (entry.id) {
+    return `${type}:${entry.id}`;
+  }
+
+  return `${type}:${JSON.stringify({
+    ability: entry.ability,
+    categories: entry.categories,
+    category: entry.category,
+    classId: entry.classId,
+    damageType: entry.damageType,
+    damageTypes: entry.damageTypes,
+    featureType: entry.featureType,
+    spellId: entry.spellId,
+    spellIds: entry.spellIds,
+    value: entry.value
+  })}`;
+};
+
+const mergeStructuredArrays = (...collections) => {
+  const entries = new Map();
+
+  collections.forEach((collection) => {
+    (Array.isArray(collection) ? collection : [])
+      .forEach((entry) => {
+        entries.set(getStructuredEntryKey(entry), entry);
+      });
+  });
+
+  return [...entries.values()];
+};
+
+const mergeFeatRecords = (...records) => {
+  const validRecords = records.filter((record) => {
+    return record && typeof record === "object";
+  });
+
+  return {
+    ...Object.assign({}, ...validRecords),
+    prerequisites: mergeStructuredArrays(
+      ...validRecords.map((record) => record.prerequisites)
+    ),
+    effects: mergeStructuredArrays(
+      ...validRecords.map((record) => record.effects)
+    ),
+    choices: mergeStructuredArrays(
+      ...validRecords.map((record) => record.choices)
+    ),
+    tags: [...new Set(
+      validRecords.flatMap((record) => {
+        return Array.isArray(record.tags) ? record.tags : [];
+      })
+    )]
+  };
+};
+
+const mergeDefaultFeatRecords = () => {
+  const rawById = new Map(
+    RAW_DEFAULT_FEATS.map((feat) => {
+      return [normalizeFeatId(feat?.id || feat?.name), feat];
+    })
+  );
+  const rulesById = new Map(
+    DEFAULT_FEAT_RULES.map((feat) => {
+      return [normalizeFeatId(feat?.id || feat?.name), feat];
+    })
+  );
+
+  return FEAT_NAME_LIST.map((name) => {
+    const id = normalizeFeatId(name);
+    return mergeFeatRecords(
+      createNameListPlaceholder(name),
+      rawById.get(id),
+      rulesById.get(id),
+      { id, name }
+    );
+  });
+};
+
+const freezeRecordArray = (value) => Object.freeze(
+  Array.isArray(value)
+    ? value.map((entry) => {
+        return entry && typeof entry === "object"
+          ? Object.freeze({ ...entry })
+          : entry;
+      })
+    : []
+);
+
 const normalizeFeatRecord = (rawFeat) => {
   const raw = rawFeat || {};
 
@@ -174,21 +292,31 @@ const normalizeFeatRecord = (rawFeat) => {
     schemaVersion: DEFAULT_FEAT_SCHEMA_VERSION,
     id: normalizeFeatId(raw.id || raw.name),
     name: String(raw.name || "Unnamed Feat").trim(),
-    summary: String(raw.summary || "").trim(),
-    prerequisites: Object.freeze(
-      Array.isArray(raw.prerequisites)
-        ? raw.prerequisites.map((requirement) => {
-            return Object.freeze({ ...(requirement || {}) });
-          })
+    summary: String(
+      raw.summary || "Description not filled in yet."
+    ).trim(),
+    description: String(
+      raw.description ||
+      raw.summary ||
+      "Add this feat's full table description here."
+    ).trim(),
+    source: String(raw.source || "default").trim(),
+    prerequisites: freezeRecordArray(raw.prerequisites),
+    effects: freezeRecordArray(raw.effects),
+    choices: freezeRecordArray(raw.choices),
+    tags: Object.freeze(
+      Array.isArray(raw.tags)
+        ? raw.tags
+            .map((tag) => String(tag || "").trim())
+            .filter(Boolean)
         : []
     ),
-    effects: Object.freeze(
-      Array.isArray(raw.effects)
-        ? raw.effects.map((effect) => {
-            return Object.freeze({ ...(effect || {}) });
-          })
-        : []
-    )
+    repeatable: raw.repeatable === true,
+    repeatByChoice: raw.repeatByChoice === true,
+    repeatLimit:
+      Number.isFinite(Number(raw.repeatLimit)) && Number(raw.repeatLimit) > 0
+        ? Math.round(Number(raw.repeatLimit))
+        : null
   });
 };
 
@@ -213,12 +341,46 @@ export function validateDefaultFeatCollection(feats) {
       errors.push(`Feat ${id || index + 1} is missing a name.`);
     }
 
+    if (!String(feat?.summary || "").trim()) {
+      errors.push(`Feat ${id || index + 1} is missing a summary.`);
+    }
+
+    if (!String(feat?.description || "").trim()) {
+      errors.push(`Feat ${id || index + 1} is missing a description.`);
+    }
+
     if (!Array.isArray(feat?.prerequisites)) {
       errors.push(`Feat ${id || index + 1} prerequisites must be an array.`);
     }
 
     if (!Array.isArray(feat?.effects)) {
       errors.push(`Feat ${id || index + 1} effects must be an array.`);
+    } else if (!feat.effects.length) {
+      errors.push(`Feat ${id || index + 1} has no structured effects.`);
+    }
+
+    if (!Array.isArray(feat?.choices)) {
+      errors.push(`Feat ${id || index + 1} choices must be an array.`);
+    }
+
+    if (!Array.isArray(feat?.tags)) {
+      errors.push(`Feat ${id || index + 1} tags must be an array.`);
+    }
+
+    if (
+      /description not filled in|add this feat's full table description/i.test(
+        `${feat?.summary || ""} ${feat?.description || ""}`
+      )
+    ) {
+      errors.push(`Feat ${id || index + 1} still contains placeholder text.`);
+    }
+  });
+
+  const expectedIds = new Set(FEAT_NAME_LIST.map(normalizeFeatId));
+
+  expectedIds.forEach((id) => {
+    if (!ids.has(id)) {
+      errors.push(`Missing feat from name list: ${id}.`);
     }
   });
 
@@ -228,7 +390,7 @@ export function validateDefaultFeatCollection(feats) {
   };
 }
 
-const normalizedDefaultFeats = RAW_DEFAULT_FEATS.map(
+const normalizedDefaultFeats = mergeDefaultFeatRecords().map(
   normalizeFeatRecord
 );
 
