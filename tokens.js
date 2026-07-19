@@ -12,6 +12,9 @@ export function createTokenSystem(options) {
     addDoc: options.addDoc,
     updateDoc: options.updateDoc,
     deleteDoc: options.deleteDoc,
+    getDocs: options.getDocs,
+    query: options.query,
+    where: options.where,
     onSnapshot: options.onSnapshot,
     serverTimestamp: options.serverTimestamp,
 
@@ -98,6 +101,10 @@ export function createTokenSystem(options) {
 // =====================================================
 
   function setStatus(message) {
+    if (typeof document === "undefined") {
+      return;
+    }
+
     refreshElements();
 
     if (T.tokenBuilderStatus) {
@@ -156,6 +163,158 @@ export function createTokenSystem(options) {
     }
 
     return "object";
+  }
+
+  function safeNumber(value, fallback) {
+    const number = Number(value);
+
+    return Number.isFinite(number)
+      ? number
+      : fallback;
+  }
+
+  function getLinkedCharacterId(character) {
+    return String(
+      character?.firestoreDocumentId ||
+      character?.docId ||
+      character?.id ||
+      ""
+    ).trim();
+  }
+
+  function getCharacterPortrait(character) {
+    const image =
+      character?.identity?.image ||
+      character?.image ||
+      {};
+
+    return {
+      url: String(
+        image.url ||
+        character?.imageUrl ||
+        character?.portraitUrl ||
+        ""
+      ).trim(),
+      publicId: String(
+        image.publicId ||
+        character?.imagePublicId ||
+        character?.portraitPublicId ||
+        ""
+      ).trim()
+    };
+  }
+
+  function getCharacterLinkedTokenFields(character, roomData) {
+    const characterId =
+      getLinkedCharacterId(character);
+
+    const portrait =
+      getCharacterPortrait(character);
+
+    const name = String(
+      character?.identity?.name ||
+      character?.name ||
+      "Unnamed Character"
+    ).trim() || "Unnamed Character";
+
+    const sizeCategory =
+      normalizeSizeCategory(
+        character?.identity?.size ||
+        character?.size ||
+        "medium"
+      );
+
+    const maximumHp = Math.max(
+      1,
+      Math.round(
+        safeNumber(
+          character?.combat?.maxHp ??
+          character?.maxHp,
+          1
+        )
+      )
+    );
+
+    const currentHp = Math.max(
+      0,
+      Math.min(
+        maximumHp,
+        Math.round(
+          safeNumber(
+            character?.combat?.currentHp ??
+            character?.currentHp,
+            maximumHp
+          )
+        )
+      )
+    );
+
+    const armorClass = Math.max(
+      0,
+      Math.round(
+        safeNumber(
+          character?.combat?.armorClass ??
+          character?.armorClass,
+          10
+        )
+      )
+    );
+
+    const mediumSize =
+      getMediumSize(roomData || {});
+
+    return {
+      characterId,
+      name,
+      portrait,
+      sizeCategory,
+      pixelSize:
+        Math.round(
+          mediumSize *
+          (SIZE_MULTIPLIERS[sizeCategory] || 1)
+        ),
+      currentHp,
+      maximumHp,
+      armorClass
+    };
+  }
+
+  function buildCharacterLinkedTokenPatch(
+    character,
+    roomData
+  ) {
+    const fields =
+      getCharacterLinkedTokenFields(
+        character,
+        roomData
+      );
+
+    return {
+      name: fields.name,
+      imageUrl: fields.portrait.url,
+      publicId:
+        fields.portrait.publicId || null,
+      sizeCategory: fields.sizeCategory,
+      creatureSize: fields.sizeCategory,
+      size: fields.pixelSize,
+      armorClass: fields.armorClass,
+      ac: fields.armorClass,
+      currentHp: fields.currentHp,
+      maxHp: fields.maximumHp,
+      hp: {
+        current: fields.currentHp,
+        maximum: fields.maximumHp
+      },
+      hpAuthority: "character",
+      linkedCharacterId:
+        fields.characterId,
+      sheetId: fields.characterId,
+      sourceType: "character",
+      linkedCharacter: {
+        id: fields.characterId,
+        hpAuthority: "character"
+      }
+    };
   }
 
 
@@ -476,6 +635,23 @@ export function createTokenSystem(options) {
         pointer-events: none;
       }
 
+      .hg-token-stats {
+        position: absolute;
+        left: 50%;
+        top: 100%;
+        transform: translateX(-50%);
+        margin-top: 23px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(5, 7, 15, 0.88);
+        color: #dfe6ff;
+        border: 1px solid rgba(130, 150, 255, 0.28);
+        font-size: 10px;
+        line-height: 1.2;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+
       .hg-token-size-badge {
         position: absolute;
         left: 50%;
@@ -730,6 +906,36 @@ export function createTokenSystem(options) {
   function normalizeToken(rawToken) {
     const token = rawToken || {};
     const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
+    const maximumHp = Math.max(
+      0,
+      Math.round(
+        safeNumber(
+          token.maxHp ?? token.hp?.maximum,
+          0
+        )
+      )
+    );
+    const currentHp = Math.max(
+      0,
+      Math.min(
+        maximumHp || Number.MAX_SAFE_INTEGER,
+        Math.round(
+          safeNumber(
+            token.currentHp ?? token.hp?.current,
+            maximumHp
+          )
+        )
+      )
+    );
+    const armorClass = Math.max(
+      0,
+      Math.round(
+        safeNumber(
+          token.armorClass ?? token.ac,
+          0
+        )
+      )
+    );
 
     return {
       ...token,
@@ -740,6 +946,19 @@ export function createTokenSystem(options) {
       y: clampPercent(token.y),
       sizeCategory: cleanSizeCategory,
       creatureSize: cleanSizeCategory,
+      currentHp,
+      maxHp: maximumHp,
+      hp: {
+        current: currentHp,
+        maximum: maximumHp
+      },
+      armorClass,
+      ac: armorClass,
+      linkedCharacterId:
+        token.linkedCharacterId ||
+        token.linkedCharacter?.id ||
+        token.sheetId ||
+        null,
       mapMode: token.mapMode || "single",
       tileKey: token.tileKey || null
     };
@@ -991,6 +1210,42 @@ export function createTokenSystem(options) {
       label.textContent = token.name || "Token";
       tokenEl.appendChild(label);
 
+      const tokenStats = [];
+
+      if (
+        token.display?.hpText === true &&
+        token.maxHp > 0
+      ) {
+        tokenStats.push(
+          "HP " +
+          token.currentHp +
+          "/" +
+          token.maxHp
+        );
+      }
+
+      if (
+        token.display?.ac === true &&
+        token.armorClass > 0
+      ) {
+        tokenStats.push(
+          "AC " + token.armorClass
+        );
+      }
+
+      if (tokenStats.length > 0) {
+        const stats =
+          document.createElement("div");
+
+        stats.className =
+          "hg-token-stats";
+
+        stats.textContent =
+          tokenStats.join(" · ");
+
+        tokenEl.appendChild(stats);
+      }
+
       if (isDM) {
         tokenEl.addEventListener("pointerdown", function (event) {
           startTokenDrag(event, token, tokenEl);
@@ -1191,6 +1446,230 @@ export function createTokenSystem(options) {
         T.addTokenButton.disabled = false;
       }
     }
+  }
+
+  async function createCharacterLinkedToken(
+    character
+  ) {
+    const roomCode =
+      deps.getCurrentRoomCode
+        ? deps.getCurrentRoomCode()
+        : null;
+
+    const roomData =
+      deps.getCurrentRoomData
+        ? deps.getCurrentRoomData()
+        : null;
+
+    const isDM =
+      deps.getCurrentIsDM
+        ? deps.getCurrentIsDM()
+        : false;
+
+    if (!roomCode) {
+      throw new Error(
+        "Open a room before creating a linked token."
+      );
+    }
+
+    if (!isDM) {
+      throw new Error(
+        "Only the DM can create character-linked tokens."
+      );
+    }
+
+    const fields =
+      getCharacterLinkedTokenFields(
+        character,
+        roomData || {}
+      );
+
+    if (!fields.characterId) {
+      throw new Error(
+        "Save the character before creating its linked token."
+      );
+    }
+
+    if (!fields.portrait.url) {
+      throw new Error(
+        "Add and save a character portrait before creating its linked token."
+      );
+    }
+
+    const target =
+      getCurrentTokenTarget(
+        roomData || {}
+      );
+
+    if (!target.mapMode) {
+      throw new Error(
+        "Load a battle map or puzzle map before creating the linked token."
+      );
+    }
+
+    const timestampMillis = Date.now();
+
+    const newToken = {
+      ...buildCharacterLinkedTokenPatch(
+        character,
+        roomData || {}
+      ),
+      type: "player",
+      x: 50,
+      y: 50,
+      mapMode: target.mapMode,
+      tileKey: target.tileKey,
+      display: {
+        name: true,
+        hpBar: true,
+        hpText: true,
+        ac: true,
+        conditions: true,
+        initiative: false
+      },
+      createdAtMillis: timestampMillis,
+      updatedAtMillis: timestampMillis,
+      createdAt: deps.serverTimestamp(),
+      updatedAt: deps.serverTimestamp()
+    };
+
+    const createdDocument =
+      await deps.addDoc(
+        deps.collection(
+          deps.db,
+          "rooms",
+          roomCode,
+          "tokens"
+        ),
+        newToken
+      );
+
+    setStatus(
+      fields.name +
+      " linked token created. Character HP is authoritative."
+    );
+
+    return normalizeToken({
+      ...newToken,
+      id: createdDocument?.id || null
+    });
+  }
+
+  async function syncLinkedCharacterTokens(
+    character
+  ) {
+    const roomCode =
+      deps.getCurrentRoomCode
+        ? deps.getCurrentRoomCode()
+        : null;
+
+    const roomData =
+      deps.getCurrentRoomData
+        ? deps.getCurrentRoomData()
+        : null;
+
+    const characterId =
+      getLinkedCharacterId(character);
+
+    if (!roomCode || !characterId) {
+      return {
+        characterId,
+        updatedCount: 0
+      };
+    }
+
+    if (
+      typeof deps.getDocs !== "function" ||
+      typeof deps.query !== "function" ||
+      typeof deps.where !== "function"
+    ) {
+      throw new Error(
+        "Linked-token synchronization is missing its Firestore query tools."
+      );
+    }
+
+    const linkedTokensSnapshot =
+      await deps.getDocs(
+        deps.query(
+          deps.collection(
+            deps.db,
+            "rooms",
+            roomCode,
+            "tokens"
+          ),
+          deps.where(
+            "linkedCharacterId",
+            "==",
+            characterId
+          )
+        )
+      );
+
+    const linkedTokenDocuments =
+      Array.isArray(
+        linkedTokensSnapshot?.docs
+      )
+        ? linkedTokensSnapshot.docs
+        : [];
+
+    if (!linkedTokenDocuments.length) {
+      return {
+        characterId,
+        updatedCount: 0
+      };
+    }
+
+    const updatedAtMillis = Date.now();
+
+    const updatePatch = {
+      ...buildCharacterLinkedTokenPatch(
+        character,
+        roomData || {}
+      ),
+      updatedAtMillis,
+      updatedAt: deps.serverTimestamp()
+    };
+
+    await Promise.all(
+      linkedTokenDocuments.map((tokenDocument) => {
+        return deps.updateDoc(
+          tokenDocument.ref ||
+          deps.doc(
+            deps.db,
+            "rooms",
+            roomCode,
+            "tokens",
+            tokenDocument.id
+          ),
+          updatePatch
+        );
+      })
+    );
+
+    tokenCache = tokenCache.map((token) => {
+      if (
+        String(
+          token?.linkedCharacterId ||
+          token?.linkedCharacter?.id ||
+          token?.sheetId ||
+          ""
+        ).trim() !==
+        characterId
+      ) {
+        return token;
+      }
+
+      return normalizeToken({
+        ...token,
+        ...updatePatch
+      });
+    });
+
+    return {
+      characterId,
+      updatedCount:
+        linkedTokenDocuments.length
+    };
   }
 
   async function deleteToken(tokenId) {
@@ -1407,13 +1886,18 @@ export function createTokenSystem(options) {
     init,
     render,
     addToken,
+    buildCharacterLinkedTokenPatch,
+    createCharacterLinkedToken,
+    syncLinkedCharacterTokens,
     deleteToken,
     saveTokenScale,
     startTokenListenerForRoom,
     stopTokenListener
   };
 
-  init();
+  if (options.autoInit !== false) {
+    init();
+  }
 
   return api;
 }
