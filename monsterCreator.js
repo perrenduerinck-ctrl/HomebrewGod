@@ -913,4 +913,3 @@ export function createMonsterCreator(config) {
     exportMonsterJson
   };
 }
-
