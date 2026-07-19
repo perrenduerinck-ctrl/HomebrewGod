@@ -13759,6 +13759,9 @@ export function createCharacterCreator(options = {}) {
         creatorState.draft
       );
 
+    const fighterLevelThreeClassHtml =
+      renderClassStep();
+
     const championSelectedFromUnlock =
       setMulticlassSubclass(0, "champion");
 
@@ -13769,18 +13772,65 @@ export function createCharacterCreator(options = {}) {
         creatorState.draft
       );
 
+    const fighterLevelFourAsiSlot =
+      getUnlockedFeatChoiceSlots(
+        creatorState.draft
+      ).find((slot) => {
+        return (
+          slot.classId === "fighter" &&
+          slot.classLevel === 4
+        );
+      });
+
+    const fighterFeatModeSelected =
+      setSection12AsiMode(
+        fighterLevelFourAsiSlot?.id,
+        "feat"
+      );
+
+    const fighterFeatPickerHtml =
+      renderLevelUpWorkflow(
+        creatorState.draft
+      );
+
+    const fighterAlertSelected =
+      setSection12AsiFeat(
+        fighterLevelFourAsiSlot?.id,
+        "alert"
+      );
+
+    const fighterAlertHtml =
+      renderLevelUpWorkflow(
+        creatorState.draft
+      );
+
+    const fighterAlertClassHtml =
+      renderClassStep();
+
     record(
-      "Level-up workflow surfaces newest subclass and ASI unlocks",
+      "Level-up workflow keeps subclass and feat unlocks compact",
       {
         levelThreeSubclass:
           fighterLevelThreeUnlockHtml.includes(
-            "Newest Level Unlocks"
+            "Latest Level Unlock"
           ) &&
           fighterLevelThreeUnlockHtml.includes(
             "Martial Archetype"
           ) &&
           fighterLevelThreeUnlockHtml.includes(
+            "Choose or change this selection in Class Progression"
+          ) &&
+          !fighterLevelThreeUnlockHtml.includes(
             "ccLatestSubclass-0"
+          ),
+        singleSubclassPicker:
+          (
+            fighterLevelThreeClassHtml.match(
+              /data-multiclass-subclass-index="0"/g
+            ) || []
+          ).length === 1 &&
+          !fighterLevelThreeClassHtml.includes(
+            'data-cc-action="choose-subclass"'
           ),
         championSelectedFromUnlock,
         levelFourAsi:
@@ -13793,6 +13843,38 @@ export function createCharacterCreator(options = {}) {
           fighterLevelFourUnlockHtml.includes(
             "Pending ASI or feat choice"
           ),
+        subclassUnlockNotRepeated:
+          !fighterLevelFourUnlockHtml.includes(
+            "Latest Level Unlock: Martial Archetype"
+          ),
+        fighterFeatModeSelected,
+        compactFeatPicker:
+          fighterFeatPickerHtml.includes(
+            "hg-feat-picker-panel"
+          ) &&
+          fighterFeatPickerHtml.includes(
+            "hg-feat-picker-scroll"
+          ) &&
+          fighterFeatPickerHtml.includes(
+            "Search Feats"
+          ),
+        fighterAlertSelected,
+        selectedFeatClosesPicker:
+          fighterAlertHtml.includes(
+            "Feat: Alert"
+          ) &&
+          fighterAlertHtml.includes(
+            "Change Feat"
+          ) &&
+          !/<details[^>]*class="hg-feat-picker-panel"[^>]*\sopen(?:\s|>)/.test(
+            fighterAlertHtml
+          ),
+        singleLatestFeatPicker:
+          (
+            fighterAlertClassHtml.match(
+              /class="hg-feat-picker-panel"/g
+            ) || []
+          ).length === 1,
         latestLevel:
           creatorState.draft
             .classProgression
@@ -13800,8 +13882,15 @@ export function createCharacterCreator(options = {}) {
       },
       {
         levelThreeSubclass: true,
+        singleSubclassPicker: true,
         championSelectedFromUnlock: true,
         levelFourAsi: true,
+        subclassUnlockNotRepeated: true,
+        fighterFeatModeSelected: true,
+        compactFeatPicker: true,
+        fighterAlertSelected: true,
+        selectedFeatClosesPicker: true,
+        singleLatestFeatPicker: true,
         latestLevel: 4
       }
     );
@@ -21070,7 +21159,7 @@ export function createCharacterCreator(options = {}) {
     if (
       !context ||
       !context.subclassOptions.length ||
-      context.levelRecord.classLevel <
+      context.levelRecord.classLevel !==
         context.subclassLevel
     ) {
       return "";
@@ -21086,26 +21175,10 @@ export function createCharacterCreator(options = {}) {
       selectedSubclass?.subclassLabel ||
       "Subclass";
 
-    const choices = [
-      {
-        value: "",
-        label: `Choose ${label}`
-      },
-
-      ...context.subclassOptions.map(
-        (subclass) => {
-          return {
-            value: subclass.id,
-            label: subclass.name
-          };
-        }
-      )
-    ];
-
     return `
       <article class="hg-character-choice-card ${selectedSubclass ? "selected" : ""}">
         <h3>
-          ${escapeHtml(label)}
+          Latest Level Unlock: ${escapeHtml(label)}
           ${context.levelRecord.classLevel === context.subclassLevel ? "Unlocked" : "Choice"}
         </h3>
 
@@ -21121,18 +21194,9 @@ export function createCharacterCreator(options = {}) {
           }
         </p>
 
-        ${wizardSelect(
-          label,
-          `ccLatestSubclass-${context.classIndex}`,
-          context.classEntry.subclassId ||
-            selectedSubclass?.id ||
-            "",
-          choices,
-          {
-            extra:
-              `data-multiclass-subclass-index="${context.classIndex}"`
-          }
-        )}
+        <p class="small">
+          Choose or change this selection in Class Progression.
+        </p>
       </article>
     `;
   }
@@ -21240,7 +21304,7 @@ export function createCharacterCreator(options = {}) {
     return `
       <hr>
 
-      <h3>Newest Level Unlocks</h3>
+      <h3>Latest Level Unlock</h3>
 
       <div class="hg-character-current-choice">
         <b>Character Level ${context.levelRecord.characterLevel}:</b>
@@ -21351,6 +21415,15 @@ export function createCharacterCreator(options = {}) {
     return `
       <h3>Level Up Workflow</h3>
 
+      <div class="hg-character-beginner-note">
+        <strong>To multiclass:</strong>
+        <p>
+          1. Pick a class in Add Multiclass.<br>
+          2. Click Add Class.<br>
+          3. Use Level Up Workflow to decide which class gains future levels.
+        </p>
+      </div>
+
       <div class="hg-character-current-choice">
         <b>Current Character Level:</b>
         ${totalLevel} / 20
@@ -21451,6 +21524,14 @@ export function createCharacterCreator(options = {}) {
         character
       );
 
+    const levelOrder =
+      normalizeClassLevelOrder(
+        character
+          ?.classProgression
+          ?.levelOrder,
+        classes
+      );
+
     const classSplit = entries
       .map((entry) => {
         return `${entry.className} ${entry.classLevel}`;
@@ -21517,6 +21598,17 @@ export function createCharacterCreator(options = {}) {
         .map((entry, index) => {
           const classEntry =
             entry.classEntry;
+
+          const classProgressionKey =
+            getClassProgressionEntryKey(
+              classEntry,
+              index
+            );
+
+          const orderedLevelCount =
+            levelOrder.filter((key) => {
+              return key === classProgressionKey;
+            }).length;
 
           const otherLevelTotal =
             classes.reduce(
@@ -21634,6 +21726,11 @@ export function createCharacterCreator(options = {}) {
 
                 <br>
 
+                <b>Levels in Order:</b>
+                ${orderedLevelCount}
+
+                <br>
+
                 <b>Hit Die:</b>
                 ${escapeHtml(entry.hitDie)}
 
@@ -21704,6 +21801,17 @@ export function createCharacterCreator(options = {}) {
                   ${entry.classLevel >= maximumLevel ? "disabled" : ""}
                 >
                   + Level
+                </button>
+              </div>
+
+              <div class="hg-character-inline-actions">
+                <button
+                  type="button"
+                  data-cc-action="add-character-level"
+                  data-class-index="${index}"
+                  ${totalLevel >= 20 || entry.classLevel >= maximumLevel ? "disabled" : ""}
+                >
+                  Add next level to ${escapeHtml(entry.className)}
                 </button>
               </div>
 
@@ -21824,6 +21932,13 @@ export function createCharacterCreator(options = {}) {
       ${renderLevelUpWorkflow(character)}
 
       <hr>
+
+      <div class="hg-character-beginner-note">
+        <strong>Add Multiclass</strong>
+        <p>
+          Pick a class below, then click Add Class. The new class starts at level 1.
+        </p>
+      </div>
 
       <div class="hg-character-field-grid three">
         ${wizardSelect(
@@ -22964,13 +23079,18 @@ export function createCharacterCreator(options = {}) {
     const cleanClassId =
       cleanString(classId);
 
+    if (!cleanClassId) {
+      setStatus("Choose a class to add first.");
+      return false;
+    }
+
     const selectedClass =
       getAllClassTemplates().find((classData) => {
         return classData.id === cleanClassId;
       });
 
     if (!selectedClass) {
-      setStatus("Choose a class to add.");
+      setStatus("That class is unavailable and cannot be added.");
       return false;
     }
 
@@ -24175,6 +24295,49 @@ export function createCharacterCreator(options = {}) {
         border-color: rgba(157, 107, 255, 0.78);
         background: rgba(157, 107, 255, 0.09);
         box-shadow: 0 0 18px rgba(157, 107, 255, 0.12);
+      }
+
+      .hg-feat-picker-panel {
+        min-width: 0;
+        margin-top: 8px;
+        padding: 10px;
+        border: 1px solid rgba(116, 138, 255, 0.24);
+        border-radius: 13px;
+        background: rgba(8, 12, 25, 0.72);
+      }
+
+      .hg-feat-picker-panel > summary {
+        cursor: pointer;
+        color: #dfe6ff;
+        font-weight: bold;
+      }
+
+      .hg-feat-picker-panel[open] > summary {
+        margin-bottom: 10px;
+      }
+
+      .hg-feat-picker-toolbar {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .hg-feat-picker-toolbar input {
+        width: 100% !important;
+        margin: 0 !important;
+      }
+
+      .hg-feat-picker-scroll {
+        max-height: 480px;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 0 6px 6px 0;
+      }
+
+      .hg-feat-picker-scroll .hg-character-choice-grid {
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        margin-top: 0;
       }
 
       .hg-character-choice-card p {
@@ -33593,6 +33756,10 @@ export function createCharacterCreator(options = {}) {
 
     const previous = getSection12AsiChoiceState(featureId);
 
+    if (previous.mode === mode) {
+      return false;
+    }
+
     setSection12AsiChoiceValues(
       featureId,
       [`mode:${mode}`]
@@ -34313,9 +34480,14 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
-  function renderSection12AsiChoice(feature) {
+  function renderSection12CompactAsiChoice(feature) {
     const state = getSection12AsiChoiceState(feature.id);
     const pointsUsed = state.abilities.length;
+    const selectedFeat = state.featId
+      ? DEFAULT_FEATS.find((feat) => {
+          return feat.id === state.featId;
+        })
+      : null;
 
     return `
       <p>
@@ -34394,53 +34566,58 @@ export function createCharacterCreator(options = {}) {
         `
         : state.mode === "feat"
           ? `
-            <div
-              class="hg-character-field"
-              data-cc-asi-feat-picker="true"
-              data-feature-id="${escapeHtml(feature.id)}"
-            >
-              <label for="ccFeatSearch-${escapeHtml(feature.id)}">
-                Search Feats
-              </label>
+            <div class="hg-character-field">
+              ${selectedFeat
+                ? `
+                  <div class="hg-character-current-choice">
+                    <b>Current Choice:</b>
+                    Feat: ${escapeHtml(selectedFeat.name)}
+                    <br>${escapeHtml(selectedFeat.summary || "")}
+                    <br><span class="small">${escapeHtml(selectedFeat.description || "")}</span>
+                    <ul class="small">
+                      ${(Array.isArray(selectedFeat.effects) ? selectedFeat.effects : [])
+                        .map((effect) => {
+                          return `<li>${escapeHtml(formatSection12FeatEffect(effect))}</li>`;
+                        })
+                        .join("")}
+                    </ul>
+                    ${renderSection12FeatChoices(feature, state, selectedFeat)}
+                  </div>
+                `
+                : `
+                  <div class="hg-character-current-choice">
+                    <b>Current Choice:</b> Pending feat choice.
+                  </div>
+                `}
 
-              <input
-                id="ccFeatSearch-${escapeHtml(feature.id)}"
-                type="search"
-                placeholder="Search by feat name or description..."
-                data-cc-action-input="filter-asi-feats"
+              <details
+                class="hg-feat-picker-panel"
+                data-cc-asi-feat-picker="true"
                 data-feature-id="${escapeHtml(feature.id)}"
-                autocomplete="off"
+                ${selectedFeat ? "" : "open"}
               >
+                <summary>
+                  ${selectedFeat ? "Change Feat" : "Choose Feat"}
+                </summary>
 
-              ${state.featId
-                ? (() => {
-                    const selectedFeat = DEFAULT_FEATS.find((feat) => {
-                      return feat.id === state.featId;
-                    });
+                <div class="hg-feat-picker-toolbar">
+                  <label for="ccFeatSearch-${escapeHtml(feature.id)}">
+                    Search Feats
+                  </label>
 
-                    return selectedFeat
-                      ? `
-                        <div class="hg-character-current-choice">
-                          <b>Selected Feat:</b>
-                          ${escapeHtml(selectedFeat.name)}
-                          <br>${escapeHtml(selectedFeat.summary || "")}
-                          <br><span class="small">${escapeHtml(selectedFeat.description || "")}</span>
-                          <ul class="small">
-                            ${(Array.isArray(selectedFeat.effects) ? selectedFeat.effects : [])
-                              .map((effect) => {
-                                return `<li>${escapeHtml(formatSection12FeatEffect(effect))}</li>`;
-                              })
-                              .join("")}
-                          </ul>
-                          ${renderSection12FeatChoices(feature, state, selectedFeat)}
-                        </div>
-                      `
-                      : "";
-                  })()
-                : ""}
+                  <input
+                    id="ccFeatSearch-${escapeHtml(feature.id)}"
+                    type="search"
+                    placeholder="Search by feat name or description..."
+                    data-cc-action-input="filter-asi-feats"
+                    data-feature-id="${escapeHtml(feature.id)}"
+                    autocomplete="off"
+                  >
+                </div>
 
-              <div class="hg-character-choice-grid">
-                ${DEFAULT_FEATS.map((feat) => {
+                <div class="hg-feat-picker-scroll">
+                  <div class="hg-character-choice-grid">
+                    ${DEFAULT_FEATS.map((feat) => {
                   const prerequisite = getFeatPrerequisiteResult(
                     feat,
                     creatorState.draft,
@@ -34486,20 +34663,28 @@ export function createCharacterCreator(options = {}) {
                       </div>
                     </article>
                   `;
-                }).join("")}
-              </div>
+                    }).join("")}
+                  </div>
+                </div>
 
-              <div
-                class="hg-character-placeholder"
-                data-cc-feat-no-results="true"
-                hidden
-              >
-                No feats match that search.
-              </div>
+                <div
+                  class="hg-character-placeholder"
+                  data-cc-feat-no-results="true"
+                  hidden
+                >
+                  No feats match that search.
+                </div>
+              </details>
             </div>
           `
           : ""}
     `;
+  }
+
+  function renderSection12AsiChoice(feature) {
+    return renderSection12CompactAsiChoice(
+      feature
+    );
   }
 
   function getSection12ArtificerInfusionState(
@@ -35240,6 +35425,11 @@ export function createCharacterCreator(options = {}) {
 
     const features = getSection12ClassFeaturesThroughLevel();
     const skillChoices = selectedClass.skillChoices || {};
+    const latestAsiSlotId = cleanString(
+      getLatestLevelUpContext(
+        creatorState.draft
+      )?.asiSlot?.id
+    );
 
     const featureCards = features.map((feature) => {
       const choiceOptionRecords =
@@ -35252,6 +35442,17 @@ export function createCharacterCreator(options = {}) {
         getSection12FeatureChooseCount(feature);
       const choiceKey =
         getSection12FeatureChoiceKey(feature);
+      const featureAsiSlot =
+        feature.optionSource === "asiOrFeat"
+          ? getSection12UnlockedAsiSlot(
+              feature.id
+            )
+          : null;
+      const isLatestAsiSlot = Boolean(
+        latestAsiSlotId &&
+        cleanString(featureAsiSlot?.id) ===
+          latestAsiSlotId
+      );
 
       return `
         <article class="hg-character-choice-card">
@@ -35269,7 +35470,13 @@ export function createCharacterCreator(options = {}) {
           ${feature.customType === "artificerInfusions"
             ? renderSection12ArtificerInfusions(feature)
             : feature.optionSource === "asiOrFeat"
-            ? renderSection12AsiChoice(feature)
+            ? isLatestAsiSlot
+              ? `
+                <p class="small">
+                  Manage this choice in Latest Level Unlock above.
+                </p>
+              `
+              : renderSection12AsiChoice(feature)
             : feature.type === "choice"
             ? `
               <p><b>Choose ${chooseCount}:</b></p>
@@ -35608,27 +35815,26 @@ export function createCharacterCreator(options = {}) {
         ? `
           <hr>
 
-          ${subclassUnlocked
-            ? `
-              <h3>
-                Choose ${escapeHtml(
-                  subclassLabel
-                )}
-              </h3>
-
-              ${renderSubclassStep()}
-            `
-            : `
-              <div class="hg-character-current-choice">
-                <b>Subclass:</b>
-                ${escapeHtml(
+          <div class="hg-character-current-choice">
+            <b>${escapeHtml(subclassLabel)}:</b>
+            ${subclassUnlocked
+              ? escapeHtml(
+                  primaryClass?.subclassName ||
+                  "Pending selection"
+                )
+              : `${escapeHtml(
                   subclassLabel
                 )} unlocks at ${escapeHtml(
                   selectedClass.name ||
                   "class"
-                )} level ${subclassUnlockLevel}.
-              </div>
-            `}
+                )} level ${subclassUnlockLevel}.`}
+
+            <br>
+
+            <span class="small">
+              Choose or change subclasses in each Class Progression card above.
+            </span>
+          </div>
         `
         : ""}
 
@@ -36171,18 +36377,28 @@ export function createCharacterCreator(options = {}) {
   }
 
   function handleSection12AddMulticlassClass() {
+    const select =
+      $("ccMulticlassAddClass");
+
     const classId =
-      $("ccMulticlassAddClass")
-        ?.value ||
-      "";
+      select?.value || "";
+
+    const selectedClass =
+      getAllClassTemplates().find((classData) => {
+        return classData.id === classId;
+      });
 
     if (
       addMulticlassClass(
         classId
       )
     ) {
+      if (select) {
+        select.value = "";
+      }
+
       setStatus(
-        "Class added to progression."
+        `${selectedClass?.name || "Class"} added. Use Level Up Workflow to add levels.`
       );
 
       renderCreatorView();
@@ -36276,11 +36492,32 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
-  function handleSection12AddCharacterLevel() {
+  function handleSection12AddCharacterLevel(
+    ...values
+  ) {
+    const button =
+      findSection12ActionElement(
+        ...values
+      );
+
     const classIndex =
-      $("ccLevelUpClassIndex")
-        ?.value ||
-      0;
+      button?.dataset?.classIndex !== undefined
+        ? button.dataset.classIndex
+        : $("ccLevelUpClassIndex")
+            ?.value ||
+          0;
+
+    const classEntry =
+      getClassEntryAtIndex(
+        classIndex
+      );
+
+    const className =
+      resolveClassTemplateForEntry(
+        classEntry
+      )?.name ||
+      classEntry?.className ||
+      "Class";
 
     if (
       addCharacterLevelToClass(
@@ -36288,7 +36525,7 @@ export function createCharacterCreator(options = {}) {
       )
     ) {
       setStatus(
-        "Character level added."
+        `${className} gained the next character level.`
       );
 
       renderCreatorView();
