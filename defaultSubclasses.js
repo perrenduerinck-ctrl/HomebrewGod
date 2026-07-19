@@ -1,68 +1,441 @@
+=import { SUBCLASS_NAME_LIST } from "./defaultSubclassNames.js";
+
 export const DEFAULT_SUBCLASS_SCHEMA_VERSION = 1;
 
-function normalizeSubclassId(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+const SUBCLASS_CLASS_CONFIG = Object.freeze({
+  artificer: Object.freeze({
+    subclassLabel: "Artificer Specialist",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 5, 9, 15])
+  }),
+  barbarian: Object.freeze({
+    subclassLabel: "Primal Path",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 6, 10, 14])
+  }),
+  bard: Object.freeze({
+    subclassLabel: "Bard College",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 6, 14])
+  }),
+  cleric: Object.freeze({
+    subclassLabel: "Divine Domain",
+    unlockLevel: 1,
+    featureLevels: Object.freeze([1, 2, 6, 8, 17])
+  }),
+  druid: Object.freeze({
+    subclassLabel: "Druid Circle",
+    unlockLevel: 2,
+    featureLevels: Object.freeze([2, 6, 10, 14])
+  }),
+  fighter: Object.freeze({
+    subclassLabel: "Martial Archetype",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 7, 10, 15, 18])
+  }),
+  monk: Object.freeze({
+    subclassLabel: "Monastic Tradition",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 6, 11, 17])
+  }),
+  paladin: Object.freeze({
+    subclassLabel: "Sacred Oath",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 7, 15, 20])
+  }),
+  ranger: Object.freeze({
+    subclassLabel: "Ranger Archetype",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 7, 11, 15])
+  }),
+  rogue: Object.freeze({
+    subclassLabel: "Roguish Archetype",
+    unlockLevel: 3,
+    featureLevels: Object.freeze([3, 9, 13, 17])
+  }),
+  sorcerer: Object.freeze({
+    subclassLabel: "Sorcerous Origin",
+    unlockLevel: 1,
+    featureLevels: Object.freeze([1, 6, 14, 18])
+  }),
+  warlock: Object.freeze({
+    subclassLabel: "Otherworldly Patron",
+    unlockLevel: 1,
+    featureLevels: Object.freeze([1, 6, 10, 14])
+  }),
+  wizard: Object.freeze({
+    subclassLabel: "Arcane Tradition",
+    unlockLevel: 2,
+    featureLevels: Object.freeze([2, 6, 10, 14])
+  })
+});
 
-function normalizeFeature(rawFeature) {
-  const feature = rawFeature && typeof rawFeature === "object" ? rawFeature : {};
+const normalizeSubclassId = (value) => String(value || "")
+  .normalize("NFKD")
+  .trim()
+  .toLowerCase()
+  .replace(/[\u2018\u2019'`\u00b4]/g, "")
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "");
 
-  return Object.freeze({
-    ...feature,
-    id: normalizeSubclassId(feature.id),
-    name: String(feature.name || "").trim(),
-    type: String(feature.type || "feature").trim() || "feature",
-    summary: String(feature.summary || "").trim()
+const SUBCLASS_MATCH_AFFIXES = Object.freeze({
+  artificer: Object.freeze({ prefixes: [], suffixes: [] }),
+  barbarian: Object.freeze({ prefixes: ["path-of-the-", "path-of-"], suffixes: [] }),
+  bard: Object.freeze({ prefixes: ["college-of-"], suffixes: [] }),
+  cleric: Object.freeze({ prefixes: [], suffixes: ["-domain"] }),
+  druid: Object.freeze({ prefixes: ["circle-of-the-", "circle-of-"], suffixes: [] }),
+  fighter: Object.freeze({ prefixes: [], suffixes: [] }),
+  monk: Object.freeze({ prefixes: ["way-of-the-", "way-of-"], suffixes: [] }),
+  paladin: Object.freeze({ prefixes: ["oath-of-the-", "oath-of-"], suffixes: [] }),
+  ranger: Object.freeze({ prefixes: [], suffixes: [] }),
+  rogue: Object.freeze({ prefixes: [], suffixes: [] }),
+  sorcerer: Object.freeze({ prefixes: [], suffixes: [] }),
+  warlock: Object.freeze({ prefixes: ["the-"], suffixes: [] }),
+  wizard: Object.freeze({ prefixes: ["school-of-the-", "school-of-"], suffixes: [] })
+});
+
+const uniqueStrings = (values) => [
+  ...new Set(
+    values
+      .map(normalizeSubclassId)
+      .filter(Boolean)
+  )
+];
+
+const normalizeSubclassMatchAlias = (value, classId) => {
+  let normalized = normalizeSubclassId(value);
+  const affixes = SUBCLASS_MATCH_AFFIXES[normalizeSubclassId(classId)] || {
+    prefixes: [],
+    suffixes: []
+  };
+
+  affixes.prefixes.forEach((prefix) => {
+    if (normalized.startsWith(prefix)) {
+      normalized = normalized.slice(prefix.length);
+    }
   });
-}
 
-function normalizeSubclassRecord(rawSubclass) {
-  const raw = rawSubclass && typeof rawSubclass === "object" ? rawSubclass : {};
-  const featureLevels = Array.isArray(raw.featureLevels)
-    ? [...new Set(raw.featureLevels.map(Number).filter(Number.isInteger))].sort((a, b) => a - b)
-    : [];
-  const rawFeaturesByLevel = raw.featuresByLevel && typeof raw.featuresByLevel === "object"
-    ? raw.featuresByLevel
-    : {};
-  const featuresByLevel = {};
-
-  featureLevels.forEach(function (level) {
-    const rawFeatures = Array.isArray(rawFeaturesByLevel[level])
-      ? rawFeaturesByLevel[level]
-      : [];
-
-    featuresByLevel[level] = Object.freeze(rawFeatures.map(normalizeFeature));
+  affixes.suffixes.forEach((suffix) => {
+    if (normalized.endsWith(suffix)) {
+      normalized = normalized.slice(0, -suffix.length);
+    }
   });
 
-  const expandedSpells = raw.expandedSpells && typeof raw.expandedSpells === "object"
-    ? { ...raw.expandedSpells }
-    : {};
-  const choices = Array.isArray(raw.choices)
-    ? raw.choices.map(function (choice) {
-        return choice && typeof choice === "object" ? Object.freeze({ ...choice }) : choice;
-      })
+  return normalizeSubclassId(normalized);
+};
+
+const getSubclassMatchKeys = (subclass, fallbackClassId = "") => {
+  const classId = normalizeSubclassId(subclass?.classId || fallbackClassId);
+  const rawAliases = Array.isArray(subclass?.aliases)
+    ? subclass.aliases
     : [];
+  const identityValues = [
+    subclass?.id,
+    subclass?.name,
+    ...rawAliases
+  ];
+
+  return uniqueStrings([
+    ...identityValues,
+    ...identityValues.map((value) => normalizeSubclassMatchAlias(value, classId))
+  ]);
+};
+
+const hasOwn = (owner, key) => Object.prototype.hasOwnProperty.call(owner || {}, key);
+
+const copyArray = (value, fallback = []) => Object.freeze([
+  ...(Array.isArray(value) ? value : fallback)
+]);
+
+const copyFeatureMap = (value) => Object.freeze(
+  Object.fromEntries(
+    Object.entries(value || {}).map(([level, features]) => [
+      level,
+      copyArray(features)
+    ])
+  )
+);
+
+const getDetailedFeaturesByLevel = (detailed) => {
+  const fromLevels = Object.fromEntries(
+    Object.entries(detailed?.levels || {})
+      .filter(([, levelData]) => (
+        Array.isArray(levelData?.features) &&
+        levelData.features.length > 0
+      ))
+      .map(([level, levelData]) => [level, levelData.features])
+  );
+  const explicit = detailed?.featuresByLevel &&
+    typeof detailed.featuresByLevel === "object" &&
+    !Array.isArray(detailed.featuresByLevel)
+      ? detailed.featuresByLevel
+      : {};
+
+  return {
+    ...fromLevels,
+    ...explicit
+  };
+};
+
+const createFeaturesByLevel = (featureLevels) => Object.freeze(
+  Object.fromEntries(
+    featureLevels.map((level) => [level, Object.freeze([])])
+  )
+);
+
+const createSubclassRecord = (classId, name) => {
+  const normalizedClassId = normalizeSubclassId(classId);
+  const config = SUBCLASS_CLASS_CONFIG[normalizedClassId];
+  const featureLevels = config?.featureLevels || Object.freeze([]);
 
   return Object.freeze({
     schemaVersion: DEFAULT_SUBCLASS_SCHEMA_VERSION,
-    id: normalizeSubclassId(raw.id),
-    classId: normalizeSubclassId(raw.classId),
-    className: String(raw.className || "").trim(),
-    subclassLabel: String(raw.subclassLabel || "").trim(),
-    name: String(raw.name || "").trim(),
-    source: String(raw.source || "starter").trim() || "starter",
-    summary: String(raw.summary || "").trim(),
-    unlockLevel: Number(raw.unlockLevel),
-    featureLevels: Object.freeze(featureLevels),
-    featuresByLevel: Object.freeze(featuresByLevel),
-    expandedSpells: Object.freeze(expandedSpells),
-    choices: Object.freeze(choices)
+    id: normalizeSubclassId(name),
+    classId: normalizedClassId,
+    name: String(name || "").trim(),
+    source: "name-list",
+    summary: "Description not filled in yet.",
+    description: "Add this subclass's full table description here.",
+    subclassLabel: config?.subclassLabel || "Subclass",
+    unlockLevel: config?.unlockLevel || 1,
+    featureLevels,
+    featuresByLevel: createFeaturesByLevel(featureLevels),
+    expandedSpells: Object.freeze({}),
+    choices: Object.freeze([]),
+    effects: Object.freeze([])
   });
+};
+
+const findMatchingSubclassIndex = (
+  subclasses,
+  candidate,
+  fallbackClassId = ""
+) => {
+  const candidateClassId = normalizeSubclassId(
+    candidate?.classId || fallbackClassId
+  );
+  const candidateId = normalizeSubclassId(candidate?.id);
+  const candidateName = normalizeSubclassId(candidate?.name);
+  const candidateKeys = new Set(
+    getSubclassMatchKeys(candidate, candidateClassId)
+  );
+
+  const sameClass = (subclass) => normalizeSubclassId(
+    subclass?.classId || fallbackClassId
+  ) === candidateClassId;
+
+  const exactIdMatch = subclasses.findIndex((subclass) => (
+    sameClass(subclass) &&
+    candidateId &&
+    normalizeSubclassId(subclass?.id) === candidateId
+  ));
+
+  if (exactIdMatch >= 0) {
+    return exactIdMatch;
+  }
+
+  const exactNameMatch = subclasses.findIndex((subclass) => (
+    sameClass(subclass) &&
+    candidateName &&
+    normalizeSubclassId(subclass?.name) === candidateName
+  ));
+
+  if (exactNameMatch >= 0) {
+    return exactNameMatch;
+  }
+
+  return subclasses.findIndex((subclass) => {
+    if (!sameClass(subclass)) {
+      return false;
+    }
+
+    return getSubclassMatchKeys(subclass, candidateClassId)
+      .some((key) => candidateKeys.has(key));
+  });
+};
+
+const mergeSubclassRecord = (
+  placeholder,
+  detailed,
+  fallbackClassId = ""
+) => {
+  const hasPlaceholder = Boolean(placeholder);
+  const classId = normalizeSubclassId(
+    detailed?.classId ||
+    placeholder?.classId ||
+    fallbackClassId
+  );
+  const detailedDefinedFields = Object.fromEntries(
+    Object.entries(detailed || {}).filter(([, value]) => value !== undefined)
+  );
+  const fallbackName = String(
+    detailed?.name ||
+    placeholder?.name ||
+    detailed?.id ||
+    "Subclass"
+  ).trim();
+  const base = placeholder || createSubclassRecord(classId, fallbackName);
+  const detailedFeaturesByLevel = getDetailedFeaturesByLevel(detailed);
+  const featuresByLevel = {
+    ...(base.featuresByLevel || {}),
+    ...detailedFeaturesByLevel
+  };
+  const featureLevels = [
+    ...new Set([
+      ...(Array.isArray(base.featureLevels) ? base.featureLevels : []),
+      ...(Array.isArray(detailed?.featureLevels) ? detailed.featureLevels : []),
+      ...Object.keys(detailedFeaturesByLevel).map(Number)
+    ])
+  ]
+    .filter((level) => Number.isInteger(level) && level >= 1 && level <= 20)
+    .sort((a, b) => a - b);
+  const aliases = uniqueStrings([
+    ...(Array.isArray(base.aliases) ? base.aliases : []),
+    ...(Array.isArray(detailed?.aliases) ? detailed.aliases : []),
+    base.id,
+    base.name,
+    detailed?.id,
+    detailed?.name,
+    normalizeSubclassMatchAlias(base.id, classId),
+    normalizeSubclassMatchAlias(base.name, classId),
+    normalizeSubclassMatchAlias(detailed?.id, classId),
+    normalizeSubclassMatchAlias(detailed?.name, classId)
+  ]);
+  const expandedSpells = {
+    ...(base.expandedSpells || {}),
+    ...(detailed?.expandedSpells || {})
+  };
+  const merged = {
+    ...base,
+    ...detailedDefinedFields,
+    schemaVersion:
+      detailed?.schemaVersion ??
+      base.schemaVersion ??
+      DEFAULT_SUBCLASS_SCHEMA_VERSION,
+    classId,
+    id: hasPlaceholder
+      ? normalizeSubclassId(base.id || base.name)
+      : normalizeSubclassId(detailed?.id || detailed?.name || base.id),
+    name: hasPlaceholder
+      ? String(base.name || detailed?.name || "Subclass").trim()
+      : String(detailed?.name || base.name || "Subclass").trim(),
+    featureLevels: copyArray(featureLevels),
+    featuresByLevel: copyFeatureMap(featuresByLevel),
+    expandedSpells: Object.freeze(expandedSpells),
+    choices: copyArray(
+      hasOwn(detailed, "choices") ? detailed.choices : base.choices
+    ),
+    effects: copyArray(
+      hasOwn(detailed, "effects") ? detailed.effects : base.effects
+    ),
+    aliases: copyArray(aliases)
+  };
+
+  if (hasOwn(detailed, "resources") || hasOwn(base, "resources")) {
+    const resources = hasOwn(detailed, "resources")
+      ? detailed.resources
+      : base.resources;
+
+    merged.resources = Array.isArray(resources)
+      ? copyArray(resources)
+      : resources && typeof resources === "object"
+        ? Object.freeze({ ...resources })
+        : resources;
+  }
+
+  return Object.freeze(merged);
+};
+
+export function mergeDefaultSubclassCollections(
+  placeholderSubclasses,
+  detailedSubclasses,
+  options = {}
+) {
+  const fallbackClassId = normalizeSubclassId(options.classId);
+  const merged = [];
+
+  (Array.isArray(placeholderSubclasses) ? placeholderSubclasses : [])
+    .forEach((placeholder) => {
+      const normalizedPlaceholder = mergeSubclassRecord(
+        null,
+        placeholder,
+        fallbackClassId
+      );
+      const matchIndex = findMatchingSubclassIndex(
+        merged,
+        normalizedPlaceholder,
+        fallbackClassId
+      );
+
+      if (matchIndex >= 0) {
+        merged[matchIndex] = mergeSubclassRecord(
+          merged[matchIndex],
+          normalizedPlaceholder,
+          fallbackClassId
+        );
+      } else {
+        merged.push(normalizedPlaceholder);
+      }
+    });
+
+  (Array.isArray(detailedSubclasses) ? detailedSubclasses : [])
+    .forEach((detailed) => {
+      const candidate = {
+        ...detailed,
+        classId: detailed?.classId || fallbackClassId
+      };
+      const matchIndex = findMatchingSubclassIndex(
+        merged,
+        candidate,
+        fallbackClassId
+      );
+
+      if (matchIndex >= 0) {
+        merged[matchIndex] = mergeSubclassRecord(
+          merged[matchIndex],
+          candidate,
+          fallbackClassId
+        );
+      } else {
+        merged.push(
+          mergeSubclassRecord(
+            null,
+            candidate,
+            fallbackClassId
+          )
+        );
+      }
+    });
+
+  return Object.freeze(merged);
 }
+
+const buildDefaultSubclasses = () => Object.entries(SUBCLASS_NAME_LIST)
+  .flatMap(([classId, subclassNames]) => {
+    if (!Array.isArray(subclassNames)) {
+      return [];
+    }
+
+    return subclassNames.map((name) => createSubclassRecord(classId, name));
+  });
+
+const makeNestedSubclassMap = (subclasses) => {
+  const subclassMap = {};
+
+  subclasses.forEach((subclass) => {
+    if (!subclassMap[subclass.classId]) {
+      subclassMap[subclass.classId] = {};
+    }
+
+    subclassMap[subclass.classId][subclass.id] = subclass;
+  });
+
+  Object.keys(subclassMap).forEach((classId) => {
+    subclassMap[classId] = Object.freeze(subclassMap[classId]);
+  });
+
+  return Object.freeze(subclassMap);
+};
 
 export function validateDefaultSubclassCollection(subclasses) {
   const errors = [];
@@ -76,58 +449,85 @@ export function validateDefaultSubclassCollection(subclasses) {
 
   const seenSubclassIds = new Set();
 
-  subclasses.forEach(function (subclass, subclassIndex) {
-    const label = `Subclass at index ${subclassIndex}`;
+  subclasses.forEach((subclass, index) => {
+    const label = `Subclass ${index + 1}`;
+    const id = normalizeSubclassId(subclass?.id || subclass?.name);
+    const classId = normalizeSubclassId(subclass?.classId);
 
     if (!subclass || typeof subclass !== "object") {
       errors.push(`${label} must be an object.`);
       return;
     }
 
-    if (!subclass.id) errors.push(`${label} must have an id.`);
-    if (!subclass.classId) errors.push(`${label} must have a classId.`);
-    if (!subclass.name) errors.push(`${label} must have a name.`);
-    if (!subclass.subclassLabel) errors.push(`${label} must have a subclassLabel.`);
+    if (subclass.schemaVersion !== DEFAULT_SUBCLASS_SCHEMA_VERSION) {
+      errors.push(`${label} must use schema version ${DEFAULT_SUBCLASS_SCHEMA_VERSION}.`);
+    }
+
+    if (!id) {
+      errors.push(`${label} is missing an id.`);
+    }
+
+    if (!classId) {
+      errors.push(`${label} is missing a classId.`);
+    }
+
+    if (!String(subclass.name || "").trim()) {
+      errors.push(`${label} is missing a name.`);
+    }
+
+    if (!String(subclass.source || "").trim()) {
+      errors.push(`${label} is missing a source.`);
+    }
+
+    if (!String(subclass.summary || "").trim()) {
+      errors.push(`${label} is missing a summary.`);
+    }
+
+    if (!String(subclass.description || "").trim()) {
+      errors.push(`${label} is missing a description.`);
+    }
+
+    if (!String(subclass.subclassLabel || "").trim()) {
+      errors.push(`${label} is missing a subclassLabel.`);
+    }
 
     if (!Number.isInteger(subclass.unlockLevel) || subclass.unlockLevel < 1 || subclass.unlockLevel > 20) {
       errors.push(`${label} must have an unlockLevel between 1 and 20.`);
     }
 
     if (!Array.isArray(subclass.featureLevels)) {
-      errors.push(`${label} must have a featureLevels array.`);
+      errors.push(`${label} featureLevels must be an array.`);
     }
 
     if (!subclass.featuresByLevel || typeof subclass.featuresByLevel !== "object" || Array.isArray(subclass.featuresByLevel)) {
-      errors.push(`${label} must have a featuresByLevel object.`);
-    } else {
-      Object.entries(subclass.featuresByLevel).forEach(function ([level, features]) {
-        if (!Array.isArray(features)) {
+      errors.push(`${label} featuresByLevel must be an object.`);
+    } else if (Array.isArray(subclass.featureLevels)) {
+      subclass.featureLevels.forEach((level) => {
+        if (!Array.isArray(subclass.featuresByLevel[level])) {
           errors.push(`${label} featuresByLevel.${level} must be an array.`);
-          return;
         }
-
-        features.forEach(function (feature, featureIndex) {
-          const featureLabel = `${label} feature ${level}.${featureIndex}`;
-
-          if (!feature || typeof feature !== "object") {
-            errors.push(`${featureLabel} must be an object.`);
-            return;
-          }
-
-          if (!feature.id) errors.push(`${featureLabel} must have an id.`);
-          if (!feature.name) errors.push(`${featureLabel} must have a name.`);
-          if (!feature.summary) errors.push(`${featureLabel} must have a summary.`);
-        });
       });
     }
 
-    const uniqueKey = `${subclass.classId}:${subclass.id}`;
-
-    if (subclass.classId && subclass.id && seenSubclassIds.has(uniqueKey)) {
-      errors.push(`${label} duplicates subclass id "${subclass.id}" for class "${subclass.classId}".`);
+    if (!subclass.expandedSpells || typeof subclass.expandedSpells !== "object" || Array.isArray(subclass.expandedSpells)) {
+      errors.push(`${label} expandedSpells must be an object.`);
     }
 
-    seenSubclassIds.add(uniqueKey);
+    if (!Array.isArray(subclass.choices)) {
+      errors.push(`${label} choices must be an array.`);
+    }
+
+    if (!Array.isArray(subclass.effects)) {
+      errors.push(`${label} effects must be an array.`);
+    }
+
+    const duplicateKey = `${classId}:${id}`;
+
+    if (classId && id && seenSubclassIds.has(duplicateKey)) {
+      errors.push(`${label} duplicates subclass id "${id}" for class "${classId}".`);
+    }
+
+    seenSubclassIds.add(duplicateKey);
   });
 
   return {
@@ -136,348 +536,19 @@ export function validateDefaultSubclassCollection(subclasses) {
   };
 }
 
-const starterSubclasses = [
-  {
-    id: "berserker",
-    classId: "barbarian",
-    className: "Barbarian",
-    subclassLabel: "Primal Path",
-    name: "Berserker",
-    source: "starter",
-    summary: "A rage-focused warrior who turns fury into relentless offense.",
-    unlockLevel: 3,
-    featureLevels: [3, 6, 10, 14],
-    featuresByLevel: {
-      3: [{
-        id: "berserker-frenzied-rage",
-        name: "Frenzied Rage",
-        type: "feature",
-        summary: "Your rage becomes more aggressive and focused on offense."
-      }],
-      6: [],
-      10: [],
-      14: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "lore",
-    classId: "bard",
-    className: "Bard",
-    subclassLabel: "Bard College",
-    name: "Lore",
-    source: "starter",
-    summary: "A curious bard who gathers knowledge and turns insight into an advantage.",
-    unlockLevel: 3,
-    featureLevels: [3, 6, 14],
-    featuresByLevel: {
-      3: [{
-        id: "lore-bonus-proficiencies",
-        name: "Bonus Proficiencies",
-        type: "feature",
-        summary: "Your broad studies grant training in several additional skills."
-      }],
-      6: [],
-      14: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "life",
-    classId: "cleric",
-    className: "Cleric",
-    subclassLabel: "Divine Domain",
-    name: "Life",
-    source: "starter",
-    summary: "A devoted healer who strengthens restorative magic and protects allies.",
-    unlockLevel: 1,
-    featureLevels: [1, 2, 6, 8, 17],
-    featuresByLevel: {
-      1: [{
-        id: "life-disciple-of-life",
-        name: "Disciple of Life",
-        type: "feature",
-        summary: "Your healing spells restore additional vitality."
-      }],
-      2: [],
-      6: [],
-      8: [],
-      17: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "land",
-    classId: "druid",
-    className: "Druid",
-    subclassLabel: "Druid Circle",
-    name: "Land",
-    source: "starter",
-    summary: "A spell-focused druid whose magic reflects a chosen natural environment.",
-    unlockLevel: 2,
-    featureLevels: [2, 6, 10, 14],
-    featuresByLevel: {
-      2: [{
-        id: "land-bonus-cantrip",
-        name: "Bonus Cantrip",
-        type: "feature",
-        summary: "Your bond with the land teaches you an additional druid cantrip."
-      }],
-      6: [],
-      10: [],
-      14: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "champion",
-    classId: "fighter",
-    className: "Fighter",
-    subclassLabel: "Martial Archetype",
-    name: "Champion",
-    source: "starter",
-    summary: "A focused combatant who develops dependable athletic and martial excellence.",
-    unlockLevel: 3,
-    featureLevels: [3, 7, 10, 15, 18],
-    featuresByLevel: {
-      3: [{
-        id: "champion-improved-critical",
-        name: "Improved Critical",
-        type: "feature",
-        summary: "Your weapon attacks become more likely to land decisive hits."
-      }],
-      7: [],
-      10: [],
-      15: [],
-      18: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "open-hand",
-    classId: "monk",
-    className: "Monk",
-    subclassLabel: "Monastic Tradition",
-    name: "Open Hand",
-    source: "starter",
-    summary: "A disciplined martial artist who controls the flow of close combat.",
-    unlockLevel: 3,
-    featureLevels: [3, 6, 11, 17],
-    featuresByLevel: {
-      3: [{
-        id: "open-hand-technique",
-        name: "Open Hand Technique",
-        type: "feature",
-        summary: "Your rapid strikes can disrupt an opponent's balance and reactions."
-      }],
-      6: [],
-      11: [],
-      17: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "devotion",
-    classId: "paladin",
-    className: "Paladin",
-    subclassLabel: "Sacred Oath",
-    name: "Devotion",
-    source: "starter",
-    summary: "An honorable paladin who embodies courage, compassion, and steadfast duty.",
-    unlockLevel: 3,
-    featureLevels: [3, 7, 15, 20],
-    featuresByLevel: {
-      3: [{
-        id: "devotion-sacred-weapon",
-        name: "Sacred Weapon",
-        type: "feature",
-        summary: "You empower a weapon with divine purpose for a limited time."
-      }],
-      7: [],
-      15: [],
-      20: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "hunter",
-    classId: "ranger",
-    className: "Ranger",
-    subclassLabel: "Ranger Archetype",
-    name: "Hunter",
-    source: "starter",
-    summary: "A practical ranger who adapts specialized tactics to dangerous prey.",
-    unlockLevel: 3,
-    featureLevels: [3, 7, 11, 15],
-    featuresByLevel: {
-      3: [{
-        id: "hunter-hunters-prey",
-        name: "Hunter's Prey",
-        type: "feature",
-        summary: "You choose a combat tactic suited to bringing down difficult enemies."
-      }],
-      7: [],
-      11: [],
-      15: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "thief",
-    classId: "rogue",
-    className: "Rogue",
-    subclassLabel: "Roguish Archetype",
-    name: "Thief",
-    source: "starter",
-    summary: "A nimble rogue who excels at quick hands, climbing, and opportunistic action.",
-    unlockLevel: 3,
-    featureLevels: [3, 9, 13, 17],
-    featuresByLevel: {
-      3: [{
-        id: "thief-fast-hands",
-        name: "Fast Hands",
-        type: "feature",
-        summary: "You perform certain object and agility tasks with exceptional speed."
-      }],
-      9: [],
-      13: [],
-      17: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "draconic-bloodline",
-    classId: "sorcerer",
-    className: "Sorcerer",
-    subclassLabel: "Sorcerous Origin",
-    name: "Draconic Bloodline",
-    source: "starter",
-    summary: "A sorcerer whose inherited draconic power hardens body and magic.",
-    unlockLevel: 1,
-    featureLevels: [1, 6, 14, 18],
-    featuresByLevel: {
-      1: [{
-        id: "draconic-bloodline-resilience",
-        name: "Draconic Resilience",
-        type: "feature",
-        summary: "Draconic power improves your durability and natural defenses."
-      }],
-      6: [],
-      14: [],
-      18: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "fiend",
-    classId: "warlock",
-    className: "Warlock",
-    subclassLabel: "Otherworldly Patron",
-    name: "Fiend",
-    source: "starter",
-    summary: "A warlock empowered by a destructive patron from the lower planes.",
-    unlockLevel: 1,
-    featureLevels: [1, 6, 10, 14],
-    featuresByLevel: {
-      1: [{
-        id: "fiend-dark-ones-blessing",
-        name: "Dark One's Blessing",
-        type: "feature",
-        summary: "Defeating a hostile creature grants you a brief reserve of vitality."
-      }],
-      6: [],
-      10: [],
-      14: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "evocation",
-    classId: "wizard",
-    className: "Wizard",
-    subclassLabel: "Arcane Tradition",
-    name: "Evocation",
-    source: "starter",
-    summary: "A wizard who shapes forceful spells with precision and control.",
-    unlockLevel: 2,
-    featureLevels: [2, 6, 10, 14],
-    featuresByLevel: {
-      2: [{
-        id: "evocation-sculpt-spells",
-        name: "Sculpt Spells",
-        type: "feature",
-        summary: "You shape area spells to better protect selected allies."
-      }],
-      6: [],
-      10: [],
-      14: []
-    },
-    expandedSpells: {},
-    choices: []
-  },
-  {
-    id: "alchemist",
-    classId: "artificer",
-    className: "Artificer",
-    subclassLabel: "Artificer Specialist",
-    name: "Alchemist",
-    source: "starter",
-    summary: "An inventive artificer who produces experimental mixtures and restorative effects.",
-    unlockLevel: 3,
-    featureLevels: [3, 5, 9, 15],
-    featuresByLevel: {
-      3: [{
-        id: "alchemist-experimental-elixir",
-        name: "Experimental Elixir",
-        type: "feature",
-        summary: "You create a temporary magical mixture with a useful unpredictable effect."
-      }],
-      5: [],
-      9: [],
-      15: []
-    },
-    expandedSpells: {},
-    choices: []
-  }
-];
+export const DEFAULT_SUBCLASSES = Object.freeze(buildDefaultSubclasses());
 
-const normalizedDefaultSubclasses = starterSubclasses.map(normalizeSubclassRecord);
-const validation = validateDefaultSubclassCollection(normalizedDefaultSubclasses);
+const defaultSubclassValidation = validateDefaultSubclassCollection(
+  DEFAULT_SUBCLASSES
+);
 
-if (!validation.valid) {
+if (!defaultSubclassValidation.valid) {
   throw new Error(
-    `Invalid default subclass data: ${validation.errors.join(" ")}`
+    `Invalid default subclass data: ${defaultSubclassValidation.errors.join(" ")}`
   );
 }
 
-export const DEFAULT_SUBCLASSES = Object.freeze(normalizedDefaultSubclasses);
-
-const subclassMap = {};
-
-DEFAULT_SUBCLASSES.forEach(function (subclass) {
-  if (!subclassMap[subclass.classId]) {
-    subclassMap[subclass.classId] = {};
-  }
-
-  subclassMap[subclass.classId][subclass.id] = subclass;
-});
-
-Object.keys(subclassMap).forEach(function (classId) {
-  subclassMap[classId] = Object.freeze(subclassMap[classId]);
-});
-
-export const DEFAULT_SUBCLASS_MAP = Object.freeze(subclassMap);
+export const DEFAULT_SUBCLASS_MAP = makeNestedSubclassMap(DEFAULT_SUBCLASSES);
 
 export function getDefaultSubclassesForClass(classId) {
   const normalizedClassId = normalizeSubclassId(classId);
