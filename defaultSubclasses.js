@@ -1,4 +1,4 @@
-=import { SUBCLASS_NAME_LIST } from "./defaultSubclassNames.js";
+import { SUBCLASS_NAME_LIST } from "./defaultSubclassNames.js";
 
 export const DEFAULT_SUBCLASS_SCHEMA_VERSION = 1;
 
