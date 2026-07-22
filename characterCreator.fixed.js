@@ -12,6 +12,7 @@
 import { DEFAULT_CLASSES } from "./defaultClasses.js";
 import { DEFAULT_FEATS } from "./defaultFeats.js";
 import { DEFAULT_SPELLS } from "./defaultSpells.js";
+import { createCharacterSheetView } from "./characterSheet.js";
 
 export function createCharacterCreator(options = {}) {
   const deps = {
@@ -3875,6 +3876,13 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    cleanupDuplicateNonRepeatableAdvancementFeats(
+      normalized,
+      {
+        addMigrationWarning: true
+      }
+    );
+
     if (
       !isPlainObject(
         normalized.proficiencies.skills
@@ -5776,26 +5784,63 @@ export function createCharacterCreator(options = {}) {
     let changed = false;
 
     slots.forEach((slot) => {
-      if (
-        slot.legacyId &&
-        slot.legacyId !== slot.id &&
-        compatibilityChoices[slot.legacyId]
-      ) {
-        if (!compatibilityChoices[slot.id]) {
-          compatibilityChoices[slot.id] =
-            compatibilityChoices[slot.legacyId];
-        }
-
-        delete compatibilityChoices[slot.legacyId];
-        changed = true;
-      }
-
       const classEntry =
         classEntries[slot.classIndex];
 
       if (!classEntry) {
         return;
       }
+
+      const isStartingClass =
+        isStartingClassEntry(
+          classEntry,
+          character,
+          slot.classIndex
+        );
+
+      const compatibilityLegacyIds = [
+        slot.legacyId,
+        isStartingClass
+          ? slot.featureId
+          : ""
+      ].filter((choiceId, index, values) => {
+        return (
+          choiceId &&
+          choiceId !== slot.id &&
+          values.indexOf(choiceId) === index
+        );
+      });
+
+      compatibilityLegacyIds.forEach(
+        (legacyChoiceId) => {
+          const legacyValues =
+            compatibilityChoices[
+              legacyChoiceId
+            ];
+
+          if (!legacyValues) {
+            return;
+          }
+
+          if (
+            !uniqueCleanArray(
+              compatibilityChoices[
+                slot.id
+              ]
+            ).length
+          ) {
+            compatibilityChoices[
+              slot.id
+            ] = legacyValues;
+          }
+
+          delete compatibilityChoices[
+            legacyChoiceId
+          ];
+
+          changed = true;
+        }
+      );
 
       classEntry.choices = {
         ...(classEntry.choices || {})
@@ -5806,19 +5851,42 @@ export function createCharacterCreator(options = {}) {
           classEntry.choices.classFeatures
         );
 
-      if (
-        slot.legacyId &&
-        slot.legacyId !== slot.id &&
-        entryChoices[slot.legacyId]
-      ) {
-        if (!entryChoices[slot.id]) {
-          entryChoices[slot.id] =
-            entryChoices[slot.legacyId];
-        }
+      [
+        slot.legacyId,
+        slot.featureId
+      ]
+        .filter((choiceId, index, values) => {
+          return (
+            choiceId &&
+            choiceId !== slot.id &&
+            values.indexOf(choiceId) === index
+          );
+        })
+        .forEach((legacyChoiceId) => {
+          const legacyValues =
+            entryChoices[
+              legacyChoiceId
+            ];
 
-        delete entryChoices[slot.legacyId];
-        changed = true;
-      }
+          if (!legacyValues) {
+            return;
+          }
+
+          if (
+            !uniqueCleanArray(
+              entryChoices[slot.id]
+            ).length
+          ) {
+            entryChoices[slot.id] =
+              legacyValues;
+          }
+
+          delete entryChoices[
+            legacyChoiceId
+          ];
+
+          changed = true;
+        });
 
       classEntry.choices.classFeatures =
         entryChoices;
@@ -5827,50 +5895,201 @@ export function createCharacterCreator(options = {}) {
     character.classChoices =
       compatibilityChoices;
 
-    character.advancementChoices =
+    const normalizedAdvancementChoices =
       normalizeAdvancementChoices(
         character?.advancementChoices
-      ).map((choice) => {
-        const slot = slots.find((entry) => {
-          return (
-            choice.id === entry.id ||
-            choice.id === entry.legacyId ||
-            (
-              cleanString(choice.classEntryId) ===
-                entry.classEntryId &&
-              safeNumber(choice.classLevel, 0) ===
-                entry.classLevel
-            ) ||
-            (
-              !cleanString(choice.classEntryId) &&
-              makeSafeId(choice.classId, "") ===
-                entry.classId &&
-              safeNumber(choice.classLevel, 0) ===
-                entry.classLevel
+      );
+
+    const usedAdvancementChoices =
+      new Set();
+
+    const migratedAdvancementChoices = [];
+
+    const mergeAdvancementChoice = (
+      preferred,
+      fallback
+    ) => {
+      const preferredMode = cleanString(
+        preferred?.mode ||
+          preferred?.selectedMode
+      ).toLowerCase();
+
+      const fallbackMode = cleanString(
+        fallback?.mode ||
+          fallback?.selectedMode
+      ).toLowerCase();
+
+      const mode =
+        ["asi", "feat"].includes(
+          preferredMode
+        )
+          ? preferredMode
+          : ["asi", "feat"].includes(
+              fallbackMode
             )
-          );
+            ? fallbackMode
+            : "";
+
+      const preferredFeatId =
+        cleanString(
+          preferred?.featId ||
+            preferred?.selectedFeatId
+        );
+
+      const fallbackFeatId =
+        cleanString(
+          fallback?.featId ||
+            fallback?.selectedFeatId
+        );
+
+      const featId =
+        mode === "feat"
+          ? preferredFeatId ||
+            fallbackFeatId
+          : "";
+
+      const knownFeat =
+        DEFAULT_FEATS.find((feat) => {
+          return feat.id === featId;
         });
 
-        if (!slot) {
-          return choice;
-        }
+      return {
+        ...(fallback || {}),
+        ...(preferred || {}),
+        mode,
+        featId,
+        featName:
+          mode === "feat"
+            ? cleanString(
+                preferred?.featName,
+                cleanString(
+                  fallback?.featName,
+                  knownFeat?.name || ""
+                )
+              )
+            : "",
+        featChoices:
+          mode === "feat"
+            ? {
+                ...normalizeFeatChoiceSelections(
+                  fallback?.featChoices
+                ),
+                ...normalizeFeatChoiceSelections(
+                  preferred?.featChoices
+                )
+              }
+            : {}
+      };
+    };
 
-        if (
-          choice.id !== slot.id ||
-          choice.classEntryId !==
-            slot.classEntryId
-        ) {
-          changed = true;
-        }
+    slots.forEach((slot) => {
+      const matches =
+        normalizedAdvancementChoices
+          .filter((choice) => {
+            if (
+              usedAdvancementChoices.has(
+                choice
+              )
+            ) {
+              return false;
+            }
 
-        return {
-          ...choice,
-          id: slot.id,
-          classEntryId: slot.classEntryId,
-          classId: slot.classId,
-          classLevel: slot.classLevel
-        };
+            return (
+              choice.id === slot.id ||
+              choice.id === slot.legacyId ||
+              choice.id === slot.featureId ||
+              (
+                cleanString(
+                  choice.classEntryId
+                ) === slot.classEntryId &&
+                safeNumber(
+                  choice.classLevel,
+                  0
+                ) === slot.classLevel
+              ) ||
+              (
+                makeSafeId(
+                  choice.classId,
+                  ""
+                ) === slot.classId &&
+                safeNumber(
+                  choice.classLevel,
+                  0
+                ) === slot.classLevel
+              )
+            );
+          });
+
+      if (!matches.length) {
+        return;
+      }
+
+      const preferred =
+        matches.find((choice) => {
+          return choice.id === slot.id;
+        }) ||
+        matches.find((choice) => {
+          return (
+            cleanString(
+              choice.classEntryId
+            ) === slot.classEntryId
+          );
+        }) ||
+        matches[0];
+
+      const merged = matches
+        .filter((choice) => {
+          return choice !== preferred;
+        })
+        .reduce(
+          (result, fallback) => {
+            return mergeAdvancementChoice(
+              result,
+              fallback
+            );
+          },
+          preferred
+        );
+
+      matches.forEach((choice) => {
+        usedAdvancementChoices.add(
+          choice
+        );
       });
+
+      if (
+        matches.length > 1 ||
+        merged.id !== slot.id ||
+        cleanString(
+          merged.classEntryId
+        ) !== slot.classEntryId
+      ) {
+        changed = true;
+      }
+
+      migratedAdvancementChoices.push({
+        ...merged,
+        id: slot.id,
+        classEntryId: slot.classEntryId,
+        classId: slot.classId,
+        classLevel: slot.classLevel
+      });
+    });
+
+    normalizedAdvancementChoices
+      .filter((choice) => {
+        return !usedAdvancementChoices.has(
+          choice
+        );
+      })
+      .forEach((choice) => {
+        migratedAdvancementChoices.push(
+          choice
+        );
+      });
+
+    character.advancementChoices =
+      migratedAdvancementChoices;
 
     character.advancementChoices =
       normalizeAdvancementChoices(
@@ -5888,6 +6107,206 @@ export function createCharacterCreator(options = {}) {
     }
 
     return changed;
+  }
+
+  function cleanupDuplicateNonRepeatableAdvancementFeats(
+    character,
+    options = {}
+  ) {
+    const slots =
+      getUnlockedFeatChoiceSlots(
+        character
+      );
+
+    if (!slots.length) {
+      return [];
+    }
+
+    const classEntries =
+      getCharacterClassEntries(
+        character
+      );
+
+    const seenFeatSlots =
+      new Map();
+
+    const duplicateSlots = [];
+
+    slots.forEach((slot) => {
+      if (
+        slot.selectedMode !== "feat" ||
+        !slot.selectedFeatId
+      ) {
+        return;
+      }
+
+      const feat =
+        DEFAULT_FEATS.find((entry) => {
+          return (
+            entry.id ===
+            slot.selectedFeatId
+          );
+        });
+
+      if (
+        !feat ||
+        feat.repeatable === true
+      ) {
+        return;
+      }
+
+      if (
+        seenFeatSlots.has(feat.id)
+      ) {
+        duplicateSlots.push({
+          slot,
+          feat
+        });
+
+        return;
+      }
+
+      seenFeatSlots.set(
+        feat.id,
+        slot.id
+      );
+    });
+
+    if (!duplicateSlots.length) {
+      return [];
+    }
+
+    const duplicateSlotIds =
+      new Set(
+        duplicateSlots.map(({ slot }) => {
+          return slot.id;
+        })
+      );
+
+    const choiceMatchesDuplicateSlot = (
+      choice,
+      slot
+    ) => {
+      return (
+        choice.id === slot.id ||
+        choice.id === slot.legacyId ||
+        choice.id === slot.featureId ||
+        (
+          cleanString(
+            choice.classEntryId
+          ) === slot.classEntryId &&
+          safeNumber(
+            choice.classLevel,
+            0
+          ) === slot.classLevel
+        ) ||
+        (
+          makeSafeId(
+            choice.classId,
+            ""
+          ) === slot.classId &&
+          safeNumber(
+            choice.classLevel,
+            0
+          ) === slot.classLevel
+        )
+      );
+    };
+
+    character.advancementChoices =
+      normalizeAdvancementChoices(
+        character?.advancementChoices
+      ).filter((choice) => {
+        return !duplicateSlots.some(
+          ({ slot }) => {
+            return choiceMatchesDuplicateSlot(
+              choice,
+              slot
+            );
+          }
+        );
+      });
+
+    const compatibilityChoices =
+      normalizeClassChoiceMap(
+        character?.classChoices
+      );
+
+    duplicateSlots.forEach(
+      ({ slot, feat }) => {
+        const classEntry =
+          classEntries[
+            slot.classIndex
+          ];
+
+        const isStartingClass =
+          classEntry &&
+          isStartingClassEntry(
+            classEntry,
+            character,
+            slot.classIndex
+          );
+
+        [
+          slot.id,
+          slot.legacyId,
+          isStartingClass
+            ? slot.featureId
+            : ""
+        ]
+          .filter(Boolean)
+          .forEach((choiceId) => {
+            delete compatibilityChoices[
+              choiceId
+            ];
+          });
+
+        if (classEntry) {
+          classEntry.choices = {
+            ...(classEntry.choices || {})
+          };
+
+          const entryChoices =
+            normalizeClassChoiceMap(
+              classEntry.choices
+                .classFeatures
+            );
+
+          [
+            slot.id,
+            slot.legacyId,
+            slot.featureId
+          ]
+            .filter(Boolean)
+            .forEach((choiceId) => {
+              delete entryChoices[
+                choiceId
+              ];
+            });
+
+          classEntry.choices
+            .classFeatures =
+              entryChoices;
+        }
+
+        if (
+          options.addMigrationWarning ===
+          true
+        ) {
+          addMigrationWarning(
+            character,
+            `Duplicate feat detected: ${feat.name}. Non-repeatable feats should only be selected once.`
+          );
+        }
+      }
+    );
+
+    character.classChoices =
+      compatibilityChoices;
+
+    return [
+      ...duplicateSlotIds
+    ];
   }
 
   function calculateCharacterHitDice(
@@ -9019,6 +9438,10 @@ export function createCharacterCreator(options = {}) {
           creatorState.busyAction,
         statusMessage:
           creatorState.statusMessage,
+        multiclassAddStatus:
+          cloneData(
+            creatorState.multiclassAddStatus
+          ),
         pendingContainerRemovalId:
           creatorState.pendingContainerRemovalId,
         openContainerId:
@@ -9069,6 +9492,13 @@ export function createCharacterCreator(options = {}) {
         stateSnapshot.busyAction;
       creatorState.statusMessage =
         stateSnapshot.statusMessage;
+      creatorState.multiclassAddStatus =
+        cloneData(
+          stateSnapshot.multiclassAddStatus || {
+            message: "",
+            tone: "warning"
+          }
+        );
       creatorState.pendingContainerRemovalId =
         stateSnapshot.pendingContainerRemovalId;
       creatorState.openContainerId =
@@ -9109,6 +9539,10 @@ export function createCharacterCreator(options = {}) {
         busyAction: "",
         statusMessage:
           "Running isolated character creator self-tests.",
+        multiclassAddStatus: {
+          message: "",
+          tone: "warning"
+        },
         pendingContainerRemovalId: "",
         openContainerId: "",
         showContainedItems: false,
@@ -9377,6 +9811,169 @@ export function createCharacterCreator(options = {}) {
           "https://example.com/string-portrait.png",
         cleared: true,
         clearedUrl: ""
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection12Class("rogue");
+
+    const duplicateMulticlassResult =
+      tryAddMulticlassClass(
+        "rogue"
+      );
+
+    const missingMulticlassResult =
+      tryAddMulticlassClass(
+        "not-a-real-class"
+      );
+
+    const emptyMulticlassResult =
+      tryAddMulticlassClass("");
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection12Class("fighter");
+
+    const prerequisiteMulticlassResult =
+      tryAddMulticlassClass(
+        "wizard"
+      );
+
+    creatorState.draft.abilities.base = {
+      ...creatorState.draft.abilities.base,
+      str: 13,
+      int: 13
+    };
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const successfulMulticlassResult =
+      tryAddMulticlassClass(
+        "wizard"
+      );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection12Class("fighter");
+
+    creatorState.draft.abilities.base = {
+      ...creatorState.draft.abilities.base,
+      str: 13,
+      int: 13
+    };
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    setMulticlassClassLevel(0, 20);
+
+    const maximumLevelMulticlassResult =
+      tryAddMulticlassClass(
+        "wizard"
+      );
+
+    record(
+      "Multiclass add returns exact visible result reasons",
+      {
+        empty:
+          emptyMulticlassResult,
+        missing:
+          missingMulticlassResult,
+        duplicate:
+          duplicateMulticlassResult,
+        prerequisites: {
+          ok:
+            prerequisiteMulticlassResult.ok,
+          reason:
+            prerequisiteMulticlassResult.reason,
+          message:
+            prerequisiteMulticlassResult.message,
+          failures:
+            prerequisiteMulticlassResult
+              .failedPrerequisites
+              .map((result) => {
+                return result.classId;
+              })
+        },
+        success: {
+          ok:
+            successfulMulticlassResult.ok,
+          classId:
+            successfulMulticlassResult.classId,
+          totalLevel:
+            successfulMulticlassResult.totalLevel,
+          message:
+            successfulMulticlassResult.message
+        },
+        maximum: {
+          ok:
+            maximumLevelMulticlassResult.ok,
+          reason:
+            maximumLevelMulticlassResult.reason,
+          message:
+            maximumLevelMulticlassResult.message
+        }
+      },
+      {
+        empty: {
+          ok: false,
+          reason: "empty-class-id",
+          classId: "",
+          className: "",
+          message:
+            "Choose a class to add first.",
+          failedPrerequisites: []
+        },
+        missing: {
+          ok: false,
+          reason: "class-not-found",
+          classId:
+            "not-a-real-class",
+          className: "",
+          message:
+            "That class could not be found.",
+          failedPrerequisites: []
+        },
+        duplicate: {
+          ok: false,
+          reason: "duplicate-class",
+          classId: "rogue",
+          className: "Rogue",
+          message:
+            "That class is already in this character's progression.",
+          failedPrerequisites: []
+        },
+        prerequisites: {
+          ok: false,
+          reason:
+            "prerequisites-not-met",
+          message:
+            "Multiclass prerequisites are not met: Fighter requires Strength 13 or Dexterity 13; Wizard requires Intelligence 13.",
+          failures: [
+            "fighter",
+            "wizard"
+          ]
+        },
+        success: {
+          ok: true,
+          classId: "wizard",
+          totalLevel: 2,
+          message:
+            "Wizard added. Use Level Up Workflow to add Wizard levels. Total level is now 2."
+        },
+        maximum: {
+          ok: false,
+          reason: "maximum-level",
+          message:
+            "Character is already level 20."
+        }
       }
     );
 
@@ -13178,7 +13775,22 @@ export function createCharacterCreator(options = {}) {
           ),
         addClass:
           multiclassClassHtml.includes(
-            "Add Class"
+            "Add Selected Class"
+          ),
+        addClassLabel:
+          multiclassClassHtml.includes(
+            "Choose class to add"
+          ),
+        addClassHelper:
+          multiclassClassHtml.includes(
+            "Add Selected Class adds a new class at level 1. After that, use Level Up Workflow to add more levels to that class."
+          ),
+        localAddStatus:
+          multiclassClassHtml.includes(
+            'id="ccMulticlassAddStatus"'
+          ) &&
+          multiclassClassHtml.includes(
+            "aria-live=\"polite\""
           ),
         levelUpWorkflow:
           multiclassClassHtml.includes(
@@ -13228,6 +13840,23 @@ export function createCharacterCreator(options = {}) {
           multiclassLevelHtml.includes(
             "move-character-level-order"
           ),
+        levelOrderCollapsed:
+          multiclassLevelHtml.includes(
+            '<details class="hg-character-level-order-details">'
+          ) &&
+          multiclassLevelHtml.includes(
+            "Show Advanced Level Order"
+          ) &&
+          !multiclassLevelHtml.includes(
+            '<details class="hg-character-level-order-details" open'
+          ),
+        levelOrderCompact:
+          multiclassLevelHtml.includes(
+            "hg-character-level-order-row"
+          ) &&
+          multiclassLevelHtml.includes(
+            "Advanced: this controls HP and hit dice when multiclassing. Most players do not need to change it."
+          ),
         noReadOnlyWarning:
           !multiclassWarnings.some((warning) => {
             return warning.includes(
@@ -13240,6 +13869,13 @@ export function createCharacterCreator(options = {}) {
           ) &&
           multiclassReviewHtml.includes(
             "Level-by-Level Class Order"
+          ),
+        reviewLevelOrderReadOnly:
+          !multiclassReviewHtml.includes(
+            "move-character-level-order"
+          ) &&
+          !multiclassReviewHtml.includes(
+            "Show Advanced Level Order"
           ),
         reviewChoiceSummary:
           multiclassReviewHtml.includes(
@@ -13259,16 +13895,65 @@ export function createCharacterCreator(options = {}) {
       {
         classProgression: true,
         addClass: true,
+        addClassLabel: true,
+        addClassHelper: true,
+        localAddStatus: true,
         levelUpWorkflow: true,
         fighterLevelInput: true,
         wizardSubclassInput: true,
         fighterSummary: true,
         wizardSummary: true,
         levelOrder: true,
+        levelOrderCollapsed: true,
+        levelOrderCompact: true,
         noReadOnlyWarning: true,
         reviewSummary: true,
+        reviewLevelOrderReadOnly: true,
         reviewChoiceSummary: true,
         reviewHidesInternalSnapshots: true
+      }
+    );
+
+    const portraitLibraryDraft =
+      createEmptyCharacter();
+
+    portraitLibraryDraft.id =
+      "portrait-size-test";
+    portraitLibraryDraft.identity.name =
+      "Portrait Size Test";
+    portraitLibraryDraft.identity.image.url =
+      "https://example.invalid/portrait.png";
+
+    const portraitLibraryHtml =
+      createCharacterLibraryCard(
+        portraitLibraryDraft
+      );
+
+    record(
+      "Character library portraits have a stable maximum size",
+      {
+        portraitClass:
+          portraitLibraryHtml.includes(
+            "hg-character-library-portrait"
+          ),
+        fixedHeight:
+          portraitLibraryHtml.includes(
+            "height: 220px"
+          ),
+        maxHeight:
+          portraitLibraryHtml.includes(
+            "max-height: 220px"
+          ),
+        cropped:
+          portraitLibraryHtml.includes(
+            "object-fit: cover"
+          )
+      },
+      {
+        portraitClass: true,
+        fixedHeight: true,
+        maxHeight: true,
+        cropped: true
       }
     );
 
@@ -13964,6 +14649,209 @@ export function createCharacterCreator(options = {}) {
           "fighter:4",
           "wizard:4"
         ]
+      }
+    );
+
+    const fighterAsiSlot =
+      fighterFourWizardFourSlots[0];
+    const wizardAsiSlot =
+      fighterFourWizardFourSlots[1];
+
+    const fighterFeatModeForDuplicateTest =
+      setSection12AsiMode(
+        fighterAsiSlot?.id,
+        "feat"
+      );
+
+    const fighterAlertForDuplicateTest =
+      setSection12AsiFeat(
+        fighterAsiSlot?.id,
+        "alert"
+      );
+
+    const wizardFeatModeForDuplicateTest =
+      setSection12AsiMode(
+        wizardAsiSlot?.id,
+        "feat"
+      );
+
+    const fighterFeatOptionHtml =
+      renderSection12CompactAsiChoice(
+        fighterAsiSlot
+      );
+
+    const wizardFeatOptionHtml =
+      renderSection12CompactAsiChoice(
+        wizardAsiSlot
+      );
+
+    const duplicateAlertRejected =
+      !setSection12AsiFeat(
+        wizardAsiSlot?.id,
+        "alert"
+      );
+
+    record(
+      "Feat picker labels and blocks duplicate non-repeatable feats",
+      {
+        fighterFeatModeForDuplicateTest,
+        fighterAlertForDuplicateTest,
+        wizardFeatModeForDuplicateTest,
+        duplicateAlertRejected,
+        selectedLabel:
+          fighterFeatOptionHtml.includes(
+            "Selected"
+          ),
+        duplicateLabel:
+          wizardFeatOptionHtml.includes(
+            "Already selected"
+          ),
+        prerequisiteLabel:
+          wizardFeatOptionHtml.includes(
+            "Prerequisite not met"
+          ),
+        chooseLabel:
+          wizardFeatOptionHtml.includes(
+            "Choose Feat"
+          )
+      },
+      {
+        fighterFeatModeForDuplicateTest: true,
+        fighterAlertForDuplicateTest: true,
+        wizardFeatModeForDuplicateTest: true,
+        duplicateAlertRejected: true,
+        selectedLabel: true,
+        duplicateLabel: true,
+        prerequisiteLabel: true,
+        chooseLabel: true
+      }
+    );
+
+    const stableMigrationDraft =
+      cloneData(creatorState.draft);
+
+    stableMigrationDraft.feats = [];
+    stableMigrationDraft.classChoices = {};
+    stableMigrationDraft
+      .classProgression
+      .classes
+      .forEach((classEntry) => {
+        classEntry.choices = {
+          ...(classEntry.choices || {}),
+          classFeatures: {}
+        };
+      });
+
+    stableMigrationDraft.advancementChoices = [
+      {
+        id: fighterAsiSlot.id,
+        classEntryId:
+          fighterAsiSlot.classEntryId,
+        classId: fighterAsiSlot.classId,
+        classLevel:
+          fighterAsiSlot.classLevel,
+        mode: ""
+      },
+      {
+        id: fighterAsiSlot.legacyId,
+        classId: fighterAsiSlot.classId,
+        classLevel:
+          fighterAsiSlot.classLevel,
+        mode: "feat",
+        featId: "alert",
+        featName: "Alert"
+      }
+    ];
+
+    const migratedStableDraft =
+      normalizeCharacter(
+        stableMigrationDraft
+      );
+
+    const migratedStableChoices =
+      migratedStableDraft
+        .advancementChoices
+        .filter((choice) => {
+          return (
+            choice.classId === "fighter" &&
+            choice.classLevel === 4
+          );
+        });
+
+    const duplicateImportDraft =
+      cloneData(stableMigrationDraft);
+
+    duplicateImportDraft.feats = [
+      "alert"
+    ];
+    duplicateImportDraft.advancementChoices = [
+      {
+        id: fighterAsiSlot.id,
+        classEntryId:
+          fighterAsiSlot.classEntryId,
+        classId: fighterAsiSlot.classId,
+        classLevel:
+          fighterAsiSlot.classLevel,
+        mode: "feat",
+        featId: "alert",
+        featName: "Alert"
+      },
+      {
+        id: wizardAsiSlot.id,
+        classEntryId:
+          wizardAsiSlot.classEntryId,
+        classId: wizardAsiSlot.classId,
+        classLevel:
+          wizardAsiSlot.classLevel,
+        mode: "feat",
+        featId: "alert",
+        featName: "Alert"
+      }
+    ];
+
+    const cleanedDuplicateImport =
+      normalizeCharacter(
+        duplicateImportDraft
+      );
+
+    const cleanedDuplicateSlots =
+      getUnlockedFeatChoiceSlots(
+        cleanedDuplicateImport
+      ).filter((slot) => {
+        return (
+          slot.selectedFeatId ===
+          "alert"
+        );
+      });
+
+    record(
+      "ASI migration prefers stable slots and cleans duplicate imported feats",
+      {
+        migratedChoiceCount:
+          migratedStableChoices.length,
+        migratedChoiceId:
+          migratedStableChoices[0]?.id,
+        migratedFeatId:
+          migratedStableChoices[0]?.featId,
+        duplicateSelectedCount:
+          cleanedDuplicateSlots.length,
+        duplicateWarning:
+          cleanArray(
+            cleanedDuplicateImport
+              ?.builder
+              ?.validation
+              ?.migrationWarnings
+          ).includes(
+            "Duplicate feat detected: Alert. Non-repeatable feats should only be selected once."
+          )
+      },
+      {
+        migratedChoiceCount: 1,
+        migratedChoiceId:
+          fighterAsiSlot.id,
+        migratedFeatId: "alert",
+        duplicateSelectedCount: 1,
+        duplicateWarning: true
       }
     );
 
@@ -18771,6 +19659,10 @@ export function createCharacterCreator(options = {}) {
     isSaving: false,
     busyAction: "",
     statusMessage: "Character creator foundation ready.",
+    multiclassAddStatus: {
+      message: "",
+      tone: "warning"
+    },
     pendingContainerRemovalId: "",
     openContainerId: "",
     showContainedItems: false,
@@ -18786,6 +19678,8 @@ export function createCharacterCreator(options = {}) {
     roomSpeciesCache: [],
     roomBackgroundCache: []
   };
+
+  let characterSheetView = null;
 
   const DRAFT_AUTOSAVE_DEBOUNCE_MS = 600;
 
@@ -20911,83 +21805,84 @@ export function createCharacterCreator(options = {}) {
 
     const classLevelCounts = {};
 
-    const levelCards =
-      records
-        .map((record, index) => {
-          const classKey =
-            record.classEntryId ||
-            record.classId ||
+    const levelRecords =
+      records.map((record, index) => {
+        const classKey =
+          record.classEntryId ||
+          record.classId ||
+          record.className ||
+          "class";
+
+        classLevelCounts[classKey] =
+          (classLevelCounts[classKey] || 0) + 1;
+
+        return {
+          ...record,
+          classLevel:
+            record.classLevel ||
+            classLevelCounts[classKey],
+          levelIndex: index
+        };
+      });
+
+    const levelOrderSummary =
+      levelRecords
+        .map((record) => {
+          return `${
             record.className ||
-            "class";
-
-          classLevelCounts[classKey] =
-            (classLevelCounts[classKey] || 0) + 1;
-
-          return {
-            ...record,
-            classLevel:
-              record.classLevel ||
-              classLevelCounts[classKey]
-            ,
-            levelIndex: index
-          };
+            "Class"
+          } ${record.classLevel}`;
         })
+        .join(", ");
+
+    const levelRows =
+      levelRecords
         .map((record) => {
           return `
-            <article class="hg-character-choice-card">
-              <h3>
-                Character Level ${record.characterLevel}
-              </h3>
+            <div class="hg-character-level-order-row">
+              <div class="hg-character-level-order-label">
+                <span>
+                  Character Level ${record.characterLevel}
+                </span>
 
-              <p>
-                <b>Class:</b>
-                ${escapeHtml(
-                  record.className ||
-                  "Class"
-                )}
+                <strong>
+                  ${escapeHtml(
+                    record.className ||
+                    "Class"
+                  )}
+                  ${record.classLevel}
+                </strong>
 
-                <br>
+                <span>
+                  ${escapeHtml(
+                    record.hitDie ||
+                    "d8"
+                  )}
+                </span>
+              </div>
 
-                <b>Class Level:</b>
-                ${record.classLevel}
+              <div class="hg-character-level-order-actions">
+                <button
+                  type="button"
+                  data-cc-action="move-character-level-order"
+                  data-level-index="${record.levelIndex}"
+                  data-delta="-1"
+                  ${record.levelIndex <= 0 ? "disabled" : ""}
+                >
+                  Move Earlier
+                </button>
 
-                <br>
-
-                <b>Hit Die:</b>
-                ${escapeHtml(
-                  record.hitDie ||
-                  "d8"
-                )}
-              </p>
-
-              ${
-                readonly
-                  ? ""
-                  : `
-                    <div class="hg-character-inline-actions">
-                      <button
-                        type="button"
-                        data-cc-action="move-character-level-order"
-                        data-level-index="${record.levelIndex}"
-                        data-delta="-1"
-                        ${record.levelIndex <= 0 ? "disabled" : ""}
-                      >
-                        Move Earlier
-                      </button>
-
-                      <button
-                        type="button"
-                        data-cc-action="move-character-level-order"
-                        data-level-index="${record.levelIndex}"
-                        data-delta="1"
-                        ${record.levelIndex >= records.length - 1 ? "disabled" : ""}
-                      >
-                        Move Later
-                      </button>
-                    </div>
-                  `
-              }
-            </article>
+                <button
+                  type="button"
+                  data-cc-action="move-character-level-order"
+                  data-level-index="${record.levelIndex}"
+                  data-delta="1"
+                  ${record.levelIndex >= records.length - 1 ? "disabled" : ""}
+                >
+                  Move Later
+                </button>
+              </div>
+            </div>
           `;
         })
         .join("");
@@ -20996,17 +21891,29 @@ export function createCharacterCreator(options = {}) {
       <h3>Level-by-Level Class Order</h3>
 
       <div class="hg-character-current-choice">
-        This order controls hit dice and HP calculations.
-        ${
-          readonly
-            ? ""
-            : "Move individual character levels earlier or later to represent the order the character actually leveled."
-        }
+        <b>Level order:</b>
+        ${escapeHtml(levelOrderSummary)}
+
+        <br>
+
+        <span class="small">
+          Advanced: this controls HP and hit dice when multiclassing. Most players do not need to change it.
+        </span>
       </div>
 
-      <div class="hg-character-choice-grid">
-        ${levelCards}
-      </div>
+      ${
+        readonly
+          ? ""
+          : `
+            <details class="hg-character-level-order-details">
+              <summary>Show Advanced Level Order</summary>
+
+              <div class="hg-character-level-order-rows">
+                ${levelRows}
+              </div>
+            </details>
+          `
+      }
     `;
   }
 
@@ -21419,7 +22326,7 @@ export function createCharacterCreator(options = {}) {
         <strong>To multiclass:</strong>
         <p>
           1. Pick a class in Add Multiclass.<br>
-          2. Click Add Class.<br>
+          2. Click Add Selected Class.<br>
           3. Use Level Up Workflow to decide which class gains future levels.
         </p>
       </div>
@@ -21504,6 +22411,117 @@ export function createCharacterCreator(options = {}) {
 
       ${renderLatestLevelUnlockSummary(character)}
     `;
+  }
+
+  function getSection12MulticlassAddStatus() {
+    const stored =
+      creatorState.multiclassAddStatus;
+
+    return {
+      message: cleanString(
+        stored?.message
+      ),
+      tone:
+        stored?.tone === "success"
+          ? "success"
+          : "warning"
+    };
+  }
+
+  function renderSection12MulticlassAddStatus() {
+    const status =
+      getSection12MulticlassAddStatus();
+    const isSuccess =
+      status.tone === "success";
+
+    return `
+      <div
+        id="ccMulticlassAddStatus"
+        class="${isSuccess ? "hg-character-current-choice" : "hg-character-warning"} hg-character-multiclass-add-status"
+        data-status-kind="${status.tone}"
+        role="${isSuccess ? "status" : "alert"}"
+        aria-live="polite"
+        ${status.message ? "" : "hidden"}
+      >
+        ${escapeHtml(status.message)}
+      </div>
+    `;
+  }
+
+  function setSection12MulticlassAddStatus(
+    message,
+    tone = "warning",
+    localRoot = null
+  ) {
+    const cleanMessage =
+      cleanString(message);
+    const cleanTone =
+      tone === "success"
+        ? "success"
+        : "warning";
+
+    creatorState.multiclassAddStatus = {
+      message: cleanMessage,
+      tone: cleanTone
+    };
+
+    setStatus(cleanMessage);
+
+    if (typeof document === "undefined") {
+      return cleanMessage;
+    }
+
+    const roots = [
+      localRoot,
+      W.stepBody,
+      W.root
+    ].filter((root, index, values) => {
+      return (
+        root &&
+        typeof root.querySelector ===
+          "function" &&
+        values.indexOf(root) === index
+      );
+    });
+
+    let statusElement = null;
+
+    roots.some((root) => {
+      statusElement =
+        root.querySelector(
+          "#ccMulticlassAddStatus"
+        );
+
+      return Boolean(statusElement);
+    });
+
+    if (!statusElement) {
+      statusElement =
+        document.getElementById(
+          "ccMulticlassAddStatus"
+        );
+    }
+
+    if (!statusElement) {
+      return cleanMessage;
+    }
+
+    statusElement.textContent =
+      cleanMessage;
+    statusElement.hidden =
+      !cleanMessage;
+    statusElement.className =
+      `${cleanTone === "success" ? "hg-character-current-choice" : "hg-character-warning"} hg-character-multiclass-add-status`;
+    statusElement.dataset.statusKind =
+      cleanTone;
+    statusElement.setAttribute(
+      "role",
+      cleanTone === "success"
+        ? "status"
+        : "alert"
+    );
+
+    return cleanMessage;
   }
 
   function renderMulticlassProgressionEditor(
@@ -21936,13 +22954,13 @@ export function createCharacterCreator(options = {}) {
       <div class="hg-character-beginner-note">
         <strong>Add Multiclass</strong>
         <p>
-          Pick a class below, then click Add Class. The new class starts at level 1.
+          Add Selected Class adds a new class at level 1. After that, use Level Up Workflow to add more levels to that class.
         </p>
       </div>
 
       <div class="hg-character-field-grid three">
         ${wizardSelect(
-          "Add Multiclass",
+          "Choose class to add",
           "ccMulticlassAddClass",
           "",
           addClassChoices,
@@ -21965,10 +22983,12 @@ export function createCharacterCreator(options = {}) {
             data-cc-action="add-multiclass-class"
             ${totalLevel >= 20 ? "disabled" : ""}
           >
-            Add Class
+            Add Selected Class
           </button>
         </div>
       </div>
+
+      ${renderSection12MulticlassAddStatus()}
 
       <div class="hg-character-choice-grid">
         ${classCards ||
@@ -23073,15 +24093,22 @@ export function createCharacterCreator(options = {}) {
     return totalLevel;
   }
 
-  function addMulticlassClass(
+  function tryAddMulticlassClass(
     classId
   ) {
     const cleanClassId =
       cleanString(classId);
 
     if (!cleanClassId) {
-      setStatus("Choose a class to add first.");
-      return false;
+      return {
+        ok: false,
+        reason: "empty-class-id",
+        classId: "",
+        className: "",
+        message:
+          "Choose a class to add first.",
+        failedPrerequisites: []
+      };
     }
 
     const selectedClass =
@@ -23090,8 +24117,15 @@ export function createCharacterCreator(options = {}) {
       });
 
     if (!selectedClass) {
-      setStatus("That class is unavailable and cannot be added.");
-      return false;
+      return {
+        ok: false,
+        reason: "class-not-found",
+        classId: cleanClassId,
+        className: "",
+        message:
+          "That class could not be found.",
+        failedPrerequisites: []
+      };
     }
 
     const classes =
@@ -23111,10 +24145,15 @@ export function createCharacterCreator(options = {}) {
       });
 
     if (existingClass) {
-      setStatus(
-        `${selectedClass.name} is already in this class progression. Increase its class level instead.`
-      );
-      return false;
+      return {
+        ok: false,
+        reason: "duplicate-class",
+        classId: selectedClass.id,
+        className: selectedClass.name,
+        message:
+          "That class is already in this character's progression.",
+        failedPrerequisites: []
+      };
     }
 
     const currentTotal =
@@ -23123,10 +24162,15 @@ export function createCharacterCreator(options = {}) {
       );
 
     if (currentTotal >= 20) {
-      setStatus(
-        "Total character level is already 20."
-      );
-      return false;
+      return {
+        ok: false,
+        reason: "maximum-level",
+        classId: selectedClass.id,
+        className: selectedClass.name,
+        message:
+          "Character is already level 20.",
+        failedPrerequisites: []
+      };
     }
 
     if (classes.length) {
@@ -23139,13 +24183,25 @@ export function createCharacterCreator(options = {}) {
         });
 
       if (failedPrerequisites.length) {
-        setStatus(
-          `Multiclass prerequisites not met: ${failedPrerequisites
-            .map(formatMulticlassPrerequisiteFailure)
-            .join("; ")}.`
-        );
+        const failureSummary =
+          failedPrerequisites
+            .map(
+              formatMulticlassPrerequisiteFailure
+            )
+            .join("; ");
 
-        return false;
+        return {
+          ok: false,
+          reason: "prerequisites-not-met",
+          classId: selectedClass.id,
+          className: selectedClass.name,
+          message:
+            `Multiclass prerequisites are not met: ${failureSummary}.`,
+          failedPrerequisites:
+            cloneData(
+              failedPrerequisites
+            )
+        };
       }
     }
 
@@ -23167,10 +24223,34 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
-    refreshClassProgressionDerivedValues();
+    const totalLevel =
+      refreshClassProgressionDerivedValues();
+
     markDraftChanged();
 
-    return true;
+    return {
+      ok: true,
+      reason: "added",
+      classId: selectedClass.id,
+      className: selectedClass.name,
+      totalLevel,
+      message:
+        `${selectedClass.name} added. Use Level Up Workflow to add ${selectedClass.name} levels. Total level is now ${totalLevel}.`,
+      failedPrerequisites: []
+    };
+  }
+
+  function addMulticlassClass(
+    classId
+  ) {
+    const result =
+      tryAddMulticlassClass(
+        classId
+      );
+
+    setStatus(result.message);
+
+    return result.ok;
   }
 
   function setMulticlassClassLevel(
@@ -23768,6 +24848,11 @@ export function createCharacterCreator(options = {}) {
   }
 
   function replaceDraft(character, options = {}) {
+    creatorState.multiclassAddStatus = {
+      message: "",
+      tone: "warning"
+    };
+
     creatorState.draft = normalizeCharacter(character);
 
     refreshLoadedClassDerivedValues();
@@ -24316,6 +25401,72 @@ export function createCharacterCreator(options = {}) {
         margin-bottom: 10px;
       }
 
+      .hg-character-level-order-details {
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid rgba(116, 138, 255, 0.22);
+        border-radius: 12px;
+        background: rgba(8, 12, 25, 0.58);
+      }
+
+      .hg-character-level-order-details > summary {
+        cursor: pointer;
+        color: #dfe6ff;
+        font-weight: bold;
+      }
+
+      .hg-character-level-order-details[open] > summary {
+        margin-bottom: 8px;
+      }
+
+      .hg-character-level-order-rows {
+        display: grid;
+        gap: 5px;
+      }
+
+      .hg-character-level-order-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        padding: 7px 8px;
+        border: 1px solid rgba(116, 138, 255, 0.14);
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.022);
+      }
+
+      .hg-character-level-order-label {
+        display: grid;
+        grid-template-columns: minmax(105px, 0.8fr) minmax(110px, 1fr) 48px;
+        gap: 8px;
+        align-items: center;
+        min-width: 0;
+        font-size: 12px;
+      }
+
+      .hg-character-level-order-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .hg-character-level-order-actions button {
+        width: auto !important;
+        margin: 0 !important;
+        padding: 6px 8px !important;
+        font-size: 11px;
+      }
+
+      .hg-character-choice-card.unavailable {
+        border-color: rgba(174, 184, 223, 0.2);
+        background: rgba(255, 255, 255, 0.015);
+      }
+
+      .hg-feat-option-status {
+        color: #c8d0ef;
+        font-weight: bold;
+      }
+
       .hg-feat-picker-toolbar {
         display: grid;
         gap: 6px;
@@ -24484,6 +25635,14 @@ export function createCharacterCreator(options = {}) {
 
         .hg-character-portrait-frame {
           max-width: 220px;
+        }
+
+        .hg-character-level-order-row {
+          grid-template-columns: 1fr;
+        }
+
+        .hg-character-level-order-label {
+          grid-template-columns: minmax(100px, 0.85fr) minmax(105px, 1fr) 44px;
         }
       }
     `;
@@ -26950,12 +28109,17 @@ export function createCharacterCreator(options = {}) {
           imageUrl
             ? `
               <img
+                class="hg-character-library-portrait"
                 src="${escapeHtml(imageUrl)}"
                 alt="${escapeHtml(name)}"
+                loading="lazy"
                 style="
                   width: 100%;
+                  height: 220px;
+                  max-height: 220px;
                   aspect-ratio: 16 / 9;
                   object-fit: cover;
+                  display: block;
                   border-radius: 12px;
                   margin-bottom: 10px;
                   border: 1px solid rgba(116, 138, 255, 0.2);
@@ -34133,13 +35297,15 @@ export function createCharacterCreator(options = {}) {
       options
     );
 
+    if (!result.met) {
+      return result.reasons.join("; ");
+    }
+
     if (!Array.isArray(feat?.prerequisites) || !feat.prerequisites.length) {
       return "No prerequisite";
     }
 
-    return result.met
-      ? "Prerequisites met"
-      : result.reasons.join("; ");
+    return "Prerequisites met";
   }
 
   function setSection12AsiFeat(featureId, featId) {
@@ -34624,6 +35790,23 @@ export function createCharacterCreator(options = {}) {
                     { featureId: feature.id }
                   );
                   const selected = state.featId === feat.id;
+                  const alreadySelected =
+                    !selected &&
+                    prerequisite.reasons.includes(
+                      "Already selected in another advancement slot"
+                    );
+                  const prerequisiteFailed =
+                    !selected &&
+                    !alreadySelected &&
+                    !prerequisite.met;
+                  const buttonLabel =
+                    selected
+                      ? "Selected"
+                      : alreadySelected
+                        ? "Already selected"
+                        : prerequisiteFailed
+                          ? "Prerequisite not met"
+                          : "Choose Feat";
                   const searchText = [
                     feat.name,
                     feat.summary,
@@ -34633,7 +35816,7 @@ export function createCharacterCreator(options = {}) {
 
                   return `
                     <article
-                      class="hg-character-choice-card ${selected ? "selected" : ""}"
+                      class="hg-character-choice-card ${selected ? "selected" : ""} ${alreadySelected || prerequisiteFailed ? "unavailable" : ""}"
                       data-cc-feat-option="true"
                       data-feat-search-text="${escapeHtml(searchText)}"
                     >
@@ -34650,15 +35833,26 @@ export function createCharacterCreator(options = {}) {
                         ${feat.repeatable === true ? "<br><b>Repeatable:</b> Yes" : ""}
                       </p>
 
+                      ${
+                        alreadySelected ||
+                        prerequisiteFailed
+                          ? `
+                            <p class="small hg-feat-option-status">
+                              ${escapeHtml(buttonLabel)}
+                            </p>
+                          `
+                          : ""
+                      }
+
                       <div class="hg-character-card-actions">
                         <button
                           type="button"
                           data-cc-action="choose-asi-feat"
                           data-feature-id="${escapeHtml(feature.id)}"
                           data-feat-id="${escapeHtml(feat.id)}"
-                          ${selected || !prerequisite.met ? "disabled" : ""}
+                          ${selected || alreadySelected || prerequisiteFailed ? "disabled" : ""}
                         >
-                          ${selected ? "Selected" : "Choose Feat"}
+                          ${buttonLabel}
                         </button>
                       </div>
                     </article>
@@ -36376,33 +37570,199 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
-  function handleSection12AddMulticlassClass() {
-    const select =
-      $("ccMulticlassAddClass");
-
-    const classId =
-      select?.value || "";
-
-    const selectedClass =
-      getAllClassTemplates().find((classData) => {
-        return classData.id === classId;
-      });
-
+  function debugSection12MulticlassAdd(
+    stage,
+    details = {}
+  ) {
     if (
-      addMulticlassClass(
-        classId
-      )
+      globalThis
+        ?.HOMEBREW_GOD_DEBUG_MULTICLASS !==
+      true
     ) {
-      if (select) {
-        select.value = "";
-      }
+      return;
+    }
 
-      setStatus(
-        `${selectedClass?.name || "Class"} added. Use Level Up Workflow to add levels.`
+    console.debug(
+      `[CharacterCreator] ${stage}`,
+      details
+    );
+  }
+
+  function handleSection12AddMulticlassClass(
+    ...values
+  ) {
+    const button =
+      findSection12ActionElement(
+        ...values
       );
 
-      renderCreatorView();
+    const localRoot =
+      button?.closest?.(
+        ".hg-character-step-panel"
+      ) || null;
+
+    const selectCandidates =
+      localRoot
+        ? [
+            ...localRoot.querySelectorAll(
+              "#ccMulticlassAddClass"
+            )
+          ]
+        : [];
+
+    const select =
+      selectCandidates.find(
+        (candidate) => {
+          return (
+            candidate.hidden !== true &&
+            candidate.getAttribute(
+              "aria-hidden"
+            ) !== "true" &&
+            !candidate.closest("[hidden]")
+          );
+        }
+      ) ||
+      selectCandidates[0] ||
+      null;
+
+    const rawSelectValue =
+      select?.value ?? "";
+    const classId = cleanString(
+      rawSelectValue
+    );
+    const selectedClass =
+      getAllClassTemplates().find(
+        (classData) => {
+          return classData.id === classId;
+        }
+      ) || null;
+    const existingClassIds =
+      getClassProgressionEntries()
+        .map((classEntry) => {
+          return getMulticlassClassId(
+            classEntry
+          );
+        })
+        .filter(Boolean);
+    const currentTotal =
+      recalculateClassTotalLevel(
+        creatorState.draft
+      );
+
+    debugSection12MulticlassAdd(
+      "add multiclass clicked",
+      {
+        localRootFound:
+          Boolean(localRoot),
+        selectorFound:
+          Boolean(select),
+        selectorCount:
+          selectCandidates.length,
+        selectValue:
+          rawSelectValue,
+        classId,
+        selectedClassName:
+          selectedClass?.name || "",
+        existingClassIds,
+        currentTotal
+      }
+    );
+
+    if (!select) {
+      const message =
+        "Multiclass class selector was not found.";
+
+      console.warn(
+        message
+      );
+
+      setSection12MulticlassAddStatus(
+        message,
+        "warning",
+        localRoot
+      );
+
+      debugSection12MulticlassAdd(
+        "add multiclass result",
+        {
+          localRootFound:
+            Boolean(localRoot),
+          selectorFound: false,
+          selectorCount:
+            selectCandidates.length,
+          selectValue:
+            rawSelectValue,
+          classId,
+          selectedClassName: "",
+          existingClassIds,
+          currentTotal,
+          addResult: {
+            ok: false,
+            reason:
+              "selector-not-found",
+            message
+          }
+        }
+      );
+
+      return false;
     }
+
+    const addResult =
+      tryAddMulticlassClass(
+        classId
+      );
+
+    debugSection12MulticlassAdd(
+      "add multiclass result",
+      {
+        localRootFound: true,
+        selectorFound: true,
+        selectorCount:
+          selectCandidates.length,
+        selectValue:
+          rawSelectValue,
+        classId,
+        selectedClassName:
+          selectedClass?.name || "",
+        existingClassIds,
+        currentTotal,
+        addResult:
+          cloneData(addResult),
+        classProgression:
+          cloneData(
+            creatorState.draft
+              .classProgression
+          )
+      }
+    );
+
+    if (!addResult.ok) {
+      setSection12MulticlassAddStatus(
+        addResult.message,
+        "warning",
+        localRoot
+      );
+
+      return false;
+    }
+
+    select.value = "";
+
+    setSection12MulticlassAddStatus(
+      addResult.message,
+      "success",
+      localRoot
+    );
+
+    renderCreatorView();
+
+    setSection12MulticlassAddStatus(
+      addResult.message,
+      "success"
+    );
+
+    return true;
   }
 
   function handleSection12AdjustMulticlassLevel(
@@ -54262,6 +55622,13 @@ export function createCharacterCreator(options = {}) {
 
         <button
           type="button"
+          data-cc-action="open-character-sheet"
+        >
+          Open Character Sheet
+        </button>
+
+        <button
+          type="button"
           data-cc-action="refresh-review"
         >
           Refresh Review
@@ -55737,6 +57104,33 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function getSection17CharacterSheetView() {
+    if (!characterSheetView) {
+      characterSheetView = createCharacterSheetView({
+        root: () => {
+          refreshWizardElements();
+          return W.root;
+        },
+
+        getCharacter: getCharacterSnapshot,
+        setStatus,
+
+        onClose: () => {
+          setStatus("Returned to the Character Creator.");
+          renderCreatorView();
+        }
+      });
+    }
+
+    return characterSheetView;
+  }
+
+  function handleSection17OpenCharacterSheet() {
+    getSection17CharacterSheetView().open(
+      getCharacterSnapshot()
+    );
+  }
+
   registerCharacterCreatorAction(
     "adjust-class-resource",
     handleSection17AdjustClassResource
@@ -55815,6 +57209,11 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "refresh-review",
     handleSection17RefreshReview
+  );
+
+  registerCharacterCreatorAction(
+    "open-character-sheet",
+    handleSection17OpenCharacterSheet
   );
 
   registerCharacterCreatorAction(
@@ -57597,6 +58996,13 @@ export function createCharacterCreator(options = {}) {
           data-cc-action="library"
         >
           Open Character Library
+        </button>
+
+        <button
+          type="button"
+          data-cc-action="open-character-sheet"
+        >
+          Open Character Sheet
         </button>
       </div>
 
