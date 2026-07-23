@@ -16,13 +16,13 @@
   <script type="importmap">
     {
       "imports": {
-        "../characterCreator.fixed.js": "../characterCreator.fixed.js?v=phase2-20260723",
-        "../characterSheet.js": "../characterSheet.js?v=phase2-20260723",
-        "../defaultClasses.js": "../defaultClasses.js?v=phase2-20260723",
-        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase2-20260723",
-        "../defaultFeats.js": "../defaultFeats.js?v=phase2-20260723",
-        "../defaultSpells.js": "../defaultSpells.js?v=phase2-20260723",
-        "../ruleset2014.js": "../ruleset2014.js?v=phase2-20260723"
+        "../characterCreator.fixed.js": "../characterCreator.fixed.js?v=phase3-20260723",
+        "../characterSheet.js": "../characterSheet.js?v=phase3-20260723",
+        "../defaultClasses.js": "../defaultClasses.js?v=phase3-20260723",
+        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase3-20260723",
+        "../defaultFeats.js": "../defaultFeats.js?v=phase3-20260723",
+        "../defaultSpells.js": "../defaultSpells.js?v=phase3-20260723",
+        "../ruleset2014.js": "../ruleset2014.js?v=phase3-20260723"
       }
     }
   </script>
@@ -42,7 +42,10 @@
       }
     } catch (error) {
       document.body.dataset.testStatus = "fail";
-      output.textContent = `FAIL\n${error?.stack || error}`;
+      output.textContent =
+        output.textContent === "RUNNING"
+          ? `FAIL\n${error?.stack || error}`
+          : `${output.textContent}\n\nFAIL\n${error?.stack || error}`;
       throw error;
     }
   </script>
