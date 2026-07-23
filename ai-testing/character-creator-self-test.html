@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Homebrew God Character-Creator Self-Tests</title>
+</head>
+<body data-test-status="running">
+  <h1>Character-Creator Rules Self-Tests</h1>
+  <pre id="result" role="status">RUNNING</pre>
+
+  <script type="module">
+    import { createCharacterCreator } from "../characterCreator.fixed.js";
+
+    const output = document.getElementById("result");
+
+    try {
+      const creator = createCharacterCreator();
+      const result = creator.runRulesSelfTests();
+      document.body.dataset.testStatus = result.passed ? "pass" : "fail";
+      output.textContent = JSON.stringify(result, null, 2);
+
+      if (!result.passed) {
+        throw new Error(`${result.failed.length} of ${result.total} self-tests failed`);
+      }
+    } catch (error) {
+      document.body.dataset.testStatus = "fail";
+      output.textContent = `FAIL\n${error?.stack || error}`;
+      throw error;
+    }
+  </script>
+</body>
+</html>
