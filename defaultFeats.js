@@ -1,5 +1,6 @@
 import { FEAT_NAME_LIST } from "./defaultFeatNames.js";
 import { DEFAULT_FEAT_RULES } from "./defaultFeatRules.js";
+import { getLegacy2014Metadata } from "./ruleset2014.js";
 
 export const DEFAULT_FEAT_SCHEMA_VERSION = 2;
 
@@ -289,6 +290,7 @@ const normalizeFeatRecord = (rawFeat) => {
 
   return Object.freeze({
     ...raw,
+    ...getLegacy2014Metadata("feat", raw.id || raw.name, raw),
     schemaVersion: DEFAULT_FEAT_SCHEMA_VERSION,
     id: normalizeFeatId(raw.id || raw.name),
     name: String(raw.name || "Unnamed Feat").trim(),
