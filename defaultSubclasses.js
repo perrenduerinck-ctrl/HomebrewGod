@@ -1,4 +1,5 @@
 import { SUBCLASS_NAME_LIST } from "./defaultSubclassNames.js";
+import { getLegacy2014Metadata } from "./ruleset2014.js";
 
 export const DEFAULT_SUBCLASS_SCHEMA_VERSION = 1;
 
@@ -185,12 +186,19 @@ const createFeaturesByLevel = (featureLevels) => Object.freeze(
 
 const createSubclassRecord = (classId, name) => {
   const normalizedClassId = normalizeSubclassId(classId);
+  const subclassId = normalizeSubclassId(name);
   const config = SUBCLASS_CLASS_CONFIG[normalizedClassId];
   const featureLevels = config?.featureLevels || Object.freeze([]);
 
   return Object.freeze({
+    ...getLegacy2014Metadata(
+      "subclass",
+      subclassId,
+      {},
+      normalizedClassId
+    ),
     schemaVersion: DEFAULT_SUBCLASS_SCHEMA_VERSION,
-    id: normalizeSubclassId(name),
+    id: subclassId,
     classId: normalizedClassId,
     name: String(name || "").trim(),
     source: "name-list",
@@ -308,6 +316,14 @@ const mergeSubclassRecord = (
   const merged = {
     ...base,
     ...detailedDefinedFields,
+    ...getLegacy2014Metadata(
+      "subclass",
+      hasPlaceholder
+        ? normalizeSubclassId(base.id || base.name)
+        : normalizeSubclassId(detailed?.id || detailed?.name || base.id),
+      detailed || base,
+      classId
+    ),
     schemaVersion:
       detailed?.schemaVersion ??
       base.schemaVersion ??
