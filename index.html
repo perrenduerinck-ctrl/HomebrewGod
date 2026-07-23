@@ -482,6 +482,77 @@
   <!-- =====================================================
        INDEX SECTION 6 — APP SCRIPT
   ====================================================== -->
-  <script type="module" src="./app.js"></script>
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.has("smokeTest")) return;
+
+      const smoke = {
+        errors: [],
+        moduleLoaded: false,
+        render() {
+          if (!document.body) return;
+          let result = document.getElementById("homebrewGodSmokeResult");
+          if (!result) {
+            result = document.createElement("output");
+            result.id = "homebrewGodSmokeResult";
+            result.setAttribute("role", "status");
+            result.style.cssText = [
+              "position:fixed",
+              "right:1rem",
+              "bottom:1rem",
+              "z-index:99999",
+              "max-width:min(36rem,calc(100vw - 2rem))",
+              "padding:.75rem 1rem",
+              "border:2px solid currentColor",
+              "border-radius:.5rem",
+              "color:#fff",
+              "background:#18201b",
+              "font:600 14px/1.4 system-ui,sans-serif"
+            ].join(";");
+            document.body.appendChild(result);
+          }
+
+          const failed = this.errors.length > 0;
+          const passed = this.moduleLoaded && !failed;
+          document.body.dataset.smokeStatus = failed ? "fail" : passed ? "pass" : "running";
+          result.style.color = failed ? "#ffb8b8" : passed ? "#a8e8ba" : "#ffe59a";
+          result.textContent = failed
+            ? `SMOKE TEST FAIL — ${this.errors.join(" | ")}`
+            : passed
+              ? "SMOKE TEST PASS — app.js, Firebase, and local module imports loaded."
+              : "SMOKE TEST RUNNING — waiting for app.js.";
+        },
+        record(error) {
+          const message = error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : String(error || "Unknown application error");
+          this.errors.push(message);
+          this.render();
+        }
+      };
+
+      window.__HOMEBREW_GOD_SMOKE__ = smoke;
+      window.addEventListener("error", (event) => {
+        smoke.record(event.error || event.message || "Application script failed to load");
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        smoke.record(event.reason || "Unhandled promise rejection");
+      });
+      window.addEventListener("DOMContentLoaded", () => {
+        smoke.render();
+        window.setTimeout(() => {
+          if (!smoke.moduleLoaded && !smoke.errors.length) {
+            smoke.record("Timed out before app.js reported a successful module load");
+          }
+        }, 15000);
+      }, { once: true });
+    })();
+  </script>
+  <script
+    type="module"
+    src="./app.js"
+    onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
+  ></script>
 </body>
 </html>
