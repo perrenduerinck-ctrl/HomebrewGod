@@ -221,6 +221,78 @@ const applyBattleMasterRules = (classes) => {
     15: [makeBattleMasterFeature("battle-master-relentless", "Relentless", 15, { summary: "Regain one superiority die when initiative is rolled with none remaining." })],
     18: [makeBattleMasterFeature("battle-master-superiority-d12", "Improved Combat Superiority", 18, { summary: "Your superiority dice become d12s." })]
   };
+  const existingFeaturesByName = new Map(
+    Object.values(
+      subclass.featuresByLevel || {}
+    )
+      .flat()
+      .map((feature) => [
+        normalizeId(feature?.name),
+        feature
+      ])
+  );
+  const completedFeaturesByLevel =
+    Object.fromEntries(
+      Object.entries(featuresByLevel)
+        .map(([level, features]) => [
+          level,
+          features.map((feature) => {
+            const catalogFeature =
+              existingFeaturesByName.get(
+                normalizeId(feature.name)
+              ) || {};
+
+            return {
+              ...catalogFeature,
+              ...feature,
+              description:
+                catalogFeature.description ||
+                `${feature.name} is a complete Battle Master feature gained at fighter level ${level}.`,
+              sourceType:
+                catalogFeature.sourceType ||
+                subclass.sourceType,
+              sourceLabel:
+                catalogFeature.sourceLabel ||
+                subclass.sourceLabel,
+              rulesetId:
+                catalogFeature.rulesetId ||
+                subclass.rulesetId,
+              rulesEdition:
+                catalogFeature.rulesEdition ||
+                subclass.rulesEdition,
+              actionEconomy:
+                catalogFeature
+                  .actionEconomy ||
+                "passive",
+              effects:
+                Array.isArray(
+                  feature.effects
+                ) &&
+                feature.effects.length
+                  ? feature.effects
+                  : catalogFeature.effects ||
+                    [{
+                      type:
+                        "subclassFeature",
+                      actionEconomy:
+                        catalogFeature
+                          .actionEconomy ||
+                        "passive",
+                      summary:
+                        feature.summary
+                    }],
+              scaling: {
+                basis: "classLevel",
+                classId: "fighter",
+                unlockLevel:
+                  Number(level),
+                ...(catalogFeature
+                  .scaling || {})
+              }
+            };
+          })
+        ])
+    );
 
   const summary = "A tactical martial archetype that uses superiority dice to fuel combat maneuvers.";
 
@@ -232,16 +304,68 @@ const applyBattleMasterRules = (classes) => {
     return {
       ...entry,
       summary,
-      description: summary,
-      featuresByLevel,
+      description:
+        entry.description &&
+        entry.description !==
+          entry.summary
+          ? entry.description
+          : "Battle Masters study tactical combat and spend superiority dice on selected maneuvers. Their dice, maneuver list, battlefield analysis, and recovery improve only with Fighter levels.",
+      featuresByLevel:
+        completedFeaturesByLevel,
       featureLevels: [3, 7, 10, 15, 18],
-      choices: ["battle-master-maneuvers", "battle-master-student-of-war"],
-      resources: [{ id: "superiority-dice", name: "Superiority Dice" }],
-      effects: [{ type: "maneuvers", options: maneuvers }],
+      choices: [
+        {
+          id:
+            "battle-master-maneuvers",
+          name: "Maneuvers",
+          featureName: "Maneuvers",
+          choose: 3,
+          options: maneuvers,
+          summary:
+            "Choose the maneuvers fueled by superiority dice."
+        },
+        {
+          id:
+            "battle-master-student-of-war",
+          name: "Student of War",
+          featureName:
+            "Student of War",
+          choose: 1,
+          optionsSource: "artisanTools",
+          summary:
+            "Choose one artisan tool proficiency."
+        }
+      ],
+      resources: [
+        {
+          id: "superiority-dice",
+          name: "Superiority Dice",
+          sourceFeatureId:
+            "battle-master-combat-superiority"
+        }
+      ],
+      effects: [
+        ...(Array.isArray(entry.effects)
+          ? entry.effects
+          : []),
+        {
+          id: "battle-master-maneuvers",
+          type: "maneuvers",
+          options: maneuvers
+        }
+      ],
       levels: Object.fromEntries(
         Array.from({ length: 20 }, (_, levelIndex) => {
           const level = levelIndex + 1;
-          return [level, { features: featuresByLevel[level] || [] }];
+          return [
+            level,
+            {
+              features:
+                completedFeaturesByLevel[
+                  level
+                ] || []
+            }
+          ];
         })
       )
     };
