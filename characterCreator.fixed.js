@@ -52,7 +52,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 7;
+  const CHARACTER_SCHEMA_VERSION = 8;
   const CLASS_SCHEMA_VERSION = 1;
   const SPECIES_SCHEMA_VERSION = 1;
   const BACKGROUND_SCHEMA_VERSION = 1;
@@ -258,6 +258,7 @@ export function createCharacterCreator(options = {}) {
         attackModifiers: [],
         spellModifiers: [],
         combatProfiles: [],
+        classSaveDcs: [],
         attackAction: {
           attacks: 1,
           sourceIds: [],
@@ -388,7 +389,8 @@ export function createCharacterCreator(options = {}) {
         slots: {},
         slotUsage: {
           normal: {},
-          pact: 0
+          pact: 0,
+          pactSources: {}
         },
         pactMagic: {
           slots: 0,
@@ -3728,7 +3730,33 @@ export function createCharacterCreator(options = {}) {
             Math.round(
               safeNumber(raw.magic?.slotUsage?.pact, 0)
             )
-          )
+          ),
+          pactSources:
+            raw.magic?.slotUsage?.pactSources &&
+            typeof raw.magic.slotUsage
+              .pactSources === "object" &&
+            !Array.isArray(
+              raw.magic.slotUsage.pactSources
+            )
+              ? Object.fromEntries(
+                  Object.entries(
+                    raw.magic.slotUsage
+                      .pactSources
+                  ).map(([sourceId, used]) => {
+                    return [
+                      cleanString(sourceId),
+                      Math.max(
+                        0,
+                        Math.round(
+                          safeNumber(used, 0)
+                        )
+                      )
+                    ];
+                  }).filter(([sourceId]) => {
+                    return Boolean(sourceId);
+                  })
+                )
+              : {}
         },
 
         customSpells:
@@ -12538,6 +12566,745 @@ export function createCharacterCreator(options = {}) {
       "Multiclass Extra Attack keeps the highest version",
       creatorState.draft.classMechanics.attackAction.attacks,
       3
+    );
+
+    creatorState.draft = createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 10,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          5
+        ),
+        makeInteractionClassEntry(
+          "phase6-paladin",
+          "paladin",
+          5
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+
+    record(
+      "Phase 6: Extra Attack never stacks across classes",
+      {
+        attacks:
+          creatorState.draft
+            .classMechanics
+            .attackAction.attacks,
+        sourceCount:
+          creatorState.draft
+            .classMechanics
+            .attackAction
+            .sourceIds.length
+      },
+      {
+        attacks: 2,
+        sourceCount: 2
+      }
+    );
+
+    creatorState.draft = createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 16,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          11
+        ),
+        makeInteractionClassEntry(
+          "phase6-paladin",
+          "paladin",
+          5
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+
+    record(
+      "Phase 6: Fighter higher Extra Attack values are preserved",
+      {
+        attacks:
+          creatorState.draft
+            .classMechanics
+            .attackAction.attacks,
+        classEntryId:
+          creatorState.draft
+            .classMechanics
+            .attackAction
+            .classEntryId
+      },
+      {
+        attacks: 3,
+        classEntryId: "phase6-fighter"
+      }
+    );
+
+    const phase6WarlockEntry =
+      makeInteractionClassEntry(
+        "phase6-warlock",
+        "warlock",
+        5
+      );
+    phase6WarlockEntry.choices = {
+      classFeatures: {
+        "phase6-warlock:eldritch-invocations":
+          ["Thirsting Blade"]
+      }
+    };
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 10,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          5
+        ),
+        phase6WarlockEntry
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+
+    record(
+      "Phase 6: Thirsting Blade does not add another attack to Extra Attack",
+      {
+        attacks:
+          creatorState.draft
+            .classMechanics
+            .attackAction.attacks,
+        sources:
+          creatorState.draft
+            .classMechanics
+            .attackAction
+            .sourceNames.some((name) => {
+              return name.includes(
+                "Thirsting Blade"
+              );
+            })
+      },
+      {
+        attacks: 2,
+        sources: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.abilities.scores.wis =
+      16;
+    creatorState.draft.abilities.scores.cha =
+      14;
+    creatorState.draft.classProgression = {
+      totalLevel: 9,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-cleric",
+          "cleric",
+          6,
+          "life",
+          "Life Domain"
+        ),
+        makeInteractionClassEntry(
+          "phase6-paladin",
+          "paladin",
+          3,
+          "devotion",
+          "Oath of Devotion"
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+    const phase6SharedChannel =
+      creatorState.draft
+        .classMechanics.resources
+        .filter((resource) => {
+          return (
+            resource.canonicalId ===
+            "channel-divinity"
+          );
+        });
+
+    record(
+      "Phase 6: Channel Divinity uses one shared pool",
+      phase6SharedChannel.map((resource) => {
+        return {
+          id: resource.id,
+          shared: resource.shared,
+          maximumUses:
+            resource.maximumUses
+        };
+      }),
+      [
+        {
+          id: "shared:channel-divinity",
+          shared: true,
+          maximumUses: 2
+        }
+      ]
+    );
+
+    record(
+      "Phase 6: Channel Divinity grants every eligible class and subclass option",
+      phase6SharedChannel[0]
+        .spendOptions
+        .map((option) => {
+          return {
+            name: option.name,
+            classEntryId:
+              option.classEntryId
+          };
+        })
+        .sort((a, b) => {
+          return a.name.localeCompare(
+            b.name
+          );
+        }),
+      [
+        {
+          name: "Preserve Life",
+          classEntryId:
+            "phase6-cleric"
+        },
+        {
+          name: "Sacred Weapon",
+          classEntryId:
+            "phase6-paladin"
+        },
+        {
+          name: "Turn the Unholy",
+          classEntryId:
+            "phase6-paladin"
+        },
+        {
+          name: "Turn Undead",
+          classEntryId:
+            "phase6-cleric"
+        }
+      ]
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 8,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-cleric",
+          "cleric",
+          5,
+          "life",
+          "Life Domain"
+        ),
+        makeInteractionClassEntry(
+          "phase6-paladin",
+          "paladin",
+          3,
+          "devotion",
+          "Oath of Devotion"
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+
+    record(
+      "Phase 6: Channel Divinity uses increase only at explicit class levels",
+      creatorState.draft
+        .classMechanics.resources
+        .find((resource) => {
+          return (
+            resource.canonicalId ===
+            "channel-divinity"
+          );
+        })?.maximumUses,
+      1
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.abilities.scores.dex =
+      16;
+    creatorState.draft.classProgression = {
+      totalLevel: 13,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-rogue",
+          "rogue",
+          3
+        ),
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          10
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+    const phase6SneakProfile =
+      creatorState.draft
+        .classMechanics.combatProfiles
+        .find((profile) => {
+          return profile.type ===
+            "sneakAttack";
+        });
+
+    record(
+      "Phase 6: Sneak Attack uses Rogue class level",
+      {
+        classLevel:
+          phase6SneakProfile.classLevel,
+        dice:
+          getProgressionValueByLevel(
+            phase6SneakProfile
+              .diceByLevel,
+            phase6SneakProfile
+              .classLevel,
+            ""
+          )
+      },
+      {
+        classLevel: 3,
+        dice: "2d6"
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 13,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-barbarian",
+          "barbarian",
+          3
+        ),
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          10
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+    const phase6RageProfile =
+      creatorState.draft
+        .classMechanics.combatProfiles
+        .find((profile) => {
+          return profile.type ===
+            "rage";
+        });
+    const phase6RageResource =
+      creatorState.draft
+        .classMechanics.resources
+        .find((resource) => {
+          return resource.canonicalId ===
+            "rage";
+        });
+
+    record(
+      "Phase 6: Rage damage and uses use Barbarian class level",
+      {
+        classLevel:
+          phase6RageProfile.classLevel,
+        damage:
+          getProgressionValueByLevel(
+            phase6RageProfile
+              .damageBonusByLevel,
+            phase6RageProfile
+              .classLevel,
+            0
+          ),
+        uses:
+          phase6RageResource
+            .maximumUses
+      },
+      {
+        classLevel: 3,
+        damage: 2,
+        uses: 3
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 15,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-monk",
+          "monk",
+          5
+        ),
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          10
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+    const phase6MartialArtsProfile =
+      creatorState.draft
+        .classMechanics.combatProfiles
+        .find((profile) => {
+          return profile.type ===
+            "martialArts";
+        });
+    const phase6KiResource =
+      creatorState.draft
+        .classMechanics.resources
+        .find((resource) => {
+          return resource.canonicalId ===
+            "ki";
+        });
+
+    record(
+      "Phase 6: Martial Arts uses Monk class level",
+      {
+        classLevel:
+          phase6MartialArtsProfile
+            .classLevel,
+        die:
+          getProgressionValueByLevel(
+            phase6MartialArtsProfile
+              .dieByLevel,
+            phase6MartialArtsProfile
+              .classLevel,
+            ""
+          )
+      },
+      {
+        classLevel: 5,
+        die: "d6"
+      }
+    );
+
+    record(
+      "Phase 6: Ki uses Monk class level",
+      {
+        classEntryId:
+          phase6KiResource
+            .classEntryId,
+        maximumUses:
+          phase6KiResource
+            .maximumUses
+      },
+      {
+        classEntryId: "phase6-monk",
+        maximumUses: 5
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 14,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-druid",
+          "druid",
+          4
+        ),
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          10
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+    const phase6WildShapeProfile =
+      creatorState.draft
+        .classMechanics.combatProfiles
+        .find((profile) => {
+          return profile.type ===
+            "wildShape";
+        });
+
+    record(
+      "Phase 6: Wild Shape uses Druid class level",
+      {
+        classLevel:
+          phase6WildShapeProfile
+            .classLevel,
+        maximumCr:
+          getProgressionValueByLevel(
+            phase6WildShapeProfile
+              .maxCrByLevel,
+            phase6WildShapeProfile
+              .classLevel,
+            ""
+          ),
+        durationHours:
+          Math.floor(
+            phase6WildShapeProfile
+              .classLevel / 2
+          )
+      },
+      {
+        classLevel: 4,
+        maximumCr: "1/2",
+        durationHours: 2
+      }
+    );
+
+    const phase6SmiteCharacter =
+      createEmptyCharacter();
+    phase6SmiteCharacter
+      .classMechanics.combatProfiles = [
+        {
+          type: "divineSmite",
+          classEntryId:
+            "phase6-paladin",
+          classLevel: 2
+        }
+      ];
+    phase6SmiteCharacter.magic.slots = {
+      0: 9,
+      1: 4,
+      2: 0,
+      3: -1
+    };
+    phase6SmiteCharacter
+      .magic.pactMagicSources = [
+        {
+          classEntryId:
+            "phase6-warlock",
+          classId: "warlock",
+          className: "Warlock",
+          slots: 2,
+          slotLevel: 2
+        },
+        {
+          classEntryId:
+            "phase6-empty-pact",
+          classId: "custom",
+          className: "Empty Pact",
+          slots: 0,
+          slotLevel: 3
+        }
+      ];
+
+    record(
+      "Phase 6: Divine Smite uses only valid spell slots",
+      getSection12DivineSmiteSlotOptions(
+        phase6SmiteCharacter
+      ).map((slot) => {
+        return {
+          kind: slot.kind,
+          sourceId: slot.sourceId,
+          level: slot.level,
+          maximum: slot.maximum
+        };
+      }),
+      [
+        {
+          kind: "normal",
+          sourceId: "",
+          level: 1,
+          maximum: 4
+        },
+        {
+          kind: "pact",
+          sourceId:
+            "phase6-warlock",
+          level: 2,
+          maximum: 2
+        }
+      ]
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 12,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-paladin",
+          "paladin",
+          2
+        ),
+        makeInteractionClassEntry(
+          "phase6-fighter",
+          "fighter",
+          10
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+
+    record(
+      "Phase 6: class resources never scale from total character level",
+      creatorState.draft
+        .classMechanics.resources
+        .find((resource) => {
+          return (
+            resource.canonicalId ===
+            "lay-on-hands"
+          );
+        })?.maximumUses,
+      10
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.abilities.scores.wis =
+      16;
+    creatorState.draft.abilities.scores.cha =
+      14;
+    creatorState.draft.abilities.scores.int =
+      20;
+    creatorState.draft.abilities.base.wis =
+      16;
+    creatorState.draft.abilities.base.cha =
+      14;
+    creatorState.draft.abilities.base.int =
+      20;
+    creatorState.draft.classProgression = {
+      totalLevel: 6,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-monk",
+          "monk",
+          3
+        ),
+        makeInteractionClassEntry(
+          "phase6-paladin",
+          "paladin",
+          3
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+
+    record(
+      "Phase 6: class save DCs use the correct class ability",
+      creatorState.draft
+        .classMechanics.classSaveDcs
+        .map((entry) => {
+          return {
+            classEntryId:
+              entry.classEntryId,
+            abilityId:
+              entry.abilityId,
+            saveDc:
+              entry.saveDc
+          };
+        }),
+      [
+        {
+          classEntryId:
+            "phase6-monk",
+          abilityId: "wis",
+          saveDc: 14
+        },
+        {
+          classEntryId:
+            "phase6-paladin",
+          abilityId: "cha",
+          saveDc: 13
+        }
+      ]
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 9,
+      classes: [
+        makeInteractionClassEntry(
+          "phase6-rogue",
+          "rogue",
+          3
+        ),
+        makeInteractionClassEntry(
+          "phase6-barbarian",
+          "barbarian",
+          3
+        ),
+        makeInteractionClassEntry(
+          "phase6-monk",
+          "monk",
+          3
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+
+    record(
+      "Phase 6: class features remain attached to the correct class entry",
+      {
+        profiles:
+          Object.fromEntries(
+            creatorState.draft
+              .classMechanics
+              .combatProfiles
+              .filter((profile) => {
+                return [
+                  "sneakAttack",
+                  "rage",
+                  "martialArts"
+                ].includes(profile.type);
+              })
+              .map((profile) => {
+                return [
+                  profile.type,
+                  profile.classEntryId
+                ];
+              })
+          ),
+        resources:
+          Object.fromEntries(
+            creatorState.draft
+              .classMechanics
+              .resources
+              .filter((resource) => {
+                return [
+                  "rage",
+                  "ki"
+                ].includes(
+                  resource.canonicalId
+                );
+              })
+              .map((resource) => {
+                return [
+                  resource.canonicalId,
+                  resource.classEntryId
+                ];
+              })
+          )
+      },
+      {
+        profiles: {
+          sneakAttack:
+            "phase6-rogue",
+          rage:
+            "phase6-barbarian",
+          martialArts:
+            "phase6-monk"
+        },
+        resources: {
+          rage:
+            "phase6-barbarian",
+          ki:
+            "phase6-monk"
+        }
+      }
     );
 
     creatorState.draft = createEmptyCharacter();
@@ -24721,11 +25488,27 @@ export function createCharacterCreator(options = {}) {
       character.magic.slotUsage &&
       typeof character.magic.slotUsage === "object"
         ? character.magic.slotUsage
-        : { normal: {}, pact: 0 };
+        : {
+            normal: {},
+            pact: 0,
+            pactSources: {}
+          };
     character.magic.slotUsage.normal =
       character.magic.slotUsage.normal &&
       typeof character.magic.slotUsage.normal === "object"
         ? character.magic.slotUsage.normal
+        : {};
+    character.magic.slotUsage.pactSources =
+      character.magic.slotUsage
+        .pactSources &&
+      typeof character.magic.slotUsage
+        .pactSources === "object" &&
+      !Array.isArray(
+        character.magic.slotUsage
+          .pactSources
+      )
+        ? character.magic.slotUsage
+            .pactSources
         : {};
 
     const normal = Object.fromEntries(
@@ -24755,53 +25538,214 @@ export function createCharacterCreator(options = {}) {
           }];
         })
     );
-    const pactMaximum = Math.max(
-      0,
-      safeNumber(character.magic.pactMagic?.slots, 0)
-    );
-    const pactUsed = Math.min(
-      pactMaximum,
-      Math.max(
-        0,
-        safeNumber(character.magic.slotUsage.pact, 0)
+    const pactSourceRecords =
+      (
+        Array.isArray(
+          character.magic
+            .pactMagicSources
+        ) &&
+        character.magic
+          .pactMagicSources.length
+          ? character.magic
+              .pactMagicSources
+          : [
+              {
+                classEntryId:
+                  "legacy:pact-magic",
+                className: "Pact Magic",
+                slots:
+                  character.magic
+                    .pactMagic?.slots,
+                slotLevel:
+                  character.magic
+                    .pactMagic?.slotLevel
+              }
+            ]
       )
-    );
-    character.magic.slotUsage.pact = pactUsed;
+        .map((source, index) => {
+          const sourceId = cleanString(
+            source?.classEntryId,
+            `pact-source-${index + 1}`
+          );
+          const maximum = Math.max(
+            0,
+            safeNumber(
+              source?.slots,
+              0
+            )
+          );
+          const level = Math.max(
+            0,
+            safeNumber(
+              source?.slotLevel,
+              0
+            )
+          );
+          const legacyUsed =
+            index === 0
+              ? safeNumber(
+                  character.magic
+                    .slotUsage.pact,
+                  0
+                )
+              : 0;
+          const used = Math.min(
+            maximum,
+            Math.max(
+              0,
+              safeNumber(
+                character.magic
+                  .slotUsage
+                  .pactSources[
+                    sourceId
+                  ],
+                legacyUsed
+              )
+            )
+          );
+
+          character.magic.slotUsage
+            .pactSources[sourceId] =
+              used;
+
+          return {
+            sourceId,
+            classEntryId: sourceId,
+            classId:
+              cleanString(
+                source?.classId
+              ),
+            className:
+              cleanString(
+                source?.className,
+                "Pact Magic"
+              ),
+            level,
+            maximum,
+            used,
+            remaining:
+              maximum - used
+          };
+        })
+        .filter((source) => {
+          return (
+            source.maximum > 0 &&
+            source.level > 0
+          );
+        });
+    const pact =
+      pactSourceRecords[0] || {
+        sourceId: "",
+        classEntryId: "",
+        classId: "",
+        className: "Pact Magic",
+        level: 0,
+        maximum: 0,
+        used: 0,
+        remaining: 0
+      };
+    character.magic.slotUsage.pact =
+      pact.used;
 
     return {
       normal,
-      pact: {
-        level: Math.max(
-          0,
-          safeNumber(character.magic.pactMagic?.slotLevel, 0)
-        ),
-        maximum: pactMaximum,
-        used: pactUsed,
-        remaining: pactMaximum - pactUsed
-      }
+      pact,
+      pactSources:
+        pactSourceRecords
     };
+  }
+
+  function getSection12DivineSmiteSlotOptions(
+    character = creatorState.draft
+  ) {
+    const usage =
+      getSection12SpellSlotUsageState(
+        character
+      );
+
+    return [
+      ...Object.values(usage.normal)
+        .map((slot) => {
+          return {
+            kind: "normal",
+            sourceId: "",
+            level: slot.level,
+            label:
+              `Level ${slot.level} slot`,
+            maximum: slot.maximum,
+            used: slot.used,
+            remaining: slot.remaining
+          };
+        }),
+      ...usage.pactSources.map((slot) => {
+        return {
+          kind: "pact",
+          sourceId: slot.sourceId,
+          level: slot.level,
+          label:
+            `${slot.className} Pact slot (level ${slot.level})`,
+          maximum: slot.maximum,
+          used: slot.used,
+          remaining: slot.remaining
+        };
+      })
+    ].filter((slot) => {
+      return (
+        slot.level > 0 &&
+        slot.maximum > 0
+      );
+    });
   }
 
   function adjustSection12SpellSlotUsage(
     kind,
     level,
-    delta
+    delta,
+    sourceId = ""
   ) {
     const state = getSection12SpellSlotUsageState();
     const change = Math.sign(safeNumber(delta, 0));
 
     if (kind === "pact") {
-      if (!state.pact.maximum) {
+      const pactSource =
+        state.pactSources.find(
+          (source) => {
+            return (
+              source.sourceId ===
+                cleanString(sourceId) ||
+              (
+                !cleanString(sourceId) &&
+                source ===
+                  state.pactSources[0]
+              )
+            );
+          }
+        );
+
+      if (!pactSource?.maximum) {
         return false;
       }
 
-      creatorState.draft.magic.slotUsage.pact = Math.max(
+      const nextUsed = Math.max(
         0,
         Math.min(
-          state.pact.maximum,
-          state.pact.used + change
+          pactSource.maximum,
+          pactSource.used + change
         )
       );
+      creatorState.draft.magic
+        .slotUsage.pactSources[
+          pactSource.sourceId
+        ] = nextUsed;
+
+      if (
+        pactSource ===
+        state.pactSources[0]
+      ) {
+        creatorState.draft.magic
+          .slotUsage.pact =
+            nextUsed;
+      }
     } else {
       const slot = state.normal[String(level)];
 
@@ -24840,30 +25784,10 @@ export function createCharacterCreator(options = {}) {
       return "";
     }
 
-    const usage = getSection12SpellSlotUsageState(character);
-    const normalSlots = Object.values(usage.normal);
-    const slotCards = [
-      ...normalSlots.map((slot) => ({
-        kind: "normal",
-        level: slot.level,
-        label: `Level ${slot.level} slot`,
-        maximum: slot.maximum,
-        used: slot.used,
-        remaining: slot.remaining
-      })),
-      ...(
-        usage.pact.maximum > 0
-          ? [{
-              kind: "pact",
-              level: usage.pact.level,
-              label: `Pact slot (level ${usage.pact.level})`,
-              maximum: usage.pact.maximum,
-              used: usage.pact.used,
-              remaining: usage.pact.remaining
-            }]
-          : []
-      )
-    ];
+    const slotCards =
+      getSection12DivineSmiteSlotOptions(
+        character
+      );
 
     if (!slotCards.length) {
       return `<p class="small">Divine Smite is available, but this character currently has no spell slots to spend.</p>`;
@@ -24891,6 +25815,7 @@ export function createCharacterCreator(options = {}) {
                       data-cc-action="adjust-divine-smite-slot"
                       data-slot-kind="${slot.kind}"
                       data-slot-level="${slot.level}"
+                      data-slot-source-id="${escapeHtml(slot.sourceId || "")}"
                       data-delta="1"
                       ${slot.remaining <= 0 ? "disabled" : ""}
                     >Spend for Smite</button>
@@ -24899,6 +25824,7 @@ export function createCharacterCreator(options = {}) {
                       data-cc-action="adjust-divine-smite-slot"
                       data-slot-kind="${slot.kind}"
                       data-slot-level="${slot.level}"
+                      data-slot-source-id="${escapeHtml(slot.sourceId || "")}"
                       data-delta="-1"
                       ${slot.used <= 0 ? "disabled" : ""}
                     >Restore Slot</button>
@@ -24964,15 +25890,13 @@ export function createCharacterCreator(options = {}) {
     }
 
     if (effect.type === "maneuverSaveDc") {
-      const abilityModifier = Math.max(
-        calculateAbilityModifier(
-          getAbilityScore(creatorState.draft, "str")
-        ),
-        calculateAbilityModifier(
-          getAbilityScore(creatorState.draft, "dex")
-        )
-      );
-      return `Maneuver save DC ${8 + getCharacterProficiencyBonus(creatorState.draft) + abilityModifier}.`;
+      return `Maneuver save DC ${safeNumber(
+        effect.saveDc,
+        8
+      )} (${cleanString(
+        effect.saveAbility,
+        "str"
+      ).toUpperCase()}).`;
     }
 
     if (effect.type === "armorClassFormula") {
@@ -25002,6 +25926,23 @@ export function createCharacterCreator(options = {}) {
     const resources = Array.isArray(mechanics.resources)
       ? mechanics.resources
       : [];
+    const classSaveDcLines =
+      (
+        Array.isArray(
+          mechanics.classSaveDcs
+        )
+          ? mechanics.classSaveDcs
+          : []
+      )
+        .filter((entry) => {
+          return (
+            entry.saveDc !== null &&
+            entry.saveDc !== undefined
+          );
+        })
+        .map((entry) => {
+          return `${entry.className || entry.classId || "Class"} feature save DC ${entry.saveDc} (${String(entry.abilityId || "").toUpperCase()}).`;
+        });
     const effectLines = [
       ...(Array.isArray(mechanics.combatProfiles)
         ? mechanics.combatProfiles
@@ -25023,6 +25964,7 @@ export function createCharacterCreator(options = {}) {
         : [])
     ]
       .map(formatSelectedClassMechanicEffect)
+      .concat(classSaveDcLines)
       .filter(Boolean)
       .filter((line, index, values) => {
         return values.indexOf(line) === index;
@@ -25103,6 +26045,37 @@ export function createCharacterCreator(options = {}) {
                         </div>
                       `}
                   </div>
+                  ${
+                    Array.isArray(
+                      resourceEntry.spendOptions
+                    ) &&
+                    resourceEntry
+                      .spendOptions.length
+                      ? `
+                        <p class="small">
+                          <b>Options:</b>
+                          ${resourceEntry
+                            .spendOptions
+                            .map((option) => {
+                              return `${
+                                option.name
+                              } (${
+                                option.className ||
+                                "Class"
+                              }${
+                                option.saveDc
+                                  ? `, DC ${option.saveDc} ${String(option.saveAbility || "").toUpperCase()}`
+                                  : ""
+                              })`;
+                            })
+                            .map((label) => {
+                              return escapeHtml(label);
+                            })
+                            .join("; ")}
+                        </p>
+                      `
+                      : ""
+                  }
                   ${
                     resourceEntry.canonicalId === "rage" &&
                     !readonly
@@ -38316,7 +39289,136 @@ export function createCharacterCreator(options = {}) {
       .replace(/\s+mastery.*$/i, "")
       .replace(/\s*\([^)]*\)\s*$/g, "");
 
+    if (
+      /^channel divinity(?:\s*:|$)/i.test(
+        inferredName
+      )
+    ) {
+      return "channel-divinity";
+    }
+
     return makeSafeId(inferredName, "resource");
+  }
+
+  const SECTION12_CLASS_FEATURE_SAVE_ABILITIES =
+    Object.freeze({
+      artificer: "int",
+      barbarian: "con",
+      bard: "cha",
+      cleric: "wis",
+      druid: "wis",
+      fighter: "str",
+      monk: "wis",
+      paladin: "cha",
+      ranger: "wis",
+      rogue: "dex",
+      sorcerer: "cha",
+      warlock: "cha",
+      wizard: "int"
+    });
+
+  function getSection12ClassFeatureSaveDc(
+    character,
+    classEntryId,
+    effect = {}
+  ) {
+    const classEntries =
+      getCharacterClassEntries(character);
+    const classEntry =
+      classEntries.find((entry, index) => {
+        return (
+          getClassProgressionEntryKey(
+            entry,
+            index
+          ) === cleanString(classEntryId)
+        );
+      }) || null;
+    const classId = cleanString(
+      classEntry?.classId ||
+      effect?.classId
+    );
+    const template =
+      classEntry
+        ? resolveClassTemplateForEntry(
+            classEntry
+          )
+        : null;
+    let abilityId = cleanString(
+      effect?.saveDcAbility ||
+      effect?.classSaveAbility ||
+      effect?.usesAbility
+    )
+      .slice(0, 3)
+      .toLowerCase();
+
+    if (
+      cleanString(effect?.type) ===
+      "maneuverSaveDc"
+    ) {
+      abilityId =
+        getAbilityScore(character, "dex") >
+        getAbilityScore(character, "str")
+          ? "dex"
+          : "str";
+    }
+
+    if (
+      !ABILITY_DEFINITIONS.some(
+        (ability) => {
+          return ability.id === abilityId;
+        }
+      )
+    ) {
+      abilityId = cleanString(
+        template?.spellcastingAbility ||
+        SECTION12_CLASS_FEATURE_SAVE_ABILITIES[
+          classId
+        ]
+      )
+        .slice(0, 3)
+        .toLowerCase();
+    }
+
+    if (
+      !ABILITY_DEFINITIONS.some(
+        (ability) => {
+          return ability.id === abilityId;
+        }
+      )
+    ) {
+      return {
+        classEntryId:
+          cleanString(classEntryId),
+        classId,
+        abilityId: "",
+        abilityModifier: null,
+        saveDc: null
+      };
+    }
+
+    const abilityModifier =
+      calculateAbilityModifier(
+        getAbilityScore(
+          character,
+          abilityId
+        )
+      );
+
+    return {
+      classEntryId:
+        cleanString(classEntryId),
+      classId,
+      abilityId,
+      abilityModifier,
+      saveDc:
+        calculateRuleSpellSaveDc({
+          proficiencyBonus:
+            getCharacterProficiencyBonus(
+              character
+            ),
+          abilityModifier
+        })
+    };
   }
 
   function applySelectedClassFeatureMechanics() {
@@ -38342,6 +39444,7 @@ export function createCharacterCreator(options = {}) {
       attackModifiers: [],
       spellModifiers: [],
       combatProfiles: [],
+      classSaveDcs: [],
       attackAction: {
         attacks: 1,
         sourceIds: [],
@@ -38453,6 +39556,13 @@ export function createCharacterCreator(options = {}) {
         );
       const sourceId =
         `${classEntryId}:${canonicalId}`;
+      const featureSourceId =
+        `${classEntryId}:${
+          cleanString(
+            feature.id,
+            canonicalId
+          )
+        }`;
       const shared =
         canonicalId === "channel-divinity";
       const resourceId = shared
@@ -38503,6 +39613,22 @@ export function createCharacterCreator(options = {}) {
         ...(existingResource?.sourceIds || []),
         sourceId
       ]);
+      const featureSourceIds =
+        uniqueCleanArray([
+          ...(
+            existingResource
+              ?.featureSourceIds || []
+          ),
+          featureSourceId
+        ]);
+      const sourceMaximums = {
+        ...(
+          existingResource
+            ?.sourceMaximums || {}
+        ),
+        [featureSourceId]:
+          maximumUses
+      };
       const preservedCurrentUses = existingResource
         ?.currentUses ??
         (
@@ -38516,11 +39642,141 @@ export function createCharacterCreator(options = {}) {
         maximumUses === null ||
         safeNumber(maximumUses, 0) >=
           safeNumber(existingResource.maximumUses, 0);
+      const inferredChannelOption =
+        shared &&
+        /^channel divinity\s*:/i.test(
+          cleanString(feature.name)
+        )
+          ? [
+              {
+                id: makeSafeId(
+                  cleanString(feature.name)
+                    .replace(
+                      /^channel divinity\s*:\s*/i,
+                      ""
+                    ),
+                  "channel-divinity-option"
+                ),
+                name: cleanString(feature.name)
+                  .replace(
+                    /^channel divinity\s*:\s*/i,
+                    ""
+                  ),
+                cost: 1
+              }
+            ]
+          : [];
+      const incomingSpendOptions = [
+        ...(
+          Array.isArray(
+            feature.spendOptions
+          )
+            ? feature.spendOptions
+            : []
+        ),
+        ...(
+          Array.isArray(
+            resource.spendOptions
+          )
+            ? resource.spendOptions
+            : []
+        ),
+        ...inferredChannelOption
+      ].map((option) => {
+        const normalizedOption =
+          typeof option === "string"
+            ? {
+                id: makeSafeId(
+                  option,
+                  "resource-option"
+                ),
+                name: option
+              }
+            : cloneData(option);
+        const saveContext =
+          getSection12ClassFeatureSaveDc(
+            draft,
+            classEntryId,
+            {
+              ...normalizedOption,
+              classId:
+                feature.classId ||
+                classEntry?.classId
+            }
+          );
+
+        return {
+          ...normalizedOption,
+          id: makeSafeId(
+            normalizedOption.id ||
+            normalizedOption.name,
+            "resource-option"
+          ),
+          name: cleanString(
+            normalizedOption.name,
+            feature.name
+          ),
+          cost: Math.max(
+            1,
+            safeNumber(
+              normalizedOption.cost,
+              1
+            )
+          ),
+          classEntryId,
+          classId:
+            feature.classId ||
+            classEntry?.classId ||
+            "",
+          className:
+            feature.className ||
+            classEntry?.className ||
+            "Class",
+          featureId:
+            cleanString(feature.id),
+          featureName:
+            cleanString(feature.name),
+          saveAbility:
+            normalizedOption
+              .usesSave === false
+                ? ""
+                : saveContext.abilityId,
+          saveDc:
+            normalizedOption
+              .usesSave === false
+                ? null
+                : saveContext.saveDc
+        };
+      });
+      const combinedSpendOptions = [
+        ...(
+          existingResource
+            ?.spendOptions || []
+        ),
+        ...incomingSpendOptions
+      ].filter((option, index, values) => {
+        return (
+          values.findIndex((candidate) => {
+            return (
+              cleanString(
+                candidate.classEntryId
+              ) ===
+                cleanString(
+                  option.classEntryId
+                ) &&
+              cleanString(candidate.id) ===
+                cleanString(option.id)
+            );
+          }) === index
+        );
+      });
       const next = {
         id: resourceId,
         canonicalId,
         sourceId,
         sourceIds,
+        featureSourceIds,
+        sourceMaximums,
         sourceNames,
         shared,
         classEntryId: shared
@@ -38567,11 +39823,10 @@ export function createCharacterCreator(options = {}) {
               ""
             )
           : existingResource.die,
-        spendOptions: cloneData(
-          incomingIsAuthoritative
-            ? feature.spendOptions || []
-            : existingResource.spendOptions || []
-        )
+        spendOptions:
+          cloneData(
+            combinedSpendOptions
+          )
       };
 
       resourceById.set(resourceId, next);
@@ -38597,6 +39852,33 @@ export function createCharacterCreator(options = {}) {
         featureName: context.feature.name,
         option: context.option || ""
       };
+      const needsClassSaveDc =
+        type === "maneuverSaveDc" ||
+        effect.classSaveDc === true ||
+        Boolean(
+          cleanString(
+            effect.saveDcAbility ||
+            effect.classSaveAbility
+          )
+        );
+
+      if (needsClassSaveDc) {
+        const saveContext =
+          getSection12ClassFeatureSaveDc(
+            draft,
+            context.classEntryId,
+            {
+              ...effect,
+              classId:
+                context.feature.classId
+            }
+          );
+
+        record.saveAbility =
+          saveContext.abilityId;
+        record.saveDc =
+          saveContext.saveDc;
+      }
 
       if (type === "armorClassFormula") {
         const isFirstReceivedRule =
@@ -38627,6 +39909,11 @@ export function createCharacterCreator(options = {}) {
           )
         );
         const sourceId = `${record.classEntryId}:${record.featureId}`;
+        const sourceFeatureName =
+          cleanString(
+            record.option,
+            record.featureName
+          );
         const currentAttacks = safeNumber(
           mechanics.attackAction.attacks,
           1
@@ -38639,10 +39926,11 @@ export function createCharacterCreator(options = {}) {
             classId: record.classId,
             className: record.className,
             featureId: record.featureId,
-            featureName: record.featureName,
+            featureName:
+              sourceFeatureName,
             sourceIds: [sourceId],
             sourceNames: [
-              `${record.className}: ${record.featureName}`
+              `${record.className}: ${sourceFeatureName}`
             ]
           };
         } else if (attacks === currentAttacks) {
@@ -38654,7 +39942,7 @@ export function createCharacterCreator(options = {}) {
           mechanics.attackAction.sourceNames =
             uniqueCleanArray([
               ...mechanics.attackAction.sourceNames,
-              `${record.className}: ${record.featureName}`
+              `${record.className}: ${sourceFeatureName}`
             ]);
         }
       } else if (type === "armorClassBonus") {
@@ -38723,6 +40011,35 @@ export function createCharacterCreator(options = {}) {
           classEntry,
           classIndex
         );
+        const classEntryId =
+          getClassProgressionEntryKey(
+            classEntry,
+            classIndex
+          );
+        const saveContext =
+          getSection12ClassFeatureSaveDc(
+            draft,
+            classEntryId,
+            {
+              classId:
+                classEntry.classId
+            }
+          );
+
+        mechanics.classSaveDcs.push({
+          ...saveContext,
+          className:
+            cleanString(
+              classEntry.className,
+              template?.name ||
+              classEntry.classId
+            ),
+          classLevel:
+            getClassEntryLevel(
+              classEntry,
+              1
+            )
+        });
 
         features.forEach((feature) => {
           const classLevel = Math.max(
@@ -61814,7 +63131,8 @@ export function createCharacterCreator(options = {}) {
       adjustSection12SpellSlotUsage(
         button?.dataset?.slotKind || "normal",
         button?.dataset?.slotLevel || 0,
-        button?.dataset?.delta || 0
+        button?.dataset?.delta || 0,
+        button?.dataset?.slotSourceId || ""
       )
     ) {
       setStatus("Spell slot usage updated.");
