@@ -549,9 +549,17 @@
       }, { once: true });
     })();
   </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "./characterCreator.fixed.js": "./characterCreator.fixed.js?v=phase1-20260723",
+        "./characterSheet.js": "./characterSheet.js?v=phase1-20260723"
+      }
+    }
+  </script>
   <script
     type="module"
-    src="./app.js"
+    src="./app.js?v=phase1-20260723"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>
