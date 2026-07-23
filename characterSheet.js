@@ -753,7 +753,317 @@ function renderCurrency(character) {
       ${CURRENCY.map((denomination) => `
         <div>
           <strong>${clampInteger(currency[denomination], 0, 0)}</strong>
-          <span>${escapeHtml(denomination.toUpperCase())}</s…2634 tokens truncated…<h2>${escapeHtml(`${classLabel}${subclass ? ` \u2014 ${subclass}` : ""}`)}</h2>
+          <span>${escapeHtml(denomination.toUpperCase())}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderAbilities(character) {
+  return `
+    <div class="hg-sheet-ability-grid">
+      ${ABILITIES.map((ability) => {
+        const score = Math.round(getAbilityScore(character, ability.id));
+        const modifier = getAbilityModifier(character, ability.id);
+
+        return `
+          <article class="hg-sheet-ability-box">
+            <span>${escapeHtml(ability.short)}</span>
+            <strong>${escapeHtml(formatModifier(modifier))}</strong>
+            <small>${score}</small>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderSavingThrows(character, proficiencyBonus) {
+  const proficiencies = getSavingThrowProficiencies(character);
+
+  return `
+    <div class="hg-sheet-compact-list">
+      ${ABILITIES.map((ability) => {
+        const proficient = proficiencies.has(ability.id);
+        const value = getAbilityModifier(character, ability.id) +
+          (proficient ? proficiencyBonus : 0);
+
+        return `
+          <div class="hg-sheet-skill-row">
+            <span class="hg-sheet-prof-mark" aria-label="${proficient ? "Proficient" : "Not proficient"}">
+              ${proficient ? "\u25cf" : "\u25cb"}
+            </span>
+            <span>${escapeHtml(ability.name)}</span>
+            <strong>${escapeHtml(formatModifier(value))}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderSkills(character, proficiencyBonus) {
+  return `
+    <div class="hg-sheet-skill-list">
+      ${SKILLS.map((skill) => {
+        const details = getSkillDetails(character, skill, proficiencyBonus);
+        const marker = details.expertise
+          ? "\u25c9"
+          : details.proficient
+            ? "\u25cf"
+            : "\u25cb";
+        const label = details.expertise
+          ? "Expertise"
+          : details.proficient
+            ? "Proficient"
+            : "Not proficient";
+
+        return `
+          <div class="hg-sheet-skill-row">
+            <span class="hg-sheet-prof-mark" aria-label="${escapeHtml(label)}">${marker}</span>
+            <span>
+              ${escapeHtml(skill.name)}
+              <small>${escapeHtml(skill.ability.toUpperCase())}</small>
+            </span>
+            <strong>${escapeHtml(formatModifier(details.modifier))}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderMainPanel(character, summary) {
+  const combat = isRecord(character?.combat) ? character.combat : {};
+  const currentHp = clampInteger(
+    combat.currentHp ?? character?.currentHp,
+    0,
+    0
+  );
+  const maxHp = clampInteger(
+    combat.maxHp ?? character?.maxHp,
+    0,
+    0
+  );
+  const temporaryHp = clampInteger(combat.temporaryHp, 0, 0);
+  const armorClass = Math.round(finiteNumber(
+    combat.armorClass ?? character?.armorClass,
+    10
+  ));
+  const initiative = optionalNumber(combat.initiative) ??
+    getAbilityModifier(character, "dex");
+  const speed = formatSpeed(combat.speed, character?.speed);
+  const featureGroups = getFeatureGroups(character);
+  const feats = getFeatEntries(character);
+
+  return `
+    <section class="hg-sheet-panel" aria-label="Main character sheet">
+      <div class="hg-sheet-stat-grid">
+        <article class="hg-sheet-stat-card">
+          <span>Armor Class</span>
+          <strong>${armorClass}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Initiative</span>
+          <strong>${escapeHtml(formatModifier(initiative))}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Speed</span>
+          <strong class="hg-sheet-stat-text">${escapeHtml(speed)}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Hit Points</span>
+          <strong>${currentHp} / ${maxHp}</strong>
+          ${temporaryHp ? `<small>${temporaryHp} temporary</small>` : ""}
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Proficiency</span>
+          <strong>${escapeHtml(formatModifier(summary.proficiencyBonus))}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Passive Perception</span>
+          <strong>${summary.passivePerception}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Hit Dice</span>
+          <strong class="hg-sheet-stat-text">${escapeHtml(formatHitDice(character))}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Attacks / Action</span>
+          <strong>${clampInteger(combat.attacksPerAction, 1, 1)}</strong>
+        </article>
+      </div>
+
+      <div class="hg-sheet-two-column">
+        <div>
+          <article class="hg-sheet-card">
+            <h2>Abilities</h2>
+            ${renderAbilities(character)}
+          </article>
+
+          <article class="hg-sheet-card">
+            <h2>Saving Throws</h2>
+            ${renderSavingThrows(character, summary.proficiencyBonus)}
+          </article>
+
+          <article class="hg-sheet-card">
+            <h2>Skills</h2>
+            ${renderSkills(character, summary.proficiencyBonus)}
+          </article>
+        </div>
+
+        <div>
+          <article class="hg-sheet-card">
+            <h2>Attacks</h2>
+            ${renderAttackTable(character, summary.proficiencyBonus)}
+          </article>
+
+          <article class="hg-sheet-card">
+            <h2>Equipment</h2>
+            ${renderEquipment(character)}
+          </article>
+
+          <div class="hg-sheet-card-grid">
+            <article class="hg-sheet-card">
+              <h2>Currency</h2>
+              ${renderCurrency(character)}
+            </article>
+
+            <article class="hg-sheet-card">
+              <h2>Proficiencies</h2>
+              ${renderDefinitionList([
+                ["Armor", listText(character?.proficiencies?.armor)],
+                ["Weapons", listText(character?.proficiencies?.weapons)],
+                ["Tools", listText(character?.proficiencies?.tools)]
+              ])}
+            </article>
+
+            <article class="hg-sheet-card">
+              <h2>Languages</h2>
+              <p>${escapeHtml(listText(character?.proficiencies?.languages))}</p>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <div class="hg-sheet-card-grid hg-sheet-feature-grid">
+        ${featureGroups.map((group) => `
+          <article class="hg-sheet-card">
+            <h2>${escapeHtml(group.title)}</h2>
+            ${renderContentList(group.entries)}
+          </article>
+        `).join("")}
+
+        <article class="hg-sheet-card">
+          <h2>Feats</h2>
+          ${renderContentList(feats, "No feats selected.")}
+        </article>
+      </div>
+
+      ${firstText(character?.features?.notes, character?.notes) ? `
+        <article class="hg-sheet-card">
+          <h2>Notes</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(character?.features?.notes, character?.notes))}</p>
+        </article>
+      ` : ""}
+    </section>
+  `;
+}
+
+function renderStoryPanel(character) {
+  const identity = isRecord(character?.identity) ? character.identity : {};
+  const background = isRecord(character?.background) ? character.background : {};
+
+  return `
+    <section class="hg-sheet-panel" aria-label="Story character sheet">
+      <div class="hg-sheet-card-grid">
+        <article class="hg-sheet-card">
+          <h2>Identity</h2>
+          ${renderDefinitionList([
+            ["Name", getName(character)],
+            ["Species", getSpeciesName(character)],
+            ["Background", getBackgroundName(character)],
+            ["Size", titleFromId(identity.size, "Not recorded")],
+            ["Pronouns", identity.pronouns],
+            ["Age", identity.age],
+            ["Alignment / Outlook", identity.alignment],
+            ["Deity / Belief", identity.deity]
+          ])}
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Appearance</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(identity.appearance, character?.appearance, "No appearance recorded."))}</p>
+        </article>
+
+        <article class="hg-sheet-card hg-sheet-wide-card">
+          <h2>Backstory</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(background.backstory, character?.backstory, "No backstory recorded."))}</p>
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Personality Traits</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(background.traits, character?.personality?.traits, character?.personalityTraits, "None recorded."))}</p>
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Ideals</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(background.ideals, character?.personality?.ideals, character?.ideals, "None recorded."))}</p>
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Bonds</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(background.bonds, character?.personality?.bonds, character?.bonds, "None recorded."))}</p>
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Flaws</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(background.flaws, character?.personality?.flaws, character?.flaws, "None recorded."))}</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function collectSpellIds(source) {
+  return {
+    cantrips: asArray(source?.cantripIds),
+    known: asArray(source?.knownSpellIds),
+    prepared: asArray(source?.preparedSpellIds),
+    spellbook: asArray(source?.spellbookSpellIds),
+    alwaysPrepared: asArray(source?.alwaysPreparedSpellIds),
+    arcanum: isRecord(source?.mysticArcanumSpellIds)
+      ? Object.values(source.mysticArcanumSpellIds)
+      : []
+  };
+}
+
+function renderSpellNameList(values, fallback = "None recorded") {
+  const names = asArray(values)
+    .map((value) => {
+      if (isRecord(value)) {
+        return firstText(value.name, titleFromId(value.id, "Spell"));
+      }
+
+      return titleFromId(value, "Spell");
+    })
+    .filter(Boolean);
+
+  return names.length ? names.join(", ") : fallback;
+}
+
+function renderSpellSource(source, fallbackKey) {
+  const spells = collectSpellIds(source);
+  const classLabel = firstText(
+    source?.className,
+    titleFromId(source?.classId || fallbackKey, "Spellcasting Source")
+  );
+  const subclass = firstText(source?.subclassName);
+
+  return `
+    <article class="hg-sheet-card">
+      <h2>${escapeHtml(`${classLabel}${subclass ? ` \u2014 ${subclass}` : ""}`)}</h2>
       ${renderDefinitionList([
         ["Spellcasting Ability", titleFromId(source?.spellcastingAbility, "Not recorded")],
         ["Spell Save DC", optionalNumber(source?.spellSaveDc) === null ? "Not recorded" : String(source.spellSaveDc)],
