@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Homebrew God Ruleset Policy Tests</title>
+</head>
+<body data-test-status="running">
+  <h1>Ruleset Policy Tests</h1>
+  <pre id="result" role="status">RUNNING</pre>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "../defaultClasses.js": "../defaultClasses.js?v=phase2-20260723",
+        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase2-20260723",
+        "../defaultFeats.js": "../defaultFeats.js?v=phase2-20260723",
+        "../defaultSpells.js": "../defaultSpells.js?v=phase2-20260723",
+        "../ruleset2014.js": "../ruleset2014.js?v=phase2-20260723"
+      }
+    }
+  </script>
+  <script type="module">
+    import { DEFAULT_CLASSES } from "../defaultClasses.js";
+    import { DEFAULT_SUBCLASSES } from "../defaultSubclasses.js";
+    import { DEFAULT_FEATS } from "../defaultFeats.js";
+    import { DEFAULT_SPELLS } from "../defaultSpells.js";
+    import {
+      ACTIVE_RULESET,
+      isActiveRulesetEntry
+    } from "../ruleset2014.js";
+
+    const groups = {
+      classes: Object.values(DEFAULT_CLASSES),
+      subclasses: DEFAULT_SUBCLASSES,
+      feats: DEFAULT_FEATS,
+      spells: DEFAULT_SPELLS
+    };
+    const failures = [];
+
+    Object.entries(groups).forEach(([groupName, entries]) => {
+      entries.forEach((entry) => {
+        if (entry.rulesetId !== ACTIVE_RULESET.id) {
+          failures.push(`${groupName}:${entry.id} has no active ruleset ID`);
+        }
+        if (entry.rulesEdition !== ACTIVE_RULESET.edition) {
+          failures.push(`${groupName}:${entry.id} has no 2014 edition label`);
+        }
+        if (!entry.sourceLabel || !entry.sourceType) {
+          failures.push(`${groupName}:${entry.id} has no catalog source label`);
+        }
+      });
+    });
+
+    if (isActiveRulesetEntry({ rulesetId: "dnd5e-2024" })) {
+      failures.push("2024 content was accepted by the 2014 rules mode");
+    }
+
+    const result = {
+      passed: failures.length === 0,
+      ruleset: ACTIVE_RULESET,
+      counts: Object.fromEntries(
+        Object.entries(groups).map(([key, entries]) => [key, entries.length])
+      ),
+      failures
+    };
+
+    document.body.dataset.testStatus = result.passed ? "pass" : "fail";
+    document.getElementById("result").textContent =
+      JSON.stringify(result, null, 2);
+
+    if (!result.passed) {
+      throw new Error(failures.join(" | "));
+    }
+  </script>
+</body>
+</html>
