@@ -52,7 +52,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 4;
+  const CHARACTER_SCHEMA_VERSION = 5;
   const CLASS_SCHEMA_VERSION = 1;
   const SPECIES_SCHEMA_VERSION = 1;
   const BACKGROUND_SCHEMA_VERSION = 1;
@@ -244,7 +244,8 @@ export function createCharacterCreator(options = {}) {
       classProgression: {
         totalLevel: 1,
         classes: [],
-        levelOrder: []
+        levelOrder: [],
+        unarmoredDefenseSource: null
       },
 
       classData: null,
@@ -3225,7 +3226,22 @@ export function createCharacterCreator(options = {}) {
           normalizeClassLevelOrder(
             raw.classProgression?.levelOrder,
             normalizedClassList
+          ),
+
+        unarmoredDefenseSource:
+          raw.classProgression
+            ?.unarmoredDefenseSource &&
+          typeof raw.classProgression
+            .unarmoredDefenseSource === "object" &&
+          !Array.isArray(
+            raw.classProgression
+              .unarmoredDefenseSource
           )
+            ? cloneData(
+                raw.classProgression
+                  .unarmoredDefenseSource
+              )
+            : null
       },
 
       classData:
@@ -3877,6 +3893,22 @@ export function createCharacterCreator(options = {}) {
         addMigrationWarning:
           normalized.classProgression
             .classes.length > 0
+      }
+    );
+
+    enforceClassProgressionLevelCap(
+      normalized,
+      {
+        addMigrationWarning: true
+      }
+    );
+
+    syncFirstUnarmoredDefenseSource(
+      normalized,
+      {
+        addMigrationWarning:
+          normalized.classProgression
+            .classes.length > 1
       }
     );
 
@@ -5456,6 +5488,318 @@ export function createCharacterCreator(options = {}) {
     }
 
     return levelOrder;
+  }
+
+  function enforceClassProgressionLevelCap(
+    character = creatorState.draft,
+    options = {}
+  ) {
+    const progression =
+      character?.classProgression;
+
+    if (
+      !progression ||
+      typeof progression !== "object"
+    ) {
+      return 1;
+    }
+
+    const classes =
+      getCharacterClassEntries(character);
+
+    if (!classes.length) {
+      progression.totalLevel = 1;
+      progression.levelOrder = [];
+      return 1;
+    }
+
+    const completeOrder =
+      normalizeClassLevelOrder(
+        progression.levelOrder,
+        classes
+      );
+
+    const wasOverMaximum =
+      completeOrder.length > 20;
+
+    const cappedOrder =
+      completeOrder.slice(0, 20);
+
+    const levelCounts = new Map();
+
+    cappedOrder.forEach((entryKey) => {
+      levelCounts.set(
+        entryKey,
+        (levelCounts.get(entryKey) || 0) + 1
+      );
+    });
+
+    const retainedClasses =
+      classes.filter((classEntry, index) => {
+        const entryKey =
+          getClassProgressionEntryKey(
+            classEntry,
+            index
+          );
+
+        classEntry.level =
+          levelCounts.get(entryKey) || 0;
+
+        return classEntry.level > 0;
+      });
+
+    classes.splice(
+      0,
+      classes.length,
+      ...retainedClasses
+    );
+
+    progression.levelOrder =
+      cappedOrder.filter((entryKey) => {
+        return retainedClasses.some(
+          (classEntry, index) => {
+            return (
+              getClassProgressionEntryKey(
+                classEntry,
+                index
+              ) === entryKey
+            );
+          }
+        );
+      });
+
+    progression.totalLevel =
+      Math.max(
+        1,
+        progression.levelOrder.length
+      );
+
+    if (
+      wasOverMaximum &&
+      options.addMigrationWarning === true
+    ) {
+      addMigrationWarning(
+        character,
+        "Class progression exceeded total character level 20 and was trimmed in saved level order."
+      );
+    }
+
+    return progression.totalLevel;
+  }
+
+  const UNARMORED_DEFENSE_CLASS_RULES =
+    Object.freeze({
+      barbarian: Object.freeze({
+        featureId:
+          "unarmored-defense-barbarian",
+        className: "Barbarian"
+      }),
+      monk: Object.freeze({
+        featureId:
+          "unarmored-defense-monk",
+        className: "Monk"
+      })
+    });
+
+  function syncFirstUnarmoredDefenseSource(
+    character = creatorState.draft,
+    options = {}
+  ) {
+    const progression =
+      character?.classProgression;
+
+    if (
+      !progression ||
+      typeof progression !== "object"
+    ) {
+      return null;
+    }
+
+    const classes =
+      getCharacterClassEntries(character);
+
+    const findEligibleRecord = (
+      classEntry,
+      fallbackIndex = 0,
+      acquiredAtCharacterLevel = 1
+    ) => {
+      if (!classEntry) {
+        return null;
+      }
+
+      const classId = makeSafeId(
+        classEntry.classId ||
+          classEntry.className,
+        ""
+      );
+      const rule =
+        UNARMORED_DEFENSE_CLASS_RULES[
+          classId
+        ];
+
+      if (
+        !rule ||
+        getClassEntryLevel(
+          classEntry,
+          0
+        ) < 1
+      ) {
+        return null;
+      }
+
+      return {
+        classEntryId:
+          getClassProgressionEntryKey(
+            classEntry,
+            fallbackIndex
+          ),
+        classId,
+        className:
+          safeDisplayString(
+            classEntry.className,
+            rule.className
+          ),
+        featureId: rule.featureId,
+        featureName:
+          "Unarmored Defense",
+        acquiredAtCharacterLevel:
+          Math.max(
+            1,
+            Math.round(
+              safeNumber(
+                acquiredAtCharacterLevel,
+                1
+              )
+            )
+          )
+      };
+    };
+
+    const savedSource =
+      progression
+        .unarmoredDefenseSource &&
+      typeof progression
+        .unarmoredDefenseSource ===
+        "object" &&
+      !Array.isArray(
+        progression
+          .unarmoredDefenseSource
+      )
+        ? progression
+            .unarmoredDefenseSource
+        : null;
+
+    const savedClassEntry =
+      savedSource
+        ? (
+            classes.find(
+              (classEntry, index) => {
+                return (
+                  getClassProgressionEntryKey(
+                    classEntry,
+                    index
+                  ) ===
+                  cleanString(
+                    savedSource
+                      .classEntryId
+                  )
+                );
+              }
+            ) ||
+            classes.find((classEntry) => {
+              return (
+                makeSafeId(
+                  classEntry.classId ||
+                    classEntry.className,
+                  ""
+                ) ===
+                makeSafeId(
+                  savedSource.classId,
+                  ""
+                )
+              );
+            })
+          )
+        : null;
+
+    const preserved =
+      findEligibleRecord(
+        savedClassEntry,
+        classes.indexOf(
+          savedClassEntry
+        ),
+        savedSource
+          ?.acquiredAtCharacterLevel
+      );
+
+    if (preserved) {
+      progression
+        .unarmoredDefenseSource =
+          preserved;
+
+      return preserved;
+    }
+
+    const levelOrder =
+      normalizeClassLevelOrder(
+        progression.levelOrder,
+        classes
+      );
+
+    let derived = null;
+
+    levelOrder.some(
+      (entryKey, levelIndex) => {
+        const classEntry =
+          findClassEntryForLevelOrderKey(
+            entryKey,
+            classes
+          );
+
+        derived =
+          findEligibleRecord(
+            classEntry,
+            classes.indexOf(
+              classEntry
+            ),
+            levelIndex + 1
+          );
+
+        return Boolean(derived);
+      }
+    );
+
+    if (!derived) {
+      classes.some(
+        (classEntry, index) => {
+          derived =
+            findEligibleRecord(
+              classEntry,
+              index,
+              1
+            );
+
+          return Boolean(derived);
+        }
+      );
+    }
+
+    progression
+      .unarmoredDefenseSource =
+        derived;
+
+    if (
+      savedSource &&
+      !preserved &&
+      options.addMigrationWarning === true
+    ) {
+      addMigrationWarning(
+        character,
+        "The saved Unarmored Defense source was no longer valid and was repaired from the character's class-level history."
+      );
+    }
+
+    return derived;
   }
 
   function findClassEntryForLevelOrderKey(
@@ -7130,6 +7474,10 @@ export function createCharacterCreator(options = {}) {
     )
       ? character.classMechanics.armorClassFormulas
       : [];
+    const firstUnarmoredDefenseSource =
+      syncFirstUnarmoredDefenseSource(
+        character
+      );
 
     const shieldBonus =
       equippedShields.length
@@ -7274,7 +7622,17 @@ export function createCharacterCreator(options = {}) {
           );
         });
       } else {
-        if (characterHasClass(character, "barbarian")) {
+        if (
+          firstUnarmoredDefenseSource
+            ?.classId === "barbarian" ||
+          (
+            !firstUnarmoredDefenseSource &&
+            characterHasClass(
+              character,
+              "barbarian"
+            )
+          )
+        ) {
           addOption(
             "barbarian-unarmored-defense",
             "Barbarian Unarmored Defense",
@@ -7284,7 +7642,17 @@ export function createCharacterCreator(options = {}) {
         }
 
         if (
-          characterHasClass(character, "monk") &&
+          (
+            firstUnarmoredDefenseSource
+              ?.classId === "monk" ||
+            (
+              !firstUnarmoredDefenseSource &&
+              characterHasClass(
+                character,
+                "monk"
+              )
+            )
+          ) &&
           shieldBonus === 0
         ) {
           addOption(
@@ -13969,6 +14337,16 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    creatorState.draft.abilities.base = {
+      ...creatorState.draft.abilities.base,
+      str: 13,
+      int: 13
+    };
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
     const wizardLevelChanged =
       setMulticlassClassLevel(1, 3);
 
@@ -17182,6 +17560,1326 @@ export function createCharacterCreator(options = {}) {
         creatorState.draft
       ),
       true
+    );
+
+    const phase3PrerequisiteLabels = {
+      artificer: "Intelligence 13",
+      barbarian: "Strength 13",
+      bard: "Charisma 13",
+      cleric: "Wisdom 13",
+      druid: "Wisdom 13",
+      fighter:
+        "Strength 13 or Dexterity 13",
+      monk:
+        "Dexterity 13 and Wisdom 13",
+      paladin:
+        "Strength 13 and Charisma 13",
+      ranger:
+        "Dexterity 13 and Wisdom 13",
+      rogue: "Dexterity 13",
+      sorcerer: "Charisma 13",
+      warlock: "Charisma 13",
+      wizard: "Intelligence 13"
+    };
+
+    const phase3PrerequisiteAudit =
+      Object.entries(
+        phase3PrerequisiteLabels
+      ).map(([classId, label]) => {
+        const passing =
+          createEmptyCharacter();
+        const requirements =
+          getMulticlassPrerequisiteRequirements(
+            classId,
+            getAllClassTemplates()
+              .find((entry) => {
+                return entry.id === classId;
+              })
+          );
+
+        passing.abilities.scores =
+          createAbilityMap(12);
+
+        requirements.forEach(
+          (requirement) => {
+            const items =
+              Array.isArray(
+                requirement.any
+              )
+                ? requirement.any
+                : [requirement];
+
+            items.forEach((item) => {
+              passing.abilities
+                .scores[item.ability] =
+                  item.minimum;
+            });
+          }
+        );
+
+        const passingResult =
+          getMulticlassPrerequisiteResultForClass(
+            classId,
+            passing
+          );
+
+        const failing =
+          cloneData(passing);
+
+        if (classId === "fighter") {
+          failing.abilities.scores.str = 12;
+          failing.abilities.scores.dex = 12;
+        } else {
+          const firstRequirement =
+            requirements[0];
+          const firstItem =
+            Array.isArray(
+              firstRequirement?.any
+            )
+              ? firstRequirement.any[0]
+              : firstRequirement;
+
+          failing.abilities
+            .scores[
+              firstItem.ability
+            ] = 12;
+        }
+
+        return {
+          classId,
+          label:
+            passingResult.label,
+          labelMatches:
+            passingResult.label === label,
+          passesAtThirteen:
+            passingResult.met,
+          rejectsBelow:
+            !getMulticlassPrerequisiteResultForClass(
+              classId,
+              failing
+            ).met
+        };
+      });
+
+    const fighterStrengthOnly =
+      createEmptyCharacter();
+    fighterStrengthOnly
+      .abilities.scores =
+        createAbilityMap(12);
+    fighterStrengthOnly
+      .abilities.scores.str = 13;
+
+    const fighterDexterityOnly =
+      cloneData(
+        fighterStrengthOnly
+      );
+    fighterDexterityOnly
+      .abilities.scores.str = 12;
+    fighterDexterityOnly
+      .abilities.scores.dex = 13;
+
+    record(
+      "Phase 3 verifies all 13 multiclass prerequisite formulas",
+      {
+        classCount:
+          phase3PrerequisiteAudit.length,
+        labels:
+          phase3PrerequisiteAudit.every(
+            (entry) => {
+              return entry.labelMatches;
+            }
+          ),
+        passing:
+          phase3PrerequisiteAudit.every(
+            (entry) => {
+              return entry.passesAtThirteen;
+            }
+          ),
+        failing:
+          phase3PrerequisiteAudit.every(
+            (entry) => {
+              return entry.rejectsBelow;
+            }
+          ),
+        fighterStrength:
+          getMulticlassPrerequisiteResultForClass(
+            "fighter",
+            fighterStrengthOnly
+          ).met,
+        fighterDexterity:
+          getMulticlassPrerequisiteResultForClass(
+            "fighter",
+            fighterDexterityOnly
+          ).met
+      },
+      {
+        classCount: 13,
+        labels: true,
+        passing: true,
+        failing: true,
+        fighterStrength: true,
+        fighterDexterity: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "fighter"
+    );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        str: 12,
+        dex: 12,
+        int: 12
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const phase3BothFail =
+      tryAddMulticlassClass(
+        "wizard"
+      );
+
+    creatorState.draft
+      .abilities.base.dex = 13;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const phase3NewOnlyFails =
+      tryAddMulticlassClass(
+        "wizard"
+      );
+
+    creatorState.draft
+      .abilities.base.int = 13;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const phase3BothPass =
+      tryAddMulticlassClass(
+        "wizard"
+      );
+
+    record(
+      "Adding a class requires both existing and new class prerequisites",
+      {
+        bothFailures:
+          phase3BothFail
+            .failedPrerequisites
+            .map((entry) => {
+              return entry.classId;
+            }),
+        newOnlyFailure:
+          phase3NewOnlyFails
+            .failedPrerequisites
+            .map((entry) => {
+              return entry.classId;
+            }),
+        bothPass:
+          phase3BothPass.ok
+      },
+      {
+        bothFailures: [
+          "fighter",
+          "wizard"
+        ],
+        newOnlyFailure: [
+          "wizard"
+        ],
+        bothPass: true
+      }
+    );
+
+    const buildUnarmoredOrder = (
+      firstClassId,
+      secondClassId
+    ) => {
+      creatorState.draft =
+        createEmptyCharacter();
+      chooseSection12Class(
+        firstClassId
+      );
+      creatorState.draft
+        .abilities.base = {
+          ...creatorState.draft
+            .abilities.base,
+          str: 13,
+          dex: 16,
+          con: 14,
+          wis: 18
+        };
+      recalculateAbilityTotals(
+        creatorState.draft
+      );
+
+      const added =
+        addMulticlassClass(
+          secondClassId
+        );
+      const source =
+        cloneData(
+          creatorState.draft
+            .classProgression
+            .unarmoredDefenseSource
+        );
+      const formulas =
+        cloneData(
+          creatorState.draft
+            .classMechanics
+            .armorClassFormulas
+        );
+      const armorClass =
+        calculateArmorClassOptions(
+          creatorState.draft
+        ).selected.total;
+
+      return {
+        added,
+        source,
+        formulas,
+        armorClass,
+        character:
+          cloneData(
+            creatorState.draft
+          )
+      };
+    };
+
+    const barbarianThenMonk =
+      buildUnarmoredOrder(
+        "barbarian",
+        "monk"
+      );
+    const monkThenBarbarian =
+      buildUnarmoredOrder(
+        "monk",
+        "barbarian"
+      );
+    const reorderedUnarmoredImport =
+      cloneData(
+        barbarianThenMonk.character
+      );
+
+    reorderedUnarmoredImport
+      .classProgression.levelOrder =
+        [
+          ...reorderedUnarmoredImport
+            .classProgression
+            .levelOrder
+        ].reverse();
+
+    const preservedUnarmoredImport =
+      normalizeCharacter(
+        reorderedUnarmoredImport
+      );
+    const legacyUnarmoredImport =
+      cloneData(
+        monkThenBarbarian.character
+      );
+
+    delete legacyUnarmoredImport
+      .classProgression
+      .unarmoredDefenseSource;
+
+    const migratedUnarmoredImport =
+      normalizeCharacter(
+        legacyUnarmoredImport
+      );
+
+    record(
+      "First received Unarmored Defense is exclusive and survives migration",
+      {
+        barbarianThenMonk: {
+          source:
+            barbarianThenMonk
+              .source.classId,
+          formulas:
+            barbarianThenMonk
+              .formulas
+              .map((entry) => {
+                return entry.featureId;
+              }),
+          armorClass:
+            barbarianThenMonk
+              .armorClass
+        },
+        monkThenBarbarian: {
+          source:
+            monkThenBarbarian
+              .source.classId,
+          formulas:
+            monkThenBarbarian
+              .formulas
+              .map((entry) => {
+                return entry.featureId;
+              }),
+          armorClass:
+            monkThenBarbarian
+              .armorClass
+        },
+        reorderedImport:
+          preservedUnarmoredImport
+            .classProgression
+            .unarmoredDefenseSource
+            ?.classId,
+        migratedImport:
+          migratedUnarmoredImport
+            .classProgression
+            .unarmoredDefenseSource
+            ?.classId
+      },
+      {
+        barbarianThenMonk: {
+          source: "barbarian",
+          formulas: [
+            "unarmored-defense-barbarian"
+          ],
+          armorClass: 15
+        },
+        monkThenBarbarian: {
+          source: "monk",
+          formulas: [
+            "unarmored-defense-monk"
+          ],
+          armorClass: 17
+        },
+        reorderedImport:
+          "barbarian",
+        migratedImport:
+          "monk"
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "fighter"
+    );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        str: 13,
+        int: 13
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    addMulticlassClass(
+      "wizard"
+    );
+
+    creatorState.draft
+      .abilities.base.int = 12;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const directPrerequisiteBypass =
+      setMulticlassClassLevel(
+        1,
+        2
+      );
+
+    creatorState.draft
+      .abilities.base.int = 13;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const directPendingChoiceBypass =
+      setMulticlassClassLevel(
+        1,
+        2
+      );
+    const fighterStyleFeature =
+      getSection12ClassFeaturesThroughLevel()
+        .find((feature) => {
+          return (
+            feature.id ===
+            "fighting-style-fighter"
+          );
+        });
+    const fighterStyleSelected =
+      toggleSection12ClassFeatureChoice(
+        getSection12FeatureChoiceKey(
+          fighterStyleFeature
+        ),
+        "Defense"
+      );
+    const directLevelAfterChoice =
+      setMulticlassClassLevel(
+        1,
+        2
+      );
+    const directSubclassBypass =
+      setMulticlassClassLevel(
+        1,
+        3
+      );
+    const wizardSubclassSelected =
+      setMulticlassSubclass(
+        1,
+        "evocation"
+      );
+    const directLevelAfterSubclass =
+      setMulticlassClassLevel(
+        1,
+        3
+      );
+
+    record(
+      "Direct multiclass level editing cannot bypass prerequisites or choices",
+      {
+        prerequisiteBypass:
+          directPrerequisiteBypass,
+        pendingFeatureBypass:
+          directPendingChoiceBypass,
+        fighterStyleSelected,
+        afterFeatureChoice:
+          directLevelAfterChoice,
+        pendingSubclassBypass:
+          directSubclassBypass,
+        wizardSubclassSelected,
+        afterSubclassChoice:
+          directLevelAfterSubclass,
+        wizardLevel:
+          creatorState.draft
+            .classProgression
+            .classes[1].level
+      },
+      {
+        prerequisiteBypass: false,
+        pendingFeatureBypass: false,
+        fighterStyleSelected: true,
+        afterFeatureChoice: true,
+        pendingSubclassBypass: false,
+        wizardSubclassSelected: true,
+        afterSubclassChoice: true,
+        wizardLevel: 3
+      }
+    );
+
+    const overLevelImport =
+      normalizeCharacter({
+        classProgression: {
+          totalLevel: 25,
+          classes: [
+            {
+              entryId: "fighter-cap",
+              classId: "fighter",
+              className: "Fighter",
+              level: 15
+            },
+            {
+              entryId: "wizard-cap",
+              classId: "wizard",
+              className: "Wizard",
+              level: 10
+            }
+          ],
+          levelOrder: [
+            ...Array(15).fill(
+              "fighter-cap"
+            ),
+            ...Array(10).fill(
+              "wizard-cap"
+            )
+          ]
+        }
+      });
+
+    record(
+      "Imported multiclass totals are capped at 20 and proficiency uses total level",
+      {
+        totalLevel:
+          overLevelImport
+            .classProgression
+            .totalLevel,
+        levels:
+          overLevelImport
+            .classProgression
+            .classes
+            .map((entry) => {
+              return `${entry.classId}:${entry.level}`;
+            }),
+        levelOrderCount:
+          overLevelImport
+            .classProgression
+            .levelOrder.length,
+        proficiencyBonus:
+          getCharacterProficiencyBonus(
+            overLevelImport
+          ),
+        migrationWarning:
+          cleanArray(
+            overLevelImport.builder
+              .validation
+              .migrationWarnings
+          ).some((warning) => {
+            return warning.includes(
+              "level 20"
+            );
+          })
+      },
+      {
+        totalLevel: 20,
+        levels: [
+          "fighter:15",
+          "wizard:5"
+        ],
+        levelOrderCount: 20,
+        proficiencyBonus: 6,
+        migrationWarning: true
+      }
+    );
+
+    const expectedGrantSignatures = {
+      artificer:
+        "Light Armor|Medium Armor|Shields::::Thieves' Tools|Tinker's Tools::0::0",
+      barbarian:
+        "Shields::Simple Weapons|Martial Weapons::::0::0",
+      bard:
+        "Light Armor::::::1::1",
+      cleric:
+        "Light Armor|Medium Armor|Shields::::::0::0",
+      druid:
+        "Light Armor|Medium Armor|Shields::::::0::0",
+      fighter:
+        "Light Armor|Medium Armor|Shields::Simple Weapons|Martial Weapons::::0::0",
+      monk:
+        "::Simple Weapons|Shortswords::::0::0",
+      paladin:
+        "Light Armor|Medium Armor|Shields::Simple Weapons|Martial Weapons::::0::0",
+      ranger:
+        "Light Armor|Medium Armor|Shields::Simple Weapons|Martial Weapons::::1::0",
+      rogue:
+        "Light Armor::::Thieves' Tools::1::0",
+      sorcerer:
+        "::::::0::0",
+      warlock:
+        "Light Armor::Simple Weapons::::0::0",
+      wizard:
+        "::::::0::0"
+    };
+    const actualGrantSignatures =
+      Object.fromEntries(
+        Object.keys(
+          expectedGrantSignatures
+        ).map((classId) => {
+          const rule =
+            getMulticlassProficiencyRule({
+              classId,
+              className:
+                DEFAULT_CLASSES[classId]
+                  .name
+            });
+
+          return [
+            classId,
+            [
+              cleanArray(
+                rule.armor
+              ).join("|"),
+              cleanArray(
+                rule.weapons
+              ).join("|"),
+              cleanArray(
+                rule.tools
+              ).join("|"),
+              safeNumber(
+                rule.skillChoices
+                  ?.choose,
+                0
+              ),
+              safeNumber(
+                rule.toolChoices
+                  ?.choose,
+                0
+              )
+            ].join("::")
+          ];
+        })
+      );
+
+    record(
+      "Every secondary class proficiency grant matches the 2014 table",
+      {
+        classCount:
+          Object.keys(
+            actualGrantSignatures
+          ).length,
+        allMatch:
+          Object.keys(
+            expectedGrantSignatures
+          ).every((classId) => {
+            return (
+              actualGrantSignatures[
+                classId
+              ] ===
+              expectedGrantSignatures[
+                classId
+              ]
+            );
+          })
+      },
+      {
+        classCount: 13,
+        allMatch: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "wizard"
+    );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        int: 13,
+        cha: 13
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    addMulticlassClass(
+      "bard"
+    );
+
+    const bardChoiceHtml =
+      renderMulticlassProgressionEditor(
+        creatorState.draft
+      );
+    const bardWarningsBefore = [
+      ...getMulticlassPendingSkillChoiceWarnings(
+        creatorState.draft
+      ),
+      ...getMulticlassPendingToolChoiceWarnings(
+        creatorState.draft
+      )
+    ];
+    const bardClassCompleteBefore =
+      isSection17ClassComplete(
+        creatorState.draft
+      );
+    const bardSkillSelected =
+      toggleMulticlassSkillChoice(
+        1,
+        "persuasion"
+      );
+    const bardToolSelected =
+      toggleMulticlassToolChoice(
+        1,
+        "Bagpipes"
+      );
+    const bardWarningsAfter = [
+      ...getMulticlassPendingSkillChoiceWarnings(
+        creatorState.draft
+      ),
+      ...getMulticlassPendingToolChoiceWarnings(
+        creatorState.draft
+      )
+    ];
+
+    record(
+      "Pending multiclass skill and tool choices block completion and have controls",
+      {
+        warningCountBefore:
+          bardWarningsBefore.length,
+        classCompleteBefore:
+          bardClassCompleteBefore,
+        toolControl:
+          bardChoiceHtml.includes(
+            'data-cc-action="toggle-multiclass-tool"'
+          ) &&
+          bardChoiceHtml.includes(
+            'data-tool-value="Bagpipes"'
+          ),
+        bardSkillSelected,
+        bardToolSelected,
+        warningCountAfter:
+          bardWarningsAfter.length,
+        skillGranted:
+          creatorState.draft
+            .proficiencies
+            .skills.persuasion
+            ?.proficient === true,
+        toolGranted:
+          creatorState.draft
+            .proficiencies
+            .tools
+            .includes("Bagpipes"),
+        classCompleteAfter:
+          isSection17ClassComplete(
+            creatorState.draft
+          )
+      },
+      {
+        warningCountBefore: 2,
+        classCompleteBefore: false,
+        toolControl: true,
+        bardSkillSelected: true,
+        bardToolSelected: true,
+        warningCountAfter: 0,
+        skillGranted: true,
+        toolGranted: true,
+        classCompleteAfter: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "wizard"
+    );
+    creatorState.draft
+      .equipment.items = [
+        normalizeSection15Item({
+          id: "phase3-kept-item",
+          name: "Kept Item",
+          category: "gear"
+        })
+      ];
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        int: 13,
+        dex: 13,
+        wis: 13
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    const equipmentBeforeMulticlass =
+      JSON.stringify(
+        creatorState.draft
+          .equipment.items
+      );
+    addMulticlassClass(
+      "ranger"
+    );
+    const startingBeforeCardMove =
+      getStartingClassEntry(
+        creatorState.draft
+      )?.entryId;
+    const classCardsMoved =
+      moveMulticlassClass(
+        1,
+        -1
+      );
+    const startingAfterCardMove =
+      getStartingClassEntry(
+        creatorState.draft
+      )?.entryId;
+
+    record(
+      "Starting class benefits survive class-card reordering",
+      {
+        classCardsMoved,
+        startingStable:
+          startingBeforeCardMove ===
+          startingAfterCardMove,
+        startingClass:
+          getStartingClassEntry(
+            creatorState.draft
+          )?.classId,
+        savingThrows:
+          creatorState.draft
+            .proficiencies
+            .savingThrows,
+        noRangerSavingThrows:
+          !creatorState.draft
+            .proficiencies
+            .savingThrows
+            .includes("Strength") &&
+          !creatorState.draft
+            .proficiencies
+            .savingThrows
+            .includes("Dexterity"),
+        equipmentUnchanged:
+          JSON.stringify(
+            creatorState.draft
+              .equipment.items
+          ) ===
+          equipmentBeforeMulticlass
+      },
+      {
+        classCardsMoved: true,
+        startingStable: true,
+        startingClass: "wizard",
+        savingThrows: [
+          "Intelligence",
+          "Wisdom"
+        ],
+        noRangerSavingThrows: true,
+        equipmentUnchanged: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "wizard"
+    );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        int: 13,
+        dex: 13
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    addMulticlassClass(
+      "rogue"
+    );
+    toggleMulticlassSkillChoice(
+      1,
+      "stealth"
+    );
+    const rogueClassSource =
+      getClassSourceLabel(
+        creatorState.draft
+          .classProgression
+          .classes[1]
+      );
+    const rogueProficienciesBefore = {
+      armor:
+        creatorState.draft
+          .proficiencies.armor
+          .includes("Light Armor"),
+      tools:
+        creatorState.draft
+          .proficiencies.tools
+          .includes("Thieves' Tools"),
+      skill:
+        cleanArray(
+          creatorState.draft
+            .proficiencies
+            .skills.stealth
+            ?.source
+        ).includes(
+          rogueClassSource
+        )
+    };
+    const rogueRemovedForCleanup =
+      removeMulticlassClass(1);
+    const rogueProficienciesAfter = {
+      armor:
+        creatorState.draft
+          .proficiencies.armor
+          .includes("Light Armor"),
+      tools:
+        creatorState.draft
+          .proficiencies.tools
+          .includes("Thieves' Tools"),
+      skill:
+        cleanArray(
+          creatorState.draft
+            .proficiencies
+            .skills.stealth
+            ?.source
+        ).includes(
+          rogueClassSource
+        )
+    };
+
+    record(
+      "Removing a class removes its granted proficiencies",
+      {
+        before:
+          rogueProficienciesBefore,
+        removed:
+          rogueRemovedForCleanup,
+        after:
+          rogueProficienciesAfter
+      },
+      {
+        before: {
+          armor: true,
+          tools: true,
+          skill: true
+        },
+        removed: true,
+        after: {
+          armor: false,
+          tools: false,
+          skill: false
+        }
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "fighter"
+    );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        str: 13,
+        int: 13
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    const cleanupFightingStyle =
+      getSection12ClassFeaturesThroughLevel()
+        .find((feature) => {
+          return (
+            feature.id ===
+            "fighting-style-fighter"
+          );
+        });
+    toggleSection12ClassFeatureChoice(
+      getSection12FeatureChoiceKey(
+        cleanupFightingStyle
+      ),
+      "Defense"
+    );
+    addCharacterLevelToClass(0);
+    const fighterActionSurgeBefore =
+      getSection12ClassFeaturesThroughLevel()
+        .some((feature) => {
+          return (
+            feature.id ===
+              "action-surge"
+          );
+        });
+    const fighterLoweredForCleanup =
+      setMulticlassClassLevel(
+        0,
+        1
+      );
+    const fighterActionSurgeAfter =
+      getSection12ClassFeaturesThroughLevel()
+        .some((feature) => {
+          return (
+            feature.id ===
+              "action-surge"
+          );
+        });
+    addMulticlassClass(
+      "wizard"
+    );
+    addCharacterLevelToClass(1);
+    setMulticlassSubclass(
+      1,
+      "evocation"
+    );
+    refreshClassProgressionDerivedValues();
+
+    const cleanupWizardEntry =
+      creatorState.draft
+        .classProgression
+        .classes[1];
+    const cleanupWizardKey =
+      cleanupWizardEntry.entryId;
+    cleanupWizardEntry.choices = {
+      ...(cleanupWizardEntry.choices || {}),
+      classFeatures: {
+        ...normalizeClassChoiceMap(
+          cleanupWizardEntry
+            .choices
+            ?.classFeatures
+        ),
+        [`${cleanupWizardKey}:arcane-tradition`]:
+          ["Evocation"]
+      }
+    };
+    getSection16ClassSourceStore()[
+      cleanupWizardKey
+    ] = {
+      classEntryId:
+        cleanupWizardKey,
+      classId: "wizard",
+      className: "Wizard",
+      cantripIds: [],
+      knownSpellIds: [
+        "magic-missile"
+      ],
+      preparedSpellIds: [],
+      spellbookSpellIds: [],
+      alwaysPreparedSpellIds: [],
+      mysticArcanumSpellIds: {}
+    };
+    creatorState.draft.magic
+      .spellSourceModelVersion = 2;
+    syncSection16LegacySpellAliases();
+
+    const wizardSubclassBenefitsBefore =
+      creatorState.draft
+        .features
+        .classFeatures
+        .filter((feature) => {
+          return (
+            feature.classEntryId ===
+              cleanupWizardKey &&
+            feature.source ===
+              "subclass"
+          );
+        }).length;
+    const wizardLoweredForCleanup =
+      setMulticlassClassLevel(
+        1,
+        1
+      );
+    const wizardSubclassBenefitsAfter =
+      creatorState.draft
+        .features
+        .classFeatures
+        .filter((feature) => {
+          return (
+            feature.classEntryId ===
+              cleanupWizardKey &&
+            feature.source ===
+              "subclass"
+          );
+        }).length;
+    const staleWizardChoiceRemoved =
+      !Object.hasOwn(
+        normalizeClassChoiceMap(
+          creatorState.draft
+            .classProgression
+            .classes[1]
+            .choices
+            .classFeatures
+        ),
+        `${cleanupWizardKey}:arcane-tradition`
+      );
+    const wizardClassRemoved =
+      removeMulticlassClass(1);
+
+    record(
+      "Lowering or removing a class prunes features, subclass benefits, spells, resources, and choices",
+      {
+        subclassBenefitsBefore:
+          wizardSubclassBenefitsBefore >
+          0,
+        classFeatureBefore:
+          fighterActionSurgeBefore,
+        classLowered:
+          fighterLoweredForCleanup,
+        classFeatureAfter:
+          fighterActionSurgeAfter,
+        lowered:
+          wizardLoweredForCleanup,
+        subclassBenefitsAfter:
+          wizardSubclassBenefitsAfter,
+        staleChoiceRemoved:
+          staleWizardChoiceRemoved,
+        removed:
+          wizardClassRemoved,
+        removedEntryAbsent:
+          !creatorState.draft
+            .classProgression
+            .classes
+            .some((entry) => {
+              return (
+                entry.entryId ===
+                cleanupWizardKey
+              );
+            }),
+        spellSourceRemoved:
+          !Object.hasOwn(
+            getSection16ClassSourceStore(),
+            cleanupWizardKey
+          ),
+        spellAliasRemoved:
+          !creatorState.draft
+            .magic.knownSpellIds
+            .includes(
+              "magic-missile"
+            ),
+        resourcesRemoved:
+          !creatorState.draft
+            .classMechanics
+            .resources
+            .some((resource) => {
+              return (
+                resource.classId ===
+                "wizard"
+              );
+            }),
+        featuresRemoved:
+          !creatorState.draft
+            .features
+            .classFeatures
+            .some((feature) => {
+              return (
+                feature.classEntryId ===
+                cleanupWizardKey
+              );
+            })
+      },
+      {
+        subclassBenefitsBefore: true,
+        classFeatureBefore: true,
+        classLowered: true,
+        classFeatureAfter: false,
+        lowered: true,
+        subclassBenefitsAfter: 0,
+        staleChoiceRemoved: true,
+        removed: true,
+        removedEntryAbsent: true,
+        spellSourceRemoved: true,
+        spellAliasRemoved: true,
+        resourcesRemoved: true,
+        featuresRemoved: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "fighter"
+    );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        str: 13,
+        int: 13
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    const asiCleanupFightingStyle =
+      getSection12ClassFeaturesThroughLevel()
+        .find((feature) => {
+          return (
+            feature.id ===
+            "fighting-style-fighter"
+          );
+        });
+    toggleSection12ClassFeatureChoice(
+      getSection12FeatureChoiceKey(
+        asiCleanupFightingStyle
+      ),
+      "Defense"
+    );
+    addMulticlassClass(
+      "wizard"
+    );
+    addCharacterLevelToClass(0);
+    addCharacterLevelToClass(0);
+    addCharacterLevelToClass(0);
+
+    const abandonedAsiSlot =
+      getUnlockedFeatChoiceSlots(
+        creatorState.draft
+      ).find((slot) => {
+        return (
+          slot.classId === "fighter" &&
+          slot.classLevel === 4
+        );
+      });
+    setSection12AsiMode(
+      abandonedAsiSlot?.id,
+      "feat"
+    );
+    setSection12AsiFeat(
+      abandonedAsiSlot?.id,
+      "alert"
+    );
+    const fighterLoweredBelowAsi =
+      setMulticlassClassLevel(
+        0,
+        3
+      );
+
+    record(
+      "Lowering class level removes abandoned ASI and feat selections",
+      {
+        lowered:
+          fighterLoweredBelowAsi,
+        unlockedSlots:
+          getUnlockedFeatChoiceSlots(
+            creatorState.draft
+          ).filter((slot) => {
+            return (
+              slot.classId ===
+              "fighter"
+            );
+          }).length,
+        advancementChoices:
+          creatorState.draft
+            .advancementChoices
+            .filter((choice) => {
+              return (
+                choice.classId ===
+                "fighter" &&
+                choice.classLevel === 4
+              );
+            }).length,
+        alertStillSelected:
+          creatorState.draft
+            .feats.includes("alert"),
+        compatibilityFeatRefs:
+          Object.entries(
+            normalizeClassChoiceMap(
+              creatorState.draft
+                .classChoices
+            )
+          )
+            .filter(([, values]) => {
+              return values.includes(
+                "feat:alert"
+              );
+            })
+            .map(([choiceId]) => {
+              return choiceId;
+            }),
+        classEntryFeatRefs:
+          getClassProgressionEntries(
+            creatorState.draft
+          ).flatMap((classEntry) => {
+            return Object.entries(
+              normalizeClassChoiceMap(
+                classEntry?.choices
+                  ?.classFeatures
+              )
+            )
+              .filter(([, values]) => {
+                return values.includes(
+                  "feat:alert"
+                );
+              })
+              .map(([choiceId]) => {
+                return choiceId;
+              });
+          }),
+        asiBonusSource:
+          Object.keys(
+            creatorState.draft
+              .abilities
+              .bonusSources
+          ).some((sourceId) => {
+            return sourceId.includes(
+              abandonedAsiSlot?.id
+            );
+          })
+      },
+      {
+        lowered: true,
+        unlockedSlots: 0,
+        advancementChoices: 0,
+        alertStillSelected: false,
+        compatibilityFeatRefs: [],
+        classEntryFeatRefs: [],
+        asiBonusSource: false
+      }
     );
 
     const failed =
@@ -22887,6 +24585,12 @@ export function createCharacterCreator(options = {}) {
                 character
               )}
 
+              ${renderMulticlassToolChoices(
+                entry.classEntry,
+                index,
+                character
+              )}
+
               <div class="hg-character-inline-actions">
                 <button
                   type="button"
@@ -23063,12 +24767,16 @@ export function createCharacterCreator(options = {}) {
       character
     );
 
+    syncClassLevelOrderToClassLevels(
+      character
+    );
+
     character.classProgression.totalLevel =
-      calculateClassProgressionTotalLevel(
+      enforceClassProgressionLevelCap(
         character
       );
 
-    syncClassLevelOrderToClassLevels(
+    syncFirstUnarmoredDefenseSource(
       character
     );
 
@@ -23430,6 +25138,37 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function getClassEntryToolChoiceOptions(
+    classEntry,
+    classIndex = 0,
+    character = creatorState.draft
+  ) {
+    const config =
+      getClassEntryToolChoiceConfig(
+        classEntry,
+        classIndex,
+        character
+      );
+
+    const configuredOptions =
+      cleanArray(config.from);
+
+    const sourceOptions =
+      configuredOptions.length
+        ? configuredOptions
+        : [config.label];
+
+    return uniqueCleanArray(
+      sourceOptions.flatMap((option) => {
+        return expandSection14ToolChoice(
+          option
+        );
+      })
+    ).sort((a, b) => {
+      return a.localeCompare(b);
+    });
+  }
+
   function getValidClassEntryToolChoices(
     classEntry,
     classIndex = 0,
@@ -23496,6 +25235,56 @@ export function createCharacterCreator(options = {}) {
 
       return [
         `${className} multiclass proficiency choice is pending: choose ${config.choose} ${config.label}${config.choose === 1 ? "" : "s"}.`
+      ];
+    });
+  }
+
+  function getMulticlassPendingSkillChoiceWarnings(
+    character = creatorState.draft
+  ) {
+    return getClassProgressionEntries(
+      character
+    ).flatMap((classEntry, classIndex) => {
+      if (
+        isStartingClassEntry(
+          classEntry,
+          character,
+          classIndex
+        )
+      ) {
+        return [];
+      }
+
+      const config =
+        getClassEntrySkillChoiceConfig(
+          classEntry,
+          classIndex,
+          character
+        );
+
+      if (config.choose <= 0) {
+        return [];
+      }
+
+      const selectedCount =
+        countValidClassEntrySkillChoices(
+          classEntry,
+          classIndex,
+          character
+        );
+
+      if (selectedCount === config.choose) {
+        return [];
+      }
+
+      const className =
+        safeDisplayString(
+          classEntry?.className,
+          `Class ${classIndex + 1}`
+        );
+
+      return [
+        `${className} multiclass skill choice is pending: choose ${config.choose} skill proficienc${config.choose === 1 ? "y" : "ies"}.`
       ];
     });
   }
@@ -23901,6 +25690,76 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function renderMulticlassToolChoices(
+    classEntry,
+    classIndex = 0,
+    character = creatorState.draft
+  ) {
+    const config =
+      getClassEntryToolChoiceConfig(
+        classEntry,
+        classIndex,
+        character
+      );
+
+    if (
+      isStartingClassEntry(
+        classEntry,
+        character,
+        classIndex
+      ) ||
+      config.choose <= 0
+    ) {
+      return "";
+    }
+
+    const selected = new Set(
+      getValidClassEntryToolChoices(
+        classEntry,
+        classIndex,
+        character
+      )
+    );
+
+    const options =
+      getClassEntryToolChoiceOptions(
+        classEntry,
+        classIndex,
+        character
+      );
+
+    return `
+      <p>
+        <b>Multiclass Tool:</b>
+        Choose ${config.choose}
+        ${escapeHtml(config.label)}${config.choose === 1 ? "" : "s"}.
+        Selected ${selected.size} / ${config.choose}.
+      </p>
+
+      <div class="hg-character-inline-actions">
+        ${options
+          .map((tool) => {
+            const isSelected =
+              selected.has(tool);
+
+            return `
+              <button
+                type="button"
+                class="${isSelected ? "selected" : ""}"
+                data-cc-action="toggle-multiclass-tool"
+                data-class-index="${classIndex}"
+                data-tool-value="${escapeHtml(tool)}"
+              >
+                ${isSelected ? "Remove" : "Choose"}
+                ${escapeHtml(tool)}
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
   function toggleMulticlassSkillChoice(
     classIndex,
     skillId
@@ -23976,6 +25835,88 @@ export function createCharacterCreator(options = {}) {
         ...choices,
         skill.id
       ];
+    }
+
+    applyClassProgressionProficiencies();
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+    markDraftChanged();
+
+    return true;
+  }
+
+  function toggleMulticlassToolChoice(
+    classIndex,
+    toolValue
+  ) {
+    const index =
+      Math.max(
+        0,
+        Math.round(
+          safeNumber(classIndex, 0)
+        )
+      );
+
+    const classEntry =
+      getClassEntryAtIndex(index);
+
+    if (!classEntry) {
+      return false;
+    }
+
+    const config =
+      getClassEntryToolChoiceConfig(
+        classEntry,
+        index
+      );
+    const tool = cleanString(
+      toolValue
+    );
+    const options =
+      getClassEntryToolChoiceOptions(
+        classEntry,
+        index
+      );
+
+    if (
+      config.choose <= 0 ||
+      !options.includes(tool)
+    ) {
+      return false;
+    }
+
+    classEntry.choices = {
+      ...(classEntry.choices || {})
+    };
+
+    const choices =
+      getClassEntryStoredToolChoices(
+        classEntry
+      );
+    const alreadySelected =
+      choices.includes(tool);
+
+    if (alreadySelected) {
+      classEntry.choices
+        .toolProficiencyIds =
+          choices.filter((value) => {
+            return value !== tool;
+          });
+    } else if (
+      choices.length >= config.choose
+    ) {
+      setStatus(
+        `Choose only ${config.choose} ${config.label}${config.choose === 1 ? "" : "s"}.`
+      );
+
+      return false;
+    } else {
+      classEntry.choices
+        .toolProficiencyIds = [
+          ...choices,
+          tool
+        ];
     }
 
     applyClassProgressionProficiencies();
@@ -24065,6 +26006,298 @@ export function createCharacterCreator(options = {}) {
     });
   }
 
+  function getPendingClassFeatureChoiceWarnings(
+    character = creatorState.draft
+  ) {
+    return getClassProgressionEntries(
+      character
+    ).flatMap((classEntry, classIndex) => {
+      return collectSection12FeaturesForClassEntry(
+        classEntry,
+        classIndex
+      ).flatMap((feature) => {
+        const optionSource =
+          cleanString(
+            feature.optionSource
+          ).toLowerCase();
+
+        if (
+          feature.type !== "choice" ||
+          [
+            "subclasses",
+            "asiorfeat"
+          ].includes(optionSource)
+        ) {
+          return [];
+        }
+
+        const options =
+          getSection12FeatureChoiceOptions(
+            feature
+          );
+        const required =
+          getSection12FeatureChooseCount(
+            feature
+          );
+        const selected =
+          getSection12FeatureStoredChoices(
+            feature
+          ).filter((choice) => {
+            return options.includes(choice);
+          });
+
+        if (
+          !options.length ||
+          selected.length >= required
+        ) {
+          return [];
+        }
+
+        return [
+          `${feature.className || classEntry.className || "Class"} class level ${feature.level} has a pending ${feature.name} choice (${selected.length}/${required}).`
+        ];
+      });
+    });
+  }
+
+  function getClassProgressionPendingChoiceWarnings(
+    character = creatorState.draft
+  ) {
+    const warnings = [
+      ...getPendingClassFeatureChoiceWarnings(
+        character
+      ),
+      ...getMulticlassPendingSkillChoiceWarnings(
+        character
+      ),
+      ...getMulticlassPendingToolChoiceWarnings(
+        character
+      )
+    ];
+
+    getMulticlassSummaryEntries(
+      character
+    ).forEach((entry) => {
+      const subclassOptions =
+        Array.isArray(
+          entry.template?.subclasses
+        )
+          ? entry.template.subclasses
+          : [];
+
+      if (
+        subclassOptions.length > 0 &&
+        entry.classLevel >=
+          entry.subclassLevel &&
+        !entry.subclassName
+      ) {
+        warnings.push(
+          `${entry.className} has a pending subclass choice at class level ${entry.subclassLevel}.`
+        );
+      }
+    });
+
+    getUnlockedFeatChoiceSlots(
+      character
+    )
+      .filter((slot) => {
+        return (
+          !slot.selectedMode ||
+          (
+            slot.selectedMode === "feat" &&
+            !slot.selectedFeatId
+          )
+        );
+      })
+      .forEach((slot) => {
+        warnings.push(
+          `${slot.className} class level ${slot.classLevel} has a pending ASI or feat choice.`
+        );
+      });
+
+    return uniqueCleanArray(
+      warnings
+    );
+  }
+
+  function pruneAbandonedClassFeatureChoices(
+    character = creatorState.draft
+  ) {
+    const activeChoiceIds = new Set();
+    const primaryChoiceIds = new Set();
+    const removedFeatIds = [];
+
+    getClassProgressionEntries(
+      character
+    ).forEach((classEntry, classIndex) => {
+      const availableIds = new Set();
+
+      collectSection12FeaturesForClassEntry(
+        classEntry,
+        classIndex
+      ).forEach((feature) => {
+        availableIds.add(feature.id);
+        availableIds.add(
+          getSection12FeatureChoiceKey(
+            feature
+          )
+        );
+      });
+
+      getUnlockedFeatChoiceSlots(
+        character
+      )
+        .filter((slot) => {
+          return (
+            slot.classEntryId ===
+            getClassProgressionEntryKey(
+              classEntry,
+              classIndex
+            )
+          );
+        })
+        .forEach((slot) => {
+          availableIds.add(slot.id);
+          availableIds.add(slot.legacyId);
+          availableIds.add(slot.featureId);
+        });
+
+      availableIds.delete("");
+
+      availableIds.forEach((id) => {
+        activeChoiceIds.add(id);
+
+        if (
+          isStartingClassEntry(
+            classEntry,
+            character,
+            classIndex
+          )
+        ) {
+          primaryChoiceIds.add(id);
+        }
+      });
+
+      classEntry.choices = {
+        ...(classEntry.choices || {})
+      };
+
+      const storedChoices =
+        normalizeClassChoiceMap(
+          classEntry.choices
+            .classFeatures
+        );
+
+      Object.keys(storedChoices)
+        .forEach((choiceId) => {
+          if (availableIds.has(choiceId)) {
+            return;
+          }
+
+          storedChoices[choiceId]
+            .filter((value) => {
+              return value.startsWith(
+                "feat:"
+              );
+            })
+            .forEach((value) => {
+              removedFeatIds.push(
+                value.slice(
+                  "feat:".length
+                )
+              );
+            });
+
+          delete storedChoices[choiceId];
+        });
+
+      classEntry.choices
+        .classFeatures =
+          storedChoices;
+    });
+
+    const compatibilityChoices =
+      normalizeClassChoiceMap(
+        character.classChoices
+      );
+
+    Object.keys(compatibilityChoices)
+      .forEach((choiceId) => {
+        if (
+          primaryChoiceIds.has(choiceId)
+        ) {
+          return;
+        }
+
+        compatibilityChoices[choiceId]
+          .filter((value) => {
+            return value.startsWith(
+              "feat:"
+            );
+          })
+          .forEach((value) => {
+            removedFeatIds.push(
+              value.slice(
+                "feat:".length
+              )
+            );
+          });
+
+        delete compatibilityChoices[
+          choiceId
+        ];
+      });
+
+    character.classChoices =
+      compatibilityChoices;
+
+    removedFeatIds.forEach(
+      removeSection12AsiFeatIfUnused
+    );
+
+    return activeChoiceIds;
+  }
+
+  function pruneRemovedClassSpellSources(
+    character = creatorState.draft
+  ) {
+    const store =
+      getSection16ClassSourceStore(
+        character
+      );
+    const activeSourceKeys = new Set(
+      getSpellcastingClassOptions(
+        character
+      )
+        .map(getSection16SourceKey)
+        .filter(Boolean)
+    );
+    const removedSourceKeys = [];
+
+    Object.keys(store)
+      .forEach((sourceKey) => {
+        if (
+          activeSourceKeys.has(sourceKey)
+        ) {
+          return;
+        }
+
+        removedSourceKeys.push(
+          sourceKey
+        );
+        delete store[sourceKey];
+      });
+
+    if (
+      character === creatorState.draft &&
+      removedSourceKeys.length
+    ) {
+      syncSection16LegacySpellAliases();
+    }
+
+    return removedSourceKeys;
+  }
+
   function refreshClassProgressionDerivedValues(
     options = {}
   ) {
@@ -24075,6 +26308,14 @@ export function createCharacterCreator(options = {}) {
       recalculateClassTotalLevel(
         draft
       );
+
+    pruneAbandonedClassFeatureChoices(
+      draft
+    );
+
+    pruneRemovedClassSpellSources(
+      draft
+    );
 
     draft.combat.proficiencyBonus =
       getGenericProficiencyBonus(
@@ -24328,14 +26569,49 @@ export function createCharacterCreator(options = {}) {
           )
         )
       );
-
-    if (
+    const currentLevel =
       getClassEntryLevel(
         classEntry,
         1
-      ) === nextLevel
+      );
+
+    if (
+      currentLevel === nextLevel
     ) {
       return false;
+    }
+
+    if (
+      nextLevel > currentLevel &&
+      classes.length > 1
+    ) {
+      const failedPrerequisites =
+        getMulticlassPrerequisiteResults(
+          creatorState.draft
+        ).filter((result) => {
+          return !result.met;
+        });
+
+      if (failedPrerequisites.length) {
+        setStatus(
+          `Class level was not changed. Multiclass prerequisites are not met: ${failedPrerequisites.map(formatMulticlassPrerequisiteFailure).join("; ")}.`
+        );
+
+        return false;
+      }
+
+      const pendingChoices =
+        getClassProgressionPendingChoiceWarnings(
+          creatorState.draft
+        );
+
+      if (pendingChoices.length) {
+        setStatus(
+          `Class level was not changed. Complete pending class choices first: ${pendingChoices.join(" ")}`
+        );
+
+        return false;
+      }
     }
 
     classEntry.level =
@@ -33073,16 +35349,35 @@ export function createCharacterCreator(options = {}) {
     const legacyChoices = normalizeClassChoiceMap(
       creatorState.draft.classChoices
     );
+    const legacyDirectChoices =
+      feature?.name ===
+        "Fighting Style" &&
+      cleanString(
+        classEntry?.choices
+          ?.fightingStyle
+      )
+        ? [
+            cleanString(
+              classEntry.choices
+                .fightingStyle
+            )
+          ]
+        : [];
 
-    return uniqueCleanArray(
+    const storedChoices =
       entryChoices[choiceKey] ||
       entryChoices[feature?.id] ||
       legacyChoices[choiceKey] ||
       (
         safeNumber(feature?.classIndex, 0) === 0
           ? legacyChoices[feature?.id]
-          : []
-      )
+          : null
+      );
+
+    return uniqueCleanArray(
+      cleanArray(storedChoices).length
+        ? storedChoices
+        : legacyDirectChoices
     );
   }
 
@@ -34087,6 +36382,18 @@ export function createCharacterCreator(options = {}) {
     const resourceById = new Map();
     const classSourceStore =
       getSection16ClassSourceStore(draft);
+    const firstUnarmoredDefenseSource =
+      syncFirstUnarmoredDefenseSource(
+        draft
+      );
+    const firstUnarmoredDefenseFeatureIds =
+      new Set(
+        Object.values(
+          UNARMORED_DEFENSE_CLASS_RULES
+        ).map((rule) => {
+          return rule.featureId;
+        })
+      );
 
     Object.values(classSourceStore)
       .forEach((source) => {
@@ -34318,7 +36625,26 @@ export function createCharacterCreator(options = {}) {
       };
 
       if (type === "armorClassFormula") {
-        mechanics.armorClassFormulas.push(record);
+        const isFirstReceivedRule =
+          firstUnarmoredDefenseFeatureIds
+            .has(record.featureId);
+
+        if (
+          !isFirstReceivedRule ||
+          (
+            firstUnarmoredDefenseSource &&
+            record.classEntryId ===
+              firstUnarmoredDefenseSource
+                .classEntryId &&
+            record.featureId ===
+              firstUnarmoredDefenseSource
+                .featureId
+          )
+        ) {
+          mechanics
+            .armorClassFormulas
+            .push(record);
+        }
       } else if (type === "extraAttack") {
         const attacks = Math.max(
           1,
@@ -34972,12 +37298,34 @@ export function createCharacterCreator(options = {}) {
       )
     ).some((values) => {
       return values.includes(`feat:${cleanFeatId}`);
-    });
+    }) ||
+      getClassProgressionEntries(
+        creatorState.draft
+      ).some((classEntry) => {
+        return Object.values(
+          normalizeClassChoiceMap(
+            classEntry?.choices
+              ?.classFeatures
+          )
+        ).some((values) => {
+          return values.includes(
+            `feat:${cleanFeatId}`
+          );
+        });
+      });
 
     if (!stillUsed) {
       creatorState.draft.feats = normalizeFeatIds(
         creatorState.draft.feats
       ).filter((id) => id !== cleanFeatId);
+
+      creatorState.draft.selectedFeats =
+        normalizeFeatIds(
+          creatorState.draft
+            .selectedFeats
+        ).filter((id) => {
+          return id !== cleanFeatId;
+        });
     }
   }
 
@@ -35473,12 +37821,40 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft.advancementChoices =
         normalizeAdvancementChoices(
           creatorState.draft.advancementChoices
-        ).filter((choice) => {
+        );
+
+      const removedFeatIds =
+        creatorState.draft
+          .advancementChoices
+          .filter((choice) => {
+            return (
+              choice.type === "asi-or-feat" &&
+              !availableSlotIds.has(
+                choice.id
+              )
+            );
+          })
+          .map((choice) => {
+            return cleanString(
+              choice.featId
+            );
+          })
+          .filter(Boolean);
+
+      creatorState.draft
+        .advancementChoices =
+          creatorState.draft
+            .advancementChoices
+            .filter((choice) => {
           return (
             choice.type !== "asi-or-feat" ||
             availableSlotIds.has(choice.id)
           );
         });
+
+      removedFeatIds.forEach(
+        removeSection12AsiFeatIfUnused
+      );
 
       return;
     }
@@ -37989,6 +40365,28 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function handleSection12ToggleMulticlassTool(
+    ...values
+  ) {
+    const button =
+      findSection12ActionElement(
+        ...values
+      );
+
+    if (
+      toggleMulticlassToolChoice(
+        button?.dataset?.classIndex,
+        button?.dataset?.toolValue
+      )
+    ) {
+      setStatus(
+        "Multiclass tool proficiency updated."
+      );
+
+      renderCreatorView();
+    }
+  }
+
   function handleSection12MulticlassChange({
     target
   }) {
@@ -38401,6 +40799,11 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "toggle-multiclass-skill",
     handleSection12ToggleMulticlassSkill
+  );
+
+  registerCharacterCreatorAction(
+    "toggle-multiclass-tool",
+    handleSection12ToggleMulticlassTool
   );
 
   registerCharacterCreatorAction(
@@ -53320,6 +55723,18 @@ export function createCharacterCreator(options = {}) {
         warnings.push(warning);
       });
 
+      getMulticlassPendingSkillChoiceWarnings(
+        draft
+      ).forEach((warning) => {
+        warnings.push(warning);
+      });
+
+      getPendingClassFeatureChoiceWarnings(
+        draft
+      ).forEach((warning) => {
+        warnings.push(warning);
+      });
+
       getMulticlassSummaryEntries(draft)
         .forEach((entry, index) => {
           const subclassOptions =
@@ -56611,11 +59026,43 @@ export function createCharacterCreator(options = {}) {
   function isSection17ClassComplete(
     character
   ) {
-    return Boolean(
-      getPrimaryClassEntry(
+    if (
+      !getPrimaryClassEntry(
         character
-      ) &&
-      getSafeClassName(character)
+      ) ||
+      !getSafeClassName(character)
+    ) {
+      return false;
+    }
+
+    if (!isMulticlassDraft(character)) {
+      return true;
+    }
+
+    const totalLevel =
+      getCharacterClassEntries(
+        character
+      ).reduce((sum, classEntry) => {
+        return (
+          sum +
+          getClassEntryLevel(
+            classEntry,
+            0
+          )
+        );
+      }, 0);
+
+    return (
+      totalLevel >= 1 &&
+      totalLevel <= 20 &&
+      getMulticlassPrerequisiteResults(
+        character
+      ).every((result) => {
+        return result.met;
+      }) &&
+      getClassProgressionPendingChoiceWarnings(
+        character
+      ).length === 0
     );
   }
 
