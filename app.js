@@ -65,6 +65,11 @@ const db = getFirestore(app);
 
 console.log("Firebase initialized");
 
+if (window.__HOMEBREW_GOD_SMOKE__) {
+  window.__HOMEBREW_GOD_SMOKE__.moduleLoaded = true;
+  window.__HOMEBREW_GOD_SMOKE__.render();
+}
+
 // =====================================================
 // APP SECTION 3 — PAGE ELEMENTS / STATE
 // =====================================================
