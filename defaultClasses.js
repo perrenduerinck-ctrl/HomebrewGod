@@ -3,6 +3,7 @@ import {
   mergeDefaultSubclassCollections
 } from "./defaultSubclasses.js";
 import { applyDefaultClassFeatureRules } from "./defaultClassFeatureRules.js";
+import { getLegacy2014Metadata } from "./ruleset2014.js";
 
 export const DEFAULT_CLASSES = {
   barbarian: {
@@ -2631,6 +2632,11 @@ addClassFeatureMechanics("rogue", "sneak-attack", {
 });
 
 Object.values(DEFAULT_CLASSES).forEach((classData) => {
+  Object.assign(
+    classData,
+    getLegacy2014Metadata("class", classData.id, classData)
+  );
+
   Object.values(classData.featuresByLevel)
     .flat()
     .filter((featureData) => featureData.type === "spellcasting")
