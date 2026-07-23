@@ -1,5 +1,6 @@
 import { SPELL_NAME_LIST } from "./defaultSpellNames.js";
 import { SRD_SPELL_DETAILS } from "./defaultSpellDetails.js";
+import { getLegacy2014Metadata } from "./ruleset2014.js";
 
 export const DEFAULT_SPELL_SCHEMA_VERSION = 1;
 
@@ -286,6 +287,7 @@ const normalizeDetailedSpell = (rawSpell) => {
   ].map(normalizeSpellId).filter(Boolean);
 
   return Object.freeze({
+    ...getLegacy2014Metadata("spell", id, raw),
     schemaVersion: DEFAULT_SPELL_SCHEMA_VERSION,
     id,
     name: String(raw.name || "").trim(),
