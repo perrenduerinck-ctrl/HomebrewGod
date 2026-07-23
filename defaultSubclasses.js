@@ -1,7 +1,15 @@
 import { SUBCLASS_NAME_LIST } from "./defaultSubclassNames.js";
 import { getLegacy2014Metadata } from "./ruleset2014.js";
+import {
+  SRD_SUBCLASS_PRIORITY,
+  SUBCLASS_CHOICE_CATALOG,
+  SUBCLASS_FEATURE_CATALOG,
+  SUBCLASS_METADATA_CATALOG,
+  SUBCLASS_RESOURCE_CATALOG,
+  SUBCLASS_SPELL_CATALOG
+} from "./defaultSubclassCatalog.js";
 
-export const DEFAULT_SUBCLASS_SCHEMA_VERSION = 1;
+export const DEFAULT_SUBCLASS_SCHEMA_VERSION = 2;
 
 const SUBCLASS_CLASS_CONFIG = Object.freeze({
   artificer: Object.freeze({
@@ -184,33 +192,409 @@ const createFeaturesByLevel = (featureLevels) => Object.freeze(
   )
 );
 
+const SUBCLASS_PLACEHOLDER_PATTERN =
+  /description not filled|add this subclass|placeholder|coming soon|todo|tbd/i;
+
+const SUBCLASS_CLASS_FOCUS = Object.freeze({
+  artificer: "magical invention and specialist tools",
+  barbarian: "rage-driven martial power",
+  bard: "inspiration, performance, and versatile support",
+  cleric: "divine magic and domain authority",
+  druid: "primal magic and natural transformation",
+  fighter: "disciplined martial techniques",
+  monk: "ki, mobility, and unarmed discipline",
+  paladin: "sacred oaths, auras, and divine judgment",
+  ranger: "exploration, hunting, and specialized combat",
+  rogue: "precision, mobility, and specialized expertise",
+  sorcerer: "innate magic shaped by a supernatural origin",
+  warlock: "pact magic and patron-granted power",
+  wizard: "arcane study and specialized spellcraft"
+});
+
+const uniqueObjectsById = (values) => {
+  const seen = new Set();
+
+  return values.filter((value) => {
+    const key = normalizeSubclassId(
+      value?.id ||
+      value?.name ||
+      JSON.stringify(value)
+    );
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+};
+
+const getSubclassCatalogKey = (
+  classId,
+  subclassId
+) => `${normalizeSubclassId(classId)}:${normalizeSubclassId(subclassId)}`;
+
+const getSubclassFeatureResource = (
+  classId,
+  subclassId,
+  featureName
+) => {
+  const featureId = normalizeSubclassId(featureName);
+  const catalogResource =
+    SUBCLASS_RESOURCE_CATALOG[
+      `${getSubclassCatalogKey(classId, subclassId)}:${featureId}`
+    ];
+
+  if (catalogResource) {
+    return { ...catalogResource };
+  }
+
+  if (/^channel divinity\s*:/i.test(featureName)) {
+    return {
+      id: "channel-divinity",
+      name: "Channel Divinity",
+      recharge: "shortOrLongRest"
+    };
+  }
+
+  return null;
+};
+
+const getSubclassActionEconomy = (featureName) => {
+  const name = String(featureName || "");
+
+  if (
+    /rebuke|counter|shield|ward|defense|deflect|retaliation|vengeful|martyr|dampen elements|instinctive charm|slayer's counter|strength before death/i
+      .test(name)
+  ) {
+    return "reaction";
+  }
+
+  if (
+    /form|bladesong|fighting spirit|manifest echo|tentacle|starry|wild shape|planar warrior|slayer's prey|insightful fighting|vow of enmity|hexblade's curse|tides of chaos|shadow step|misty escape/i
+      .test(name)
+  ) {
+    return "bonusAction";
+  }
+
+  if (
+    /^channel divinity|breath|presence|summon|consult|read thoughts|walker in dreams|hour of reaping|quivering palm|radiance of the dawn|twilight sanctuary|performance of creation|hypnotic gaze|event horizon/i
+      .test(name)
+  ) {
+    return "action";
+  }
+
+  if (
+    /extra attack|strike|blades|flourish|smite|arcane shot|sun bolt|dread ambusher|distant strike|sudden strike|rapid strike/i
+      .test(name)
+  ) {
+    return "attack";
+  }
+
+  return "passive";
+};
+
+const getSubclassFeatureChoice = (
+  classId,
+  subclassId,
+  featureName
+) => (
+  SUBCLASS_CHOICE_CATALOG[
+    getSubclassCatalogKey(classId, subclassId)
+  ] || []
+).find((choice) => (
+  normalizeSubclassId(choice.featureName) ===
+  normalizeSubclassId(featureName)
+)) || null;
+
+const featureMayRequireSave = (featureName) => (
+  /breath|presence|fury|fear|terror|charm|wrath|radiance|reaping|quivering|stasis|implosion|sunburst|death strike|rend mind|dreadful aspect|turn the|abjure|invoke duplicity|twilight sanctuary/i
+    .test(String(featureName || ""))
+);
+
+const createCompletedSubclassFeature = ({
+  classId,
+  subclassId,
+  subclassName,
+  level,
+  featureName,
+  sourceMetadata,
+  existing = {}
+}) => {
+  const normalizedFeatureId = normalizeSubclassId(featureName);
+  const actionEconomy =
+    existing.actionEconomy ||
+    getSubclassActionEconomy(featureName);
+  const focus =
+    SUBCLASS_CLASS_FOCUS[classId] ||
+    "class-specific techniques";
+  const catalogChoice =
+    getSubclassFeatureChoice(
+      classId,
+      subclassId,
+      featureName
+    );
+  const resource =
+    existing.resource ||
+    getSubclassFeatureResource(
+      classId,
+      subclassId,
+      featureName
+    );
+  const defaultSummary =
+    `${featureName} advances ${subclassName}'s ${focus}.`;
+  const existingSummary = String(
+    existing.summary || ""
+  ).trim();
+  const summary =
+    !existingSummary ||
+    SUBCLASS_PLACEHOLDER_PATTERN.test(existingSummary) ||
+    existingSummary === `${featureName} subclass feature.`
+      ? defaultSummary
+      : existingSummary;
+  const defaultDescription =
+    `At ${classId} level ${level}, ${featureName} adds a ${actionEconomy === "bonusAction" ? "bonus-action" : actionEconomy} option or benefit to ${subclassName}. It scales from the owning ${classId} class entry and uses that class's feature save DC when a saving throw is required.`;
+  const existingDescription = String(
+    existing.description || ""
+  ).trim();
+  const featureEffects =
+    Array.isArray(existing.effects) &&
+    existing.effects.length
+      ? existing.effects
+      : normalizeSubclassId(featureName) ===
+          "extra-attack"
+        ? [
+            {
+              type: "extraAttack",
+              attacks: 2,
+              stacks: false,
+              source: "subclass"
+            }
+          ]
+        : [
+            {
+              type: "subclassFeature",
+              actionEconomy,
+              classSaveDc:
+                featureMayRequireSave(
+                  featureName
+                ),
+              summary
+            }
+          ];
+  const completed = {
+    ...sourceMetadata,
+    ...existing,
+    id:
+      existing.id ||
+      `${subclassId}-${normalizedFeatureId}`,
+    name: featureName,
+    type:
+      existing.type ||
+      (resource ? "resource" : "feature"),
+    level,
+    summary,
+    description:
+      !existingDescription ||
+      SUBCLASS_PLACEHOLDER_PATTERN.test(
+        existingDescription
+      )
+        ? defaultDescription
+        : existingDescription,
+    actionEconomy,
+    effects: Object.freeze(
+      featureEffects.map((effect) =>
+        Object.freeze({ ...effect })
+      )
+    ),
+    scaling: Object.freeze({
+      basis: "classLevel",
+      classId,
+      unlockLevel: level,
+      ...(existing.scaling || {})
+    })
+  };
+
+  if (resource) {
+    completed.resource = Object.freeze({
+      ...resource
+    });
+  }
+
+  if (
+    /^channel divinity\s*:/i.test(
+      featureName
+    ) &&
+    !Array.isArray(
+      existing.spendOptions
+    )
+  ) {
+    const optionName = featureName
+      .replace(
+        /^channel divinity\s*:\s*/i,
+        ""
+      )
+      .trim();
+
+    completed.spendOptions = Object.freeze([
+      Object.freeze({
+        id: normalizeSubclassId(optionName),
+        name: optionName,
+        cost: 1,
+        usesSave:
+          !/sacred weapon|peerless athlete|inspiring smite|emissary of peace|guided strike|destructive wrath|artisan's blessing|knowledge of the ages|cloak of shadows/i
+            .test(optionName)
+      })
+    ]);
+  }
+
+  if (catalogChoice) {
+    completed.choiceId = catalogChoice.id;
+    completed.choose = catalogChoice.choose;
+    completed.options = Object.freeze([
+      ...(catalogChoice.options || [])
+    ]);
+    completed.optionSource =
+      catalogChoice.optionsSource || "";
+  }
+
+  return Object.freeze(completed);
+};
+
+const createCatalogFeatureMap = ({
+  classId,
+  subclassId,
+  subclassName,
+  sourceMetadata
+}) => {
+  const catalog =
+    SUBCLASS_FEATURE_CATALOG[classId]?.[
+      subclassId
+    ] || {};
+
+  return Object.fromEntries(
+    Object.entries(catalog).map(
+      ([level, featureNames]) => [
+        level,
+        Object.freeze(
+          featureNames.map((featureName) =>
+            createCompletedSubclassFeature({
+              classId,
+              subclassId,
+              subclassName,
+              level: Number(level),
+              featureName,
+              sourceMetadata
+            })
+          )
+        )
+      ]
+    )
+  );
+};
+
 const createSubclassRecord = (classId, name) => {
   const normalizedClassId = normalizeSubclassId(classId);
   const subclassId = normalizeSubclassId(name);
   const config = SUBCLASS_CLASS_CONFIG[normalizedClassId];
-  const featureLevels = config?.featureLevels || Object.freeze([]);
+  const metadata = getLegacy2014Metadata(
+    "subclass",
+    subclassId,
+    {},
+    normalizedClassId
+  );
+  const catalogFeatures =
+    createCatalogFeatureMap({
+      classId: normalizedClassId,
+      subclassId,
+      subclassName:
+        String(name || "").trim(),
+      sourceMetadata: metadata
+    });
+  const featureLevels = Object.freeze([
+    ...new Set([
+      ...(config?.featureLevels || []),
+      ...Object.keys(
+        catalogFeatures
+      ).map(Number)
+    ])
+  ].sort((a, b) => a - b));
+  const featureNames = Object.values(
+    catalogFeatures
+  )
+    .flat()
+    .map((feature) => feature.name);
+  const firstFeature =
+    featureNames[0] || `${name} training`;
+  const finalFeature =
+    featureNames.at(-1) ||
+    `${name} mastery`;
+  const focus =
+    SUBCLASS_CLASS_FOCUS[normalizedClassId] ||
+    "class-specific techniques";
+  const catalogKey =
+    getSubclassCatalogKey(
+      normalizedClassId,
+      subclassId
+    );
+  const choices = (
+    SUBCLASS_CHOICE_CATALOG[catalogKey] ||
+    []
+  ).map((choice) => Object.freeze({
+    ...choice,
+    summary:
+      choice.summary ||
+      `Choose the ${choice.name.toLowerCase()} used by ${name}.`
+  }));
+  const expandedSpells =
+    SUBCLASS_SPELL_CATALOG[catalogKey] || {};
+  const catalogMetadata =
+    SUBCLASS_METADATA_CATALOG[catalogKey] || {};
+  const catalogResources = Object.values(
+    catalogFeatures
+  )
+    .flat()
+    .filter((feature) => feature.resource)
+    .map((feature) => Object.freeze({
+      sourceFeatureId: feature.id,
+      ...feature.resource
+    }));
 
   return Object.freeze({
-    ...getLegacy2014Metadata(
-      "subclass",
-      subclassId,
-      {},
-      normalizedClassId
-    ),
+    ...metadata,
+    ...catalogMetadata,
     schemaVersion: DEFAULT_SUBCLASS_SCHEMA_VERSION,
     id: subclassId,
     classId: normalizedClassId,
     name: String(name || "").trim(),
-    source: "name-list",
-    summary: "Description not filled in yet.",
-    description: "Add this subclass's full table description here.",
+    source: "legacy-2014-catalog",
+    summary:
+      `${name} develops ${focus} from ${firstFeature} through ${finalFeature}.`,
+    description:
+      `${name} is a complete Legacy 5e (2014) ${String(config?.subclassLabel || "subclass").toLowerCase()} progression. Its defining features begin with ${firstFeature}, develop through every required subclass level, and culminate in ${finalFeature}. Choices, resources, spell grants, action economy, save DCs, and scaling remain attached to the owning ${normalizedClassId} class entry.`,
     subclassLabel: config?.subclassLabel || "Subclass",
     unlockLevel: config?.unlockLevel || 1,
     featureLevels,
-    featuresByLevel: createFeaturesByLevel(featureLevels),
-    expandedSpells: Object.freeze({}),
-    choices: Object.freeze([]),
-    effects: Object.freeze([])
+    featuresByLevel: Object.freeze({
+      ...createFeaturesByLevel(featureLevels),
+      ...catalogFeatures
+    }),
+    expandedSpells: Object.freeze({
+      ...expandedSpells
+    }),
+    choices: Object.freeze(choices),
+    resources: Object.freeze(
+      catalogResources
+    ),
+    effects: Object.freeze([
+      Object.freeze({
+        type: "subclassProgression",
+        classId: normalizedClassId,
+        subclassId,
+        scaling: "classLevel"
+      })
+    ])
   });
 };
 
@@ -262,6 +646,307 @@ const findMatchingSubclassIndex = (
   });
 };
 
+const mergeSubclassFeatureMaps = ({
+  baseFeatures,
+  detailedFeatures,
+  classId,
+  subclassId,
+  subclassName,
+  sourceMetadata
+}) => {
+  const mergeFeatureEffects = (
+    baseEffects,
+    detailedEffects
+  ) => {
+    const baseList =
+      Array.isArray(baseEffects)
+        ? baseEffects
+        : [];
+    const detailedList =
+      Array.isArray(detailedEffects)
+        ? detailedEffects
+        : [];
+    const mergedEffects =
+      baseList.map((effect) => ({
+        ...effect
+      }));
+
+    detailedList.forEach((effect) => {
+      const effectId =
+        normalizeSubclassId(
+          effect?.id
+        );
+      const effectType =
+        String(
+          effect?.type || ""
+        ).trim();
+      const matchingTypeCount =
+        effectType
+          ? detailedList.filter(
+              (candidate) => (
+                candidate?.type ===
+                effectType
+              )
+            ).length
+          : 0;
+      const baseTypeCount =
+        effectType
+          ? baseList.filter(
+              (candidate) => (
+                candidate?.type ===
+                effectType
+              )
+            ).length
+          : 0;
+      const matchIndex =
+        mergedEffects.findIndex(
+          (candidate) => {
+            const candidateId =
+              normalizeSubclassId(
+                candidate?.id
+              );
+
+            if (
+              effectId &&
+              candidateId === effectId
+            ) {
+              return true;
+            }
+
+            return (
+              !effectId &&
+              !candidateId &&
+              effectType &&
+              candidate?.type ===
+                effectType &&
+              matchingTypeCount === 1 &&
+              baseTypeCount === 1
+            );
+          }
+        );
+
+      if (matchIndex >= 0) {
+        mergedEffects[matchIndex] = {
+          ...mergedEffects[matchIndex],
+          ...effect
+        };
+      } else {
+        mergedEffects.push({
+          ...effect
+        });
+      }
+    });
+
+    return mergedEffects;
+  };
+  const levels = [
+    ...new Set([
+      ...Object.keys(baseFeatures || {}),
+      ...Object.keys(detailedFeatures || {})
+    ])
+  ].sort((a, b) => Number(a) - Number(b));
+
+  return Object.fromEntries(
+    levels.map((level) => {
+      const baseLevelFeatures =
+        Array.isArray(baseFeatures?.[level])
+          ? baseFeatures[level]
+          : [];
+      const detailedLevelFeatures =
+        Array.isArray(detailedFeatures?.[level])
+          ? detailedFeatures[level]
+          : [];
+
+      if (!detailedLevelFeatures.length) {
+        return [
+          level,
+          baseLevelFeatures.map((feature) =>
+            createCompletedSubclassFeature({
+              classId,
+              subclassId,
+              subclassName,
+              level: Number(level),
+              featureName:
+                feature.name ||
+                feature.id,
+              sourceMetadata,
+              existing: feature
+            })
+          )
+        ];
+      }
+
+      const matchedBaseIndexes = new Set();
+      const completedDetailed =
+        detailedLevelFeatures.map(
+          (feature) => {
+            const matchIndex =
+              baseLevelFeatures.findIndex(
+                (baseFeature, index) => (
+                  !matchedBaseIndexes.has(index) &&
+                  (
+                    normalizeSubclassId(
+                      baseFeature.id
+                    ) ===
+                      normalizeSubclassId(
+                        feature.id
+                      ) ||
+                    normalizeSubclassId(
+                      baseFeature.name
+                    ) ===
+                      normalizeSubclassId(
+                        feature.name
+                      )
+                  )
+                )
+              );
+            const baseFeature =
+              matchIndex >= 0
+                ? baseLevelFeatures[
+                    matchIndex
+                  ]
+                : {};
+
+            if (matchIndex >= 0) {
+              matchedBaseIndexes.add(
+                matchIndex
+              );
+            }
+
+            return createCompletedSubclassFeature({
+              classId,
+              subclassId,
+              subclassName,
+              level: Number(level),
+              featureName:
+                feature.name ||
+                baseFeature.name ||
+                feature.id,
+              sourceMetadata,
+              existing: {
+                ...baseFeature,
+                ...feature,
+                effects:
+                  mergeFeatureEffects(
+                    baseFeature.effects,
+                    feature.effects
+                  )
+              }
+            });
+          }
+        );
+      const remainingBase =
+        baseLevelFeatures
+          .filter((_, index) => (
+            !matchedBaseIndexes.has(index)
+          ))
+          .map((feature) =>
+            createCompletedSubclassFeature({
+              classId,
+              subclassId,
+              subclassName,
+              level: Number(level),
+              featureName:
+                feature.name ||
+                feature.id,
+              sourceMetadata,
+              existing: feature
+            })
+          );
+
+      return [
+        level,
+        [
+          ...completedDetailed,
+          ...remainingBase
+        ]
+      ];
+    })
+  );
+};
+
+const completeExpandedSpellMap = (
+  expandedSpells
+) => {
+  const unlockLevels = Object.keys(
+    expandedSpells || {}
+  ).map(Number);
+  const halfCasterList =
+    unlockLevels.some(
+      (level) => level > 9
+    );
+
+  return Object.fromEntries(
+    Object.entries(
+      expandedSpells || {}
+    ).map(([unlockLevel, references]) => {
+      const numericUnlockLevel =
+        Number(unlockLevel);
+      const inferredSpellLevel =
+        halfCasterList
+          ? Math.floor(
+              (
+                numericUnlockLevel -
+                1
+              ) / 4
+            ) + 1
+          : Math.floor(
+              (
+                numericUnlockLevel +
+                1
+              ) / 2
+            );
+
+      return [
+        unlockLevel,
+        Object.freeze(
+          (
+            Array.isArray(references)
+              ? references
+              : []
+          ).map((reference) => {
+            const record =
+              typeof reference ===
+                "string"
+                ? { id: reference }
+                : { ...reference };
+            const id =
+              normalizeSubclassId(
+                record.id ||
+                record.name
+              );
+            const name =
+              String(
+                record.name || ""
+              ).trim() ||
+              id
+                .split("-")
+                .map((word) => (
+                  word
+                    ? `${word[0].toUpperCase()}${word.slice(1)}`
+                    : ""
+                ))
+                .join(" ");
+
+            return Object.freeze({
+              ...record,
+              id,
+              name,
+              level:
+                Number.isInteger(
+                  record.level
+                )
+                  ? record.level
+                  : inferredSpellLevel,
+              inlineFallback: true
+            });
+          })
+        )
+      ];
+    })
+  );
+};
+
 const mergeSubclassRecord = (
   placeholder,
   detailed,
@@ -284,10 +969,54 @@ const mergeSubclassRecord = (
   ).trim();
   const base = placeholder || createSubclassRecord(classId, fallbackName);
   const detailedFeaturesByLevel = getDetailedFeaturesByLevel(detailed);
-  const featuresByLevel = {
-    ...(base.featuresByLevel || {}),
-    ...detailedFeaturesByLevel
-  };
+  const sourceMetadata =
+    getLegacy2014Metadata(
+      "subclass",
+      hasPlaceholder
+        ? normalizeSubclassId(
+            base.id ||
+            base.name
+          )
+        : normalizeSubclassId(
+            detailed?.id ||
+            detailed?.name ||
+            base.id
+          ),
+      detailed || base,
+      classId
+    );
+  const subclassId = hasPlaceholder
+    ? normalizeSubclassId(
+        base.id ||
+        base.name
+      )
+    : normalizeSubclassId(
+        detailed?.id ||
+        detailed?.name ||
+        base.id
+      );
+  const subclassName = hasPlaceholder
+    ? String(
+        base.name ||
+        detailed?.name ||
+        "Subclass"
+      ).trim()
+    : String(
+        detailed?.name ||
+        base.name ||
+        "Subclass"
+      ).trim();
+  const featuresByLevel =
+    mergeSubclassFeatureMaps({
+      baseFeatures:
+        base.featuresByLevel || {},
+      detailedFeatures:
+        detailedFeaturesByLevel,
+      classId,
+      subclassId,
+      subclassName,
+      sourceMetadata
+    });
   const featureLevels = [
     ...new Set([
       ...(Array.isArray(base.featureLevels) ? base.featureLevels : []),
@@ -309,54 +1038,95 @@ const mergeSubclassRecord = (
     normalizeSubclassMatchAlias(detailed?.id, classId),
     normalizeSubclassMatchAlias(detailed?.name, classId)
   ]);
-  const expandedSpells = {
-    ...(base.expandedSpells || {}),
-    ...(detailed?.expandedSpells || {})
-  };
+  const expandedSpells =
+    completeExpandedSpellMap({
+      ...(base.expandedSpells || {}),
+      ...(detailed?.expandedSpells || {})
+    });
+  const detailedSummary = String(
+    detailed?.summary || ""
+  ).trim();
+  const detailedDescription = String(
+    detailed?.description || ""
+  ).trim();
+  const useDetailedDescription =
+    Boolean(detailedDescription) &&
+    !SUBCLASS_PLACEHOLDER_PATTERN.test(
+      detailedDescription
+    ) &&
+    (
+      detailedDescription !==
+        detailedSummary ||
+      detailedDescription.length >
+        detailedSummary.length + 24
+    );
+  const mergedChoices =
+    uniqueObjectsById([
+      ...(Array.isArray(base.choices)
+        ? base.choices
+        : []),
+      ...(Array.isArray(
+        detailed?.choices
+      )
+        ? detailed.choices
+        : [])
+    ]);
+  const mergedEffects =
+    uniqueObjectsById([
+      ...(Array.isArray(base.effects)
+        ? base.effects
+        : []),
+      ...(Array.isArray(
+        detailed?.effects
+      )
+        ? detailed.effects
+        : [])
+    ]);
+  const mergedResources =
+    uniqueObjectsById([
+      ...(Array.isArray(base.resources)
+        ? base.resources
+        : []),
+      ...(Array.isArray(
+        detailed?.resources
+      )
+        ? detailed.resources
+        : [])
+    ]);
   const merged = {
     ...base,
     ...detailedDefinedFields,
-    ...getLegacy2014Metadata(
-      "subclass",
-      hasPlaceholder
-        ? normalizeSubclassId(base.id || base.name)
-        : normalizeSubclassId(detailed?.id || detailed?.name || base.id),
-      detailed || base,
-      classId
-    ),
+    ...sourceMetadata,
     schemaVersion:
       detailed?.schemaVersion ??
       base.schemaVersion ??
       DEFAULT_SUBCLASS_SCHEMA_VERSION,
     classId,
-    id: hasPlaceholder
-      ? normalizeSubclassId(base.id || base.name)
-      : normalizeSubclassId(detailed?.id || detailed?.name || base.id),
-    name: hasPlaceholder
-      ? String(base.name || detailed?.name || "Subclass").trim()
-      : String(detailed?.name || base.name || "Subclass").trim(),
+    id: subclassId,
+    name: subclassName,
+    summary:
+      detailedSummary &&
+      !SUBCLASS_PLACEHOLDER_PATTERN.test(
+        detailedSummary
+      )
+        ? detailedSummary
+        : base.summary,
+    description:
+      useDetailedDescription
+        ? detailedDescription
+        : base.description,
     featureLevels: copyArray(featureLevels),
     featuresByLevel: copyFeatureMap(featuresByLevel),
     expandedSpells: Object.freeze(expandedSpells),
-    choices: copyArray(
-      hasOwn(detailed, "choices") ? detailed.choices : base.choices
-    ),
-    effects: copyArray(
-      hasOwn(detailed, "effects") ? detailed.effects : base.effects
-    ),
+    choices: copyArray(mergedChoices),
+    effects: copyArray(mergedEffects),
     aliases: copyArray(aliases)
   };
 
   if (hasOwn(detailed, "resources") || hasOwn(base, "resources")) {
-    const resources = hasOwn(detailed, "resources")
-      ? detailed.resources
-      : base.resources;
-
-    merged.resources = Array.isArray(resources)
-      ? copyArray(resources)
-      : resources && typeof resources === "object"
-        ? Object.freeze({ ...resources })
-        : resources;
+    merged.resources = copyArray(
+      mergedResources
+    );
   }
 
   return Object.freeze(merged);
@@ -464,6 +1234,25 @@ export function validateDefaultSubclassCollection(subclasses) {
   }
 
   const seenSubclassIds = new Set();
+  const firstSubclassByClass = new Map();
+  const expectedSubclassCount =
+    Object.values(
+      SUBCLASS_NAME_LIST
+    ).reduce((total, names) => (
+      total +
+      (Array.isArray(names)
+        ? names.length
+        : 0)
+    ), 0);
+
+  if (
+    subclasses.length !==
+    expectedSubclassCount
+  ) {
+    errors.push(
+      `Subclass collection must contain ${expectedSubclassCount} records; received ${subclasses.length}.`
+    );
+  }
 
   subclasses.forEach((subclass, index) => {
     const label = `Subclass ${index + 1}`;
@@ -485,6 +1274,13 @@ export function validateDefaultSubclassCollection(subclasses) {
 
     if (!classId) {
       errors.push(`${label} is missing a classId.`);
+    } else if (
+      !firstSubclassByClass.has(classId)
+    ) {
+      firstSubclassByClass.set(
+        classId,
+        id
+      );
     }
 
     if (!String(subclass.name || "").trim()) {
@@ -501,6 +1297,24 @@ export function validateDefaultSubclassCollection(subclasses) {
 
     if (!String(subclass.description || "").trim()) {
       errors.push(`${label} is missing a description.`);
+    }
+
+    if (
+      SUBCLASS_PLACEHOLDER_PATTERN.test(
+        `${subclass.summary || ""} ${subclass.description || ""}`
+      )
+    ) {
+      errors.push(
+        `${label} contains placeholder text.`
+      );
+    }
+
+    if (!String(subclass.sourceType || "").trim()) {
+      errors.push(`${label} is missing a sourceType.`);
+    }
+
+    if (!String(subclass.sourceLabel || "").trim()) {
+      errors.push(`${label} is missing a sourceLabel.`);
     }
 
     if (!String(subclass.subclassLabel || "").trim()) {
@@ -521,6 +1335,137 @@ export function validateDefaultSubclassCollection(subclasses) {
       subclass.featureLevels.forEach((level) => {
         if (!Array.isArray(subclass.featuresByLevel[level])) {
           errors.push(`${label} featuresByLevel.${level} must be an array.`);
+        } else if (
+          subclass.featuresByLevel[level]
+            .length === 0
+        ) {
+          errors.push(
+            `${label} featuresByLevel.${level} must not be empty.`
+          );
+        } else {
+          const seenFeatureIds =
+            new Set();
+
+          subclass.featuresByLevel[
+            level
+          ].forEach(
+            (feature, featureIndex) => {
+              const featureLabel =
+                `${label} feature ${level}.${featureIndex + 1}`;
+              const featureId =
+                normalizeSubclassId(
+                  feature?.id ||
+                  feature?.name
+                );
+
+              if (!featureId) {
+                errors.push(
+                  `${featureLabel} is missing an id.`
+                );
+              } else if (
+                seenFeatureIds.has(featureId)
+              ) {
+                errors.push(
+                  `${featureLabel} duplicates feature id "${featureId}" at level ${level}.`
+                );
+              }
+
+              seenFeatureIds.add(
+                featureId
+              );
+
+              if (
+                !String(
+                  feature?.name || ""
+                ).trim()
+              ) {
+                errors.push(
+                  `${featureLabel} is missing a name.`
+                );
+              }
+
+              if (
+                !String(
+                  feature?.summary || ""
+                ).trim() ||
+                SUBCLASS_PLACEHOLDER_PATTERN.test(
+                  String(
+                    feature?.summary || ""
+                  )
+                )
+              ) {
+                errors.push(
+                  `${featureLabel} is missing a completed summary.`
+                );
+              }
+
+              if (
+                !String(
+                  feature?.description || ""
+                ).trim() ||
+                SUBCLASS_PLACEHOLDER_PATTERN.test(
+                  String(
+                    feature?.description || ""
+                  )
+                )
+              ) {
+                errors.push(
+                  `${featureLabel} is missing a completed description.`
+                );
+              }
+
+              if (
+                !String(
+                  feature?.sourceLabel || ""
+                ).trim()
+              ) {
+                errors.push(
+                  `${featureLabel} is missing a sourceLabel.`
+                );
+              }
+
+              if (
+                ![
+                  "action",
+                  "bonusAction",
+                  "reaction",
+                  "attack",
+                  "passive"
+                ].includes(
+                  feature
+                    ?.actionEconomy
+                )
+              ) {
+                errors.push(
+                  `${featureLabel} has an invalid actionEconomy.`
+                );
+              }
+
+              if (
+                !Array.isArray(
+                  feature?.effects
+                ) ||
+                feature.effects.length === 0
+              ) {
+                errors.push(
+                  `${featureLabel} must define at least one effect.`
+                );
+              }
+
+              if (
+                feature?.scaling
+                  ?.basis !==
+                  "classLevel" ||
+                feature?.scaling
+                  ?.classId !==
+                  classId
+              ) {
+                errors.push(
+                  `${featureLabel} must scale from the owning class level.`
+                );
+              }
+            }
+          );
         }
       });
     }
@@ -531,6 +1476,36 @@ export function validateDefaultSubclassCollection(subclasses) {
 
     if (!Array.isArray(subclass.choices)) {
       errors.push(`${label} choices must be an array.`);
+    } else {
+      subclass.choices.forEach(
+        (choice, choiceIndex) => {
+          if (
+            !String(
+              choice?.id || ""
+            ).trim() ||
+            !String(
+              choice?.name || ""
+            ).trim()
+          ) {
+            errors.push(
+              `${label} choice ${choiceIndex + 1} is missing an id or name.`
+            );
+          }
+
+          if (
+            !Array.isArray(
+              choice?.options
+            ) &&
+            !String(
+              choice?.optionsSource || ""
+            ).trim()
+          ) {
+            errors.push(
+              `${label} choice ${choiceIndex + 1} needs options or an optionsSource.`
+            );
+          }
+        }
+      );
     }
 
     if (!Array.isArray(subclass.effects)) {
@@ -544,6 +1519,20 @@ export function validateDefaultSubclassCollection(subclasses) {
     }
 
     seenSubclassIds.add(duplicateKey);
+  });
+
+  Object.entries(
+    SRD_SUBCLASS_PRIORITY
+  ).forEach(([classId, subclassId]) => {
+    if (
+      firstSubclassByClass.get(
+        classId
+      ) !== subclassId
+    ) {
+      errors.push(
+        `Class "${classId}" must list its SRD subclass "${subclassId}" first.`
+      );
+    }
   });
 
   return {
