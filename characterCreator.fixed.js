@@ -13,6 +13,11 @@ import { DEFAULT_CLASSES } from "./defaultClasses.js";
 import { DEFAULT_FEATS } from "./defaultFeats.js";
 import { DEFAULT_SPELLS } from "./defaultSpells.js";
 import { createCharacterSheetView } from "./characterSheet.js";
+import {
+  ACTIVE_RULESET,
+  getLegacy2014Metadata,
+  isActiveRulesetEntry
+} from "./ruleset2014.js";
 
 export function createCharacterCreator(options = {}) {
   const deps = {
@@ -209,6 +214,9 @@ export function createCharacterCreator(options = {}) {
       id: null,
       sheetType: "character",
       schemaVersion: CHARACTER_SCHEMA_VERSION,
+      rulesetId: ACTIVE_RULESET.id,
+      rulesEdition: ACTIVE_RULESET.edition,
+      rulesMode: ACTIVE_RULESET.mode,
 
       identity: {
         name: "",
@@ -3149,6 +3157,9 @@ export function createCharacterCreator(options = {}) {
 
       id: raw.id || null,
       schemaVersion: CHARACTER_SCHEMA_VERSION,
+      rulesetId: ACTIVE_RULESET.id,
+      rulesEdition: ACTIVE_RULESET.edition,
+      rulesMode: ACTIVE_RULESET.mode,
 
       identity: {
         ...empty.identity,
@@ -9311,6 +9322,7 @@ export function createCharacterCreator(options = {}) {
     const raw = classData || {};
 
     return createSrdClassTemplate({
+      ...getLegacy2014Metadata("class", raw.id, raw),
       id: raw.id,
       name: raw.name,
       summary:
@@ -19918,6 +19930,10 @@ export function createCharacterCreator(options = {}) {
       raw.name,
       "Custom Class"
     );
+    const classId = makeSafeId(
+      raw.id || name,
+      "custom-class"
+    );
 
     const skillChoices =
       raw.skillChoices ||
@@ -19925,11 +19941,9 @@ export function createCharacterCreator(options = {}) {
 
     return {
       schemaVersion: CLASS_SCHEMA_VERSION,
+      ...getLegacy2014Metadata("class", classId, raw),
 
-      id: makeSafeId(
-        raw.id || name,
-        "custom-class"
-      ),
+      id: classId,
 
       docId: raw.docId || null,
       name,
@@ -20111,6 +20125,10 @@ export function createCharacterCreator(options = {}) {
     });
 
     creatorState.roomClassCache.forEach((classData) => {
+      if (!isActiveRulesetEntry(classData)) {
+        return;
+      }
+
       const normalized = normalizeClassTemplate(
         classData,
         "homebrew"
@@ -20128,6 +20146,7 @@ export function createCharacterCreator(options = {}) {
 
     if (
       primaryClass?.templateSnapshot &&
+      isActiveRulesetEntry(primaryClass.templateSnapshot) &&
       !classMap.has(primaryClass.classId)
     ) {
       const normalized = normalizeClassTemplate(
@@ -25664,6 +25683,23 @@ export function createCharacterCreator(options = {}) {
       .replaceAll("'", "&#039;");
   }
 
+  function renderRulesetMetadata(record, kind, parentId = "") {
+    const metadata = getLegacy2014Metadata(
+      kind,
+      record?.id || record?.name,
+      record,
+      parentId
+    );
+
+    return `
+      <span class="small" data-ruleset-id="${escapeHtml(metadata.rulesetId)}">
+        <b>Rules:</b> ${escapeHtml(ACTIVE_RULESET.label)}
+        <br>
+        <b>Catalog:</b> ${escapeHtml(metadata.sourceLabel)}
+      </span>
+    `;
+  }
+
   function beginnerNote(title, body) {
     return `
       <div class="hg-character-beginner-note">
@@ -29302,6 +29338,11 @@ export function createCharacterCreator(options = {}) {
           speciesId,
           {
             ...cloneData(species),
+            ...getLegacy2014Metadata(
+              "species",
+              speciesId,
+              species
+            ),
             id: speciesId,
             source:
               species.source ||
@@ -29314,6 +29355,10 @@ export function createCharacterCreator(options = {}) {
       creatorState.roomSpeciesCache ||
       []
     ).forEach((species) => {
+      if (!isActiveRulesetEntry(species)) {
+        return;
+      }
+
       const speciesId =
         makeSafeId(
           species.id ||
@@ -29322,11 +29367,16 @@ export function createCharacterCreator(options = {}) {
           "custom-species"
         );
 
-      speciesMap.set(
-        speciesId,
-        {
-          ...cloneData(species),
-          id: speciesId,
+        speciesMap.set(
+          speciesId,
+          {
+            ...cloneData(species),
+            ...getLegacy2014Metadata(
+              "species",
+              speciesId,
+              species
+            ),
+            id: speciesId,
           source:
             species.source ||
             "homebrew"
@@ -29341,6 +29391,7 @@ export function createCharacterCreator(options = {}) {
 
     if (
       selectedSpecies &&
+      isActiveRulesetEntry(selectedSpecies) &&
       creatorState.draft
         .species
         .source !== "custom"
@@ -29356,6 +29407,11 @@ export function createCharacterCreator(options = {}) {
         speciesId,
         {
           ...cloneData(
+            selectedSpecies
+          ),
+          ...getLegacy2014Metadata(
+            "species",
+            speciesId,
             selectedSpecies
           ),
 
@@ -30798,6 +30854,10 @@ export function createCharacterCreator(options = {}) {
             </p>
 
             <p>
+              ${renderRulesetMetadata(species, "species")}
+            </p>
+
+            <p>
               <b>Size:</b>
 
               ${escapeHtml(
@@ -31966,6 +32026,10 @@ export function createCharacterCreator(options = {}) {
         raw.name,
         "Custom Subclass"
       );
+    const subclassId = makeSafeId(
+      raw.id || name,
+      "custom-subclass"
+    );
 
     const rawLevels =
       raw.levels &&
@@ -32011,11 +32075,14 @@ export function createCharacterCreator(options = {}) {
 
     return {
       ...cloneData(raw),
-
-      id: makeSafeId(
-        raw.id || name,
-        "custom-subclass"
+      ...getLegacy2014Metadata(
+        "subclass",
+        subclassId,
+        raw,
+        raw.classId || getSelectedClassTemplate()?.id
       ),
+
+      id: subclassId,
 
       name,
 
@@ -32055,6 +32122,10 @@ export function createCharacterCreator(options = {}) {
         ? selectedClass.subclasses
         : []
     ).forEach((subclass) => {
+      if (!isActiveRulesetEntry(subclass)) {
+        return;
+      }
+
       const normalized =
         normalizeSection12Subclass(
           subclass,
@@ -32077,7 +32148,7 @@ export function createCharacterCreator(options = {}) {
       primaryClass?.choices
         ?.subclassSnapshot;
 
-    if (savedSubclass) {
+    if (savedSubclass && isActiveRulesetEntry(savedSubclass)) {
       const normalized =
         normalizeSection12Subclass(
           savedSubclass,
@@ -36901,13 +36972,8 @@ export function createCharacterCreator(options = {}) {
                 )}
               </p>
 
-              <p class="small">
-                Source:
-
-                ${escapeHtml(
-                  classData.source ||
-                  "template"
-                )}
+              <p>
+                ${renderRulesetMetadata(classData, "class")}
               </p>
             `,
 
@@ -37364,13 +37430,12 @@ export function createCharacterCreator(options = {}) {
                   "No description provided."
                 )}
 
-                <br>
+                <br><br>
 
-                Source:
-
-                ${escapeHtml(
-                  subclass.source ||
-                  "template"
+                ${renderRulesetMetadata(
+                  subclass,
+                  "subclass",
+                  selectedClass?.id
                 )}
               </p>
             `,
@@ -41075,14 +41140,20 @@ export function createCharacterCreator(options = {}) {
         raw.name,
         "Custom Background"
       );
+    const backgroundId = makeSafeId(
+      raw.id || name,
+      "custom-background"
+    );
 
     return {
       ...cloneData(raw),
-
-      id: makeSafeId(
-        raw.id || name,
-        "custom-background"
+      ...getLegacy2014Metadata(
+        "background",
+        backgroundId,
+        raw
       ),
+
+      id: backgroundId,
 
       name,
 
@@ -41189,6 +41260,10 @@ export function createCharacterCreator(options = {}) {
       creatorState.roomBackgroundCache ||
       []
     ).forEach((background) => {
+      if (!isActiveRulesetEntry(background)) {
+        return;
+      }
+
       const normalized =
         normalizeSection14Background(
           background,
@@ -41208,6 +41283,7 @@ export function createCharacterCreator(options = {}) {
 
     if (
       selectedSnapshot &&
+      isActiveRulesetEntry(selectedSnapshot) &&
       creatorState.draft
         .background
         .source !== "custom" &&
@@ -42709,13 +42785,8 @@ export function createCharacterCreator(options = {}) {
                 )}
               </p>
 
-              <p class="small">
-                Source:
-
-                ${escapeHtml(
-                  background.source ||
-                  "template"
-                )}
+              <p>
+                ${renderRulesetMetadata(background, "background")}
               </p>
             `,
 
@@ -50693,6 +50764,10 @@ export function createCharacterCreator(options = {}) {
                     spell.summary ||
                     "No summary provided."
                   )}
+
+                  <br><br>
+
+                  ${renderRulesetMetadata(spell, "spell")}
                 </p>
 
                 <p class="small">
@@ -51114,7 +51189,11 @@ export function createCharacterCreator(options = {}) {
                 "Unknown"
               )}
 
-              <br>
+              <br><br>
+
+              ${renderRulesetMetadata(spell, "spell")}
+
+              <br><br>
 
               <b>Class Source:</b>
 
@@ -51618,6 +51697,8 @@ export function createCharacterCreator(options = {}) {
             <br>${escapeHtml(feat.description || "")}
             <br><b>Prerequisite:</b>
             ${escapeHtml(getFeatPrerequisiteLabel(feat))}
+            <br><br>
+            ${renderRulesetMetadata(feat, "feat")}
           </p>
 
           <div class="hg-character-card-actions">
@@ -58504,6 +58585,32 @@ export function createCharacterCreator(options = {}) {
     ) {
       throw new Error(
         "That JSON file does not contain a character object."
+      );
+    }
+
+    const importedRulesEntries = [
+      rawCharacter,
+      rawCharacter.species?.templateSnapshot,
+      rawCharacter.background?.templateSnapshot,
+      ...(
+        Array.isArray(rawCharacter.classProgression?.classes)
+          ? rawCharacter.classProgression.classes.flatMap((entry) => [
+              entry,
+              entry?.templateSnapshot,
+              entry?.choices?.subclassSnapshot
+            ])
+          : []
+      )
+    ].filter(Boolean);
+
+    const incompatibleRulesEntry = importedRulesEntries.find(
+      (entry) => !isActiveRulesetEntry(entry)
+    );
+
+    if (incompatibleRulesEntry) {
+      throw new Error(
+        `This character uses ${incompatibleRulesEntry.rulesetId || incompatibleRulesEntry.rulesEdition || incompatibleRulesEntry.edition || "an incompatible ruleset"}. ` +
+        `${ACTIVE_RULESET.label} is the only active rules mode.`
       );
     }
 
