@@ -52,7 +52,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 5;
+  const CHARACTER_SCHEMA_VERSION = 6;
   const CLASS_SCHEMA_VERSION = 1;
   const SPECIES_SCHEMA_VERSION = 1;
   const BACKGROUND_SCHEMA_VERSION = 1;
@@ -333,6 +333,7 @@ export function createCharacterCreator(options = {}) {
           rageActive: false
         },
         hpCalculation: {
+          schemaVersion: 2,
           mode: "fixed",
           levelOneValue: null,
           laterLevelValues: [],
@@ -4981,6 +4982,7 @@ export function createCharacterCreator(options = {}) {
         : "fixed";
 
     return {
+      schemaVersion: 2,
       mode,
       levelOneValue:
         raw.levelOneValue === null ||
@@ -6676,13 +6678,11 @@ export function createCharacterCreator(options = {}) {
 
         const level =
           Math.max(
-            1,
+            0,
             Math.round(
               safeNumber(
                 classEntry?.level,
-                character
-                  ?.classProgression
-                  ?.totalLevel || 1
+                0
               )
             )
           );
@@ -6704,6 +6704,9 @@ export function createCharacterCreator(options = {}) {
           ),
           count: level
         };
+      })
+      .filter((entry) => {
+        return entry.count > 0;
       });
   }
 
@@ -6779,6 +6782,19 @@ export function createCharacterCreator(options = {}) {
           )
       };
     });
+  }
+
+  function hpRollRawHasAssociation(
+    rawRecord
+  ) {
+    return Boolean(
+      cleanString(
+        rawRecord?.classEntryId
+      ) ||
+      cleanString(rawRecord?.classId) ||
+      cleanString(rawRecord?.className) ||
+      cleanString(rawRecord?.hitDie)
+    );
   }
 
   function hpRollRawMatchesLevel(
@@ -6881,12 +6897,18 @@ export function createCharacterCreator(options = {}) {
       }) ||
       unusedRecords.find((record) => {
         return (
+          !hpRollRawHasAssociation(
+            record
+          ) &&
           record.characterLevel ===
           levelRecord.characterLevel
         );
       }) ||
       unusedRecords.find((record) => {
         return (
+          !hpRollRawHasAssociation(
+            record
+          ) &&
           record.rawIndex ===
           laterLevelIndex
         );
@@ -7107,7 +7129,7 @@ export function createCharacterCreator(options = {}) {
       if (hasMulticlass) {
         addMigrationWarning(
           character,
-          "Old multiclass rolled HP values were assigned to class levels in class-entry order."
+          "Legacy multiclass numeric HP rolls cannot be assigned to classes with certainty. They were matched to the saved level order and must be reviewed."
         );
       }
     }
@@ -17323,7 +17345,7 @@ export function createCharacterCreator(options = {}) {
         .warnings
         .some((warning) => {
           return warning.includes(
-            "Level 3 now uses Wizard d6"
+            "level 3 is inactive or incompatible"
           );
         }),
       true
@@ -17431,6 +17453,785 @@ export function createCharacterCreator(options = {}) {
           .laterLevelValues
       ),
       storedRollsBeforeConChange
+    );
+
+    const createPhase4ClassEntry = (
+      classId,
+      level = 1
+    ) => {
+      const template =
+        getTemplate(
+          DEFAULT_CLASS_TEMPLATES,
+          classId
+        );
+
+      return {
+        entryId:
+          `phase4-${classId}`,
+        classId,
+        className:
+          template?.name ||
+          classId,
+        level,
+        hitDie:
+          template?.hitDie ||
+          "d8",
+        templateSnapshot:
+          cloneData(template)
+      };
+    };
+
+    const createPhase4FourDieCharacter =
+      ({
+        levelOrder,
+        constitution = 10
+      }) => {
+        const abilityScores = {
+          str: 13,
+          dex: 13,
+          con: constitution,
+          int: 13,
+          wis: 13,
+          cha: 13
+        };
+
+        return normalizeCharacter({
+          abilities: {
+            base:
+              abilityScores,
+            scores:
+              abilityScores
+          },
+          classProgression: {
+            totalLevel: 4,
+            classes: [
+              createPhase4ClassEntry(
+                "wizard"
+              ),
+              createPhase4ClassEntry(
+                "bard"
+              ),
+              createPhase4ClassEntry(
+                "fighter"
+              ),
+              createPhase4ClassEntry(
+                "barbarian"
+              )
+            ],
+            levelOrder
+          },
+          combat: {
+            hpCalculation: {
+              mode: "fixed",
+              laterLevelValues: []
+            }
+          }
+        });
+      };
+
+    const phase4D6First =
+      createPhase4FourDieCharacter({
+        levelOrder: [
+          "phase4-wizard",
+          "phase4-bard",
+          "phase4-fighter",
+          "phase4-barbarian"
+        ]
+      });
+
+    const phase4D12First =
+      createPhase4FourDieCharacter({
+        levelOrder: [
+          "phase4-barbarian",
+          "phase4-wizard",
+          "phase4-bard",
+          "phase4-fighter"
+        ]
+      });
+
+    const phase4ConstitutionCharacter =
+      createPhase4FourDieCharacter({
+        levelOrder: [
+          "phase4-wizard",
+          "phase4-bard",
+          "phase4-fighter",
+          "phase4-barbarian"
+        ],
+        constitution: 14
+      });
+
+    record(
+      "Phase 4 keeps a separate Hit Die pool for every class",
+      calculateCharacterHitDice(
+        phase4D6First
+      ).map((pool) => {
+        return (
+          `${pool.classId}:` +
+          `${pool.count}${pool.die}`
+        );
+      }),
+      [
+        "wizard:1d6",
+        "bard:1d8",
+        "fighter:1d10",
+        "barbarian:1d12"
+      ]
+    );
+
+    record(
+      "Phase 4 level 1 uses the starting class Hit Die maximum",
+      {
+        startingClass:
+          getCharacterLevelHitDieRecords(
+            phase4D6First
+          )[0]?.classId,
+        startingDie:
+          getCharacterLevelHitDieRecords(
+            phase4D6First
+          )[0]?.hitDie,
+        maximumHp:
+          calculateCharacterHp(
+            phase4D6First
+          ).maximumHp
+      },
+      {
+        startingClass:
+          "wizard",
+        startingDie: "d6",
+        maximumHp: 24
+      }
+    );
+
+    record(
+      "Phase 4 later levels use d6 4, d8 5, d10 6, and d12 7 fixed averages",
+      {
+        d6Later:
+          calculateCharacterHp(
+            phase4D12First
+          ).maximumHp,
+        d12Later:
+          calculateCharacterHp(
+            phase4D6First
+          ).maximumHp
+      },
+      {
+        d6Later: 27,
+        d12Later: 24
+      }
+    );
+
+    record(
+      "Phase 4 applies Constitution once per total character level",
+      (
+        calculateCharacterHp(
+          phase4ConstitutionCharacter
+        ).maximumHp -
+        calculateCharacterHp(
+          phase4D6First
+        ).maximumHp
+      ),
+      8
+    );
+
+    const phase4HillDwarf =
+      cloneData(
+        phase4ConstitutionCharacter
+      );
+    phase4HillDwarf.species = {
+      ...phase4HillDwarf.species,
+      id: "dwarf",
+      name: "Dwarf",
+      choices: {
+        ...phase4HillDwarf.species
+          .choices,
+        subraceId:
+          "hill-dwarf"
+      }
+    };
+
+    record(
+      "Phase 4 applies Hill Dwarf HP once per total character level",
+      {
+        bonus:
+          getSpeciesHpBonus(
+            phase4HillDwarf
+          ),
+        maximumHp:
+          calculateCharacterHp(
+            phase4HillDwarf
+          ).maximumHp
+      },
+      {
+        bonus: 4,
+        maximumHp: 36
+      }
+    );
+
+    const phase4Tough =
+      cloneData(
+        phase4ConstitutionCharacter
+      );
+    phase4Tough.feats = [
+      "tough"
+    ];
+    phase4Tough.selectedFeats = [
+      "tough"
+    ];
+
+    record(
+      "Phase 4 applies Tough once per total character level",
+      {
+        bonus:
+          calculateSelectedFeatNumericEffect(
+            phase4Tough,
+            "hpBonus"
+          ),
+        maximumHp:
+          calculateCharacterHp(
+            phase4Tough
+          ).maximumHp
+      },
+      {
+        bonus: 8,
+        maximumHp: 40
+      }
+    );
+
+    record(
+      "Phase 4 covers multiclass d6, d8, d10, and d12 HP combinations",
+      {
+        d6Start:
+          calculateCharacterHp(
+            phase4D6First
+          ).maximumHp,
+        d12Start:
+          calculateCharacterHp(
+            phase4D12First
+          ).maximumHp,
+        dice:
+          getCharacterLevelHitDieRecords(
+            phase4D6First
+          ).map((record) => {
+            return record.hitDie;
+          })
+      },
+      {
+        d6Start: 24,
+        d12Start: 27,
+        dice: [
+          "d6",
+          "d8",
+          "d10",
+          "d12"
+        ]
+      }
+    );
+
+    creatorState.draft =
+      cloneData(
+        phase4D6First
+      );
+    const phase4HpUi =
+      renderLevelStep();
+
+    record(
+      "Phase 4 level UI displays class-specific Hit Die pools",
+      {
+        guidance:
+          phase4HpUi.includes(
+            "Each class keeps its own pool."
+          ),
+        wizard:
+          phase4HpUi.includes(
+            "1d6 Wizard"
+          ),
+        bard:
+          phase4HpUi.includes(
+            "1d8 Bard"
+          ),
+        fighter:
+          phase4HpUi.includes(
+            "1d10 Fighter"
+          ),
+        barbarian:
+          phase4HpUi.includes(
+            "1d12 Barbarian"
+          )
+      },
+      {
+        guidance: true,
+        wizard: true,
+        bard: true,
+        fighter: true,
+        barbarian: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "fighter"
+    );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        str: 13,
+        int: 13
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const phase4FightingStyle =
+      getSection12ClassFeaturesThroughLevel()
+        .find((feature) => {
+          return (
+            feature.id ===
+            "fighting-style-fighter"
+          );
+        });
+    const phase4StyleSelected =
+      toggleSection12ClassFeatureChoice(
+        getSection12FeatureChoiceKey(
+          phase4FightingStyle
+        ),
+        "Defense"
+      );
+    const phase4FighterLevelAdded =
+      addCharacterLevelToClass(0);
+
+    creatorState.draft
+      .combat
+      .hpCalculation =
+        normalizeHpCalculation({
+          mode: "rolled",
+          laterLevelValues: []
+        });
+    setSection13HpRollValue(
+      2,
+      8
+    );
+
+    const phase4WizardAdded =
+      addMulticlassClass(
+        "wizard"
+      );
+    setSection13HpRollValue(
+      3,
+      4
+    );
+
+    const phase4HpAfterAdd =
+      calculateCharacterHp(
+        creatorState.draft
+      );
+
+    record(
+      "Phase 4 recalculates rolled HP after adding a class",
+      {
+        styleSelected:
+          phase4StyleSelected,
+        fighterLevelAdded:
+          phase4FighterLevelAdded,
+        wizardAdded:
+          phase4WizardAdded,
+        maximumHp:
+          phase4HpAfterAdd
+            .maximumHp,
+        rolls:
+          phase4HpAfterAdd.rolls
+            .map((roll) => {
+              return (
+                `${roll.classId}:` +
+                `${roll.roll}`
+              );
+            }),
+        hitDice:
+          calculateCharacterHitDice(
+            creatorState.draft
+          ).map((pool) => {
+            return (
+              `${pool.count}${pool.die}`
+            );
+          })
+      },
+      {
+        styleSelected: true,
+        fighterLevelAdded: true,
+        wizardAdded: true,
+        maximumHp: 22,
+        rolls: [
+          "fighter:8",
+          "wizard:4"
+        ],
+        hitDice: [
+          "2d10",
+          "1d6"
+        ]
+      }
+    );
+
+    const phase4StoredRollsBeforeMove =
+      JSON.stringify(
+        creatorState.draft
+          .combat
+          .hpCalculation
+          .laterLevelValues
+      );
+
+    const phase4MovedOnce =
+      moveCharacterLevelOrder(
+        2,
+        -1
+      );
+    const phase4HpAfterMove =
+      calculateCharacterHp(
+        creatorState.draft
+      );
+
+    record(
+      "Phase 4 recalculates rolled HP after moving character levels",
+      {
+        moved:
+          phase4MovedOnce,
+        order:
+          getCharacterLevelHitDieRecords(
+            creatorState.draft
+          ).map((record) => {
+            return record.classId;
+          }),
+        rolls:
+          phase4HpAfterMove.rolls
+            .map((roll) => {
+              return (
+                `${roll.classId}:` +
+                `${roll.roll}`
+              );
+            }),
+        maximumHp:
+          phase4HpAfterMove
+            .maximumHp
+      },
+      {
+        moved: true,
+        order: [
+          "fighter",
+          "wizard",
+          "fighter"
+        ],
+        rolls: [
+          "wizard:4",
+          "fighter:8"
+        ],
+        maximumHp: 22
+      }
+    );
+
+    const phase4MovedToStart =
+      moveCharacterLevelOrder(
+        1,
+        -1
+      );
+    const phase4HpWithWizardStart =
+      calculateCharacterHp(
+        creatorState.draft
+      );
+    const phase4WizardStartRollState =
+      getSection13HpRollState(
+        creatorState.draft
+      );
+
+    record(
+      "Phase 4 level-order changes update HP without corrupting class-owned rolls",
+      {
+        moved:
+          phase4MovedToStart,
+        startingClass:
+          getCharacterLevelHitDieRecords(
+            creatorState.draft
+          )[0]?.classId,
+        maximumHp:
+          phase4HpWithWizardStart
+            .maximumHp,
+        activeRolls:
+          phase4HpWithWizardStart
+            .rolls
+            .map((roll) => {
+              return (
+                `${roll.classId}:` +
+                `${roll.roll}`
+              );
+            }),
+        storedUnchanged:
+          JSON.stringify(
+            creatorState.draft
+              .combat
+              .hpCalculation
+              .laterLevelValues
+          ) ===
+          phase4StoredRollsBeforeMove,
+        incompatibleWizardRoll:
+          phase4WizardStartRollState
+            .inactiveRecords
+            .some((record) => {
+              return (
+                record.classId ===
+                "wizard"
+              );
+            })
+      },
+      {
+        moved: true,
+        startingClass:
+          "wizard",
+        maximumHp: 20,
+        activeRolls: [
+          "fighter:8",
+          "fighter:6"
+        ],
+        storedUnchanged: true,
+        incompatibleWizardRoll:
+          true
+      }
+    );
+
+    moveCharacterLevelOrder(
+      0,
+      1
+    );
+    moveCharacterLevelOrder(
+      1,
+      1
+    );
+    const phase4WizardRemoved =
+      removeMulticlassClass(1);
+    const phase4HpAfterRemove =
+      calculateCharacterHp(
+        creatorState.draft
+      );
+
+    record(
+      "Phase 4 recalculates rolled HP after removing a class",
+      {
+        removed:
+          phase4WizardRemoved,
+        maximumHp:
+          phase4HpAfterRemove
+            .maximumHp,
+        rolls:
+          phase4HpAfterRemove.rolls
+            .map((roll) => {
+              return (
+                `${roll.classId}:` +
+                `${roll.roll}`
+              );
+            }),
+        hitDice:
+          calculateCharacterHitDice(
+            creatorState.draft
+          ).map((pool) => {
+            return (
+              `${pool.classId}:` +
+              `${pool.count}${pool.die}`
+            );
+          })
+      },
+      {
+        removed: true,
+        maximumHp: 18,
+        rolls: [
+          "fighter:8"
+        ],
+        hitDice: [
+          "fighter:2d10"
+        ]
+      }
+    );
+
+    const phase4RollsBeforeConstitution =
+      JSON.stringify(
+        creatorState.draft
+          .combat
+          .hpCalculation
+          .laterLevelValues
+      );
+    creatorState.draft
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        con: 16
+      };
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    const phase4HpAfterConstitution =
+      calculateCharacterHp(
+        creatorState.draft
+      );
+
+    record(
+      "Phase 4 recalculates rolled HP after changing Constitution",
+      {
+        maximumHp:
+          phase4HpAfterConstitution
+            .maximumHp,
+        activeRoll:
+          phase4HpAfterConstitution
+            .rolls[0]?.roll,
+        storedUnchanged:
+          JSON.stringify(
+            creatorState.draft
+              .combat
+              .hpCalculation
+              .laterLevelValues
+          ) ===
+          phase4RollsBeforeConstitution
+      },
+      {
+        maximumHp: 24,
+        activeRoll: 8,
+        storedUnchanged: true
+      }
+    );
+
+    const phase4LegacyMulticlass =
+      normalizeCharacter({
+        abilities: {
+          base: {
+            str: 13,
+            dex: 13,
+            con: 10,
+            int: 13,
+            wis: 10,
+            cha: 10
+          }
+        },
+        classProgression: {
+          totalLevel: 3,
+          classes: [
+            createPhase4ClassEntry(
+              "fighter",
+              2
+            ),
+            createPhase4ClassEntry(
+              "wizard",
+              1
+            )
+          ],
+          levelOrder: [
+            "phase4-fighter",
+            "phase4-fighter",
+            "phase4-wizard"
+          ]
+        },
+        combat: {
+          hpCalculation: {
+            mode: "rolled",
+            laterLevelValues: [
+              8,
+              99
+            ]
+          }
+        }
+      });
+    const phase4LegacyHp =
+      calculateCharacterHp(
+        phase4LegacyMulticlass
+      );
+
+    record(
+      "Phase 4 imports legacy numeric HP rolls into per-level records",
+      {
+        schemaVersion:
+          phase4LegacyMulticlass
+            .combat
+            .hpCalculation
+            .schemaVersion,
+        maximumHp:
+          phase4LegacyHp
+            .maximumHp,
+        records:
+          phase4LegacyHp.rolls
+            .map((roll) => {
+              return {
+                classId:
+                  roll.classId,
+                hitDie:
+                  roll.hitDie,
+                roll:
+                  roll.roll
+              };
+            })
+      },
+      {
+        schemaVersion: 2,
+        maximumHp: 24,
+        records: [
+          {
+            classId:
+              "fighter",
+            hitDie: "d10",
+            roll: 8
+          },
+          {
+            classId:
+              "wizard",
+            hitDie: "d6",
+            roll: 6
+          }
+        ]
+      }
+    );
+
+    record(
+      "Phase 4 warns when legacy multiclass rolls are uncertain",
+      warningTextFor(
+        phase4LegacyMulticlass
+      ).includes(
+        "cannot be assigned to classes with certainty"
+      ),
+      true
+    );
+
+    const phase4CappedStructuredRoll =
+      normalizeHpRollRecordsForCharacter(
+        [
+          {
+            characterLevel: 2,
+            classEntryId:
+              "phase4-fighter",
+            classId: "fighter",
+            className: "Fighter",
+            hitDie: "d10",
+            roll: 8
+          },
+          {
+            characterLevel: 3,
+            classEntryId:
+              "phase4-wizard",
+            classId: "wizard",
+            className: "Wizard",
+            hitDie: "d6",
+            roll: 99
+          }
+        ],
+        phase4LegacyMulticlass
+      );
+
+    record(
+      "Phase 4 prevents saved rolls from exceeding their associated Hit Die",
+      phase4CappedStructuredRoll
+        .map((roll) => {
+          return (
+            `${roll.hitDie}:` +
+            `${roll.roll}`
+          );
+        }),
+      [
+        "d10:8",
+        "d6:6"
+      ]
     );
 
     record(
@@ -41550,27 +42351,45 @@ export function createCharacterCreator(options = {}) {
         character
       );
 
-    const activeLevelNumbers =
-      new Set(
-        laterLevels.map((record) => {
-          return record.characterLevel;
-        })
-      );
+    const usedIndexes = new Set();
+    const matchedLevelByRawIndex =
+      new Map();
+
+    laterLevels.forEach(
+      (levelRecord, laterLevelIndex) => {
+        const rawRecord =
+          findHpRollRawRecordForLevel({
+            rawRecords,
+            usedIndexes,
+            levelRecord,
+            laterLevelIndex
+          });
+
+        if (!rawRecord) {
+          return;
+        }
+
+        usedIndexes.add(
+          rawRecord.rawIndex
+        );
+        matchedLevelByRawIndex.set(
+          rawRecord.rawIndex,
+          levelRecord
+        );
+      }
+    );
 
     const warnings = [];
 
     rawRecords.forEach((rawRecord) => {
       const activeLevel =
-        laterLevels.find((record) => {
-          return (
-            record.characterLevel ===
-            rawRecord.characterLevel
-          );
-        });
+        matchedLevelByRawIndex.get(
+          rawRecord.rawIndex
+        );
 
       if (!activeLevel) {
         warnings.push(
-          `Stored rolled HP for level ${rawRecord.characterLevel} is inactive after the current class level changes.`
+          `Stored rolled HP for level ${rawRecord.characterLevel} is inactive or incompatible after the current class level changes.`
         );
 
         return;
@@ -41606,8 +42425,8 @@ export function createCharacterCreator(options = {}) {
       rawRecords,
       inactiveRecords:
         rawRecords.filter((record) => {
-          return !activeLevelNumbers.has(
-            record.characterLevel
+          return !usedIndexes.has(
+            record.rawIndex
           );
         }),
       warnings: [
@@ -41675,22 +42494,8 @@ export function createCharacterCreator(options = {}) {
         }
       );
 
-    const activeLevels =
-      new Set(
-        rollState.laterLevels.map(
-          (record) => {
-            return record.characterLevel;
-          }
-        )
-      );
-
     const inactiveRolls =
-      rollState.rawRecords
-        .filter((record) => {
-          return !activeLevels.has(
-            record.characterLevel
-          );
-        })
+      rollState.inactiveRecords
         .map((record) => {
           return {
             characterLevel:
@@ -42076,10 +42881,16 @@ export function createCharacterCreator(options = {}) {
         <br>
 
         <b>Hit Dice:</b>
-        A single-class level ${level} character has ${level}
-        ${escapeHtml(hitDie)} hit ${level === 1 ? "die" : "dice"}.
-        Hit-dice count equals class level. Single-class creation is
-        the primary workflow for now.
+        Each class keeps its own pool. This level ${level} character
+        currently has ${escapeHtml(
+          calculateCharacterHitDice(draft)
+            .map((entry) => {
+              return `${entry.count}${entry.die} ${entry.className}`;
+            })
+            .join(", ") ||
+            `${level}${hitDie}`
+        )}.
+        Hit-die count in each pool equals that class's level.
       </div>
     `;
   }
