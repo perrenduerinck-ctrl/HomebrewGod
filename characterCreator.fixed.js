@@ -12,6 +12,10 @@
 import { DEFAULT_CLASSES } from "./defaultClasses.js";
 import { DEFAULT_FEATS } from "./defaultFeats.js";
 import { DEFAULT_SPELLS } from "./defaultSpells.js";
+import {
+  DEFAULT_SUBCLASSES,
+  validateDefaultSubclassCollection
+} from "./defaultSubclasses.js";
 import { createCharacterSheetView } from "./characterSheet.js";
 import {
   ACTIVE_RULESET,
@@ -52,7 +56,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 8;
+  const CHARACTER_SCHEMA_VERSION = 9;
   const CLASS_SCHEMA_VERSION = 1;
   const SPECIES_SCHEMA_VERSION = 1;
   const BACKGROUND_SCHEMA_VERSION = 1;
@@ -13307,6 +13311,919 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    const phase7Subclasses =
+      Object.values(DEFAULT_CLASSES)
+        .flatMap((classData) => {
+          return (
+            classData.subclasses || []
+          );
+        });
+    const phase7Features =
+      phase7Subclasses.flatMap(
+        (subclass) => {
+          return Object.values(
+            subclass.featuresByLevel ||
+              {}
+          ).flat();
+        }
+      );
+    const phase7SpellReferences =
+      phase7Subclasses.flatMap(
+        (subclass) => {
+          return Object.values(
+            subclass.expandedSpells ||
+              {}
+          ).flat();
+        }
+      );
+    const findPhase7Subclass = (
+      classId,
+      subclassId
+    ) => {
+      return (
+        DEFAULT_CLASSES[classId]
+          ?.subclasses || []
+      ).find((subclass) => {
+        return (
+          subclass.id ===
+          subclassId
+        );
+      });
+    };
+
+    record(
+      "Phase 7: all 118 subclass summaries replace placeholder text",
+      {
+        total:
+          phase7Subclasses.length,
+        placeholders:
+          phase7Subclasses.filter(
+            (subclass) => {
+              return /description not filled|add this subclass|placeholder|coming soon|todo|tbd/i
+                .test(
+                  subclass.summary || ""
+                );
+            }
+          ).length
+      },
+      {
+        total: 118,
+        placeholders: 0
+      }
+    );
+
+    record(
+      "Phase 7: all 118 subclasses have completed descriptions",
+      phase7Subclasses.filter(
+        (subclass) => {
+          return (
+            !String(
+              subclass.description ||
+                ""
+            ).trim() ||
+            /description not filled|add this subclass|placeholder|coming soon|todo|tbd/i
+              .test(
+                subclass.description ||
+                  ""
+              )
+          );
+        }
+      ).length,
+      0
+    );
+
+    record(
+      "Phase 7: every required subclass feature level is populated",
+      phase7Subclasses.filter(
+        (subclass) => {
+          return (
+            subclass.featureLevels ||
+            []
+          ).some((level) => {
+            return (
+              !Array.isArray(
+                subclass
+                  .featuresByLevel?.[
+                    level
+                  ]
+              ) ||
+              subclass
+                .featuresByLevel[
+                  level
+                ].length === 0
+            );
+          });
+        }
+      ).length,
+      0
+    );
+
+    record(
+      "Phase 7: subclass choices are structured and selectable",
+      {
+        total:
+          phase7Subclasses.reduce(
+            (total, subclass) => {
+              return (
+                total +
+                (
+                  subclass.choices ||
+                  []
+                ).length
+              );
+            },
+            0
+          ),
+        structured:
+          phase7Subclasses.every(
+            (subclass) => {
+              return (
+                subclass.choices ||
+                []
+              ).every((choice) => {
+                return (
+                  choice &&
+                  typeof choice ===
+                    "object" &&
+                  Boolean(choice.id) &&
+                  Boolean(
+                    Array.isArray(
+                      choice.options
+                    ) ||
+                    choice.optionsSource
+                  )
+                );
+              });
+            }
+          )
+      },
+      {
+        total: 25,
+        structured: true
+      }
+    );
+
+    record(
+      "Phase 7: subclass resource pools are complete and trackable",
+      {
+        total:
+          phase7Subclasses.reduce(
+            (total, subclass) => {
+              return (
+                total +
+                (
+                  subclass.resources ||
+                  []
+                ).length
+              );
+            },
+            0
+          ),
+        valid:
+          phase7Subclasses.every(
+            (subclass) => {
+              return (
+                subclass.resources ||
+                []
+              ).every((resource) => {
+                return Boolean(
+                  resource?.id &&
+                  resource?.name
+                );
+              });
+            }
+          )
+      },
+      {
+        total: 57,
+        valid: true
+      }
+    );
+
+    record(
+      "Phase 7: subclass actions bonus actions and reactions are labeled",
+      Object.fromEntries(
+        [
+          "action",
+          "attack",
+          "bonusAction",
+          "passive",
+          "reaction"
+        ].map((actionEconomy) => {
+          return [
+            actionEconomy,
+            phase7Features.filter(
+              (feature) => {
+                return (
+                  feature
+                    .actionEconomy ===
+                  actionEconomy
+                );
+              }
+            ).length
+          ];
+        })
+      ),
+      {
+        action: 50,
+        attack: 33,
+        bonusAction: 24,
+        passive: 485,
+        reaction: 31
+      }
+    );
+
+    record(
+      "Phase 7: every subclass feature carries a passive or active effect",
+      {
+        total:
+          phase7Features.length,
+        withEffects:
+          phase7Features.filter(
+            (feature) => {
+              return (
+                Array.isArray(
+                  feature.effects
+                ) &&
+                feature.effects.length > 0
+              );
+            }
+          ).length
+      },
+      {
+        total: 623,
+        withEffects: 623
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft
+      .classProgression = {
+        totalLevel: 3,
+        classes: [
+          makeInteractionClassEntry(
+            "phase7-cleric",
+            "cleric",
+            3,
+            "arcana",
+            "Arcana"
+          )
+        ],
+        levelOrder: []
+      };
+    const phase7ArcanaSpellSource =
+      getSpellcastingClassOptions(
+        creatorState.draft
+      ).find((entry) => {
+        return (
+          entry.classEntryId ===
+          "phase7-cleric"
+        );
+      });
+    const phase7InlineSpellGrant =
+      getSection16ExpandedSpellGrants(
+        phase7ArcanaSpellSource
+      ).find((grant) => {
+        return (
+          grant.spellId ===
+          "magic-aura"
+        );
+      });
+
+    record(
+      "Phase 7: subclass spell grants resolve through catalog or inline references",
+      {
+        total:
+          phase7SpellReferences
+            .length,
+        complete:
+          phase7SpellReferences.every(
+            (reference) => {
+              return Boolean(
+                reference?.id &&
+                reference?.name &&
+                Number.isInteger(
+                  reference.level
+                ) &&
+                reference
+                  .inlineFallback ===
+                  true
+              );
+            }
+          ),
+        inlineRuntime: {
+          id:
+            phase7InlineSpellGrant
+              ?.spell?.id,
+          name:
+            phase7InlineSpellGrant
+              ?.spell?.name,
+          level:
+            phase7InlineSpellGrant
+              ?.spell?.level,
+          inlineSubclassSpell:
+            phase7InlineSpellGrant
+              ?.spell
+              ?.inlineSubclassSpell ===
+            true
+        }
+      },
+      {
+        total: 421,
+        complete: true,
+        inlineRuntime: {
+          id: "magic-aura",
+          name: "Magic Aura",
+          level: 2,
+          inlineSubclassSpell: true
+        }
+      }
+    );
+
+    record(
+      "Phase 7: subclass expanded spell lists are attached to eligible subclasses",
+      phase7Subclasses.filter(
+        (subclass) => {
+          return (
+            Object.keys(
+              subclass
+                .expandedSpells ||
+                {}
+            ).length > 0
+          );
+        }
+      ).length,
+      45
+    );
+
+    record(
+      "Phase 7: subclass save DC effects retain owning class context",
+      {
+        saveEffects:
+          phase7Features.filter(
+            (feature) => {
+              return (
+                feature.effects ||
+                []
+              ).some((effect) => {
+                return (
+                  effect
+                    .classSaveDc ===
+                  true
+                );
+              });
+            }
+          ).length,
+        owned:
+          phase7Features.every(
+            (feature) => {
+              return (
+                feature.scaling
+                  ?.classId &&
+                feature.scaling
+                  ?.basis ===
+                  "classLevel"
+              );
+            }
+          )
+      },
+      {
+        saveEffects: 34,
+        owned: true
+      }
+    );
+
+    record(
+      "Phase 7: subclass feature scaling uses individual class level",
+      phase7Features.filter(
+        (feature) => {
+          return (
+            feature.scaling
+              ?.basis !==
+              "classLevel" ||
+            !feature.scaling
+              ?.classId
+          );
+        }
+      ).length,
+      0
+    );
+
+    record(
+      "Phase 7: every subclass feature has a completed description",
+      {
+        total:
+          phase7Features.length,
+        described:
+          phase7Features.filter(
+            (feature) => {
+              return Boolean(
+                String(
+                  feature.description ||
+                    ""
+                ).trim()
+              );
+            }
+          ).length
+      },
+      {
+        total: 623,
+        described: 623
+      }
+    );
+
+    record(
+      "Phase 7: every subclass feature has a rules source label",
+      {
+        total:
+          phase7Features.length,
+        labeled:
+          phase7Features.filter(
+            (feature) => {
+              return Boolean(
+                feature.sourceLabel &&
+                feature.rulesEdition ===
+                  "2014"
+              );
+            }
+          ).length
+      },
+      {
+        total: 623,
+        labeled: 623
+      }
+    );
+
+    const phase7EldritchKnight =
+      findPhase7Subclass(
+        "fighter",
+        "eldritch-knight"
+      );
+
+    record(
+      "Phase 7: Eldritch Knight uses third-caster progression",
+      {
+        progression:
+          phase7EldritchKnight
+            .spellcastingProgression,
+        ability:
+          phase7EldritchKnight
+            .spellcastingAbility,
+        spellList:
+          phase7EldritchKnight
+            .spellListClassId
+      },
+      {
+        progression:
+          "third-caster",
+        ability: "int",
+        spellList: "wizard"
+      }
+    );
+
+    record(
+      "Phase 7: Eldritch Knight enforces school restrictions",
+      {
+        allowedSchools:
+          phase7EldritchKnight
+            .spellSchoolRestrictions
+            ?.default,
+        unrestrictedKnownSpellLevels:
+          phase7EldritchKnight
+            .spellSchoolRestrictions
+            ?.unrestrictedSpellLevelsAtClassLevels
+      },
+      {
+        allowedSchools: [
+          "abjuration",
+          "evocation"
+        ],
+        unrestrictedKnownSpellLevels:
+          [3, 8, 14, 20]
+      }
+    );
+
+    const phase7ArcaneTrickster =
+      findPhase7Subclass(
+        "rogue",
+        "arcane-trickster"
+      );
+
+    record(
+      "Phase 7: Arcane Trickster uses third-caster progression",
+      {
+        progression:
+          phase7ArcaneTrickster
+            .spellcastingProgression,
+        ability:
+          phase7ArcaneTrickster
+            .spellcastingAbility,
+        spellList:
+          phase7ArcaneTrickster
+            .spellListClassId
+      },
+      {
+        progression:
+          "third-caster",
+        ability: "int",
+        spellList: "wizard"
+      }
+    );
+
+    record(
+      "Phase 7: Arcane Trickster enforces school restrictions",
+      {
+        allowedSchools:
+          phase7ArcaneTrickster
+            .spellSchoolRestrictions
+            ?.default,
+        unrestrictedKnownSpellLevels:
+          phase7ArcaneTrickster
+            .spellSchoolRestrictions
+            ?.unrestrictedSpellLevelsAtClassLevels,
+        requiredCantripIds:
+          phase7ArcaneTrickster
+            .spellSchoolRestrictions
+            ?.requiredCantripIds
+      },
+      {
+        allowedSchools: [
+          "enchantment",
+          "illusion"
+        ],
+        unrestrictedKnownSpellLevels:
+          [3, 8, 14, 20],
+        requiredCantripIds: [
+          "mage-hand"
+        ]
+      }
+    );
+
+    const phase7ClericDomains =
+      DEFAULT_CLASSES.cleric
+        .subclasses;
+
+    record(
+      "Phase 7: every Cleric domain grants spells and Channel Divinity",
+      {
+        domains:
+          phase7ClericDomains.length,
+        spellLists:
+          phase7ClericDomains.filter(
+            (subclass) => {
+              return (
+                Object.keys(
+                  subclass
+                    .expandedSpells ||
+                    {}
+                ).length > 0
+              );
+            }
+          ).length,
+        channelOptions:
+          phase7ClericDomains.filter(
+            (subclass) => {
+              return Object.values(
+                subclass
+                  .featuresByLevel ||
+                  {}
+              )
+                .flat()
+                .some((feature) => {
+                  return /^Channel Divinity:/i
+                    .test(
+                      feature.name
+                    );
+                });
+            }
+          ).length
+      },
+      {
+        domains: 14,
+        spellLists: 14,
+        channelOptions: 14
+      }
+    );
+
+    const phase7PaladinOaths =
+      DEFAULT_CLASSES.paladin
+        .subclasses;
+
+    record(
+      "Phase 7: every Paladin oath grants spells and Channel Divinity",
+      {
+        oaths:
+          phase7PaladinOaths.length,
+        spellLists:
+          phase7PaladinOaths.filter(
+            (subclass) => {
+              return (
+                Object.keys(
+                  subclass
+                    .expandedSpells ||
+                    {}
+                ).length > 0
+              );
+            }
+          ).length,
+        channelOptions:
+          phase7PaladinOaths.filter(
+            (subclass) => {
+              return Object.values(
+                subclass
+                  .featuresByLevel ||
+                  {}
+              )
+                .flat()
+                .some((feature) => {
+                  return /^Channel Divinity:/i
+                    .test(
+                      feature.name
+                    );
+                });
+            }
+          ).length
+      },
+      {
+        oaths: 9,
+        spellLists: 9,
+        channelOptions: 9
+      }
+    );
+
+    record(
+      "Phase 7: all Artificer specialists have spells features and resources",
+      DEFAULT_CLASSES.artificer
+        .subclasses.map(
+          (subclass) => {
+            return {
+              id: subclass.id,
+              spells:
+                Object.keys(
+                  subclass
+                    .expandedSpells ||
+                    {}
+                ).length > 0,
+              complete:
+                (
+                  subclass
+                    .featureLevels ||
+                  []
+                ).every((level) => {
+                  return Boolean(
+                    subclass
+                      .featuresByLevel?.[
+                        level
+                      ]?.length
+                  );
+                }),
+              resources:
+                (
+                  subclass.resources ||
+                  []
+                ).length > 0
+            };
+          }
+        ),
+      [
+        {
+          id: "alchemist",
+          spells: true,
+          complete: true,
+          resources: true
+        },
+        {
+          id: "armorer",
+          spells: true,
+          complete: true,
+          resources: true
+        },
+        {
+          id: "artillerist",
+          spells: true,
+          complete: true,
+          resources: true
+        },
+        {
+          id: "battle-smith",
+          spells: true,
+          complete: true,
+          resources: true
+        }
+      ]
+    );
+
+    record(
+      "Phase 7: every Warlock patron has expanded spells and features",
+      {
+        patrons:
+          DEFAULT_CLASSES.warlock
+            .subclasses.length,
+        complete:
+          DEFAULT_CLASSES.warlock
+            .subclasses.filter(
+              (subclass) => {
+                return (
+                  Object.keys(
+                    subclass
+                      .expandedSpells ||
+                      {}
+                  ).length > 0 &&
+                  (
+                    subclass
+                      .featureLevels ||
+                    []
+                  ).every((level) => {
+                    return Boolean(
+                      subclass
+                        .featuresByLevel?.[
+                          level
+                        ]?.length
+                    );
+                  })
+                );
+              }
+            ).length
+      },
+      {
+        patrons: 9,
+        complete: 9
+      }
+    );
+
+    record(
+      "Phase 7: every Sorcerous Origin has features at all required levels",
+      {
+        origins:
+          DEFAULT_CLASSES.sorcerer
+            .subclasses.length,
+        complete:
+          DEFAULT_CLASSES.sorcerer
+            .subclasses.filter(
+              (subclass) => {
+                return (
+                  subclass
+                    .featureLevels ||
+                  []
+                ).every((level) => {
+                  return Boolean(
+                    subclass
+                      .featuresByLevel?.[
+                        level
+                      ]?.length
+                  );
+                });
+              }
+            ).length
+      },
+      {
+        origins: 8,
+        complete: 8
+      }
+    );
+
+    record(
+      "Phase 7: subclass Extra Attack variants use the shared nonstacking rule",
+      phase7Subclasses
+        .flatMap((subclass) => {
+          return Object.values(
+            subclass
+              .featuresByLevel || {}
+          )
+            .flat()
+            .filter((feature) => {
+              return (
+                feature.effects || []
+              ).some((effect) => {
+                return (
+                  effect.type ===
+                    "extraAttack" &&
+                  effect.attacks === 2 &&
+                  effect.stacks ===
+                    false
+                );
+              });
+            })
+            .map(() => {
+              return `${subclass.classId}:${subclass.id}`;
+            });
+        })
+        .sort(),
+      [
+        "artificer:armorer",
+        "artificer:battle-smith",
+        "bard:swords",
+        "bard:valor",
+        "wizard:bladesinging"
+      ]
+    );
+
+    const phase7PlaceholderFixture =
+      cloneData(
+        DEFAULT_SUBCLASSES
+      );
+    phase7PlaceholderFixture[0]
+      .summary =
+      "Description not filled in yet.";
+    const phase7PlaceholderValidation =
+      validateDefaultSubclassCollection(
+        phase7PlaceholderFixture
+      );
+
+    record(
+      "Phase 7: validation rejects subclass placeholder text",
+      {
+        valid:
+          phase7PlaceholderValidation
+            .valid,
+        caught:
+          phase7PlaceholderValidation
+            .errors.some((error) => {
+              return error.includes(
+                "placeholder text"
+              );
+            })
+      },
+      {
+        valid: false,
+        caught: true
+      }
+    );
+
+    const phase7EmptyLevelFixture =
+      cloneData(
+        DEFAULT_SUBCLASSES
+      );
+    const phase7EmptyLevel =
+      phase7EmptyLevelFixture[0]
+        .featureLevels[0];
+    phase7EmptyLevelFixture[0]
+      .featuresByLevel[
+        phase7EmptyLevel
+      ] = [];
+    const phase7EmptyLevelValidation =
+      validateDefaultSubclassCollection(
+        phase7EmptyLevelFixture
+      );
+
+    record(
+      "Phase 7: validation rejects empty required subclass feature levels",
+      {
+        valid:
+          phase7EmptyLevelValidation
+            .valid,
+        caught:
+          phase7EmptyLevelValidation
+            .errors.some((error) => {
+              return error.includes(
+                "must not be empty"
+              );
+            })
+      },
+      {
+        valid: false,
+        caught: true
+      }
+    );
+
+    record(
+      "Phase 7: SRD subclasses are prioritized before non-SRD entries",
+      Object.fromEntries(
+        Object.values(
+          DEFAULT_CLASSES
+        )
+          .filter((classData) => {
+            return (
+              classData.id !==
+              "artificer"
+            );
+          })
+          .map((classData) => {
+            return [
+              classData.id,
+              classData
+                .subclasses?.[0]?.id
+            ];
+          })
+      ),
+      {
+        barbarian: "berserker",
+        bard: "lore",
+        cleric: "life",
+        druid: "land",
+        fighter: "champion",
+        monk: "open-hand",
+        paladin: "devotion",
+        ranger: "hunter",
+        rogue: "thief",
+        sorcerer:
+          "draconic-bloodline",
+        warlock: "fiend",
+        wizard: "evocation"
+      }
+    );
+
     creatorState.draft = createEmptyCharacter();
     creatorState.draft.classProgression = {
       totalLevel: 2,
@@ -25897,6 +26814,26 @@ export function createCharacterCreator(options = {}) {
         effect.saveAbility,
         "str"
       ).toUpperCase()}).`;
+    }
+
+    if (effect.type === "subclassFeature") {
+      const actionLabels = {
+        action: "Action",
+        bonusAction: "Bonus action",
+        reaction: "Reaction",
+        attack: "Attack",
+        passive: "Passive"
+      };
+      const actionLabel =
+        actionLabels[
+          effect.actionEconomy
+        ] || "Passive";
+      const saveLabel =
+        effect.saveDc
+          ? ` Save DC ${effect.saveDc} (${String(effect.saveAbility || "").toUpperCase()}).`
+          : "";
+
+      return `${effect.featureName} — ${actionLabel}.${saveLabel}`;
     }
 
     if (effect.type === "armorClassFormula") {
@@ -39216,9 +40153,40 @@ export function createCharacterCreator(options = {}) {
         classLevel,
         null
       );
+    const normalizedValue =
+      cleanString(value)
+        .toLowerCase()
+        .replace(/[\s_-]+/g, "");
 
-    if (String(value).toLowerCase() === "unlimited") {
+    if (normalizedValue === "unlimited") {
       return null;
+    }
+
+    if (
+      normalizedValue ===
+      "proficiencybonus"
+    ) {
+      return getCharacterProficiencyBonus(
+        creatorState.draft
+      );
+    }
+
+    if (
+      normalizedValue ===
+      "twiceproficiencybonus"
+    ) {
+      return (
+        getCharacterProficiencyBonus(
+          creatorState.draft
+        ) * 2
+      );
+    }
+
+    if (
+      normalizedValue ===
+      "classlevel"
+    ) {
+      return classLevel;
     }
 
     if (value !== null && value !== undefined && value !== "") {
@@ -54520,6 +55488,28 @@ export function createCharacterCreator(options = {}) {
     spellId,
     character = creatorState.draft
   ) {
+    const inlineSubclassReference =
+      getSpellcastingClassOptions(
+        character
+      )
+        .flatMap((entry) => {
+          return Object.values(
+            entry?.expandedSpells || {}
+          ).flat();
+        })
+        .find((spellReference) => {
+          return (
+            spellReference &&
+            typeof spellReference ===
+              "object" &&
+            spellReference
+              .inlineFallback === true &&
+            getSection16SpellReferenceId(
+              spellReference
+            ) === spellId
+          );
+        });
+
     return (
       DEFAULT_SPELLS.find((spell) => {
         return spell.id === spellId;
@@ -54533,6 +55523,39 @@ export function createCharacterCreator(options = {}) {
       ).find((spell) => {
         return spell.id === spellId;
       }) ||
+      (
+        inlineSubclassReference
+          ? {
+              id: spellId,
+              name: cleanString(
+                inlineSubclassReference
+                  .name,
+                spellId
+              ),
+              level: Math.max(
+                0,
+                safeNumber(
+                  inlineSubclassReference
+                    .level,
+                  0
+                )
+              ),
+              school: cleanString(
+                inlineSubclassReference
+                  .school,
+                "subclass"
+              ),
+              classes: [],
+              subclasses: [],
+              sourceType:
+                "legacy-non-srd",
+              sourceLabel:
+                "Legacy 5e subclass spell reference",
+              rulesEdition: "2014",
+              inlineSubclassSpell: true
+            }
+          : null
+      ) ||
       null
     );
   }
