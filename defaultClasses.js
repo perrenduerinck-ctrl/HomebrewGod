@@ -190,7 +190,16 @@ export const DEFAULT_CLASSES = {
           name: "Channel Divinity",
           type: "resource",
           summary: "Invoke a limited divine effect tied to your class and domain.",
-          resource: { uses: 1, recharge: "shortOrLongRest" }
+          resource: { uses: 1, recharge: "shortOrLongRest" },
+          spendOptions: [
+            {
+              id: "turn-undead",
+              name: "Turn Undead",
+              cost: 1,
+              saveDcAbility: "wis",
+              usesSave: true
+            }
+          ]
         }
       ],
       3: []
@@ -1427,7 +1436,18 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
       },
       featuresByLevel: {
         1: [sf("life-bonus-proficiency", "Bonus Proficiency"), sf("life-disciple-of-life", "Disciple of Life")],
-        2: [sf("life-preserve-life", "Channel Divinity: Preserve Life", "Restore health to nearby creatures.", { type: "resource", resource: { recharge: "shortOrLongRest" } })],
+        2: [sf("life-preserve-life", "Channel Divinity: Preserve Life", "Restore health to nearby creatures.", {
+          type: "resource",
+          resource: { recharge: "shortOrLongRest" },
+          spendOptions: [
+            {
+              id: "preserve-life",
+              name: "Preserve Life",
+              cost: 1,
+              usesSave: false
+            }
+          ]
+        })],
         6: [sf("life-blessed-healer", "Blessed Healer")],
         8: [sf("life-divine-strike", "Divine Strike")],
         17: [sf("life-supreme-healing", "Supreme Healing")]
@@ -1530,7 +1550,22 @@ const DEFAULT_SUBCLASS_TEMPLATES = {
                 name: "Channel Divinity",
                 uses: 1,
                 recharge: "shortOrLongRest"
-              }
+              },
+              spendOptions: [
+                {
+                  id: "sacred-weapon",
+                  name: "Sacred Weapon",
+                  cost: 1,
+                  usesSave: false
+                },
+                {
+                  id: "turn-the-unholy",
+                  name: "Turn the Unholy",
+                  cost: 1,
+                  saveDcAbility: "cha",
+                  usesSave: true
+                }
+              ]
             }
           )
         ],
