@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Homebrew God App Smoke Test</title>
+  <style>
+    body {
+      max-width: 760px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #ece7dc;
+      background: #181b20;
+      font: 16px/1.5 system-ui, sans-serif;
+    }
+    .result {
+      padding: 1rem;
+      border: 1px solid #60656f;
+      border-radius: 0.5rem;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Homebrew God App Smoke Test</h1>
+  <p>Opening the real application in smoke-test mode…</p>
+  <pre class="result" role="status">RUNNING — loading ../index.html?smokeTest=1</pre>
+
+  <script>
+    window.location.replace("../index.html?smokeTest=1");
+  </script>
+</body>
+</html>
