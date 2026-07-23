@@ -52,7 +52,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 6;
+  const CHARACTER_SCHEMA_VERSION = 7;
   const CLASS_SCHEMA_VERSION = 1;
   const SPECIES_SCHEMA_VERSION = 1;
   const BACKGROUND_SCHEMA_VERSION = 1;
@@ -394,6 +394,7 @@ export function createCharacterCreator(options = {}) {
           slots: 0,
           slotLevel: 0
         },
+        pactMagicSources: [],
         notes: ""
       },
 
@@ -3754,6 +3755,50 @@ export function createCharacterCreator(options = {}) {
           )
         },
 
+        pactMagicSources:
+          Array.isArray(
+            raw.magic?.pactMagicSources
+          )
+            ? raw.magic.pactMagicSources
+                .map((source) => {
+                  return {
+                    classEntryId: cleanString(
+                      source?.classEntryId
+                    ),
+                    classId: cleanString(
+                      source?.classId
+                    ),
+                    className: cleanString(
+                      source?.className
+                    ),
+                    slots: Math.max(
+                      0,
+                      Math.round(
+                        safeNumber(
+                          source?.slots,
+                          0
+                        )
+                      )
+                    ),
+                    slotLevel: Math.max(
+                      0,
+                      Math.round(
+                        safeNumber(
+                          source?.slotLevel,
+                          0
+                        )
+                      )
+                    )
+                  };
+                })
+                .filter((source) => {
+                  return (
+                    source.slots > 0 &&
+                    source.slotLevel > 0
+                  );
+                })
+            : [],
+
         spellcastingProgression:
           cleanString(
             raw.magic?.spellcastingProgression,
@@ -4474,9 +4519,38 @@ export function createCharacterCreator(options = {}) {
           );
         })
         .map((entry) => {
-          return getSrd2014PactMagic(
-            entry?.level
-          );
+          const pact =
+            getSrd2014PactMagic(
+              entry?.level
+            );
+          const classEntryId =
+            cleanString(
+              entry?.classEntryId ||
+              entry?.entryId
+            );
+          const classId =
+            cleanString(entry?.classId);
+          const className =
+            cleanString(entry?.className);
+
+          return {
+            ...pact,
+            ...(
+              classEntryId
+                ? { classEntryId }
+                : {}
+            ),
+            ...(
+              classId
+                ? { classId }
+                : {}
+            ),
+            ...(
+              className
+                ? { className }
+                : {}
+            )
+          };
         });
 
     return {
@@ -9150,10 +9224,7 @@ export function createCharacterCreator(options = {}) {
     const knownIds = [...new Set([
       ...(
         sourceModelActive
-          ? cleanArray(
-              character?.magic
-                ?.unassignedKnownSpellIds
-            )
+          ? []
           : cleanArray(
               character?.magic?.knownSpellIds
             )
@@ -9174,10 +9245,7 @@ export function createCharacterCreator(options = {}) {
     const preparedIds = [...new Set([
       ...(
         sourceModelActive
-          ? cleanArray(
-              character?.magic
-                ?.unassignedPreparedSpellIds
-            )
+          ? []
           : cleanArray(
               character?.magic?.preparedSpellIds
             )
@@ -9324,6 +9392,68 @@ export function createCharacterCreator(options = {}) {
     };
   }
 
+  function getPerClassSpellSelectionSummary(
+    character
+  ) {
+    const spellcasting =
+      getSpellcastingSummary(character);
+    const sourceStore =
+      character?.magic?.classSources &&
+      typeof character.magic.classSources === "object" &&
+      !Array.isArray(character.magic.classSources)
+        ? character.magic.classSources
+        : {};
+
+    return spellcasting.classes.map((entry) => {
+      const sourceId =
+        getSection16SourceKey(entry);
+      const source =
+        sourceStore[sourceId] || {};
+
+      return {
+        classEntryId: sourceId,
+        classId: cleanString(entry.classId),
+        className:
+          cleanString(
+            entry.className,
+            entry.classId
+          ),
+        cantripIds:
+          cleanArray(source.cantripIds),
+        knownSpellIds:
+          cleanArray(source.knownSpellIds),
+        preparedSpellIds:
+          cleanArray(source.preparedSpellIds),
+        spellbookSpellIds:
+          cleanArray(
+            source.spellbookSpellIds
+          ),
+        alwaysPreparedSpellIds:
+          cleanArray(
+            source.alwaysPreparedSpellIds
+          ),
+        cantripsKnownLimit:
+          Math.max(
+            0,
+            safeNumber(
+              entry.cantripsKnown,
+              0
+            )
+          ),
+        spellsKnownLimit:
+          Math.max(
+            0,
+            safeNumber(
+              entry.spellsKnown,
+              0
+            )
+          ),
+        preparedLimit:
+          entry.preparedLimit
+      };
+    });
+  }
+
   function getSpellcastingClassOptions(
     character
   ) {
@@ -9359,6 +9489,227 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function getSpellSourceContexts(
+    character,
+    spell
+  ) {
+    const spellId = cleanString(spell?.id);
+    const sourceId = getSpellSourceId(spell);
+    const spellcasters =
+      getSpellcastingClassOptions(character);
+    const activeEntriesBySourceId =
+      new Map(
+        spellcasters.map((entry) => {
+          return [
+            getSection16SourceKey(entry),
+            entry
+          ];
+        })
+      );
+    const contexts = [];
+    const classSources =
+      character?.magic?.classSources &&
+      typeof character.magic.classSources === "object" &&
+      !Array.isArray(character.magic.classSources)
+        ? Object.values(
+            character.magic.classSources
+          )
+        : [];
+
+    classSources.forEach((source) => {
+      const classEntryId = cleanString(
+        source?.classEntryId
+      );
+      const entry =
+        activeEntriesBySourceId.get(
+          classEntryId
+        );
+
+      if (!entry || !spellId) {
+        return;
+      }
+
+      const selectedSpellIds = [
+        ...cleanArray(source?.cantripIds),
+        ...cleanArray(source?.knownSpellIds),
+        ...cleanArray(source?.preparedSpellIds),
+        ...cleanArray(source?.spellbookSpellIds),
+        ...cleanArray(
+          source?.alwaysPreparedSpellIds
+        ),
+        ...Object.values(
+          source?.mysticArcanumSpellIds ||
+          {}
+        )
+      ];
+
+      if (!selectedSpellIds.includes(spellId)) {
+        return;
+      }
+
+      contexts.push({
+        kind: "class",
+        sourceId: classEntryId,
+        sourceName:
+          cleanString(
+            entry.className,
+            entry.classId
+          ),
+        spellcastingAbility:
+          cleanString(
+            entry.spellcastingAbility
+          ),
+        spellSaveDc:
+          entry.spellSaveDc ?? null,
+        spellAttackBonus:
+          entry.spellAttackBonus ?? null,
+        entry
+      });
+    });
+
+    const featSources =
+      character?.magic?.featSources &&
+      typeof character.magic.featSources === "object" &&
+      !Array.isArray(character.magic.featSources)
+        ? Object.entries(
+            character.magic.featSources
+          )
+        : [];
+
+    featSources.forEach(([featSourceId, source]) => {
+      const grantSpellIds =
+        (
+          Array.isArray(source?.grants)
+            ? source.grants
+            : []
+        )
+          .map((grant) => {
+            return getSection16SpellReferenceId(
+              grant
+            );
+          })
+          .filter(Boolean);
+      const selectedSpellIds =
+        uniqueCleanArray([
+          ...cleanArray(source?.spellIds),
+          ...grantSpellIds
+        ]);
+
+      if (
+        spellId &&
+        selectedSpellIds.includes(spellId)
+      ) {
+        contexts.push({
+          kind: "feat",
+          sourceId: cleanString(
+            featSourceId
+          ),
+          sourceName:
+            cleanString(
+              source?.featName,
+              source?.featId ||
+              "Feat"
+            ),
+          spellcastingAbility:
+            cleanString(
+              source?.spellcastingAbility
+            ),
+          spellSaveDc: null,
+          spellAttackBonus: null,
+          entry: null
+        });
+      }
+    });
+
+    if (
+      !contexts.length &&
+      sourceId
+    ) {
+      const entry =
+        spellcasters.find((candidate) => {
+          return (
+            getSection16SourceKey(
+              candidate
+            ) === sourceId ||
+            cleanString(
+              candidate.classId
+            ) === sourceId
+          );
+        });
+
+      if (entry) {
+        contexts.push({
+          kind: "class",
+          sourceId:
+            getSection16SourceKey(entry),
+          sourceName:
+            cleanString(
+              entry.className,
+              entry.classId
+            ),
+          spellcastingAbility:
+            cleanString(
+              entry.spellcastingAbility
+            ),
+          spellSaveDc:
+            entry.spellSaveDc ?? null,
+          spellAttackBonus:
+            entry.spellAttackBonus ?? null,
+          entry
+        });
+      } else {
+        const featSource =
+          featSources.find(
+            ([featSourceId, source]) => {
+              return (
+                cleanString(featSourceId) ===
+                  sourceId ||
+                cleanString(source?.featId) ===
+                  sourceId
+              );
+            }
+          );
+
+        if (featSource) {
+          contexts.push({
+            kind: "feat",
+            sourceId:
+              cleanString(featSource[0]),
+            sourceName:
+              cleanString(
+                featSource[1]?.featName,
+                featSource[1]?.featId ||
+                "Feat"
+              ),
+            spellcastingAbility:
+              cleanString(
+                featSource[1]
+                  ?.spellcastingAbility
+              ),
+            spellSaveDc: null,
+            spellAttackBonus: null,
+            entry: null
+          });
+        }
+      }
+    }
+
+    return contexts.filter(
+      (context, index, values) => {
+        return (
+          values.findIndex((candidate) => {
+            return (
+              candidate.kind ===
+                context.kind &&
+              candidate.sourceId ===
+                context.sourceId
+            );
+          }) === index
+        );
+      }
+    );
+  }
+
   function getSpellcastingEntryForSpell(
     character,
     spell
@@ -9370,6 +9721,21 @@ export function createCharacterCreator(options = {}) {
 
     const sourceId =
       getSpellSourceId(spell);
+
+    const storedSourceEntry =
+      getSpellSourceContexts(
+        character,
+        spell
+      ).find((context) => {
+        return (
+          context.kind === "class" &&
+          Boolean(context.entry)
+        );
+      })?.entry;
+
+    if (storedSourceEntry) {
+      return storedSourceEntry;
+    }
 
     if (!sourceId) {
       return spellcasters.length === 1
@@ -9409,6 +9775,19 @@ export function createCharacterCreator(options = {}) {
       getSpellcastingClassOptions(
         character
       );
+    const sourceContexts =
+      getSpellSourceContexts(
+        character,
+        spell
+      );
+    const featSource =
+      sourceContexts.find((context) => {
+        return context.kind === "feat";
+      });
+
+    if (featSource) {
+      return "";
+    }
 
     if (!spellcasters.length) {
       return "";
@@ -9418,8 +9797,10 @@ export function createCharacterCreator(options = {}) {
       getSpellSourceId(spell);
 
     if (
-      spellcasters.length > 1 &&
-      !sourceId
+      !sourceId &&
+      !sourceContexts.some((context) => {
+        return context.kind === "class";
+      })
     ) {
       return `${spell?.name || "A spell"} needs a class source.`;
     }
@@ -9484,6 +9865,122 @@ export function createCharacterCreator(options = {}) {
     }
 
     return "";
+  }
+
+  function getSpellSlotCastingOptions(
+    character,
+    spell,
+    sourceId = ""
+  ) {
+    const summary =
+      getSpellcastingSummary(character);
+    const spellLevel = Math.max(
+      0,
+      safeNumber(spell?.level, 0)
+    );
+    const sourceEntry =
+      (
+        sourceId
+          ? summary.classes.find((entry) => {
+              return (
+                getSection16SourceKey(entry) ===
+                  sourceId ||
+                cleanString(entry.classId) ===
+                  sourceId
+              );
+            })
+          : null
+      ) ||
+      getSpellcastingEntryForSpell(
+        character,
+        spell
+      );
+
+    if (
+      spellLevel < 1 ||
+      !sourceEntry ||
+      spellLevel >
+        safeNumber(
+          sourceEntry.maxSpellLevel,
+          0
+        )
+    ) {
+      return {
+        canCast: false,
+        baseSpellLevel: spellLevel,
+        sourceClassMaxSpellLevel:
+          sourceEntry
+            ? safeNumber(
+                sourceEntry.maxSpellLevel,
+                0
+              )
+            : null,
+        normalSlotLevels: [],
+        pactMagic: [],
+        canUpcast: false
+      };
+    }
+
+    const normalSlotLevels =
+      Object.entries(
+        summary.multiclass?.spellSlots || {}
+      )
+        .filter(([level, slots]) => {
+          return (
+            safeNumber(level, 0) >=
+              spellLevel &&
+            safeNumber(slots, 0) > 0
+          );
+        })
+        .map(([level]) => {
+          return safeNumber(level, 0);
+        });
+    const pactMagic =
+      (
+        summary.multiclass?.pactMagic ||
+        []
+      ).filter((source) => {
+        return (
+          safeNumber(
+            source?.slots,
+            0
+          ) > 0 &&
+          safeNumber(
+            source?.slotLevel,
+            0
+          ) >= spellLevel
+        );
+      });
+
+    return {
+      canCast:
+        summary.castingBlocked !== true &&
+        (
+          normalSlotLevels.length > 0 ||
+          pactMagic.length > 0
+        ),
+      baseSpellLevel: spellLevel,
+      sourceClassMaxSpellLevel:
+        safeNumber(
+          sourceEntry.maxSpellLevel,
+          0
+        ),
+      normalSlotLevels,
+      pactMagic:
+        cloneData(pactMagic),
+      canUpcast:
+        normalSlotLevels.some((level) => {
+          return level > spellLevel;
+        }) ||
+        pactMagic.some((source) => {
+          return (
+            safeNumber(
+              source.slotLevel,
+              0
+            ) > spellLevel
+          );
+        })
+    };
   }
 
   function isCharacterNonSpellcaster(
@@ -12369,8 +12866,684 @@ export function createCharacterCreator(options = {}) {
       {
         casterLevel: 5,
         spellSlots: { 1: 4, 2: 3, 3: 2 },
-        pactMagic: [{ slots: 2, slotLevel: 3 }]
+        pactMagic: [
+          {
+            slots: 2,
+            slotLevel: 3,
+            classEntryId: "warlock",
+            classId: "warlock",
+            className: "Warlock"
+          }
+        ]
       }
+    );
+
+    record(
+      "Phase 5: full-caster plus full-caster slots",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 3,
+          progressionType: "full-caster"
+        },
+        {
+          level: 2,
+          progressionType: "full-caster"
+        }
+      ]),
+      {
+        casterLevel: 5,
+        spellSlots: { 1: 4, 2: 3, 3: 2 },
+        pactMagic: []
+      }
+    );
+
+    record(
+      "Phase 5: full-caster plus half-caster slots",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 3,
+          progressionType: "full-caster"
+        },
+        {
+          level: 4,
+          progressionType: "half-caster"
+        }
+      ]),
+      {
+        casterLevel: 5,
+        spellSlots: { 1: 4, 2: 3, 3: 2 },
+        pactMagic: []
+      }
+    );
+
+    record(
+      "Phase 5: full-caster plus third-caster slots",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 4,
+          progressionType: "full-caster"
+        },
+        {
+          level: 5,
+          progressionType: "third-caster"
+        }
+      ]),
+      {
+        casterLevel: 5,
+        spellSlots: { 1: 4, 2: 3, 3: 2 },
+        pactMagic: []
+      }
+    );
+
+    record(
+      "Phase 5: full-caster plus Artificer slots",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 2,
+          progressionType: "full-caster"
+        },
+        {
+          level: 3,
+          progressionType: "artificer"
+        }
+      ]),
+      {
+        casterLevel: 4,
+        spellSlots: { 1: 4, 2: 3 },
+        pactMagic: []
+      }
+    );
+
+    record(
+      "Phase 5: Paladin plus Ranger slots",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 5,
+          progressionType: "half-caster"
+        },
+        {
+          level: 5,
+          progressionType: "half-caster"
+        }
+      ]),
+      {
+        casterLevel: 4,
+        spellSlots: { 1: 4, 2: 3 },
+        pactMagic: []
+      }
+    );
+
+    record(
+      "Phase 5: Artificer rounds upward",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 3,
+          progressionType: "artificer"
+        }
+      ]).casterLevel,
+      2
+    );
+
+    record(
+      "Phase 5: Paladin and Ranger round downward when multiclassed",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          level: 3,
+          progressionType: "half-caster"
+        },
+        {
+          level: 3,
+          progressionType: "half-caster"
+        }
+      ]).casterLevel,
+      2
+    );
+
+    record(
+      "Phase 5: Eldritch Knight rounds downward when multiclassed",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          classId: "fighter",
+          subclassId: "eldritch-knight",
+          level: 5,
+          progressionType: "third-caster"
+        }
+      ]).casterLevel,
+      1
+    );
+
+    record(
+      "Phase 5: Arcane Trickster rounds downward when multiclassed",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          classId: "rogue",
+          subclassId: "arcane-trickster",
+          level: 5,
+          progressionType: "third-caster"
+        }
+      ]).casterLevel,
+      1
+    );
+
+    const phase5WizardWarlock =
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          classEntryId: "wizard-source",
+          classId: "wizard",
+          className: "Wizard",
+          level: 3,
+          progressionType: "full-caster"
+        },
+        {
+          classEntryId: "warlock-source",
+          classId: "warlock",
+          className: "Warlock",
+          level: 5,
+          progressionType: "pact-magic"
+        }
+      ]);
+
+    record(
+      "Phase 5: Pact Magic stays separate from Spellcasting slots",
+      {
+        normal: phase5WizardWarlock.spellSlots,
+        pact: phase5WizardWarlock.pactMagic
+          .map((source) => {
+            return {
+              slots: source.slots,
+              slotLevel: source.slotLevel
+            };
+          })
+      },
+      {
+        normal: { 1: 4, 2: 2 },
+        pact: [{ slots: 2, slotLevel: 3 }]
+      }
+    );
+
+    record(
+      "Phase 5: Warlock plus full-caster",
+      {
+        casterLevel:
+          phase5WizardWarlock.casterLevel,
+        normalSlots:
+          phase5WizardWarlock.spellSlots,
+        pactSource:
+          phase5WizardWarlock
+            .pactMagic[0]
+            .classEntryId
+      },
+      {
+        casterLevel: 3,
+        normalSlots: { 1: 4, 2: 2 },
+        pactSource: "warlock-source"
+      }
+    );
+
+    const phase5WarlockPaladin =
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          classEntryId: "warlock-source",
+          classId: "warlock",
+          className: "Warlock",
+          level: 5,
+          progressionType: "pact-magic"
+        },
+        {
+          classEntryId: "paladin-source",
+          classId: "paladin",
+          className: "Paladin",
+          level: 4,
+          progressionType: "half-caster"
+        }
+      ]);
+
+    record(
+      "Phase 5: Warlock plus Paladin",
+      {
+        casterLevel:
+          phase5WarlockPaladin.casterLevel,
+        normalSlots:
+          phase5WarlockPaladin.spellSlots,
+        pactSlots:
+          phase5WarlockPaladin
+            .pactMagic[0].slots
+      },
+      {
+        casterLevel: 2,
+        normalSlots: { 1: 3 },
+        pactSlots: 2
+      }
+    );
+
+    record(
+      "Phase 5: multiple Pact Magic sources remain distinct",
+      calculateSrd2014MulticlassSpellcasting([
+        {
+          classEntryId: "warlock-a",
+          classId: "warlock",
+          className: "Warlock",
+          level: 2,
+          progressionType: "pact-magic"
+        },
+        {
+          classEntryId: "pact-b",
+          classId: "custom-pact",
+          className: "Custom Pact",
+          level: 3,
+          progressionType: "pact-magic"
+        }
+      ]).pactMagic.map((source) => {
+        return {
+          classEntryId:
+            source.classEntryId,
+          slots: source.slots,
+          slotLevel: source.slotLevel
+        };
+      }),
+      [
+        {
+          classEntryId: "warlock-a",
+          slots: 2,
+          slotLevel: 1
+        },
+        {
+          classEntryId: "pact-b",
+          slots: 2,
+          slotLevel: 2
+        }
+      ]
+    );
+
+    const phase5SpellSourceCharacter =
+      createEmptyCharacter();
+    phase5SpellSourceCharacter
+      .abilities.scores.int = 16;
+    phase5SpellSourceCharacter
+      .abilities.scores.wis = 18;
+    phase5SpellSourceCharacter
+      .classProgression.totalLevel = 6;
+    phase5SpellSourceCharacter
+      .classProgression.classes = [
+        {
+          entryId: "wizard-source",
+          classId: "wizard",
+          className: "Wizard",
+          level: 1,
+          templateSnapshot:
+            DEFAULT_CLASS_TEMPLATES.find(
+              (template) => {
+                return template.id ===
+                  "wizard";
+              }
+            )
+        },
+        {
+          entryId: "cleric-source",
+          classId: "cleric",
+          className: "Cleric",
+          level: 5,
+          templateSnapshot:
+            DEFAULT_CLASS_TEMPLATES.find(
+              (template) => {
+                return template.id ===
+                  "cleric";
+              }
+            )
+        }
+      ];
+    phase5SpellSourceCharacter
+      .magic.spellSourceModelVersion = 2;
+    phase5SpellSourceCharacter
+      .magic.customSpells = [
+        normalizeSection16Spell({
+          id: "phase5-shared-level-one",
+          name: "Phase 5 Shared Spell",
+          level: 1,
+          classes: ["wizard", "cleric"]
+        }),
+        normalizeSection16Spell({
+          id: "phase5-shared-level-three",
+          name: "Phase 5 High Spell",
+          level: 3,
+          classes: ["wizard", "cleric"]
+        }),
+        normalizeSection16Spell({
+          id: "phase5-feat-spell",
+          name: "Phase 5 Feat Spell",
+          level: 1
+        }),
+        normalizeSection16Spell({
+          id: "phase5-ownerless",
+          name: "Phase 5 Ownerless",
+          level: 1,
+          source: "import"
+        })
+      ];
+    phase5SpellSourceCharacter
+      .magic.classSources = {
+        "wizard-source": {
+          classEntryId: "wizard-source",
+          classId: "wizard",
+          className: "Wizard",
+          spellcastingAbility: "int",
+          cantripIds: [],
+          knownSpellIds: [
+            "phase5-shared-level-one"
+          ],
+          preparedSpellIds: [],
+          spellbookSpellIds: [
+            "phase5-shared-level-one"
+          ],
+          alwaysPreparedSpellIds: [],
+          mysticArcanumSpellIds: {}
+        },
+        "cleric-source": {
+          classEntryId: "cleric-source",
+          classId: "cleric",
+          className: "Cleric",
+          spellcastingAbility: "wis",
+          cantripIds: [],
+          knownSpellIds: [],
+          preparedSpellIds: [
+            "phase5-shared-level-three"
+          ],
+          spellbookSpellIds: [],
+          alwaysPreparedSpellIds: [],
+          mysticArcanumSpellIds: {}
+        }
+      };
+    phase5SpellSourceCharacter
+      .magic.featSources = {
+        "magic-initiate-source": {
+          featId: "magic-initiate",
+          featName: "Magic Initiate",
+          spellcastingAbility: "cha",
+          spellIds: ["phase5-feat-spell"],
+          grants: []
+        }
+      };
+
+    const phase5PerClassSelections =
+      getPerClassSpellSelectionSummary(
+        phase5SpellSourceCharacter
+      );
+
+    record(
+      "Phase 5: spells known calculate separately per class",
+      phase5PerClassSelections.map((source) => {
+        return {
+          classId: source.classId,
+          knownSpellIds:
+            source.knownSpellIds
+        };
+      }),
+      [
+        {
+          classId: "wizard",
+          knownSpellIds: [
+            "phase5-shared-level-one"
+          ]
+        },
+        {
+          classId: "cleric",
+          knownSpellIds: []
+        }
+      ]
+    );
+
+    record(
+      "Phase 5: prepared spells calculate separately per class",
+      phase5PerClassSelections.map((source) => {
+        return {
+          classId: source.classId,
+          preparedSpellIds:
+            source.preparedSpellIds
+        };
+      }),
+      [
+        {
+          classId: "wizard",
+          preparedSpellIds: []
+        },
+        {
+          classId: "cleric",
+          preparedSpellIds: [
+            "phase5-shared-level-three"
+          ]
+        }
+      ]
+    );
+
+    record(
+      "Phase 5: spell levels are limited by individual class level",
+      getSection16EligibleSpellcasters(
+        phase5SpellSourceCharacter
+          .magic.customSpells[1],
+        {
+          character:
+            phase5SpellSourceCharacter
+        }
+      ).map((entry) => {
+        return entry.classId;
+      }),
+      ["cleric"]
+    );
+
+    const phase5UpcastOptions =
+      getSpellSlotCastingOptions(
+        phase5SpellSourceCharacter,
+        phase5SpellSourceCharacter
+          .magic.customSpells[0],
+        "wizard-source"
+      );
+
+    record(
+      "Phase 5: higher combined slots upcast lower-level class spells",
+      {
+        sourceClassMaxSpellLevel:
+          phase5UpcastOptions
+            .sourceClassMaxSpellLevel,
+        normalSlotLevels:
+          phase5UpcastOptions
+            .normalSlotLevels,
+        canUpcast:
+          phase5UpcastOptions.canUpcast
+      },
+      {
+        sourceClassMaxSpellLevel: 1,
+        normalSlotLevels: [1, 2, 3],
+        canUpcast: true
+      }
+    );
+
+    record(
+      "Phase 5: every selected spell resolves to a class or feat source",
+      {
+        classSource:
+          getSpellSourceContexts(
+            phase5SpellSourceCharacter,
+            phase5SpellSourceCharacter
+              .magic.customSpells[0]
+          ).map((context) => {
+            return context.kind;
+          }),
+        featSource:
+          getSpellSourceContexts(
+            phase5SpellSourceCharacter,
+            phase5SpellSourceCharacter
+              .magic.customSpells[2]
+          ).map((context) => {
+            return context.kind;
+          })
+      },
+      {
+        classSource: ["class"],
+        featSource: ["feat"]
+      }
+    );
+
+    record(
+      "Phase 5: a spell uses its source class spellcasting ability",
+      getSpellSourceContexts(
+        phase5SpellSourceCharacter,
+        phase5SpellSourceCharacter
+          .magic.customSpells[0]
+      )[0]?.spellcastingAbility,
+      "int"
+    );
+
+    phase5SpellSourceCharacter
+      .equipment.items = [
+        normalizeSection15Item({
+          id: "phase5-arcane-focus",
+          name: "Arcane Focus",
+          category: "arcane focus"
+        }),
+        normalizeSection15Item({
+          id: "phase5-holy-symbol",
+          name: "Holy Symbol",
+          category: "holy symbol"
+        })
+      ];
+
+    record(
+      "Phase 5: spellcasting focuses stay with the correct class",
+      getSpellcastingFocusSummary(
+        phase5SpellSourceCharacter
+      ).map((source) => {
+        return {
+          classId: source.classId,
+          focuses: source.focuses.map(
+            (focus) => focus.name
+          )
+        };
+      }),
+      [
+        {
+          classId: "wizard",
+          focuses: ["Arcane Focus"]
+        },
+        {
+          classId: "cleric",
+          focuses: ["Holy Symbol"]
+        }
+      ]
+    );
+
+    const phase5InvalidImportedSpell =
+      normalizeSection16Spell({
+        id: "phase5-invalid-import",
+        name: "Invalid Imported Spell",
+        level: 1,
+        classId: "removed-class",
+        source: "import"
+      });
+
+    record(
+      "Phase 5: imported spells without a valid source warn",
+      getSpellSourceWarning(
+        phase5SpellSourceCharacter,
+        phase5InvalidImportedSpell
+      ),
+      "Invalid Imported Spell has an invalid class source."
+    );
+
+    phase5SpellSourceCharacter
+      .magic.unassignedKnownSpellIds = [
+        "phase5-ownerless"
+      ];
+    phase5SpellSourceCharacter
+      .magic.unassignedPreparedSpellIds = [
+        "phase5-ownerless"
+      ];
+    phase5SpellSourceCharacter
+      .magic.knownSpellIds.push(
+        "phase5-ownerless"
+      );
+    phase5SpellSourceCharacter
+      .magic.preparedSpellIds.push(
+        "phase5-ownerless"
+      );
+
+    record(
+      "Phase 5: ownerless spells do not affect spell calculations",
+      {
+        known:
+          getSpellSelectionLimits(
+            phase5SpellSourceCharacter
+          ).knownIds.includes(
+            "phase5-ownerless"
+          ),
+        prepared:
+          getSpellSelectionLimits(
+            phase5SpellSourceCharacter
+          ).preparedIds.includes(
+            "phase5-ownerless"
+          ),
+        warning:
+          getSpellSourceWarning(
+            phase5SpellSourceCharacter,
+            phase5SpellSourceCharacter
+              .magic.customSpells[3]
+          )
+      },
+      {
+        known: false,
+        prepared: false,
+        warning:
+          "Phase 5 Ownerless needs a class source."
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 2,
+      classes: [
+        makeInteractionClassEntry(
+          "phase5-barbarian",
+          "barbarian",
+          1
+        ),
+        makeInteractionClassEntry(
+          "phase5-sorcerer",
+          "sorcerer",
+          1
+        )
+      ],
+      levelOrder: []
+    };
+    refreshSelectedClassFeatures();
+    const phase5RageResourceId =
+      creatorState.draft
+        .classMechanics.resources
+        .find((resource) => {
+          return resource.canonicalId ===
+            "rage";
+        })?.id;
+    toggleSection12RageState(
+      phase5RageResourceId
+    );
+
+    record(
+      "Phase 5: Rage blocks spellcasting",
+      getSpellcastingSummary(
+        creatorState.draft
+      ).castingBlocked,
+      true
+    );
+
+    toggleSection12RageState(
+      phase5RageResourceId
+    );
+
+    record(
+      "Phase 5: spellcasting resumes after Rage ends",
+      getSpellcastingSummary(
+        creatorState.draft
+      ).castingBlocked,
+      false
     );
 
     record(
@@ -48117,6 +49290,139 @@ export function createCharacterCreator(options = {}) {
 // CHARACTER CREATOR SECTION 15 — EQUIPMENT / INVENTORY
 // =====================================================
 
+  function getSpellcastingFocusClassIds(
+    item,
+    spellcastingClasses = []
+  ) {
+    const explicitClassIds =
+      uniqueCleanArray(
+        item?.spellcastingFocusClassIds ||
+        item?.focusClassIds
+      ).map((classId) => {
+        return makeSafeId(classId, "class");
+      });
+
+    if (explicitClassIds.length) {
+      return explicitClassIds;
+    }
+
+    const focusText =
+      `${cleanString(item?.category)} ${cleanString(item?.name)}`.toLowerCase();
+    const categoryText =
+      cleanString(item?.category).toLowerCase();
+
+    if (focusText.includes("component pouch")) {
+      return uniqueCleanArray(
+        spellcastingClasses.map((entry) => {
+          return entry?.classId;
+        })
+      );
+    }
+
+    if (
+      focusText.includes("druidic focus") ||
+      focusText.includes("sprig of mistletoe") ||
+      focusText.includes("totem") ||
+      focusText.includes("wooden staff") ||
+      focusText.includes("yew wand")
+    ) {
+      return ["druid"];
+    }
+
+    if (
+      focusText.includes("arcane focus") ||
+      (
+        categoryText.includes("focus") &&
+        /\b(crystal|orb|rod|staff|wand)\b/i
+          .test(focusText)
+      )
+    ) {
+      return [
+        "sorcerer",
+        "warlock",
+        "wizard"
+      ];
+    }
+
+    if (
+      focusText.includes("holy symbol") ||
+      focusText.includes("amulet") ||
+      focusText.includes("emblem") ||
+      focusText.includes("reliquary")
+    ) {
+      return ["cleric", "paladin"];
+    }
+
+    if (
+      focusText.includes("musical instrument") ||
+      /\b(lute|lyre|flute|horn|drum|dulcimer|viol|bagpipes|shawm)\b/i
+        .test(focusText)
+    ) {
+      return ["bard"];
+    }
+
+    if (
+      focusText.includes("artisan") ||
+      focusText.includes("thieves' tools") ||
+      focusText.includes("thieves tools") ||
+      item?.infused === true ||
+      cleanString(item?.infusionId)
+    ) {
+      return ["artificer"];
+    }
+
+    return [];
+  }
+
+  function getSpellcastingFocusSummary(
+    character
+  ) {
+    const spellcastingClasses =
+      getSpellcastingClassOptions(character);
+    const inventory =
+      Array.isArray(
+        character?.equipment?.items
+      )
+        ? character.equipment.items
+        : [];
+
+    return spellcastingClasses.map((entry) => {
+      const classId = cleanString(
+        entry.classId
+      );
+      const focuses =
+        inventory.filter((item) => {
+          return (
+            !cleanString(item?.containerId) &&
+            getSpellcastingFocusClassIds(
+              item,
+              spellcastingClasses
+            ).includes(classId)
+          );
+        });
+
+      return {
+        classEntryId:
+          getSection16SourceKey(entry),
+        classId,
+        className:
+          cleanString(
+            entry.className,
+            classId
+          ),
+        focuses: focuses.map((item) => {
+          return {
+            id: cleanString(item.id),
+            name: cleanString(
+              item.name,
+              "Spellcasting focus"
+            )
+          };
+        })
+      };
+    });
+  }
+
   function normalizeSection15Item(
     rawItem,
     fallbackSource = "custom"
@@ -48372,6 +49678,9 @@ export function createCharacterCreator(options = {}) {
       isContainer,
 
       capacityWeight,
+
+      spellcastingFocusClassIds:
+        getSpellcastingFocusClassIds(raw),
 
       ownerCharacterId:
         cleanString(raw.ownerCharacterId)
@@ -57829,10 +59138,26 @@ export function createCharacterCreator(options = {}) {
       </article>
     `;
 
+    const focusBySourceId =
+      new Map(
+        getSpellcastingFocusSummary(
+          creatorState.draft
+        ).map((focusSummary) => {
+          return [
+            focusSummary.classEntryId,
+            focusSummary.focuses
+          ];
+        })
+      );
+
     const classCards =
       summary.classes.map((entry) => {
         const source =
           getSection16SourceState(entry);
+        const focuses =
+          focusBySourceId.get(
+            getSection16SourceKey(entry)
+          ) || [];
 
         const arcanumCount = Object.values(
           source?.mysticArcanumSpellIds || {}
@@ -57875,6 +59200,18 @@ export function createCharacterCreator(options = {}) {
               ${escapeHtml(
                 entry.spellcastingAbility ||
                 "None"
+              )}
+
+              <br>
+              <b>Focus:</b>
+              ${escapeHtml(
+                focuses.length
+                  ? focuses
+                      .map((focus) => {
+                        return focus.name;
+                      })
+                      .join(", ")
+                  : "None assigned"
               )}
 
               <br>
@@ -58091,6 +59428,32 @@ export function createCharacterCreator(options = {}) {
               creatorState.draft,
               spell
             );
+        const castingOptions =
+          sourceEntry && spellLevel > 0
+            ? getSpellSlotCastingOptions(
+                creatorState.draft,
+                spell,
+                getSection16SourceKey(
+                  sourceEntry
+                )
+              )
+            : null;
+        const castingSlotLabels = [
+          ...(
+            castingOptions?.normalSlotLevels ||
+            []
+          ).map((level) => {
+            return `level ${level}`;
+          }),
+          ...(
+            castingOptions?.pactMagic || []
+          ).map((source) => {
+            return `Pact level ${safeNumber(
+              source.slotLevel,
+              0
+            )}`;
+          })
+        ];
 
         const inSpellbook = Boolean(
           sourceRecord?.spellbookSpellIds
@@ -58197,6 +59560,22 @@ export function createCharacterCreator(options = {}) {
                         : formatSection17Modifier(
                             sourceEntry.spellAttackBonus
                           )
+                    }
+
+                    ${
+                      castingSlotLabels.length
+                        ? `
+                          <br>
+                          <b>Cast With:</b>
+                          ${escapeHtml(
+                            castingSlotLabels.join(", ")
+                          )}${
+                            castingOptions.canUpcast
+                              ? " (higher slots upcast this spell)"
+                              : ""
+                          }
+                        `
+                        : ""
                     }
                   `
                   : ""
@@ -61054,8 +62433,23 @@ export function createCharacterCreator(options = {}) {
           }
         : {
             slots: 0,
-            slotLevel: 0
-          };
+          slotLevel: 0
+        };
+
+    character.magic.pactMagicSources =
+      cloneData(
+        (
+          spellSummary.multiclass
+            ?.pactMagic || []
+        ).filter((entry) => {
+          return (
+            safeNumber(
+              entry.slots,
+              0
+            ) > 0
+          );
+        })
+      );
 
     const primarySpellcaster =
       spellSummary.classes.find((entry) => {
