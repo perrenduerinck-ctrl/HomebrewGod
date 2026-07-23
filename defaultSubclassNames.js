@@ -7,10 +7,10 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   barbarian: [
+    "Berserker",
     "Ancestral Guardian",
     "Battlerager",
     "Beast",
-    "Berserker",
     "Giant",
     "Storm Herald",
     "Totem Warrior",
@@ -19,10 +19,10 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   bard: [
+    "Lore",
     "Creation",
     "Eloquence",
     "Glamour",
-    "Lore",
     "Spirits",
     "Swords",
     "Valor",
@@ -30,12 +30,12 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   cleric: [
+    "Life",
     "Arcana",
     "Death",
     "Forge",
     "Grave",
     "Knowledge",
-    "Life",
     "Light",
     "Nature",
     "Order",
@@ -47,8 +47,8 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   druid: [
-    "Dreams",
     "Land",
+    "Dreams",
     "Moon",
     "Shepherd",
     "Spores",
@@ -57,11 +57,11 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   fighter: [
+    "Champion",
     "Arcane Archer",
     "Banneret / Purple Dragon Knight",
     "Battle Master",
     "Cavalier",
-    "Champion",
     "Echo Knight",
     "Eldritch Knight",
     "Psi Warrior",
@@ -70,6 +70,7 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   monk: [
+    "Open Hand",
     "Ascendant Dragon",
     "Astral Self",
     "Drunken Master",
@@ -77,16 +78,15 @@ export const SUBCLASS_NAME_LIST = {
     "Kensei",
     "Long Death",
     "Mercy",
-    "Open Hand",
     "Shadow",
     "Sun Soul"
   ],
 
   paladin: [
+    "Devotion",
     "Ancients",
     "Conquest",
     "Crown",
-    "Devotion",
     "Glory",
     "Oathbreaker",
     "Redemption",
@@ -95,17 +95,18 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   ranger: [
+    "Hunter",
     "Beast Master",
     "Drakewarden",
     "Fey Wanderer",
     "Gloom Stalker",
     "Horizon Walker",
-    "Hunter",
     "Monster Slayer",
     "Swarmkeeper"
   ],
 
   rogue: [
+    "Thief",
     "Arcane Trickster",
     "Assassin",
     "Inquisitive",
@@ -113,15 +114,14 @@ export const SUBCLASS_NAME_LIST = {
     "Phantom",
     "Scout",
     "Soulknife",
-    "Swashbuckler",
-    "Thief"
+    "Swashbuckler"
   ],
 
   sorcerer: [
+    "Draconic Bloodline",
     "Aberrant Mind",
     "Clockwork Soul",
     "Divine Soul",
-    "Draconic Bloodline",
     "Lunar Sorcery",
     "Shadow Magic",
     "Storm Sorcery",
@@ -129,10 +129,10 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   warlock: [
+    "Fiend",
     "Archfey",
     "Celestial",
     "Fathomless",
-    "Fiend",
     "Genie",
     "Great Old One",
     "Hexblade",
@@ -141,13 +141,13 @@ export const SUBCLASS_NAME_LIST = {
   ],
 
   wizard: [
+    "Evocation",
     "Abjuration",
     "Bladesinging",
     "Chronurgy",
     "Conjuration",
     "Divination",
     "Enchantment",
-    "Evocation",
     "Graviturgy",
     "Illusion",
     "Necromancy",
