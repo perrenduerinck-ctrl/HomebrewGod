@@ -124,6 +124,16 @@ const INVOCATION_DETAILS = {
     effects: [{ type: "atWillSpell", spellId: "jump", selfOnly: true }],
     summary: "Cast jump on yourself at will."
   },
+  "Thirsting Blade": {
+    minimumLevel: 5,
+    effects: [{
+      type: "extraAttack",
+      attacks: 2,
+      pactWeaponOnly: true,
+      stacks: false
+    }],
+    summary: "Attack twice, instead of once, with your pact weapon. This does not add another attack to Extra Attack."
+  },
   "Whispers of the Grave": {
     minimumLevel: 9,
     effects: [{ type: "atWillSpell", spellId: "speak-with-dead" }],
