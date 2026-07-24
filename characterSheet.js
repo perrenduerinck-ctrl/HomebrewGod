@@ -1108,6 +1108,108 @@ function renderSpellSlots(magic) {
   `;
 }
 
+function getFeatSpellRecords(character) {
+  const direct = asArray(
+    character?.featMechanics?.spellcasting
+  );
+  const fromSources = isRecord(
+    character?.magic?.featSources
+  )
+    ? Object.values(
+        character.magic.featSources
+      ).flatMap((source) => {
+        return asArray(source?.spellRecords);
+      })
+    : [];
+  const records = new Map();
+
+  [...direct, ...fromSources]
+    .forEach((entry, index) => {
+      if (!isRecord(entry)) {
+        return;
+      }
+
+      const key = firstText(
+        entry.id,
+        `${entry.sourceId || entry.featId || "feat"}:${entry.spellId || index}`
+      );
+
+      records.set(key, entry);
+    });
+
+  return [...records.values()];
+}
+
+function formatFeatSpellRecharge(value) {
+  const recharge = cleanText(value);
+
+  if (recharge === "shortOrLongRest") {
+    return "short or long rest";
+  }
+
+  if (recharge === "longRest") {
+    return "long rest";
+  }
+
+  if (recharge === "shortRest") {
+    return "short rest";
+  }
+
+  return recharge
+    ? titleFromId(recharge, recharge)
+    : "";
+}
+
+function renderFeatSpellResources(character) {
+  const records = getFeatSpellRecords(character);
+
+  if (!records.length) {
+    return `<p class="hg-sheet-muted">No feat spells recorded.</p>`;
+  }
+
+  return `
+    <ul class="hg-sheet-list">
+      ${records.map((record) => {
+        const maximumUses = optionalNumber(
+          record.maximumUses
+        );
+        const currentUses = optionalNumber(
+          record.currentUses
+        );
+        const usage = record.atWill === true
+          ? "At will"
+          : maximumUses === null
+            ? "Known spell"
+            : `${Math.max(0, currentUses ?? maximumUses)} / ${Math.max(0, maximumUses)} use${maximumUses === 1 ? "" : "s"} remaining`;
+        const recharge = formatFeatSpellRecharge(
+          record.recharge
+        );
+        const details = [
+          titleFromId(
+            record.spellcastingAbility,
+            "Ability not recorded"
+          ),
+          usage,
+          recharge
+            ? `Recharges after a ${recharge}`
+            : "",
+          record.canUseSpellSlots === true
+            ? "May also use normal spell slots"
+            : ""
+        ].filter(Boolean);
+
+        return `
+          <li data-feat-spell-resource="${escapeHtml(firstText(record.id, record.spellId))}">
+            <strong>${escapeHtml(firstText(record.spellName, titleFromId(record.spellId, "Feat spell")))}</strong>
+            <span>${escapeHtml(details.join(" · "))}</span>
+            <small>${escapeHtml(firstText(record.featName, titleFromId(record.featId, "Feat")))}</small>
+          </li>
+        `;
+      }).join("")}
+    </ul>
+  `;
+}
+
 function renderSpellPanel(character) {
   const magic = isRecord(character?.magic) ? character.magic : {};
   const classSources = isRecord(magic.classSources)
@@ -1153,6 +1255,11 @@ function renderSpellPanel(character) {
         <article class="hg-sheet-card">
           <h2>Innate Spells</h2>
           ${renderContentList(innate, "No innate spells recorded.")}
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Feat Spells</h2>
+          ${renderFeatSpellResources(character)}
         </article>
 
         <article class="hg-sheet-card">
