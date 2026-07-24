@@ -64,7 +64,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 11;
+  const CHARACTER_SCHEMA_VERSION = 12;
   const CLASS_SCHEMA_VERSION =
     DEFAULT_CLASS_SCHEMA_VERSION;
   const SPECIES_SCHEMA_VERSION = 1;
@@ -287,12 +287,13 @@ export function createCharacterCreator(options = {}) {
       selectedFeats: [],
       advancementChoices: [],
       featMechanics: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         hpBonus: 0,
         initiativeBonus: 0,
         speedBonus: 0,
         resistances: [],
         resources: [],
+        spellcasting: [],
         passiveEffects: [],
         instances: []
       },
@@ -3465,12 +3466,32 @@ export function createCharacterCreator(options = {}) {
         raw.advancementChoices
       ),
 
-      featMechanics:
-        raw.featMechanics &&
-        typeof raw.featMechanics === "object" &&
-        !Array.isArray(raw.featMechanics)
-          ? cloneData(raw.featMechanics)
-          : cloneData(empty.featMechanics),
+      featMechanics: {
+        ...cloneData(empty.featMechanics),
+        ...(
+          raw.featMechanics &&
+          typeof raw.featMechanics === "object" &&
+          !Array.isArray(raw.featMechanics)
+            ? cloneData(raw.featMechanics)
+            : {}
+        ),
+        resources:
+          Array.isArray(raw.featMechanics?.resources)
+            ? cloneData(raw.featMechanics.resources)
+            : [],
+        spellcasting:
+          Array.isArray(raw.featMechanics?.spellcasting)
+            ? cloneData(raw.featMechanics.spellcasting)
+            : [],
+        passiveEffects:
+          Array.isArray(raw.featMechanics?.passiveEffects)
+            ? cloneData(raw.featMechanics.passiveEffects)
+            : [],
+        instances:
+          Array.isArray(raw.featMechanics?.instances)
+            ? cloneData(raw.featMechanics.instances)
+            : []
+      },
 
       abilities: {
         method: cleanString(
@@ -9803,6 +9824,21 @@ export function createCharacterCreator(options = {}) {
         spellId &&
         selectedSpellIds.includes(spellId)
       ) {
+        const spellRecord =
+          (
+            Array.isArray(
+              source?.spellRecords
+            )
+              ? source.spellRecords
+              : []
+          ).find((record) => {
+            return (
+              cleanString(
+                record?.spellId
+              ) === spellId
+            );
+          });
+
         contexts.push({
           kind: "feat",
           sourceId: cleanString(
@@ -9816,6 +9852,8 @@ export function createCharacterCreator(options = {}) {
             ),
           spellcastingAbility:
             cleanString(
+              spellRecord
+                ?.spellcastingAbility ||
               source?.spellcastingAbility
             ),
           spellSaveDc: null,
@@ -15294,6 +15332,650 @@ export function createCharacterCreator(options = {}) {
         normalAsiMode: true,
         pseudoFeatInPicker: false,
         pseudoFeatRejected: true
+      }
+    );
+
+    const createPhase10FeatSelection = (
+      featId,
+      featChoices = {}
+    ) => {
+      const slot =
+        createPhase9FighterAsiSlot();
+      const encodedChoices =
+        Object.entries(featChoices)
+          .flatMap(
+            ([choiceId, values]) => {
+              return uniqueCleanArray(
+                values
+              ).map((value) => {
+                return encodeFeatChoiceValue(
+                  choiceId,
+                  value
+                );
+              });
+            }
+          )
+          .filter(Boolean);
+
+      setSection12AsiChoiceValues(
+        slot.id,
+        [
+          "mode:feat",
+          `feat:${featId}`,
+          ...encodedChoices
+        ]
+      );
+      creatorState.draft.feats = [
+        featId
+      ];
+      creatorState.draft.selectedFeats = [
+        featId
+      ];
+      syncSection12AdvancementChoice(
+        slot.id
+      );
+      applySelectedFeatMechanics();
+
+      return {
+        slot,
+        source:
+          creatorState.draft
+            .magic
+            .featSources[
+              slot.id
+            ],
+        records:
+          creatorState.draft
+            .featMechanics
+            .spellcasting
+      };
+    };
+
+    const phase10Aberrant =
+      createPhase10FeatSelection(
+        "aberrant-dragonmark",
+        {
+          cantrip: ["fire-bolt"],
+          "level-one-spell": [
+            "magic-missile"
+          ]
+        }
+      );
+
+    record(
+      "Phase 10: Aberrant Dragonmark spells use Constitution",
+      uniqueCleanArray(
+        phase10Aberrant.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["con"]
+    );
+
+    const phase10Artificer =
+      createPhase10FeatSelection(
+        "artificer-initiate",
+        {
+          cantrip: ["mending"],
+          "level-one-spell": [
+            "cure-wounds"
+          ],
+          "artisan-tool": [
+            "Alchemist's supplies"
+          ]
+        }
+      );
+
+    record(
+      "Phase 10: Artificer Initiate spells use Intelligence",
+      uniqueCleanArray(
+        phase10Artificer.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["int"]
+    );
+
+    const phase10Drow =
+      createPhase10FeatSelection(
+        "drow-high-magic"
+      );
+
+    record(
+      "Phase 10: Drow High Magic spells use Charisma",
+      uniqueCleanArray(
+        phase10Drow.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["cha"]
+    );
+
+    const phase10Svirfneblin =
+      createPhase10FeatSelection(
+        "svirfneblin-magic"
+      );
+
+    record(
+      "Phase 10: Svirfneblin Magic spells use Intelligence",
+      uniqueCleanArray(
+        phase10Svirfneblin.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["int"]
+    );
+
+    const phase10WoodElf =
+      createPhase10FeatSelection(
+        "wood-elf-magic",
+        {
+          cantrip: ["druidcraft"]
+        }
+      );
+
+    record(
+      "Phase 10: Wood Elf Magic spells use Wisdom",
+      uniqueCleanArray(
+        phase10WoodElf.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["wis"]
+    );
+
+    const phase10MagicInitiate =
+      createPhase10FeatSelection(
+        "magic-initiate",
+        {
+          "spell-class": ["Wizard"],
+          cantrips: [
+            "fire-bolt",
+            "ray-of-frost"
+          ],
+          "level-one-spell": [
+            "magic-missile"
+          ]
+        }
+      );
+
+    record(
+      "Phase 10: Magic Initiate derives its ability from the selected class",
+      uniqueCleanArray(
+        phase10MagicInitiate.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["int"]
+    );
+
+    const phase10SpellSniper =
+      createPhase10FeatSelection(
+        "spell-sniper",
+        {
+          "cantrip-class": [
+            "Warlock"
+          ],
+          "attack-cantrip": [
+            "eldritch-blast"
+          ]
+        }
+      );
+
+    record(
+      "Phase 10: Spell Sniper derives its ability from the selected spell list",
+      {
+        ability:
+          phase10SpellSniper
+            .records[0]
+            ?.spellcastingAbility,
+        sourceClass:
+          phase10SpellSniper
+            .records[0]
+            ?.sourceClassId
+      },
+      {
+        ability: "cha",
+        sourceClass: "warlock"
+      }
+    );
+
+    const phase10FeyTouched =
+      createPhase10FeatSelection(
+        "fey-touched",
+        {
+          ability: ["Wisdom"],
+          "level-one-spell": [
+            "charm-person"
+          ]
+        }
+      );
+
+    record(
+      "Phase 10: Fey Touched preserves the chosen casting ability",
+      uniqueCleanArray(
+        phase10FeyTouched.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["wis"]
+    );
+
+    const phase10ShadowTouched =
+      createPhase10FeatSelection(
+        "shadow-touched",
+        {
+          ability: ["Charisma"],
+          "level-one-spell": [
+            "false-life"
+          ]
+        }
+      );
+
+    record(
+      "Phase 10: Shadow Touched preserves the chosen casting ability",
+      uniqueCleanArray(
+        phase10ShadowTouched.records.map(
+          (entry) => {
+            return entry
+              .spellcastingAbility;
+          }
+        )
+      ),
+      ["cha"]
+    );
+
+    const phase10Telekinetic =
+      createPhase10FeatSelection(
+        "telekinetic",
+        {
+          ability: [
+            "Intelligence"
+          ]
+        }
+      );
+
+    record(
+      "Phase 10: Telekinetic preserves the chosen casting ability",
+      phase10Telekinetic
+        .records[0]
+        ?.spellcastingAbility,
+      "int"
+    );
+
+    const phase10Telepathic =
+      createPhase10FeatSelection(
+        "telepathic",
+        {
+          ability: ["Wisdom"]
+        }
+      );
+
+    record(
+      "Phase 10: Telepathic preserves the chosen casting ability",
+      phase10Telepathic
+        .records[0]
+        ?.spellcastingAbility,
+      "wis"
+    );
+
+    record(
+      "Phase 10: at-will feat spells are tracked",
+      phase10Drow.records
+        .find((entry) => {
+          return entry.spellId ===
+            "detect-magic";
+        })
+        ?.atWill,
+      true
+    );
+
+    record(
+      "Phase 10: once-per-long-rest feat spells are tracked",
+      (() => {
+        const record =
+          phase10Drow.records
+            .find((entry) => {
+              return entry.spellId ===
+                "levitate";
+            });
+
+        return {
+          maximumUses:
+            record?.maximumUses,
+          currentUses:
+            record?.currentUses,
+          recharge:
+            record?.recharge
+        };
+      })(),
+      {
+        maximumUses: 1,
+        currentUses: 1,
+        recharge: "longRest"
+      }
+    );
+
+    record(
+      "Phase 10: feat spells that may use normal slots are tracked",
+      phase10FeyTouched.records
+        .map((entry) => {
+          return {
+            spellId: entry.spellId,
+            canUseSpellSlots:
+              entry.canUseSpellSlots
+          };
+        }),
+      [
+        {
+          spellId: "misty-step",
+          canUseSpellSlots: true
+        },
+        {
+          spellId: "charm-person",
+          canUseSpellSlots: true
+        }
+      ]
+    );
+
+    const phase10SheetHtml =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          creatorState.draft,
+          {
+            activeTab: "spell"
+          }
+        );
+
+    record(
+      "Phase 10: feat spell resources appear on the character sheet",
+      {
+        card:
+          phase10SheetHtml.includes(
+            "<h2>Feat Spells</h2>"
+          ),
+        spell:
+          phase10SheetHtml.includes(
+            "Detect Thoughts"
+          ),
+        ability:
+          phase10SheetHtml.includes(
+            "Wis"
+          ),
+        usage:
+          phase10SheetHtml.includes(
+            "1 / 1 use remaining"
+          )
+      },
+      {
+        card: true,
+        spell: true,
+        ability: true,
+        usage: true
+      }
+    );
+
+    const phase10MagicInitiateFeat =
+      DEFAULT_FEATS.find((feat) => {
+        return feat.id ===
+          "magic-initiate";
+      });
+    const phase10MagicInitiateSpellChoice =
+      phase10MagicInitiateFeat
+        ?.choices
+        ?.find((choice) => {
+          return choice.id ===
+            "level-one-spell";
+        });
+    const phase10ClericOptions =
+      getSection12FeatChoiceOptions(
+        phase10MagicInitiateSpellChoice,
+        {
+          featChoices: {
+            "spell-class": [
+              "Cleric"
+            ]
+          }
+        }
+      );
+
+    record(
+      "Phase 10: feat spell choices enforce the selected class list",
+      {
+        count:
+          phase10ClericOptions.length >
+          0,
+        allCleric:
+          phase10ClericOptions.every(
+            (option) => {
+              return DEFAULT_SPELLS
+                .find((spell) => {
+                  return spell.id ===
+                    option.value;
+                })
+                ?.classes
+                ?.includes("cleric");
+            }
+          )
+      },
+      {
+        count: true,
+        allCleric: true
+      }
+    );
+
+    const phase10FeySpellChoice =
+      DEFAULT_FEATS
+        .find((feat) => {
+          return feat.id ===
+            "fey-touched";
+        })
+        ?.choices
+        ?.find((choice) => {
+          return choice.id ===
+            "level-one-spell";
+        });
+    const phase10FeyOptions =
+      getSection12FeatChoiceOptions(
+        phase10FeySpellChoice,
+        {}
+      );
+
+    record(
+      "Phase 10: feat spell choices enforce spell-school restrictions",
+      {
+        count:
+          phase10FeyOptions.length >
+          0,
+        allAllowed:
+          phase10FeyOptions.every(
+            (option) => {
+              return [
+                "divination",
+                "enchantment"
+              ].includes(
+                cleanString(
+                  DEFAULT_SPELLS
+                    .find((spell) => {
+                      return spell.id ===
+                        option.value;
+                    })
+                    ?.school
+                ).toLowerCase()
+              );
+            }
+          )
+      },
+      {
+        count: true,
+        allAllowed: true
+      }
+    );
+
+    const phase10RitualChoice =
+      DEFAULT_FEATS
+        .find((feat) => {
+          return feat.id ===
+            "ritual-caster";
+        })
+        ?.choices
+        ?.find((choice) => {
+          return choice.id ===
+            "ritual-spells";
+        });
+    const phase10RitualOptions =
+      getSection12FeatChoiceOptions(
+        phase10RitualChoice,
+        {
+          featChoices: {
+            "ritual-class": [
+              "Wizard"
+            ]
+          }
+        }
+      );
+
+    record(
+      "Phase 10: feat spell choices enforce ritual restrictions",
+      {
+        count:
+          phase10RitualOptions.length >
+          0,
+        allRitual:
+          phase10RitualOptions.every(
+            (option) => {
+              return DEFAULT_SPELLS
+                .find((spell) => {
+                  return spell.id ===
+                    option.value;
+                })
+                ?.ritual === true;
+            }
+          )
+      },
+      {
+        count: true,
+        allRitual: true
+      }
+    );
+
+    const phase10AttackChoice =
+      DEFAULT_FEATS
+        .find((feat) => {
+          return feat.id ===
+            "spell-sniper";
+        })
+        ?.choices
+        ?.find((choice) => {
+          return choice.id ===
+            "attack-cantrip";
+        });
+    const phase10AttackOptions =
+      getSection12FeatChoiceOptions(
+        phase10AttackChoice,
+        {
+          featChoices: {
+            "cantrip-class": [
+              "Wizard"
+            ]
+          }
+        }
+      );
+
+    record(
+      "Phase 10: feat spell choices enforce spell-attack-only restrictions",
+      {
+        count:
+          phase10AttackOptions.length >
+          0,
+        allAttackRolls:
+          phase10AttackOptions.every(
+            (option) => {
+              return Boolean(
+                DEFAULT_SPELLS
+                  .find((spell) => {
+                    return spell.id ===
+                      option.value;
+                  })
+                  ?.attackType
+              );
+            }
+          )
+      },
+      {
+        count: true,
+        allAttackRolls: true
+      }
+    );
+
+    const phase10CompleteWarnings =
+      getFeatSpellcastingValidationWarnings(
+        creatorState.draft
+      );
+    const phase10InvalidFixture =
+      cloneData(
+        creatorState.draft
+      );
+    phase10InvalidFixture
+      .featMechanics
+      .spellcasting[0]
+      .spellcastingAbility = "";
+    phase10InvalidFixture
+      .featMechanics
+      .spellcasting[0]
+      .sourceId = "";
+    const phase10InvalidWarnings =
+      getFeatSpellcastingValidationWarnings(
+        phase10InvalidFixture
+      );
+
+    record(
+      "Phase 10: every feat spell validates its casting ability and source",
+      {
+        complete:
+          phase10CompleteWarnings.length,
+        missingAbility:
+          phase10InvalidWarnings.some(
+            (warning) => {
+              return warning.includes(
+                "no casting ability"
+              );
+            }
+          ),
+        missingSource:
+          phase10InvalidWarnings.some(
+            (warning) => {
+              return warning.includes(
+                "no valid feat spell source"
+              );
+            }
+          )
+      },
+      {
+        complete: 0,
+        missingAbility: true,
+        missingSource: true
       }
     );
 
@@ -27379,6 +28061,50 @@ export function createCharacterCreator(options = {}) {
           Math.sign(safeNumber(delta, 0))
       )
     );
+
+    if (resourceEntry.kind === "featSpell") {
+      const matchingSpellRecord =
+        (
+          Array.isArray(
+            creatorState.draft
+              .featMechanics
+              ?.spellcasting
+          )
+            ? creatorState.draft
+                .featMechanics
+                .spellcasting
+            : []
+        ).find((entry) => {
+          return entry.id === resourceEntry.id;
+        });
+      const matchingSourceRecord =
+        Object.values(
+          creatorState.draft
+            .magic
+            ?.featSources || {}
+        )
+          .flatMap((source) => {
+            return Array.isArray(
+              source?.spellRecords
+            )
+              ? source.spellRecords
+              : [];
+          })
+          .find((entry) => {
+            return entry.id === resourceEntry.id;
+          });
+
+      [
+        matchingSpellRecord,
+        matchingSourceRecord
+      ]
+        .filter(Boolean)
+        .forEach((entry) => {
+          entry.currentUses =
+            resourceEntry.currentUses;
+        });
+    }
+
     applyCompatibilityAliases(creatorState.draft);
     markDraftChanged();
 
@@ -28154,6 +28880,11 @@ export function createCharacterCreator(options = {}) {
     const resources = Array.isArray(character?.featMechanics?.resources)
       ? character.featMechanics.resources
       : [];
+    const spellcasting = Array.isArray(
+      character?.featMechanics?.spellcasting
+    )
+      ? character.featMechanics.spellcasting
+      : [];
 
     if (!instances.length) {
       return "";
@@ -28165,6 +28896,9 @@ export function createCharacterCreator(options = {}) {
         ${instances.map((instance) => {
           const featResources = resources.filter((entry) => {
             return entry.id.startsWith(`${instance.id}:`);
+          });
+          const featSpellRecords = spellcasting.filter((entry) => {
+            return entry.sourceId === instance.id;
           });
           const choiceSummaries = (Array.isArray(instance.feat.choices)
             ? instance.feat.choices
@@ -28193,6 +28927,29 @@ export function createCharacterCreator(options = {}) {
                 ? `<ul class="small">${choiceSummaries.map((summary) => {
                     return `<li>${escapeHtml(summary)}</li>`;
                   }).join("")}</ul>`
+                : ""}
+
+              ${featSpellRecords.length
+                ? `
+                  <ul class="small">
+                    ${featSpellRecords.map((record) => {
+                      const usage = record.atWill === true
+                        ? "At will"
+                        : record.maximumUses === null
+                          ? "Known"
+                          : `${safeNumber(record.currentUses, 0)} / ${safeNumber(record.maximumUses, 0)}; recharges ${record.recharge}`;
+
+                      return `
+                        <li>
+                          ${escapeHtml(record.spellName || record.spellId)}
+                          — ${escapeHtml(String(record.spellcastingAbility || "").toUpperCase())};
+                          ${escapeHtml(usage)}
+                          ${record.canUseSpellSlots === true ? "; may also use spell slots" : ""}
+                        </li>
+                      `;
+                    }).join("")}
+                  </ul>
+                `
                 : ""}
 
               ${featResources.map((resourceEntry) => {
@@ -40984,14 +41741,40 @@ export function createCharacterCreator(options = {}) {
         : []
       ).map((entry) => [entry.id, entry])
     );
+    const previousSpellcasting = Object.fromEntries(
+      (Array.isArray(draft.featMechanics?.spellcasting)
+        ? draft.featMechanics.spellcasting
+        : []
+      ).map((entry) => [entry.id, entry])
+    );
+    const previousFeatSources =
+      draft.magic.featSources &&
+      typeof draft.magic.featSources === "object" &&
+      !Array.isArray(draft.magic.featSources)
+        ? draft.magic.featSources
+        : {};
+    const existingSpellcastingAbility = cleanString(
+      getSpellcastingClassOptions(draft)
+        .find((entry) => {
+          return cleanString(entry?.spellcastingAbility);
+        })
+        ?.spellcastingAbility ||
+      draft.magic.spellcastingAbility ||
+      Object.values(previousFeatSources)
+        .find((source) => {
+          return cleanString(source?.spellcastingAbility);
+        })
+        ?.spellcastingAbility
+    );
     const instances = getSelectedDefaultFeatInstances(draft);
     const mechanics = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       hpBonus: 0,
       initiativeBonus: 0,
       speedBonus: 0,
       resistances: [],
       resources: [],
+      spellcasting: [],
       passiveEffects: [],
       instances: []
     };
@@ -41027,6 +41810,17 @@ export function createCharacterCreator(options = {}) {
       }) || null;
     };
 
+    const spellcastingAbilityByClass =
+      Object.freeze({
+        artificer: "int",
+        bard: "cha",
+        cleric: "wis",
+        druid: "wis",
+        sorcerer: "cha",
+        warlock: "cha",
+        wizard: "int"
+      });
+
     const addSkillSource = (skillValue, sourceName, expertise = false) => {
       const skill = getSkill(skillValue);
 
@@ -41060,6 +41854,242 @@ export function createCharacterCreator(options = {}) {
       };
       const spellIds = [];
       const spellGrants = [];
+      const spellRecords = [];
+      const spellChoiceEffect =
+        (Array.isArray(feat.effects)
+          ? feat.effects
+          : []
+        ).find((effect) => {
+          return effect?.type === "spellChoice";
+        }) || {};
+
+      const resolveSpellAbility = (
+        descriptor = {}
+      ) => {
+        const abilityChoiceId = cleanString(
+          descriptor.abilityChoiceId
+        );
+        const selectedClassId = makeSafeId(
+          choices[
+            descriptor.classChoiceId
+          ]?.[0] ||
+          descriptor.classId,
+          ""
+        );
+        const ability =
+          getAbility(descriptor.ability) ||
+          getAbility(
+            choices[abilityChoiceId]?.[0]
+          ) ||
+          getAbility(
+            choices[
+              "spellcasting-ability"
+            ]?.[0] ||
+            choices.ability?.[0]
+          ) ||
+          getAbility(
+            spellcastingAbilityByClass[
+              selectedClassId
+            ]
+          ) ||
+          (
+            feat.usesExistingSpellcastingAbility ===
+              true
+              ? getAbility(
+                  existingSpellcastingAbility
+                )
+              : null
+          );
+
+        return {
+          ability,
+          abilityChoiceId,
+          selectedClassId
+        };
+      };
+
+      const addFeatSpellRecords = ({
+        descriptor = {},
+        origin = "choice",
+        choiceId = "",
+        ids = []
+      }) => {
+        uniqueCleanArray(ids)
+          .forEach((spellId) => {
+            const spell =
+              getSection16SpellById(
+                spellId,
+                draft
+              );
+            const spellLevel = Math.max(
+              0,
+              safeNumber(spell?.level, 0)
+            );
+            const abilityResult =
+              resolveSpellAbility(
+                descriptor
+              );
+            const rawUses =
+              descriptor.usesEach ??
+              descriptor.uses;
+            const maximumUses =
+              rawUses ===
+                "proficiencyBonus"
+                ? getCharacterProficiencyBonus(
+                    draft
+                  )
+                : (
+                    rawUses === null ||
+                    rawUses === undefined
+                      ? null
+                      : Math.max(
+                          0,
+                          safeNumber(
+                            rawUses,
+                            0
+                          )
+                        )
+                  );
+            const atWill =
+              descriptor.atWill === true ||
+              (
+                spellLevel === 0 &&
+                maximumUses === null
+              );
+            const spellResourceId =
+              `${instance.id}:spell:${spellId}`;
+            const previous =
+              previousSpellcasting[
+                spellResourceId
+              ] ||
+              previousResources[
+                spellResourceId
+              ];
+            const currentUses =
+              maximumUses === null ||
+              atWill
+                ? null
+                : Math.min(
+                    maximumUses,
+                    Math.max(
+                      0,
+                      safeNumber(
+                        previous?.currentUses,
+                        maximumUses
+                      )
+                    )
+                  );
+            const sourceClassId =
+              abilityResult
+                .selectedClassId ||
+              makeSafeId(
+                descriptor.classId,
+                ""
+              );
+            const record = {
+              id: spellResourceId,
+              sourceType: "feat",
+              sourceId: instance.id,
+              featId: feat.id,
+              featName: feat.name,
+              spellId,
+              spellName: cleanString(
+                spell?.name,
+                spellId
+              ),
+              spellLevel,
+              origin,
+              choiceId:
+                cleanString(choiceId),
+              spellcastingAbility:
+                abilityResult
+                  .ability?.id || "",
+              abilitySource:
+                cleanString(
+                  descriptor.ability ||
+                  abilityResult
+                    .abilityChoiceId ||
+                  descriptor
+                    .classChoiceId ||
+                  descriptor.classId ||
+                  (
+                    feat
+                      .usesExistingSpellcastingAbility
+                      ? "existing-spellcasting"
+                      : ""
+                  )
+                ),
+              sourceClassId,
+              atWill,
+              maximumUses:
+                atWill
+                  ? null
+                  : maximumUses,
+              currentUses:
+                atWill
+                  ? null
+                  : currentUses,
+              recharge:
+                atWill
+                  ? ""
+                  : cleanString(
+                      descriptor.recharge,
+                      maximumUses === null
+                        ? ""
+                        : "longRest"
+                    ),
+              canUseSpellSlots:
+                descriptor
+                  .canUseSpellSlots ===
+                true,
+              restrictions: {
+                levels:
+                  Array.isArray(
+                    descriptor.levels
+                  )
+                    ? cloneData(
+                        descriptor.levels
+                      )
+                    : [],
+                schools:
+                  uniqueCleanArray(
+                    descriptor.schools
+                  ),
+                ritualOnly:
+                  descriptor
+                    .ritualOnly === true,
+                attackRollOnly:
+                  descriptor
+                    .attackRollOnly ===
+                  true,
+                list: cleanString(
+                  descriptor.list
+                )
+              }
+            };
+
+            spellIds.push(spellId);
+            spellRecords.push(record);
+            mechanics.spellcasting.push(
+              record
+            );
+
+            if (
+              record.maximumUses !==
+                null &&
+              record.atWill !== true
+            ) {
+              mechanics.resources.push({
+                ...record,
+                resourceId:
+                  `spell:${spellId}`,
+                name:
+                  record.spellName,
+                kind: "featSpell"
+              });
+            }
+          });
+      };
 
       (Array.isArray(feat.effects) ? feat.effects : [])
         .forEach((effect) => {
@@ -41214,8 +42244,12 @@ export function createCharacterCreator(options = {}) {
 
           if (type === "spellGrant") {
             const ids = uniqueCleanArray(effect.spellIds || [effect.spellId]);
-            spellIds.push(...ids);
             spellGrants.push({ ...effect, spellIds: ids });
+            addFeatSpellRecords({
+              descriptor: effect,
+              origin: "grant",
+              ids
+            });
           }
 
           if (type === "custom" && effect.summary) {
@@ -41263,7 +42297,16 @@ export function createCharacterCreator(options = {}) {
           }
 
           if (type === "spell") {
-            spellIds.push(...selectedValues);
+            addFeatSpellRecords({
+              descriptor: {
+                ...spellChoiceEffect,
+                ...featChoice
+              },
+              origin: "choice",
+              choiceId:
+                featChoice.id,
+              ids: selectedValues
+            });
           }
         });
 
@@ -41277,18 +42320,24 @@ export function createCharacterCreator(options = {}) {
           );
         });
 
-      const spellcastingAbility = getAbility(
-        choices["spellcasting-ability"]?.[0] ||
-        choices.ability?.[0]
-      );
+      if (spellRecords.length) {
+        const sourceAbilityIds =
+          uniqueCleanArray(
+            spellRecords.map((record) => {
+              return record.spellcastingAbility;
+            })
+          );
 
-      if (spellIds.length || spellGrants.length) {
         draft.magic.featSources[instance.id] = {
           featId: feat.id,
           featName: feat.name,
-          spellcastingAbility: spellcastingAbility?.id || "",
+          sourceType: "feat",
+          sourceId: instance.id,
+          spellcastingAbility:
+            sourceAbilityIds[0] || "",
           spellIds: uniqueCleanArray(spellIds),
-          grants: spellGrants
+          grants: spellGrants,
+          spellRecords
         };
       }
 
@@ -61221,6 +62270,87 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function getFeatSpellcastingValidationWarnings(
+    character
+  ) {
+    const records = Array.isArray(
+      character?.featMechanics
+        ?.spellcasting
+    )
+      ? character.featMechanics
+          .spellcasting
+      : [];
+    const featSources =
+      character?.magic?.featSources &&
+      typeof character.magic
+        .featSources === "object" &&
+      !Array.isArray(
+        character.magic.featSources
+      )
+        ? character.magic.featSources
+        : {};
+    const warnings = [];
+
+    records.forEach((record) => {
+      const spellLabel = cleanString(
+        record?.spellName ||
+        record?.spellId,
+        "A feat spell"
+      );
+      const sourceId = cleanString(
+        record?.sourceId
+      );
+
+      if (
+        !cleanString(
+          record?.spellcastingAbility
+        )
+      ) {
+        warnings.push(
+          `${spellLabel} from ${record?.featName || "a feat"} has no casting ability.`
+        );
+      }
+
+      if (
+        !sourceId ||
+        !cleanString(record?.featId) ||
+        !featSources[sourceId]
+      ) {
+        warnings.push(
+          `${spellLabel} has no valid feat spell source.`
+        );
+      }
+    });
+
+    Object.entries(featSources)
+      .forEach(([sourceId, source]) => {
+        uniqueCleanArray(
+          source?.spellIds
+        ).forEach((spellId) => {
+          const hasRecord = records.some(
+            (record) => {
+              return (
+                cleanString(
+                  record?.sourceId
+                ) === sourceId &&
+                cleanString(
+                  record?.spellId
+                ) === spellId
+              );
+            }
+          );
+
+          if (!hasRecord) {
+            warnings.push(
+              `${cleanString(source?.featName, source?.featId || "A feat")} spell ${spellId} is missing its tracked casting source.`
+            );
+          }
+        });
+      });
+
+    return uniqueCleanArray(warnings);
+  }
+
   function getSection17Warnings() {
     const warnings = [
       ...getValidationWarnings(
@@ -61551,6 +62681,12 @@ export function createCharacterCreator(options = {}) {
             }
           });
       });
+
+    warnings.push(
+      ...getFeatSpellcastingValidationWarnings(
+        draft
+      )
+    );
 
     const selectedBackground =
       getSelectedSection14Background();
