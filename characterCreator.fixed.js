@@ -14,7 +14,11 @@ import {
   DEFAULT_CLASS_SCHEMA_VERSION,
   validateDefaultClassCollection
 } from "./defaultClasses.js";
-import { DEFAULT_FEATS } from "./defaultFeats.js";
+import {
+  DEFAULT_FEATS,
+  DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM,
+  validateDefaultFeatCollection
+} from "./defaultFeats.js";
 import { DEFAULT_SPELLS } from "./defaultSpells.js";
 import {
   DEFAULT_SUBCLASSES,
@@ -60,7 +64,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 10;
+  const CHARACTER_SCHEMA_VERSION = 11;
   const CLASS_SCHEMA_VERSION =
     DEFAULT_CLASS_SCHEMA_VERSION;
   const SPECIES_SCHEMA_VERSION = 1;
@@ -1668,6 +1672,169 @@ export function createCharacterCreator(options = {}) {
     recalculateAbilityTotals(
       creatorState.draft
     );
+  }
+
+  const POST_CAP_ABILITY_SOURCE_PREFIXES =
+    Object.freeze([
+      "magic:",
+      "manual-override:"
+    ]);
+
+  function getFeatAbilityEffectMaximum(
+    effect
+  ) {
+    const maximum = Number(
+      effect?.maximum ??
+      DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM
+    );
+
+    return Number.isFinite(maximum)
+      ? Math.max(
+          1,
+          Math.min(
+            30,
+            Math.round(maximum)
+          )
+        )
+      : DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM;
+  }
+
+  function getNormalAbilityScoreForCap(
+    character,
+    abilityId,
+    {
+      excludedSource = ""
+    } = {}
+  ) {
+    const ability =
+      ABILITY_DEFINITIONS.find(
+        (entry) => {
+          return entry.id === abilityId;
+        }
+      );
+
+    if (!ability) {
+      return 10;
+    }
+
+    const base = safeNumber(
+      character?.abilities?.base
+        ?.[abilityId],
+      10
+    );
+    const sources =
+      character?.abilities?.bonusSources;
+    const ordinaryBonus = Object.entries(
+      sources &&
+      typeof sources === "object" &&
+      !Array.isArray(sources)
+        ? sources
+        : {}
+    ).reduce(
+      (total, [sourceName, bonusMap]) => {
+        if (
+          sourceName === excludedSource ||
+          POST_CAP_ABILITY_SOURCE_PREFIXES
+            .some((prefix) => {
+              return sourceName.startsWith(
+                prefix
+              );
+            })
+        ) {
+          return total;
+        }
+
+        return (
+          total +
+          safeNumber(
+            bonusMap?.[abilityId],
+            0
+          )
+        );
+      },
+      0
+    );
+
+    return Math.max(
+      1,
+      Math.min(
+        30,
+        Math.round(
+          base + ordinaryBonus
+        )
+      )
+    );
+  }
+
+  function createNormalAbilityCapScoreMap(
+    character,
+    options = {}
+  ) {
+    return Object.fromEntries(
+      ABILITY_DEFINITIONS.map(
+        (ability) => {
+          return [
+            ability.id,
+            getNormalAbilityScoreForCap(
+              character,
+              ability.id,
+              options
+            )
+          ];
+        }
+      )
+    );
+  }
+
+  function addCappedNormalAbilityIncrease({
+    bonusMap,
+    scoreMap,
+    abilityId,
+    amount = 1,
+    maximum =
+      DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM
+  }) {
+    if (
+      !Object.hasOwn(bonusMap, abilityId) ||
+      !Object.hasOwn(scoreMap, abilityId)
+    ) {
+      return 0;
+    }
+
+    const requested = Math.max(
+      0,
+      Math.round(
+        safeNumber(amount, 0)
+      )
+    );
+    const cleanMaximum = Math.max(
+      1,
+      Math.min(
+        30,
+        Math.round(
+          safeNumber(
+            maximum,
+            DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM
+          )
+        )
+      )
+    );
+    const granted = Math.max(
+      0,
+      Math.min(
+        requested,
+        cleanMaximum -
+          safeNumber(
+            scoreMap[abilityId],
+            10
+          )
+      )
+    );
+
+    bonusMap[abilityId] += granted;
+    scoreMap[abilityId] += granted;
+
+    return granted;
   }
 
   function removeSkillProficiencySourcesByPrefix(
@@ -14628,6 +14795,505 @@ export function createCharacterCreator(options = {}) {
       {
         valid: false,
         caught: true
+      }
+    );
+
+    const phase9NormalFeatBonus =
+      createAbilityMap(0);
+    const phase9NormalFeatScores = {
+      ...createAbilityMap(10),
+      str: 19
+    };
+    const phase9NormalFeatGranted =
+      addCappedNormalAbilityIncrease({
+        bonusMap:
+          phase9NormalFeatBonus,
+        scoreMap:
+          phase9NormalFeatScores,
+        abilityId: "str",
+        amount: 2,
+        maximum:
+          DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM
+      });
+
+    record(
+      "Phase 9: normal feat increases cannot raise an ability above 20",
+      {
+        granted:
+          phase9NormalFeatGranted,
+        bonus:
+          phase9NormalFeatBonus.str,
+        score:
+          phase9NormalFeatScores.str
+      },
+      {
+        granted: 1,
+        bonus: 1,
+        score: 20
+      }
+    );
+
+    const phase9ResilientEffect =
+      DEFAULT_FEATS
+        .find((feat) => {
+          return feat.id ===
+            "resilient";
+        })
+        ?.effects
+        ?.find((effect) => {
+          return effect.type ===
+            "abilityChoice";
+        });
+    const phase9HalfFeatBonus =
+      createAbilityMap(0);
+    const phase9HalfFeatScores = {
+      ...createAbilityMap(10),
+      con: 20
+    };
+    const phase9HalfFeatGranted =
+      addCappedNormalAbilityIncrease({
+        bonusMap:
+          phase9HalfFeatBonus,
+        scoreMap:
+          phase9HalfFeatScores,
+        abilityId: "con",
+        amount:
+          phase9ResilientEffect
+            ?.increase,
+        maximum:
+          getFeatAbilityEffectMaximum(
+            phase9ResilientEffect
+          )
+      });
+
+    record(
+      "Phase 9: half-feats cannot raise an ability from 20 to 21",
+      {
+        declaredMaximum:
+          phase9ResilientEffect
+            ?.maximum,
+        granted:
+          phase9HalfFeatGranted,
+        score:
+          phase9HalfFeatScores.con
+      },
+      {
+        declaredMaximum: 20,
+        granted: 0,
+        score: 20
+      }
+    );
+
+    const phase9DeclaredMaximumFixture =
+      cloneData(DEFAULT_FEATS);
+    const phase9DeclaredMaximumFeat =
+      phase9DeclaredMaximumFixture
+        .find((feat) => {
+          return feat.id ===
+            "resilient";
+        });
+    const phase9DeclaredMaximumEffect =
+      phase9DeclaredMaximumFeat
+        .effects
+        .find((effect) => {
+          return effect.type ===
+            "abilityChoice";
+        });
+
+    phase9DeclaredMaximumEffect.maximum =
+      22;
+    phase9DeclaredMaximumEffect.increase =
+      2;
+
+    const phase9DeclaredMaximumValidation =
+      validateDefaultFeatCollection(
+        phase9DeclaredMaximumFixture
+      );
+    const phase9DeclaredMaximumBonus =
+      createAbilityMap(0);
+    const phase9DeclaredMaximumScores = {
+      ...createAbilityMap(10),
+      wis: 20
+    };
+    const phase9DeclaredMaximumGranted =
+      addCappedNormalAbilityIncrease({
+        bonusMap:
+          phase9DeclaredMaximumBonus,
+        scoreMap:
+          phase9DeclaredMaximumScores,
+        abilityId: "wis",
+        amount:
+          phase9DeclaredMaximumEffect
+            .increase,
+        maximum:
+          getFeatAbilityEffectMaximum(
+            phase9DeclaredMaximumEffect
+          )
+      });
+
+    record(
+      "Phase 9: feat effects respect their declared maximum ability score",
+      {
+        valid:
+          phase9DeclaredMaximumValidation
+            .valid,
+        granted:
+          phase9DeclaredMaximumGranted,
+        score:
+          phase9DeclaredMaximumScores.wis
+      },
+      {
+        valid: true,
+        granted: 2,
+        score: 22
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft
+      .abilities.base.con = 18;
+    creatorState.draft.feats = [
+      "aberrant-dragonmark"
+    ];
+    creatorState.draft.selectedFeats = [
+      "aberrant-dragonmark"
+    ];
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    applySelectedFeatMechanics();
+
+    record(
+      "Phase 9: fixed feat ability increases apply through the capped source",
+      {
+        score:
+          creatorState.draft
+            .abilities.scores.con,
+        bonus:
+          creatorState.draft
+            .abilities
+            .bonusSources
+            ["feat:aberrant-dragonmark-1"]
+            ?.con || 0
+      },
+      {
+        score: 19,
+        bonus: 1
+      }
+    );
+
+    const createPhase9FighterAsiSlot = (
+      baseScores = {}
+    ) => {
+      creatorState.draft =
+        createEmptyCharacter();
+      chooseSection12Class(
+        "fighter"
+      );
+
+      Object.entries(baseScores)
+        .forEach(
+          ([abilityId, score]) => {
+            if (
+              Object.hasOwn(
+                creatorState.draft
+                  .abilities.base,
+                abilityId
+              )
+            ) {
+              creatorState.draft
+                .abilities.base[
+                  abilityId
+                ] = score;
+            }
+          }
+        );
+
+      recalculateAbilityTotals(
+        creatorState.draft
+      );
+
+      addCharacterLevelToClass(0);
+      addCharacterLevelToClass(0);
+      addCharacterLevelToClass(0);
+
+      return getUnlockedFeatChoiceSlots(
+        creatorState.draft
+      ).find((slot) => {
+        return (
+          slot.classId ===
+            "fighter" &&
+          slot.classLevel === 4
+        );
+      });
+    };
+
+    const phase9SelectableSlot =
+      createPhase9FighterAsiSlot({
+        wis: 18
+      });
+    const phase9SelectableMode =
+      setSection12AsiMode(
+        phase9SelectableSlot?.id,
+        "feat"
+      );
+    const phase9SelectableFeat =
+      setSection12AsiFeat(
+        phase9SelectableSlot?.id,
+        "resilient"
+      );
+    const phase9SelectableChoice =
+      setSection12FeatChoiceValues(
+        phase9SelectableSlot?.id,
+        "ability",
+        ["Wisdom"]
+      );
+
+    record(
+      "Phase 9: selectable feat ability increases apply to the chosen ability",
+      {
+        mode:
+          phase9SelectableMode,
+        feat:
+          phase9SelectableFeat,
+        choice:
+          phase9SelectableChoice,
+        wisdom:
+          creatorState.draft
+            .abilities.scores.wis,
+        strength:
+          creatorState.draft
+            .abilities.scores.str
+      },
+      {
+        mode: true,
+        feat: true,
+        choice: true,
+        wisdom: 19,
+        strength: 10
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft
+      .abilities.base.str = 19;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    setSection12AsiBonusSource(
+      "phase9-same-ability",
+      ["str", "str"]
+    );
+
+    record(
+      "Phase 9: two ASI increases placed in one ability stop at 20",
+      {
+        score:
+          creatorState.draft
+            .abilities.scores.str,
+        bonus:
+          creatorState.draft
+            .abilities
+            .bonusSources
+            ["class-asi:phase9-same-ability"]
+            ?.str || 0
+      },
+      {
+        score: 20,
+        bonus: 1
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft
+      .abilities.base.dex = 19;
+    creatorState.draft
+      .abilities.base.con = 19;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    setSection12AsiBonusSource(
+      "phase9-split-abilities",
+      ["dex", "con"]
+    );
+
+    record(
+      "Phase 9: ASI increases can split between two abilities",
+      {
+        dexterity:
+          creatorState.draft
+            .abilities.scores.dex,
+        constitution:
+          creatorState.draft
+            .abilities.scores.con
+      },
+      {
+        dexterity: 20,
+        constitution: 20
+      }
+    );
+
+    creatorState.draft =
+      normalizeCharacter({
+        abilities: {
+          method: "manual",
+          base: {
+            ...createAbilityMap(10),
+            str: 22
+          },
+          bonusSources: {}
+        }
+      });
+    setSection12AsiBonusSource(
+      "phase9-imported-score",
+      ["str"]
+    );
+
+    record(
+      "Phase 9: imported ability scores above 20 are preserved without normal increases",
+      {
+        score:
+          creatorState.draft
+            .abilities.scores.str,
+        asiBonus:
+          creatorState.draft
+            .abilities
+            .bonusSources
+            ["class-asi:phase9-imported-score"]
+            ?.str || 0
+      },
+      {
+        score: 22,
+        asiBonus: 0
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft
+      .abilities.base.str = 22;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    setAbilityBonusSource(
+      "magic:phase9-belt",
+      {
+        ...createAbilityMap(0),
+        str: 4
+      }
+    );
+
+    record(
+      "Phase 9: manual and magical ability values may exceed 20 up to the global 30 ceiling",
+      {
+        manualBase:
+          creatorState.draft
+            .abilities.base.str,
+        magicalBonus:
+          creatorState.draft
+            .abilities
+            .bonusSources
+            ["magic:phase9-belt"]
+            .str,
+        score:
+          creatorState.draft
+            .abilities.scores.str
+      },
+      {
+        manualBase: 22,
+        magicalBonus: 4,
+        score: 26
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft
+      .abilities.base.str = 19;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    setAbilityBonusSource(
+      "magic:phase9-blessing",
+      {
+        ...createAbilityMap(0),
+        str: 2
+      }
+    );
+    setSection12AsiBonusSource(
+      "phase9-separated-source",
+      ["str"]
+    );
+
+    record(
+      "Phase 9: magical overrides remain separate from normal ASI limits",
+      {
+        ordinaryScore:
+          getNormalAbilityScoreForCap(
+            creatorState.draft,
+            "str"
+          ),
+        asiBonus:
+          creatorState.draft
+            .abilities
+            .bonusSources
+            ["class-asi:phase9-separated-source"]
+            .str,
+        magicalBonus:
+          creatorState.draft
+            .abilities
+            .bonusSources
+            ["magic:phase9-blessing"]
+            .str,
+        finalScore:
+          creatorState.draft
+            .abilities.scores.str
+      },
+      {
+        ordinaryScore: 20,
+        asiBonus: 1,
+        magicalBonus: 2,
+        finalScore: 22
+      }
+    );
+
+    const phase9PickerSlot =
+      createPhase9FighterAsiSlot();
+    setSection12AsiMode(
+      phase9PickerSlot?.id,
+      "feat"
+    );
+    const phase9PickerHtml =
+      renderSection12CompactAsiChoice(
+        phase9PickerSlot
+      );
+    const phase9PseudoFeatRejected =
+      !setSection12AsiFeat(
+        phase9PickerSlot?.id,
+        "ability-score-improvement"
+      );
+
+    record(
+      "Phase 9: normal Ability Score Improvement is not offered as a feat",
+      {
+        normalAsiMode:
+          phase9PickerHtml.includes(
+            'data-mode="asi"'
+          ),
+        pseudoFeatInPicker:
+          phase9PickerHtml.includes(
+            'data-feat-id="ability-score-improvement"'
+          ),
+        pseudoFeatRejected:
+          phase9PseudoFeatRejected
+      },
+      {
+        normalAsiMode: true,
+        pseudoFeatInPicker: false,
+        pseudoFeatRejected: true
       }
     );
 
@@ -40334,6 +41000,10 @@ export function createCharacterCreator(options = {}) {
     removeSkillProficiencySourcesByPrefix(["feat:"]);
     removeListProficiencySourcesByPrefix(["feat:"]);
     draft.magic.featSources = {};
+    const normalAbilityScores =
+      createNormalAbilityCapScoreMap(
+        draft
+      );
 
     const getAbility = (value) => {
       const normalized = makeSafeId(value, "");
@@ -40399,7 +41069,21 @@ export function createCharacterCreator(options = {}) {
             const ability = getAbility(effect.ability);
 
             if (ability) {
-              bonusMap[ability.id] += safeNumber(effect.value, 1);
+              addCappedNormalAbilityIncrease({
+                bonusMap,
+                scoreMap:
+                  normalAbilityScores,
+                abilityId: ability.id,
+                amount:
+                  safeNumber(
+                    effect.value,
+                    1
+                  ),
+                maximum:
+                  getFeatAbilityEffectMaximum(
+                    effect
+                  )
+              });
             }
           }
 
@@ -40408,11 +41092,31 @@ export function createCharacterCreator(options = {}) {
             const selectedAbility = getAbility(choices[choiceId]?.[0]);
 
             if (selectedAbility) {
-              bonusMap[selectedAbility.id] += safeNumber(effect.increase, 1);
+              addCappedNormalAbilityIncrease({
+                bonusMap,
+                scoreMap:
+                  normalAbilityScores,
+                abilityId:
+                  selectedAbility.id,
+                amount:
+                  safeNumber(
+                    effect.increase,
+                    1
+                  ),
+                maximum:
+                  getFeatAbilityEffectMaximum(
+                    effect
+                  )
+              });
             }
           }
 
           if (type === "abilityScoreImprovement") {
+            const maximum =
+              getFeatAbilityEffectMaximum(
+                effect
+              );
+
             uniqueCleanArray(effect.choiceIds)
               .flatMap((choiceId) => uniqueCleanArray(choices[choiceId]))
               .slice(0, Math.max(1, safeNumber(effect.points, 2)))
@@ -40420,7 +41124,15 @@ export function createCharacterCreator(options = {}) {
                 const ability = getAbility(value);
 
                 if (ability) {
-                  bonusMap[ability.id] += 1;
+                  addCappedNormalAbilityIncrease({
+                    bonusMap,
+                    scoreMap:
+                      normalAbilityScores,
+                    abilityId:
+                      ability.id,
+                    amount: 1,
+                    maximum
+                  });
                 }
               });
           }
@@ -41981,16 +42693,41 @@ export function createCharacterCreator(options = {}) {
     featureId,
     abilities = []
   ) {
+    const sourceName =
+      `class-asi:${featureId}`;
+    const sources =
+      ensureAbilityBonusSources(
+        creatorState.draft
+      );
+
+    delete sources[sourceName];
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
     const bonusMap = createAbilityMap(0);
+    const normalAbilityScores =
+      createNormalAbilityCapScoreMap(
+        creatorState.draft
+      );
 
     abilities.forEach((abilityId) => {
       if (Object.hasOwn(bonusMap, abilityId)) {
-        bonusMap[abilityId] += 1;
+        addCappedNormalAbilityIncrease({
+          bonusMap,
+          scoreMap:
+            normalAbilityScores,
+          abilityId,
+          amount: 1,
+          maximum:
+            DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM
+        });
       }
     });
 
     setAbilityBonusSource(
-      `class-asi:${featureId}`,
+      sourceName,
       bonusMap
     );
   }
@@ -42088,11 +42825,15 @@ export function createCharacterCreator(options = {}) {
       const currentCount = abilities.filter(
         (id) => id === abilityId
       ).length;
-      const currentScore = safeNumber(
-        creatorState.draft.abilities.scores[abilityId],
-        10
-      );
-      const scoreWithoutThisAsi = currentScore - currentCount;
+      const scoreWithoutThisAsi =
+        getNormalAbilityScoreForCap(
+          creatorState.draft,
+          abilityId,
+          {
+            excludedSource:
+              `class-asi:${featureId}`
+          }
+        );
 
       if (
         abilities.length >= 2 ||
@@ -42448,7 +43189,14 @@ export function createCharacterCreator(options = {}) {
       return feat.id === cleanFeatId;
     });
 
-    if (cleanFeatId && !selectedFeat) {
+    if (
+      cleanFeatId &&
+      (
+        !selectedFeat ||
+        cleanFeatId ===
+          "ability-score-improvement"
+      )
+    ) {
       return false;
     }
 
@@ -42679,15 +43427,15 @@ export function createCharacterCreator(options = {}) {
     const type = cleanString(effect?.type);
 
     if (type === "abilityIncrease") {
-      return `${effect.ability} +${safeNumber(effect.value, 1)}`;
+      return `${effect.ability} +${safeNumber(effect.value, 1)} (maximum ${getFeatAbilityEffectMaximum(effect)})`;
     }
 
     if (type === "abilityChoice") {
-      return `Chosen ability +${safeNumber(effect.increase, 1)}`;
+      return `Chosen ability +${safeNumber(effect.increase, 1)} (maximum ${getFeatAbilityEffectMaximum(effect)})`;
     }
 
     if (type === "abilityScoreImprovement") {
-      return `${safeNumber(effect.points, 2)} ability-score increases`;
+      return `${safeNumber(effect.points, 2)} ability-score increases (maximum ${getFeatAbilityEffectMaximum(effect)})`;
     }
 
     if (type === "hpBonus") {
@@ -42854,10 +43602,15 @@ export function createCharacterCreator(options = {}) {
               const count = state.abilities.filter(
                 (id) => id === ability.id
               ).length;
-              const score = safeNumber(
-                creatorState.draft.abilities.scores[ability.id],
-                10
-              );
+              const scoreForCap =
+                getNormalAbilityScoreForCap(
+                  creatorState.draft,
+                  ability.id,
+                  {
+                    excludedSource:
+                      `class-asi:${feature.id}`
+                  }
+                ) + count;
 
               return `
                 <div class="hg-character-field">
@@ -42878,7 +43631,7 @@ export function createCharacterCreator(options = {}) {
                       data-feature-id="${escapeHtml(feature.id)}"
                       data-ability-id="${escapeHtml(ability.id)}"
                       data-delta="1"
-                      ${pointsUsed >= 2 || score >= 20 ? "disabled" : ""}
+                      ${pointsUsed >= 2 || scoreForCap >= DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM ? "disabled" : ""}
                       aria-label="Increase ${escapeHtml(ability.name)}"
                     >+</button>
                   </div>
@@ -42940,7 +43693,12 @@ export function createCharacterCreator(options = {}) {
 
                 <div class="hg-feat-picker-scroll">
                   <div class="hg-character-choice-grid">
-                    ${DEFAULT_FEATS.map((feat) => {
+                    ${DEFAULT_FEATS
+                      .filter((feat) => {
+                        return feat.id !==
+                          "ability-score-improvement";
+                      })
+                      .map((feat) => {
                   const prerequisite = getFeatPrerequisiteResult(
                     feat,
                     creatorState.draft,
