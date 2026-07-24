@@ -2,7 +2,7 @@ import { FEAT_NAME_LIST } from "./defaultFeatNames.js";
 import { DEFAULT_FEAT_RULES } from "./defaultFeatRules.js";
 import { getLegacy2014Metadata } from "./ruleset2014.js";
 
-export const DEFAULT_FEAT_SCHEMA_VERSION = 3;
+export const DEFAULT_FEAT_SCHEMA_VERSION = 4;
 export const DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM = 20;
 
 const FEAT_ABILITY_EFFECT_TYPES = new Set([
@@ -348,6 +348,8 @@ const normalizeFeatRecord = (rawFeat) => {
     ),
     repeatable: raw.repeatable === true,
     repeatByChoice: raw.repeatByChoice === true,
+    usesExistingSpellcastingAbility:
+      raw.usesExistingSpellcastingAbility === true,
     repeatLimit:
       Number.isFinite(Number(raw.repeatLimit)) && Number(raw.repeatLimit) > 0
         ? Math.round(Number(raw.repeatLimit))
@@ -420,6 +422,85 @@ export function validateDefaultFeatCollection(feats) {
     if (!Array.isArray(feat?.choices)) {
       errors.push(`Feat ${id || index + 1} choices must be an array.`);
     }
+
+    const choices = Array.isArray(feat?.choices)
+      ? feat.choices
+      : [];
+    const abilityChoiceIds = new Set(
+      choices
+        .filter((choice) => {
+          return String(choice?.type || "").toLowerCase() === "ability";
+        })
+        .map((choice) => String(choice?.id || "").trim())
+        .filter(Boolean)
+    );
+    const classChoiceIds = new Set(
+      choices
+        .filter((choice) => {
+          return String(choice?.type || "").toLowerCase() === "class";
+        })
+        .map((choice) => String(choice?.id || "").trim())
+        .filter(Boolean)
+    );
+    const hasDefaultAbilityChoice =
+      abilityChoiceIds.has("spellcasting-ability") ||
+      abilityChoiceIds.has("ability");
+    const featSpellEntries = [
+      ...(Array.isArray(feat?.effects)
+        ? feat.effects.filter((effect) => {
+            return effect?.type === "spellGrant";
+          })
+        : []),
+      ...choices.filter((choice) => {
+        return String(choice?.type || "").toLowerCase() === "spell";
+      })
+    ];
+
+    featSpellEntries.forEach((entry, spellIndex) => {
+      const abilityChoiceId =
+        String(entry?.abilityChoiceId || "").trim();
+      const classChoiceId =
+        String(entry?.classChoiceId || "").trim();
+
+      if (
+        abilityChoiceId &&
+        !abilityChoiceIds.has(abilityChoiceId)
+      ) {
+        errors.push(
+          `Feat ${id || index + 1} spell ${spellIndex + 1} references an unknown ability choice.`
+        );
+      }
+
+      if (
+        classChoiceId &&
+        !classChoiceIds.has(classChoiceId)
+      ) {
+        errors.push(
+          `Feat ${id || index + 1} spell ${spellIndex + 1} references an unknown class choice.`
+        );
+      }
+
+      const hasAbilitySource = Boolean(
+        String(entry?.ability || "").trim() ||
+        (
+          abilityChoiceId &&
+          abilityChoiceIds.has(abilityChoiceId)
+        ) ||
+        String(entry?.classId || "").trim() ||
+        (
+          classChoiceId &&
+          classChoiceIds.has(classChoiceId)
+        ) ||
+        hasDefaultAbilityChoice ||
+        feat?.usesExistingSpellcastingAbility === true
+      );
+
+      if (!hasAbilitySource) {
+        errors.push(
+          `Feat ${id || index + 1} spell ${spellIndex + 1} has no casting ability source.`
+        );
+      }
+    });
 
     if (!Array.isArray(feat?.tags)) {
       errors.push(`Feat ${id || index + 1} tags must be an array.`);
