@@ -9,7 +9,11 @@
 // CHARACTER CREATOR SECTION 1 — MODULE / DEPENDENCIES
 // =====================================================
 
-import { DEFAULT_CLASSES } from "./defaultClasses.js";
+import {
+  DEFAULT_CLASSES,
+  DEFAULT_CLASS_SCHEMA_VERSION,
+  validateDefaultClassCollection
+} from "./defaultClasses.js";
 import { DEFAULT_FEATS } from "./defaultFeats.js";
 import { DEFAULT_SPELLS } from "./defaultSpells.js";
 import {
@@ -56,8 +60,9 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 9;
-  const CLASS_SCHEMA_VERSION = 1;
+  const CHARACTER_SCHEMA_VERSION = 10;
+  const CLASS_SCHEMA_VERSION =
+    DEFAULT_CLASS_SCHEMA_VERSION;
   const SPECIES_SCHEMA_VERSION = 1;
   const BACKGROUND_SCHEMA_VERSION = 1;
 
@@ -14224,6 +14229,408 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    const phase8Features =
+      Object.values(DEFAULT_CLASSES)
+        .flatMap((classData) => {
+          return Object.values(
+            classData.featuresByLevel
+          ).flat();
+        });
+    const phase8Validation =
+      validateDefaultClassCollection(
+        DEFAULT_CLASSES
+      );
+
+    record(
+      "Phase 8: all 285 base-class features have completed descriptions",
+      {
+        total:
+          phase8Features.length,
+        completed:
+          phase8Features.filter(
+            (feature) => {
+              return String(
+                feature.description || ""
+              ).trim().length >= 80;
+            }
+          ).length
+      },
+      {
+        total: 285,
+        completed: 285
+      }
+    );
+
+    record(
+      "Phase 8: base-class summaries stay concise and replace placeholder text",
+      {
+        concise:
+          phase8Features.every(
+            (feature) => {
+              return (
+                String(
+                  feature.summary || ""
+                ).length > 0 &&
+                String(
+                  feature.summary || ""
+                ).length <= 180
+              );
+            }
+          ),
+        placeholders:
+          phase8Features.filter(
+            (feature) => {
+              return /class feature\.?$|description not filled|placeholder|coming soon|\btodo\b|\btbd\b/i
+                .test(
+                  feature.summary || ""
+                );
+            }
+          ).length
+      },
+      {
+        concise: true,
+        placeholders: 0
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft
+      .classProgression = {
+        totalLevel: 1,
+        classes: [
+          makeInteractionClassEntry(
+            "phase8-barbarian",
+            "barbarian",
+            1
+          )
+        ],
+        levelOrder: [
+          "phase8-barbarian"
+        ]
+      };
+    refreshSelectedClassFeatures();
+    const phase8Rage =
+      DEFAULT_CLASSES.barbarian
+        .featuresByLevel[1][0];
+    const phase8DescriptionHtml =
+      escapeHtml(
+        phase8Rage.description
+      );
+    const phase8DetailHtml =
+      renderSection12SelectedClassDetails();
+    const phase8ReviewHtml =
+      renderSection17ClassAndFeatSummary();
+
+    record(
+      "Phase 8: detail and review views show full class-feature descriptions",
+      {
+        detail:
+          phase8DetailHtml.includes(
+            phase8DescriptionHtml
+          ),
+        review:
+          phase8ReviewHtml.includes(
+            phase8DescriptionHtml
+          ),
+        metadata:
+          phase8DetailHtml.includes(
+            phase8Rage.sourceLabel
+          ) &&
+          phase8ReviewHtml.includes(
+            phase8Rage.sourceLabel
+          )
+      },
+      {
+        detail: true,
+        review: true,
+        metadata: true
+      }
+    );
+
+    record(
+      "Phase 8: every base-class feature carries source and edition metadata",
+      {
+        total:
+          phase8Features.length,
+        labeled:
+          phase8Features.filter(
+            (feature) => {
+              return (
+                Boolean(
+                  feature.sourceLabel &&
+                  feature.sourceType &&
+                  feature.rulesetId
+                ) &&
+                feature.rulesEdition ===
+                  "2014"
+              );
+            }
+          ).length
+      },
+      {
+        total: 285,
+        labeled: 285
+      }
+    );
+
+    record(
+      "Phase 8: every base class defines a complete level 1 through 20 progression",
+      Object.fromEntries(
+        Object.entries(
+          DEFAULT_CLASSES
+        ).map(
+          ([classId, classData]) => {
+            return [
+              classId,
+              Object.keys(
+                classData
+                  .featuresByLevel
+              ).length
+            ];
+          }
+        )
+      ),
+      Object.fromEntries(
+        Object.keys(
+          DEFAULT_CLASSES
+        ).map((classId) => [
+          classId,
+          20
+        ])
+      )
+    );
+
+    record(
+      "Phase 8: every base-class feature unlocks at its containing class level",
+      phase8Features.filter(
+        (feature) => {
+          const owner =
+            DEFAULT_CLASSES[
+              feature.classId
+            ];
+
+          return !(
+            owner
+              ?.featuresByLevel?.[
+                feature.unlockLevel
+              ] || []
+          ).includes(feature);
+        }
+      ).length,
+      0
+    );
+
+    record(
+      "Phase 8: class resource scaling tables match the canonical progressions",
+      phase8Validation.errors.filter(
+        (error) => {
+          return (
+            error.includes(
+              "class-resource progression"
+            ) ||
+            error.includes(
+              "progression table"
+            )
+          );
+        }
+      ),
+      []
+    );
+
+    record(
+      "Phase 8: all base classes retain their confirmed starting proficiencies",
+      phase8Validation.errors.filter(
+        (error) => {
+          return error.includes(
+            "starting proficiencies"
+          );
+        }
+      ),
+      []
+    );
+
+    record(
+      "Phase 8: all base classes retain their confirmed multiclass proficiencies",
+      {
+        errors:
+          phase8Validation.errors.filter(
+            (error) => {
+              return error.includes(
+                "multiclass"
+              );
+            }
+          ),
+        barbarianArmor:
+          DEFAULT_CLASSES.barbarian
+            .multiclassProficiencies
+            .armor
+      },
+      {
+        errors: [],
+        barbarianArmor: [
+          "Light Armor",
+          "Medium Armor",
+          "Shields"
+        ]
+      }
+    );
+
+    record(
+      "Phase 8: class-data validation accepts the complete default catalog",
+      {
+        valid:
+          phase8Validation.valid,
+        classCount:
+          phase8Validation
+            .classCount,
+        featureCount:
+          phase8Validation
+            .featureCount,
+        errors:
+          phase8Validation
+            .errors
+            .length
+      },
+      {
+        valid: true,
+        classCount: 13,
+        featureCount: 285,
+        errors: 0
+      }
+    );
+
+    const phase8DuplicateFixture =
+      cloneData(DEFAULT_CLASSES);
+    phase8DuplicateFixture
+      .barbarian
+      .featuresByLevel[2][0]
+      .id = "rage";
+    const phase8DuplicateValidation =
+      validateDefaultClassCollection(
+        phase8DuplicateFixture
+      );
+
+    record(
+      "Phase 8: class-data validation rejects duplicate feature IDs",
+      {
+        valid:
+          phase8DuplicateValidation
+            .valid,
+        caught:
+          phase8DuplicateValidation
+            .errors
+            .some((error) => {
+              return error.includes(
+                "duplicate feature ID"
+              );
+            })
+      },
+      {
+        valid: false,
+        caught: true
+      }
+    );
+
+    const phase8MissingDescriptionFixture =
+      cloneData(DEFAULT_CLASSES);
+    phase8MissingDescriptionFixture
+      .barbarian
+      .featuresByLevel[1][0]
+      .description = "";
+    const phase8MissingDescriptionValidation =
+      validateDefaultClassCollection(
+        phase8MissingDescriptionFixture
+      );
+
+    record(
+      "Phase 8: class-data validation rejects missing descriptions",
+      {
+        valid:
+          phase8MissingDescriptionValidation
+            .valid,
+        caught:
+          phase8MissingDescriptionValidation
+            .errors
+            .some((error) => {
+              return error.includes(
+                "missing a completed description"
+              );
+            })
+      },
+      {
+        valid: false,
+        caught: true
+      }
+    );
+
+    const phase8UnsupportedEffectFixture =
+      cloneData(DEFAULT_CLASSES);
+    phase8UnsupportedEffectFixture
+      .barbarian
+      .featuresByLevel[1][0]
+      .effects[0]
+      .type =
+      "unsupported-phase8-effect";
+    const phase8UnsupportedEffectValidation =
+      validateDefaultClassCollection(
+        phase8UnsupportedEffectFixture
+      );
+
+    record(
+      "Phase 8: class-data validation rejects unsupported class-effect types",
+      {
+        valid:
+          phase8UnsupportedEffectValidation
+            .valid,
+        caught:
+          phase8UnsupportedEffectValidation
+            .errors
+            .some((error) => {
+              return error.includes(
+                "unsupported class-effect type"
+              );
+            })
+      },
+      {
+        valid: false,
+        caught: true
+      }
+    );
+
+    const phase8InvalidProgressionFixture =
+      cloneData(DEFAULT_CLASSES);
+    phase8InvalidProgressionFixture
+      .barbarian
+      .featuresByLevel[1][0]
+      .resource
+      .usesByLevel[21] = 7;
+    const phase8InvalidProgressionValidation =
+      validateDefaultClassCollection(
+        phase8InvalidProgressionFixture
+      );
+
+    record(
+      "Phase 8: class-data validation rejects invalid progression tables",
+      {
+        valid:
+          phase8InvalidProgressionValidation
+            .valid,
+        caught:
+          phase8InvalidProgressionValidation
+            .errors
+            .some((error) => {
+              return error.includes(
+                "invalid progression table level"
+              );
+            })
+      },
+      {
+        valid: false,
+        caught: true
+      }
+    );
+
     creatorState.draft = createEmptyCharacter();
     creatorState.draft.classProgression = {
       totalLevel: 2,
@@ -21802,7 +22209,7 @@ export function createCharacterCreator(options = {}) {
       artificer:
         "Light Armor|Medium Armor|Shields::::Thieves' Tools|Tinker's Tools::0::0",
       barbarian:
-        "Shields::Simple Weapons|Martial Weapons::::0::0",
+        "Light Armor|Medium Armor|Shields::Simple Weapons|Martial Weapons::::0::0",
       bard:
         "Light Armor::::::1::1",
       cleric:
@@ -27774,10 +28181,23 @@ export function createCharacterCreator(options = {}) {
               <p class="small">
                 ${escapeHtml(
                   feature.summary ||
-                  feature.description ||
-                  "No description provided."
+                  "No summary provided."
                 )}
               </p>
+
+              <p
+                class="small"
+                data-feature-full-description="true"
+              >
+                ${escapeHtml(
+                  feature.description ||
+                  "No full description provided."
+                )}
+              </p>
+
+              ${renderClassFeatureMetadata(
+                feature
+              )}
 
               ${renderSection12FeatureMechanics(feature)}
             </article>
@@ -31856,6 +32276,37 @@ export function createCharacterCreator(options = {}) {
         <b>Rules:</b> ${escapeHtml(ACTIVE_RULESET.label)}
         <br>
         <b>Catalog:</b> ${escapeHtml(metadata.sourceLabel)}
+      </span>
+    `;
+  }
+
+  function renderClassFeatureMetadata(feature) {
+    const sourceLabel = safeDisplayString(
+      feature?.sourceLabel,
+      safeDisplayString(
+        feature?.source,
+        "Unlabeled source"
+      )
+    );
+    const rulesEdition = safeDisplayString(
+      feature?.rulesEdition,
+      ACTIVE_RULESET.edition
+    );
+
+    return `
+      <span
+        class="small"
+        data-class-feature-metadata="true"
+        data-ruleset-id="${escapeHtml(
+          feature?.rulesetId ||
+          ACTIVE_RULESET.id
+        )}"
+      >
+        <b>Edition:</b>
+        ${escapeHtml(rulesEdition)}
+        <br>
+        <b>Source:</b>
+        ${escapeHtml(sourceLabel)}
       </span>
     `;
   }
@@ -43364,6 +43815,25 @@ export function createCharacterCreator(options = {}) {
               ? `<br>${escapeHtml(feature.summary)}`
               : ""}
           </p>
+
+          ${
+            feature.description
+              ? `
+                <p
+                  class="small"
+                  data-feature-full-description="true"
+                >
+                  ${escapeHtml(
+                    feature.description
+                  )}
+                </p>
+              `
+              : ""
+          }
+
+          ${renderClassFeatureMetadata(
+            feature
+          )}
 
           ${renderSection12FeatureMechanics(feature)}
 
@@ -58388,8 +58858,23 @@ export function createCharacterCreator(options = {}) {
               <b>Source:</b>
 
               ${escapeHtml(
+                feature.sourceLabel ||
                 feature.source
               )}
+
+              ${
+                feature.rulesEdition
+                  ? `
+                    <br>
+
+                    <b>Edition:</b>
+
+                    ${escapeHtml(
+                      feature.rulesEdition
+                    )}
+                  `
+                  : ""
+              }
 
               ${
                 feature.level
@@ -58446,6 +58931,21 @@ export function createCharacterCreator(options = {}) {
                   <p class="small">
                     ${escapeHtml(
                       feature.summary
+                    )}
+                  </p>
+                `
+                : ""
+            }
+
+            ${
+              feature.description
+                ? `
+                  <p
+                    class="small"
+                    data-feature-full-description="true"
+                  >
+                    ${escapeHtml(
+                      feature.description
                     )}
                   </p>
                 `
@@ -62075,6 +62575,68 @@ export function createCharacterCreator(options = {}) {
       .join("");
   }
 
+  function renderSection17FeatureReviewItem(
+    feature,
+    levelLabel = ""
+  ) {
+    const description = safeDisplayString(
+      feature?.description
+    );
+
+    return `
+      <div class="hg-character-review-feature">
+        <b>
+          ${escapeHtml(
+            levelLabel
+              ? `${levelLabel}: ${feature?.name || "Unnamed Feature"}`
+              : feature?.name || "Unnamed Feature"
+          )}
+        </b>
+
+        ${
+          feature?.summary
+            ? `
+              <br>
+              <span class="small">
+                ${escapeHtml(
+                  feature.summary
+                )}
+              </span>
+            `
+            : ""
+        }
+
+        ${
+          description
+            ? `
+              <br>
+              <span
+                class="small"
+                data-feature-full-description="true"
+              >
+                ${escapeHtml(
+                  description
+                )}
+              </span>
+            `
+            : ""
+        }
+
+        ${
+          feature?.sourceLabel ||
+          feature?.rulesEdition
+            ? `
+              <br>
+              ${renderClassFeatureMetadata(
+                feature
+              )}
+            `
+            : ""
+        }
+      </div>
+    `;
+  }
+
   function renderSection17FeatureSummary() {
     const groups = [
       {
@@ -62127,16 +62689,15 @@ export function createCharacterCreator(options = {}) {
             ${
               values.length
                 ? `
-                  <p>
+                  <div>
                     ${values
                       .map((feature) => {
-                        return escapeHtml(
-                          feature.name ||
-                          "Unnamed Feature"
+                        return renderSection17FeatureReviewItem(
+                          feature
                         );
                       })
-                      .join("<br>")}
-                  </p>
+                      .join("<hr>")}
+                  </div>
                 `
                 : `
                   <p class="small">
@@ -62478,7 +63039,7 @@ export function createCharacterCreator(options = {}) {
         <article class="hg-character-choice-card">
           <h3>Class Features</h3>
 
-          <p>
+          <div>
             ${features.length
               ? features.map((feature) => {
                   const levelLabel =
@@ -62486,10 +63047,13 @@ export function createCharacterCreator(options = {}) {
                       ? `${feature.className} ${safeNumber(feature.level, 1)}`
                       : `Level ${safeNumber(feature.level, 1)}`;
 
-                  return `${escapeHtml(levelLabel)}: ${escapeHtml(feature.name)}`;
-                }).join("<br>")
+                  return renderSection17FeatureReviewItem(
+                    feature,
+                    levelLabel
+                  );
+                }).join("<hr>")
               : "None recorded."}
-          </p>
+          </div>
         </article>
 
         <article class="hg-character-choice-card">
