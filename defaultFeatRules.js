@@ -128,8 +128,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Increase Constitution by 1, learn one sorcerer cantrip and one 1st-level sorcerer spell, and cast the spell once per short or long rest through the mark.",
     {
       prerequisites: [{ type: "setting", setting: "Eberron" }],
-      effects: [fixedAbility("Constitution"), { type: "spellChoice", classId: "sorcerer", cantrips: 1, levelOneSpells: 1, ability: "Constitution" }, resource("aberrant-spell", "Aberrant spell", 1, "shortOrLongRest"), custom("aberrant-vitality", "When the marked spell is cast, an optional Hit Die can produce temporary hit points or force damage.")],
-      choices: [choice("cantrip", "Sorcerer cantrip", "spell", [], { classId: "sorcerer", levels: [0] }), choice("level-one-spell", "1st-level sorcerer spell", "spell", [], { classId: "sorcerer", levels: [1] })],
+      effects: [fixedAbility("Constitution"), { type: "spellChoice", classId: "sorcerer", cantrips: 1, levelOneSpells: 1, ability: "Constitution" }, custom("aberrant-vitality", "When the marked spell is cast, an optional Hit Die can produce temporary hit points or force damage.")],
+      choices: [choice("cantrip", "Sorcerer cantrip", "spell", [], { classId: "sorcerer", levels: [0], ability: "Constitution", atWill: true }), choice("level-one-spell", "1st-level sorcerer spell", "spell", [], { classId: "sorcerer", levels: [1], ability: "Constitution", uses: 1, recharge: "shortOrLongRest" })],
       tags: ["half-feat", "spellcasting", "dragonmark"]
     }
   ),
@@ -145,8 +145,9 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Learn a 2nd-level enchantment or necromancy spell and cast it once per long rest. Hit Dice can be spent to add damage to a spell.",
     {
       prerequisites: [{ type: "level", minimum: 4 }, { type: "featChoice", featId: "initiate-of-high-sorcery", choiceId: "moon", values: ["Nuitari"] }],
-      effects: [{ type: "spellChoice", schools: ["enchantment", "necromancy"], levels: [2], count: 1 }, resource("black-robe-spell", "Black Robe spell", 1), custom("life-channel", "Spend Hit Dice after rolling spell damage to add the rolls to one target's damage.")],
-      choices: [choice("robe-spell", "2nd-level enchantment or necromancy spell", "spell", [], { levels: [2], schools: ["enchantment", "necromancy"] })],
+      effects: [{ type: "spellChoice", schools: ["enchantment", "necromancy"], levels: [2], count: 1 }, custom("life-channel", "Spend Hit Dice after rolling spell damage to add the rolls to one target's damage.")],
+      choices: [choice("robe-spell", "2nd-level enchantment or necromancy spell", "spell", [], { levels: [2], schools: ["enchantment", "necromancy"], uses: 1, recharge: "longRest", canUseSpellSlots: true })],
+      usesExistingSpellcastingAbility: true,
       tags: ["spellcasting", "dragonlance"]
     }
   ),
@@ -156,8 +157,9 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Learn a 2nd-level illusion or transmutation spell and cast it once per long rest. A limited reaction can treat a d20 roll of 9 or lower as a 10.",
     {
       prerequisites: [{ type: "level", minimum: 4 }, { type: "featChoice", featId: "initiate-of-high-sorcery", choiceId: "moon", values: ["Lunitari"] }],
-      effects: [{ type: "spellChoice", schools: ["illusion", "transmutation"], levels: [2], count: 1 }, resource("red-robe-spell", "Red Robe spell", 1), resource("balance-of-precision", "Balance of Precision", "proficiencyBonus"), custom("balance-of-precision-rule", "Reaction after an attack or save roll of 9 or lower changes the d20 result to 10.")],
-      choices: [choice("robe-spell", "2nd-level illusion or transmutation spell", "spell", [], { levels: [2], schools: ["illusion", "transmutation"] })],
+      effects: [{ type: "spellChoice", schools: ["illusion", "transmutation"], levels: [2], count: 1 }, resource("balance-of-precision", "Balance of Precision", "proficiencyBonus"), custom("balance-of-precision-rule", "Reaction after an attack or save roll of 9 or lower changes the d20 result to 10.")],
+      choices: [choice("robe-spell", "2nd-level illusion or transmutation spell", "spell", [], { levels: [2], schools: ["illusion", "transmutation"], uses: 1, recharge: "longRest", canUseSpellSlots: true })],
+      usesExistingSpellcastingAbility: true,
       tags: ["spellcasting", "dragonlance"]
     }
   ),
@@ -167,8 +169,9 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Learn a 2nd-level abjuration or divination spell and cast it once per long rest. A reaction can spend a spell slot to reduce damage to a nearby creature.",
     {
       prerequisites: [{ type: "level", minimum: 4 }, { type: "featChoice", featId: "initiate-of-high-sorcery", choiceId: "moon", values: ["Solinari"] }],
-      effects: [{ type: "spellChoice", schools: ["abjuration", "divination"], levels: [2], count: 1 }, resource("white-robe-spell", "White Robe spell", 1), custom("protective-ward", "Reaction spends a spell slot and reduces nearby damage by 1d6 per slot level plus the spellcasting modifier.")],
-      choices: [choice("robe-spell", "2nd-level abjuration or divination spell", "spell", [], { levels: [2], schools: ["abjuration", "divination"] })],
+      effects: [{ type: "spellChoice", schools: ["abjuration", "divination"], levels: [2], count: 1 }, custom("protective-ward", "Reaction spends a spell slot and reduces nearby damage by 1d6 per slot level plus the spellcasting modifier.")],
+      choices: [choice("robe-spell", "2nd-level abjuration or divination spell", "spell", [], { levels: [2], schools: ["abjuration", "divination"], uses: 1, recharge: "longRest", canUseSpellSlots: true })],
+      usesExistingSpellcastingAbility: true,
       tags: ["spellcasting", "dragonlance"]
     }
   ),
@@ -183,8 +186,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Learn a cantrip, a 1st-level artificer spell, and one artisan's tool.",
     "Use Intelligence for the chosen artificer spells, cast the 1st-level spell once per long rest, and use an artisan's tool as a spellcasting focus.",
     {
-      effects: [{ type: "spellChoice", classId: "artificer", cantrips: 1, levelOneSpells: 1, ability: "Intelligence" }, { type: "proficiencyChoice", choose: 1, categories: ["artisanTool"] }, resource("artificer-initiate-spell", "Artificer Initiate spell", 1)],
-      choices: [choice("cantrip", "Artificer cantrip", "spell", [], { classId: "artificer", levels: [0] }), choice("level-one-spell", "1st-level artificer spell", "spell", [], { classId: "artificer", levels: [1] }), choice("artisan-tool", "Artisan's tool", "tool", [], { category: "artisan" })],
+      effects: [{ type: "spellChoice", classId: "artificer", cantrips: 1, levelOneSpells: 1, ability: "Intelligence" }, { type: "proficiencyChoice", choose: 1, categories: ["artisanTool"] }],
+      choices: [choice("cantrip", "Artificer cantrip", "spell", [], { classId: "artificer", levels: [0], ability: "Intelligence", atWill: true }), choice("level-one-spell", "1st-level artificer spell", "spell", [], { classId: "artificer", levels: [1], ability: "Intelligence", uses: 1, recharge: "longRest", canUseSpellSlots: true }), choice("artisan-tool", "Artisan's tool", "tool", [], { category: "artisan" })],
       tags: ["spellcasting", "tool"]
     }
   ),
@@ -219,7 +222,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Cartomancer",
     "Use playing cards as a focus and hide one prepared spell in a card each day.",
     "Gain prestidigitation and use cards as a spellcasting focus. After a long rest, store one spell from your class list in a card for a bonus-action casting.",
-    { prerequisites: [{ type: "level", minimum: 4 }, { type: "spellcasting" }], effects: [{ type: "spellGrant", spellId: "prestidigitation" }, resource("hidden-ace", "Hidden Ace", 1), custom("hidden-ace-rule", "Store one prepared spell with a casting time of one action; cast it from the card as a bonus action before the next long rest.")], tags: ["spellcasting", "focus"] }
+    { prerequisites: [{ type: "level", minimum: 4 }, { type: "spellcasting" }], effects: [{ type: "spellGrant", spellId: "prestidigitation", atWill: true }, resource("hidden-ace", "Hidden Ace", 1), custom("hidden-ace-rule", "Store one prepared spell with a casting time of one action; cast it from the card as a bonus action before the next long rest.")], usesExistingSpellcastingAbility: true, tags: ["spellcasting", "focus"] }
   ),
   rule(
     "Charger",
@@ -276,8 +279,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Learn one cleric cantrip, augury, and one 1st-level spell determined by alignment. Cast each leveled spell once per long rest and choose its mental casting ability.",
     {
       prerequisites: [{ type: "level", minimum: 4 }, { type: "setting", setting: "Dragonlance" }],
-      effects: [{ type: "spellChoice", cantrips: 1, levelOneSpells: 1, grantedSpells: ["augury"] }, resource("divinely-favored-augury", "Augury", 1), resource("divinely-favored-spell", "Divinely Favored spell", 1)],
-      choices: [choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cleric-cantrip", "Cleric cantrip", "spell", [], { classId: "cleric", levels: [0] }), choice("alignment-spell", "Alignment spell", "spell", [], { levels: [1], alignmentFiltered: true })],
+      effects: [{ type: "spellGrant", spellId: "augury", uses: 1, recharge: "longRest", abilityChoiceId: "spellcasting-ability", canUseSpellSlots: true }, { type: "spellChoice", cantrips: 1, levelOneSpells: 1 }],
+      choices: [choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cleric-cantrip", "Cleric cantrip", "spell", [], { classId: "cleric", levels: [0], abilityChoiceId: "spellcasting-ability", atWill: true }), choice("alignment-spell", "Alignment spell", "spell", [], { levels: [1], alignmentFiltered: true, abilityChoiceId: "spellcasting-ability", uses: 1, recharge: "longRest", canUseSpellSlots: true })],
       tags: ["spellcasting", "dragonlance"]
     }
   ),
@@ -406,8 +409,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Improve a mental ability and learn misty step plus one 1st-level divination or enchantment spell.",
     "Increase Intelligence, Wisdom, or Charisma by 1. Cast each learned spell once per long rest or with available slots, using the chosen ability.",
     {
-      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "spellGrant", spellId: "misty-step", uses: 1, recharge: "longRest", abilityChoiceId: "ability" }, { type: "spellChoice", levels: [1], schools: ["divination", "enchantment"], count: 1, abilityChoiceId: "ability" }],
-      choices: [choice("ability", "Ability increase and spellcasting ability", "ability", MENTAL_ABILITIES), choice("level-one-spell", "1st-level divination or enchantment spell", "spell", [], { levels: [1], schools: ["divination", "enchantment"] })],
+      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "spellGrant", spellId: "misty-step", uses: 1, recharge: "longRest", abilityChoiceId: "ability", canUseSpellSlots: true }, { type: "spellChoice", levels: [1], schools: ["divination", "enchantment"], count: 1, abilityChoiceId: "ability" }],
+      choices: [choice("ability", "Ability increase and spellcasting ability", "ability", MENTAL_ABILITIES), choice("level-one-spell", "1st-level divination or enchantment spell", "spell", [], { levels: [1], schools: ["divination", "enchantment"], abilityChoiceId: "ability", uses: 1, recharge: "longRest", canUseSpellSlots: true })],
       tags: ["half-feat", "spellcasting", "teleportation"]
     }
   ),
@@ -465,7 +468,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Learn cure wounds and manifest protective spectral wings.",
     "Cast cure wounds once per long rest or with spell slots using a chosen mental ability. A proficiency-limited reaction adds proficiency bonus to AC against one attack.",
     {
-      effects: [{ type: "spellGrant", spellId: "cure-wounds", uses: 1, recharge: "longRest", abilityChoiceId: "spellcasting-ability" }, resource("protective-wings", "Protective Wings", "proficiencyBonus"), custom("protective-wings-rule", "Reaction adds proficiency bonus to your or a nearby creature's AC against the triggering attack.")],
+      effects: [{ type: "spellGrant", spellId: "cure-wounds", uses: 1, recharge: "longRest", abilityChoiceId: "spellcasting-ability", canUseSpellSlots: true }, resource("protective-wings", "Protective Wings", "proficiencyBonus"), custom("protective-wings-rule", "Reaction adds proficiency bonus to your or a nearby creature's AC against the triggering attack.")],
       choices: [choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES)],
       tags: ["dragon", "spellcasting", "healing", "armor-class"]
     }
@@ -529,8 +532,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Choose Solinari, Lunitari, or Nuitari, a mental casting ability, one wizard cantrip, and two 1st-level spells from that moon's schools. Each leveled spell is cast once per long rest.",
     {
       prerequisites: [{ type: "classOrBackground", classIds: ["sorcerer", "wizard"], backgroundIds: ["mage-of-high-sorcery"] }, { type: "setting", setting: "Dragonlance" }],
-      effects: [{ type: "spellChoice", classId: "wizard", cantrips: 1, levelOneSpells: 2 }, resource("high-sorcery-spells", "High Sorcery spells", 2)],
-      choices: [choice("moon", "Moon of magic", "option", ["Solinari", "Lunitari", "Nuitari"]), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cantrip", "Wizard cantrip", "spell", [], { classId: "wizard", levels: [0] }), choice("moon-spells", "Moon-aligned 1st-level spells", "spell", [], { levels: [1], choose: 2, moonChoiceId: "moon" })],
+      effects: [{ type: "spellChoice", classId: "wizard", cantrips: 1, levelOneSpells: 2 }],
+      choices: [choice("moon", "Moon of magic", "option", ["Solinari", "Lunitari", "Nuitari"]), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cantrip", "Wizard cantrip", "spell", [], { classId: "wizard", levels: [0], abilityChoiceId: "spellcasting-ability", atWill: true }), choice("moon-spells", "Moon-aligned 1st-level spells", "spell", [], { levels: [1], choose: 2, moonChoiceId: "moon", abilityChoiceId: "spellcasting-ability", usesEach: 1, recharge: "longRest", canUseSpellSlots: true })],
       tags: ["spellcasting", "dragonlance"]
     }
   ),
@@ -627,8 +630,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Learn two cantrips and one 1st-level spell from a chosen spellcasting class.",
     "Choose bard, cleric, druid, sorcerer, warlock, or wizard. Learn two cantrips and one 1st-level spell from that class, casting the leveled spell once per long rest.",
     {
-      effects: [{ type: "classChoice", id: "magic-initiate-class", options: ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"] }, { type: "spellChoice", cantrips: 2, levelOneSpells: 1 }, resource("magic-initiate-spell", "Magic Initiate spell", 1)],
-      choices: [choice("spell-class", "Spellcasting class", "class", ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]), choice("cantrips", "Cantrips", "spell", [], { choose: 2, levels: [0], classChoiceId: "spell-class" }), choice("level-one-spell", "1st-level spell", "spell", [], { levels: [1], classChoiceId: "spell-class" })],
+      effects: [{ type: "classChoice", id: "magic-initiate-class", options: ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"] }, { type: "spellChoice", cantrips: 2, levelOneSpells: 1 }],
+      choices: [choice("spell-class", "Spellcasting class", "class", ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]), choice("cantrips", "Cantrips", "spell", [], { choose: 2, levels: [0], classChoiceId: "spell-class", atWill: true }), choice("level-one-spell", "1st-level spell", "spell", [], { levels: [1], classChoiceId: "spell-class", uses: 1, recharge: "longRest" })],
       repeatable: true,
       repeatByChoice: true,
       tags: ["spellcasting"]
@@ -777,7 +780,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     {
       prerequisites: [{ type: "abilityAnyMinimum", abilities: ["int", "wis"], minimum: 13 }],
       effects: [{ type: "ritualBook", initialSpells: 2, maximumSpellLevelFormula: "floor(characterLevel/2)" }],
-      choices: [choice("ritual-class", "Ritual spell class", "class", ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]), choice("ritual-spells", "1st-level ritual spells", "spell", [], { choose: 2, levels: [1], ritualOnly: true, classChoiceId: "ritual-class" })],
+      choices: [choice("ritual-class", "Ritual spell class", "class", ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]), choice("ritual-spells", "1st-level ritual spells", "spell", [], { choose: 2, levels: [1], ritualOnly: true, classChoiceId: "ritual-class", atWill: true })],
       tags: ["spellcasting", "ritual", "spellbook"]
     }
   ),
@@ -787,8 +790,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Cast comprehend languages without a slot and choose a proficiency-scaled number of 1st-level rune spells, each cast once per long rest or with slots.",
     {
       prerequisites: [{ type: "spellcastingOrRuneCarver" }],
-      effects: [{ type: "spellGrant", spellId: "comprehend-languages", atWill: true }, { type: "spellChoice", list: "rune-spells", count: "proficiencyBonus", levels: [1] }],
-      choices: [choice("rune-spells", "Rune spells", "spell", [], { chooseFormula: "proficiencyBonus", levels: [1], list: "rune-spells" }), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES)],
+      effects: [{ type: "spellGrant", spellId: "comprehend-languages", atWill: true, abilityChoiceId: "spellcasting-ability" }, { type: "spellChoice", list: "rune-spells", count: "proficiencyBonus", levels: [1] }],
+      choices: [choice("rune-spells", "Rune spells", "spell", [], { chooseFormula: "proficiencyBonus", levels: [1], list: "rune-spells", abilityChoiceId: "spellcasting-ability", usesEach: 1, recharge: "longRest", canUseSpellSlots: true }), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES)],
       tags: ["spellcasting", "giant", "runes"]
     }
   ),
@@ -831,8 +834,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Improve a mental ability and learn invisibility plus one 1st-level illusion or necromancy spell.",
     "Increase Intelligence, Wisdom, or Charisma by 1. Cast each learned spell once per long rest or with available slots, using the chosen ability.",
     {
-      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "spellGrant", spellId: "invisibility", uses: 1, recharge: "longRest", abilityChoiceId: "ability" }, { type: "spellChoice", levels: [1], schools: ["illusion", "necromancy"], count: 1, abilityChoiceId: "ability" }],
-      choices: [choice("ability", "Ability increase and spellcasting ability", "ability", MENTAL_ABILITIES), choice("level-one-spell", "1st-level illusion or necromancy spell", "spell", [], { levels: [1], schools: ["illusion", "necromancy"] })],
+      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "spellGrant", spellId: "invisibility", uses: 1, recharge: "longRest", abilityChoiceId: "ability", canUseSpellSlots: true }, { type: "spellChoice", levels: [1], schools: ["illusion", "necromancy"], count: 1, abilityChoiceId: "ability" }],
+      choices: [choice("ability", "Ability increase and spellcasting ability", "ability", MENTAL_ABILITIES), choice("level-one-spell", "1st-level illusion or necromancy spell", "spell", [], { levels: [1], schools: ["illusion", "necromancy"], abilityChoiceId: "ability", uses: 1, recharge: "longRest", canUseSpellSlots: true })],
       tags: ["half-feat", "spellcasting"]
     }
   ),
@@ -902,7 +905,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     {
       prerequisites: [{ type: "spellcasting" }],
       effects: [custom("spell-sniper-range", "Double the range of spells that require an attack roll."), custom("spell-sniper-cover", "Ranged spell attacks ignore half and three-quarters cover."), { type: "spellChoice", cantrips: 1, attackRollOnly: true }],
-      choices: [choice("cantrip-class", "Cantrip class", "class", ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]), choice("attack-cantrip", "Attack-roll cantrip", "spell", [], { levels: [0], attackRollOnly: true, classChoiceId: "cantrip-class" })],
+      choices: [choice("cantrip-class", "Cantrip class", "class", ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]), choice("attack-cantrip", "Attack-roll cantrip", "spell", [], { levels: [0], attackRollOnly: true, classChoiceId: "cantrip-class", atWill: true })],
       tags: ["spellcasting", "ranged"]
     }
   ),
@@ -959,7 +962,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Improve a mental ability, wield an enhanced mage hand, and shove creatures at range.",
     "Increase Intelligence, Wisdom, or Charisma by 1, gain an invisible extended mage hand, and use a bonus action to telekinetically push or pull a nearby creature.",
     {
-      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "spellGrant", spellId: "mage-hand", abilityChoiceId: "ability", invisible: true, rangeBonus: 30 }, custom("telekinetic-shove", "Bonus action forces a Strength save to move a visible creature within 30 feet 5 feet toward or away from you.")],
+      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "spellGrant", spellId: "mage-hand", abilityChoiceId: "ability", atWill: true, invisible: true, rangeBonus: 30 }, custom("telekinetic-shove", "Bonus action forces a Strength save to move a visible creature within 30 feet 5 feet toward or away from you.")],
       choices: [choice("ability", "Ability increase and save ability", "ability", MENTAL_ABILITIES)],
       tags: ["half-feat", "spellcasting", "movement"]
     }
@@ -969,7 +972,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Improve a mental ability, speak telepathically, and cast detect thoughts.",
     "Increase Intelligence, Wisdom, or Charisma by 1, communicate one-way telepathically within 60 feet, and cast detect thoughts once per long rest or with slots.",
     {
-      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "telepathy", range: 60, responseRequiredSharedLanguage: true }, { type: "spellGrant", spellId: "detect-thoughts", uses: 1, recharge: "longRest", abilityChoiceId: "ability", noComponents: true }],
+      effects: [abilityChoice("ability", MENTAL_ABILITIES), { type: "telepathy", range: 60, responseRequiredSharedLanguage: true }, { type: "spellGrant", spellId: "detect-thoughts", uses: 1, recharge: "longRest", abilityChoiceId: "ability", canUseSpellSlots: true, noComponents: true }],
       choices: [choice("ability", "Ability increase and spellcasting ability", "ability", MENTAL_ABILITIES)],
       tags: ["half-feat", "spellcasting", "telepathy"]
     }
@@ -1014,7 +1017,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     {
       prerequisites: [{ type: "species", speciesIds: ["elf"], subraceIds: ["wood-elf"] }],
       effects: [{ type: "spellChoice", classId: "druid", cantrips: 1, ability: "Wisdom" }, { type: "spellGrant", spellIds: ["longstrider", "pass-without-trace"], usesEach: 1, recharge: "longRest", ability: "Wisdom" }],
-      choices: [choice("cantrip", "Druid cantrip", "spell", [], { classId: "druid", levels: [0] })],
+      choices: [choice("cantrip", "Druid cantrip", "spell", [], { classId: "druid", levels: [0], ability: "Wisdom", atWill: true })],
       tags: ["species", "spellcasting", "stealth"]
     }
   )
