@@ -3,7 +3,17 @@ import {
   mergeDefaultSubclassCollections
 } from "./defaultSubclasses.js";
 import { applyDefaultClassFeatureRules } from "./defaultClassFeatureRules.js";
+import {
+  DEFAULT_CLASS_IDS,
+  DEFAULT_CLASS_PROFICIENCY_EXPECTATIONS,
+  SUPPORTED_BASE_CLASS_EFFECT_TYPES,
+  SUPPORTED_BASE_CLASS_FEATURE_TYPES,
+  getBaseClassFeatureCopy,
+  isBaseClassSummaryPlaceholder
+} from "./defaultClassFeatureCatalog.js";
 import { getLegacy2014Metadata } from "./ruleset2014.js";
+
+export const DEFAULT_CLASS_SCHEMA_VERSION = 2;
 
 export const DEFAULT_CLASSES = {
   barbarian: {
@@ -858,7 +868,7 @@ export const DEFAULT_MULTICLASS_RULES = {
       any: []
     },
     proficiencies: {
-      armor: ["Shields"],
+      armor: ["Light Armor", "Medium Armor", "Shields"],
       weapons: ["Simple Weapons", "Martial Weapons"],
       tools: [],
       skillChoices: { choose: 0, from: [] }
@@ -2690,3 +2700,604 @@ Object.values(DEFAULT_CLASSES).forEach((classData) => {
 // Apply the structured choice, resource, and conditional-combat rules only
 // after the complete level-20 and subclass catalogs have been assembled.
 applyDefaultClassFeatureRules(DEFAULT_CLASSES);
+
+Object.entries(DEFAULT_CLASSES).forEach(([classId, classData]) => {
+  Object.entries(classData.featuresByLevel).forEach(
+    ([levelKey, features]) => {
+      const unlockLevel = Number(levelKey);
+
+      features.forEach((featureData) => {
+        Object.assign(
+          featureData,
+          getBaseClassFeatureCopy({
+            classId,
+            className: classData.name,
+            level: unlockLevel,
+            feature: featureData
+          }),
+          {
+            schemaVersion:
+              DEFAULT_CLASS_SCHEMA_VERSION,
+            classId,
+            unlockLevel,
+            source:
+              featureData.source ||
+              `class:${classId}`,
+            sourceType:
+              featureData.sourceType ||
+              classData.sourceType,
+            sourceLabel:
+              featureData.sourceLabel ||
+              classData.sourceLabel,
+            rulesetId:
+              featureData.rulesetId ||
+              classData.rulesetId,
+            rulesEdition:
+              featureData.rulesEdition ||
+              classData.rulesEdition,
+            rulesMode:
+              featureData.rulesMode ||
+              classData.rulesMode
+          }
+        );
+      });
+    }
+  );
+});
+
+const stableList = (value) => (
+  Array.isArray(value)
+    ? value
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean)
+        .sort()
+        .join("|")
+    : ""
+);
+
+const proficiencySignature = ({
+  armor,
+  weapons,
+  tools,
+  skillChoices
+}) => [
+  stableList(armor),
+  stableList(weapons),
+  stableList(tools),
+  Number(skillChoices?.choose || 0),
+  stableList(skillChoices?.from)
+];
+
+const progressionRank = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  const text = String(value || "").trim().toLowerCase();
+
+  if (text === "unlimited") {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (/^\d+(?:\.\d+)?$/.test(text)) {
+    return Number(text);
+  }
+
+  if (/^\d+\/\d+$/.test(text)) {
+    const [numerator, denominator] =
+      text.split("/").map(Number);
+    return denominator
+      ? numerator / denominator
+      : null;
+  }
+
+  const diceMatch = text.match(
+    /^(\d*)d(\d+)$/
+  );
+
+  if (diceMatch) {
+    const count = Number(
+      diceMatch[1] || 1
+    );
+    const sides = Number(
+      diceMatch[2]
+    );
+    return count * (sides + 1) / 2;
+  }
+
+  return null;
+};
+
+const validateProgressionTable = (
+  table,
+  path,
+  errors
+) => {
+  if (
+    !table ||
+    typeof table !== "object" ||
+    Array.isArray(table)
+  ) {
+    errors.push(
+      `${path} has an invalid progression table.`
+    );
+    return;
+  }
+
+  const entries = Object.entries(table);
+
+  if (!entries.length) {
+    errors.push(
+      `${path} has an empty progression table.`
+    );
+    return;
+  }
+
+  const levels = entries.map(
+    ([level]) => Number(level)
+  );
+
+  if (
+    levels.some((level) => {
+      return (
+        !Number.isInteger(level) ||
+        level < 1 ||
+        level > 20
+      );
+    })
+  ) {
+    errors.push(
+      `${path} has an invalid progression table level.`
+    );
+  }
+
+  if (
+    entries.some(([, value]) => {
+      return (
+        value === null ||
+        value === undefined ||
+        value === ""
+      );
+    })
+  ) {
+    errors.push(
+      `${path} has an empty progression table value.`
+    );
+  }
+
+  const rankedValues = entries
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([, value]) => progressionRank(value));
+
+  if (
+    rankedValues.every((value) => value !== null) &&
+    rankedValues.some((value, index) => {
+      return (
+        index > 0 &&
+        value < rankedValues[index - 1]
+      );
+    })
+  ) {
+    errors.push(
+      `${path} has a decreasing progression table.`
+    );
+  }
+};
+
+const PROGRESSION_TABLE_KEYS = new Set([
+  "activeByLevel",
+  "cantripsKnown",
+  "chooseByLevel",
+  "damageBonusByLevel",
+  "diceByLevel",
+  "dieByLevel",
+  "infusedItemsByLevel",
+  "infusionsKnownByLevel",
+  "knownByLevel",
+  "limitationsByLevel",
+  "maxCrByLevel",
+  "rechargeByLevel",
+  "spellsKnown",
+  "usesByLevel"
+]);
+
+const collectProgressionTables = (
+  value,
+  path,
+  callback
+) => {
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => {
+      collectProgressionTables(
+        entry,
+        `${path}[${index}]`,
+        callback
+      );
+    });
+    return;
+  }
+
+  Object.entries(value).forEach(([key, child]) => {
+    const childPath = `${path}.${key}`;
+
+    if (PROGRESSION_TABLE_KEYS.has(key)) {
+      callback(child, childPath);
+      return;
+    }
+
+    collectProgressionTables(
+      child,
+      childPath,
+      callback
+    );
+  });
+};
+
+const getFeature = (
+  classes,
+  classId,
+  featureId
+) => Object.values(
+  classes[classId]?.featuresByLevel || {}
+)
+  .flat()
+  .find((feature) => feature?.id === featureId);
+
+const getPathValue = (value, path) => (
+  path.split(".").reduce(
+    (current, key) => current?.[key],
+    value
+  )
+);
+
+const canonicalResourceChecks = [
+  ["barbarian", "rage", "resource.usesByLevel", { 1: 2, 3: 3, 6: 4, 12: 5, 17: 6, 20: "unlimited" }],
+  ["barbarian", "rage", "effects.0.damageBonusByLevel", { 1: 2, 9: 3, 16: 4 }],
+  ["bard", "bardic-inspiration", "resource.dieByLevel", { 1: "d6", 5: "d8", 10: "d10", 15: "d12" }],
+  ["bard", "bardic-inspiration", "resource.rechargeByLevel", { 1: "longRest", 5: "shortOrLongRest" }],
+  ["cleric", "channel-divinity", "resource.usesByLevel", { 2: 1, 6: 2, 18: 3 }],
+  ["druid", "wild-shape", "effects.0.maxCrByLevel", { 2: "1/4", 4: "1/2", 8: "1" }],
+  ["monk", "ki", "resource.pool.formula", "classLevel"],
+  ["monk", "unarmored-movement", "effects.0.values", { 2: 10, 6: 15, 10: 20, 14: 25, 18: 30 }],
+  ["paladin", "lay-on-hands", "resource.pool.formula", "classLevel * 5"],
+  ["rogue", "sneak-attack", "effects.0.diceByLevel", { 1: "1d6", 3: "2d6", 5: "3d6", 7: "4d6", 9: "5d6", 11: "6d6", 13: "7d6", 15: "8d6", 17: "9d6", 19: "10d6" }],
+  ["sorcerer", "font-of-magic", "resource.pool.formula", "classLevel"],
+  ["artificer", "infuse-item", "effects.0.knownByLevel", { 2: 4, 6: 6, 10: 8, 14: 10, 18: 12 }],
+  ["artificer", "infuse-item", "effects.0.activeByLevel", { 2: 2, 6: 3, 10: 4, 14: 5, 18: 6 }]
+];
+
+const sameData = (left, right) => (
+  JSON.stringify(left) === JSON.stringify(right)
+);
+
+export const validateDefaultClassCollection = (
+  rawClasses
+) => {
+  const classes = Array.isArray(rawClasses)
+    ? Object.fromEntries(
+        rawClasses.map((classData) => [
+          classData?.id,
+          classData
+        ])
+      )
+    : rawClasses || {};
+  const errors = [];
+  const classIds = Object.keys(classes);
+
+  if (
+    classIds.length !==
+    DEFAULT_CLASS_IDS.length
+  ) {
+    errors.push(
+      `Expected ${DEFAULT_CLASS_IDS.length} base classes; received ${classIds.length}.`
+    );
+  }
+
+  DEFAULT_CLASS_IDS.forEach((classId) => {
+    const classData = classes[classId];
+
+    if (!classData) {
+      errors.push(
+        `Missing base class ${classId}.`
+      );
+      return;
+    }
+
+    const levelKeys = Object.keys(
+      classData.featuresByLevel || {}
+    );
+    const expectedLevelKeys = Array.from(
+      { length: 20 },
+      (_, index) => String(index + 1)
+    );
+
+    if (
+      !sameData(levelKeys, expectedLevelKeys)
+    ) {
+      errors.push(
+        `${classId} must define progression levels 1 through 20 in order.`
+      );
+    }
+
+    const seenFeatureIds = new Set();
+
+    expectedLevelKeys.forEach((levelKey) => {
+      const features =
+        classData.featuresByLevel?.[levelKey];
+
+      if (!Array.isArray(features)) {
+        errors.push(
+          `${classId} level ${levelKey} must contain a feature list.`
+        );
+        return;
+      }
+
+      features.forEach((feature, index) => {
+        const path =
+          `${classId}.featuresByLevel.${levelKey}[${index}]`;
+        const featureId =
+          String(feature?.id || "").trim();
+
+        if (!featureId) {
+          errors.push(
+            `${path} is missing a feature ID.`
+          );
+        } else if (seenFeatureIds.has(featureId)) {
+          errors.push(
+            `${classId} has duplicate feature ID "${featureId}".`
+          );
+        } else {
+          seenFeatureIds.add(featureId);
+        }
+
+        if (
+          Number(feature?.unlockLevel) !==
+          Number(levelKey)
+        ) {
+          errors.push(
+            `${path} has incorrect unlock level ${feature?.unlockLevel}.`
+          );
+        }
+
+        if (feature?.classId !== classId) {
+          errors.push(
+            `${path} has incorrect owning class ${feature?.classId}.`
+          );
+        }
+
+        if (
+          !SUPPORTED_BASE_CLASS_FEATURE_TYPES
+            .includes(feature?.type)
+        ) {
+          errors.push(
+            `${path} has unsupported feature type "${feature?.type}".`
+          );
+        }
+
+        if (
+          isBaseClassSummaryPlaceholder(
+            feature?.summary
+          ) ||
+          String(feature.summary).length > 180
+        ) {
+          errors.push(
+            `${path} has an invalid concise summary.`
+          );
+        }
+
+        const description = String(
+          feature?.description || ""
+        ).trim();
+
+        if (
+          description.length < 80 ||
+          /description not filled|placeholder|coming soon|\btodo\b|\btbd\b/i
+            .test(description)
+        ) {
+          errors.push(
+            `${path} is missing a completed description.`
+          );
+        }
+
+        if (
+          !feature?.sourceLabel ||
+          !feature?.sourceType ||
+          !feature?.rulesetId ||
+          feature?.rulesEdition !== "2014"
+        ) {
+          errors.push(
+            `${path} is missing source or edition metadata.`
+          );
+        }
+
+        (Array.isArray(feature?.effects)
+          ? feature.effects
+          : []
+        ).forEach((effect, effectIndex) => {
+          if (
+            !SUPPORTED_BASE_CLASS_EFFECT_TYPES
+              .includes(effect?.type)
+          ) {
+            errors.push(
+              `${path}.effects[${effectIndex}] has unsupported class-effect type "${effect?.type}".`
+            );
+          }
+        });
+
+        collectProgressionTables(
+          feature,
+          path,
+          (table, tablePath) => {
+            validateProgressionTable(
+              table,
+              tablePath,
+              errors
+            );
+          }
+        );
+      });
+    });
+
+    const proficiencyExpectation =
+      DEFAULT_CLASS_PROFICIENCY_EXPECTATIONS[
+        classId
+      ];
+    const startingSignature =
+      proficiencySignature({
+        armor:
+          classData.armorProficiencies,
+        weapons:
+          classData.weaponProficiencies,
+        tools:
+          classData.toolProficiencies,
+        skillChoices:
+          classData.skillChoices
+      });
+    const multiclassSignature =
+      proficiencySignature({
+        armor:
+          classData.multiclassProficiencies
+            ?.armor,
+        weapons:
+          classData.multiclassProficiencies
+            ?.weapons,
+        tools:
+          classData.multiclassProficiencies
+            ?.tools,
+        skillChoices:
+          classData.multiclassProficiencies
+            ?.skillChoices
+      });
+
+    if (
+      !sameData(
+        startingSignature,
+        proficiencyExpectation.starting
+      )
+    ) {
+      errors.push(
+        `${classId} has invalid starting proficiencies.`
+      );
+    }
+
+    if (
+      !sameData(
+        multiclassSignature,
+        proficiencyExpectation.multiclass
+      )
+    ) {
+      errors.push(
+        `${classId} has invalid multiclass proficiencies.`
+      );
+    }
+
+    if (
+      proficiencyExpectation
+        .multiclassToolChoice &&
+      !sameData(
+        [
+          Number(
+            classData
+              .multiclassProficiencies
+              ?.toolChoices
+              ?.choose || 0
+          ),
+          String(
+            classData
+              .multiclassProficiencies
+              ?.toolChoices
+              ?.label || ""
+          )
+        ],
+        proficiencyExpectation
+          .multiclassToolChoice
+      )
+    ) {
+      errors.push(
+        `${classId} has invalid multiclass tool proficiencies.`
+      );
+    }
+
+    [
+      "cantripsKnown",
+      "spellsKnown",
+      "infusionsKnownByLevel",
+      "infusedItemsByLevel"
+    ].forEach((key) => {
+      if (classData[key]) {
+        validateProgressionTable(
+          classData[key],
+          `${classId}.${key}`,
+          errors
+        );
+      }
+    });
+  });
+
+  const featureCount =
+    DEFAULT_CLASS_IDS.reduce(
+      (total, classId) => {
+        return (
+          total +
+          Object.values(
+            classes[classId]
+              ?.featuresByLevel || {}
+          ).flat().length
+        );
+      },
+      0
+    );
+
+  if (featureCount !== 285) {
+    errors.push(
+      `Expected 285 base-class features; received ${featureCount}.`
+    );
+  }
+
+  canonicalResourceChecks.forEach(
+    ([
+      classId,
+      featureId,
+      path,
+      expected
+    ]) => {
+      const feature = getFeature(
+        classes,
+        classId,
+        featureId
+      );
+      const actual = getPathValue(
+        feature,
+        path
+      );
+
+      if (!sameData(actual, expected)) {
+        errors.push(
+          `${classId}.${featureId}.${path} does not match the required class-resource progression.`
+        );
+      }
+    }
+  );
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    classCount: classIds.length,
+    featureCount
+  };
+};
+
+export const DEFAULT_CLASS_VALIDATION =
+  validateDefaultClassCollection(
+    DEFAULT_CLASSES
+  );
+
+if (!DEFAULT_CLASS_VALIDATION.valid) {
+  throw new Error(
+    `Default class validation failed: ${DEFAULT_CLASS_VALIDATION.errors.join(" | ")}`
+  );
+}
