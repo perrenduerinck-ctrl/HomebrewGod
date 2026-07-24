@@ -2,7 +2,14 @@ import { FEAT_NAME_LIST } from "./defaultFeatNames.js";
 import { DEFAULT_FEAT_RULES } from "./defaultFeatRules.js";
 import { getLegacy2014Metadata } from "./ruleset2014.js";
 
-export const DEFAULT_FEAT_SCHEMA_VERSION = 2;
+export const DEFAULT_FEAT_SCHEMA_VERSION = 3;
+export const DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM = 20;
+
+const FEAT_ABILITY_EFFECT_TYPES = new Set([
+  "abilityChoice",
+  "abilityIncrease",
+  "abilityScoreImprovement"
+]);
 
 const RAW_DEFAULT_FEATS = [
   {
@@ -285,6 +292,28 @@ const freezeRecordArray = (value) => Object.freeze(
     : []
 );
 
+const normalizeFeatEffect = (rawEffect) => {
+  if (!rawEffect || typeof rawEffect !== "object") {
+    return rawEffect;
+  }
+
+  if (!FEAT_ABILITY_EFFECT_TYPES.has(String(rawEffect.type || ""))) {
+    return rawEffect;
+  }
+
+  const rawMaximum =
+    rawEffect.maximum ??
+    DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM;
+  const numericMaximum = Number(rawMaximum);
+
+  return {
+    ...rawEffect,
+    maximum: Number.isFinite(numericMaximum)
+      ? Math.round(numericMaximum)
+      : rawMaximum
+  };
+};
+
 const normalizeFeatRecord = (rawFeat) => {
   const raw = rawFeat || {};
 
@@ -304,7 +333,11 @@ const normalizeFeatRecord = (rawFeat) => {
     ).trim(),
     source: String(raw.source || "default").trim(),
     prerequisites: freezeRecordArray(raw.prerequisites),
-    effects: freezeRecordArray(raw.effects),
+    effects: freezeRecordArray(
+      Array.isArray(raw.effects)
+        ? raw.effects.map(normalizeFeatEffect)
+        : raw.effects
+    ),
     choices: freezeRecordArray(raw.choices),
     tags: Object.freeze(
       Array.isArray(raw.tags)
@@ -359,6 +392,29 @@ export function validateDefaultFeatCollection(feats) {
       errors.push(`Feat ${id || index + 1} effects must be an array.`);
     } else if (!feat.effects.length) {
       errors.push(`Feat ${id || index + 1} has no structured effects.`);
+    } else {
+      feat.effects.forEach((effect, effectIndex) => {
+        if (
+          !FEAT_ABILITY_EFFECT_TYPES.has(
+            String(effect?.type || "")
+          )
+        ) {
+          return;
+        }
+
+        const maximum = Number(effect.maximum);
+
+        if (
+          !Number.isFinite(maximum) ||
+          !Number.isInteger(maximum) ||
+          maximum < 1 ||
+          maximum > 30
+        ) {
+          errors.push(
+            `Feat ${id || index + 1} ability effect ${effectIndex + 1} has an invalid maximum ability score.`
+          );
+        }
+      });
     }
 
     if (!Array.isArray(feat?.choices)) {
