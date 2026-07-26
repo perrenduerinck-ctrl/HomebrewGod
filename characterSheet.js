@@ -487,6 +487,74 @@ function renderContentList(values, fallbackText = "None recorded") {
   `;
 }
 
+function formatFeatSituationalEntry(entry) {
+  const handlingId =
+    cleanText(entry?.handling);
+  const handling = {
+    automatic: "Automatic",
+    tracked: "Tracked",
+    manual: "Manual"
+  }[handlingId] || "Manual";
+  const actionEconomy = {
+    action: "Action",
+    bonusAction: "Bonus action",
+    reaction: "Reaction",
+    passive: "Passive"
+  }[cleanText(entry?.actionEconomy)] || "Passive";
+  const recharge = {
+    none: "None",
+    turn: "Start of turn",
+    shortRest: "Short rest",
+    longRest: "Long rest",
+    shortOrLongRest: "Short or long rest"
+  }[cleanText(entry?.recharge)] ||
+    titleFromId(entry?.recharge, "None");
+  const usage = isRecord(entry?.usage)
+    ? cleanText(
+      entry.usage.label,
+      entry.usage.scope === "perTarget"
+        ? "Once per target"
+        : ""
+    )
+    : "";
+  const timing = cleanText(entry?.activationTime);
+  const details = [
+    `${handling} · ${actionEconomy}${timing ? ` (${timing})` : ""}`,
+    cleanText(entry?.summary),
+    entry?.condition
+      ? `When: ${cleanText(entry.condition)}`
+      : "",
+    handlingId === "manual" || handlingId === "tracked"
+      ? `Use: ${cleanText(entry?.instructions, entry?.summary)}`
+      : "",
+    `Recharge: ${recharge}${usage ? ` · ${usage}` : ""}`
+  ].filter(Boolean);
+
+  return {
+    id: cleanText(entry?.id),
+    name: titleFromId(
+      entry?.effectId,
+      cleanText(entry?.featName, "Feat effect")
+    ),
+    summary: details.join(". "),
+    source: cleanText(entry?.featName)
+  };
+}
+
+function getFeatSituationalEntries(character, section) {
+  return asArray(
+    character?.featMechanics
+      ?.situationalEffects
+  )
+    .filter((entry) => {
+      return cleanText(
+        entry?.section,
+        "utility"
+      ) === section;
+    })
+    .map(formatFeatSituationalEntry);
+}
+
 function getFeatEntries(character) {
   const byKey = new Map();
 
@@ -670,34 +738,47 @@ function getAttackRows(character, proficiencyBonus) {
 
 function renderAttackTable(character, proficiencyBonus) {
   const rows = getAttackRows(character, proficiencyBonus);
+  const conditionalEntries =
+    getFeatSituationalEntries(
+      character,
+      "attack"
+    );
 
-  if (!rows.length) {
+  if (!rows.length && !conditionalEntries.length) {
     return `<p class="hg-sheet-muted">No attacks are recorded yet.</p>`;
   }
 
   return `
-    <div class="hg-sheet-table-wrap">
-      <table class="hg-sheet-table">
-        <thead>
-          <tr>
-            <th>Attack</th>
-            <th>To Hit</th>
-            <th>Damage</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map((row) => `
+    ${rows.length ? `
+      <div class="hg-sheet-table-wrap">
+        <table class="hg-sheet-table">
+          <thead>
             <tr>
-              <td>${escapeHtml(row.name)}</td>
-              <td>${row.attackBonus === null ? "\u2014" : escapeHtml(formatModifier(row.attackBonus))}</td>
-              <td>${escapeHtml(row.damage)}</td>
-              <td>${escapeHtml(row.notes)}</td>
+              <th>Attack</th>
+              <th>To Hit</th>
+              <th>Damage</th>
+              <th>Notes</th>
             </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${row.attackBonus === null ? "\u2014" : escapeHtml(formatModifier(row.attackBonus))}</td>
+                <td>${escapeHtml(row.damage)}</td>
+                <td>${escapeHtml(row.notes)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : `<p class="hg-sheet-muted">No attack entries are recorded.</p>`}
+    ${conditionalEntries.length ? `
+      <div data-feat-attack-conditions="true">
+        <h3>Conditional feat effects</h3>
+        ${renderContentList(conditionalEntries)}
+      </div>
+    ` : ""}
   `;
 }
 
@@ -877,6 +958,11 @@ function renderFeatMechanics(character) {
   const actions = asArray(
     mechanics.actions
   );
+  const situationalEffects =
+    asArray(
+      mechanics
+        .situationalEffects
+    );
   const healingBonuses = asArray(
     mechanics.healingBonuses
   );
@@ -897,6 +983,7 @@ function renderFeatMechanics(character) {
     telepathy,
     ritualBooks,
     actions,
+    situationalEffects,
     healingBonuses,
     resistances,
     armorClassModifiers
@@ -966,7 +1053,17 @@ function renderFeatMechanics(character) {
         source:
           entry.featName
       };
-    })
+    }),
+    ...situationalEffects
+      .filter((entry) => {
+        return cleanText(
+          entry.section,
+          "utility"
+        ) === "defense";
+      })
+      .map(
+        formatFeatSituationalEntry
+      )
   ];
   const senseEntries = [
     ...senses.map((entry) => {
@@ -1037,23 +1134,35 @@ function renderFeatMechanics(character) {
       };
     });
   const actionEntries =
-    actions.map((entry) => {
-      return {
-        id: entry.id,
-        name:
-          firstText(
-            entry.name,
-            "Feat action"
-          ),
-        summary:
-          firstText(
-            entry.summary,
-            entry.activation
-          ),
-        source:
-          entry.featName
-      };
-    });
+    [
+      ...actions.map((entry) => {
+        return {
+          id: entry.id,
+          name:
+            firstText(
+              entry.name,
+              "Feat action"
+            ),
+          summary:
+            firstText(
+              entry.summary,
+              entry.activation
+            ),
+          source:
+            entry.featName
+        };
+      }),
+      ...situationalEffects
+        .filter((entry) => {
+          return cleanText(
+            entry.section,
+            "utility"
+          ) === "utility";
+        })
+        .map(
+          formatFeatSituationalEntry
+        )
+    ];
   const healingEntries =
     healingBonuses.map((entry) => {
       return {
@@ -1122,7 +1231,7 @@ function renderFeatMechanics(character) {
 
       ${actionEntries.length ? `
         <article class="hg-sheet-card">
-          <h2>Feat Actions</h2>
+          <h2>Feat Actions &amp; Reminders</h2>
           ${renderContentList(actionEntries)}
         </article>
       ` : ""}

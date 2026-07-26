@@ -293,7 +293,7 @@ export function createCharacterCreator(options = {}) {
       selectedFeats: [],
       advancementChoices: [],
       featMechanics: {
-        schemaVersion: 3,
+        schemaVersion: 4,
         hpBonus: 0,
         initiativeBonus: 0,
         speedBonus: 0,
@@ -314,6 +314,7 @@ export function createCharacterCreator(options = {}) {
         healingBonuses: [],
         resources: [],
         spellcasting: [],
+        situationalEffects: [],
         passiveEffects: [],
         instances: []
       },
@@ -3558,6 +3559,10 @@ export function createCharacterCreator(options = {}) {
         spellcasting:
           Array.isArray(raw.featMechanics?.spellcasting)
             ? cloneData(raw.featMechanics.spellcasting)
+            : [],
+        situationalEffects:
+          Array.isArray(raw.featMechanics?.situationalEffects)
+            ? cloneData(raw.featMechanics.situationalEffects)
             : [],
         passiveEffects:
           Array.isArray(raw.featMechanics?.passiveEffects)
@@ -16955,6 +16960,659 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    const phase12FeatIds = [
+      "bountiful-luck",
+      "charger",
+      "crossbow-expert",
+      "defensive-duelist",
+      "dungeon-delver",
+      "grappler",
+      "great-weapon-master",
+      "healer",
+      "inspiring-leader",
+      "mage-slayer",
+      "mounted-combatant",
+      "polearm-master",
+      "savage-attacker",
+      "sentinel",
+      "sharpshooter",
+      "shield-master",
+      "skulker",
+      "war-caster"
+    ];
+    const phase12RuleEffects =
+      DEFAULT_FEATS
+        .filter((feat) => {
+          return phase12FeatIds
+            .includes(feat.id);
+        })
+        .flatMap((feat) => {
+          return (
+            Array.isArray(feat.effects)
+              ? feat.effects
+              : []
+          )
+            .filter((effect) => {
+              return Boolean(
+                effect?.handling
+              );
+            })
+            .map((effect) => {
+              return {
+                featId: feat.id,
+                ...effect
+              };
+            });
+        });
+
+    record(
+      "Phase 12: situational feat effects are marked automatic, tracked, or manual",
+      {
+        reviewedFeats:
+          new Set(
+            phase12RuleEffects.map(
+              (effect) => {
+                return effect.featId;
+              }
+            )
+          ).size,
+        valid:
+          phase12RuleEffects.every(
+            (effect) => {
+              return [
+                "automatic",
+                "tracked",
+                "manual"
+              ].includes(
+                effect.handling
+              );
+            }
+          )
+      },
+      {
+        reviewedFeats: 18,
+        valid: true
+      }
+    );
+
+    record(
+      "Phase 12: manual and tracked feat effects include clear use instructions",
+      phase12RuleEffects
+        .filter((effect) => {
+          return effect.handling !==
+            "automatic";
+        })
+        .every((effect) => {
+          return (
+            cleanString(
+              effect.instructions
+            ).length > 20 &&
+            cleanString(
+              effect.instructions
+            ) !==
+              cleanString(
+                effect.summary
+              )
+          );
+        }),
+      true
+    );
+
+    record(
+      "Phase 12: situational feat effects use action economy labels",
+      {
+        labels:
+          uniqueCleanArray(
+            phase12RuleEffects.map(
+              (effect) => {
+                return effect
+                  .actionEconomy;
+              }
+            )
+          ).sort(),
+        valid:
+          phase12RuleEffects.every(
+            (effect) => {
+              return [
+                "action",
+                "bonusAction",
+                "reaction",
+                "passive"
+              ].includes(
+                effect.actionEconomy
+              );
+            }
+          )
+      },
+      {
+        labels: [
+          "action",
+          "bonusAction",
+          "passive",
+          "reaction"
+        ],
+        valid: true
+      }
+    );
+
+    record(
+      "Phase 12: situational feat effects include recharge labels",
+      phase12RuleEffects.every(
+        (effect) => {
+          return [
+            "none",
+            "turn",
+            "shortOrLongRest"
+          ].includes(
+            effect.recharge
+          );
+        }
+      ),
+      true
+    );
+
+    createPhase10FeatSelection(
+      "savage-attacker"
+    );
+    const phase12SavageResource =
+      creatorState.draft
+        .featMechanics
+        .resources
+        .find((entry) => {
+          return entry.resourceId ===
+            "savage-attacker-reroll";
+        });
+    const phase12SavageSpent =
+      adjustSelectedFeatResource(
+        phase12SavageResource?.id,
+        -1
+      );
+
+    record(
+      "Phase 12: applicable situational feat uses have a persistent counter",
+      {
+        maximum:
+          phase12SavageResource
+            ?.maximumUses,
+        recharge:
+          phase12SavageResource
+            ?.recharge,
+        spent:
+          phase12SavageSpent,
+        remaining:
+          creatorState.draft
+            .featMechanics
+            .resources
+            .find((entry) => {
+              return entry.id ===
+                phase12SavageResource
+                  ?.id;
+            })?.currentUses
+      },
+      {
+        maximum: 1,
+        recharge: "turn",
+        spent: true,
+        remaining: 0
+      }
+    );
+
+    createPhase10FeatSelection(
+      "shield-master"
+    );
+    const phase12SheetHtml =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          creatorState.draft,
+          {
+            activeTab: "main"
+          }
+        );
+
+    record(
+      "Phase 12: attack and defense sections display conditional feat summaries",
+      {
+        attack:
+          phase12SheetHtml.includes(
+            'data-feat-attack-conditions="true"'
+          ) &&
+          phase12SheetHtml.includes(
+            "Shield Master Shove"
+          ),
+        defense:
+          phase12SheetHtml.includes(
+            "<h2>Feat Defenses</h2>"
+          ) &&
+          phase12SheetHtml.includes(
+            "Shield Master Evasion"
+          ),
+        labels:
+          phase12SheetHtml.includes(
+            "Manual · Bonus action"
+          ) &&
+          phase12SheetHtml.includes(
+            "Automatic · Passive"
+          ),
+        instructions:
+          phase12SheetHtml.includes(
+            "Use: After the Attack action"
+          )
+      },
+      {
+        attack: true,
+        defense: true,
+        labels: true,
+        instructions: true
+      }
+    );
+
+    const phase12ReviewExpectations = [
+      {
+        featId: "bountiful-luck",
+        name: "Bountiful Luck",
+        verify: (effects) => {
+          return (
+            effects.length === 1 &&
+            effects[0]
+              .actionEconomy ===
+              "reaction" &&
+            effects[0]
+              .condition
+              .includes("30 feet")
+          );
+        }
+      },
+      {
+        featId: "charger",
+        name: "Charger",
+        verify: (effects) => {
+          return (
+            effects.length === 1 &&
+            effects[0]
+              .actionEconomy ===
+              "bonusAction" &&
+            effects[0]
+              .instructions
+              .includes("+5")
+          );
+        }
+      },
+      {
+        featId: "crossbow-expert",
+        name: "Crossbow Expert",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.filter(
+              (entry) => {
+                return entry
+                  .handling ===
+                  "automatic";
+              }
+            ).length === 2 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .actionEconomy ===
+                  "bonusAction";
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "defensive-duelist",
+        name: "Defensive Duelist",
+        verify: (effects) => {
+          return (
+            effects.length === 1 &&
+            effects[0].section ===
+              "defense" &&
+            effects[0]
+              .actionEconomy ===
+              "reaction"
+          );
+        }
+      },
+      {
+        featId: "dungeon-delver",
+        name: "Dungeon Delver",
+        verify: (effects) => {
+          return (
+            effects.length === 4 &&
+            effects.every(
+              (entry) => {
+                return entry
+                  .handling ===
+                  "automatic";
+              }
+            ) &&
+            effects.filter(
+              (entry) => {
+                return entry.section ===
+                  "defense";
+              }
+            ).length === 2
+          );
+        }
+      },
+      {
+        featId: "grappler",
+        name: "Grappler",
+        verify: (effects) => {
+          return (
+            effects.length === 2 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .actionEconomy ===
+                  "action" &&
+                  entry.instructions
+                    .includes(
+                      "both you and the target are restrained"
+                    );
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "great-weapon-master",
+        name: "Great Weapon Master",
+        verify: (effects) => {
+          return (
+            effects.length === 2 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .actionEconomy ===
+                  "bonusAction";
+              }
+            ) &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .instructions
+                  .includes(
+                    "Apply -5 to hit"
+                  );
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "healer",
+        name: "Healer",
+        verify: (effects) => {
+          return (
+            effects.length === 2 &&
+            effects.some(
+              (entry) => {
+                return (
+                  entry.usage
+                    ?.scope ===
+                    "perTarget" &&
+                  entry.recharge ===
+                    "shortOrLongRest"
+                );
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "inspiring-leader",
+        name: "Inspiring Leader",
+        verify: (effects) => {
+          return (
+            effects.length === 1 &&
+            effects[0]
+              .activationTime ===
+              "10 minutes" &&
+            effects[0].usage
+              ?.scope ===
+              "perTarget"
+          );
+        }
+      },
+      {
+        featId: "mage-slayer",
+        name: "Mage Slayer",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .actionEconomy ===
+                  "reaction";
+              }
+            ) &&
+            effects.filter(
+              (entry) => {
+                return entry
+                  .handling ===
+                  "automatic";
+              }
+            ).length === 2
+          );
+        }
+      },
+      {
+        featId: "mounted-combatant",
+        name: "Mounted Combatant",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.filter(
+              (entry) => {
+                return entry.section ===
+                  "defense";
+              }
+            ).length === 2 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .instructions
+                  .includes(
+                    "does not spend your reaction"
+                  );
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "polearm-master",
+        name: "Polearm Master",
+        verify: (effects) => {
+          return (
+            effects.length === 2 &&
+            effects.map(
+              (entry) => {
+                return entry
+                  .actionEconomy;
+              }
+            ).sort().join(",") ===
+              "bonusAction,reaction"
+          );
+        }
+      },
+      {
+        featId: "savage-attacker",
+        name: "Savage Attacker",
+        verify: (
+          effects,
+          resources
+        ) => {
+          return (
+            effects.length === 1 &&
+            effects[0].handling ===
+              "tracked" &&
+            resources.some(
+              (entry) => {
+                return (
+                  entry.resourceId ===
+                    "savage-attacker-reroll" &&
+                  entry.maximumUses ===
+                    1 &&
+                  entry.recharge ===
+                    "turn"
+                );
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "sentinel",
+        name: "Sentinel",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .actionEconomy ===
+                  "reaction" &&
+                  entry.condition
+                    .includes(
+                      "does not also have Sentinel"
+                    );
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "sharpshooter",
+        name: "Sharpshooter",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.filter(
+              (entry) => {
+                return entry
+                  .handling ===
+                  "automatic";
+              }
+            ).length === 2 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .instructions
+                  .includes(
+                    "Apply -5 to hit"
+                  );
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "shield-master",
+        name: "Shield Master",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .actionEconomy ===
+                  "bonusAction";
+              }
+            ) &&
+            effects.some(
+              (entry) => {
+                return entry
+                  .actionEconomy ===
+                  "reaction" &&
+                  entry.section ===
+                    "defense";
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "skulker",
+        name: "Skulker",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.filter(
+              (entry) => {
+                return entry
+                  .handling ===
+                  "automatic";
+              }
+            ).length === 2 &&
+            effects.some(
+              (entry) => {
+                return entry.effectId ===
+                  "skulker-hide" &&
+                  entry.handling ===
+                    "manual";
+              }
+            )
+          );
+        }
+      },
+      {
+        featId: "war-caster",
+        name: "War Caster",
+        verify: (effects) => {
+          return (
+            effects.length === 3 &&
+            effects.filter(
+              (entry) => {
+                return entry
+                  .handling ===
+                  "automatic";
+              }
+            ).length === 2 &&
+            effects.some(
+              (entry) => {
+                return (
+                  entry.actionEconomy ===
+                    "reaction" &&
+                  entry.instructions
+                    .includes(
+                      "targets only the provoking creature"
+                    )
+                );
+              }
+            )
+          );
+        }
+      }
+    ];
+
+    phase12ReviewExpectations
+      .forEach((expectation) => {
+        createPhase10FeatSelection(
+          expectation.featId
+        );
+        const effects =
+          creatorState.draft
+            .featMechanics
+            .situationalEffects;
+        const resources =
+          creatorState.draft
+            .featMechanics
+            .resources;
+
+        record(
+          `Phase 12: ${expectation.name} situational mechanics reviewed`,
+          expectation.verify(
+            effects,
+            resources
+          ),
+          true
+        );
+      });
+
     creatorState.draft = createEmptyCharacter();
     creatorState.draft.classProgression = {
       totalLevel: 2,
@@ -29868,6 +30526,14 @@ export function createCharacterCreator(options = {}) {
       ? character.featMechanics
           .restChoices
       : [];
+    const situationalEffects =
+      Array.isArray(
+        character?.featMechanics
+          ?.situationalEffects
+      )
+        ? character.featMechanics
+            .situationalEffects
+        : [];
 
     if (!instances.length) {
       return "";
@@ -29888,6 +30554,13 @@ export function createCharacterCreator(options = {}) {
               return entry.sourceId ===
                 instance.id;
             });
+          const featSituationalEffects =
+            situationalEffects.filter(
+              (entry) => {
+                return entry.sourceId ===
+                  instance.id;
+              }
+            );
           const choiceSummaries = (Array.isArray(instance.feat.choices)
             ? instance.feat.choices
             : []
@@ -29933,6 +30606,58 @@ export function createCharacterCreator(options = {}) {
                           — ${escapeHtml(String(record.spellcastingAbility || "").toUpperCase())};
                           ${escapeHtml(usage)}
                           ${record.canUseSpellSlots === true ? "; may also use spell slots" : ""}
+                        </li>
+                      `;
+                    }).join("")}
+                  </ul>
+                `
+                : ""}
+
+              ${featSituationalEffects.length
+                ? `
+                  <ul
+                    class="small"
+                    data-feat-situational-effects="${escapeHtml(instance.feat.id)}"
+                  >
+                    ${featSituationalEffects.map((entry) => {
+                      const handlingLabel = {
+                        automatic: "Automatic",
+                        tracked: "Tracked",
+                        manual: "Manual"
+                      }[entry.handling] || "Manual";
+                      const economyLabel = {
+                        action: "Action",
+                        bonusAction: "Bonus action",
+                        reaction: "Reaction",
+                        passive: "Passive"
+                      }[entry.actionEconomy] || "Passive";
+                      const timingLabel =
+                        cleanString(
+                          entry.activationTime
+                        );
+                      const rechargeLabel =
+                        entry.recharge === "none"
+                          ? "No separate recharge"
+                          : formatSection12Recharge(
+                              entry.recharge
+                            );
+                      const usageLabel =
+                        entry.usage?.scope === "perTarget"
+                          ? cleanString(
+                              entry.usage.label,
+                              "Once per target"
+                            )
+                          : "";
+
+                      return `
+                        <li data-feat-situational-effect="${escapeHtml(entry.effectId)}">
+                          <b>${escapeHtml(`${handlingLabel} · ${economyLabel}${timingLabel ? ` (${timingLabel})` : ""}`)}</b>
+                          — ${escapeHtml(entry.summary)}
+                          <br><span>${escapeHtml(`Recharge: ${rechargeLabel}${usageLabel ? ` · ${usageLabel}` : ""}`)}</span>
+                          ${entry.condition ? `<br><span><b>When:</b> ${escapeHtml(entry.condition)}</span>` : ""}
+                          ${entry.handling === "manual" || entry.handling === "tracked"
+                            ? `<br><span><b>Use:</b> ${escapeHtml(entry.instructions)}</span>`
+                            : ""}
                         </li>
                       `;
                     }).join("")}
@@ -42807,7 +43532,7 @@ export function createCharacterCreator(options = {}) {
     );
     const instances = getSelectedDefaultFeatInstances(draft);
     const mechanics = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       hpBonus: 0,
       initiativeBonus: 0,
       speedBonus: 0,
@@ -42828,6 +43553,7 @@ export function createCharacterCreator(options = {}) {
       healingBonuses: [],
       resources: [],
       spellcasting: [],
+      situationalEffects: [],
       passiveEffects: [],
       instances: []
     };
@@ -44042,12 +44768,130 @@ export function createCharacterCreator(options = {}) {
           }
 
           if (type === "custom" && effect.summary) {
-            mechanics.passiveEffects.push({
-              id: `${instance.id}:${effect.id}`,
-              featId: feat.id,
-              featName: feat.name,
-              summary: effect.summary
-            });
+            const situationalId =
+              `${instance.id}:${effect.id}`;
+            const handling =
+              ["automatic", "tracked", "manual"]
+                .includes(effect.handling)
+                ? effect.handling
+                : "";
+
+            if (handling) {
+              const actionEconomy =
+                ["action", "bonusAction", "reaction", "passive"]
+                  .includes(effect.actionEconomy)
+                  ? effect.actionEconomy
+                  : "passive";
+              const section =
+                ["attack", "defense", "utility"]
+                  .includes(effect.section)
+                  ? effect.section
+                  : "utility";
+              const usage =
+                effect.usage &&
+                typeof effect.usage === "object" &&
+                !Array.isArray(effect.usage)
+                  ? cloneData(effect.usage)
+                  : null;
+              const maximumUses =
+                usage &&
+                usage.scope === "self"
+                  ? Math.max(
+                      0,
+                      safeNumber(
+                        usage.maximumUses,
+                        0
+                      )
+                    )
+                  : 0;
+
+              mechanics.situationalEffects.push({
+                id: situationalId,
+                featId: feat.id,
+                featName: feat.name,
+                sourceId: instance.id,
+                effectId: effect.id,
+                handling,
+                actionEconomy,
+                activationTime:
+                  cleanString(
+                    effect.activationTime
+                  ),
+                recharge:
+                  cleanString(
+                    effect.recharge,
+                    "none"
+                  ),
+                section,
+                condition:
+                  cleanString(
+                    effect.condition
+                  ),
+                summary:
+                  cleanString(
+                    effect.summary
+                  ),
+                instructions:
+                  cleanString(
+                    effect.instructions,
+                    effect.summary
+                  ),
+                usage,
+                resourceId:
+                  handling === "tracked" &&
+                  maximumUses > 0
+                    ? situationalId
+                    : ""
+              });
+
+              if (
+                handling === "tracked" &&
+                maximumUses > 0
+              ) {
+                const previous =
+                  previousResources[
+                    situationalId
+                  ];
+
+                mechanics.resources.push({
+                  id: situationalId,
+                  featId: feat.id,
+                  featName: feat.name,
+                  resourceId:
+                    effect.id,
+                  name:
+                    cleanString(
+                      usage.label,
+                      feat.name
+                    ),
+                  maximumUses,
+                  currentUses:
+                    Math.min(
+                      maximumUses,
+                      Math.max(
+                        0,
+                        safeNumber(
+                          previous?.currentUses,
+                          maximumUses
+                        )
+                      )
+                    ),
+                  recharge:
+                    cleanString(
+                      effect.recharge,
+                      "none"
+                    ),
+                  die: ""
+                });
+              }
+            } else {
+              mechanics.passiveEffects.push({
+                id: situationalId,
+                featId: feat.id,
+                featName: feat.name,
+                summary: effect.summary
+              });
+            }
           }
         });
 

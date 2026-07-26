@@ -46,6 +46,30 @@ const custom = (id, summary, extra = {}) => ({
   ...extra
 });
 
+const situational = (
+  id,
+  summary,
+  {
+    handling = "manual",
+    actionEconomy = "passive",
+    recharge = "none",
+    section = "utility",
+    condition = "",
+    instructions = summary,
+    usage = null,
+    ...extra
+  } = {}
+) => custom(id, summary, {
+  handling,
+  actionEconomy,
+  recharge,
+  section,
+  condition,
+  instructions,
+  usage,
+  ...extra
+});
+
 const abilityChoice = (
   id = "ability",
   options = ABILITIES,
@@ -216,7 +240,19 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Bountiful Luck",
     "Let a nearby ally reroll a natural 1 by sharing halfling luck.",
     "When a nearby ally rolls a 1 on an attack, check, or save, use a reaction to let that ally reroll; your own Lucky trait pauses until your next turn.",
-    { prerequisites: [{ type: "species", speciesIds: ["halfling"] }], effects: [custom("bountiful-luck-reaction", "Reaction lets a nearby ally reroll a natural 1; personal halfling luck is unavailable until the next turn.")], tags: ["species", "reaction", "support"] }
+    {
+      prerequisites: [{ type: "species", speciesIds: ["halfling"] }],
+      effects: [situational(
+        "bountiful-luck-reaction",
+        "A nearby ally can reroll a natural 1; your Lucky trait is unavailable until the end of your next turn.",
+        {
+          actionEconomy: "reaction",
+          condition: "An ally within 30 feet rolls a 1 on an attack roll, ability check, or saving throw.",
+          instructions: "Spend your reaction, have the ally reroll the d20, and use the new roll. Do not use your own halfling Lucky trait before the end of your next turn."
+        }
+      )],
+      tags: ["species", "reaction", "support"]
+    }
   ),
   rule(
     "Cartomancer",
@@ -228,7 +264,19 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Charger",
     "Dash into a forceful bonus-action attack or shove.",
     "After using the Dash action, make one melee weapon attack or shove as a bonus action; moving straight toward the target improves its damage or push.",
-    { effects: [custom("charger-attack", "After Dash, bonus action melee attack gains +5 damage after a 10-foot straight approach, or shove pushes 10 feet.")], tags: ["combat", "movement", "bonus-action"] }
+    {
+      effects: [situational(
+        "charger-attack",
+        "After Dash, make a bonus-action melee attack or shove; a 10-foot straight approach adds +5 damage or increases the shove to 10 feet.",
+        {
+          actionEconomy: "bonusAction",
+          section: "attack",
+          condition: "You used the Dash action this turn.",
+          instructions: "Spend a bonus action to make one melee weapon attack or shove. If you moved at least 10 feet in a straight line immediately before it, add +5 damage to the attack or push the target up to 10 feet on the shove."
+        }
+      )],
+      tags: ["combat", "movement", "bonus-action"]
+    }
   ),
   rule(
     "Chef",
@@ -255,7 +303,26 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Crossbow Expert",
     "Ignore crossbow loading, fight at close range, and make a hand-crossbow bonus attack.",
     "Ignore Loading for proficient crossbows, avoid close-range disadvantage with ranged attacks, and make a hand-crossbow attack as a bonus action after a one-handed attack.",
-    { effects: [custom("crossbow-loading", "Ignore the Loading property of proficient crossbows."), custom("close-range-ranged", "Being within 5 feet of a hostile creature does not impose disadvantage on ranged attacks."), custom("hand-crossbow-bonus-attack", "After attacking with a one-handed weapon, make a hand-crossbow attack as a bonus action.")], tags: ["combat", "ranged", "weapon"] }
+    {
+      effects: [
+        situational("crossbow-loading", "Ignore the Loading property of crossbows with which you are proficient.", {
+          handling: "automatic",
+          section: "attack",
+          condition: "You are proficient with the crossbow."
+        }),
+        situational("close-range-ranged", "A hostile creature within 5 feet does not impose disadvantage on your ranged attack rolls.", {
+          handling: "automatic",
+          section: "attack"
+        }),
+        situational("hand-crossbow-bonus-attack", "After attacking with a one-handed weapon, make one loaded hand-crossbow attack.", {
+          actionEconomy: "bonusAction",
+          section: "attack",
+          condition: "You used the Attack action and attacked with a one-handed weapon.",
+          instructions: "Spend a bonus action to attack with a loaded hand crossbow you are holding; the Ammunition property still applies."
+        })
+      ],
+      tags: ["combat", "ranged", "weapon"]
+    }
   ),
   rule(
     "Crusher",
@@ -271,7 +338,20 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Defensive Duelist",
     "Use a reaction and a finesse weapon to add proficiency bonus to AC against one attack.",
     "While wielding a finesse weapon, use a reaction when hit by a melee attack to add proficiency bonus to AC for that attack.",
-    { prerequisites: [{ type: "abilityMinimum", ability: "dex", minimum: 13 }], effects: [custom("defensive-duelist-reaction", "Reaction adds proficiency bonus to AC against the triggering melee attack while wielding a finesse weapon.")], tags: ["combat", "reaction", "armor-class"] }
+    {
+      prerequisites: [{ type: "abilityMinimum", ability: "dex", minimum: 13 }],
+      effects: [situational(
+        "defensive-duelist-reaction",
+        "Add your proficiency bonus to AC against the triggering melee attack.",
+        {
+          actionEconomy: "reaction",
+          section: "defense",
+          condition: "A creature hits you with a melee attack while you wield a finesse weapon with which you are proficient.",
+          instructions: "Spend your reaction, add your proficiency bonus to AC for that attack only, and check whether the triggering attack now misses."
+        }
+      )],
+      tags: ["combat", "reaction", "armor-class"]
+    }
   ),
   rule(
     "Divinely Favored",
@@ -322,7 +402,29 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Dungeon Delver",
     "Find secret doors and resist the danger of traps.",
     "Gain advantage to find hidden doors and resist traps, plus resistance to trap damage; moving quickly does not impose the normal passive-perception penalty for hidden threats.",
-    { effects: [custom("dungeon-delver-search", "Advantage on Perception and Investigation checks to detect secret doors."), custom("dungeon-delver-traps", "Advantage on saves against traps and resistance to trap damage."), custom("dungeon-delver-travel", "Fast travel does not impose the normal passive Perception penalty for hidden threats.")], tags: ["exploration", "resistance"] }
+    {
+      effects: [
+        situational("dungeon-delver-search", "Advantage on Perception and Investigation checks made to detect secret doors.", {
+          handling: "automatic",
+          condition: "The check is made to detect a secret door."
+        }),
+        situational("dungeon-delver-trap-saves", "Advantage on saving throws made to avoid or resist traps.", {
+          handling: "automatic",
+          section: "defense",
+          condition: "The saving throw is caused by a trap."
+        }),
+        situational("dungeon-delver-trap-resistance", "Resistance to damage dealt by traps.", {
+          handling: "automatic",
+          section: "defense",
+          condition: "The damage is dealt by a trap."
+        }),
+        situational("dungeon-delver-travel", "Traveling at a fast pace does not impose the normal penalty on passive Perception.", {
+          handling: "automatic",
+          condition: "You are traveling at a fast pace."
+        })
+      ],
+      tags: ["exploration", "resistance"]
+    }
   ),
   rule(
     "Durable",
@@ -477,13 +579,44 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Grappler",
     "Gain advantage against creatures you grapple and attempt to restrain them.",
     "Attacks against a creature you grapple have advantage. Use an action to contest a second grapple that restrains both you and the target.",
-    { prerequisites: [{ type: "abilityMinimum", ability: "str", minimum: 13 }], effects: [custom("grappler-advantage", "Advantage on attack rolls against creatures you are grappling."), custom("grappler-pin", "Action makes another grapple contest; success restrains both grappler and target until the grapple ends.")], tags: ["combat", "grapple"] }
+    {
+      prerequisites: [{ type: "abilityMinimum", ability: "str", minimum: 13 }],
+      effects: [
+        situational("grappler-advantage", "Advantage on attack rolls against a creature you are grappling.", {
+          handling: "automatic",
+          section: "attack",
+          condition: "You are grappling the target."
+        }),
+        situational("grappler-pin", "A successful second grapple contest restrains both you and the target until the grapple ends.", {
+          actionEconomy: "action",
+          section: "attack",
+          condition: "You are already grappling the target.",
+          instructions: "Spend an action and make another grapple check against the target. On a success, both you and the target are restrained until the grapple ends."
+        })
+      ],
+      tags: ["combat", "grapple"]
+    }
   ),
   rule(
     "Great Weapon Master",
     "Gain a bonus attack after a critical hit or takedown and trade accuracy for heavy-weapon damage.",
     "A melee critical hit or reduction to 0 hit points can trigger one bonus-action melee attack. Before a proficient heavy-weapon attack, take -5 to hit for +10 damage.",
-    { effects: [custom("great-weapon-master-bonus-attack", "Critical melee hits and melee takedowns can grant one bonus-action melee attack."), custom("great-weapon-master-power-attack", "Before a proficient heavy melee attack, choose -5 to hit and +10 damage.")], tags: ["combat", "weapon", "heavy"] }
+    {
+      effects: [
+        situational("great-weapon-master-bonus-attack", "After a melee critical hit or reducing a creature to 0 hit points, make one melee weapon attack.", {
+          actionEconomy: "bonusAction",
+          section: "attack",
+          condition: "On your turn, you score a critical hit with a melee weapon or reduce a creature to 0 hit points with one.",
+          instructions: "Spend a bonus action before the turn ends to make one melee weapon attack."
+        }),
+        situational("great-weapon-master-power-attack", "Take -5 to the attack roll to add +10 damage on a hit.", {
+          section: "attack",
+          condition: "Before making a melee attack with a heavy weapon with which you are proficient.",
+          instructions: "Declare the power attack before rolling. Apply -5 to hit; if it hits, add 10 to the attack's damage."
+        })
+      ],
+      tags: ["combat", "weapon", "heavy"]
+    }
   ),
   rule(
     "Guile of the Cloud Giant",
@@ -506,7 +639,23 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Healer",
     "Use a healer's kit to stabilize more effectively and restore hit points.",
     "A healer's kit can stabilize a creature and restore 1 hit point, or restore a larger amount once per creature between rests.",
-    { effects: [custom("healer-stabilize", "Using a healer's kit to stabilize also restores 1 hit point."), custom("healer-kit-healing", "Action and one kit use restore 1d6 + 4 + target Hit Dice maximum; each target benefits once per short or long rest.")], tags: ["healing", "item"] }
+    {
+      effects: [
+        situational("healer-stabilize", "Stabilizing a dying creature with a healer's kit also restores 1 hit point.", {
+          actionEconomy: "action",
+          condition: "You use a healer's kit to stabilize a dying creature.",
+          instructions: "Spend one use of the healer's kit; the creature becomes stable and regains 1 hit point."
+        }),
+        situational("healer-kit-healing", "Restore 1d6 + 4 + the target's maximum number of Hit Dice hit points.", {
+          actionEconomy: "action",
+          recharge: "shortOrLongRest",
+          condition: "The target has not received this healing since its last short or long rest.",
+          instructions: "Spend one healer's kit use, roll 1d6, and add 4 plus the target's maximum Hit Dice. Mark that target as ineligible until it finishes a short or long rest.",
+          usage: { maximumUses: 1, scope: "perTarget", label: "Once per target" }
+        })
+      ],
+      tags: ["healing", "item"]
+    }
   ),
   rule(
     "Heavily Armored",
@@ -541,7 +690,23 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Inspiring Leader",
     "Bolster companions with a ten-minute speech and temporary hit points.",
     "After ten minutes, up to six friendly creatures gain temporary hit points equal to your level plus Charisma modifier, once per rest.",
-    { prerequisites: [{ type: "abilityMinimum", ability: "cha", minimum: 13 }], effects: [custom("inspiring-speech", "After 10 minutes, up to six allies gain temporary hit points equal to character level + Charisma modifier; a creature benefits once per rest.")], tags: ["support", "temporary-hit-points"] }
+    {
+      prerequisites: [{ type: "abilityMinimum", ability: "cha", minimum: 13 }],
+      effects: [situational(
+        "inspiring-speech",
+        "After a 10-minute speech, up to six creatures gain temporary hit points equal to your level + Charisma modifier.",
+        {
+          actionEconomy: "action",
+          activationTime: "10 minutes",
+          recharge: "shortOrLongRest",
+          section: "defense",
+          condition: "Each friendly creature is within 30 feet, can see or hear you, understands you, and has not benefited since its last short or long rest.",
+          instructions: "Spend 10 minutes speaking. Choose up to six eligible friendly creatures, including yourself, and give each the temporary hit points; mark each recipient as ineligible until it rests.",
+          usage: { maximumUses: 1, scope: "perTarget", label: "Once per recipient" }
+        }
+      )],
+      tags: ["support", "temporary-hit-points"]
+    }
   ),
   rule(
     "Keen Mind",
@@ -623,7 +788,27 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Mage Slayer",
     "Punish nearby spellcasting and resist spells cast at close range.",
     "React to a nearby spellcaster with a melee attack, impose disadvantage on concentration saves caused by your damage, and gain advantage on saves against nearby spells.",
-    { effects: [custom("mage-slayer-reaction", "Reaction melee attack when a creature within 5 feet casts a spell."), custom("mage-slayer-concentration", "Damage you deal imposes disadvantage on concentration saves."), custom("mage-slayer-saves", "Advantage on saves against spells cast by creatures within 5 feet.")], tags: ["combat", "spellcasting", "reaction"] }
+    {
+      effects: [
+        situational("mage-slayer-reaction", "Make a melee weapon attack when a nearby creature casts a spell.", {
+          actionEconomy: "reaction",
+          section: "attack",
+          condition: "A creature within 5 feet of you casts a spell.",
+          instructions: "Spend your reaction immediately after the spell is cast to make one melee weapon attack against that creature."
+        }),
+        situational("mage-slayer-concentration", "A creature has disadvantage on the concentration save caused by damage you deal.", {
+          handling: "automatic",
+          section: "attack",
+          condition: "Your damage forces the creature to make a Constitution save to maintain concentration."
+        }),
+        situational("mage-slayer-saves", "Advantage on saving throws against spells cast by creatures within 5 feet.", {
+          handling: "automatic",
+          section: "defense",
+          condition: "The spell's caster is within 5 feet of you."
+        })
+      ],
+      tags: ["combat", "spellcasting", "reaction"]
+    }
   ),
   rule(
     "Magic Initiate",
@@ -685,7 +870,26 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Mounted Combatant",
     "Fight effectively from a mount and protect it from attacks and area effects.",
     "Gain advantage on melee attacks against smaller unmounted foes, redirect attacks from your mount to yourself, and improve its Dexterity-save outcomes.",
-    { effects: [custom("mounted-advantage", "While mounted, advantage on melee attacks against unmounted creatures smaller than the mount."), custom("mounted-redirect", "Redirect an attack targeting the mount to yourself."), custom("mounted-evasion", "Mount takes no damage on a successful Dexterity save and half on a failure when the effect normally allows half.")], tags: ["combat", "mounted"] }
+    {
+      effects: [
+        situational("mounted-advantage", "Advantage on melee attack rolls against unmounted creatures smaller than your mount.", {
+          handling: "automatic",
+          section: "attack",
+          condition: "You are mounted and the target is unmounted and smaller than your mount."
+        }),
+        situational("mounted-redirect", "Force an attack targeting your mount to target you instead.", {
+          section: "defense",
+          condition: "An attack targets your mount.",
+          instructions: "Before the attack is resolved, declare that it targets you instead. This does not spend your reaction."
+        }),
+        situational("mounted-evasion", "Your mount takes no damage on a successful Dexterity save and half on a failed save when success normally halves damage.", {
+          handling: "automatic",
+          section: "defense",
+          condition: "Your mount is subjected to an effect that allows a Dexterity save for half damage."
+        })
+      ],
+      tags: ["combat", "mounted"]
+    }
   ),
   rule(
     "Observant",
@@ -739,7 +943,23 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Polearm Master",
     "Gain a bonus butt-end attack and opportunity attacks against approaching foes.",
     "After attacking with a qualifying polearm, make a bonus-action 1d4 bludgeoning attack. Enemies provoke opportunity attacks when entering the polearm's reach.",
-    { effects: [custom("polearm-bonus-attack", "After attacking only with a glaive, halberd, quarterstaff, or spear, make a bonus-action butt-end attack for 1d4 bludgeoning."), custom("polearm-opportunity", "Creatures provoke an opportunity attack when entering the reach of a qualifying polearm.")], tags: ["combat", "weapon", "reaction"] }
+    {
+      effects: [
+        situational("polearm-bonus-attack", "Make a 1d4 bludgeoning attack with the opposite end of a qualifying polearm.", {
+          actionEconomy: "bonusAction",
+          section: "attack",
+          condition: "You used the Attack action and attacked only with a glaive, halberd, quarterstaff, or spear.",
+          instructions: "Spend a bonus action and use the same attack ability as the weapon's primary attack; the damage die is 1d4 bludgeoning."
+        }),
+        situational("polearm-opportunity", "Creatures provoke an opportunity attack when they enter your qualifying polearm's reach.", {
+          actionEconomy: "reaction",
+          section: "attack",
+          condition: "A creature enters the reach of your glaive, halberd, pike, quarterstaff, or spear.",
+          instructions: "Spend your reaction to make the opportunity attack with the qualifying polearm."
+        })
+      ],
+      tags: ["combat", "weapon", "reaction"]
+    }
   ),
   rule(
     "Prodigy",
@@ -799,7 +1019,21 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Savage Attacker",
     "Reroll a melee weapon's damage dice once per turn and choose either total.",
     "Once per turn when rolling melee weapon damage, roll the weapon's damage dice a second time and use either result.",
-    { effects: [custom("savage-attacker-reroll", "Once per turn, reroll all damage dice for one melee weapon hit and choose either total.")], tags: ["combat", "weapon", "damage"] }
+    {
+      effects: [situational(
+        "savage-attacker-reroll",
+        "Reroll a melee weapon's damage dice and use either total.",
+        {
+          handling: "tracked",
+          recharge: "turn",
+          section: "attack",
+          condition: "Once per turn when you roll damage for a melee weapon attack.",
+          instructions: "Spend the tracked use, roll the weapon's damage dice a second time, choose either total, and restore the use at the start of your next turn.",
+          usage: { maximumUses: 1, scope: "self", label: "Reroll" }
+        }
+      )],
+      tags: ["combat", "weapon", "damage"]
+    }
   ),
   rule(
     "Scion of the Outer Planes",
@@ -827,7 +1061,26 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Sentinel",
     "Stop enemies with opportunity attacks and punish attacks against nearby allies.",
     "Opportunity attacks reduce speed to 0, Disengage does not prevent them, and a nearby attack against someone else can trigger a reaction melee attack.",
-    { effects: [custom("sentinel-stop", "A creature hit by your opportunity attack has speed 0 for the rest of its turn."), custom("sentinel-disengage", "Creatures provoke your opportunity attacks even after taking Disengage."), custom("sentinel-retaliation", "Reaction melee attack when a nearby creature attacks someone other than you without this feat.")], tags: ["combat", "reaction", "control"] }
+    {
+      effects: [
+        situational("sentinel-stop", "A creature hit by your opportunity attack has speed 0 for the rest of its turn.", {
+          handling: "automatic",
+          section: "attack",
+          condition: "Your opportunity attack hits."
+        }),
+        situational("sentinel-disengage", "Creatures provoke your opportunity attacks even after taking Disengage.", {
+          handling: "automatic",
+          section: "attack"
+        }),
+        situational("sentinel-retaliation", "Make a melee weapon attack against a nearby attacker who targets someone else.", {
+          actionEconomy: "reaction",
+          section: "attack",
+          condition: "A creature within 5 feet attacks a target other than you, and that target does not also have Sentinel.",
+          instructions: "Spend your reaction to make one melee weapon attack against the attacking creature."
+        })
+      ],
+      tags: ["combat", "reaction", "control"]
+    }
   ),
   rule(
     "Shadow Touched",
@@ -843,13 +1096,51 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Sharpshooter",
     "Master difficult long-range shots and trade accuracy for damage.",
     "Long range no longer imposes disadvantage, ranged weapon attacks ignore most cover, and proficient ranged attacks can take -5 to hit for +10 damage.",
-    { effects: [custom("sharpshooter-range", "Ranged weapon attacks do not suffer disadvantage at long range."), custom("sharpshooter-cover", "Ranged weapon attacks ignore half and three-quarters cover."), custom("sharpshooter-power-attack", "Before a proficient ranged weapon attack, choose -5 to hit and +10 damage.")], tags: ["combat", "ranged", "weapon"] }
+    {
+      effects: [
+        situational("sharpshooter-range", "Long range does not impose disadvantage on your ranged weapon attack rolls.", {
+          handling: "automatic",
+          section: "attack"
+        }),
+        situational("sharpshooter-cover", "Ranged weapon attacks ignore half cover and three-quarters cover.", {
+          handling: "automatic",
+          section: "attack"
+        }),
+        situational("sharpshooter-power-attack", "Take -5 to the attack roll to add +10 damage on a hit.", {
+          section: "attack",
+          condition: "Before making a ranged weapon attack with a weapon with which you are proficient.",
+          instructions: "Declare the power attack before rolling. Apply -5 to hit; if it hits, add 10 to the attack's damage."
+        })
+      ],
+      tags: ["combat", "ranged", "weapon"]
+    }
   ),
   rule(
     "Shield Master",
     "Use a shield offensively and defend against Dexterity-based effects.",
     "After attacking, shove with a shield as a bonus action. Add the shield's AC bonus to certain single-target Dexterity saves and use a reaction to take no damage on a successful save.",
-    { effects: [custom("shield-master-shove", "After taking Attack, bonus action shove a creature within 5 feet using the shield."), custom("shield-master-save-bonus", "Add shield AC bonus to Dexterity saves against effects targeting only you."), custom("shield-master-evasion", "Reaction after a successful Dexterity save for half damage reduces damage to zero.")], tags: ["combat", "shield", "saving-throw"] }
+    {
+      effects: [
+        situational("shield-master-shove", "Shove a creature within 5 feet with your shield after taking the Attack action.", {
+          actionEconomy: "bonusAction",
+          section: "attack",
+          condition: "You wield a shield and used the Attack action on your turn.",
+          instructions: "After the Attack action, spend a bonus action to make the shove attempt against a creature within 5 feet."
+        }),
+        situational("shield-master-save-bonus", "Add your shield's AC bonus to Dexterity saves against effects that target only you.", {
+          handling: "automatic",
+          section: "defense",
+          condition: "You wield a shield and the harmful effect targets only you."
+        }),
+        situational("shield-master-evasion", "Take no damage after succeeding on a Dexterity save that normally deals half damage.", {
+          actionEconomy: "reaction",
+          section: "defense",
+          condition: "You wield a shield and succeed on a Dexterity save against an effect that deals half damage on a success.",
+          instructions: "Spend your reaction after the successful save to reduce the effect's damage to 0."
+        })
+      ],
+      tags: ["combat", "shield", "saving-throw"]
+    }
   ),
   rule(
     "Skill Expert",
@@ -875,7 +1166,26 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Skulker",
     "Hide effectively in dim light and make missed ranged attacks without revealing yourself.",
     "Hide while lightly obscured, remain hidden after a missed ranged weapon attack, and remove dim-light disadvantage from sight-based Perception checks.",
-    { prerequisites: [{ type: "abilityMinimum", ability: "dex", minimum: 13 }], effects: [custom("skulker-hide", "Can attempt to hide while lightly obscured."), custom("skulker-miss", "A missed ranged weapon attack does not reveal your position."), custom("skulker-dim-light", "Dim light does not impose disadvantage on sight-based Perception checks.")], tags: ["stealth", "ranged", "exploration"] }
+    {
+      prerequisites: [{ type: "abilityMinimum", ability: "dex", minimum: 13 }],
+      effects: [
+        situational("skulker-hide", "You can attempt to hide while only lightly obscured.", {
+          condition: "You are lightly obscured from the creature from which you are hiding.",
+          instructions: "Use the normal Hide action or other available Hide timing even though you are only lightly obscured."
+        }),
+        situational("skulker-miss", "A missed ranged weapon attack does not reveal your position.", {
+          handling: "automatic",
+          section: "attack",
+          condition: "You are hidden and miss with a ranged weapon attack."
+        }),
+        situational("skulker-dim-light", "Dim light does not impose disadvantage on sight-based Perception checks.", {
+          handling: "automatic",
+          section: "defense",
+          condition: "The Perception check relies on sight in dim light."
+        })
+      ],
+      tags: ["stealth", "ranged", "exploration"]
+    }
   ),
   rule(
     "Slasher",
@@ -998,7 +1308,27 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "War Caster",
     "Maintain concentration and cast effectively while armed in close combat.",
     "Gain advantage on concentration saves, perform somatic components with occupied hands, and replace an opportunity attack with a qualifying one-target spell.",
-    { prerequisites: [{ type: "spellcasting" }], effects: [custom("war-caster-concentration", "Advantage on Constitution saves to maintain concentration after damage."), custom("war-caster-components", "Perform somatic spell components while hands hold weapons or a shield."), custom("war-caster-opportunity-spell", "Reaction casts a one-action, one-target spell instead of an opportunity attack.")], tags: ["spellcasting", "combat", "concentration"] }
+    {
+      prerequisites: [{ type: "spellcasting" }],
+      effects: [
+        situational("war-caster-concentration", "Advantage on Constitution saving throws made to maintain concentration after taking damage.", {
+          handling: "automatic",
+          section: "defense",
+          condition: "Damage forces a Constitution save to maintain concentration."
+        }),
+        situational("war-caster-components", "Perform somatic spell components while holding weapons or a shield in one or both hands.", {
+          handling: "automatic",
+          condition: "Your hands are occupied by weapons or a shield."
+        }),
+        situational("war-caster-opportunity-spell", "Cast a spell instead of making an opportunity attack.", {
+          actionEconomy: "reaction",
+          section: "attack",
+          condition: "A creature's movement provokes an opportunity attack from you.",
+          instructions: "Spend your reaction to cast a spell with a casting time of 1 action that targets only the provoking creature."
+        })
+      ],
+      tags: ["spellcasting", "combat", "concentration"]
+    }
   ),
   rule(
     "Weapon Master",
