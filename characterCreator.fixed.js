@@ -36,7 +36,17 @@ import {
   ACTIVE_RULESET,
   getLegacy2014Metadata,
   isActiveRulesetEntry
-} from "./ruleset2014.js";
+} from "./ruleset2014.js?v=phase14-20260726";
+import {
+  BUILTIN_BACKGROUND_2014_EXPECTATIONS,
+  BUILTIN_BACKGROUND_IDS_2014,
+  BUILTIN_SPECIES_2014_EXPECTATIONS,
+  BUILTIN_SPECIES_IDS_2014,
+  BUILTIN_SUBRACE_2014_EXPECTATIONS,
+  enrichBuiltinBackgroundTemplate,
+  enrichBuiltinSpeciesTemplate,
+  validateBuiltinSpeciesBackgroundCatalog
+} from "./defaultSpeciesBackgroundContent.js?v=phase14-20260726";
 
 export function createCharacterCreator(options = {}) {
   const deps = {
@@ -18545,6 +18555,364 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    const phase14Species =
+      DEFAULT_SPECIES_TEMPLATES;
+    const phase14Subraces =
+      phase14Species.flatMap((species) => {
+        return Array.isArray(species.subraces)
+          ? species.subraces
+          : [];
+      });
+    const phase14SpeciesTraits =
+      phase14Species.flatMap((species) => {
+        return [
+          ...(
+            Array.isArray(species.traits)
+              ? species.traits
+              : []
+          ),
+          ...(
+            Array.isArray(species.subraces)
+              ? species.subraces
+              : []
+          ).flatMap((subrace) => {
+            return Array.isArray(subrace.traits)
+              ? subrace.traits
+              : [];
+          })
+        ];
+      });
+    const phase14Backgrounds =
+      DEFAULT_BACKGROUND_TEMPLATES;
+    const phase14BackgroundFeatures =
+      phase14Backgrounds.flatMap(
+        (background) => {
+          return Array.isArray(
+            background.features
+          )
+            ? background.features
+            : [];
+        }
+      );
+    const phase14HasFullDescription =
+      (record) => {
+        const description = String(
+          record?.description ||
+          ""
+        ).trim();
+
+        return (
+          description.length >= 80 &&
+          !/placeholder|coming soon|\btodo\b|\btbd\b/i
+            .test(description)
+        );
+      };
+    const phase14HasMetadata =
+      (record) => {
+        return (
+          record?.rulesetId ===
+            ACTIVE_RULESET.id &&
+          record?.rulesEdition ===
+            ACTIVE_RULESET.edition &&
+          Boolean(
+            String(
+              record?.sourceLabel ||
+              ""
+            ).trim()
+          ) &&
+          Boolean(
+            String(
+              record?.sourceType ||
+              ""
+            ).trim()
+          )
+        );
+      };
+    const phase14SameValue =
+      (actual, expected) => {
+        return (
+          JSON.stringify(actual ?? {}) ===
+          JSON.stringify(expected ?? {})
+        );
+      };
+
+    record(
+      "Phase 14: all nine built-in species have full descriptions",
+      {
+        ids:
+          phase14Species.map(
+            (species) => species.id
+          ),
+        fullyDescribed:
+          phase14Species.every(
+            phase14HasFullDescription
+          )
+      },
+      {
+        ids: [
+          ...BUILTIN_SPECIES_IDS_2014
+        ],
+        fullyDescribed: true
+      }
+    );
+
+    record(
+      "Phase 14: every built-in species trait has a full description",
+      {
+        traitCount:
+          phase14SpeciesTraits.length,
+        fullyDescribed:
+          phase14SpeciesTraits.every(
+            phase14HasFullDescription
+          )
+      },
+      {
+        traitCount:
+          phase14SpeciesTraits.length,
+        fullyDescribed: true
+      }
+    );
+
+    record(
+      "Phase 14: every built-in subrace has a full description",
+      {
+        ids:
+          phase14Subraces.map(
+            (subrace) => subrace.id
+          ),
+        fullyDescribed:
+          phase14Subraces.every(
+            phase14HasFullDescription
+          )
+      },
+      {
+        ids: Object.keys(
+          BUILTIN_SUBRACE_2014_EXPECTATIONS
+        ),
+        fullyDescribed: true
+      }
+    );
+
+    record(
+      "Phase 14: species, subrace, trait, background, and feature metadata is complete",
+      {
+        ruleset:
+          ACTIVE_RULESET.id,
+        edition:
+          ACTIVE_RULESET.edition,
+        allLabeled: [
+          ...phase14Species,
+          ...phase14Subraces,
+          ...phase14SpeciesTraits,
+          ...phase14Backgrounds,
+          ...phase14BackgroundFeatures
+        ].every(phase14HasMetadata)
+      },
+      {
+        ruleset: "dnd5e-2014",
+        edition: "2014",
+        allLabeled: true
+      }
+    );
+
+    record(
+      "Phase 14: fixed 2014 species and subrace ability bonuses match the catalog",
+      {
+        species:
+          phase14Species.every(
+            (species) => {
+              return phase14SameValue(
+                species.abilityBonuses,
+                BUILTIN_SPECIES_2014_EXPECTATIONS[
+                  species.id
+                ]?.abilityBonuses
+              );
+            }
+          ),
+        subraces:
+          phase14Subraces.every(
+            (subrace) => {
+              return phase14SameValue(
+                subrace.abilityBonuses,
+                BUILTIN_SUBRACE_2014_EXPECTATIONS[
+                  subrace.id
+                ]?.abilityBonuses
+              );
+            }
+          )
+      },
+      {
+        species: true,
+        subraces: true
+      }
+    );
+
+    const phase14CatalogErrors =
+      validateBuiltinSpeciesBackgroundCatalog(
+        {
+          species:
+            phase14Species,
+          backgrounds:
+            phase14Backgrounds,
+          equipmentPackages:
+            DEFAULT_BACKGROUND_EQUIPMENT_PACKAGES
+        }
+      );
+
+    record(
+      "Phase 14: species size, speed, languages, proficiencies, and resistances are validated",
+      {
+        catalogErrors:
+          phase14CatalogErrors.length,
+        catalogErrorMessages:
+          phase14CatalogErrors,
+        coversEverySpecies:
+          Object.keys(
+            BUILTIN_SPECIES_2014_EXPECTATIONS
+          ).length
+      },
+      {
+        catalogErrors: 0,
+        catalogErrorMessages: [],
+        coversEverySpecies: 9
+      }
+    );
+
+    record(
+      "Phase 14: all 13 built-in backgrounds have full descriptions",
+      {
+        ids:
+          phase14Backgrounds.map(
+            (background) => background.id
+          ),
+        fullyDescribed:
+          phase14Backgrounds.every(
+            phase14HasFullDescription
+          )
+      },
+      {
+        ids: [
+          ...BUILTIN_BACKGROUND_IDS_2014
+        ],
+        fullyDescribed: true
+      }
+    );
+
+    record(
+      "Phase 14: every built-in background feature has a full description",
+      {
+        featureCount:
+          phase14BackgroundFeatures.length,
+        fullyDescribed:
+          phase14BackgroundFeatures.every(
+            phase14HasFullDescription
+          )
+      },
+      {
+        featureCount: 13,
+        fullyDescribed: true
+      }
+    );
+
+    record(
+      "Phase 14: background skill choices match the fixed catalog",
+      phase14Backgrounds.every(
+        (background) => {
+          const expected =
+            BUILTIN_BACKGROUND_2014_EXPECTATIONS[
+              background.id
+            ];
+
+          return (
+            background.skillChoices?.choose ===
+              expected.skills.length &&
+            phase14SameValue(
+              background.skillChoices?.from,
+              expected.skills
+            )
+          );
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 14: background tool choices match the fixed catalog",
+      phase14Backgrounds.every(
+        (background) => {
+          return phase14SameValue(
+            background.toolChoices,
+            BUILTIN_BACKGROUND_2014_EXPECTATIONS[
+              background.id
+            ]?.toolChoices
+          );
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 14: background language choices match the fixed catalog",
+      phase14Backgrounds.every(
+        (background) => {
+          return phase14SameValue(
+            background.languageChoices,
+            BUILTIN_BACKGROUND_2014_EXPECTATIONS[
+              background.id
+            ]?.languageChoices
+          );
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 14: every background equipment package is available and populated",
+      phase14Backgrounds.every(
+        (background) => {
+          const packageId =
+            BUILTIN_BACKGROUND_2014_EXPECTATIONS[
+              background.id
+            ]?.packageId;
+          const equipmentPackage =
+            DEFAULT_BACKGROUND_EQUIPMENT_PACKAGES
+              .find((entry) => {
+                return entry.id === packageId;
+              });
+
+          return (
+            background.equipmentPackageIds
+              ?.includes(packageId) &&
+            Array.isArray(
+              equipmentPackage?.items
+            ) &&
+            equipmentPackage.items.length >
+              0
+          );
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 14: additional published species and backgrounds follow the documented extension policy",
+      {
+        bundled:
+          ACTIVE_RULESET
+            .speciesBackgroundCatalog
+            ?.additionalPublishedContent,
+        extensions:
+          ACTIVE_RULESET
+            .speciesBackgroundCatalog
+            ?.extensionPolicy
+      },
+      {
+        bundled: "not-bundled",
+        extensions:
+          "custom-or-room-content-with-source-labels"
+      }
+    );
+
     creatorState.draft = createEmptyCharacter();
     creatorState.draft.classProgression = {
       totalLevel: 2,
@@ -27078,7 +27446,7 @@ export function createCharacterCreator(options = {}) {
     })
   );
 
-  const DEFAULT_SPECIES_TEMPLATES = Object.freeze([
+  const RAW_DEFAULT_SPECIES_TEMPLATES = [
     {
       schemaVersion: SPECIES_SCHEMA_VERSION,
       id: "human",
@@ -27592,9 +27960,17 @@ export function createCharacterCreator(options = {}) {
       ],
       subraces: []
     }
-  ]);
+  ];
 
-  const DEFAULT_BACKGROUND_TEMPLATES = Object.freeze([
+  const DEFAULT_SPECIES_TEMPLATES =
+    Object.freeze(
+      RAW_DEFAULT_SPECIES_TEMPLATES
+        .map(
+          enrichBuiltinSpeciesTemplate
+        )
+    );
+
+  const RAW_DEFAULT_BACKGROUND_TEMPLATES = [
     {
       schemaVersion: BACKGROUND_SCHEMA_VERSION,
       id: "acolyte",
@@ -28023,7 +28399,15 @@ export function createCharacterCreator(options = {}) {
       bonds: ["Old neighborhood", "Found family"],
       flaws: ["Distrustful", "Hoarding"]
     }
-  ]);
+  ];
+
+  const DEFAULT_BACKGROUND_TEMPLATES =
+    Object.freeze(
+      RAW_DEFAULT_BACKGROUND_TEMPLATES
+        .map(
+          enrichBuiltinBackgroundTemplate
+        )
+    );
 
   const DEFAULT_BACKGROUND_EQUIPMENT_PACKAGES = Object.freeze([
     {
@@ -36385,6 +36769,71 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
+  function renderFullCatalogDescription(
+    record,
+    label = "Full description"
+  ) {
+    const description = String(
+      record?.description ||
+      ""
+    ).trim();
+
+    if (!description) {
+      return "";
+    }
+
+    return `
+      <details class="hg-character-level-order-details">
+        <summary>${escapeHtml(label)}</summary>
+        <p>${escapeHtml(description)}</p>
+      </details>
+    `;
+  }
+
+  function renderCatalogEntryDetails(
+    entries,
+    {
+      label = "Details",
+      kind = "trait",
+      parentId = ""
+    } = {}
+  ) {
+    const records = Array.isArray(entries)
+      ? entries.filter(Boolean)
+      : [];
+
+    if (!records.length) {
+      return "";
+    }
+
+    return `
+      <details class="hg-character-level-order-details">
+        <summary>${escapeHtml(label)}</summary>
+        ${records.map((record) => {
+          return `
+            <p>
+              <b>${escapeHtml(
+                record.name ||
+                "Unnamed entry"
+              )}:</b>
+              ${escapeHtml(
+                record.description ||
+                record.summary ||
+                "No description provided."
+              )}
+              <br>
+              ${renderRulesetMetadata(
+                record,
+                kind,
+                parentId
+              )}
+            </p>
+          `;
+        }).join("")}
+      </details>
+    `;
+  }
+
   function renderClassFeatureMetadata(feature) {
     const sourceLabel = safeDisplayString(
       feature?.sourceLabel,
@@ -41573,6 +42022,11 @@ export function createCharacterCreator(options = {}) {
               ${renderRulesetMetadata(species, "species")}
             </p>
 
+            ${renderFullCatalogDescription(
+              species,
+              "Full species description"
+            )}
+
             <p>
               <b>Size:</b>
 
@@ -41618,6 +42072,15 @@ export function createCharacterCreator(options = {}) {
                 ) || "None listed"
               )}
             </p>
+
+            ${renderCatalogEntryDetails(
+              species.traits,
+              {
+                label: "Species trait descriptions",
+                kind: "species-trait",
+                parentId: species.id
+              }
+            )}
           `;
 
           return wizardChoiceCard(
@@ -41681,6 +42144,19 @@ export function createCharacterCreator(options = {}) {
 
             `
               <p>
+                ${renderRulesetMetadata(
+                  subrace,
+                  "subrace",
+                  selectedSpeciesTemplate?.id
+                )}
+              </p>
+
+              ${renderFullCatalogDescription(
+                subrace,
+                "Full subrace description"
+              )}
+
+              <p>
                 ${
                   abilityText
                     ? `<b>Ability:</b> ${escapeHtml(abilityText)}`
@@ -41712,6 +42188,15 @@ export function createCharacterCreator(options = {}) {
                   ) || "No additional traits"
                 )}
               </p>
+
+              ${renderCatalogEntryDetails(
+                subrace.traits,
+                {
+                  label: "Subrace trait descriptions",
+                  kind: "subrace-trait",
+                  parentId: subrace.id
+                }
+              )}
             `,
 
             selected
@@ -42037,6 +42522,24 @@ export function createCharacterCreator(options = {}) {
                 ${escapeHtml(
                   trait.summary ||
                   "No description provided."
+                )}
+              </p>
+
+              ${
+                trait.description &&
+                trait.description !==
+                  trait.summary
+                  ? `<p>${escapeHtml(
+                      trait.description
+                    )}</p>`
+                  : ""
+              }
+
+              <p>
+                ${renderRulesetMetadata(
+                  trait,
+                  "species-trait",
+                  selectedSpeciesTemplate?.id
                 )}
               </p>
             `,
@@ -56093,6 +56596,20 @@ export function createCharacterCreator(options = {}) {
                 )}
               </p>
 
+              ${renderFullCatalogDescription(
+                background,
+                "Full background description"
+              )}
+
+              ${renderCatalogEntryDetails(
+                background.features,
+                {
+                  label: "Background feature description",
+                  kind: "background-feature",
+                  parentId: background.id
+                }
+              )}
+
               <p>
                 <b>Skill Choices:</b>
 
@@ -56178,8 +56695,27 @@ export function createCharacterCreator(options = {}) {
               <p>
                 ${escapeHtml(
                   feature.summary ||
-                  feature.description ||
                   "No description provided."
+                )}
+              </p>
+
+              ${
+                feature.description &&
+                feature.description !==
+                  feature.summary
+                  ? `<p>${escapeHtml(
+                      feature.description
+                    )}</p>`
+                  : ""
+              }
+
+              <p>
+                ${renderRulesetMetadata(
+                  feature,
+                  "background-feature",
+                  creatorState.draft
+                    .background
+                    .id
                 )}
               </p>
             `,

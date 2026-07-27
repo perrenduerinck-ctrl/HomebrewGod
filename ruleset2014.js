@@ -16,6 +16,13 @@ export const ACTIVE_RULESET = Object.freeze({
     elementalAdept: "repeat-by-damage-type",
     magicInitiate: "single-selection"
   }),
+  speciesBackgroundCatalog: Object.freeze({
+    builtinSpecies: "core-nine",
+    builtinBackgrounds: "legacy-thirteen",
+    additionalPublishedContent: "not-bundled",
+    extensionPolicy:
+      "custom-or-room-content-with-source-labels"
+  }),
   futureMode: "dnd5e-2024"
 });
 

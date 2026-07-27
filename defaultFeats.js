@@ -1,6 +1,6 @@
 import { FEAT_NAME_LIST } from "./defaultFeatNames.js";
-import { DEFAULT_FEAT_RULES } from "./defaultFeatRules.js?v=phase13-20260726b";
-import { getLegacy2014Metadata } from "./ruleset2014.js?v=phase13-20260726b";
+import { DEFAULT_FEAT_RULES } from "./defaultFeatRules.js?v=phase14-20260726";
+import { getLegacy2014Metadata } from "./ruleset2014.js?v=phase14-20260726";
 
 export const DEFAULT_FEAT_SCHEMA_VERSION = 4;
 export const DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM = 20;
