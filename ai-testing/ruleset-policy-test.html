@@ -12,15 +12,15 @@
   <script type="importmap">
     {
       "imports": {
-        "../defaultClasses.js": "../defaultClasses.js?v=phase13-20260726",
-        "../defaultClassFeatureCatalog.js": "../defaultClassFeatureCatalog.js?v=phase13-20260726",
-        "../defaultClassFeatureRules.js": "../defaultClassFeatureRules.js?v=phase13-20260726",
-        "../defaultSubclassCatalog.js": "../defaultSubclassCatalog.js?v=phase13-20260726",
-        "../defaultSubclassNames.js": "../defaultSubclassNames.js?v=phase13-20260726",
-        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase13-20260726",
-        "../defaultFeats.js": "../defaultFeats.js?v=phase13-20260726",
-        "../defaultSpells.js": "../defaultSpells.js?v=phase13-20260726",
-        "../ruleset2014.js": "../ruleset2014.js?v=phase13-20260726"
+        "../defaultClasses.js": "../defaultClasses.js?v=phase13-20260726b",
+        "../defaultClassFeatureCatalog.js": "../defaultClassFeatureCatalog.js?v=phase13-20260726b",
+        "../defaultClassFeatureRules.js": "../defaultClassFeatureRules.js?v=phase13-20260726b",
+        "../defaultSubclassCatalog.js": "../defaultSubclassCatalog.js?v=phase13-20260726b",
+        "../defaultSubclassNames.js": "../defaultSubclassNames.js?v=phase13-20260726b",
+        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase13-20260726b",
+        "../defaultFeats.js": "../defaultFeats.js?v=phase13-20260726b",
+        "../defaultSpells.js": "../defaultSpells.js?v=phase13-20260726b",
+        "../ruleset2014.js": "../ruleset2014.js?v=phase13-20260726b"
       }
     }
   </script>
@@ -68,6 +68,35 @@
         DEFAULT_FEATS
       )
     );
+
+    const elementalAdept = DEFAULT_FEATS.find(
+      (feat) => feat.id === "elemental-adept"
+    );
+    const magicInitiate = DEFAULT_FEATS.find(
+      (feat) => feat.id === "magic-initiate"
+    );
+
+    if (
+      elementalAdept?.repeatable !== true ||
+      elementalAdept?.repeatByChoice !== true ||
+      ACTIVE_RULESET.featRepeatability.elementalAdept !==
+        "repeat-by-damage-type"
+    ) {
+      failures.push(
+        "Elemental Adept does not use the 2014 repeat-by-damage-type policy"
+      );
+    }
+
+    if (
+      magicInitiate?.repeatable !== false ||
+      magicInitiate?.repeatByChoice !== false ||
+      ACTIVE_RULESET.featRepeatability.magicInitiate !==
+        "single-selection"
+    ) {
+      failures.push(
+        "Magic Initiate does not use the 2014 single-selection policy"
+      );
+    }
 
     const result = {
       passed: failures.length === 0,
