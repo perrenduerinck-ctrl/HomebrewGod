@@ -12,15 +12,15 @@
   <script type="importmap">
     {
       "imports": {
-        "../defaultClasses.js": "../defaultClasses.js?v=phase14-20260726",
-        "../defaultClassFeatureCatalog.js": "../defaultClassFeatureCatalog.js?v=phase14-20260726",
-        "../defaultClassFeatureRules.js": "../defaultClassFeatureRules.js?v=phase14-20260726",
-        "../defaultSubclassCatalog.js": "../defaultSubclassCatalog.js?v=phase14-20260726",
-        "../defaultSubclassNames.js": "../defaultSubclassNames.js?v=phase14-20260726",
-        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase14-20260726",
-        "../defaultFeats.js": "../defaultFeats.js?v=phase14-20260726",
-        "../defaultSpells.js": "../defaultSpells.js?v=phase14-20260726",
-        "../ruleset2014.js": "../ruleset2014.js?v=phase14-20260726"
+        "../defaultClasses.js": "../defaultClasses.js?v=phase15-20260726",
+        "../defaultClassFeatureCatalog.js": "../defaultClassFeatureCatalog.js?v=phase15-20260726",
+        "../defaultClassFeatureRules.js": "../defaultClassFeatureRules.js?v=phase15-20260726",
+        "../defaultSubclassCatalog.js": "../defaultSubclassCatalog.js?v=phase15-20260726",
+        "../defaultSubclassNames.js": "../defaultSubclassNames.js?v=phase15-20260726",
+        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase15-20260726",
+        "../defaultFeats.js": "../defaultFeats.js?v=phase15-20260726",
+        "../defaultSpells.js": "../defaultSpells.js?v=phase15-20260726",
+        "../ruleset2014.js": "../ruleset2014.js?v=phase15-20260726"
       }
     }
   </script>
@@ -31,7 +31,10 @@
       DEFAULT_FEATS,
       validateFeatPrerequisiteDefinitions
     } from "../defaultFeats.js";
-    import { DEFAULT_SPELLS } from "../defaultSpells.js";
+    import {
+      DEFAULT_SPELLS,
+      validateDefaultSpellCatalog
+    } from "../defaultSpells.js";
     import {
       ACTIVE_RULESET,
       isActiveRulesetEntry
@@ -121,12 +124,48 @@
       );
     }
 
+    const spellCatalogAudit =
+      validateDefaultSpellCatalog(
+        DEFAULT_SPELLS,
+        {
+          feats: DEFAULT_FEATS,
+          subclasses:
+            DEFAULT_SUBCLASSES
+        }
+      );
+
+    failures.push(
+      ...spellCatalogAudit.errors
+    );
+
+    if (
+      ACTIVE_RULESET
+        .spellCatalog
+        ?.srdSpells !== 319 ||
+      ACTIVE_RULESET
+        .spellCatalog
+        ?.additionalCantrips !== 21 ||
+      ACTIVE_RULESET
+        .spellCatalog
+        ?.totalSpells !== 340 ||
+      ACTIVE_RULESET
+        .spellCatalog
+        ?.additionalLeveledSpells !==
+        "inline-subclass-fallbacks-only"
+    ) {
+      failures.push(
+        "Spell catalog policy is incomplete"
+      );
+    }
+
     const result = {
       passed: failures.length === 0,
       ruleset: ACTIVE_RULESET,
       counts: Object.fromEntries(
         Object.entries(groups).map(([key, entries]) => [key, entries.length])
       ),
+      spellCatalog:
+        spellCatalogAudit.counts,
       failures
     };
 

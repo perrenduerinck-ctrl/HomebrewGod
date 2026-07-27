@@ -26,7 +26,15 @@ import {
   validateDefaultFeatCollection,
   validateFeatPrerequisiteDefinitions
 } from "./defaultFeats.js";
-import { DEFAULT_SPELLS } from "./defaultSpells.js";
+import {
+  ADDITIONAL_CANTRIP_EXPECTATIONS_2014,
+  ADDITIONAL_CANTRIP_IDS_2014,
+  ADDITIONAL_CANTRIP_COUNT_2014,
+  DEFAULT_SPELLS,
+  SRD_SPELL_COUNT_2014,
+  validateDefaultSpellCatalog,
+  validateDefaultSpellReferences
+} from "./defaultSpells.js?v=phase15-20260726";
 import {
   DEFAULT_SUBCLASSES,
   validateDefaultSubclassCollection
@@ -36,7 +44,7 @@ import {
   ACTIVE_RULESET,
   getLegacy2014Metadata,
   isActiveRulesetEntry
-} from "./ruleset2014.js?v=phase14-20260726";
+} from "./ruleset2014.js?v=phase15-20260726";
 import {
   BUILTIN_BACKGROUND_2014_EXPECTATIONS,
   BUILTIN_BACKGROUND_IDS_2014,
@@ -18910,6 +18918,506 @@ export function createCharacterCreator(options = {}) {
         bundled: "not-bundled",
         extensions:
           "custom-or-room-content-with-source-labels"
+      }
+    );
+
+    const phase15SpellAudit =
+      validateDefaultSpellCatalog(
+        DEFAULT_SPELLS,
+        {
+          feats: DEFAULT_FEATS,
+          subclasses:
+            DEFAULT_SUBCLASSES
+        }
+      );
+    const phase15SrdSpells =
+      DEFAULT_SPELLS.filter((spell) => {
+        return spell.sourceType === "srd";
+      });
+    const phase15AdditionalCantrips =
+      ADDITIONAL_CANTRIP_IDS_2014
+        .map((spellId) => {
+          return DEFAULT_SPELLS.find(
+            (spell) => {
+              return spell.id === spellId;
+            }
+          );
+        })
+        .filter(Boolean);
+
+    record(
+      "Phase 15: all 319 SRD spells remain validated",
+      {
+        configured:
+          SRD_SPELL_COUNT_2014,
+        cataloged:
+          phase15SrdSpells.length,
+        auditErrors:
+          phase15SpellAudit.errors
+      },
+      {
+        configured: 319,
+        cataloged: 319,
+        auditErrors: []
+      }
+    );
+
+    record(
+      "Phase 15: all 21 additional cantrips are reviewed",
+      {
+        configured:
+          ADDITIONAL_CANTRIP_COUNT_2014,
+        ids:
+          phase15AdditionalCantrips
+            .map((spell) => spell.id),
+        fullyDescribed:
+          phase15AdditionalCantrips
+            .every((spell) => {
+              return (
+                String(
+                  spell.description ||
+                  ""
+                ).length >= 100 &&
+                spell.level === 0
+              );
+            })
+      },
+      {
+        configured: 21,
+        ids: [
+          ...ADDITIONAL_CANTRIP_IDS_2014
+        ],
+        fullyDescribed: true
+      }
+    );
+
+    record(
+      "Phase 15: every spell class list matches its canonical catalog entry",
+      {
+        valid:
+          phase15SpellAudit.valid,
+        additionalCantripsMatch:
+          phase15AdditionalCantrips
+            .every((spell) => {
+              return (
+                JSON.stringify(
+                  spell.classes
+                ) ===
+                JSON.stringify(
+                  ADDITIONAL_CANTRIP_EXPECTATIONS_2014[
+                    spell.id
+                  ]?.classes
+                )
+              );
+            })
+      },
+      {
+        valid: true,
+        additionalCantripsMatch: true
+      }
+    );
+
+    record(
+      "Phase 15: every spell level and level key is valid",
+      DEFAULT_SPELLS.every(
+        (spell) => {
+          return (
+            Number.isInteger(
+              spell.level
+            ) &&
+            spell.level >= 0 &&
+            spell.level <= 9 &&
+            spell.levelKey ===
+              (
+                spell.level === 0
+                  ? "cantrip"
+                  : `level${spell.level}`
+              )
+          );
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 15: every spell school is valid",
+      DEFAULT_SPELLS.every(
+        (spell) => {
+          return [
+            "abjuration",
+            "conjuration",
+            "divination",
+            "enchantment",
+            "evocation",
+            "illusion",
+            "necromancy",
+            "transmutation"
+          ].includes(spell.school);
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 15: every spell has a verified casting time",
+      DEFAULT_SPELLS.every(
+        (spell) => {
+          return Boolean(
+            String(
+              spell.castingTime ||
+              ""
+            ).trim()
+          );
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 15: every spell has a verified range",
+      DEFAULT_SPELLS.every(
+        (spell) => {
+          return Boolean(
+            String(
+              spell.range ||
+              ""
+            ).trim()
+          );
+        }
+      ),
+      true
+    );
+
+    record(
+      "Phase 15: every spell component and material requirement is valid",
+      {
+        valid:
+          DEFAULT_SPELLS.every(
+            (spell) => {
+              const components =
+                spell.components ||
+                {};
+
+              return (
+                [
+                  components.verbal,
+                  components.somatic,
+                  components.material
+                ].every((value) => {
+                  return typeof value ===
+                    "boolean";
+                }) &&
+                (
+                  components.verbal ||
+                  components.somatic ||
+                  components.material
+                ) &&
+                components.material ===
+                  Boolean(
+                    String(
+                      components
+                        .materialText ||
+                      ""
+                    ).trim()
+                  )
+              );
+            }
+          ),
+        materialSpells:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return spell.components
+                .material;
+            }
+          ).length
+      },
+      {
+        valid: true,
+        materialSpells: 189
+      }
+    );
+
+    record(
+      "Phase 15: duration and concentration metadata is complete",
+      {
+        valid:
+          DEFAULT_SPELLS.every(
+            (spell) => {
+              return (
+                Boolean(
+                  String(
+                    spell.duration ||
+                    ""
+                  ).trim()
+                ) &&
+                typeof spell
+                  .concentration ===
+                  "boolean"
+              );
+            }
+          ),
+        concentrationSpells:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return spell
+                .concentration;
+            }
+          ).length
+      },
+      {
+        valid: true,
+        concentrationSpells: 128
+      }
+    );
+
+    record(
+      "Phase 15: ritual status is verified for every spell",
+      {
+        valid:
+          DEFAULT_SPELLS.every(
+            (spell) => {
+              return typeof spell.ritual ===
+                "boolean";
+            }
+          ),
+        rituals:
+          DEFAULT_SPELLS.filter(
+            (spell) => spell.ritual
+          ).length
+      },
+      {
+        valid: true,
+        rituals: 29
+      }
+    );
+
+    record(
+      "Phase 15: attack and saving-throw metadata is verified",
+      {
+        spellAttacks:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return [
+                "melee",
+                "ranged"
+              ].includes(
+                spell.attackType
+              );
+            }
+          ).length,
+        weaponAttacks:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return spell.attackType
+                .includes("weapon");
+            }
+          ).length,
+        savingThrows:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return Boolean(
+                spell.saveAbility
+              );
+            }
+          ).length
+      },
+      {
+        spellAttacks: 18,
+        weaponAttacks: 2,
+        savingThrows: 103
+      }
+    );
+
+    const phase15DamageSpells =
+      DEFAULT_SPELLS.filter(
+        (spell) => {
+          return spell.damage.length;
+        }
+      );
+
+    record(
+      "Phase 15: damage scaling metadata is verified",
+      {
+        damageSpells:
+          phase15DamageSpells.length,
+        scaled:
+          phase15DamageSpells.every(
+            (spell) => {
+              return (
+                Object.keys(
+                  spell.scaling
+                    .atCharacterLevel
+                ).length > 0 ||
+                Object.keys(
+                  spell.scaling
+                    .atSlotLevel
+                ).length > 0
+              );
+            }
+          ),
+        characterScaling:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return Object.keys(
+                spell.scaling
+                  .atCharacterLevel
+              ).length > 0;
+            }
+          ).length
+      },
+      {
+        damageSpells: 80,
+        scaled: true,
+        characterScaling: 24
+      }
+    );
+
+    const phase15HealingSpells =
+      DEFAULT_SPELLS.filter(
+        (spell) => {
+          return spell.healing.length;
+        }
+      );
+
+    record(
+      "Phase 15: healing scaling metadata is verified",
+      {
+        healingSpells:
+          phase15HealingSpells.length,
+        scaled:
+          phase15HealingSpells.every(
+            (spell) => {
+              return Object.keys(
+                spell.scaling
+                  .healingAtSlotLevel
+              ).length > 0;
+            }
+          )
+      },
+      {
+        healingSpells: 10,
+        scaled: true
+      }
+    );
+
+    record(
+      "Phase 15: higher-level spell effects are preserved",
+      {
+        higherLevelSpells:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return Boolean(
+                spell
+                  .higherLevelDescription
+              );
+            }
+          ).length,
+        synchronized:
+          DEFAULT_SPELLS.every(
+            (spell) => {
+              return (
+                spell
+                  .higherLevelDescription ===
+                spell.scaling
+                  .higherLevelDescription
+              );
+            }
+          )
+      },
+      {
+        higherLevelSpells: 90,
+        synchronized: true
+      }
+    );
+
+    record(
+      "Phase 15: every spell has edition and source labels",
+      {
+        srd:
+          phase15SrdSpells.length,
+        additional:
+          DEFAULT_SPELLS.filter(
+            (spell) => {
+              return (
+                spell.sourceType ===
+                "legacy-non-srd"
+              );
+            }
+          ).length,
+        labeled:
+          DEFAULT_SPELLS.every(
+            (spell) => {
+              return (
+                spell.rulesetId ===
+                  ACTIVE_RULESET.id &&
+                spell.rulesEdition ===
+                  ACTIVE_RULESET.edition &&
+                Boolean(
+                  spell.sourceLabel
+                )
+              );
+            }
+          )
+      },
+      {
+        srd: 319,
+        additional: 21,
+        labeled: true
+      }
+    );
+
+    const phase15References =
+      validateDefaultSpellReferences({
+        spells: DEFAULT_SPELLS,
+        feats: DEFAULT_FEATS,
+        subclasses:
+          DEFAULT_SUBCLASSES
+      });
+    const phase15BrokenReferenceFixture =
+      validateDefaultSpellReferences({
+        spells: DEFAULT_SPELLS,
+        feats: [
+          {
+            id:
+              "phase15-broken-spell",
+            effects: [
+              {
+                spellId:
+                  "missing-phase15-spell"
+              }
+            ]
+          }
+        ]
+      });
+
+    record(
+      "Phase 15: broken feat and subclass spell IDs are detected",
+      {
+        catalogValid:
+          phase15References.valid,
+        references:
+          phase15References
+            .referenceCount,
+        inlineFallbacks:
+          phase15References
+            .inlineFallbackCount,
+        rejectsBrokenFixture:
+          (
+            !phase15BrokenReferenceFixture
+              .valid &&
+            phase15BrokenReferenceFixture
+              .errors.some((error) => {
+                return error.includes(
+                  "missing-phase15-spell"
+                );
+              })
+          )
+      },
+      {
+        catalogValid: true,
+        references: 399,
+        inlineFallbacks: 46,
+        rejectsBrokenFixture: true
       }
     );
 
@@ -44889,7 +45397,16 @@ export function createCharacterCreator(options = {}) {
             (!schools.length || schools.includes(cleanString(spell?.school).toLowerCase())) &&
             (!selectedClass || spellClasses.includes(selectedClass)) &&
             (choice?.ritualOnly !== true || spell?.ritual === true) &&
-            (choice?.attackRollOnly !== true || Boolean(spell?.attackType))
+            (
+              choice?.attackRollOnly !==
+                true ||
+              ["melee", "ranged"]
+                .includes(
+                  cleanString(
+                    spell?.attackType
+                  ).toLowerCase()
+                )
+            )
           );
         })
         .map((spell) => ({
@@ -64553,6 +65070,117 @@ export function createCharacterCreator(options = {}) {
     }`;
   }
 
+  function formatSection16SpellResolution(
+    spell
+  ) {
+    const parts = [];
+    const attackType = cleanString(
+      spell?.attackType
+    );
+    const saveAbility = cleanString(
+      spell?.saveAbility
+    );
+    const damageTypes = uniqueCleanArray(
+      (
+        Array.isArray(spell?.damage)
+          ? spell.damage
+          : []
+      ).map((entry) => {
+        return entry?.damageType;
+      })
+    );
+
+    if (attackType) {
+      const attackLabel = {
+        melee: "Melee spell attack",
+        ranged: "Ranged spell attack",
+        "melee-weapon":
+          "Melee weapon attack",
+        "ranged-weapon":
+          "Ranged weapon attack"
+      }[attackType] || attackType;
+
+      parts.push(attackLabel);
+    }
+
+    if (saveAbility) {
+      parts.push(
+        `${saveAbility.toUpperCase()} saving throw`
+      );
+    }
+
+    if (damageTypes.length) {
+      parts.push(
+        `${damageTypes.join("/")} damage`
+      );
+    }
+
+    if (
+      Array.isArray(spell?.healing) &&
+      spell.healing.length
+    ) {
+      parts.push("healing");
+    }
+
+    return parts.join(" · ");
+  }
+
+  function formatSection16SpellScaling(
+    spell
+  ) {
+    const characterScaling =
+      Object.entries(
+        spell?.scaling
+          ?.atCharacterLevel ||
+        {}
+      );
+    const slotScaling =
+      Object.entries(
+        spell?.scaling
+          ?.atSlotLevel ||
+        {}
+      );
+    const healingScaling =
+      Object.entries(
+        spell?.scaling
+          ?.healingAtSlotLevel ||
+        {}
+      );
+    const parts = [];
+
+    if (characterScaling.length) {
+      parts.push(
+        `character level ${characterScaling
+          .map(([level, value]) => {
+            return `${level}: ${value}`;
+          })
+          .join(", ")}`
+      );
+    }
+
+    if (slotScaling.length) {
+      parts.push(
+        `slot level ${slotScaling
+          .map(([level, value]) => {
+            return `${level}: ${value}`;
+          })
+          .join(", ")}`
+      );
+    }
+
+    if (healingScaling.length) {
+      parts.push(
+        `healing by slot ${healingScaling
+          .map(([level, value]) => {
+            return `${level}: ${value}`;
+          })
+          .join(", ")}`
+      );
+    }
+
+    return parts.join(" · ");
+  }
+
   function renderSection16DefaultSpellViewer() {
     migrateSection16LegacySpellSelections();
 
@@ -64785,6 +65413,14 @@ export function createCharacterCreator(options = {}) {
               formatSection16SpellComponents(
                 spell
               );
+            const resolution =
+              formatSection16SpellResolution(
+                spell
+              );
+            const scaling =
+              formatSection16SpellScaling(
+                spell
+              );
 
             const searchText = [
               spell.name,
@@ -64876,6 +65512,30 @@ export function createCharacterCreator(options = {}) {
                     spell.duration ||
                     "Not specified"
                   )}
+
+                  ${
+                    resolution
+                      ? `
+                        <br>
+                        <b>Resolution:</b>
+                        ${escapeHtml(
+                          resolution
+                        )}
+                      `
+                      : ""
+                  }
+
+                  ${
+                    scaling
+                      ? `
+                        <br>
+                        <b>Scaling:</b>
+                        ${escapeHtml(
+                          scaling
+                        )}
+                      `
+                      : ""
+                  }
 
                   ${
                     spell.ritual
@@ -65318,14 +65978,54 @@ export function createCharacterCreator(options = {}) {
               )}
 
               ${
-                spell.components
+                formatSection16SpellResolution(
+                  spell
+                )
+                  ? `
+                    <br>
+
+                    <b>Resolution:</b>
+
+                    ${escapeHtml(
+                      formatSection16SpellResolution(
+                        spell
+                      )
+                    )}
+                  `
+                  : ""
+              }
+
+              ${
+                formatSection16SpellScaling(
+                  spell
+                )
+                  ? `
+                    <br>
+
+                    <b>Scaling:</b>
+
+                    ${escapeHtml(
+                      formatSection16SpellScaling(
+                        spell
+                      )
+                    )}
+                  `
+                  : ""
+              }
+
+              ${
+                formatSection16SpellComponents(
+                  spell
+                )
                   ? `
                     <br>
 
                     <b>Components:</b>
 
                     ${escapeHtml(
-                      spell.components
+                      formatSection16SpellComponents(
+                        spell
+                      )
                     )}
                   `
                   : ""

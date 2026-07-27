@@ -23,6 +23,13 @@ export const ACTIVE_RULESET = Object.freeze({
     extensionPolicy:
       "custom-or-room-content-with-source-labels"
   }),
+  spellCatalog: Object.freeze({
+    srdSpells: 319,
+    additionalCantrips: 21,
+    totalSpells: 340,
+    additionalLeveledSpells:
+      "inline-subclass-fallbacks-only"
+  }),
   futureMode: "dnd5e-2024"
 });
 
