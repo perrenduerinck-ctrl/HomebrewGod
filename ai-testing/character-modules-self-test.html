@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 19 Character Modules Self-Test</title>
+  <style>
+    body {
+      max-width: 860px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #edf0ff;
+      background: #111522;
+      font: 16px/1.5 system-ui, sans-serif;
+    }
+
+    pre {
+      padding: 1rem;
+      border: 1px solid #6571b9;
+      border-radius: 0.5rem;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body data-test-status="running">
+  <h1>Phase 19 Character Modules Self-Test</h1>
+  <pre id="result" role="status">RUNNING</pre>
+
+  <script type="module">
+    import {
+      calculateAbilityModifier,
+      calculateProficiencyBonus,
+      calculateRuleCarryingCapacity,
+      calculateRuleFixedAverageHp,
+      calculateRulePassiveScore,
+      calculateRuleSkillModifier,
+      calculateRuleSpellAttackBonus,
+      calculateRuleSpellSaveDc
+    } from "../characterCreator/rulesMath.js?v=phase19-20260727";
+    import {
+      buildLegacyMigrationReport,
+      normalizeCharacterEnvelope
+    } from "../characterCreator/normalization.js?v=phase19-20260727";
+    import {
+      buildClassLevelOrder,
+      calculateClassProgressionLevel,
+      getProgressionValueByLevel
+    } from "../characterCreator/classProgression.js?v=phase19-20260727";
+    import {
+      evaluateMulticlassPrerequisites,
+      isMulticlassRequirementMet
+    } from "../characterCreator/multiclassing.js?v=phase19-20260727";
+    import {
+      decodeFeatChoiceValue,
+      encodeFeatChoiceValue,
+      getFeatAbilityEffectMaximum,
+      normalizeFeatChoiceSelections,
+      parseFeatChoiceSelections
+    } from "../characterCreator/featMechanics.js?v=phase19-20260727";
+    import {
+      getClassFeaturesThroughLevel,
+      getClassResourceMaximum
+    } from "../characterCreator/classMechanics.js?v=phase19-20260727";
+    import {
+      getSubclassFeaturesThroughLevel,
+      mergeSubclassFeatureLevels
+    } from "../characterCreator/subclassMechanics.js?v=phase19-20260727";
+    import {
+      calculateSrd2014MulticlassSpellcasting,
+      getSrd2014PactMagic,
+      getSrd2014SpellSlots,
+      slotsArrayToObject
+    } from "../characterCreator/spellcasting.js?v=phase19-20260727";
+    import {
+      countRequiredContentChoices,
+      normalizeContentChoiceGroup,
+      normalizeSpeciesBackgroundChoices
+    } from "../characterCreator/speciesBackgrounds.js?v=phase19-20260727";
+    import {
+      calculateInventoryLineWeight,
+      normalizeInventoryItemBase
+    } from "../characterCreator/inventoryEquipment.js?v=phase19-20260727";
+    import {
+      escapeHtml,
+      renderTextList
+    } from "../characterCreator/rendering.js?v=phase19-20260727";
+    import {
+      buildCharacterSheetPresentation,
+      formatPresentationClass
+    } from "../characterCreator/sheetPresentation.js?v=phase19-20260727";
+    import {
+      createCharacterPersistence
+    } from "../characterCreator/persistence.js?v=phase19-20260727";
+    import {
+      createCharacterCatalogs
+    } from "../characterCreator/catalogs.js?v=phase19-20260727";
+    import {
+      runCharacterCreatorSelfTests
+    } from "../characterCreator/selfTests.js?v=phase19-20260727";
+
+    const result = document.getElementById("result");
+    const failures = [];
+    let assertions = 0;
+
+    function assert(condition, message) {
+      assertions += 1;
+      if (!condition) {
+        failures.push(message);
+      }
+    }
+
+    try {
+      assert(calculateAbilityModifier(18) === 4, "Ability modifiers are pure rules math.");
+      assert(calculateAbilityModifier(9) === -1, "Odd low ability scores round down.");
+      assert(calculateProficiencyBonus(1) === 2, "Level 1 proficiency is +2.");
+      assert(calculateProficiencyBonus(17) === 6, "Level 17 proficiency is +6.");
+      assert(calculateRuleSkillModifier({ abilityModifier: 3, proficiencyBonus: 4, proficient: true, expertise: true }) === 11, "Expertise doubles proficiency.");
+      assert(calculateRulePassiveScore(5, { advantage: true }) === 20, "Passive advantage adds five.");
+      assert(calculateRuleFixedAverageHp({ hitDie: "d10", level: 3, constitutionModifier: 2 }) === 28, "Fixed-average HP uses the 2014 progression.");
+      assert(calculateRuleSpellSaveDc({ proficiencyBonus: 3, abilityModifier: 4 }) === 15, "Spell save DC is calculated.");
+      assert(calculateRuleSpellAttackBonus({ proficiencyBonus: 3, abilityModifier: 4, bonus: 1 }) === 8, "Spell attack bonuses are calculated.");
+      assert(calculateRuleCarryingCapacity({ strength: 10, size: "large" }).carryingCapacity === 300, "Large carrying capacity doubles.");
+
+      assert(Object.keys(normalizeCharacterEnvelope(null)).length === 0, "Null character input normalizes to an object.");
+      assert(Object.keys(normalizeCharacterEnvelope([])).length === 0, "Array character input normalizes to an object.");
+      const canonical = { identity: { name: "Mira" } };
+      assert(normalizeCharacterEnvelope(canonical) === canonical, "Canonical records retain identity.");
+      const migration = buildLegacyMigrationReport({ name: "Mira", race: "Elf", stats: { str: 10 } });
+      assert(migration.requiresMigration === true, "Legacy fields trigger migration.");
+      assert(migration.legacyFields.includes("race"), "Migration reports legacy species.");
+      assert(buildLegacyMigrationReport({ identity: {}, classProgression: {} }).hasCanonicalProgression === true, "Canonical progression is recognized.");
+
+      assert(calculateClassProgressionLevel([{ level: 3 }, { level: 4 }]) === 7, "Multiclass levels add.");
+      assert(calculateClassProgressionLevel([{ level: 18 }, { level: 5 }]) === 20, "Character level is capped at 20.");
+      assert(buildClassLevelOrder([{ entryId: "fighter", level: 2 }, { entryId: "wizard", level: 1 }]).join(",") === "fighter,fighter,wizard", "Class level order is deterministic.");
+      assert(getProgressionValueByLevel({ 1: 1, 5: 2 }, 4) === 1, "Progression uses the last unlocked value.");
+      assert(getProgressionValueByLevel({ 1: 1, 5: 2 }, 5) === 2, "Progression unlocks exact levels.");
+
+      const scores = { str: 13, dex: 12 };
+      assert(isMulticlassRequirementMet({ ability: "str", minimum: 13 }, (id) => scores[id]) === true, "Single multiclass requirements pass.");
+      assert(isMulticlassRequirementMet({ any: [{ ability: "str", minimum: 14 }, { ability: "dex", minimum: 12 }] }, (id) => scores[id]) === true, "Any-of multiclass requirements pass.");
+      const multiclassResult = evaluateMulticlassPrerequisites({ configuredRequirements: [{ ability: "str", minimum: 14 }], getAbilityScore: (id) => scores[id] });
+      assert(multiclassResult.met === false, "Failed multiclass requirements are reported.");
+      assert(multiclassResult.failed.length === 1, "Failed multiclass requirements remain inspectable.");
+
+      const featValue = encodeFeatChoiceValue("damage type", "cold/fire");
+      assert(featValue.startsWith("feat-choice:"), "Feat choices use a stable prefix.");
+      assert(decodeFeatChoiceValue(featValue).value === "cold/fire", "Feat choices round-trip encoded values.");
+      assert(decodeFeatChoiceValue("bad") === null, "Invalid feat choices are rejected.");
+      assert(parseFeatChoiceSelections([featValue])["damage type"][0] === "cold/fire", "Feat choice lists parse by choice ID.");
+      assert(normalizeFeatChoiceSelections({ a: ["x", "x", ""] }).a.length === 1, "Feat choices are unique and clean.");
+      assert(getFeatAbilityEffectMaximum({ maximum: 22 }) === 22, "Feat ability caps support explicit maxima.");
+      assert(getFeatAbilityEffectMaximum({ maximum: 99 }) === 30, "Feat ability caps never exceed 30.");
+
+      const classFeatures = getClassFeaturesThroughLevel({ 1: ["One"], 3: ["Three"], 5: ["Five"] }, 3, (feature, level) => ({ name: feature, level }));
+      assert(classFeatures.length === 2, "Class feature unlocks stop at class level.");
+      assert(classFeatures[1].level === 3, "Class feature unlock levels are retained.");
+      assert(getClassResourceMaximum({ maximumByLevel: { 1: 2, 5: 3 } }, 4) === 2, "Class resources use the latest unlocked maximum.");
+      assert(getClassResourceMaximum({ maximum: 4 }, 1) === 4, "Class resources support fixed maxima.");
+
+      const subclassLevels = mergeSubclassFeatureLevels({ levels: { 3: { note: "A" } }, featuresByLevel: { 3: ["Path"], 7: ["Greater Path"] } });
+      assert(subclassLevels[3].note === "A", "Subclass level metadata survives merging.");
+      assert(subclassLevels[3].features[0] === "Path", "Subclass feature maps merge into level records.");
+      assert(getSubclassFeaturesThroughLevel({ featuresByLevel: { 3: ["Path"], 7: ["Greater Path"] } }, 6).length === 1, "Subclass mechanics respect unlock level.");
+      assert(getSubclassFeaturesThroughLevel({ featuresByLevel: { 3: [{ name: "Path" }] } }, 3)[0].level === 3, "Subclass features expose their unlock level.");
+
+      assert(slotsArrayToObject([2, 1, 0])[2] === 1, "Spell slot arrays normalize to level maps.");
+      assert(getSrd2014SpellSlots("full-caster", 5)[3] === 2, "Full caster slots use the 2014 table.");
+      assert(Object.keys(getSrd2014SpellSlots("half-caster", 1)).length === 0, "Level 1 half casters have no slots.");
+      assert(getSrd2014PactMagic(5).slotLevel === 3, "Pact Magic uses class level.");
+      const multiclassCasting = calculateSrd2014MulticlassSpellcasting([
+        { level: 3, progressionType: "full-caster" },
+        { level: 4, progressionType: "half-caster" },
+        { level: 5, progressionType: "pact-magic", entryId: "warlock" }
+      ]);
+      assert(multiclassCasting.casterLevel === 5, "Multiclass caster levels combine correctly.");
+      assert(multiclassCasting.spellSlots[3] === 2, "Combined caster slots use the shared table.");
+      assert(multiclassCasting.pactMagic[0].classEntryId === "warlock", "Pact slots remain separate and attributable.");
+
+      const choice = normalizeContentChoiceGroup({ choose: "2", from: [" Arcana ", "", "History"] });
+      assert(choice.choose === 2, "Species/background choice counts normalize.");
+      assert(choice.from.join(",") === "Arcana,History", "Species/background choice options clean.");
+      const allChoices = normalizeSpeciesBackgroundChoices({ skillChoices: { choose: 2 }, languageChoices: { choose: 1 } });
+      assert(allChoices.toolChoices.choose === 0, "Missing choice groups receive safe defaults.");
+      assert(countRequiredContentChoices({ skillChoices: { choose: 2 }, languageChoices: { choose: 1 } }) === 3, "Required content choices total correctly.");
+
+      const item = normalizeInventoryItemBase({ name: " Rope ", quantity: 2, weight: 10, category: "gear" });
+      assert(item.name === "Rope", "Inventory names normalize.");
+      assert(item.quantity === 2, "Inventory quantities normalize.");
+      assert(item.weight === 10, "Inventory weights normalize.");
+      assert(calculateInventoryLineWeight({ name: "Rope", quantity: 2, weight: 10 }) === 20, "Inventory line weight is pure and testable.");
+      assert(normalizeInventoryItemBase({ category: "magic-item", attuned: true }).requiresAttunement === true, "Magic-item attunement state normalizes.");
+
+      assert(escapeHtml("<b>&") === "&lt;b&gt;&amp;", "Rendering escapes HTML.");
+      assert(renderTextList(["A", "B"]) === "A, B", "Rendering composes text lists.");
+      assert(renderTextList([], "<None>") === "&lt;None&gt;", "Rendering escapes fallback text.");
+      assert(typeof createCharacterPersistence === "function", "Character persistence is an extracted factory.");
+      assert(typeof createCharacterCatalogs === "function", "Character catalogs are an extracted factory.");
+      assert(typeof runCharacterCreatorSelfTests === "function", "The large regression suite is an extracted runner.");
+
+      const presentation = buildCharacterSheetPresentation({
+        identity: { name: "Mira", image: { url: "https://example.com/mira.webp" } },
+        species: { name: "Elf" },
+        background: { name: "Sage" },
+        classProgression: {
+          classes: [{ className: "Wizard", level: 5, subclassName: "Evocation" }]
+        }
+      });
+      assert(presentation.name === "Mira", "Sheet presentation selects canonical names.");
+      assert(presentation.initial === "M", "Sheet presentation derives initials.");
+      assert(presentation.speciesName === "Elf", "Sheet presentation selects species.");
+      assert(presentation.backgroundName === "Sage", "Sheet presentation selects backgrounds.");
+      assert(presentation.classLine === "Wizard 5 — Evocation", "Sheet presentation formats class progression.");
+      assert(presentation.portraitUrl.startsWith("https:"), "Sheet presentation accepts safe portraits.");
+      assert(buildCharacterSheetPresentation({ image: { url: "javascript:alert(1)" } }).portraitUrl === "", "Sheet presentation rejects unsafe portraits.");
+      assert(formatPresentationClass({ className: "No Class", level: 1 }) === "No Class", "Empty class presentation remains friendly.");
+
+      const moduleNames = [
+        "rulesMath",
+        "normalization",
+        "classProgression",
+        "multiclassing",
+        "featMechanics",
+        "classMechanics",
+        "subclassMechanics",
+        "spellcasting",
+        "speciesBackgrounds",
+        "inventoryEquipment",
+        "rendering",
+        "sheetPresentation"
+      ];
+      const [creatorSource, ...moduleSources] = await Promise.all([
+        fetch("../characterCreator.fixed.js?v=phase19-20260727").then((response) => response.text()),
+        ...moduleNames.map((name) => {
+          return fetch(`../characterCreator/${name}.js?v=phase19-20260727`).then((response) => response.text());
+        })
+      ]);
+      const creatorLineCount = creatorSource.split(/\r?\n/).length;
+      assert(creatorLineCount < 55000, `Character creator stays below 55,000 lines (actual ${creatorLineCount}).`);
+      assert(creatorSource.includes("createCharacterPersistence"), "The creator integrates extracted persistence.");
+      assert(creatorSource.includes("normalizeCharacterEnvelope"), "The creator integrates extracted normalization.");
+      assert(creatorSource.includes("getClassFeaturesThroughLevel"), "The creator integrates extracted class mechanics.");
+      assert(creatorSource.includes("mergeSubclassFeatureLevels"), "The creator integrates extracted subclass mechanics.");
+      assert(creatorSource.includes("normalizeInventoryItemBase"), "The creator integrates extracted inventory mechanics.");
+      moduleSources.forEach((source, index) => {
+        assert(!/\bdocument\b|\bwindow\b/.test(source), `${moduleNames[index]} stays DOM-independent.`);
+      });
+
+      const testState = {
+        done: true,
+        passed: failures.length === 0,
+        assertions,
+        failures,
+        creatorLineCount
+      };
+      window.__CHARACTER_MODULES_TEST__ = testState;
+      document.body.dataset.testStatus = testState.passed ? "pass" : "fail";
+      result.textContent = testState.passed
+        ? `PASS — ${assertions} Phase 19 character module assertions\ncharacterCreator.fixed.js: ${creatorLineCount} lines`
+        : `FAIL — ${failures.length} of ${assertions} assertions failed\n${failures.join("\n")}`;
+
+      if (!testState.passed) {
+        throw new Error(result.textContent);
+      }
+    } catch (error) {
+      window.__CHARACTER_MODULES_TEST__ = {
+        done: true,
+        passed: false,
+        assertions,
+        failures: failures.length ? failures : [String(error?.message || error)]
+      };
+      document.body.dataset.testStatus = "fail";
+      if (result.textContent === "RUNNING") {
+        result.textContent = `FAIL\n${error?.stack || error}`;
+      }
+      throw error;
+    }
+  </script>
+</body>
+</html>

@@ -3,6 +3,10 @@
 // Rendering uses a protected snapshot; tracked changes flow through callbacks.
 // =====================================================
 
+import {
+  buildCharacterSheetPresentation
+} from "./characterCreator/sheetPresentation.js";
+
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },
   { id: "dex", name: "Dexterity", short: "DEX" },
@@ -3149,6 +3153,10 @@ export function createCharacterSheetView(options = {}) {
     renderOptions = {}
   ) {
     const safeCharacter = isRecord(character) ? character : {};
+    const presentation =
+      buildCharacterSheetPresentation(
+        safeCharacter
+      );
     const classEntries = getClassEntries(safeCharacter);
     const totalLevel = getTotalLevel(safeCharacter, classEntries);
     const proficiencyBonus = getProficiencyBonus(safeCharacter, totalLevel);
@@ -3164,11 +3172,12 @@ export function createCharacterSheetView(options = {}) {
     const activeTab = ["main", "story", "spell"].includes(requestedTab)
       ? requestedTab
       : "main";
-    const portraitUrl = safeImageUrl(
-      safeCharacter?.identity?.image?.url || safeCharacter?.image?.url
-    );
-    const classLine = classEntries.map(formatClassEntry).join(" / ");
-    const initial = getName(safeCharacter).charAt(0).toUpperCase() || "?";
+    const portraitUrl =
+      presentation.portraitUrl;
+    const classLine =
+      presentation.classLine;
+    const initial =
+      presentation.initial;
     const mainSummary = {
       proficiencyBonus,
       passivePerception
@@ -3208,16 +3217,16 @@ export function createCharacterSheetView(options = {}) {
       <div class="hg-character-sheet" data-character-sheet-view="true">
         <header class="hg-character-sheet-header">
           ${portraitUrl
-            ? `<img class="hg-character-sheet-portrait" src="${escapeHtml(portraitUrl)}" alt="${escapeHtml(`${getName(safeCharacter)} portrait`)}">`
+            ? `<img class="hg-character-sheet-portrait" src="${escapeHtml(portraitUrl)}" alt="${escapeHtml(`${presentation.name} portrait`)}">`
             : `<div class="hg-character-sheet-portrait-placeholder" aria-hidden="true">${escapeHtml(initial)}</div>`}
 
           <div class="hg-character-sheet-heading">
-            <h1>${escapeHtml(getName(safeCharacter))}</h1>
+            <h1>${escapeHtml(presentation.name)}</h1>
             <p class="hg-sheet-class-line">${escapeHtml(classLine)}</p>
             <p>
               Level ${totalLevel}
-              &middot; ${escapeHtml(getSpeciesName(safeCharacter))}
-              &middot; ${escapeHtml(getBackgroundName(safeCharacter))}
+              &middot; ${escapeHtml(presentation.speciesName)}
+              &middot; ${escapeHtml(presentation.backgroundName)}
             </p>
             <p
               class="hg-sheet-sync-status"

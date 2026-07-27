@@ -46,7 +46,7 @@
       getRecordRevisionMillis,
       getTimestampMillis,
       validateSecureImageDescriptor
-    } from "../securityPersistence.js?v=phase18-20260727";
+    } from "../securityPersistence.js?v=phase19-20260727";
 
     const result = document.getElementById("testResult");
     const failures = [];
@@ -152,10 +152,10 @@
     assert(/Sign in again/.test(friendlyServiceError({ code: "unauthenticated" }, { action: "upload" })), "Authentication errors request sign-in.");
 
     const [rules, app, functionsSource, firebaseConfig] = await Promise.all([
-      fetch("../firestore.rules?v=phase18-20260727").then((response) => response.text()),
-      fetch("../app.js?v=phase18-20260727").then((response) => response.text()),
-      fetch("../functions/index.js?v=phase18-20260727").then((response) => response.text()),
-      fetch("../firebase.json?v=phase18-20260727").then((response) => response.text())
+      fetch("../firestore.rules?v=phase19-20260727").then((response) => response.text()),
+      fetch("../app.js?v=phase19-20260727").then((response) => response.text()),
+      fetch("../functions/index.js?v=phase19-20260727").then((response) => response.text()),
+      fetch("../firebase.json?v=phase19-20260727").then((response) => response.text())
     ]);
 
     assert(rules.includes("allow read:") && rules.includes("if isRoomMember(roomCode)"), "Room reads require membership.");
