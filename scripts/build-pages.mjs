@@ -75,6 +75,30 @@ for (const entry of rootFiles) {
 }
 
 for (
+  const auditFile of
+  [
+    "firebase.json",
+    "firestore.rules"
+  ]
+) {
+  await cp(
+    path.join(root, auditFile),
+    path.join(output, auditFile)
+  );
+}
+
+await mkdir(
+  path.join(output, "functions"),
+  {
+    recursive: true
+  }
+);
+await cp(
+  path.join(root, "functions", "index.js"),
+  path.join(output, "functions", "index.js")
+);
+
+for (
   const directory of
   [
     "ai-testing",

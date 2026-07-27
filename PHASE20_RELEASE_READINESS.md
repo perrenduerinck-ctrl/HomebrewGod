@@ -42,6 +42,6 @@ The release fails when any of these checks fail:
 
 ## GitHub Actions and Pages
 
-`.github/workflows/release-readiness.yml` runs the full suite on every push, pull request, and manual dispatch. The GitHub Pages deployment job depends on the test job. It builds a reviewed static artifact, deploys only after all required checks pass, and then runs a browser smoke test and module contract suite against the deployment URL.
+`.github/workflows/release-readiness.yml` runs the full suite on every push, pull request, and manual dispatch. The GitHub Pages deployment job depends on the test job. It builds a reviewed static artifact, deploys only after all required checks pass, and then runs the application smoke check plus every published character, ruleset, monster, security, and module suite against the deployment URL.
 
 No production Firebase records are created by the automated suite. DM-room and battle-map navigation use the explicit smoke-test harness, while mutations and permissions use isolated in-memory or stubbed persistence tests.

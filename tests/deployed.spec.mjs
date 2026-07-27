@@ -51,3 +51,70 @@ test(
     );
   }
 );
+
+const deployedSelfTests = [
+  {
+    name:
+      "character creator",
+    path:
+      "ai-testing/character-creator-self-test.html?release=phase20-20260727",
+    selector: "#result",
+    expected: "\"total\": 456"
+  },
+  {
+    name:
+      "ruleset policy",
+    path:
+      "ai-testing/ruleset-policy-test.html?release=phase20-20260727",
+    selector: "#result",
+    expected: "\"passed\": true"
+  },
+  {
+    name:
+      "monster creator",
+    path:
+      "ai-testing/monster-creator-self-test.html?release=phase20-20260727",
+    selector: "#testResult",
+    expected: "97 Phase 20"
+  },
+  {
+    name:
+      "security and persistence",
+    path:
+      "ai-testing/security-persistence-self-test.html?release=phase20-20260727",
+    selector: "#testResult",
+    expected: "60 Phase 18"
+  }
+];
+
+for (const suite of deployedSelfTests) {
+  test(
+    `deployed GitHub Pages build passes the ${suite.name} suite`,
+    async ({ page }) => {
+      await page.goto(
+        suite.path,
+        {
+          waitUntil:
+            "domcontentloaded"
+        }
+      );
+
+      await expect(
+        page.locator("body")
+      ).toHaveAttribute(
+        "data-test-status",
+        "pass",
+        {
+          timeout: 120000
+        }
+      );
+      await expect(
+        page.locator(
+          suite.selector
+        )
+      ).toContainText(
+        suite.expected
+      );
+    }
+  );
+}

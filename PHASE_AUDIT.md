@@ -34,7 +34,7 @@ This audit combines static release gates, schema validators, fixtures, browser s
 - 340 spells validate: 319 SRD spells and 21 reviewed additional cantrips.
 - 399 feat/subclass spell references validate.
 - 456 character, 97 monster, 60 security/persistence, and 88 module browser assertions pass.
-- 128 local import references resolve with exact filename capitalization.
+- 130 local import references resolve with exact filename capitalization.
 - 12 release fixture and workflow contract tests pass.
 
 The automated audit intentionally avoids production Firebase or Cloudinary mutations. Production-facing behavior is covered through rules, permission stubs, persistence conflict tests, safe screen navigation, and the deployed GitHub Pages smoke suite.

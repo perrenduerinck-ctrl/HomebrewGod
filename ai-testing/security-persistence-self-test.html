@@ -29,9 +29,26 @@
     }
   </style>
 </head>
-<body>
+<body data-test-status="running">
   <h1>Phase 18 Security and Persistence Self-Test</h1>
   <pre id="testResult">RUNNING</pre>
+
+  <script>
+    window.addEventListener("error", (event) => {
+      const output = document.getElementById("testResult");
+      document.body.dataset.testStatus = "fail";
+      output.className = "fail";
+      output.textContent =
+        `FAIL\n${event.error?.stack || event.message}` +
+        `\n${event.filename || "unknown"}:${event.lineno || 0}:${event.colno || 0}`;
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const output = document.getElementById("testResult");
+      document.body.dataset.testStatus = "fail";
+      output.className = "fail";
+      output.textContent = `FAIL\n${event.reason?.stack || event.reason}`;
+    });
+  </script>
 
   <script type="module">
     import {
@@ -151,11 +168,21 @@
     assert(/too large/i.test(friendlyServiceError({ code: "resource-exhausted" }, { service: "Cloudinary" })), "Size errors are friendly.");
     assert(/Sign in again/.test(friendlyServiceError({ code: "unauthenticated" }, { action: "upload" })), "Authentication errors request sign-in.");
 
+    async function fetchRequiredText(sourcePath) {
+      const response = await fetch(sourcePath);
+      if (!response.ok) {
+        throw new Error(
+          `Required security audit source is missing: ${sourcePath} (${response.status}).`
+        );
+      }
+      return response.text();
+    }
+
     const [rules, app, functionsSource, firebaseConfig] = await Promise.all([
-      fetch("../firestore.rules?v=phase20-20260727").then((response) => response.text()),
-      fetch("../app.js?v=phase20-20260727").then((response) => response.text()),
-      fetch("../functions/index.js?v=phase20-20260727").then((response) => response.text()),
-      fetch("../firebase.json?v=phase20-20260727").then((response) => response.text())
+      fetchRequiredText("../firestore.rules?v=phase20-20260727"),
+      fetchRequiredText("../app.js?v=phase20-20260727"),
+      fetchRequiredText("../functions/index.js?v=phase20-20260727"),
+      fetchRequiredText("../firebase.json?v=phase20-20260727")
     ]);
 
     assert(rules.includes("allow read:") && rules.includes("if isRoomMember(roomCode)"), "Room reads require membership.");
@@ -180,9 +207,11 @@
     };
 
     if (failures.length) {
+      document.body.dataset.testStatus = "fail";
       result.className = "fail";
       result.textContent = `FAIL — ${failures.length} of ${assertions} assertions failed\n\n${failures.join("\n")}`;
     } else {
+      document.body.dataset.testStatus = "pass";
       result.className = "pass";
       result.textContent = `PASS — ${assertions} Phase 18 security and persistence assertions`;
     }
