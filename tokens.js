@@ -317,6 +317,94 @@ export function createTokenSystem(options) {
     };
   }
 
+  function getLinkedMonsterId(monster) {
+    return String(
+      monster?.firestoreDocumentId ||
+      monster?.docId ||
+      monster?.id ||
+      ""
+    ).trim();
+  }
+
+  function buildMonsterLinkedTokenPatch(
+    monster,
+    roomData
+  ) {
+    const monsterId =
+      getLinkedMonsterId(monster);
+
+    const name = String(
+      monster?.name ||
+      "Unnamed Monster"
+    ).trim() || "Unnamed Monster";
+
+    const sizeCategory =
+      normalizeSizeCategory(
+        monster?.size ||
+        "medium"
+      );
+
+    const maximumHp = Math.max(
+      1,
+      Math.round(
+        safeNumber(
+          monster?.hp,
+          1
+        )
+      )
+    );
+
+    const armorClass = Math.max(
+      0,
+      Math.round(
+        safeNumber(
+          monster?.ac,
+          10
+        )
+      )
+    );
+
+    const mediumSize =
+      getMediumSize(roomData || {});
+
+    return {
+      name,
+      imageUrl: String(
+        monster?.imageUrl ||
+        monster?.image?.url ||
+        ""
+      ).trim(),
+      publicId: String(
+        monster?.imagePublicId ||
+        monster?.image?.publicId ||
+        ""
+      ).trim() || null,
+      sizeCategory,
+      creatureSize: sizeCategory,
+      size:
+        Math.round(
+          mediumSize *
+          (SIZE_MULTIPLIERS[sizeCategory] || 1)
+        ),
+      armorClass,
+      ac: armorClass,
+      currentHp: maximumHp,
+      maxHp: maximumHp,
+      hp: {
+        current: maximumHp,
+        maximum: maximumHp
+      },
+      hpAuthority: "token",
+      linkedMonsterId: monsterId,
+      sheetId: monsterId,
+      sourceType: "monster",
+      linkedMonster: {
+        id: monsterId,
+        hpAuthority: "token"
+      }
+    };
+  }
+
 
 // =====================================================
 // TOKENS SECTION 4 â€” TOKEN STYLES
@@ -512,1392 +600,4 @@ export function createTokenSystem(options) {
         inset: 0;
         width: 100%;
         height: 100%;
-        pointer-events: none;
-        z-index: 40;
-      }
-
-      .hg-map-scale-preview {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        border-radius: 999px;
-        border: 3px solid rgba(255, 255, 255, 0.96);
-        background: rgba(255, 255, 255, 0.10);
-        box-shadow:
-          0 0 0 2px rgba(0, 0, 0, 0.72),
-          0 0 26px rgba(255, 255, 255, 0.70),
-          inset 0 0 20px rgba(255, 255, 255, 0.16);
-        pointer-events: none;
-        z-index: 9998;
-        transform: translate(-50%, -50%);
-      }
-
-      .hg-map-scale-label {
-        position: absolute;
-        left: 50%;
-        top: calc(50% + var(--preview-radius, 32px) + 8px);
-        transform: translateX(-50%);
-        padding: 4px 9px;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.78);
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.62);
-        font-size: 12px;
-        font-weight: bold;
-        white-space: nowrap;
-        pointer-events: none;
-        z-index: 9999;
-        box-shadow: 0 0 14px rgba(255, 255, 255, 0.24);
-      }
-
-      /* =====================================================
-         TOKEN PIECES
-      ===================================================== */
-
-      .hg-token {
-        position: absolute;
-        border-radius: 999px;
-        overflow: visible;
-        pointer-events: auto;
-        cursor: grab;
-        user-select: none;
-        transform: translateZ(0);
-      }
-
-      .hg-token img,
-      .hg-token-fallback {
-        width: 100%;
-        height: 100%;
-        border-radius: 999px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        object-fit: cover;
-        background: #101528;
-        color: white;
-        font-weight: bold;
-        border: 2px solid rgba(120, 160, 255, 0.9);
-        box-shadow:
-          0 0 0 2px rgba(0, 0, 0, 0.65),
-          0 0 18px rgba(110, 130, 255, 0.45);
-        pointer-events: none;
-      }
-
-      .hg-token-player img,
-      .hg-token-player .hg-token-fallback {
-        border-color: rgba(88, 166, 255, 0.95);
-        box-shadow:
-          0 0 0 2px rgba(0, 0, 0, 0.65),
-          0 0 20px rgba(88, 166, 255, 0.52);
-      }
-
-      .hg-token-enemy img,
-      .hg-token-enemy .hg-token-fallback {
-        border-color: rgba(255, 90, 122, 0.95);
-        box-shadow:
-          0 0 0 2px rgba(0, 0, 0, 0.65),
-          0 0 20px rgba(255, 90, 122, 0.52);
-      }
-
-      .hg-token-npc img,
-      .hg-token-npc .hg-token-fallback {
-        border-color: rgba(180, 140, 255, 0.95);
-        box-shadow:
-          0 0 0 2px rgba(0, 0, 0, 0.65),
-          0 0 20px rgba(180, 140, 255, 0.48);
-      }
-
-      .hg-token-object img,
-      .hg-token-object .hg-token-fallback {
-        border-color: rgba(170, 190, 220, 0.95);
-        box-shadow:
-          0 0 0 2px rgba(0, 0, 0, 0.65),
-          0 0 16px rgba(170, 190, 220, 0.35);
-      }
-
-      .hg-token-label {
-        position: absolute;
-        left: 50%;
-        top: 100%;
-        transform: translateX(-50%);
-        margin-top: 4px;
-        padding: 2px 6px;
-        max-width: 130px;
-        border-radius: 999px;
-        background: rgba(5, 7, 15, 0.82);
-        color: #ffffff;
-        border: 1px solid rgba(130, 150, 255, 0.35);
-        font-size: 11px;
-        line-height: 1.2;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        pointer-events: none;
-      }
-
-      .hg-token-stats {
-        position: absolute;
-        left: 50%;
-        top: 100%;
-        transform: translateX(-50%);
-        margin-top: 23px;
-        padding: 2px 6px;
-        border-radius: 999px;
-        background: rgba(5, 7, 15, 0.88);
-        color: #dfe6ff;
-        border: 1px solid rgba(130, 150, 255, 0.28);
-        font-size: 10px;
-        line-height: 1.2;
-        white-space: nowrap;
-        pointer-events: none;
-      }
-
-      .hg-token-size-badge {
-        position: absolute;
-        left: 50%;
-        bottom: 100%;
-        transform: translateX(-50%);
-        margin-bottom: 4px;
-        padding: 2px 6px;
-        border-radius: 999px;
-        background: rgba(9, 12, 28, 0.82);
-        color: #dfe6ff;
-        border: 1px solid rgba(150, 170, 255, 0.28);
-        font-size: 10px;
-        line-height: 1.1;
-        white-space: nowrap;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.15s ease;
-      }
-
-      .hg-token:hover .hg-token-size-badge {
-        opacity: 1;
-      }
-
-      .hg-token-delete {
-        position: absolute;
-        right: -8px;
-        top: -8px;
-        width: 22px !important;
-        height: 22px !important;
-        min-width: 22px !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border-radius: 999px !important;
-        font-size: 12px !important;
-        line-height: 1 !important;
-        background: rgba(255, 70, 100, 0.95) !important;
-        border-color: rgba(255, 170, 190, 0.8) !important;
-        z-index: 3;
-      }
-
-      .hg-token-dragging {
-        cursor: grabbing !important;
-        z-index: 9999 !important;
-        filter: brightness(1.15);
-      }
-
-      /* =====================================================
-         SMALL SCREENS
-      ===================================================== */
-
-      @media (max-width: 900px) {
-        .tokenScaleCompactRow,
-        .tokenAddCompactRow {
-          display: block;
-        }
-
-        #tokenMediumSizeInput,
-        #tokenTypeSelect,
-        #tokenSizeSelect,
-        #tokenNameInput,
-        #tokenImageUploadInput {
-          display: block !important;
-          width: 100% !important;
-          margin: 6px 0 !important;
-        }
-
-        .creatorMenuGrid {
-          grid-template-columns: 1fr;
-        }
-
-        .statMiniGrid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-      }
-    `;
-
-    document.head.appendChild(style);
-  }
-
-// =====================================================
-// TOKENS SECTION 5 â€” CONTROL CONNECTIONS
-// =====================================================
-
-  function ensureListeners() {
-    if (!window.homebrewGodTokenListenersReady) {
-      window.homebrewGodTokenListenersReady = true;
-
-      document.addEventListener("pointermove", handleTokenPointerMove);
-      document.addEventListener("pointerup", handleTokenPointerUp);
-      document.addEventListener("pointercancel", cancelTokenDrag);
-    }
-  }
-
-  function connectControls() {
-    refreshElements();
-
-    if (T.addTokenButton && T.addTokenButton.dataset.homebrewGodTokensConnected !== "yes") {
-      T.addTokenButton.dataset.homebrewGodTokensConnected = "yes";
-      T.addTokenButton.addEventListener("click", addToken);
-    }
-
-    if (T.saveTokenScaleButton && T.saveTokenScaleButton.dataset.homebrewGodScaleConnected !== "yes") {
-      T.saveTokenScaleButton.dataset.homebrewGodScaleConnected = "yes";
-      T.saveTokenScaleButton.addEventListener("click", saveTokenScale);
-    }
-
-    if (T.tokenMediumSizeInput && T.tokenMediumSizeInput.dataset.homebrewGodPreviewConnected !== "yes") {
-      T.tokenMediumSizeInput.dataset.homebrewGodPreviewConnected = "yes";
-
-      T.tokenMediumSizeInput.addEventListener("input", function () {
-        const mediumSize = clampMediumSize(T.tokenMediumSizeInput.value);
-        updateScaleNumber(mediumSize);
-        showMapScalePreview(mediumSize, "Medium");
-      });
-
-      T.tokenMediumSizeInput.addEventListener("change", function () {
-        const mediumSize = clampMediumSize(T.tokenMediumSizeInput.value);
-        showMapScalePreview(mediumSize, "Medium");
-      });
-    }
-  }
-
-
-// =====================================================
-// TOKENS SECTION 6 â€” SIZE / SCALE LOGIC
-// =====================================================
-
-  function getMediumSize(room) {
-    const direct = room && Number(room.tokenMediumSize);
-    const nested = room && room.tokenScale && Number(room.tokenScale.mediumSize);
-
-    if (Number.isFinite(direct)) {
-      return clampMediumSize(direct);
-    }
-
-    if (Number.isFinite(nested)) {
-      return clampMediumSize(nested);
-    }
-
-    return 64;
-  }
-
-  function getTokenPixelSize(token, room) {
-    const mediumSize = getMediumSize(room || {});
-    const sizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
-    const multiplier = SIZE_MULTIPLIERS[sizeCategory] || 1;
-
-    return Math.round(mediumSize * multiplier);
-  }
-
-  function updateScaleControlsFromRoom(room) {
-    refreshElements();
-
-    const mediumSize = getMediumSize(room || {});
-
-    if (T.tokenMediumSizeInput) {
-      T.tokenMediumSizeInput.value = String(mediumSize);
-    }
-
-    updateScaleNumber(mediumSize);
-  }
-
-  function updateScaleNumber(mediumSizeValue) {
-    refreshElements();
-
-    const mediumSize = clampMediumSize(mediumSizeValue);
-
-    if (T.tokenMediumSizeValue) {
-      T.tokenMediumSizeValue.textContent = String(mediumSize);
-    }
-  }
-
-
-// =====================================================
-// TOKENS SECTION 7 â€” MAP SCALE PREVIEW
-// =====================================================
-
-  function removeMapScalePreview() {
-    refreshElements();
-
-    if (scalePreviewHideTimer) {
-      clearTimeout(scalePreviewHideTimer);
-      scalePreviewHideTimer = null;
-    }
-
-    if (!T.tokenLayer) {
-      return;
-    }
-
-    const oldCircle = T.tokenLayer.querySelector(".hg-map-scale-preview");
-    const oldLabel = T.tokenLayer.querySelector(".hg-map-scale-label");
-
-    if (oldCircle) oldCircle.remove();
-    if (oldLabel) oldLabel.remove();
-  }
-
-  function showMapScalePreview(mediumSize, labelName = "Medium") {
-    refreshElements();
-
-    const layer = prepareTokenLayer();
-
-    if (!layer) {
-      return;
-    }
-
-    if (scalePreviewHideTimer) {
-      clearTimeout(scalePreviewHideTimer);
-      scalePreviewHideTimer = null;
-    }
-
-    const cleanSize = clampMediumSize(mediumSize);
-
-    let circle = layer.querySelector(".hg-map-scale-preview");
-    let label = layer.querySelector(".hg-map-scale-label");
-
-    if (!circle) {
-      circle = document.createElement("div");
-      circle.className = "hg-map-scale-preview";
-      layer.appendChild(circle);
-    }
-
-    if (!label) {
-      label = document.createElement("div");
-      label.className = "hg-map-scale-label";
-      layer.appendChild(label);
-    }
-
-    circle.style.width = cleanSize + "px";
-    circle.style.height = cleanSize + "px";
-
-    label.style.setProperty("--preview-radius", (cleanSize / 2) + "px");
-    label.textContent = labelName + " " + cleanSize + "px";
-
-    setStatus("Scale preview: " + labelName + " " + cleanSize + "px. Save when it fits one square.");
-  }
-
-  function hideMapScalePreviewSoon() {
-    if (scalePreviewHideTimer) {
-      clearTimeout(scalePreviewHideTimer);
-    }
-
-    scalePreviewHideTimer = setTimeout(function () {
-      removeMapScalePreview();
-    }, 900);
-  }
-
-
-// =====================================================
-// TOKENS SECTION 8 â€” TOKEN SUBCOLLECTION DATA / LISTENER
-// =====================================================
-
-  function normalizeToken(rawToken) {
-    const token = rawToken || {};
-    const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
-    const maximumHp = Math.max(
-      0,
-      Math.round(
-        safeNumber(
-          token.maxHp ?? token.hp?.maximum,
-          0
-        )
-      )
-    );
-    const currentHp = Math.max(
-      0,
-      Math.min(
-        maximumHp || Number.MAX_SAFE_INTEGER,
-        Math.round(
-          safeNumber(
-            token.currentHp ?? token.hp?.current,
-            maximumHp
-          )
-        )
-      )
-    );
-    const armorClass = Math.max(
-      0,
-      Math.round(
-        safeNumber(
-          token.armorClass ?? token.ac,
-          0
-        )
-      )
-    );
-
-    return {
-      ...token,
-      id: token.id,
-      name: token.name || "Token",
-      type: safeTokenType(token.type),
-      x: clampPercent(token.x),
-      y: clampPercent(token.y),
-      sizeCategory: cleanSizeCategory,
-      creatureSize: cleanSizeCategory,
-      currentHp,
-      maxHp: maximumHp,
-      hp: {
-        current: currentHp,
-        maximum: maximumHp
-      },
-      armorClass,
-      ac: armorClass,
-      linkedCharacterId:
-        token.linkedCharacterId ||
-        token.linkedCharacter?.id ||
-        token.sheetId ||
-        null,
-      mapMode: token.mapMode || "single",
-      tileKey: token.tileKey || null
-    };
-  }
-
-  function getRoomTokens() {
-    return tokenCache.map(function (token) {
-      return normalizeToken(token);
-    });
-  }
-
-  function stopTokenListener() {
-    if (typeof tokenUnsubscribe === "function") {
-      tokenUnsubscribe();
-    }
-
-    tokenUnsubscribe = null;
-    tokenRoomCode = null;
-    tokenCache = [];
-  }
-
-  function startTokenListenerForRoom(roomCode) {
-    if (!roomCode) {
-      stopTokenListener();
-      return;
-    }
-
-    if (tokenRoomCode === roomCode && tokenUnsubscribe) {
-      return;
-    }
-
-    stopTokenListener();
-
-    tokenRoomCode = roomCode;
-
-    const tokenCollectionRef = deps.collection(deps.db, "rooms", roomCode, "tokens");
-
-    tokenUnsubscribe = deps.onSnapshot(tokenCollectionRef, function (snapshot) {
-      tokenCache = snapshot.docs.map(function (tokenDoc) {
-        return normalizeToken({
-          ...tokenDoc.data(),
-          id: tokenDoc.id
-        });
-      });
-
-      render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
-    });
-  }
-
-  function getCurrentTokenTarget(room) {
-    const safeRoom = room || {};
-    const tiles = deps.getPuzzleTiles ? deps.getPuzzleTiles(safeRoom) : [];
-    const viewMode = deps.getPuzzleViewMode ? deps.getPuzzleViewMode(safeRoom) : "board";
-    const activeTile = deps.getActivePuzzleTile ? deps.getActivePuzzleTile(safeRoom) : null;
-
-    if (tiles.length > 0) {
-      if (viewMode === "focus" && activeTile) {
-        return {
-          mapMode: "puzzle",
-          tileKey: activeTile.key
-        };
-      }
-
-      return {
-        mapMode: "puzzle",
-        tileKey: null
-      };
-    }
-
-    const currentMap = deps.buildMapFromRoomFields
-      ? deps.buildMapFromRoomFields(safeRoom)
-      : null;
-
-    if (currentMap && currentMap.url) {
-      return {
-        mapMode: "single",
-        tileKey: null
-      };
-    }
-
-    return {
-      mapMode: null,
-      tileKey: null
-    };
-  }
-
-  function tokenMatchesCurrentView(token, room) {
-    const target = getCurrentTokenTarget(room);
-
-    if (!target.mapMode) {
-      return false;
-    }
-
-    if ((token.mapMode || "single") !== target.mapMode) {
-      return false;
-    }
-
-    if (target.mapMode === "puzzle") {
-      if (target.tileKey) {
-        return token.tileKey === target.tileKey;
-      }
-
-      return !token.tileKey;
-    }
-
-    return target.mapMode === "single";
-  }
-
-
-// =====================================================
-// TOKENS SECTION 9 â€” TOKEN LAYER / MAP CONTAINER
-// =====================================================
-
-  function getTokenContainerForCurrentView() {
-    refreshElements();
-
-    if (T.puzzleMapBoard && !T.puzzleMapBoard.classList.contains("hidden")) {
-      return T.puzzleMapBoard;
-    }
-
-    if (T.battleMapViewer && !T.battleMapViewer.classList.contains("hidden")) {
-      return T.battleMapViewer;
-    }
-
-    return T.battleMapSurface || T.battleMapViewer || T.puzzleMapBoard || null;
-  }
-
-  function prepareTokenLayer() {
-    refreshElements();
-
-    if (!T.tokenLayer) {
-      console.warn("Homebrew God tokens: tokenLayer was not found.");
-      return null;
-    }
-
-    const container = getTokenContainerForCurrentView();
-
-    if (!container) {
-      console.warn("Homebrew God tokens: no map container found.");
-      return null;
-    }
-
-    const computedPosition = window.getComputedStyle(container).position;
-
-    if (computedPosition === "static") {
-      container.style.position = "relative";
-    }
-
-    if (T.tokenLayer.parentNode !== container) {
-      container.appendChild(T.tokenLayer);
-    }
-
-    T.tokenLayer.style.position = "absolute";
-    T.tokenLayer.style.left = "0";
-    T.tokenLayer.style.top = "0";
-    T.tokenLayer.style.width = "100%";
-    T.tokenLayer.style.height = "100%";
-    T.tokenLayer.style.pointerEvents = "none";
-    T.tokenLayer.style.zIndex = "40";
-
-    return T.tokenLayer;
-  }
-
-
-// =====================================================
-// TOKENS SECTION 10 â€” TOKEN RENDERING
-// =====================================================
-
-  function positionTokenElement(tokenEl, token, room) {
-    const size = getTokenPixelSize(token, room || {});
-    const x = clampPercent(token.x);
-    const y = clampPercent(token.y);
-
-    tokenEl.style.width = size + "px";
-    tokenEl.style.height = size + "px";
-    tokenEl.style.left = "calc(" + x + "% - " + (size / 2) + "px)";
-    tokenEl.style.top = "calc(" + y + "% - " + (size / 2) + "px)";
-  }
-
-  function render(room) {
-    refreshElements();
-    ensureStyles();
-    connectControls();
-
-    const safeRoom = room || (deps.getCurrentRoomData ? deps.getCurrentRoomData() : {}) || {};
-    const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-
-    lastRenderedRoom = safeRoom;
-
-    startTokenListenerForRoom(roomCode);
-    updateScaleControlsFromRoom(safeRoom);
-
-    if (activeTokenDrag) {
-      return;
-    }
-
-    const layer = prepareTokenLayer();
-
-    if (!layer) {
-      return;
-    }
-
-    const existingScaleCircle = layer.querySelector(".hg-map-scale-preview");
-    const existingScaleLabel = layer.querySelector(".hg-map-scale-label");
-
-    layer.innerHTML = "";
-
-    if (existingScaleCircle) {
-      layer.appendChild(existingScaleCircle);
-    }
-
-    if (existingScaleLabel) {
-      layer.appendChild(existingScaleLabel);
-    }
-
-    const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
-
-    const visibleTokens = getRoomTokens().filter(function (token) {
-      return tokenMatchesCurrentView(token, safeRoom);
-    });
-
-    visibleTokens.forEach(function (token) {
-      const tokenEl = document.createElement("div");
-      tokenEl.className = "hg-token hg-token-" + token.type;
-      tokenEl.dataset.tokenId = token.id;
-      tokenEl.title = token.name || "Token";
-
-      positionTokenElement(tokenEl, token, safeRoom);
-
-      if (token.imageUrl) {
-        const img = document.createElement("img");
-        img.src = token.imageUrl;
-        img.alt = token.name || "Token";
-        tokenEl.appendChild(img);
-      } else {
-        const fallback = document.createElement("div");
-        fallback.className = "hg-token-fallback";
-        fallback.textContent = String(token.name || "?").trim().charAt(0).toUpperCase() || "?";
-        tokenEl.appendChild(fallback);
-      }
-
-      const sizeBadge = document.createElement("div");
-      sizeBadge.className = "hg-token-size-badge";
-      sizeBadge.textContent = sizeCategoryLabel(token.sizeCategory);
-      tokenEl.appendChild(sizeBadge);
-
-      const label = document.createElement("div");
-      label.className = "hg-token-label";
-      label.textContent = token.name || "Token";
-      tokenEl.appendChild(label);
-
-      const tokenStats = [];
-
-      if (
-        token.display?.hpText === true &&
-        token.maxHp > 0
-      ) {
-        tokenStats.push(
-          "HP " +
-          token.currentHp +
-          "/" +
-          token.maxHp
-        );
-      }
-
-      if (
-        token.display?.ac === true &&
-        token.armorClass > 0
-      ) {
-        tokenStats.push(
-          "AC " + token.armorClass
-        );
-      }
-
-      if (tokenStats.length > 0) {
-        const stats =
-          document.createElement("div");
-
-        stats.className =
-          "hg-token-stats";
-
-        stats.textContent =
-          tokenStats.join(" Â· ");
-
-        tokenEl.appendChild(stats);
-      }
-
-      if (isDM) {
-        tokenEl.addEventListener("pointerdown", function (event) {
-          startTokenDrag(event, token, tokenEl);
-        });
-
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "hg-token-delete";
-        deleteButton.textContent = "Ã—";
-        deleteButton.title = "Delete token";
-
-        deleteButton.addEventListener("click", function (event) {
-          event.stopPropagation();
-          deleteToken(token.id);
-        });
-
-        tokenEl.appendChild(deleteButton);
-      }
-
-      layer.appendChild(tokenEl);
-    });
-  }
-
-
-// =====================================================
-// TOKENS SECTION 11 â€” SCALE SAVE
-// Scale still lives on the room doc.
-// This rarely changes, so it is okay if the room updates here.
-// =====================================================
-
-  async function saveTokenScale() {
-    try {
-      refreshElements();
-
-      const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-      const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : null;
-      const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
-
-      if (!roomCode) {
-        alert("Open a room first.");
-        return;
-      }
-
-      if (!isDM) {
-        alert("Only the DM can change token scale.");
-        return;
-      }
-
-      const mediumSize = clampMediumSize(T.tokenMediumSizeInput ? T.tokenMediumSizeInput.value : 64);
-
-      const newRoomData = {
-        ...(roomData || {}),
-        tokenMediumSize: mediumSize,
-        tokenScale: {
-          ...((roomData && roomData.tokenScale) || {}),
-          mediumSize: mediumSize,
-          updatedAtMillis: Date.now()
-        }
-      };
-
-      if (deps.setCurrentRoomData) {
-        deps.setCurrentRoomData(newRoomData);
-      }
-
-      await deps.updateDoc(deps.doc(deps.db, "rooms", roomCode), {
-        tokenMediumSize: mediumSize,
-        tokenScale: {
-          mediumSize: mediumSize,
-          updatedAtMillis: Date.now()
-        },
-        updatedAt: deps.serverTimestamp()
-      });
-
-      render(newRoomData);
-      showMapScalePreview(mediumSize, "Saved Medium");
-      hideMapScalePreviewSoon();
-      setStatus("Medium token size saved at " + mediumSize + "px.");
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
-    }
-  }
-
-
-// =====================================================
-// TOKENS SECTION 12 â€” ADD / DELETE TOKEN
-// Uses rooms/{roomCode}/tokens/{tokenId}
-// =====================================================
-
-  async function addToken() {
-    try {
-      refreshElements();
-
-      const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-      const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : null;
-      const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
-
-      if (!roomCode) {
-        alert("Open a room first.");
-        return;
-      }
-
-      if (!isDM) {
-        alert("Only the DM can add tokens.");
-        return;
-      }
-
-      const target = getCurrentTokenTarget(roomData || {});
-
-      if (!target.mapMode) {
-        alert("Load a battle map or puzzle map first.");
-        return;
-      }
-
-      const file = T.tokenImageUploadInput ? T.tokenImageUploadInput.files[0] : null;
-
-      if (!file) {
-        alert("Choose a token image first.");
-        return;
-      }
-
-      const name = T.tokenNameInput && T.tokenNameInput.value.trim()
-        ? T.tokenNameInput.value.trim()
-        : "Unnamed Token";
-
-      const type = T.tokenTypeSelect && T.tokenTypeSelect.value
-        ? safeTokenType(T.tokenTypeSelect.value)
-        : "object";
-
-      const sizeCategory = T.tokenSizeSelect && T.tokenSizeSelect.value
-        ? normalizeSizeCategory(T.tokenSizeSelect.value)
-        : "medium";
-
-      if (!deps.uploadImage) {
-        alert("Token uploader is not connected.");
-        return;
-      }
-
-      removeMapScalePreview();
-      setStatus("Uploading token...");
-
-      if (T.addTokenButton) {
-        T.addTokenButton.disabled = true;
-      }
-
-      const cloudinaryResult = await deps.uploadImage(file);
-      const mediumSize = getMediumSize(roomData || {});
-
-      const newToken = {
-        name,
-        type,
-        imageUrl: cloudinaryResult.secure_url,
-        publicId: cloudinaryResult.public_id,
-        x: 50,
-        y: 50,
-        mapMode: target.mapMode,
-        tileKey: target.tileKey,
-        sizeCategory,
-        creatureSize: sizeCategory,
-        size: Math.round(mediumSize * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
-        sheetId: null,
-        display: {
-          name: true,
-          hpBar: false,
-          hpText: false,
-          ac: false,
-          conditions: true,
-          initiative: false
-        },
-        createdAtMillis: Date.now(),
-        updatedAtMillis: Date.now(),
-        createdAt: deps.serverTimestamp(),
-        updatedAt: deps.serverTimestamp()
-      };
-
-      await deps.addDoc(
-        deps.collection(deps.db, "rooms", roomCode, "tokens"),
-        newToken
-      );
-
-      if (T.tokenNameInput) {
-        T.tokenNameInput.value = "";
-      }
-
-      if (T.tokenImageUploadInput) {
-        T.tokenImageUploadInput.value = "";
-      }
-
-      setStatus(sizeCategoryLabel(sizeCategory) + " token added.");
-    } catch (error) {
-      console.error(error);
-      setStatus("Token upload failed.");
-      alert(error.message);
-    } finally {
-      refreshElements();
-
-      if (T.addTokenButton) {
-        T.addTokenButton.disabled = false;
-      }
-    }
-  }
-
-  async function createCharacterLinkedToken(
-    character
-  ) {
-    const roomCode =
-      deps.getCurrentRoomCode
-        ? deps.getCurrentRoomCode()
-        : null;
-
-    const roomData =
-      deps.getCurrentRoomData
-        ? deps.getCurrentRoomData()
-        : null;
-
-    const isDM =
-      deps.getCurrentIsDM
-        ? deps.getCurrentIsDM()
-        : false;
-
-    if (!roomCode) {
-      throw new Error(
-        "Open a room before creating a linked token."
-      );
-    }
-
-    if (!isDM) {
-      throw new Error(
-        "Only the DM can create character-linked tokens."
-      );
-    }
-
-    const fields =
-      getCharacterLinkedTokenFields(
-        character,
-        roomData || {}
-      );
-
-    if (!fields.characterId) {
-      throw new Error(
-        "Save the character before creating its linked token."
-      );
-    }
-
-    if (!fields.portrait.url) {
-      throw new Error(
-        "Add and save a character portrait before creating its linked token."
-      );
-    }
-
-    const target =
-      getCurrentTokenTarget(
-        roomData || {}
-      );
-
-    if (!target.mapMode) {
-      throw new Error(
-        "Load a battle map or puzzle map before creating the linked token."
-      );
-    }
-
-    const timestampMillis = Date.now();
-
-    const newToken = {
-      ...buildCharacterLinkedTokenPatch(
-        character,
-        roomData || {}
-      ),
-      type: "player",
-      x: 50,
-      y: 50,
-      mapMode: target.mapMode,
-      tileKey: target.tileKey,
-      display: {
-        name: true,
-        hpBar: true,
-        hpText: true,
-        ac: true,
-        conditions: true,
-        initiative: false
-      },
-      createdAtMillis: timestampMillis,
-      updatedAtMillis: timestampMillis,
-      createdAt: deps.serverTimestamp(),
-      updatedAt: deps.serverTimestamp()
-    };
-
-    const createdDocument =
-      await deps.addDoc(
-        deps.collection(
-          deps.db,
-          "rooms",
-          roomCode,
-          "tokens"
-        ),
-        newToken
-      );
-
-    setStatus(
-      fields.name +
-      " linked token created. Character HP is authoritative."
-    );
-
-    return normalizeToken({
-      ...newToken,
-      id: createdDocument?.id || null
-    });
-  }
-
-  async function syncLinkedCharacterTokens(
-    character
-  ) {
-    const roomCode =
-      deps.getCurrentRoomCode
-        ? deps.getCurrentRoomCode()
-        : null;
-
-    const roomData =
-      deps.getCurrentRoomData
-        ? deps.getCurrentRoomData()
-        : null;
-
-    const characterId =
-      getLinkedCharacterId(character);
-
-    if (!roomCode || !characterId) {
-      return {
-        characterId,
-        updatedCount: 0
-      };
-    }
-
-    if (
-      typeof deps.getDocs !== "function" ||
-      typeof deps.query !== "function" ||
-      typeof deps.where !== "function"
-    ) {
-      throw new Error(
-        "Linked-token synchronization is missing its Firestore query tools."
-      );
-    }
-
-    const linkedTokensSnapshot =
-      await deps.getDocs(
-        deps.query(
-          deps.collection(
-            deps.db,
-            "rooms",
-            roomCode,
-            "tokens"
-          ),
-          deps.where(
-            "linkedCharacterId",
-            "==",
-            characterId
-          )
-        )
-      );
-
-    const linkedTokenDocuments =
-      Array.isArray(
-        linkedTokensSnapshot?.docs
-      )
-        ? linkedTokensSnapshot.docs
-        : [];
-
-    if (!linkedTokenDocuments.length) {
-      return {
-        characterId,
-        updatedCount: 0
-      };
-    }
-
-    const updatedAtMillis = Date.now();
-
-    const updatePatch = {
-      ...buildCharacterLinkedTokenPatch(
-        character,
-        roomData || {}
-      ),
-      updatedAtMillis,
-      updatedAt: deps.serverTimestamp()
-    };
-
-    await Promise.all(
-      linkedTokenDocuments.map((tokenDocument) => {
-        return deps.updateDoc(
-          tokenDocument.ref ||
-          deps.doc(
-            deps.db,
-            "rooms",
-            roomCode,
-            "tokens",
-            tokenDocument.id
-          ),
-          updatePatch
-        );
-      })
-    );
-
-    tokenCache = tokenCache.map((token) => {
-      if (
-        String(
-          token?.linkedCharacterId ||
-          token?.linkedCharacter?.id ||
-          token?.sheetId ||
-          ""
-        ).trim() !==
-        characterId
-      ) {
-        return token;
-      }
-
-      return normalizeToken({
-        ...token,
-        ...updatePatch
-      });
-    });
-
-    return {
-      characterId,
-      updatedCount:
-        linkedTokenDocuments.length
-    };
-  }
-
-  async function deleteToken(tokenId) {
-    try {
-      const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-      const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
-
-      if (!roomCode || !isDM) {
-        alert("Only the DM can delete tokens.");
-        return;
-      }
-
-      if (!confirm("Delete this token? This does not delete the image from Cloudinary.")) {
-        return;
-      }
-
-      await deps.deleteDoc(
-        deps.doc(deps.db, "rooms", roomCode, "tokens", tokenId)
-      );
-
-      setStatus("Token deleted.");
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
-    }
-  }
-
-
-// =====================================================
-// TOKENS SECTION 13 â€” TOKEN DRAGGING
-// No room document updates.
-// Saves only rooms/{roomCode}/tokens/{tokenId}
-// =====================================================
-
-  async function saveTokenPosition(tokenId, x, y) {
-    const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-    const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
-
-    if (!roomCode || !isDM || !tokenId) {
-      return;
-    }
-
-    await deps.updateDoc(
-      deps.doc(deps.db, "rooms", roomCode, "tokens", tokenId),
-      {
-        x: clampPercent(x),
-        y: clampPercent(y),
-        movedAtMillis: Date.now(),
-        updatedAtMillis: Date.now(),
-        updatedAt: deps.serverTimestamp()
-      }
-    );
-  }
-
-  function startTokenDrag(event, token, tokenEl) {
-    const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
-
-    if (!isDM) {
-      return;
-    }
-
-    if (event.pointerType === "mouse" && event.button !== 0) {
-      return;
-    }
-
-    if (event.target.closest(".hg-token-delete")) {
-      return;
-    }
-
-    const container = getTokenContainerForCurrentView();
-
-    if (!container) {
-      return;
-    }
-
-    const rect = container.getBoundingClientRect();
-
-    if (rect.width <= 0 || rect.height <= 0) {
-      return;
-    }
-
-    event.preventDefault();
-
-    try {
-      tokenEl.setPointerCapture(event.pointerId);
-    } catch (error) {
-      // Safe to ignore.
-    }
-
-    const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : {};
-    const tokenPixelSize = getTokenPixelSize(token, roomData || {});
-
-    activeTokenDrag = {
-      tokenId: token.id,
-      tokenEl,
-      pointerId: event.pointerId,
-      size: tokenPixelSize,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startX: clampPercent(token.x),
-      startY: clampPercent(token.y),
-      currentX: clampPercent(token.x),
-      currentY: clampPercent(token.y),
-      rectWidth: Math.max(1, rect.width),
-      rectHeight: Math.max(1, rect.height)
-    };
-
-    tokenEl.classList.add("hg-token-dragging");
-    setStatus("Dragging token...");
-  }
-
-  function handleTokenPointerMove(event) {
-    if (!activeTokenDrag) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const drag = activeTokenDrag;
-
-    const dxPercent = ((event.clientX - drag.startClientX) / drag.rectWidth) * 100;
-    const dyPercent = ((event.clientY - drag.startClientY) / drag.rectHeight) * 100;
-
-    drag.currentX = clampPercent(drag.startX + dxPercent);
-    drag.currentY = clampPercent(drag.startY + dyPercent);
-
-    const fakeTokenForPosition = {
-      x: drag.currentX,
-      y: drag.currentY,
-      sizeCategory: "medium"
-    };
-
-    const fakeRoomForPosition = {
-      tokenMediumSize: drag.size
-    };
-
-    positionTokenElement(drag.tokenEl, fakeTokenForPosition, fakeRoomForPosition);
-  }
-
-  async function handleTokenPointerUp() {
-    if (!activeTokenDrag) {
-      return;
-    }
-
-    const drag = activeTokenDrag;
-    activeTokenDrag = null;
-
-    drag.tokenEl.classList.remove("hg-token-dragging");
-
-    try {
-      if (drag.pointerId !== undefined && drag.pointerId !== null) {
-        try {
-          drag.tokenEl.releasePointerCapture(drag.pointerId);
-        } catch (error) {
-          // Safe to ignore.
-        }
-      }
-
-      await saveTokenPosition(drag.tokenId, drag.currentX, drag.currentY);
-
-      const cachedToken = tokenCache.find(function (token) {
-        return token.id === drag.tokenId;
-      });
-
-      if (cachedToken) {
-        cachedToken.x = drag.currentX;
-        cachedToken.y = drag.currentY;
-      }
-
-      render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
-      setStatus("Token position saved.");
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
-      render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
-    }
-  }
-
-  function cancelTokenDrag() {
-    if (!activeTokenDrag) {
-      return;
-    }
-
-    activeTokenDrag.tokenEl.classList.remove("hg-token-dragging");
-    activeTokenDrag = null;
-
-    render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
-  }
-
-
-// =====================================================
-// TOKENS SECTION 14 â€” INIT / PUBLIC API
-// =====================================================
-
-  function init() {
-    refreshElements();
-    ensureStyles();
-    ensureListeners();
-    connectControls();
-
-    window.HomebrewGodTokens = api;
-
-    const roomData = deps.getCurrentRoomData ? deps.getCurrentRoomData() : {};
-    const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-
-    startTokenListenerForRoom(roomCode);
-    updateScaleControlsFromRoom(roomData || {});
-    render(roomData || {});
-
-    setStatus("Token system connected.");
-  }
-
-  const api = {
-    init,
-    render,
-    addToken,
-    buildCharacterLinkedTokenPatch,
-    createCharacterLinkedToken,
-    syncLinkedCharacterTokens,
-    deleteToken,
-    saveTokenScale,
-    startTokenListenerForRoom,
-    stopTokenListener
-  };
-
-  if (options.autoInit !== false) {
-    init();
-  }
-
-  return api;
-}
+        pointer-events: nonïÞù¶‰žËkºwµç@€€ô4(4(€€€€€½¹ÍÐ¹…µ”€ôP¹Ñ½­•¹9…µ•%¹ÁÕÐ€˜˜P¹Ñ½­•¹9…µ•%¹ÁÕÐ¹Ù…±Õ”¹ÑÉ¥´ ¤4(€€€€€€€€üP¹Ñ½­•¹9…µ•%¹ÁÕÐ¹Ù…±Õ”¹ÑÉ¥´ ¤4(€€€€€€€€è€‰U¹¹…µ•Q½­•¸ˆì4(4(€€€€€½¹ÍÐÑåÁ”€ôP¹Ñ½­•¹QåÁ•M•±•Ð€˜˜P¹Ñ½­•¹QåÁ•M•±•Ð¹Ù…±Õ”4(€€€€€€€€üÍ…™•Q½­•¹QåÁ”¡P¹Ñ½­•¹QåÁ•M•±•Ð¹Ù…±Õ”¤4(€€€€€€€€è€‰½‰©•Ðˆì4(4(€€€€€½¹ÍÐÍ¥é•…Ñ•½Éä€ôP¹Ñ½­•¹M¥é•M•±•Ð€˜˜P¹Ñ½­•¹M¥é•M•±•Ð¹Ù…±Õ”4(€€€€€€€€ü¹½Éµ…±¥é•M¥é•…Ñ•½Éä¡P¹Ñ½­•¹M¥é•M•±•Ð¹Ù…±Õ”¤4(€€€€€€€€è€‰µ•‘¥Õ´ˆì4(4(€€€€€¥˜€ …‘•ÁÌ¹ÕÁ±½…‘%µ…”¤ì4(€€€€€€€…±•ÉÐ ‰Q½­•¸ÕÁ±½…‘•È¥Ì¹½Ð½¹¹•Ñ•¸ˆ¤ì4(€€€€€€€É•ÑÕÉ¸ì4(€€€€€ô4(4(€€€€€É•µ½Ù•5…ÁM…±•AÉ•Ù¥•Ü ¤ì4(€€€€€Í•ÑMÑ…ÑÕÌ ‰UÁ±½…‘¥¹œÑ½­•¸¸¸¸ˆ¤ì4(4(€€€€€¥˜€¡P¹…‘‘Q½­•¹	ÕÑÑ½¸¤ì4(€€€€€€€P¹…‘‘Q½­•¹	ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”ì4(€€€€€ô4(4(€€€€€½¹ÍÐ±½Õ‘¥¹…ÉåI•ÍÕ±Ð€ô…Ý…¥Ð‘•ÁÌ¹ÕÁ±½…‘%µ…”¡™¥±”¤ì4(€€€€€½¹ÍÐµ•‘¥ÕµM¥é”€ô•Ñ5•‘¥ÕµM¥é”¡É½½µ…Ñ„ñðíô¤ì4(4(€€€€€½¹ÍÐ¹•ÝQ½­•¸€ôì4(€€€€€€€¹…µ”°4(€€€€€€€ÑåÁ”°4(€€€€€€€¥µ…•UÉ°è±½Õ‘¥¹…ÉåI•ÍÕ±Ð¹Í•ÕÉ•}ÕÉ°°4(€€€€€€€ÁÕ‰±¥%è±½Õ‘¥¹…ÉåI•ÍÕ±Ð¹ÁÕ‰±¥}¥°4(€€€€€€€àè€ÔÀ°4(€€€€€€€äè€ÔÀ°4(€€€€€€€µ…Á5½‘”èÑ…É•Ð¹µ…Á5½‘”°4(€€€€€€€Ñ¥±•-•äèÑ…É•Ð¹Ñ¥±•-•ä°4(€€€€€€€Í¥é•…Ñ•½Éä°4(€€€€€€€É•…ÑÕÉ•M¥é”èÍ¥é•…Ñ•½Éä°4(€€€€€€€Í¥é”è5…Ñ ¹É½Õ¹¡µ•‘¥ÕµM¥é”€¨€¡M%i}5U1Q%A1%IMmÍ¥é•…Ñ•½Éåtñð€Ä¤¤°4(€€€€€€€Í¡••Ñ%è¹Õ±°°4(€€€€€€€‘¥ÍÁ±…äèì4(€€€€€€€€€¹…µ”èÑÉÕ”°4(€€€€€€€€€¡Á	…Èè™…±Í”°4(€€€€€€€€€¡ÁQ•áÐè™…±Í”°4(€€€€€€€€€…Œè™…±Í”°4(€€€€€€€€€½¹‘¥Ñ¥½¹ÌèÑÉÕ”°4(€€€€€€€€€¥¹¥Ñ¥…Ñ¥Ù”è™…±Í”4(€€€€€€€ô°4(€€€€€€€É•…Ñ•‘Ñ5¥±±¥Ìè…Ñ”¹¹½Ü ¤°4(€€€€€€€ÕÁ‘…Ñ•‘Ñ5¥±±¥Ìè…Ñ”¹¹½Ü ¤°4(€€€€€€€É•…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤°4(€€€€€€€ÕÁ‘…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤4(€€€€€ôì4(4(€€€€€…Ý…¥Ð‘•ÁÌ¹…‘‘½Œ 4(€€€€€€€‘•ÁÌ¹½±±•Ñ¥½¸¡‘•ÁÌ¹‘ˆ°€‰É½½µÌˆ°É½½µ½‘”°€‰Ñ½­•¹Ìˆ¤°4(€€€€€€€¹•ÝQ½­•¸4(€€€€€€¤ì4(4(€€€€€¥˜€¡P¹Ñ½­•¹9…µ•%¹ÁÕÐ¤ì4(€€€€€€€P¹Ñ½­•¹9…µ•%¹ÁÕÐ¹Ù…±Õ”€ô€ˆˆì4(€€€€€ô4(4(€€€€€¥˜€¡P¹Ñ½­•¹%µ…•UÁ±½…‘%¹ÁÕÐ¤ì4(€€€€€€€P¹Ñ½­•¹%µ…•UÁ±½…‘%¹ÁÕÐ¹Ù…±Õ”€ô€ˆˆì4(€€€€€ô4(4(€€€€€Í•ÑMÑ…ÑÕÌ¡Í¥é•…Ñ•½Éå1…‰•°¡Í¥é•…Ñ•½Éä¤€¬€ˆÑ½­•¸…‘‘•¸ˆ¤ì4(€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È¡•ÉÉ½È¤ì4(€€€€€Í•ÑMÑ…ÑÕÌ ‰Q½­•¸ÕÁ±½…™…¥±•¸ˆ¤ì4(€€€€€…±•ÉÐ¡•ÉÉ½È¹µ•ÍÍ…”¤ì4(€€€ô™¥¹…±±äì4(€€€€€É•™É•Í¡±•µ•¹ÑÌ ¤ì4(4(€€€€€¥˜€¡P¹…‘‘Q½­•¹	ÕÑÑ½¸¤ì4(€€€€€€€P¹…‘‘Q½­•¹	ÕÑÑ½¸¹‘¥Í…‰±•€ô™…±Í”ì4(€€€€€ô4(€€€ô4(€ô4(4(€…Íå¹Œ™Õ¹Ñ¥½¸É•…Ñ•¡…É…Ñ•É1¥¹­•‘Q½­•¸ (€€€¡…É…Ñ•È(€€¤ì(€€€½¹ÍÐÉ½½µ½‘”€ô4(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘”4(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘” ¤4(€€€€€€€€è¹Õ±°ì4(4(€€€½¹ÍÐÉ½½µ…Ñ„€ô4(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„4(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤4(€€€€€€€€è¹Õ±°ì4(4(€€€½¹ÍÐ¥Í4€ô4(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í44(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4 ¤4(€€€€€€€€è™…±Í”ì4(4(€€€¥˜€ …É½½µ½‘”¤ì4(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È 4(€€€€€€€€‰=Á•¸„É½½´‰•™½É”É•…Ñ¥¹œ„±¥¹­•Ñ½­•¸¸ˆ4(€€€€€€¤ì4(€€€ô4(4(€€€¥˜€ …¥Í4¤ì4(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È 4(€€€€€€€€‰=¹±äÑ¡”4…¸É•…Ñ”¡…É…Ñ•Èµ±¥¹­•Ñ½­•¹Ì¸ˆ4(€€€€€€¤ì4(€€€ô4(4(€€€½¹ÍÐ™¥•±‘Ì€ô4(€€€€€•Ñ¡…É…Ñ•É1¥¹­•‘Q½­•¹¥•±‘Ì 4(€€€€€€€¡…É…Ñ•È°4(€€€€€€€É½½µ…Ñ„ñðíô4(€€€€€€¤ì4(4(€€€¥˜€ …™¥•±‘Ì¹¡…É…Ñ•É%¤ì4(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È 4(€€€€€€€€‰M…Ù”Ñ¡”¡…É…Ñ•È‰•™½É”É•…Ñ¥¹œ¥ÑÌ±¥¹­•Ñ½­•¸¸ˆ4(€€€€€€¤ì4(€€€ô4(4(€€€¥˜€ …™¥•±‘Ì¹Á½ÉÑÉ…¥Ð¹ÕÉ°¤ì4(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È 4(€€€€€€€€‰‘…¹Í…Ù”„¡…É…Ñ•ÈÁ½ÉÑÉ…¥Ð‰•™½É”É•…Ñ¥¹œ¥ÑÌ±¥¹­•Ñ½­•¸¸ˆ4(€€€€€€¤ì4(€€€ô4(4(€€€½¹ÍÐÑ…É•Ð€ô4(€€€€€•ÑÕÉÉ•¹ÑQ½­•¹Q…É•Ð 4(€€€€€€€É½½µ…Ñ„ñðíô4(€€€€€€¤ì4(4(€€€¥˜€ …Ñ…É•Ð¹µ…Á5½‘”¤ì4(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È 4(€€€€€€€€‰1½…„‰…ÑÑ±”µ…À½ÈÁÕéé±”µ…À‰•™½É”É•…Ñ¥¹œÑ¡”±¥¹­•Ñ½­•¸¸ˆ4(€€€€€€¤ì4(€€€ô4(4(€€€½¹ÍÐÑ¥µ•ÍÑ…µÁ5¥±±¥Ì€ô…Ñ”¹¹½Ü ¤ì4(4(€€€½¹ÍÐ¹•ÝQ½­•¸€ôì4(€€€€€€¸¸¹‰Õ¥±‘¡…É…Ñ•É1¥¹­•‘Q½­•¹A…Ñ  4(€€€€€€€¡…É…Ñ•È°4(€€€€€€€É½½µ…Ñ„ñðíô4(€€€€€€¤°4(€€€€€ÑåÁ”è€‰Á±…å•Èˆ°4(€€€€€àè€ÔÀ°4(€€€€€äè€ÔÀ°4(€€€€€µ…Á5½‘”èÑ…É•Ð¹µ…Á5½‘”°4(€€€€€Ñ¥±•-•äèÑ…É•Ð¹Ñ¥±•-•ä°4(€€€€€‘¥ÍÁ±…äèì4(€€€€€€€¹…µ”èÑÉÕ”°4(€€€€€€€¡Á	…ÈèÑÉÕ”°4(€€€€€€€¡ÁQ•áÐèÑÉÕ”°4(€€€€€€€…ŒèÑÉÕ”°4(€€€€€€€½¹‘¥Ñ¥½¹ÌèÑÉÕ”°4(€€€€€€€¥¹¥Ñ¥…Ñ¥Ù”è™…±Í”4(€€€€€ô°4(€€€€€É•…Ñ•‘Ñ5¥±±¥ÌèÑ¥µ•ÍÑ…µÁ5¥±±¥Ì°4(€€€€€ÕÁ‘…Ñ•‘Ñ5¥±±¥ÌèÑ¥µ•ÍÑ…µÁ5¥±±¥Ì°4(€€€€€É•…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤°4(€€€€€ÕÁ‘…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤4(€€€ôì4(4(€€€½¹ÍÐÉ•…Ñ•‘½Õµ•¹Ð€ô4(€€€€€…Ý…¥Ð‘•ÁÌ¹…‘‘½Œ 4(€€€€€€€‘•ÁÌ¹½±±•Ñ¥½¸ 4(€€€€€€€€€‘•ÁÌ¹‘ˆ°4(€€€€€€€€€€‰É½½µÌˆ°4(€€€€€€€€€É½½µ½‘”°4(€€€€€€€€€€‰Ñ½­•¹Ìˆ4(€€€€€€€€¤°4(€€€€€€€¹•ÝQ½­•¸4(€€€€€€¤ì4(4(€€€Í•ÑMÑ…ÑÕÌ 4(€€€€€™¥•±‘Ì¹¹…µ”€¬4(€€€€€€ˆ±¥¹­•Ñ½­•¸É•…Ñ•¸¡…É…Ñ•È!@¥Ì…ÕÑ¡½É¥Ñ…Ñ¥Ù”¸ˆ4(€€€€¤ì4(4(€€€É•ÑÕÉ¸¹½Éµ…±¥é•Q½­•¸¡ì(€€€€€€¸¸¹¹•ÝQ½­•¸°(€€€€€¥èÉ•…Ñ•‘½Õµ•¹Ðü¹¥ñð¹Õ±°(€€€ô¤ì(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸É•…Ñ•5½¹ÍÑ•É1¥¹­•‘Q½­•¸ (€€€µ½¹ÍÑ•È(€€¤ì(€€€½¹ÍÐÉ½½µ½‘”€ô(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘”(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘” ¤(€€€€€€€€è¹Õ±°ì((€€€½¹ÍÐÉ½½µ…Ñ„€ô(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤(€€€€€€€€è¹Õ±°ì((€€€½¹ÍÐ¥Í4€ô(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4 ¤(€€€€€€€€è™…±Í”ì((€€€¥˜€ …É½½µ½‘”¤ì(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È (€€€€€€€€‰=Á•¸„É½½´‰•™½É”É•…Ñ¥¹œ„µ½¹ÍÑ•ÈÑ½­•¸¸ˆ(€€€€€€¤ì(€€€ô((€€€¥˜€ …¥Í4¤ì(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È (€€€€€€€€‰=¹±äÑ¡”4…¸É•…Ñ”µ½¹ÍÑ•ÈÑ½­•¹Ì¸ˆ(€€€€€€¤ì(€€€ô((€€€½¹ÍÐÁ…Ñ €ô(€€€€€‰Õ¥±‘5½¹ÍÑ•É1¥¹­•‘Q½­•¹A…Ñ  (€€€€€€€µ½¹ÍÑ•È°(€€€€€€€É½½µ…Ñ„ñðíô(€€€€€€¤ì((€€€¥˜€ …Á…Ñ ¹±¥¹­•‘5½¹ÍÑ•É%¤ì(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È (€€€€€€€€‰M…Ù”Ñ¡”µ½¹ÍÑ•È‰•™½É”É•…Ñ¥¹œ¥ÑÌÑ½­•¸¸ˆ(€€€€€€¤ì(€€€ô((€€€½¹ÍÐÑ…É•Ð€ô(€€€€€•ÑÕÉÉ•¹ÑQ½­•¹Q…É•Ð (€€€€€€€É½½µ…Ñ„ñðíô(€€€€€€¤ì((€€€¥˜€ …Ñ…É•Ð¹µ…Á5½‘”¤ì(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È (€€€€€€€€‰1½…„‰…ÑÑ±”µ…À½ÈÁÕéé±”µ…À‰•™½É”É•…Ñ¥¹œÑ¡”µ½¹ÍÑ•ÈÑ½­•¸¸ˆ(€€€€€€¤ì(€€€ô((€€€½¹ÍÐÑ¥µ•ÍÑ…µÁ5¥±±¥Ì€ô…Ñ”¹¹½Ü ¤ì((€€€½¹ÍÐ¹•ÝQ½­•¸€ôì(€€€€€€¸¸¹Á…Ñ °(€€€€€ÑåÁ”è€‰•¹•µäˆ°(€€€€€àè€ÔÀ°(€€€€€äè€ÔÀ°(€€€€€µ…Á5½‘”èÑ…É•Ð¹µ…Á5½‘”°(€€€€€Ñ¥±•-•äèÑ…É•Ð¹Ñ¥±•-•ä°(€€€€€‘¥ÍÁ±…äèì(€€€€€€€¹…µ”èÑÉÕ”°(€€€€€€€¡Á	…ÈèÑÉÕ”°(€€€€€€€¡ÁQ•áÐèÑÉÕ”°(€€€€€€€…ŒèÑÉÕ”°(€€€€€€€½¹‘¥Ñ¥½¹ÌèÑÉÕ”°(€€€€€€€¥¹¥Ñ¥…Ñ¥Ù”è™…±Í”(€€€€€ô°(€€€€€É•…Ñ•‘Ñ5¥±±¥ÌèÑ¥µ•ÍÑ…µÁ5¥±±¥Ì°(€€€€€ÕÁ‘…Ñ•‘Ñ5¥±±¥ÌèÑ¥µ•ÍÑ…µÁ5¥±±¥Ì°(€€€€€É•…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤°(€€€€€ÕÁ‘…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤(€€€ôì((€€€½¹ÍÐÉ•…Ñ•‘½Õµ•¹Ð€ô(€€€€€…Ý…¥Ð‘•ÁÌ¹…‘‘½Œ (€€€€€€€‘•ÁÌ¹½±±•Ñ¥½¸ (€€€€€€€€€‘•ÁÌ¹‘ˆ°(€€€€€€€€€€‰É½½µÌˆ°(€€€€€€€€€É½½µ½‘”°(€€€€€€€€€€‰Ñ½­•¹Ìˆ(€€€€€€€€¤°(€€€€€€€¹•ÝQ½­•¸(€€€€€€¤ì((€€€Í•ÑMÑ…ÑÕÌ (€€€€€Á…Ñ ¹¹…µ”€¬(€€€€€€ˆµ½¹ÍÑ•ÈÑ½­•¸É•…Ñ•¸ˆ(€€€€¤ì((€€€É•ÑÕÉ¸¹½Éµ…±¥é•Q½­•¸¡ì(€€€€€€¸¸¹¹•ÝQ½­•¸°(€€€€€¥èÉ•…Ñ•‘½Õµ•¹Ðü¹¥ñð¹Õ±°(€€€ô¤ì(€ô(4(€…Íå¹Œ™Õ¹Ñ¥½¸Íå¹1¥¹­•‘¡…É…Ñ•ÉQ½­•¹Ì 4(€€€¡…É…Ñ•È4(€€¤ì4(€€€½¹ÍÐÉ½½µ½‘”€ô4(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘”4(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘” ¤4(€€€€€€€€è¹Õ±°ì4(4(€€€½¹ÍÐÉ½½µ…Ñ„€ô4(€€€€€‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„4(€€€€€€€€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤4(€€€€€€€€è¹Õ±°ì4(4(€€€½¹ÍÐ¡…É…Ñ•É%€ô4(€€€€€•Ñ1¥¹­•‘¡…É…Ñ•É%¡¡…É…Ñ•È¤ì4(4(€€€¥˜€ …É½½µ½‘”ñð€…¡…É…Ñ•É%¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€€€€€¡…É…Ñ•É%°4(€€€€€€€ÕÁ‘…Ñ•‘½Õ¹Ðè€À4(€€€€€ôì4(€€€ô4(4(€€€¥˜€ 4(€€€€€ÑåÁ•½˜‘•ÁÌ¹•Ñ½Ì€„ôô€‰™Õ¹Ñ¥½¸ˆñð4(€€€€€ÑåÁ•½˜‘•ÁÌ¹ÅÕ•Éä€„ôô€‰™Õ¹Ñ¥½¸ˆñð4(€€€€€ÑåÁ•½˜‘•ÁÌ¹Ý¡•É”€„ôô€‰™Õ¹Ñ¥½¸ˆ4(€€€€¤ì4(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È 4(€€€€€€€€‰1¥¹­•µÑ½­•¸Íå¹¡É½¹¥é…Ñ¥½¸¥Ìµ¥ÍÍ¥¹œ¥ÑÌ¥É•ÍÑ½É”ÅÕ•ÉäÑ½½±Ì¸ˆ4(€€€€€€¤ì4(€€€ô4(4(€€€½¹ÍÐ±¥¹­•‘Q½­•¹ÍM¹…ÁÍ¡½Ð€ô4(€€€€€…Ý…¥Ð‘•ÁÌ¹•Ñ½Ì 4(€€€€€€€‘•ÁÌ¹ÅÕ•Éä 4(€€€€€€€€€‘•ÁÌ¹½±±•Ñ¥½¸ 4(€€€€€€€€€€€‘•ÁÌ¹‘ˆ°4(€€€€€€€€€€€€‰É½½µÌˆ°4(€€€€€€€€€€€É½½µ½‘”°4(€€€€€€€€€€€€‰Ñ½­•¹Ìˆ4(€€€€€€€€€€¤°4(€€€€€€€€€‘•ÁÌ¹Ý¡•É” 4(€€€€€€€€€€€€‰±¥¹­•‘¡…É…Ñ•É%ˆ°4(€€€€€€€€€€€€ˆôôˆ°4(€€€€€€€€€€€¡…É…Ñ•É%4(€€€€€€€€€€¤4(€€€€€€€€¤4(€€€€€€¤ì4(4(€€€½¹ÍÐ±¥¹­•‘Q½­•¹½Õµ•¹ÑÌ€ô4(€€€€€ÉÉ…ä¹¥ÍÉÉ…ä 4(€€€€€€€±¥¹­•‘Q½­•¹ÍM¹…ÁÍ¡½Ðü¹‘½Ì4(€€€€€€¤4(€€€€€€€€ü±¥¹­•‘Q½­•¹ÍM¹…ÁÍ¡½Ð¹‘½Ì4(€€€€€€€€èmtì4(4(€€€¥˜€ …±¥¹­•‘Q½­•¹½Õµ•¹ÑÌ¹±•¹Ñ ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€€€€€¡…É…Ñ•É%°4(€€€€€€€ÕÁ‘…Ñ•‘½Õ¹Ðè€À4(€€€€€ôì4(€€€ô4(4(€€€½¹ÍÐÕÁ‘…Ñ•‘Ñ5¥±±¥Ì€ô…Ñ”¹¹½Ü ¤ì4(4(€€€½¹ÍÐÕÁ‘…Ñ•A…Ñ €ôì4(€€€€€€¸¸¹‰Õ¥±‘¡…É…Ñ•É1¥¹­•‘Q½­•¹A…Ñ  4(€€€€€€€¡…É…Ñ•È°4(€€€€€€€É½½µ…Ñ„ñðíô4(€€€€€€¤°4(€€€€€ÕÁ‘…Ñ•‘Ñ5¥±±¥Ì°4(€€€€€ÕÁ‘…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤4(€€€ôì4(4(€€€…Ý…¥ÐAÉ½µ¥Í”¹…±° 4(€€€€€±¥¹­•‘Q½­•¹½Õµ•¹ÑÌ¹µ…À ¡Ñ½­•¹½Õµ•¹Ð¤€ôøì4(€€€€€€€É•ÑÕÉ¸‘•ÁÌ¹ÕÁ‘…Ñ•½Œ 4(€€€€€€€€€Ñ½­•¹½Õµ•¹Ð¹É•˜ñð4(€€€€€€€€€‘•ÁÌ¹‘½Œ 4(€€€€€€€€€€€‘•ÁÌ¹‘ˆ°4(€€€€€€€€€€€€‰É½½µÌˆ°4(€€€€€€€€€€€É½½µ½‘”°4(€€€€€€€€€€€€‰Ñ½­•¹Ìˆ°4(€€€€€€€€€€€Ñ½­•¹½Õµ•¹Ð¹¥4(€€€€€€€€€€¤°4(€€€€€€€€€ÕÁ‘…Ñ•A…Ñ 4(€€€€€€€€¤ì4(€€€€€ô¤4(€€€€¤ì4(4(€€€Ñ½­•¹…¡”€ôÑ½­•¹…¡”¹µ…À ¡Ñ½­•¸¤€ôøì4(€€€€€¥˜€ 4(€€€€€€€MÑÉ¥¹œ 4(€€€€€€€€€Ñ½­•¸ü¹±¥¹­•‘¡…É…Ñ•É%ñð4(€€€€€€€€€Ñ½­•¸ü¹±¥¹­•‘¡…É…Ñ•Èü¹¥ñð4(€€€€€€€€€Ñ½­•¸ü¹Í¡••Ñ%ñð4(€€€€€€€€€€ˆˆ4(€€€€€€€€¤¹ÑÉ¥´ ¤€„ôô4(€€€€€€€¡…É…Ñ•É%4(€€€€€€¤ì4(€€€€€€€É•ÑÕÉ¸Ñ½­•¸ì4(€€€€€ô4(4(€€€€€É•ÑÕÉ¸¹½Éµ…±¥é•Q½­•¸¡ì4(€€€€€€€€¸¸¹Ñ½­•¸°4(€€€€€€€€¸¸¹ÕÁ‘…Ñ•A…Ñ 4(€€€€€ô¤ì4(€€€ô¤ì4(4(€€€É•ÑÕÉ¸ì4(€€€€€¡…É…Ñ•É%°4(€€€€€ÕÁ‘…Ñ•‘½Õ¹Ðè4(€€€€€€€±¥¹­•‘Q½­•¹½Õµ•¹ÑÌ¹±•¹Ñ 4(€€€ôì4(€ô4(4(€…Íå¹Œ™Õ¹Ñ¥½¸‘•±•Ñ•Q½­•¸¡Ñ½­•¹%¤ì4(€€€ÑÉäì4(€€€€€½¹ÍÐÉ½½µ½‘”€ô‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘”€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘” ¤€è¹Õ±°ì4(€€€€€½¹ÍÐ¥Í4€ô‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4€ü‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4 ¤€è™…±Í”ì4(4(€€€€€¥˜€ …É½½µ½‘”ñð€…¥Í4¤ì4(€€€€€€€…±•ÉÐ ‰=¹±äÑ¡”4…¸‘•±•Ñ”Ñ½­•¹Ì¸ˆ¤ì4(€€€€€€€É•ÑÕÉ¸ì4(€€€€€ô4(4(€€€€€¥˜€ …½¹™¥É´ ‰•±•Ñ”Ñ¡¥ÌÑ½­•¸üQ¡¥Ì‘½•Ì¹½Ð‘•±•Ñ”Ñ¡”¥µ…”™É½´±½Õ‘¥¹…Éä¸ˆ¤¤ì4(€€€€€€€É•ÑÕÉ¸ì4(€€€€€ô4(4(€€€€€…Ý…¥Ð‘•ÁÌ¹‘•±•Ñ•½Œ 4(€€€€€€€‘•ÁÌ¹‘½Œ¡‘•ÁÌ¹‘ˆ°€‰É½½µÌˆ°É½½µ½‘”°€‰Ñ½­•¹Ìˆ°Ñ½­•¹%¤4(€€€€€€¤ì4(4(€€€€€Í•ÑMÑ…ÑÕÌ ‰Q½­•¸‘•±•Ñ•¸ˆ¤ì4(€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È¡•ÉÉ½È¤ì4(€€€€€…±•ÉÐ¡•ÉÉ½È¹µ•ÍÍ…”¤ì4(€€€ô4(€ô4(4(4(¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(¼¼Q=-9LMQ%=8€ÄÌƒŠPQ=-8I%94(¼¼9¼É½½´‘½Õµ•¹ÐÕÁ‘…Ñ•Ì¸4(¼¼M…Ù•Ì½¹±äÉ½½µÌ½íÉ½½µ½‘•ô½Ñ½­•¹Ì½íÑ½­•¹%‘ô4(¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(4(€…Íå¹Œ™Õ¹Ñ¥½¸Í…Ù•Q½­•¹A½Í¥Ñ¥½¸¡Ñ½­•¹%°à°ä¤ì4(€€€½¹ÍÐÉ½½µ½‘”€ô‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘”€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘” ¤€è¹Õ±°ì4(€€€½¹ÍÐ¥Í4€ô‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4€ü‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4 ¤€è™…±Í”ì4(4(€€€¥˜€ …É½½µ½‘”ñð€…¥Í4ñð€…Ñ½­•¹%¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€…Ý…¥Ð‘•ÁÌ¹ÕÁ‘…Ñ•½Œ 4(€€€€€‘•ÁÌ¹‘½Œ¡‘•ÁÌ¹‘ˆ°€‰É½½µÌˆ°É½½µ½‘”°€‰Ñ½­•¹Ìˆ°Ñ½­•¹%¤°4(€€€€€ì4(€€€€€€€àè±…µÁA•É•¹Ð¡à¤°4(€€€€€€€äè±…µÁA•É•¹Ð¡ä¤°4(€€€€€€€µ½Ù•‘Ñ5¥±±¥Ìè…Ñ”¹¹½Ü ¤°4(€€€€€€€ÕÁ‘…Ñ•‘Ñ5¥±±¥Ìè…Ñ”¹¹½Ü ¤°4(€€€€€€€ÕÁ‘…Ñ•‘Ðè‘•ÁÌ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤4(€€€€€ô4(€€€€¤ì4(€ô4(4(€™Õ¹Ñ¥½¸ÍÑ…ÉÑQ½­•¹É…œ¡•Ù•¹Ð°Ñ½­•¸°Ñ½­•¹°¤ì4(€€€½¹ÍÐ¥Í4€ô‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4€ü‘•ÁÌ¹•ÑÕÉÉ•¹Ñ%Í4 ¤€è™…±Í”ì4(4(€€€¥˜€ …¥Í4¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€¥˜€¡•Ù•¹Ð¹Á½¥¹Ñ•ÉQåÁ”€ôôô€‰µ½ÕÍ”ˆ€˜˜•Ù•¹Ð¹‰ÕÑÑ½¸€„ôô€À¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€¥˜€¡•Ù•¹Ð¹Ñ…É•Ð¹±½Í•ÍÐ ˆ¹¡œµÑ½­•¸µ‘•±•Ñ”ˆ¤¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€½¹ÍÐ½¹Ñ…¥¹•È€ô•ÑQ½­•¹½¹Ñ…¥¹•É½ÉÕÉÉ•¹ÑY¥•Ü ¤ì4(4(€€€¥˜€ …½¹Ñ…¥¹•È¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€½¹ÍÐÉ•Ð€ô½¹Ñ…¥¹•È¹•Ñ	½Õ¹‘¥¹±¥•¹ÑI•Ð ¤ì4(4(€€€¥˜€¡É•Ð¹Ý¥‘Ñ €ðô€ÀñðÉ•Ð¹¡•¥¡Ð€ðô€À¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€•Ù•¹Ð¹ÁÉ•Ù•¹Ñ•™…Õ±Ð ¤ì4(4(€€€ÑÉäì4(€€€€€Ñ½­•¹°¹Í•ÑA½¥¹Ñ•É…ÁÑÕÉ”¡•Ù•¹Ð¹Á½¥¹Ñ•É%¤ì4(€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€€¼¼M…™”Ñ¼¥¹½É”¸4(€€€ô4(4(€€€½¹ÍÐÉ½½µ…Ñ„€ô‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤€èíôì4(€€€½¹ÍÐÑ½­•¹A¥á•±M¥é”€ô•ÑQ½­•¹A¥á•±M¥é”¡Ñ½­•¸°É½½µ…Ñ„ñðíô¤ì4(4(€€€…Ñ¥Ù•Q½­•¹É…œ€ôì4(€€€€€Ñ½­•¹%èÑ½­•¸¹¥°4(€€€€€Ñ½­•¹°°4(€€€€€Á½¥¹Ñ•É%è•Ù•¹Ð¹Á½¥¹Ñ•É%°4(€€€€€Í¥é”èÑ½­•¹A¥á•±M¥é”°4(€€€€€ÍÑ…ÉÑ±¥•¹Ñ`è•Ù•¹Ð¹±¥•¹Ñ`°4(€€€€€ÍÑ…ÉÑ±¥•¹Ñdè•Ù•¹Ð¹±¥•¹Ñd°4(€€€€€ÍÑ…ÉÑ`è±…µÁA•É•¹Ð¡Ñ½­•¸¹à¤°4(€€€€€ÍÑ…ÉÑdè±…µÁA•É•¹Ð¡Ñ½­•¸¹ä¤°4(€€€€€ÕÉÉ•¹Ñ`è±…µÁA•É•¹Ð¡Ñ½­•¸¹à¤°4(€€€€€ÕÉÉ•¹Ñdè±…µÁA•É•¹Ð¡Ñ½­•¸¹ä¤°4(€€€€€É•Ñ]¥‘Ñ è5…Ñ ¹µ…à Ä°É•Ð¹Ý¥‘Ñ ¤°4(€€€€€É•Ñ!•¥¡Ðè5…Ñ ¹µ…à Ä°É•Ð¹¡•¥¡Ð¤4(€€€ôì4(4(€€€Ñ½­•¹°¹±…ÍÍ1¥ÍÐ¹…‘ ‰¡œµÑ½­•¸µ‘É…¥¹œˆ¤ì4(€€€Í•ÑMÑ…ÑÕÌ ‰É…¥¹œÑ½­•¸¸¸¸ˆ¤ì4(€ô4(4(€™Õ¹Ñ¥½¸¡…¹‘±•Q½­•¹A½¥¹Ñ•É5½Ù”¡•Ù•¹Ð¤ì4(€€€¥˜€ ……Ñ¥Ù•Q½­•¹É…œ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€•Ù•¹Ð¹ÁÉ•Ù•¹Ñ•™…Õ±Ð ¤ì4(4(€€€½¹ÍÐ‘É…œ€ô…Ñ¥Ù•Q½­•¹É…œì4(4(€€€½¹ÍÐ‘áA•É•¹Ð€ô€ ¡•Ù•¹Ð¹±¥•¹Ñ`€´‘É…œ¹ÍÑ…ÉÑ±¥•¹Ñ`¤€¼‘É…œ¹É•Ñ]¥‘Ñ ¤€¨€ÄÀÀì4(€€€½¹ÍÐ‘åA•É•¹Ð€ô€ ¡•Ù•¹Ð¹±¥•¹Ñd€´‘É…œ¹ÍÑ…ÉÑ±¥•¹Ñd¤€¼‘É…œ¹É•Ñ!•¥¡Ð¤€¨€ÄÀÀì4(4(€€€‘É…œ¹ÕÉÉ•¹Ñ`€ô±…µÁA•É•¹Ð¡‘É…œ¹ÍÑ…ÉÑ`€¬‘áA•É•¹Ð¤ì4(€€€‘É…œ¹ÕÉÉ•¹Ñd€ô±…µÁA•É•¹Ð¡‘É…œ¹ÍÑ…ÉÑd€¬‘åA•É•¹Ð¤ì4(4(€€€½¹ÍÐ™…­•Q½­•¹½ÉA½Í¥Ñ¥½¸€ôì4(€€€€€àè‘É…œ¹ÕÉÉ•¹Ñ`°4(€€€€€äè‘É…œ¹ÕÉÉ•¹Ñd°4(€€€€€Í¥é•…Ñ•½Éäè€‰µ•‘¥Õ´ˆ4(€€€ôì4(4(€€€½¹ÍÐ™…­•I½½µ½ÉA½Í¥Ñ¥½¸€ôì4(€€€€€Ñ½­•¹5•‘¥ÕµM¥é”è‘É…œ¹Í¥é”4(€€€ôì4(4(€€€Á½Í¥Ñ¥½¹Q½­•¹±•µ•¹Ð¡‘É…œ¹Ñ½­•¹°°™…­•Q½­•¹½ÉA½Í¥Ñ¥½¸°™…­•I½½µ½ÉA½Í¥Ñ¥½¸¤ì4(€ô4(4(€…Íå¹Œ™Õ¹Ñ¥½¸¡…¹‘±•Q½­•¹A½¥¹Ñ•ÉUÀ ¤ì4(€€€¥˜€ ……Ñ¥Ù•Q½­•¹É…œ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€½¹ÍÐ‘É…œ€ô…Ñ¥Ù•Q½­•¹É…œì4(€€€…Ñ¥Ù•Q½­•¹É…œ€ô¹Õ±°ì4(4(€€€‘É…œ¹Ñ½­•¹°¹±…ÍÍ1¥ÍÐ¹É•µ½Ù” ‰¡œµÑ½­•¸µ‘É…¥¹œˆ¤ì4(4(€€€ÑÉäì4(€€€€€¥˜€¡‘É…œ¹Á½¥¹Ñ•É%€„ôôÕ¹‘•™¥¹•€˜˜‘É…œ¹Á½¥¹Ñ•É%€„ôô¹Õ±°¤ì4(€€€€€€€ÑÉäì4(€€€€€€€€€‘É…œ¹Ñ½­•¹°¹É•±•…Í•A½¥¹Ñ•É…ÁÑÕÉ”¡‘É…œ¹Á½¥¹Ñ•É%¤ì4(€€€€€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€€€€€€¼¼M…™”Ñ¼¥¹½É”¸4(€€€€€€€ô4(€€€€€ô4(4(€€€€€…Ý…¥ÐÍ…Ù•Q½­•¹A½Í¥Ñ¥½¸¡‘É…œ¹Ñ½­•¹%°‘É…œ¹ÕÉÉ•¹Ñ`°‘É…œ¹ÕÉÉ•¹Ñd¤ì4(4(€€€€€½¹ÍÐ…¡•‘Q½­•¸€ôÑ½­•¹…¡”¹™¥¹¡™Õ¹Ñ¥½¸€¡Ñ½­•¸¤ì4(€€€€€€€É•ÑÕÉ¸Ñ½­•¸¹¥€ôôô‘É…œ¹Ñ½­•¹%ì4(€€€€€ô¤ì4(4(€€€€€¥˜€¡…¡•‘Q½­•¸¤ì4(€€€€€€€…¡•‘Q½­•¸¹à€ô‘É…œ¹ÕÉÉ•¹Ñ`ì4(€€€€€€€…¡•‘Q½­•¸¹ä€ô‘É…œ¹ÕÉÉ•¹Ñdì4(€€€€€ô4(4(€€€€€É•¹‘•È¡‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤€è±…ÍÑI•¹‘•É•‘I½½´ñðíô¤ì4(€€€€€Í•ÑMÑ…ÑÕÌ ‰Q½­•¸Á½Í¥Ñ¥½¸Í…Ù•¸ˆ¤ì4(€€€ô…Ñ €¡•ÉÉ½È¤ì4(€€€€€½¹Í½±”¹•ÉÉ½È¡•ÉÉ½È¤ì4(€€€€€…±•ÉÐ¡•ÉÉ½È¹µ•ÍÍ…”¤ì4(€€€€€É•¹‘•È¡‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤€è±…ÍÑI•¹‘•É•‘I½½´ñðíô¤ì4(€€€ô4(€ô4(4(€™Õ¹Ñ¥½¸…¹•±Q½­•¹É…œ ¤ì4(€€€¥˜€ ……Ñ¥Ù•Q½­•¹É…œ¤ì4(€€€€€É•ÑÕÉ¸ì4(€€€ô4(4(€€€…Ñ¥Ù•Q½­•¹É…œ¹Ñ½­•¹°¹±…ÍÍ1¥ÍÐ¹É•µ½Ù” ‰¡œµÑ½­•¸µ‘É…¥¹œˆ¤ì4(€€€…Ñ¥Ù•Q½­•¹É…œ€ô¹Õ±°ì4(4(€€€É•¹‘•È¡‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤€è±…ÍÑI•¹‘•É•‘I½½´ñðíô¤ì4(€ô4(4(4(¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(¼¼Q=-9LMQ%=8€ÄÐƒŠP%9%P€¼AU	1%A$4(¼¼€ôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôôô4(4(€™Õ¹Ñ¥½¸¥¹¥Ð ¤ì4(€€€É•™É•Í¡±•µ•¹ÑÌ ¤ì4(€€€•¹ÍÕÉ•MÑå±•Ì ¤ì4(€€€•¹ÍÕÉ•1¥ÍÑ•¹•ÉÌ ¤ì4(€€€½¹¹•Ñ½¹ÑÉ½±Ì ¤ì4(4(€€€Ý¥¹‘½Ü¹!½µ•‰É•Ý½‘Q½­•¹Ì€ô…Á¤ì4(4(€€€½¹ÍÐÉ½½µ…Ñ„€ô‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ…Ñ„ ¤€èíôì4(€€€½¹ÍÐÉ½½µ½‘”€ô‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘”€ü‘•ÁÌ¹•ÑÕÉÉ•¹ÑI½½µ½‘” ¤€è¹Õ±°ì4(4(€€€ÍÑ…ÉÑQ½­•¹1¥ÍÑ•¹•É½ÉI½½´¡É½½µ½‘”¤ì4(€€€ÕÁ‘…Ñ•M…±•½¹ÑÉ½±ÍÉ½µI½½´¡É½½µ…Ñ„ñðíô¤ì4(€€€É•¹‘•È¡É½½µ…Ñ„ñðíô¤ì4(4(€€€Í•ÑMÑ…ÑÕÌ ‰Q½­•¸ÍåÍÑ•´½¹¹•Ñ•¸ˆ¤ì4(€ô4(4(€½¹ÍÐ…Á¤€ôì4(€€€¥¹¥Ð°4(€€€É•¹‘•È°4(€€€…‘‘Q½­•¸°(€€€‰Õ¥±‘¡…É…Ñ•É1¥¹­•‘Q½­•¹A…Ñ °(€€€‰Õ¥±‘5½¹ÍÑ•É1¥¹­•‘Q½­•¹A…Ñ °(€€€É•…Ñ•¡…É…Ñ•É1¥¹­•‘Q½­•¸°(€€€É•…Ñ•5½¹ÍÑ•É1¥¹­•‘Q½­•¸°(€€€Íå¹1¥¹­•‘¡…É…Ñ•ÉQ½­•¹Ì°(€€€‘•±•Ñ•Q½­•¸°4(€€€Í…Ù•Q½­•¹M…±”°4(€€€ÍÑ…ÉÑQ½­•¹1¥ÍÑ•¹•É½ÉI½½´°4(€€€ÍÑ½ÁQ½­•¹1¥ÍÑ•¹•È4(€ôì4(4(€¥˜€¡½ÁÑ¥½¹Ì¹…ÕÑ½%¹¥Ð€„ôô™…±Í”¤ì4(€€€¥¹¥Ð ¤ì4(€ô4(4(€É•ÑÕÉ¸…Á¤ì4)ô4

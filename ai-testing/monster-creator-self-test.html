@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monster Creator Self-Test</title>
+  <style>
+    body {
+      max-width: 960px;
+      margin: 2rem auto;
+      padding: 0 1rem 3rem;
+      color: #ece7dc;
+      background: #181b20;
+      font: 16px/1.5 system-ui, sans-serif;
+    }
+
+    #monsterCreatorScreen {
+      display: block;
+    }
+
+    .creatorFullGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+
+    .creatorWidePanel,
+    .creatorLibraryPanel {
+      grid-column: 1 / -1;
+    }
+
+    .creatorActionBar,
+    .creatorTopBar,
+    .statMiniGrid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      padding: 0.5rem;
+    }
+
+    textarea {
+      min-height: 4rem;
+    }
+
+    .result {
+      padding: 1rem;
+      border: 1px solid #60656f;
+      border-radius: 0.5rem;
+      white-space: pre-wrap;
+    }
+
+    .pass {
+      border-color: #3fb950;
+      color: #b7f5c1;
+    }
+
+    .fail {
+      border-color: #f85149;
+      color: #ffd0cc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Monster Creator Self-Test</h1>
+  <pre id="testResult" class="result" role="status">RUNNING</pre>
+
+  <main id="monsterCreatorScreen">
+    <section>
+      <div class="creatorTopBar">
+        <button id="backFromMonsterCreatorButton" type="button">Back</button>
+      </div>
+
+      <div class="creatorActionBar">
+        <button id="newMonsterButton" type="button">New</button>
+        <button id="saveMonsterButton" type="button">Save</button>
+        <button id="createMonsterTokenButton" type="button">Create Token</button>
+        <button id="copyMonsterJsonButton" type="button">Copy</button>
+        <button id="exportMonsterJsonButton" type="button">Export</button>
+        <input id="importMonsterJsonInput" type="file">
+      </div>
+
+      <div class="creatorFullGrid">
+        <section class="toolPanelMini">
+          <input id="monsterNameInput">
+          <input id="monsterTypeInput">
+          <select id="monsterSizeSelect">
+            <option>Medium</option>
+          </select>
+          <input id="monsterImageUrlInput">
+        </section>
+
+        <section class="toolPanelMini">
+          <input id="monsterAcInput">
+          <input id="monsterHpInput">
+          <input id="monsterSpeedInput">
+          <input id="monsterCrInput">
+        </section>
+
+        <section class="toolPanelMini">
+          <div class="statMiniGrid">
+            <input id="monsterStrInput">
+            <input id="monsterDexInput">
+            <input id="monsterConInput">
+            <input id="monsterIntInput">
+            <input id="monsterWisInput">
+            <input id="monsterChaInput">
+          </div>
+        </section>
+
+        <section class="toolPanelMini creatorWidePanel">
+          <textarea id="monsterTraitsInput"></textarea>
+          <textarea id="monsterActionsInput"></textarea>
+          <textarea id="monsterBonusActionsInput"></textarea>
+          <textarea id="monsterReactionsInput"></textarea>
+          <textarea id="monsterLegendaryActionsInput"></textarea>
+          <textarea id="monsterLairActionsInput"></textarea>
+        </section>
+
+        <section class="toolPanelMini creatorWidePanel">
+          <textarea id="monsterSensesInput"></textarea>
+          <textarea id="monsterSavingThrowsInput"></textarea>
+          <textarea id="monsterSkillsInput"></textarea>
+          <textarea id="monsterDamageImmunitiesInput"></textarea>
+          <textarea id="monsterDamageResistancesInput"></textarea>
+          <textarea id="monsterDamageVulnerabilitiesInput"></textarea>
+          <textarea id="monsterConditionImmunitiesInput"></textarea>
+        </section>
+
+        <section class="toolPanelMini creatorWidePanel">
+          <textarea id="monsterNotesInput"></textarea>
+          <p id="monsterCreatorStatus"></p>
+        </section>
+
+        <section class="toolPanelMini creatorLibraryPanel">
+          <div id="monsterLibraryList"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import {
+      createMonsterCreator,
+      normalizeMonsterRecord,
+      parseMonsterNamedEntries
+    } from "../monsterCreator.js?v=phase17-20260726";
+    import {
+      createTokenSystem
+    } from "../tokens.js?v=phase17-20260726";
+
+    const result = document.getElementById("testResult");
+    const failures = [];
+    let assertionCount = 0;
+
+    function assert(condition, message) {
+      assertionCount += 1;
+
+      if (!condition) {
+        failures.push(message);
+      }
+    }
+
+    function equal(actual, expected, message) {
+      assert(
+        JSON.stringify(actual) === JSON.stringify(expected),
+        message +
+          "\nExpected: " +
+          JSON.stringify(expected) +
+          "\nActual: " +
+          JSON.stringify(actual)
+      );
+    }
+
+    function setValue(id, value) {
+      document.getElementById(id).value = value;
+    }
+
+    const parsedEntries = parseMonsterNamedEntries(
+      "Multiattack | Makes two attacks.\nRoar"
+    );
+    equal(
+      parsedEntries,
+      [
+        {
+          name: "Multiattack",
+          description: "Makes two attacks."
+        },
+        {
+          name: "Roar",
+          description: ""
+        }
+      ],
+      "Named stat-block entries parse from one-line notation."
+    );
+
+    const normalized = normalizeMonsterRecord({
+      name: "  Ember Tyrant  ",
+      size: "huge",
+      type: "dragon",
+      ac: "19",
+      hp: "256",
+      traits: [
+        {
+          title: "Magic Resistance",
+          text: "Advantage on saves against magic."
+        }
+      ],
+      actions: "Bite | Melee attack.",
+      bonusActions: "Wing Shift | Moves 10 ft.",
+      reactions: "Parry | Adds 3 AC.",
+      legendaryActions: "Detect | Makes a Wisdom check.",
+      lairActions: "Magma Burst | Lava erupts.",
+      senses: "blindsight 60 ft.",
+      savingThrows: "DEX +7",
+      skills: "Perception +12",
+      damageImmunities: "fire",
+      damageResistances: "nonmagical weapons",
+      damageVulnerabilities: "cold",
+      conditionImmunities: "frightened"
+    });
+
+    assert(normalized.name === "Ember Tyrant", "Monster names are trimmed.");
+    assert(normalized.size === "Huge", "Monster sizes normalize case.");
+    assert(normalized.type === "Dragon", "Monster types normalize case.");
+    assert(normalized.ac === 19, "Armor Class normalizes to a number.");
+    assert(normalized.hp === 256, "Hit Points normalize to a number.");
+    assert(normalized.traits[0].name === "Magic Resistance", "Traits normalize.");
+    assert(normalized.actions[0].name === "Bite", "Actions normalize.");
+    assert(normalized.bonusActions[0].name === "Wing Shift", "Bonus actions normalize.");
+    assert(normalized.reactions[0].name === "Parry", "Reactions normalize.");
+    assert(normalized.legendaryActions[0].name === "Detect", "Legendary actions normalize.");
+    assert(normalized.lairActions[0].name === "Magma Burst", "Lair actions normalize.");
+    assert(normalized.senses[0] === "blindsight 60 ft.", "Senses normalize.");
+    assert(normalized.savingThrows[0] === "DEX +7", "Saving throws normalize.");
+    assert(normalized.skills[0] === "Perception +12", "Skills normalize.");
+    assert(normalized.damageImmunities[0] === "fire", "Damage immunities normalize.");
+    assert(normalized.damageResistances[0] === "nonmagical weapons", "Damage resistances normalize.");
+    assert(normalized.damageVulnerabilities[0] === "cold", "Damage vulnerabilities normalize.");
+    assert(normalized.conditionImmunities[0] === "frightened", "Condition immunities normalize.");
+
+    const storedMonsters = [];
+    const deletedMonsterIds = [];
+    const tokenRequests = [];
+    const downloads = [];
+    let clipboardText = "";
+    let isDm = true;
+    let nextId = 1;
+    let snapshotListener = null;
+
+    function emitMonsterSnapshot() {
+      if (!snapshotListener) return;
+
+      snapshotListener({
+        docs: storedMonsters.map(function (record) {
+          return {
+            id: record.id,
+            data: function () {
+              return { ...record };
+            }
+          };
+        })
+      });
+    }
+
+    const creator = createMonsterCreator({
+      db: {},
+      collection: function (...parts) {
+        return {
+          kind: "collection",
+          parts
+        };
+      },
+      doc: function (...parts) {
+        return {
+          kind: "doc",
+          parts,
+          id: parts[parts.length - 1]
+        };
+      },
+      addDoc: async function (reference, data) {
+        assert(
+          reference.parts.slice(-1)[0] === "monsters",
+          "Save targets the room monsters collection."
+        );
+        const record = {
+          ...data,
+          id: "monster-" + nextId
+        };
+        nextId += 1;
+        storedMonsters.push(record);
+        emitMonsterSnapshot();
+        return {
+          kind: "doc",
+          id: record.id
+        };
+      },
+      updateDoc: async function (reference, patch) {
+        const id = reference.id;
+        const record = storedMonsters.find(function (entry) {
+          return entry.id === id;
+        });
+
+        if (record) {
+          Object.assign(record, patch);
+          emitMonsterSnapshot();
+        }
+      },
+      deleteDoc: async function (reference) {
+        const index = storedMonsters.findIndex(function (entry) {
+          return entry.id === reference.id;
+        });
+
+        if (index >= 0) {
+          deletedMonsterIds.push(reference.id);
+          storedMonsters.splice(index, 1);
+          emitMonsterSnapshot();
+        }
+      },
+      onSnapshot: function (reference, next) {
+        assert(
+          reference.parts.slice(-1)[0] === "monsters",
+          "Library subscribes to the room monsters collection."
+        );
+        snapshotListener = next;
+        emitMonsterSnapshot();
+        return function () {
+          snapshotListener = null;
+        };
+      },
+      serverTimestamp: function () {
+        return new Date("2026-07-26T12:00:00.000Z");
+      },
+      getCurrentRoomCode: function () {
+        return "PHASE17";
+      },
+      getCurrentRoomData: function () {
+        return {
+          dmUid: "dm-1",
+          dmName: "Test DM"
+        };
+      },
+      getCurrentIsDM: function () {
+        return isDm;
+      },
+      createMonsterLinkedToken: async function (monster) {
+        tokenRequests.push(monster);
+        return {
+          id: "token-1",
+          linkedMonsterId: monster.id
+        };
+      },
+      writeClipboard: async function (text) {
+        clipboardText = text;
+      },
+      downloadJson: function (fileName, json) {
+        downloads.push({
+          fileName,
+          json
+        });
+      },
+      confirmDelete: function () {
+        return true;
+      }
+    });
+
+    assert(!document.getElementById("saveMonsterButton").disabled, "DMs can save.");
+    assert(document.getElementById("duplicateMonsterButton").disabled, "Duplicate requires a saved monster.");
+    assert(document.getElementById("deleteMonsterButton").disabled, "Delete requires a saved monster.");
+    assert(document.getElementById("createMonsterTokenButton").disabled, "Token creation requires a saved monster.");
+
+    setValue("monsterNameInput", "Clockwork Wyrm");
+    setValue("monsterSizeSelect", "Large");
+    setValue("monsterTypeInput", "Construct");
+    setValue("monsterAlignmentInput", "Lawful neutral");
+    setValue("monsterImageUrlInput", "https://example.com/wyrm.png");
+    setValue("monsterAcInput", "18");
+    setValue("monsterHpInput", "145");
+    setValue("monsterSpeedInput", "40 ft., fly 80 ft.");
+    setValue("monsterCrInput", "11");
+    setValue("monsterStrInput", "22");
+    setValue("monsterDexInput", "14");
+    setValue("monsterConInput", "20");
+    setValue("monsterIntInput", "12");
+    setValue("monsterWisInput", "16");
+    setValue("monsterChaInput", "18");
+    setValue("monsterTraitsInput", "Immutable Form | Immune to transformations.");
+    setValue("monsterActionsInput", "Gear Bite | Melee Weapon Attack.");
+    setValue("monsterBonusActionsInput", "Overclock | Moves up to half speed.");
+    setValue("monsterReactionsInput", "Deflect | Adds 4 AC.");
+    setValue("monsterLegendaryActionsInput", "Scan | Makes a Perception check.");
+    setValue("monsterLairActionsInput", "Grinding Floor | The floor becomes difficult terrain.");
+    setValue("monsterSensesInput", "darkvision 120 ft.\npassive Perception 16");
+    setValue("monsterSavingThrowsInput", "DEX +6\nCON +9");
+    setValue("monsterSkillsInput", "Perception +7\nStealth +6");
+    setValue("monsterDamageImmunitiesInput", "poison");
+    setValue("monsterDamageResistancesInput", "fire\nlightning");
+    setValue("monsterDamageVulnerabilitiesInput", "thunder");
+    setValue("monsterConditionImmunitiesInput", "charmed\npoisoned");
+    setValue("monsterNotesInput", "A precise guardian.");
+
+    const savedId = await creator.saveMonster();
+    assert(savedId === "monster-1", "Save returns the new monster id.");
+    assert(storedMonsters.length === 1, "Save creates one monster.");
+    assert(storedMonsters[0].ownerUid === "dm-1", "Save records DM ownership.");
+    assert(storedMonsters[0].traits[0].name === "Immutable Form", "Save includes traits.");
+    assert(storedMonsters[0].actions[0].name === "Gear Bite", "Save includes actions.");
+    assert(storedMonsters[0].bonusActions[0].name === "Overclock", "Save includes bonus actions.");
+    assert(storedMonsters[0].reactions[0].name === "Deflect", "Save includes reactions.");
+    assert(storedMonsters[0].legendaryActions[0].name === "Scan", "Save includes legendary actions.");
+    assert(storedMonsters[0].lairActions[0].name === "Grinding Floor", "Save includes lair actions.");
+    equal(storedMonsters[0].senses, ["darkvision 120 ft.", "passive Perception 16"], "Save includes senses.");
+    equal(storedMonsters[0].savingThrows, ["DEX +6", "CON +9"], "Save includes saving throws.");
+    equal(storedMonsters[0].skills, ["Perception +7", "Stealth +6"], "Save includes skills.");
+    equal(storedMonsters[0].damageImmunities, ["poison"], "Save includes damage immunities.");
+    equal(storedMonsters[0].damageResistances, ["fire", "lightning"], "Save includes damage resistances.");
+    equal(storedMonsters[0].damageVulnerabilities, ["thunder"], "Save includes damage vulnerabilities.");
+    equal(storedMonsters[0].conditionImmunities, ["charmed", "poisoned"], "Save includes condition immunities.");
+
+    setValue("monsterNotesInput", "Updated guardian.");
+    await creator.saveMonster();
+    assert(storedMonsters.length === 1, "Saving a selected monster updates instead of duplicating.");
+    assert(storedMonsters[0].notes === "Updated guardian.", "Update persists current form fields.");
+
+    const copiedJson = await creator.copyMonsterJson();
+    assert(copiedJson === clipboardText, "Copy writes the exact exported JSON.");
+    assert(JSON.parse(copiedJson).actions[0].name === "Gear Bite", "Copied JSON includes the complete stat block.");
+
+    const exported = creator.exportMonsterJson();
+    assert(exported.fileName === "clockwork-wyrm.json", "Export uses a safe monster file name.");
+    assert(downloads.length === 1, "Export starts one JSON download.");
+    assert(downloads[0].json === exported.json, "Export downloads the exact serialized JSON.");
+
+    const tokenResult = await creator.createMonsterToken();
+    assert(tokenResult.id === "token-1", "Monster token creation returns the created token.");
+    assert(tokenRequests.length === 1, "Monster token creation calls the token system once.");
+    assert(tokenRequests[0].id === "monster-1", "Monster token links to the saved monster.");
+    assert(tokenRequests[0].hp === 145, "Monster token receives saved Hit Points.");
+    assert(tokenRequests[0].imageUrl === "https://example.com/wyrm.png", "Monster token receives the optional image URL.");
+
+    const duplicatedId = await creator.duplicateMonster();
+    assert(duplicatedId === "monster-2", "Duplicate creates a new monster id.");
+    assert(storedMonsters.length === 2, "Duplicate creates a second library record.");
+    assert(storedMonsters[1].name === "Clockwork Wyrm Copy", "Duplicate appends Copy to the name.");
+    assert(storedMonsters[1].actions[0].name === "Gear Bite", "Duplicate keeps the complete stat block.");
+
+    const deleted = await creator.deleteMonster(true);
+    assert(deleted, "Delete reports success.");
+    assert(storedMonsters.length === 1, "Delete removes one library record.");
+    equal(deletedMonsterIds, ["monster-2"], "Delete removes the selected duplicate.");
+
+    const imported = creator.importMonsterData({
+      monster: {
+        name: "Imported Shade",
+        type: "Undead",
+        traits: "Incorporeal Movement | Moves through creatures.",
+        actions: "Withering Touch | Deals necrotic damage.",
+        bonusActions: "Fade | Becomes invisible.",
+        reactions: "Slip Away | Moves 10 ft.",
+        legendaryActions: "Drain | Drains life.",
+        lairActions: "Dim Light | Extinguishes flames.",
+        senses: ["darkvision 60 ft."],
+        savingThrows: ["WIS +5"],
+        skills: ["Stealth +7"],
+        damageImmunities: ["necrotic"],
+        damageResistances: ["cold"],
+        damageVulnerabilities: ["radiant"],
+        conditionImmunities: ["grappled"]
+      }
+    });
+    assert(imported.name === "Imported Shade", "Import accepts a wrapped monster object.");
+    assert(creator.getState().selectedMonsterId === null, "Import creates an unsaved form.");
+    assert(creator.readMonsterForm().actions[0].name === "Withering Touch", "Import populates structured actions.");
+    const importedId = await creator.saveMonster();
+    assert(importedId === "monster-3", "Imported monster can be saved as a new record.");
+
+    isDm = false;
+    creator.refresh();
+    assert(document.getElementById("saveMonsterButton").disabled, "Players cannot save monsters.");
+    assert(document.getElementById("newMonsterButton").disabled, "Players cannot create monsters.");
+    assert(document.getElementById("duplicateMonsterButton").disabled, "Players cannot duplicate monsters.");
+    assert(document.getElementById("deleteMonsterButton").disabled, "Players cannot delete monsters.");
+    assert(document.getElementById("createMonsterTokenButton").disabled, "Players cannot create monster tokens.");
+    assert(document.getElementById("importMonsterJsonInput").disabled, "Players cannot import monsters.");
+    assert(document.getElementById("monsterNameInput").disabled, "Player editor fields are read-only.");
+    assert(!document.getElementById("copyMonsterJsonButton").disabled, "Players may copy viewed monster JSON.");
+    assert(!document.getElementById("exportMonsterJsonButton").disabled, "Players may export viewed monster JSON.");
+    const playerSaveCount = storedMonsters.length;
+    assert(await creator.saveMonster() === null, "Player save API is denied.");
+    assert(storedMonsters.length === playerSaveCount, "Denied player save does not mutate the library.");
+    assert(await creator.createMonsterToken() === null, "Player token API is denied.");
+    assert(tokenRequests.length === 1, "Denied player token request does not reach the token system.");
+    assert(creator.importMonsterData({ name: "Nope" }) === null, "Player import API is denied.");
+
+    const tokenDocuments = [];
+    let tokenIsDm = true;
+    const tokenSystem = createTokenSystem({
+      db: {},
+      collection: function (...parts) {
+        return { parts };
+      },
+      doc: function (...parts) {
+        return { parts };
+      },
+      addDoc: async function (reference, data) {
+        tokenDocuments.push({ reference, data });
+        return { id: "map-token-1" };
+      },
+      updateDoc: async function () {},
+      deleteDoc: async function () {},
+      getDocs: async function () {
+        return { docs: [] };
+      },
+      query: function (value) {
+        return value;
+      },
+      where: function () {
+        return {};
+      },
+      onSnapshot: function () {
+        return function () {};
+      },
+      serverTimestamp: function () {
+        return "timestamp";
+      },
+      getCurrentRoomCode: function () {
+        return "PHASE17";
+      },
+      getCurrentRoomData: function () {
+        return {
+          tokenMediumSize: 50,
+          currentMapUrl: "https://example.com/map.jpg"
+        };
+      },
+      getCurrentIsDM: function () {
+        return tokenIsDm;
+      },
+      getPuzzleTiles: function () {
+        return [];
+      },
+      getActivePuzzleTile: function () {
+        return null;
+      },
+      getPuzzleViewMode: function () {
+        return "board";
+      },
+      buildMapFromRoomFields: function () {
+        return {
+          url: "https://example.com/map.jpg"
+        };
+      },
+      autoInit: false
+    });
+
+    const linkedToken = await tokenSystem.createMonsterLinkedToken({
+      id: "monster-3",
+      name: "Imported Shade",
+      size: "Large",
+      hp: 88,
+      ac: 16,
+      imageUrl: ""
+    });
+    assert(linkedToken.linkedMonsterId === "monster-3", "Token document links to the monster id.");
+    assert(linkedToken.type === "enemy", "Monster tokens use the enemy token type.");
+    assert(linkedToken.maxHp === 88, "Monster token starts at full monster HP.");
+    assert(linkedToken.ac === 16, "Monster token carries monster Armor Class.");
+    assert(linkedToken.size === 100, "Large monster token uses the map token scale.");
+    assert(linkedToken.mapMode === "single", "Monster token targets the active battle map.");
+    assert(tokenDocuments.length === 1, "Token system writes exactly one token document.");
+
+    tokenIsDm = false;
+    let playerTokenDenied = false;
+    try {
+      await tokenSystem.createMonsterLinkedToken({
+        id: "monster-3",
+        name: "Imported Shade"
+      });
+    } catch (error) {
+      playerTokenDenied = /Only the DM/.test(error.message);
+    }
+    assert(playerTokenDenied, "Token system independently denies player monster-token creation.");
+    assert(tokenDocuments.length === 1, "Denied token creation does not write a document.");
+
+    const [appSource, indexSource] = await Promise.all([
+      fetch("../app.js?v=phase17-20260726").then(function (response) {
+        return response.text();
+      }),
+      fetch("../index.html?v=phase17-20260726").then(function (response) {
+        return response.text();
+      })
+    ]);
+    assert(
+      appSource.includes('import { createMonsterCreator } from "./monsterCreator.js";'),
+      "app.js imports the Monster Creator module."
+    );
+    assert(
+      appSource.includes('openToolTab("monsterCreator")'),
+      "The battle-map Monster Creator button opens its tool tab."
+    );
+    assert(
+      appSource.includes('showAnyMainScreen("monsterCreator")') &&
+        appSource.includes("initMonsterCreatorSystem();"),
+      "The monsterCreator startup URL opens and initializes the creator."
+    );
+    assert(
+      !appSource.includes("Monster Creator file comes next."),
+      "The old Monster Creator placeholder is gone."
+    );
+    assert(
+      !indexSource.includes("Full stat block saving comes next."),
+      "The outdated stat-block placeholder text is gone."
+    );
+    assert(
+      indexSource.includes("phase17-20260726"),
+      "The application advertises the Phase 17 release."
+    );
+
+    creator.destroy();
+
+    window.__MONSTER_CREATOR_TEST__ = {
+      done: true,
+      assertions: assertionCount,
+      failures
+    };
+
+    if (failures.length) {
+      result.classList.add("fail");
+      result.textContent =
+        "FAIL — " +
+        failures.length +
+        " of " +
+        assertionCount +
+        " assertions failed\n\n" +
+        failures.join("\n\n");
+    } else {
+      result.classList.add("pass");
+      result.textContent =
+        "PASS — " +
+        assertionCount +
+        " Phase 17 Monster Creator assertions";
+    }
+  </script>
+</body>
+</html>

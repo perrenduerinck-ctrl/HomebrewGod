@@ -311,7 +311,7 @@
       <div>
         <h2>Monster Creator</h2>
         <p class="small">
-          Build, save, import, and export monsters. Full stat block saving comes next.
+          Build complete stat blocks, manage the room library, and create battle-map tokens.
         </p>
       </div>
 
@@ -323,6 +323,7 @@
     <div class="creatorActionBar">
       <button id="newMonsterButton" type="button">New Monster</button>
       <button id="saveMonsterButton" type="button">Save Monster</button>
+      <button id="createMonsterTokenButton" type="button">Create Map Token</button>
       <button id="copyMonsterJsonButton" type="button">Copy JSON</button>
       <button id="exportMonsterJsonButton" type="button">Export JSON</button>
 
@@ -348,7 +349,7 @@
           <option value="gargantuan">Gargantuan</option>
         </select>
 
-        <input id="monsterImageUploadInput" type="file" accept="image/*">
+        <input id="monsterImageUrlInput" type="url" placeholder="Token image URL (optional)">
       </section>
 
       <section class="toolPanelMini">
@@ -374,9 +375,32 @@
       </section>
 
       <section class="toolPanelMini creatorWidePanel">
-        <h3>Traits / Attacks / Notes</h3>
+        <h3>Traits &amp; Actions</h3>
 
-        <textarea id="monsterNotesInput" placeholder="Traits, attacks, legendary actions, reactions, notes..."></textarea>
+        <textarea id="monsterTraitsInput" placeholder="Traits — one per line: Name | Description"></textarea>
+        <textarea id="monsterActionsInput" placeholder="Actions — one per line: Name | Description"></textarea>
+        <textarea id="monsterBonusActionsInput" placeholder="Bonus actions — one per line: Name | Description"></textarea>
+        <textarea id="monsterReactionsInput" placeholder="Reactions — one per line: Name | Description"></textarea>
+        <textarea id="monsterLegendaryActionsInput" placeholder="Legendary actions — one per line: Name | Description"></textarea>
+        <textarea id="monsterLairActionsInput" placeholder="Lair actions — one per line: Name | Description"></textarea>
+      </section>
+
+      <section class="toolPanelMini creatorWidePanel">
+        <h3>Defenses &amp; Proficiencies</h3>
+
+        <textarea id="monsterSensesInput" placeholder="Senses — one per line, such as darkvision 60 ft."></textarea>
+        <textarea id="monsterSavingThrowsInput" placeholder="Saving throws — one per line, such as DEX +5"></textarea>
+        <textarea id="monsterSkillsInput" placeholder="Skills — one per line, such as Perception +6"></textarea>
+        <textarea id="monsterDamageImmunitiesInput" placeholder="Damage immunities — one per line"></textarea>
+        <textarea id="monsterDamageResistancesInput" placeholder="Damage resistances — one per line"></textarea>
+        <textarea id="monsterDamageVulnerabilitiesInput" placeholder="Damage vulnerabilities — one per line"></textarea>
+        <textarea id="monsterConditionImmunitiesInput" placeholder="Condition immunities — one per line"></textarea>
+      </section>
+
+      <section class="toolPanelMini creatorWidePanel">
+        <h3>Description &amp; Notes</h3>
+
+        <textarea id="monsterNotesInput" placeholder="Description, tactics, ecology, treasure, and private notes..."></textarea>
 
         <p id="monsterCreatorStatus" class="status">
           Monster creator ready.
@@ -553,27 +577,29 @@
       }, { once: true });
     })();
   </script>
-  <!-- Phase 16 release marker: finished-character-sheet -->
+  <!-- Phase 17 release marker: finished-monster-creator -->
   <script type="importmap">
     {
       "imports": {
-        "./characterCreator.fixed.js": "./characterCreator.fixed.js?v=phase16-20260726",
-        "./characterSheet.js": "./characterSheet.js?v=phase16-20260726",
-        "./defaultClasses.js": "./defaultClasses.js?v=phase16-20260726",
-        "./defaultClassFeatureCatalog.js": "./defaultClassFeatureCatalog.js?v=phase16-20260726",
-        "./defaultClassFeatureRules.js": "./defaultClassFeatureRules.js?v=phase16-20260726",
-        "./defaultSubclassCatalog.js": "./defaultSubclassCatalog.js?v=phase16-20260726",
-        "./defaultSubclassNames.js": "./defaultSubclassNames.js?v=phase16-20260726",
-        "./defaultSubclasses.js": "./defaultSubclasses.js?v=phase16-20260726",
-        "./defaultFeats.js": "./defaultFeats.js?v=phase16-20260726",
-        "./defaultSpells.js": "./defaultSpells.js?v=phase16-20260726",
-        "./ruleset2014.js": "./ruleset2014.js?v=phase16-20260726"
+        "./tokens.js": "./tokens.js?v=phase17-20260726",
+        "./monsterCreator.js": "./monsterCreator.js?v=phase17-20260726",
+        "./characterCreator.fixed.js": "./characterCreator.fixed.js?v=phase17-20260726",
+        "./characterSheet.js": "./characterSheet.js?v=phase17-20260726",
+        "./defaultClasses.js": "./defaultClasses.js?v=phase17-20260726",
+        "./defaultClassFeatureCatalog.js": "./defaultClassFeatureCatalog.js?v=phase17-20260726",
+        "./defaultClassFeatureRules.js": "./defaultClassFeatureRules.js?v=phase17-20260726",
+        "./defaultSubclassCatalog.js": "./defaultSubclassCatalog.js?v=phase17-20260726",
+        "./defaultSubclassNames.js": "./defaultSubclassNames.js?v=phase17-20260726",
+        "./defaultSubclasses.js": "./defaultSubclasses.js?v=phase17-20260726",
+        "./defaultFeats.js": "./defaultFeats.js?v=phase17-20260726",
+        "./defaultSpells.js": "./defaultSpells.js?v=phase17-20260726",
+        "./ruleset2014.js": "./ruleset2014.js?v=phase17-20260726"
       }
     }
   </script>
   <script
     type="module"
-    src="./app.js?v=phase16-20260726"
+    src="./app.js?v=phase17-20260726"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>
