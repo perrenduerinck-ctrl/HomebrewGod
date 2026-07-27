@@ -1,6 +1,6 @@
 // =====================================================
-// HOMEBREW GOD - READ-ONLY CHARACTER SHEET VIEW
-// Plain HTML/CSS/JS module. This module never mutates character data.
+// HOMEBREW GOD - CHARACTER SHEET VIEW
+// Rendering uses a protected snapshot; tracked changes flow through callbacks.
 // =====================================================
 
 const ABILITIES = Object.freeze([
@@ -371,6 +371,34 @@ function getPassivePerception(character, proficiencyBonus) {
   return 10 + getSkillDetails(character, perception, proficiencyBonus).modifier;
 }
 
+function getPassiveSkillScore(character, skillId, proficiencyBonus) {
+  if (skillId === "perception") {
+    return getPassivePerception(
+      character,
+      proficiencyBonus
+    );
+  }
+
+  const skill = SKILLS.find((entry) => {
+    return entry.id === skillId;
+  });
+  const explicit = optionalNumber(
+    character?.proficiencies?.skills?.[skillId]?.passive
+  );
+
+  if (explicit !== null) {
+    return Math.round(explicit);
+  }
+
+  return skill
+    ? 10 + getSkillDetails(
+      character,
+      skill,
+      proficiencyBonus
+    ).modifier
+    : 10;
+}
+
 function formatSpeed(speed, legacySpeed = "") {
   if (isRecord(speed)) {
     const labels = {
@@ -422,6 +450,388 @@ function formatHitDice(character) {
   }).join(", ");
 }
 
+function getLevelOrderRows(character, classEntries = getClassEntries(character)) {
+  const byEntryId = new Map(
+    classEntries.map((entry, index) => [
+      firstText(entry.entryId, `class-${index + 1}`),
+      entry
+    ])
+  );
+  const rawOrder = asArray(
+    character?.classProgression?.levelOrder
+  );
+  const order = rawOrder.length
+    ? rawOrder
+    : classEntries.flatMap((entry) => {
+      return Array.from(
+        { length: clampInteger(entry.level, 0, 0) },
+        () => entry.entryId
+      );
+    });
+  const classLevels = new Map();
+
+  return order.map((value, index) => {
+    const entryId = isRecord(value)
+      ? firstText(
+        value.classEntryId,
+        value.entryId,
+        value.id
+      )
+      : cleanText(value);
+    const entry = byEntryId.get(entryId) ||
+      classEntries.find((candidate) => {
+        return (
+          normalizeKey(candidate.classId) ===
+          normalizeKey(
+            isRecord(value)
+              ? value.classId
+              : value
+          )
+        );
+      }) ||
+      classEntries[0] ||
+      {
+        entryId,
+        className: "Class",
+        classId: ""
+      };
+    const key = firstText(entry.entryId, entry.classId, entryId);
+    const classLevel = (classLevels.get(key) || 0) + 1;
+    classLevels.set(key, classLevel);
+
+    return {
+      characterLevel: index + 1,
+      classLevel,
+      className: firstText(entry.className, titleFromId(entry.classId, "Class")),
+      subclassName: firstText(entry.subclassName)
+    };
+  });
+}
+
+function renderClassProgression(character) {
+  const entries = getClassEntries(character);
+  const levelOrder = getLevelOrderRows(character, entries);
+
+  return `
+    <div class="hg-sheet-card-grid">
+      <article class="hg-sheet-card">
+        <h2>Class &amp; Subclass Progression</h2>
+        ${renderContentList(entries.map((entry) => ({
+          id: entry.entryId,
+          name: `${entry.className} ${entry.level}`,
+          summary: entry.subclassName
+            ? `Subclass: ${entry.subclassName}`
+            : "No subclass selected",
+          source: entry.entryId
+        })))}
+      </article>
+
+      <article class="hg-sheet-card hg-sheet-wide-card">
+        <h2>Level-by-Level Multiclass Order</h2>
+        ${levelOrder.length ? `
+          <ol class="hg-sheet-level-order">
+            ${levelOrder.map((entry) => `
+              <li>
+                <strong>Character ${entry.characterLevel}</strong>
+                <span>${escapeHtml(`${entry.className} ${entry.classLevel}${entry.subclassName ? ` — ${entry.subclassName}` : ""}`)}</span>
+              </li>
+            `).join("")}
+          </ol>
+        ` : `<p class="hg-sheet-muted">No class level order is recorded.</p>`}
+      </article>
+    </div>
+  `;
+}
+
+function getArmorClassSummary(character) {
+  const summary = character?.combat?.armorClassOptions;
+
+  if (
+    isRecord(summary) &&
+    Array.isArray(summary.options)
+  ) {
+    return summary;
+  }
+
+  const total = Math.round(finiteNumber(
+    character?.combat?.armorClass ??
+    character?.armorClass,
+    10
+  ));
+
+  return {
+    selected: {
+      id: firstText(
+        character?.combat?.selectedArmorClassMethod,
+        "recorded"
+      ),
+      label: "Recorded Armor Class",
+      total,
+      breakdown: "Stored character value"
+    },
+    options: []
+  };
+}
+
+function renderArmorClassOptions(character) {
+  const summary = getArmorClassSummary(character);
+  const selected = isRecord(summary.selected)
+    ? summary.selected
+    : {};
+  const options = asArray(summary.options);
+
+  return `
+    <article class="hg-sheet-card">
+      <h2>Armor Class Options</h2>
+      <p class="hg-sheet-selected-rule">
+        <strong>${escapeHtml(firstText(selected.label, "Selected Armor Class"))}: ${Math.round(finiteNumber(selected.total, 10))}</strong>
+        <span>${escapeHtml(firstText(selected.breakdown, "Stored character value"))}</span>
+      </p>
+      ${options.length ? `
+        <ul class="hg-sheet-list">
+          ${options.map((option) => `
+            <li class="${option.id === selected.id ? "hg-sheet-selected-option" : ""}">
+              <strong>${escapeHtml(firstText(option.label, "Armor Class"))}: ${Math.round(finiteNumber(option.total, 10))}</strong>
+              <span>${escapeHtml(firstText(option.breakdown, "No breakdown recorded"))}</span>
+              ${option.id === selected.id ? "<small>Selected</small>" : ""}
+            </li>
+          `).join("")}
+        </ul>
+      ` : `<p class="hg-sheet-muted">No alternate Armor Class methods are available.</p>`}
+    </article>
+  `;
+}
+
+function getHitDieKey(entry, index = 0) {
+  return firstText(
+    entry?.classEntryId,
+    entry?.entryId,
+    entry?.classId,
+    normalizeKey(entry?.className),
+    `hit-die-${index + 1}`
+  );
+}
+
+function renderHitDiceByClass(character) {
+  const dice = asArray(character?.combat?.hitDice);
+  const usage = isRecord(character?.combat?.hitDiceUsage)
+    ? character.combat.hitDiceUsage
+    : {};
+
+  if (!dice.length) {
+    return `<p class="hg-sheet-muted">No hit dice are recorded.</p>`;
+  }
+
+  return `
+    <div class="hg-sheet-resource-list">
+      ${dice.map((entry, index) => {
+        const key = getHitDieKey(entry, index);
+        const maximum = clampInteger(entry?.count, 1, 1);
+        const used = Math.min(
+          maximum,
+          clampInteger(usage[key], 0, 0)
+        );
+        const remaining = maximum - used;
+
+        return `
+          <article class="hg-sheet-resource-row" data-hit-die="${escapeHtml(key)}">
+            <div>
+              <strong>${escapeHtml(firstText(entry?.className, "Class"))}</strong>
+              <span>${remaining} / ${maximum} ${escapeHtml(firstText(entry?.die, entry?.hitDie, "d8"))}</span>
+            </div>
+            <div class="hg-sheet-inline-actions hg-sheet-no-print">
+              <button
+                type="button"
+                data-character-sheet-action="adjust-hit-die"
+                data-hit-die-id="${escapeHtml(key)}"
+                data-delta="1"
+                ${remaining <= 0 ? "disabled" : ""}
+              >Spend</button>
+              <button
+                type="button"
+                data-character-sheet-action="adjust-hit-die"
+                data-hit-die-id="${escapeHtml(key)}"
+                data-delta="-1"
+                ${used <= 0 ? "disabled" : ""}
+              >Restore</button>
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function formatResourceRecharge(value) {
+  const recharge = normalizeKey(value);
+
+  return {
+    shortrest: "short rest",
+    "short-rest": "short rest",
+    longrest: "long rest",
+    "long-rest": "long rest",
+    shortorlongrest: "short or long rest",
+    "short-or-long-rest": "short or long rest",
+    turn: "start of turn"
+  }[recharge] || titleFromId(value, "manual restoration").toLowerCase();
+}
+
+function renderTrackedResources(resources, kind, fallbackText) {
+  const entries = asArray(resources);
+
+  if (!entries.length) {
+    return `<p class="hg-sheet-muted">${escapeHtml(fallbackText)}</p>`;
+  }
+
+  return `
+    <div class="hg-sheet-resource-list">
+      ${entries.map((entry, index) => {
+        const id = firstText(
+          entry?.id,
+          entry?.resourceId,
+          `${kind}-resource-${index + 1}`
+        );
+        const maximum = optionalNumber(entry?.maximumUses);
+        const current = maximum === null
+          ? null
+          : Math.min(
+            Math.max(0, maximum),
+            clampInteger(
+              entry?.currentUses,
+              maximum,
+              0
+            )
+          );
+
+        return `
+          <article class="hg-sheet-resource-row" data-${escapeHtml(kind)}-resource="${escapeHtml(id)}">
+            <div>
+              <strong>${escapeHtml(firstText(entry?.name, titleFromId(entry?.canonicalId, "Resource")))}</strong>
+              <span>${
+                maximum === null
+                  ? escapeHtml(firstText(entry?.summary, "No usage limit recorded"))
+                  : `${current} / ${Math.max(0, maximum)}${entry?.die ? ` · ${escapeHtml(entry.die)}` : ""}`
+              }</span>
+              <small>Recharges after ${escapeHtml(formatResourceRecharge(entry?.recharge))}</small>
+            </div>
+            ${maximum === null ? "" : `
+              <div class="hg-sheet-inline-actions hg-sheet-no-print">
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-${escapeHtml(kind)}-resource"
+                  data-resource-id="${escapeHtml(id)}"
+                  data-delta="-1"
+                  ${current <= 0 ? "disabled" : ""}
+                >Spend</button>
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-${escapeHtml(kind)}-resource"
+                  data-resource-id="${escapeHtml(id)}"
+                  data-delta="1"
+                  ${current >= maximum ? "disabled" : ""}
+                >Restore</button>
+              </div>
+            `}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function collectSheetResistances(character) {
+  return [
+    ...asArray(character?.resistances),
+    ...asArray(character?.species?.resistances),
+    ...asArray(character?.classMechanics?.resistances),
+    ...asArray(character?.featMechanics?.resistances)
+  ]
+    .map((entry) => {
+      return isRecord(entry)
+        ? firstText(entry.name, entry.damageType, entry.type)
+        : cleanText(entry);
+    })
+    .filter(Boolean)
+    .filter((value, index, values) => {
+      return values.findIndex((candidate) => {
+        return normalizeKey(candidate) === normalizeKey(value);
+      }) === index;
+    });
+}
+
+function collectSheetSenses(character) {
+  return [
+    ...asArray(character?.senses),
+    ...asArray(character?.identity?.senses),
+    ...asArray(character?.species?.senses),
+    ...asArray(character?.featMechanics?.senses)
+  ]
+    .map((entry) => {
+      if (!isRecord(entry)) {
+        return cleanText(entry);
+      }
+
+      const range = clampInteger(entry.range, 0, 0);
+      return `${titleFromId(firstText(entry.sense, entry.name, entry.type), "Special sense")}${range ? ` ${range} ft.` : ""}`;
+    })
+    .filter(Boolean);
+}
+
+function renderDefensesAndMovement(character) {
+  const resistances = collectSheetResistances(character);
+  const senses = collectSheetSenses(character);
+
+  return `
+    <article class="hg-sheet-card">
+      <h2>Defenses, Senses &amp; Movement</h2>
+      ${renderDefinitionList([
+        ["Resistances", listText(resistances)],
+        ["Senses", listText(senses)],
+        ["Speed", formatSpeed(character?.combat?.speed, character?.speed)],
+        ["Languages", listText(character?.proficiencies?.languages)],
+        ["Armor Proficiencies", listText(character?.proficiencies?.armor)],
+        ["Weapon Proficiencies", listText(character?.proficiencies?.weapons)],
+        ["Tool Proficiencies", listText(character?.proficiencies?.tools)]
+      ])}
+    </article>
+  `;
+}
+
+function getManualSituationalEntries(character) {
+  const featEffects = asArray(
+    character?.featMechanics?.situationalEffects
+  )
+    .filter((entry) => {
+      return cleanText(entry?.handling) !== "automatic";
+    })
+    .map(formatFeatSituationalEntry);
+  const classEffects = [
+    ...asArray(character?.classMechanics?.passiveEffects),
+    ...asArray(character?.classMechanics?.restrictions)
+  ].map((entry, index) => {
+    if (isRecord(entry)) {
+      return {
+        id: firstText(entry.id, `class-effect-${index + 1}`),
+        name: firstText(entry.name, entry.label, titleFromId(entry.type, "Class reminder")),
+        summary: firstText(entry.instructions, entry.summary, entry.description),
+        source: firstText(entry.className, entry.source)
+      };
+    }
+
+    return {
+      id: `class-effect-${index + 1}`,
+      name: "Class reminder",
+      summary: cleanText(entry),
+      source: ""
+    };
+  });
+
+  return [...featEffects, ...classEffects]
+    .filter((entry) => {
+      return entry.name || entry.summary;
+    });
+}
+
 function listText(values, fallback = "None recorded") {
   const items = asArray(values)
     .map((value) => {
@@ -452,11 +862,29 @@ function renderDefinitionList(rows) {
 function normalizeContentEntries(values, fallbackPrefix) {
   return asArray(values).map((value, index) => {
     if (isRecord(value)) {
+      const summary = firstText(
+        value.summary,
+        value.notes
+      );
+      const description = firstText(
+        value.description,
+        value.fullDescription
+      );
+
       return {
         id: firstText(value.id, `${fallbackPrefix}-${index + 1}`),
         name: firstText(value.name, value.label, titleFromId(value.id, "Unnamed")),
-        summary: firstText(value.summary, value.description, value.notes),
-        source: firstText(value.source)
+        summary: firstText(summary, description),
+        description:
+          description && description !== summary
+            ? description
+            : "",
+        choices: firstText(value.choicesText),
+        source: firstText(
+          value.sourceLabel,
+          value.sourceName,
+          value.source
+        )
       };
     }
 
@@ -464,6 +892,8 @@ function normalizeContentEntries(values, fallbackPrefix) {
       id: `${fallbackPrefix}-${index + 1}`,
       name: firstText(value, "Unnamed"),
       summary: "",
+      description: "",
+      choices: "",
       source: ""
     };
   });
@@ -480,6 +910,8 @@ function renderContentList(values, fallbackText = "None recorded") {
         <li>
           <strong>${escapeHtml(entry.name)}</strong>
           ${entry.summary ? `<span>${escapeHtml(entry.summary)}</span>` : ""}
+          ${entry.description ? `<span class="hg-sheet-full-description">${escapeHtml(entry.description)}</span>` : ""}
+          ${entry.choices ? `<span><b>Choices:</b> ${escapeHtml(entry.choices)}</span>` : ""}
           ${entry.source ? `<small>${escapeHtml(entry.source)}</small>` : ""}
         </li>
       `).join("")}
@@ -555,6 +987,38 @@ function getFeatSituationalEntries(character, section) {
     .map(formatFeatSituationalEntry);
 }
 
+function formatChoiceMap(value) {
+  if (!isRecord(value)) {
+    return "";
+  }
+
+  return Object.entries(value)
+    .flatMap(([key, rawValues]) => {
+      const values = (
+        Array.isArray(rawValues)
+          ? rawValues
+          : [rawValues]
+      )
+        .map((entry) => {
+          if (isRecord(entry)) {
+            return firstText(
+              entry.name,
+              entry.label,
+              entry.id
+            );
+          }
+
+          return cleanText(entry);
+        })
+        .filter(Boolean);
+
+      return values.length
+        ? [`${titleFromId(key)}: ${values.join(", ")}`]
+        : [];
+    })
+    .join("; ");
+}
+
 function getFeatEntries(character) {
   const byKey = new Map();
 
@@ -579,10 +1043,26 @@ function getFeatEntries(character) {
       name: firstText(existing.name, name),
       summary: firstText(
         record.summary,
-        record.description,
+        record.featSummary,
         existing.summary
       ),
-      source: firstText(record.source, existing.source)
+      description: firstText(
+        record.description,
+        record.featDescription,
+        existing.description
+      ),
+      choices: firstText(
+        formatChoiceMap(
+          record.choices ||
+          record.featChoices
+        ),
+        existing.choices
+      ),
+      source: firstText(
+        record.sourceLabel,
+        record.source,
+        existing.source
+      )
     });
   };
 
@@ -607,12 +1087,33 @@ function getFeatEntries(character) {
 }
 
 function getFeatureGroups(character) {
+  const classFeatures = asArray(
+    character?.features?.classFeatures
+  );
+  const subclassFeatures = classFeatures.filter((entry) => {
+    return (
+      normalizeKey(entry?.source) === "subclass" ||
+      normalizeKey(entry?.sourceType) === "subclass" ||
+      normalizeKey(entry?.featureType) === "subclass"
+    );
+  });
+  const baseClassFeatures = classFeatures.filter((entry) => {
+    return !subclassFeatures.includes(entry);
+  });
+
   return [
     {
       title: "Class Features",
       entries: normalizeContentEntries(
-        character?.features?.classFeatures,
+        baseClassFeatures,
         "class-feature"
+      )
+    },
+    {
+      title: "Subclass Features",
+      entries: normalizeContentEntries(
+        subclassFeatures,
+        "subclass-feature"
       )
     },
     {
@@ -934,12 +1435,6 @@ function renderFeatMechanics(character) {
   const selectedFeatures = asArray(
     mechanics.selectedFeatures
   );
-  const resources = asArray(
-    mechanics.resources
-  ).filter((entry) => {
-    return entry.kind !==
-      "featSpell";
-  });
   const elementalAdepts = asArray(
     mechanics.elementalAdepts
   );
@@ -976,7 +1471,6 @@ function renderFeatMechanics(character) {
     );
   const hasMechanics = [
     selectedFeatures,
-    resources,
     elementalAdepts,
     damageReductions,
     senses,
@@ -1185,18 +1679,6 @@ function renderFeatMechanics(character) {
         </article>
       ` : ""}
 
-      ${resources.length ? `
-        <article class="hg-sheet-card">
-          <h2>Feat Resources</h2>
-          ${renderContentList(resources.map((entry) => ({
-            id: entry.id,
-            name: firstText(entry.name, "Feat resource"),
-            summary: `${clampInteger(entry.currentUses, 0, 0)} / ${clampInteger(entry.maximumUses, 0, 0)}${entry.die ? ` (${entry.die})` : ""}; recharges after ${titleFromId(entry.recharge).toLowerCase()}`,
-            source: entry.featName
-          })))}
-        </article>
-      ` : ""}
-
       ${defenseEntries.length ? `
         <article class="hg-sheet-card">
           <h2>Feat Defenses</h2>
@@ -1268,6 +1750,15 @@ function renderMainPanel(character, summary) {
   const speed = formatSpeed(combat.speed, character?.speed);
   const featureGroups = getFeatureGroups(character);
   const feats = getFeatEntries(character);
+  const classResources = asArray(
+    character?.classMechanics?.resources
+  );
+  const featResources = asArray(
+    character?.featMechanics?.resources
+  ).filter((entry) => {
+    return entry?.kind !== "featSpell";
+  });
+  const manualEffects = getManualSituationalEntries(character);
 
   return `
     <section class="hg-sheet-panel" aria-label="Main character sheet">
@@ -1298,6 +1789,14 @@ function renderMainPanel(character, summary) {
           <strong>${summary.passivePerception}</strong>
         </article>
         <article class="hg-sheet-stat-card">
+          <span>Passive Investigation</span>
+          <strong>${getPassiveSkillScore(character, "investigation", summary.proficiencyBonus)}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Passive Insight</span>
+          <strong>${getPassiveSkillScore(character, "insight", summary.proficiencyBonus)}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
           <span>Hit Dice</span>
           <strong class="hg-sheet-stat-text">${escapeHtml(formatHitDice(character))}</strong>
         </article>
@@ -1306,6 +1805,8 @@ function renderMainPanel(character, summary) {
           <strong>${clampInteger(combat.attacksPerAction, 1, 1)}</strong>
         </article>
       </div>
+
+      ${renderClassProgression(character)}
 
       <div class="hg-sheet-two-column">
         <div>
@@ -1323,12 +1824,24 @@ function renderMainPanel(character, summary) {
             <h2>Skills</h2>
             ${renderSkills(character, summary.proficiencyBonus)}
           </article>
+
+          ${renderArmorClassOptions(character)}
         </div>
 
         <div>
           <article class="hg-sheet-card">
             <h2>Attacks</h2>
             ${renderAttackTable(character, summary.proficiencyBonus)}
+          </article>
+
+          <article class="hg-sheet-card">
+            <h2>Hit Points &amp; Hit Dice by Class</h2>
+            ${renderDefinitionList([
+              ["Current HP", `${currentHp} / ${maxHp}`],
+              ["Temporary HP", String(temporaryHp)],
+              ["HP Method", titleFromId(combat?.hpCalculation?.mode, "Not recorded")]
+            ])}
+            ${renderHitDiceByClass(character)}
           </article>
 
           <article class="hg-sheet-card">
@@ -1357,6 +1870,36 @@ function renderMainPanel(character, summary) {
             </article>
           </div>
         </div>
+      </div>
+
+      <div class="hg-sheet-card-grid">
+        <article class="hg-sheet-card">
+          <h2>Class Resources</h2>
+          ${renderTrackedResources(
+            classResources,
+            "class",
+            "No limited class resources are recorded."
+          )}
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Feat Resources</h2>
+          ${renderTrackedResources(
+            featResources,
+            "feat",
+            "No limited feat resources are recorded."
+          )}
+        </article>
+
+        ${renderDefensesAndMovement(character)}
+
+        <article class="hg-sheet-card">
+          <h2>Manual &amp; Situational Effects</h2>
+          ${renderContentList(
+            manualEffects,
+            "No manual or situational effects are recorded."
+          )}
+        </article>
       </div>
 
       <div class="hg-sheet-card-grid hg-sheet-feature-grid">
@@ -1512,9 +2055,29 @@ function renderSpellSlots(magic) {
         const used = Math.min(total, clampInteger(usage[level], 0, 0));
 
         return `
-          <div>
-            <span>Level ${escapeHtml(level)}</span>
-            <strong>${total - used} / ${total}</strong>
+          <div class="hg-sheet-slot-row" data-normal-spell-slot="${escapeHtml(level)}">
+            <div>
+              <span>Level ${escapeHtml(level)}</span>
+              <strong>${total - used} / ${total}</strong>
+            </div>
+            <div class="hg-sheet-inline-actions hg-sheet-no-print">
+              <button
+                type="button"
+                data-character-sheet-action="adjust-spell-slot"
+                data-slot-kind="normal"
+                data-slot-level="${escapeHtml(level)}"
+                data-delta="1"
+                ${used >= total ? "disabled" : ""}
+              >Spend</button>
+              <button
+                type="button"
+                data-character-sheet-action="adjust-spell-slot"
+                data-slot-kind="normal"
+                data-slot-level="${escapeHtml(level)}"
+                data-delta="-1"
+                ${used <= 0 ? "disabled" : ""}
+              >Restore</button>
+            </div>
           </div>
         `;
       }).join("")}
@@ -1617,6 +2180,24 @@ function renderFeatSpellResources(character) {
             <strong>${escapeHtml(firstText(record.spellName, titleFromId(record.spellId, "Feat spell")))}</strong>
             <span>${escapeHtml(details.join(" · "))}</span>
             <small>${escapeHtml(firstText(record.featName, titleFromId(record.featId, "Feat")))}</small>
+            ${maximumUses === null ? "" : `
+              <span class="hg-sheet-inline-actions hg-sheet-no-print">
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-feat-resource"
+                  data-resource-id="${escapeHtml(firstText(record.id, record.spellId))}"
+                  data-delta="-1"
+                  ${(currentUses ?? maximumUses) <= 0 ? "disabled" : ""}
+                >Spend</button>
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-feat-resource"
+                  data-resource-id="${escapeHtml(firstText(record.id, record.spellId))}"
+                  data-delta="1"
+                  ${(currentUses ?? maximumUses) >= maximumUses ? "disabled" : ""}
+                >Restore</button>
+              </span>
+            `}
           </li>
         `;
       }).join("")}
@@ -1635,11 +2216,48 @@ function renderSpellPanel(character) {
   const globalPrepared = asArray(magic.preparedSpellIds);
   const pactSlots = clampInteger(magic?.pactMagic?.slots, 0, 0);
   const pactUsed = Math.min(pactSlots, clampInteger(magic?.slotUsage?.pact, 0, 0));
+  const pactSources = (
+    asArray(magic.pactMagicSources).length
+      ? asArray(magic.pactMagicSources)
+      : pactSlots
+        ? [{
+          classEntryId: "legacy:pact-magic",
+          className: "Pact Magic",
+          slots: pactSlots,
+          slotLevel: magic?.pactMagic?.slotLevel
+        }]
+        : []
+  ).map((source, index) => {
+    const sourceId = firstText(
+      source.classEntryId,
+      source.sourceId,
+      `pact-source-${index + 1}`
+    );
+    const maximum = clampInteger(source.slots, 0, 0);
+    const used = Math.min(
+      maximum,
+      clampInteger(
+        magic?.slotUsage?.pactSources?.[sourceId],
+        index === 0 ? pactUsed : 0,
+        0
+      )
+    );
+
+    return {
+      sourceId,
+      className: firstText(source.className, "Pact Magic"),
+      slotLevel: clampInteger(source.slotLevel, 0, 0),
+      maximum,
+      used
+    };
+  }).filter((source) => {
+    return source.maximum > 0;
+  });
 
   return `
     <section class="hg-sheet-panel" aria-label="Spell character sheet">
       <div class="hg-sheet-callout">
-        This is a read-only spell summary. Spell learning and preparation remain in the Character Creator.
+        Spell learning and preparation remain in the Character Creator. Uses and spell-slot spending can be tracked here.
       </div>
 
       <div class="hg-sheet-card-grid">
@@ -1661,9 +2279,43 @@ function renderSpellPanel(character) {
         <article class="hg-sheet-card">
           <h2>Spell Slots</h2>
           ${renderSpellSlots(magic)}
-          ${pactSlots ? `
-            <p><strong>Pact Magic:</strong> ${pactSlots - pactUsed} / ${pactSlots} level ${clampInteger(magic?.pactMagic?.slotLevel, 0, 0)}</p>
-          ` : ""}
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Pact Magic</h2>
+          ${pactSources.length ? `
+            <div class="hg-sheet-resource-list">
+              ${pactSources.map((source) => `
+                <article class="hg-sheet-resource-row" data-pact-source="${escapeHtml(source.sourceId)}">
+                  <div>
+                    <strong>${escapeHtml(source.className)}</strong>
+                    <span>${source.maximum - source.used} / ${source.maximum} level ${source.slotLevel}</span>
+                    <small>Recharges after a short or long rest</small>
+                  </div>
+                  <div class="hg-sheet-inline-actions hg-sheet-no-print">
+                    <button
+                      type="button"
+                      data-character-sheet-action="adjust-spell-slot"
+                      data-slot-kind="pact"
+                      data-slot-source-id="${escapeHtml(source.sourceId)}"
+                      data-slot-level="${source.slotLevel}"
+                      data-delta="1"
+                      ${source.used >= source.maximum ? "disabled" : ""}
+                    >Spend</button>
+                    <button
+                      type="button"
+                      data-character-sheet-action="adjust-spell-slot"
+                      data-slot-kind="pact"
+                      data-slot-source-id="${escapeHtml(source.sourceId)}"
+                      data-slot-level="${source.slotLevel}"
+                      data-delta="-1"
+                      ${source.used <= 0 ? "disabled" : ""}
+                    >Restore</button>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          ` : `<p class="hg-sheet-muted">No Pact Magic slots recorded.</p>`}
         </article>
 
         <article class="hg-sheet-card">
@@ -2090,13 +2742,132 @@ function ensureStyles() {
       white-space: pre-wrap;
     }
 
+    .hg-character-sheet-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 7px;
+      max-width: 460px;
+    }
+
+    .hg-character-sheet-toolbar button,
+    .hg-sheet-inline-actions button {
+      padding: 7px 10px !important;
+      font-size: 12px !important;
+    }
+
+    .hg-sheet-sync-status {
+      font-size: 12px;
+    }
+
+    .hg-sheet-full-description {
+      color: #d8def8 !important;
+      white-space: pre-wrap;
+    }
+
+    .hg-sheet-level-order {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      counter-reset: none;
+      list-style-position: inside;
+    }
+
+    .hg-sheet-level-order li {
+      display: grid;
+      gap: 2px;
+      padding: 9px;
+      border: 1px solid rgba(127, 153, 255, 0.16);
+      border-radius: 10px;
+      background: rgba(7, 11, 27, 0.58);
+    }
+
+    .hg-sheet-level-order span,
+    .hg-sheet-selected-rule span {
+      color: #aeb8df;
+      font-size: 12px;
+    }
+
+    .hg-sheet-selected-rule {
+      display: grid;
+      gap: 3px;
+      margin-bottom: 12px !important;
+      padding: 10px;
+      border: 1px solid rgba(244, 216, 139, 0.35);
+      border-radius: 10px;
+      background: rgba(244, 216, 139, 0.07);
+    }
+
+    .hg-sheet-selected-option {
+      padding: 8px !important;
+      border: 1px solid rgba(244, 216, 139, 0.35) !important;
+      border-radius: 9px;
+      background: rgba(244, 216, 139, 0.06);
+    }
+
+    .hg-sheet-resource-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .hg-sheet-resource-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px;
+      border: 1px solid rgba(127, 153, 255, 0.16);
+      border-radius: 10px;
+      background: rgba(7, 11, 27, 0.58);
+    }
+
+    .hg-sheet-resource-row > div:first-child,
+    .hg-sheet-slot-row > div:first-child {
+      display: grid;
+      gap: 2px;
+    }
+
+    .hg-sheet-resource-row span,
+    .hg-sheet-resource-row small {
+      color: #aeb8df;
+    }
+
+    .hg-sheet-resource-row small {
+      font-size: 11px;
+    }
+
+    .hg-sheet-inline-actions {
+      display: flex !important;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .hg-sheet-slot-row {
+      grid-template-columns: 1fr !important;
+      place-items: stretch !important;
+      min-width: 135px !important;
+    }
+
+    .hg-sheet-slot-row .hg-sheet-inline-actions {
+      justify-content: center;
+    }
+
+    .hg-sheet-print-only {
+      display: none;
+    }
+
     @media (max-width: 850px) {
       .hg-character-sheet-header {
         grid-template-columns: auto minmax(0, 1fr);
       }
 
-      .hg-character-sheet-header > button {
+      .hg-character-sheet-toolbar {
         grid-column: 1 / -1;
+        max-width: none;
         width: 100%;
       }
 
@@ -2142,6 +2913,106 @@ function ensureStyles() {
         grid-template-columns: 1fr;
         gap: 3px;
       }
+
+      .hg-sheet-resource-row {
+        grid-template-columns: 1fr;
+      }
+
+      .hg-sheet-inline-actions {
+        justify-content: stretch;
+      }
+
+      .hg-sheet-inline-actions button {
+        flex: 1 1 100px;
+      }
+    }
+
+    @media print {
+      @page {
+        margin: 0.45in;
+      }
+
+      body,
+      .hg-character-sheet {
+        color: #111 !important;
+        background: #fff !important;
+      }
+
+      .hg-character-sheet {
+        max-width: none;
+        font-size: 10pt;
+      }
+
+      .hg-sheet-no-print,
+      .hg-sheet-screen-panel {
+        display: none !important;
+      }
+
+      .hg-sheet-print-only {
+        display: grid !important;
+        gap: 12px;
+      }
+
+      .hg-character-sheet-header,
+      .hg-sheet-stat-card,
+      .hg-sheet-card,
+      .hg-sheet-callout,
+      .hg-sheet-level-order li,
+      .hg-sheet-resource-row,
+      .hg-sheet-currency-grid > div,
+      .hg-sheet-slot-grid > div {
+        color: #111 !important;
+        border-color: #777 !important;
+        background: #fff !important;
+        box-shadow: none !important;
+      }
+
+      .hg-sheet-card,
+      .hg-sheet-stat-card,
+      .hg-sheet-callout,
+      .hg-sheet-resource-row,
+      .hg-sheet-level-order li,
+      .hg-sheet-table tr {
+        break-inside: avoid;
+      }
+
+      .hg-character-sheet-heading h1,
+      .hg-sheet-card h2,
+      .hg-sheet-stat-card strong,
+      .hg-sheet-list strong,
+      .hg-sheet-definition-list dd,
+      .hg-sheet-table,
+      .hg-sheet-level-order strong,
+      .hg-sheet-resource-row strong {
+        color: #111 !important;
+      }
+
+      .hg-character-sheet-heading p,
+      .hg-sheet-list span,
+      .hg-sheet-list small,
+      .hg-sheet-muted,
+      .hg-sheet-definition-list dt,
+      .hg-sheet-stat-card span,
+      .hg-sheet-stat-card small,
+      .hg-sheet-resource-row span,
+      .hg-sheet-resource-row small,
+      .hg-sheet-level-order span,
+      .hg-sheet-selected-rule span {
+        color: #333 !important;
+      }
+
+      .hg-sheet-two-column,
+      .hg-sheet-card-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .hg-sheet-table-wrap {
+        overflow: visible;
+      }
+
+      .hg-sheet-table {
+        min-width: 0;
+      }
     }
   `;
 
@@ -2168,6 +3039,48 @@ function resolveRoot(rootOption) {
   return null;
 }
 
+export function createCharacterSheetJson(character) {
+  const snapshot = cloneSnapshot(
+    isRecord(character)
+      ? character
+      : {}
+  );
+
+  if (!cleanText(snapshot.sheetType)) {
+    snapshot.sheetType = "character";
+  }
+
+  return JSON.stringify(snapshot, null, 2);
+}
+
+function downloadCharacterSheetJson(character) {
+  const json = createCharacterSheetJson(character);
+
+  if (
+    typeof document === "undefined" ||
+    typeof URL === "undefined" ||
+    typeof Blob === "undefined"
+  ) {
+    return json;
+  }
+
+  const blob = new Blob(
+    [json],
+    { type: "application/json" }
+  );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  const filename = normalizeKey(
+    getName(character)
+  ) || "character";
+
+  anchor.href = url;
+  anchor.download = `${filename}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  return json;
+}
+
 export function createCharacterSheetView(options = {}) {
   const deps = {
     root: options.root || null,
@@ -2179,7 +3092,49 @@ export function createCharacterSheetView(options = {}) {
       : () => {},
     onClose: typeof options.onClose === "function"
       ? options.onClose
-      : () => {}
+      : () => {},
+    getSheetContext: typeof options.getSheetContext === "function"
+      ? options.getSheetContext
+      : () => ({}),
+    onAdjustClassResource:
+      typeof options.onAdjustClassResource === "function"
+        ? options.onAdjustClassResource
+        : () => false,
+    onAdjustFeatResource:
+      typeof options.onAdjustFeatResource === "function"
+        ? options.onAdjustFeatResource
+        : () => false,
+    onAdjustHitDie:
+      typeof options.onAdjustHitDie === "function"
+        ? options.onAdjustHitDie
+        : () => false,
+    onAdjustSpellSlot:
+      typeof options.onAdjustSpellSlot === "function"
+        ? options.onAdjustSpellSlot
+        : () => false,
+    onRest: typeof options.onRest === "function"
+      ? options.onRest
+      : () => false,
+    onExportJson: typeof options.onExportJson === "function"
+      ? options.onExportJson
+      : downloadCharacterSheetJson,
+    onPrint: typeof options.onPrint === "function"
+      ? options.onPrint
+      : () => {
+        if (
+          typeof window !== "undefined" &&
+          typeof window.print === "function"
+        ) {
+          window.print();
+          return true;
+        }
+
+        return false;
+      },
+    onSyncLinkedToken:
+      typeof options.onSyncLinkedToken === "function"
+        ? options.onSyncLinkedToken
+        : () => false
   };
 
   const state = {
@@ -2214,14 +3169,40 @@ export function createCharacterSheetView(options = {}) {
     );
     const classLine = classEntries.map(formatClassEntry).join(" / ");
     const initial = getName(safeCharacter).charAt(0).toUpperCase() || "?";
+    const mainSummary = {
+      proficiencyBonus,
+      passivePerception
+    };
+    const dependencyContext =
+      deps.getSheetContext();
+    const sheetContext = {
+      ...(
+        isRecord(dependencyContext)
+          ? dependencyContext
+          : {}
+      ),
+      ...(
+        isRecord(renderOptions.sheetContext)
+          ? renderOptions.sheetContext
+          : {}
+      )
+    };
+    const savedCharacterId = firstText(
+      sheetContext.characterId,
+      safeCharacter.id,
+      safeCharacter.docId,
+      safeCharacter.firestoreDocumentId
+    );
+    const tokenStatus = !savedCharacterId
+      ? "Save the character before synchronizing linked tokens."
+      : sheetContext.dirty === true
+        ? "Unsaved changes must be saved before linked tokens are current."
+        : "Saved character data is ready to synchronize with linked tokens.";
     const panel = activeTab === "story"
       ? renderStoryPanel(safeCharacter)
       : activeTab === "spell"
         ? renderSpellPanel(safeCharacter)
-        : renderMainPanel(safeCharacter, {
-          proficiencyBonus,
-          passivePerception
-        });
+        : renderMainPanel(safeCharacter, mainSummary);
 
     return `
       <div class="hg-character-sheet" data-character-sheet-view="true">
@@ -2238,17 +3219,42 @@ export function createCharacterSheetView(options = {}) {
               &middot; ${escapeHtml(getSpeciesName(safeCharacter))}
               &middot; ${escapeHtml(getBackgroundName(safeCharacter))}
             </p>
+            <p
+              class="hg-sheet-sync-status"
+              data-linked-token-status="${savedCharacterId ? (sheetContext.dirty === true ? "dirty" : "ready") : "unsaved"}"
+            >${escapeHtml(tokenStatus)}</p>
           </div>
 
-          <button
-            type="button"
-            data-character-sheet-action="close"
-          >
-            Back to Creator
-          </button>
+          <div class="hg-character-sheet-toolbar hg-sheet-no-print">
+            <button
+              type="button"
+              data-character-sheet-action="short-rest"
+            >Short Rest</button>
+            <button
+              type="button"
+              data-character-sheet-action="long-rest"
+            >Long Rest</button>
+            <button
+              type="button"
+              data-character-sheet-action="sync-linked-token"
+              ${savedCharacterId ? "" : "disabled"}
+            >Save &amp; Sync Tokens</button>
+            <button
+              type="button"
+              data-character-sheet-action="export-json"
+            >Export JSON</button>
+            <button
+              type="button"
+              data-character-sheet-action="print"
+            >Print</button>
+            <button
+              type="button"
+              data-character-sheet-action="close"
+            >Back to Creator</button>
+          </div>
         </header>
 
-        <nav class="hg-character-sheet-tabs" aria-label="Character sheet sections">
+        <nav class="hg-character-sheet-tabs hg-sheet-no-print" aria-label="Character sheet sections">
           ${[
             ["main", "Main"],
             ["story", "Story"],
@@ -2266,7 +3272,15 @@ export function createCharacterSheetView(options = {}) {
           `).join("")}
         </nav>
 
-        ${panel}
+        <div class="hg-sheet-screen-panel">
+          ${panel}
+        </div>
+
+        <div class="hg-sheet-print-only" aria-hidden="true">
+          ${renderMainPanel(safeCharacter, mainSummary)}
+          ${renderStoryPanel(safeCharacter)}
+          ${renderSpellPanel(safeCharacter)}
+        </div>
       </div>
     `;
   }
@@ -2291,6 +3305,76 @@ export function createCharacterSheetView(options = {}) {
     return html;
   }
 
+  function refreshCharacterSnapshot(result) {
+    const source = isRecord(result)
+      ? result
+      : deps.getCharacter() || state.character;
+
+    state.character = cloneSnapshot(source);
+    return render();
+  }
+
+  function completeTrackedAction(result, successMessage) {
+    if (result === false) {
+      deps.setStatus("That character-sheet action could not be completed.");
+      return false;
+    }
+
+    refreshCharacterSnapshot(result);
+
+    if (successMessage) {
+      deps.setStatus(successMessage);
+    }
+
+    return true;
+  }
+
+  function runTrackedAction(action, successMessage) {
+    try {
+      const result = action();
+
+      if (
+        result &&
+        typeof result.then === "function"
+      ) {
+        result
+          .then((value) => {
+            completeTrackedAction(
+              value,
+              successMessage
+            );
+          })
+          .catch((error) => {
+            console.error(
+              "Character-sheet action failed.",
+              error
+            );
+            deps.setStatus(
+              error?.message ||
+              "The character-sheet action failed."
+            );
+          });
+
+        return true;
+      }
+
+      return completeTrackedAction(
+        result,
+        successMessage
+      );
+    } catch (error) {
+      console.error(
+        "Character-sheet action failed.",
+        error
+      );
+      deps.setStatus(
+        error?.message ||
+        "The character-sheet action failed."
+      );
+      return false;
+    }
+  }
+
   function handleClick(event) {
     const button = event.target.closest("[data-character-sheet-action]");
 
@@ -2312,6 +3396,90 @@ export function createCharacterSheetView(options = {}) {
         state.activeTab = tab;
         render();
       }
+
+      return;
+    }
+
+    if (action === "adjust-class-resource") {
+      runTrackedAction(
+        () => deps.onAdjustClassResource(
+          cleanText(button.dataset.resourceId),
+          finiteNumber(button.dataset.delta, 0)
+        ),
+        "Class resource updated from the character sheet."
+      );
+      return;
+    }
+
+    if (action === "adjust-feat-resource") {
+      runTrackedAction(
+        () => deps.onAdjustFeatResource(
+          cleanText(button.dataset.resourceId),
+          finiteNumber(button.dataset.delta, 0)
+        ),
+        "Feat resource updated from the character sheet."
+      );
+      return;
+    }
+
+    if (action === "adjust-hit-die") {
+      runTrackedAction(
+        () => deps.onAdjustHitDie(
+          cleanText(button.dataset.hitDieId),
+          finiteNumber(button.dataset.delta, 0)
+        ),
+        "Hit Die usage updated from the character sheet."
+      );
+      return;
+    }
+
+    if (action === "adjust-spell-slot") {
+      runTrackedAction(
+        () => deps.onAdjustSpellSlot(
+          cleanText(button.dataset.slotKind, "normal"),
+          finiteNumber(button.dataset.slotLevel, 0),
+          finiteNumber(button.dataset.delta, 0),
+          cleanText(button.dataset.slotSourceId)
+        ),
+        "Spell-slot usage updated from the character sheet."
+      );
+      return;
+    }
+
+    if (
+      action === "short-rest" ||
+      action === "long-rest"
+    ) {
+      const restType = action === "short-rest"
+        ? "shortRest"
+        : "longRest";
+
+      runTrackedAction(
+        () => deps.onRest(restType),
+        `${action === "short-rest" ? "Short" : "Long"} rest completed.`
+      );
+      return;
+    }
+
+    if (action === "sync-linked-token") {
+      runTrackedAction(
+        () => deps.onSyncLinkedToken(
+          state.character
+        ),
+        "Character saved and linked-token synchronization completed."
+      );
+      return;
+    }
+
+    if (action === "export-json") {
+      deps.onExportJson(state.character);
+      deps.setStatus("Character JSON export prepared.");
+      return;
+    }
+
+    if (action === "print") {
+      deps.onPrint(state.character);
+      deps.setStatus("Print-friendly character sheet opened.");
     }
   }
 
@@ -2347,7 +3515,7 @@ export function createCharacterSheetView(options = {}) {
     const html = render();
 
     if (html) {
-      deps.setStatus("Read-only character sheet opened.");
+      deps.setStatus("Character sheet opened.");
     }
 
     return state.character;
@@ -2369,7 +3537,18 @@ export function createCharacterSheetView(options = {}) {
     open,
     close,
     render,
-    renderCharacterSheetHtml
+    renderCharacterSheetHtml,
+    refresh() {
+      return refreshCharacterSnapshot(
+        deps.getCharacter()
+      );
+    },
+    getJson(character = state.character) {
+      return createCharacterSheetJson(character);
+    },
+    exportJson(character = state.character) {
+      return deps.onExportJson(character);
+    }
   };
 
   return api;

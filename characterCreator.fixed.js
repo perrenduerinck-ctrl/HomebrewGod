@@ -376,6 +376,10 @@ export function createCharacterCreator(options = {}) {
         selectedArmorClassMethod: "",
         manualArmorClass: null,
         armorClassBonus: 0,
+        armorClassOptions: {
+          selected: null,
+          options: []
+        },
         maxHp: 1,
         currentHp: 1,
         temporaryHp: 0,
@@ -405,7 +409,8 @@ export function createCharacterCreator(options = {}) {
           special: ""
         },
 
-        hitDice: []
+        hitDice: [],
+        hitDiceUsage: {}
       },
 
       equipment: {
@@ -3750,6 +3755,23 @@ export function createCharacterCreator(options = {}) {
             0
           ),
 
+        armorClassOptions:
+          raw.combat?.armorClassOptions &&
+          typeof raw.combat
+            .armorClassOptions === "object" &&
+          !Array.isArray(
+            raw.combat
+              .armorClassOptions
+          )
+            ? cloneData(
+                raw.combat
+                  .armorClassOptions
+              )
+            : cloneData(
+                empty.combat
+                  .armorClassOptions
+              ),
+
         maxHp: Math.max(
           1,
           safeNumber(
@@ -3837,7 +3859,38 @@ export function createCharacterCreator(options = {}) {
 
         hitDice: Array.isArray(raw.combat?.hitDice)
           ? cloneData(raw.combat.hitDice)
-          : []
+          : [],
+
+        hitDiceUsage:
+          raw.combat?.hitDiceUsage &&
+          typeof raw.combat
+            .hitDiceUsage === "object" &&
+          !Array.isArray(
+            raw.combat
+              .hitDiceUsage
+          )
+            ? Object.fromEntries(
+                Object.entries(
+                  raw.combat
+                    .hitDiceUsage
+                ).map(([key, value]) => {
+                  return [
+                    cleanString(key),
+                    Math.max(
+                      0,
+                      Math.round(
+                        safeNumber(
+                          value,
+                          0
+                        )
+                      )
+                    )
+                  ];
+                }).filter(([key]) => {
+                  return Boolean(key);
+                })
+              )
+            : {}
       },
 
       equipment: {
@@ -19421,6 +19474,1555 @@ export function createCharacterCreator(options = {}) {
       }
     );
 
+    const phase16Character =
+      createEmptyCharacter();
+    phase16Character.id =
+      "phase16-character";
+    phase16Character.identity = {
+      ...phase16Character.identity,
+      name: "Aria Phase Sixteen",
+      pronouns: "she/her",
+      image: {
+        url:
+          "https://example.com/phase16-portrait.png",
+        publicId:
+          "phase16-portrait"
+      }
+    };
+    phase16Character.species = {
+      ...phase16Character.species,
+      id: "tiefling",
+      name: "Tiefling",
+      resistances: [
+        "fire"
+      ],
+      senses: [
+        {
+          sense: "darkvision",
+          range: 60
+        }
+      ]
+    };
+    phase16Character.background = {
+      ...phase16Character.background,
+      id: "sage",
+      name: "Sage",
+      backstory:
+        "Aria studies magic and martial traditions."
+    };
+    phase16Character.classProgression = {
+      totalLevel: 7,
+      classes: [
+        {
+          entryId:
+            "phase16-fighter",
+          classId: "fighter",
+          className: "Fighter",
+          subclassId: "champion",
+          subclassName: "Champion",
+          level: 3
+        },
+        {
+          entryId:
+            "phase16-wizard",
+          classId: "wizard",
+          className: "Wizard",
+          subclassId: "evocation",
+          subclassName:
+            "School of Evocation",
+          level: 2
+        },
+        {
+          entryId:
+            "phase16-warlock",
+          classId: "warlock",
+          className: "Warlock",
+          subclassId: "fiend",
+          subclassName: "The Fiend",
+          level: 2
+        }
+      ],
+      levelOrder: [
+        "phase16-fighter",
+        "phase16-fighter",
+        "phase16-wizard",
+        "phase16-fighter",
+        "phase16-wizard",
+        "phase16-warlock",
+        "phase16-warlock"
+      ],
+      unarmoredDefenseSource:
+        null
+    };
+    phase16Character.abilities.scores = {
+      str: 16,
+      dex: 14,
+      con: 14,
+      int: 18,
+      wis: 12,
+      cha: 13
+    };
+    phase16Character.abilities.modifiers = {
+      str: 3,
+      dex: 2,
+      con: 2,
+      int: 4,
+      wis: 1,
+      cha: 1
+    };
+    phase16Character.proficiencies = {
+      ...phase16Character
+        .proficiencies,
+      savingThrows: [
+        "Strength",
+        "Constitution"
+      ],
+      skills: {
+        perception: {
+          proficient: true,
+          expertise: true
+        },
+        investigation: {
+          proficient: true
+        },
+        insight: {
+          proficient: false
+        }
+      },
+      armor: [
+        "Light armor",
+        "Medium armor",
+        "Shields"
+      ],
+      weapons: [
+        "Simple weapons",
+        "Martial weapons"
+      ],
+      tools: [
+        "Calligrapher's supplies"
+      ],
+      languages: [
+        "Common",
+        "Infernal",
+        "Draconic"
+      ]
+    };
+    phase16Character.combat = {
+      ...phase16Character.combat,
+      armorClass: 19,
+      selectedArmorClassMethod:
+        "armor:phase16-plate",
+      armorClassOptions: {
+        selected: {
+          id:
+            "armor:phase16-plate",
+          label:
+            "Heavy Armor: Plate",
+          total: 19,
+          breakdown:
+            "Plate 18 + Defense fighting style 1"
+        },
+        options: [
+          {
+            id:
+              "armor:phase16-plate",
+            label:
+              "Heavy Armor: Plate",
+            total: 19,
+            breakdown:
+              "Plate 18 + Defense fighting style 1"
+          },
+          {
+            id: "unarmored",
+            label: "Unarmored",
+            total: 12,
+            breakdown:
+              "10 + Dexterity 2"
+          }
+        ]
+      },
+      maxHp: 52,
+      currentHp: 31,
+      temporaryHp: 4,
+      proficiencyBonus: 3,
+      attacksPerAction: 2,
+      speed: {
+        walk: 30,
+        climb: 15,
+        swim: 0,
+        fly: 0,
+        burrow: 0,
+        special: ""
+      },
+      hitDice: [
+        {
+          classEntryId:
+            "phase16-fighter",
+          classId: "fighter",
+          className: "Fighter",
+          die: "d10",
+          count: 3
+        },
+        {
+          classEntryId:
+            "phase16-wizard",
+          classId: "wizard",
+          className: "Wizard",
+          die: "d6",
+          count: 2
+        },
+        {
+          classEntryId:
+            "phase16-warlock",
+          classId: "warlock",
+          className: "Warlock",
+          die: "d8",
+          count: 2
+        }
+      ],
+      hitDiceUsage: {
+        "phase16-fighter": 2,
+        "phase16-wizard": 1,
+        "phase16-warlock": 1
+      },
+      hpCalculation: {
+        ...phase16Character
+          .combat.hpCalculation,
+        mode: "fixed"
+      }
+    };
+    phase16Character.attacks = [
+      {
+        id:
+          "phase16-longsword",
+        name: "Longsword",
+        attackBonus: 7,
+        damage: "1d8 + 4 slashing",
+        notes: "versatile 1d10"
+      }
+    ];
+    phase16Character.classMechanics = {
+      ...phase16Character
+        .classMechanics,
+      resources: [
+        {
+          id:
+            "phase16-action-surge",
+          canonicalId:
+            "action-surge",
+          name: "Action Surge",
+          currentUses: 0,
+          maximumUses: 1,
+          recharge:
+            "shortOrLongRest"
+        },
+        {
+          id:
+            "phase16-arcane-recovery",
+          canonicalId:
+            "arcane-recovery",
+          name: "Arcane Recovery",
+          currentUses: 0,
+          maximumUses: 1,
+          recharge:
+            "longRest"
+        }
+      ],
+      passiveEffects: [
+        {
+          id:
+            "phase16-defense-style",
+          name:
+            "Defense Fighting Style",
+          summary:
+            "Gain +1 AC while wearing armor.",
+          className: "Fighter"
+        }
+      ]
+    };
+    phase16Character.featMechanics = {
+      ...phase16Character
+        .featMechanics,
+      resources: [
+        {
+          id:
+            "phase16-lucky",
+          kind: "feat",
+          name: "Luck Points",
+          featName: "Lucky",
+          currentUses: 1,
+          maximumUses: 3,
+          recharge:
+            "longRest"
+        }
+      ],
+      instances: [
+        {
+          id:
+            "phase16-lucky-instance",
+          featId: "lucky",
+          featName: "Lucky",
+          featSummary:
+            "Spend luck points to alter important d20 rolls.",
+          featDescription:
+            "You have inexplicable luck that seems to kick in at just the right moment. Track each use and restore the pool after a long rest.",
+          choices: {
+            "example-choice": [
+              "Fortune"
+            ]
+          },
+          sourceLabel:
+            "Legacy 5e supplement (non-SRD)"
+        }
+      ],
+      resistances: [
+        "cold"
+      ],
+      senses: [
+        {
+          sense: "darkvision",
+          range: 120
+        }
+      ],
+      situationalEffects: [
+        {
+          id:
+            "phase16-lucky-reminder",
+          effectId:
+            "lucky-reminder",
+          featName: "Lucky",
+          handling: "manual",
+          actionEconomy: "reaction",
+          recharge: "longRest",
+          summary:
+            "Decide whether to spend a luck point after seeing the roll.",
+          instructions:
+            "Use this reminder when an eligible d20 roll is made."
+        }
+      ]
+    };
+    phase16Character.features = {
+      ...phase16Character.features,
+      classFeatures: [
+        {
+          id:
+            "phase16-action-surge-feature",
+          name: "Action Surge",
+          summary:
+            "Take one additional action.",
+          description:
+            "On your turn, you can take one additional action on top of your regular action and a possible bonus action.",
+          source: "class",
+          sourceLabel: "SRD 5.1"
+        },
+        {
+          id:
+            "phase16-improved-critical",
+          name:
+            "Improved Critical",
+          summary:
+            "Weapon attacks score a critical hit on 19 or 20.",
+          description:
+            "Your weapon attacks score a critical hit on a roll of 19 or 20.",
+          source: "subclass",
+          sourceLabel:
+            "Legacy 5e supplement (non-SRD)"
+        }
+      ]
+    };
+    phase16Character.feats = [
+      {
+        id: "lucky",
+        name: "Lucky",
+        summary:
+          "Spend luck points to influence rolls.",
+        description:
+          "You have inexplicable luck that can change attack rolls, ability checks, and saving throws.",
+        choices: {
+          "example-choice": [
+            "Fortune"
+          ]
+        },
+        sourceLabel:
+          "Legacy 5e supplement (non-SRD)"
+      }
+    ];
+    phase16Character.magic = {
+      ...phase16Character.magic,
+      slots: {
+        1: 4,
+        2: 3,
+        3: 2
+      },
+      slotUsage: {
+        normal: {
+          1: 1,
+          2: 2,
+          3: 0
+        },
+        pact: 1,
+        pactSources: {
+          "phase16-warlock": 1
+        }
+      },
+      classSources: {
+        "phase16-wizard": {
+          classEntryId:
+            "phase16-wizard",
+          classId: "wizard",
+          className: "Wizard",
+          subclassName:
+            "School of Evocation",
+          spellcastingAbility: "int",
+          spellSaveDc: 15,
+          spellAttackBonus: 7,
+          cantripIds: [
+            "fire-bolt"
+          ],
+          preparedSpellIds: [
+            "magic-missile"
+          ],
+          spellbookSpellIds: [
+            "shield"
+          ]
+        },
+        "phase16-warlock": {
+          classEntryId:
+            "phase16-warlock",
+          classId: "warlock",
+          className: "Warlock",
+          subclassName: "The Fiend",
+          spellcastingAbility: "cha",
+          spellSaveDc: 12,
+          spellAttackBonus: 4,
+          cantripIds: [
+            "eldritch-blast"
+          ],
+          knownSpellIds: [
+            "hex"
+          ]
+        }
+      },
+      pactMagic: {
+        slots: 2,
+        slotLevel: 1
+      },
+      pactMagicSources: [
+        {
+          classEntryId:
+            "phase16-warlock",
+          classId: "warlock",
+          className: "Warlock",
+          slots: 2,
+          slotLevel: 1
+        }
+      ]
+    };
+    phase16Character.equipment = {
+      ...phase16Character
+        .equipment,
+      currency: {
+        cp: 1,
+        sp: 2,
+        ep: 0,
+        gp: 35,
+        pp: 1
+      },
+      items: [
+        {
+          id:
+            "phase16-plate",
+          name: "Plate",
+          category: "armor",
+          quantity: 1,
+          weight: 65,
+          equipped: true,
+          baseArmorClass: 18
+        },
+        {
+          id:
+            "phase16-spellbook",
+          name: "Spellbook",
+          category: "gear",
+          quantity: 1,
+          weight: 3,
+          equipped: false
+        }
+      ]
+    };
+
+    const phase16Sheet =
+      createCharacterSheetView();
+    const phase16MainHtml =
+      phase16Sheet
+        .renderCharacterSheetHtml(
+          phase16Character,
+          {
+            activeTab: "main",
+            sheetContext: {
+              characterId:
+                "phase16-character",
+              dirty: false
+            }
+          }
+        );
+    const phase16SpellHtml =
+      phase16Sheet
+        .renderCharacterSheetHtml(
+          phase16Character,
+          {
+            activeTab: "spell",
+            sheetContext: {
+              characterId:
+                "phase16-character",
+              dirty: false
+            }
+          }
+        );
+
+    record(
+      "Phase 16: the character-sheet module is available",
+      typeof createCharacterSheetView,
+      "function"
+    );
+
+    record(
+      "Phase 16: identity and portrait are displayed",
+      {
+        name:
+          phase16MainHtml
+            .includes(
+              "Aria Phase Sixteen"
+            ),
+        portrait:
+          phase16MainHtml
+            .includes(
+              "phase16-portrait.png"
+            ),
+        species:
+          phase16MainHtml
+            .includes("Tiefling")
+      },
+      {
+        name: true,
+        portrait: true,
+        species: true
+      }
+    );
+
+    record(
+      "Phase 16: class and subclass progression is displayed",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "Class &amp; Subclass Progression"
+            ),
+        fighter:
+          phase16MainHtml
+            .includes(
+              "Fighter 3"
+            ),
+        champion:
+          phase16MainHtml
+            .includes(
+              "Subclass: Champion"
+            ),
+        evocation:
+          phase16MainHtml
+            .includes(
+              "School of Evocation"
+            )
+      },
+      {
+        heading: true,
+        fighter: true,
+        champion: true,
+        evocation: true
+      }
+    );
+
+    record(
+      "Phase 16: level-by-level multiclass order is displayed",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "Level-by-Level Multiclass Order"
+            ),
+        first:
+          phase16MainHtml
+            .includes(
+              "Character 1"
+            ),
+        seventh:
+          phase16MainHtml
+            .includes(
+              "Character 7"
+            ),
+        warlockTwo:
+          phase16MainHtml
+            .includes(
+              "Warlock 2 — The Fiend"
+            )
+      },
+      {
+        heading: true,
+        first: true,
+        seventh: true,
+        warlockTwo: true
+      }
+    );
+
+    record(
+      "Phase 16: ability scores and modifiers are displayed",
+      {
+        strength:
+          phase16MainHtml
+            .includes(">STR</span>"),
+        strengthScore:
+          phase16MainHtml
+            .includes("<small>16</small>"),
+        intelligence:
+          phase16MainHtml
+            .includes("<small>18</small>"),
+        modifier:
+          phase16MainHtml
+            .includes("<strong>+4</strong>")
+      },
+      {
+        strength: true,
+        strengthScore: true,
+        intelligence: true,
+        modifier: true
+      }
+    );
+
+    record(
+      "Phase 16: saving throws are displayed",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "<h2>Saving Throws</h2>"
+            ),
+        strength:
+          phase16MainHtml
+            .includes(
+              "aria-label=\"Proficient\""
+            ),
+        constitution:
+          phase16MainHtml
+            .includes("Constitution")
+      },
+      {
+        heading: true,
+        strength: true,
+        constitution: true
+      }
+    );
+
+    record(
+      "Phase 16: skills, expertise, and passive scores are displayed",
+      {
+        expertise:
+          phase16MainHtml
+            .includes(
+              "aria-label=\"Expertise\""
+            ),
+        perception:
+          phase16MainHtml
+            .includes(
+              "Passive Perception"
+            ),
+        investigation:
+          phase16MainHtml
+            .includes(
+              "Passive Investigation"
+            ),
+        insight:
+          phase16MainHtml
+            .includes(
+              "Passive Insight"
+            )
+      },
+      {
+        expertise: true,
+        perception: true,
+        investigation: true,
+        insight: true
+      }
+    );
+
+    record(
+      "Phase 16: Armor Class options and the selected option are displayed",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "Armor Class Options"
+            ),
+        selected:
+          phase16MainHtml
+            .includes(
+              "Heavy Armor: Plate"
+            ) &&
+          phase16MainHtml
+            .includes(
+              "Plate 18 + Defense fighting style 1"
+            ),
+        alternate:
+          phase16MainHtml
+            .includes("Unarmored")
+      },
+      {
+        heading: true,
+        selected: true,
+        alternate: true
+      }
+    );
+
+    record(
+      "Phase 16: HP and Hit Dice are displayed by class",
+      {
+        hp:
+          phase16MainHtml
+            .includes("31 / 52"),
+        fighter:
+          phase16MainHtml
+            .includes(
+              "1 / 3 d10"
+            ),
+        wizard:
+          phase16MainHtml
+            .includes(
+              "1 / 2 d6"
+            ),
+        warlock:
+          phase16MainHtml
+            .includes(
+              "1 / 2 d8"
+            )
+      },
+      {
+        hp: true,
+        fighter: true,
+        wizard: true,
+        warlock: true
+      }
+    );
+
+    record(
+      "Phase 16: attacks and Extra Attack count are displayed",
+      {
+        attacksPerAction:
+          phase16MainHtml
+            .includes(
+              "Attacks / Action"
+            ) &&
+          phase16MainHtml
+            .includes("<strong>2</strong>"),
+        attack:
+          phase16MainHtml
+            .includes("Longsword"),
+        bonus:
+          phase16MainHtml
+            .includes("+7"),
+        damage:
+          phase16MainHtml
+            .includes(
+              "1d8 + 4 slashing"
+            )
+      },
+      {
+        attacksPerAction: true,
+        attack: true,
+        bonus: true,
+        damage: true
+      }
+    );
+
+    record(
+      "Phase 16: class resources are displayed",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "<h2>Class Resources</h2>"
+            ),
+        actionSurge:
+          phase16MainHtml
+            .includes("Action Surge"),
+        recharge:
+          phase16MainHtml
+            .includes(
+              "Recharges after short or long rest"
+            )
+      },
+      {
+        heading: true,
+        actionSurge: true,
+        recharge: true
+      }
+    );
+
+    record(
+      "Phase 16: feat resources are displayed",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "<h2>Feat Resources</h2>"
+            ),
+        points:
+          phase16MainHtml
+            .includes("Luck Points"),
+        usage:
+          phase16MainHtml
+            .includes("1 / 3")
+      },
+      {
+        heading: true,
+        points: true,
+        usage: true
+      }
+    );
+
+    record(
+      "Phase 16: class features include full descriptions",
+      phase16MainHtml
+        .includes(
+          "On your turn, you can take one additional action on top of your regular action and a possible bonus action."
+        ),
+      true
+    );
+
+    record(
+      "Phase 16: subclass features include full descriptions",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "<h2>Subclass Features</h2>"
+            ),
+        feature:
+          phase16MainHtml
+            .includes(
+              "Improved Critical"
+            ),
+        description:
+          phase16MainHtml
+            .includes(
+              "Your weapon attacks score a critical hit on a roll of 19 or 20."
+            )
+      },
+      {
+        heading: true,
+        feature: true,
+        description: true
+      }
+    );
+
+    record(
+      "Phase 16: feats include descriptions and choices",
+      {
+        description:
+          phase16MainHtml
+            .includes(
+              "You have inexplicable luck that can change attack rolls, ability checks, and saving throws."
+            ),
+        choices:
+          phase16MainHtml
+            .includes(
+              "Choices:"
+            ) &&
+          phase16MainHtml
+            .includes(
+              "Example Choice: Fortune"
+            )
+      },
+      {
+        description: true,
+        choices: true
+      }
+    );
+
+    record(
+      "Phase 16: spellcasting is displayed separately by class",
+      {
+        wizard:
+          phase16SpellHtml
+            .includes(
+              "Wizard — School of Evocation"
+            ),
+        warlock:
+          phase16SpellHtml
+            .includes(
+              "Warlock — The Fiend"
+            ),
+        wizardAbility:
+          phase16SpellHtml
+            .includes(
+              "Int"
+            ),
+        warlockAbility:
+          phase16SpellHtml
+            .includes(
+              "Cha"
+            )
+      },
+      {
+        wizard: true,
+        warlock: true,
+        wizardAbility: true,
+        warlockAbility: true
+      }
+    );
+
+    record(
+      "Phase 16: combined multiclass spell slots are displayed",
+      {
+        heading:
+          phase16SpellHtml
+            .includes(
+              "<h2>Spell Slots</h2>"
+            ),
+        levelOne:
+          phase16SpellHtml
+            .includes(
+              "data-normal-spell-slot=\"1\""
+            ) &&
+          phase16SpellHtml
+            .includes("3 / 4"),
+        levelTwo:
+          phase16SpellHtml
+            .includes("1 / 3"),
+        levelThree:
+          phase16SpellHtml
+            .includes("2 / 2")
+      },
+      {
+        heading: true,
+        levelOne: true,
+        levelTwo: true,
+        levelThree: true
+      }
+    );
+
+    record(
+      "Phase 16: Pact Magic is displayed separately",
+      {
+        heading:
+          phase16SpellHtml
+            .includes(
+              "<h2>Pact Magic</h2>"
+            ),
+        source:
+          phase16SpellHtml
+            .includes(
+              "data-pact-source=\"phase16-warlock\""
+            ),
+        slots:
+          phase16SpellHtml
+            .includes(
+              "1 / 2 level 1"
+            )
+      },
+      {
+        heading: true,
+        source: true,
+        slots: true
+      }
+    );
+
+    record(
+      "Phase 16: inventory and equipment are displayed",
+      {
+        plate:
+          phase16MainHtml
+            .includes("Plate"),
+        equipped:
+          phase16MainHtml
+            .includes("Equipped"),
+        spellbook:
+          phase16MainHtml
+            .includes("Spellbook"),
+        currency:
+          phase16MainHtml
+            .includes(
+              "<strong>35</strong>"
+            )
+      },
+      {
+        plate: true,
+        equipped: true,
+        spellbook: true,
+        currency: true
+      }
+    );
+
+    record(
+      "Phase 16: resistances, senses, speed, languages, and proficiencies are displayed",
+      {
+        resistances:
+          phase16MainHtml
+            .includes("fire, cold"),
+        senses:
+          phase16MainHtml
+            .includes(
+              "Darkvision 60 ft."
+            ) &&
+          phase16MainHtml
+            .includes(
+              "Darkvision 120 ft."
+            ),
+        speed:
+          phase16MainHtml
+            .includes(
+              "walk 30 ft."
+            ),
+        languages:
+          phase16MainHtml
+            .includes(
+              "Common, Infernal, Draconic"
+            ),
+        proficiencies:
+          phase16MainHtml
+            .includes(
+              "Martial weapons"
+            )
+      },
+      {
+        resistances: true,
+        senses: true,
+        speed: true,
+        languages: true,
+        proficiencies: true
+      }
+    );
+
+    record(
+      "Phase 16: manual and situational effects are displayed",
+      {
+        heading:
+          phase16MainHtml
+            .includes(
+              "Manual &amp; Situational Effects"
+            ),
+        handling:
+          phase16MainHtml
+            .includes(
+              "Manual · Reaction"
+            ),
+        instructions:
+          phase16MainHtml
+            .includes(
+              "Use: Use this reminder when an eligible d20 roll is made."
+            )
+      },
+      {
+        heading: true,
+        handling: true,
+        instructions: true
+      }
+    );
+
+    const phase16RestDraft =
+      cloneData(
+        phase16Character
+      );
+    creatorState.draft =
+      phase16RestDraft;
+    creatorState.dirty = false;
+    performSection16Rest(
+      "shortRest"
+    );
+    const phase16ShortRestState = {
+      shortResource:
+        creatorState.draft
+          .classMechanics
+          .resources[0]
+          .currentUses,
+      longResource:
+        creatorState.draft
+          .classMechanics
+          .resources[1]
+          .currentUses,
+      normalSlot:
+        creatorState.draft
+          .magic
+          .slotUsage
+          .normal[1],
+      pactSlot:
+        creatorState.draft
+          .magic
+          .slotUsage
+          .pactSources[
+            "phase16-warlock"
+          ]
+    };
+    performSection16Rest(
+      "longRest"
+    );
+
+    record(
+      "Phase 16: rest controls restore the correct resources",
+      {
+        short:
+          phase16ShortRestState,
+        long: {
+          longResource:
+            creatorState.draft
+              .classMechanics
+              .resources[1]
+              .currentUses,
+          featResource:
+            creatorState.draft
+              .featMechanics
+              .resources[0]
+              .currentUses,
+          normalSlot:
+            creatorState.draft
+              .magic
+              .slotUsage
+              .normal[1],
+          hp:
+            creatorState.draft
+              .combat.currentHp,
+          temporaryHp:
+            creatorState.draft
+              .combat.temporaryHp,
+          hitDice:
+            creatorState.draft
+              .combat
+              .hitDiceUsage
+        }
+      },
+      {
+        short: {
+          shortResource: 1,
+          longResource: 0,
+          normalSlot: 1,
+          pactSlot: 0
+        },
+        long: {
+          longResource: 1,
+          featResource: 3,
+          normalSlot: 0,
+          hp: 52,
+          temporaryHp: 0,
+          hitDice: {
+            "phase16-fighter": 0,
+            "phase16-wizard": 0,
+            "phase16-warlock": 1
+          }
+        }
+      }
+    );
+
+    const phase16ActionLog = [];
+    const phase16Root =
+      typeof document !==
+        "undefined"
+        ? document
+            .createElement("div")
+        : null;
+
+    if (phase16Root) {
+      document.body
+        .appendChild(
+          phase16Root
+        );
+    }
+
+    const phase16InteractiveSheet =
+      createCharacterSheetView({
+        root:
+          phase16Root,
+        getCharacter: () => {
+          return phase16Character;
+        },
+        getSheetContext: () => {
+          return {
+            characterId:
+              "phase16-character",
+            dirty: false
+          };
+        },
+        onAdjustClassResource:
+          (resourceId, delta) => {
+            phase16ActionLog.push(
+              [
+                "class",
+                resourceId,
+                delta
+              ]
+            );
+            return true;
+          },
+        onAdjustFeatResource:
+          (resourceId, delta) => {
+            phase16ActionLog.push(
+              [
+                "feat",
+                resourceId,
+                delta
+              ]
+            );
+            return true;
+          },
+        onAdjustHitDie:
+          (resourceId, delta) => {
+            phase16ActionLog.push(
+              [
+                "hit-die",
+                resourceId,
+                delta
+              ]
+            );
+            return true;
+          },
+        onAdjustSpellSlot:
+          (
+            kind,
+            level,
+            delta,
+            sourceId
+          ) => {
+            phase16ActionLog.push(
+              [
+                "spell-slot",
+                kind,
+                level,
+                delta,
+                sourceId
+              ]
+            );
+            return true;
+          },
+        onRest:
+          (restType) => {
+            phase16ActionLog.push(
+              [
+                "rest",
+                restType
+              ]
+            );
+            return true;
+          },
+        onExportJson:
+          (character) => {
+            phase16ActionLog.push(
+              [
+                "export",
+                character.id
+              ]
+            );
+            return true;
+          },
+        onPrint:
+          (character) => {
+            phase16ActionLog.push(
+              [
+                "print",
+                character.id
+              ]
+            );
+            return true;
+          },
+        onSyncLinkedToken:
+          (character) => {
+            phase16ActionLog.push(
+              [
+                "sync",
+                character.id
+              ]
+            );
+            return true;
+          }
+      });
+    phase16InteractiveSheet
+      .open(
+        phase16Character
+      );
+    const clickPhase16SheetAction =
+      (
+        action,
+        selector = ""
+      ) => {
+        const button =
+          phase16Root
+            ?.querySelector(
+              `[data-character-sheet-action="${action}"]${selector}`
+            );
+
+        button?.click();
+        return Boolean(button);
+      };
+    const phase16ControlPresence = {
+      shortRest:
+        clickPhase16SheetAction(
+          "short-rest"
+        ),
+      longRest:
+        clickPhase16SheetAction(
+          "long-rest"
+        ),
+      classResource:
+        clickPhase16SheetAction(
+          "adjust-class-resource",
+          "[data-resource-id=\"phase16-action-surge\"][data-delta=\"1\"]"
+        ),
+      featResource:
+        clickPhase16SheetAction(
+          "adjust-feat-resource",
+          "[data-resource-id=\"phase16-lucky\"][data-delta=\"-1\"]"
+        ),
+      hitDie:
+        clickPhase16SheetAction(
+          "adjust-hit-die",
+          "[data-hit-die-id=\"phase16-fighter\"][data-delta=\"1\"]"
+        ),
+      spellSlot:
+        clickPhase16SheetAction(
+          "adjust-spell-slot",
+          "[data-slot-kind=\"normal\"][data-slot-level=\"1\"][data-delta=\"1\"]"
+        ),
+      exportJson:
+        clickPhase16SheetAction(
+          "export-json"
+        ),
+      print:
+        clickPhase16SheetAction(
+          "print"
+        ),
+      tokenSync:
+        clickPhase16SheetAction(
+          "sync-linked-token"
+        )
+    };
+
+    record(
+      "Phase 16: rest controls are wired to the character state",
+      {
+        controls: {
+          shortRest:
+            phase16ControlPresence
+              .shortRest,
+          longRest:
+            phase16ControlPresence
+              .longRest
+        },
+        actions:
+          phase16ActionLog
+            .filter((entry) => {
+              return entry[0] ===
+                "rest";
+            })
+      },
+      {
+        controls: {
+          shortRest: true,
+          longRest: true
+        },
+        actions: [
+          [
+            "rest",
+            "shortRest"
+          ],
+          [
+            "rest",
+            "longRest"
+          ]
+        ]
+      }
+    );
+
+    record(
+      "Phase 16: resource spending and restoration controls are wired",
+      {
+        controls: {
+          classResource:
+            phase16ControlPresence
+              .classResource,
+          featResource:
+            phase16ControlPresence
+              .featResource,
+          hitDie:
+            phase16ControlPresence
+              .hitDie,
+          spellSlot:
+            phase16ControlPresence
+              .spellSlot
+        },
+        actions:
+          phase16ActionLog
+            .filter((entry) => {
+              return [
+                "class",
+                "feat",
+                "hit-die",
+                "spell-slot"
+              ].includes(
+                entry[0]
+              );
+            })
+      },
+      {
+        controls: {
+          classResource: true,
+          featResource: true,
+          hitDie: true,
+          spellSlot: true
+        },
+        actions: [
+          [
+            "class",
+            "phase16-action-surge",
+            1
+          ],
+          [
+            "feat",
+            "phase16-lucky",
+            -1
+          ],
+          [
+            "hit-die",
+            "phase16-fighter",
+            1
+          ],
+          [
+            "spell-slot",
+            "normal",
+            1,
+            1,
+            ""
+          ]
+        ]
+      }
+    );
+
+    record(
+      "Phase 16: print-friendly styling and controls are present",
+      {
+        printControl:
+          phase16ControlPresence
+            .print,
+        printPanel:
+          phase16MainHtml
+            .includes(
+              "hg-sheet-print-only"
+            ),
+        printMedia:
+          Boolean(
+            typeof document !==
+              "undefined" &&
+            document
+              .getElementById(
+                "homebrewGodCharacterSheetStyles"
+              )
+              ?.textContent
+              ?.includes(
+                "@media print"
+              )
+          ),
+        callback:
+          phase16ActionLog
+            .some((entry) => {
+              return (
+                entry[0] ===
+                  "print" &&
+                entry[1] ===
+                  "phase16-character"
+              );
+            })
+      },
+      {
+        printControl: true,
+        printPanel: true,
+        printMedia: true,
+        callback: true
+      }
+    );
+
+    const phase16Json =
+      phase16InteractiveSheet
+        .getJson(
+          phase16Character
+        );
+    const phase16ParsedJson =
+      JSON.parse(
+        phase16Json
+      );
+
+    record(
+      "Phase 16: JSON export remains character-import compatible",
+      {
+        control:
+          phase16ControlPresence
+            .exportJson,
+        callback:
+          phase16ActionLog
+            .some((entry) => {
+              return (
+                entry[0] ===
+                  "export" &&
+                entry[1] ===
+                  "phase16-character"
+              );
+            }),
+        sheetType:
+          phase16ParsedJson
+            .sheetType,
+        id:
+          phase16ParsedJson.id,
+        classCount:
+          phase16ParsedJson
+            .classProgression
+            .classes.length
+      },
+      {
+        control: true,
+        callback: true,
+        sheetType: "character",
+        id: "phase16-character",
+        classCount: 3
+      }
+    );
+
+    record(
+      "Phase 16: linked-token synchronization is visible and wired",
+      {
+        status:
+          phase16MainHtml
+            .includes(
+              "data-linked-token-status=\"ready\""
+            ),
+        control:
+          phase16ControlPresence
+            .tokenSync,
+        callback:
+          phase16ActionLog
+            .some((entry) => {
+              return (
+                entry[0] ===
+                  "sync" &&
+                entry[1] ===
+                  "phase16-character"
+              );
+            })
+      },
+      {
+        status: true,
+        control: true,
+        callback: true
+      }
+    );
+
+    phase16InteractiveSheet
+      .close();
+    phase16Root?.remove();
+
     creatorState.draft = createEmptyCharacter();
     creatorState.draft.classProgression = {
       totalLevel: 2,
@@ -31596,6 +33198,452 @@ export function createCharacterCreator(options = {}) {
     );
     applyCompatibilityAliases(creatorState.draft);
     markDraftChanged();
+
+    return true;
+  }
+
+  function getSection16HitDieKey(
+    entry,
+    index = 0
+  ) {
+    return cleanString(
+      entry?.classEntryId ||
+      entry?.entryId ||
+      entry?.classId ||
+      entry?.className,
+      `hit-die-${index + 1}`
+    );
+  }
+
+  function adjustSection16HitDieUsage(
+    hitDieId,
+    delta
+  ) {
+    const hitDice =
+      calculateCharacterHitDice(
+        creatorState.draft
+      );
+    const key =
+      cleanString(hitDieId);
+    const index =
+      hitDice.findIndex(
+        (entry, entryIndex) => {
+          return (
+            getSection16HitDieKey(
+              entry,
+              entryIndex
+            ) === key
+          );
+        }
+      );
+    const hitDie =
+      hitDice[index];
+
+    if (!hitDie) {
+      return false;
+    }
+
+    creatorState.draft.combat
+      .hitDice = hitDice;
+    creatorState.draft.combat
+      .hitDiceUsage = {
+        ...(
+          creatorState.draft
+            .combat
+            .hitDiceUsage || {}
+        )
+      };
+
+    const used =
+      Math.min(
+        safeNumber(
+          hitDie.count,
+          0
+        ),
+        Math.max(
+          0,
+          safeNumber(
+            creatorState.draft
+              .combat
+              .hitDiceUsage[key],
+            0
+          )
+        )
+      );
+    const nextUsed =
+      Math.max(
+        0,
+        Math.min(
+          safeNumber(
+            hitDie.count,
+            0
+          ),
+          used +
+            Math.sign(
+              safeNumber(
+                delta,
+                0
+              )
+            )
+        )
+      );
+
+    if (nextUsed === used) {
+      return false;
+    }
+
+    creatorState.draft.combat
+      .hitDiceUsage[key] =
+        nextUsed;
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+    markDraftChanged();
+    return true;
+  }
+
+  function section16RechargeMatchesRest(
+    recharge,
+    restType
+  ) {
+    const normalized =
+      cleanString(recharge)
+        .toLowerCase()
+        .replace(/[^a-z]/g, "");
+    const longRest =
+      restType === "longRest";
+
+    if (
+      normalized ===
+      "shortorlongrest"
+    ) {
+      return true;
+    }
+
+    if (normalized === "shortrest") {
+      return true;
+    }
+
+    return (
+      longRest &&
+      normalized === "longrest"
+    );
+  }
+
+  function restoreSection16ResourceList(
+    resources,
+    restType
+  ) {
+    let changed = false;
+
+    (
+      Array.isArray(resources)
+        ? resources
+        : []
+    ).forEach((resource) => {
+      if (
+        resource.maximumUses === null ||
+        !section16RechargeMatchesRest(
+          resource.recharge,
+          restType
+        )
+      ) {
+        return;
+      }
+
+      const maximum =
+        Math.max(
+          0,
+          safeNumber(
+            resource.maximumUses,
+            0
+          )
+        );
+
+      if (
+        safeNumber(
+          resource.currentUses,
+          0
+        ) !== maximum
+      ) {
+        resource.currentUses =
+          maximum;
+        changed = true;
+      }
+    });
+
+    return changed;
+  }
+
+  function performSection16Rest(
+    restType
+  ) {
+    const type =
+      restType === "longRest"
+        ? "longRest"
+        : "shortRest";
+    const draft =
+      creatorState.draft;
+    let changed = false;
+
+    changed =
+      restoreSection16ResourceList(
+        draft.classMechanics
+          ?.resources,
+        type
+      ) || changed;
+    changed =
+      restoreSection16ResourceList(
+        draft.featMechanics
+          ?.resources,
+        type
+      ) || changed;
+
+    const featResourceUses =
+      new Map(
+        (
+          Array.isArray(
+            draft.featMechanics
+              ?.resources
+          )
+            ? draft.featMechanics
+                .resources
+            : []
+        ).map((resource) => {
+          return [
+            resource.id,
+            resource.currentUses
+          ];
+        })
+      );
+    const syncFeatSpellRecord =
+      (record) => {
+        if (
+          !record ||
+          !featResourceUses
+            .has(record.id)
+        ) {
+          return;
+        }
+
+        const restored =
+          featResourceUses
+            .get(record.id);
+
+        if (
+          record.currentUses !==
+          restored
+        ) {
+          record.currentUses =
+            restored;
+          changed = true;
+        }
+      };
+
+    (
+      Array.isArray(
+        draft.featMechanics
+          ?.spellcasting
+      )
+        ? draft.featMechanics
+            .spellcasting
+        : []
+    ).forEach(syncFeatSpellRecord);
+    Object.values(
+      draft.magic
+        ?.featSources || {}
+    ).forEach((source) => {
+      (
+        Array.isArray(
+          source?.spellRecords
+        )
+          ? source.spellRecords
+          : []
+      ).forEach(
+        syncFeatSpellRecord
+      );
+    });
+
+    const slotUsage =
+      getSection12SpellSlotUsageState(
+        draft
+      );
+
+    if (type === "longRest") {
+      Object.keys(
+        slotUsage.normal
+      ).forEach((level) => {
+        if (
+          safeNumber(
+            draft.magic
+              .slotUsage
+              .normal[level],
+            0
+          ) !== 0
+        ) {
+          draft.magic
+            .slotUsage
+            .normal[level] = 0;
+          changed = true;
+        }
+      });
+    }
+
+    slotUsage.pactSources
+      .forEach((source) => {
+        if (
+          safeNumber(
+            draft.magic
+              .slotUsage
+              .pactSources[
+                source.sourceId
+              ],
+            0
+          ) !== 0
+        ) {
+          draft.magic
+            .slotUsage
+            .pactSources[
+              source.sourceId
+            ] = 0;
+          changed = true;
+        }
+      });
+
+    if (
+      safeNumber(
+        draft.magic
+          .slotUsage.pact,
+        0
+      ) !== 0
+    ) {
+      draft.magic
+        .slotUsage.pact = 0;
+      changed = true;
+    }
+
+    if (type === "longRest") {
+      const maximumHp =
+        Math.max(
+          1,
+          safeNumber(
+            draft.combat.maxHp,
+            1
+          )
+        );
+
+      if (
+        safeNumber(
+          draft.combat.currentHp,
+          0
+        ) !== maximumHp
+      ) {
+        draft.combat.currentHp =
+          maximumHp;
+        changed = true;
+      }
+
+      if (
+        safeNumber(
+          draft.combat.temporaryHp,
+          0
+        ) !== 0
+      ) {
+        draft.combat.temporaryHp = 0;
+        changed = true;
+      }
+
+      const hitDice =
+        calculateCharacterHitDice(
+          draft
+        );
+      draft.combat.hitDice =
+        hitDice;
+      draft.combat.hitDiceUsage = {
+        ...(
+          draft.combat
+            .hitDiceUsage || {}
+        )
+      };
+      let recovery =
+        Math.max(
+          1,
+          Math.floor(
+            calculateClassProgressionTotalLevel(
+              draft
+            ) / 2
+          )
+        );
+
+      hitDice.forEach(
+        (entry, index) => {
+          if (recovery <= 0) {
+            return;
+          }
+
+          const key =
+            getSection16HitDieKey(
+              entry,
+              index
+            );
+          const used =
+            Math.min(
+              safeNumber(
+                entry.count,
+                0
+              ),
+              Math.max(
+                0,
+                safeNumber(
+                  draft.combat
+                    .hitDiceUsage[key],
+                  0
+                )
+              )
+            );
+          const restored =
+            Math.min(
+              used,
+              recovery
+            );
+
+          if (restored > 0) {
+            draft.combat
+              .hitDiceUsage[key] =
+                used - restored;
+            recovery -=
+              restored;
+            changed = true;
+          }
+        }
+      );
+    }
+
+    if (
+      draft.combat
+        .classFeatureStates
+        ?.rageActive === true
+    ) {
+      draft.combat
+        .classFeatureStates
+        .rageActive = false;
+      draft.classMechanics
+        .spellcastingBlocked =
+          false;
+      draft.classMechanics
+        .spellcastingBlockReasons =
+          [];
+      changed = true;
+    }
+
+    applyCompatibilityAliases(
+      draft
+    );
+
+    if (changed) {
+      markDraftChanged();
+    }
 
     return true;
   }
@@ -47481,6 +49529,25 @@ export function createCharacterCreator(options = {}) {
         id: instance.id,
         featId: feat.id,
         featName: feat.name,
+        featSummary:
+          cleanString(
+            feat.summary
+          ),
+        featDescription:
+          cleanString(
+            feat.description,
+            feat.summary
+          ),
+        sourceLabel:
+          cleanString(
+            feat.sourceLabel,
+            feat.source
+          ),
+        rulesEdition:
+          cleanString(
+            feat.rulesEdition,
+            ACTIVE_RULESET.edition
+          ),
         choices,
         effects: cloneData(feat.effects)
       });
@@ -72293,6 +74360,36 @@ export function createCharacterCreator(options = {}) {
 
         getCharacter: getCharacterSnapshot,
         setStatus,
+        getSheetContext: () => {
+          return {
+            characterId:
+              creatorState
+                .currentCharacterId,
+            dirty:
+              creatorState.dirty,
+            lastSavedAtMillis:
+              creatorState.draft
+                ?.builder
+                ?.lastSavedAtMillis
+          };
+        },
+        onAdjustClassResource:
+          adjustSelectedClassResource,
+        onAdjustFeatResource:
+          adjustSelectedFeatResource,
+        onAdjustHitDie:
+          adjustSection16HitDieUsage,
+        onAdjustSpellSlot:
+          adjustSection12SpellSlotUsage,
+        onRest:
+          performSection16Rest,
+        onExportJson: () => {
+          return exportSection18Json();
+        },
+        onSyncLinkedToken:
+          async () => {
+            return await handleSection18Save();
+          },
 
         onClose: () => {
           setStatus("Returned to the Character Creator.");
@@ -72800,13 +74897,20 @@ export function createCharacterCreator(options = {}) {
           .totalLevel
       );
 
-    const armorClass =
+    const armorClassSummary =
       calculateArmorClassOptions(
         character
-      ).selected;
+      );
+    const armorClass =
+      armorClassSummary.selected;
 
     character.combat.armorClass =
       armorClass.total;
+    character.combat
+      .armorClassOptions =
+        cloneData(
+          armorClassSummary
+        );
 
     const hpSummary =
       calculateCharacterHp(
@@ -72849,6 +74953,68 @@ export function createCharacterCreator(options = {}) {
     character.combat.hitDice =
       calculateCharacterHitDice(
         character
+      );
+    const activeHitDieKeys =
+      new Set(
+        character.combat.hitDice
+          .map((entry, index) => {
+            return cleanString(
+              entry.classEntryId ||
+              entry.classId ||
+              entry.className,
+              `hit-die-${index + 1}`
+            );
+          })
+      );
+    character.combat.hitDiceUsage =
+      Object.fromEntries(
+        Object.entries(
+          character.combat
+            .hitDiceUsage || {}
+        )
+          .filter(([key]) => {
+            return activeHitDieKeys
+              .has(key);
+          })
+          .map(([key, value]) => {
+            const matching =
+              character.combat
+                .hitDice
+                .find((entry, index) => {
+                  return (
+                    cleanString(
+                      entry.classEntryId ||
+                      entry.classId ||
+                      entry.className,
+                      `hit-die-${index + 1}`
+                    ) === key
+                  );
+                });
+
+            return [
+              key,
+              Math.min(
+                Math.max(
+                  0,
+                  Math.round(
+                    safeNumber(
+                      value,
+                      0
+                    )
+                  )
+                ),
+                Math.max(
+                  0,
+                  Math.round(
+                    safeNumber(
+                      matching?.count,
+                      0
+                    )
+                  )
+                )
+              )
+            ];
+          })
       );
 
     character.combat.initiative =
@@ -75279,6 +77445,10 @@ export function createCharacterCreator(options = {}) {
 
     getClassAsiLevels,
     getUnlockedFeatChoiceSlots,
+    takeRest:
+      performSection16Rest,
+    adjustHitDie:
+      adjustSection16HitDieUsage,
 
     save: handleSection18Save,
     saveCopy: handleSection18SaveCopy,
