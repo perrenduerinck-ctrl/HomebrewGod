@@ -67,7 +67,7 @@
     }
   </style>
 </head>
-<body>
+<body data-test-status="running">
   <h1>Monster Creator Self-Test</h1>
   <pre id="testResult" class="result" role="status">RUNNING</pre>
 
@@ -664,6 +664,7 @@
     };
 
     if (failures.length) {
+      document.body.dataset.testStatus = "fail";
       result.classList.add("fail");
       result.textContent =
         "FAIL — " +
@@ -673,6 +674,7 @@
         " assertions failed\n\n" +
         failures.join("\n\n");
     } else {
+      document.body.dataset.testStatus = "pass";
       result.classList.add("pass");
       result.textContent =
         "PASS — " +
