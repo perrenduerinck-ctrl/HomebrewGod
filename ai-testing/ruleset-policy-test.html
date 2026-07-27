@@ -12,22 +12,25 @@
   <script type="importmap">
     {
       "imports": {
-        "../defaultClasses.js": "../defaultClasses.js?v=phase12-20260726",
-        "../defaultClassFeatureCatalog.js": "../defaultClassFeatureCatalog.js?v=phase12-20260726",
-        "../defaultClassFeatureRules.js": "../defaultClassFeatureRules.js?v=phase12-20260726",
-        "../defaultSubclassCatalog.js": "../defaultSubclassCatalog.js?v=phase12-20260726",
-        "../defaultSubclassNames.js": "../defaultSubclassNames.js?v=phase12-20260726",
-        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase12-20260726",
-        "../defaultFeats.js": "../defaultFeats.js?v=phase12-20260726",
-        "../defaultSpells.js": "../defaultSpells.js?v=phase12-20260726",
-        "../ruleset2014.js": "../ruleset2014.js?v=phase12-20260726"
+        "../defaultClasses.js": "../defaultClasses.js?v=phase13-20260726",
+        "../defaultClassFeatureCatalog.js": "../defaultClassFeatureCatalog.js?v=phase13-20260726",
+        "../defaultClassFeatureRules.js": "../defaultClassFeatureRules.js?v=phase13-20260726",
+        "../defaultSubclassCatalog.js": "../defaultSubclassCatalog.js?v=phase13-20260726",
+        "../defaultSubclassNames.js": "../defaultSubclassNames.js?v=phase13-20260726",
+        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase13-20260726",
+        "../defaultFeats.js": "../defaultFeats.js?v=phase13-20260726",
+        "../defaultSpells.js": "../defaultSpells.js?v=phase13-20260726",
+        "../ruleset2014.js": "../ruleset2014.js?v=phase13-20260726"
       }
     }
   </script>
   <script type="module">
     import { DEFAULT_CLASSES } from "../defaultClasses.js";
     import { DEFAULT_SUBCLASSES } from "../defaultSubclasses.js";
-    import { DEFAULT_FEATS } from "../defaultFeats.js";
+    import {
+      DEFAULT_FEATS,
+      validateFeatPrerequisiteDefinitions
+    } from "../defaultFeats.js";
     import { DEFAULT_SPELLS } from "../defaultSpells.js";
     import {
       ACTIVE_RULESET,
@@ -59,6 +62,12 @@
     if (isActiveRulesetEntry({ rulesetId: "dnd5e-2024" })) {
       failures.push("2024 content was accepted by the 2014 rules mode");
     }
+
+    failures.push(
+      ...validateFeatPrerequisiteDefinitions(
+        DEFAULT_FEATS
+      )
+    );
 
     const result = {
       passed: failures.length === 0,

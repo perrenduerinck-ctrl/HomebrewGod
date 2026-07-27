@@ -23,7 +23,8 @@ import {
 import {
   DEFAULT_FEATS,
   DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM,
-  validateDefaultFeatCollection
+  validateDefaultFeatCollection,
+  validateFeatPrerequisiteDefinitions
 } from "./defaultFeats.js";
 import { DEFAULT_SPELLS } from "./defaultSpells.js";
 import {
@@ -6866,6 +6867,8 @@ export function createCharacterCreator(options = {}) {
 
     const seenFeatSlots =
       new Map();
+    const seenFeatChoiceValues =
+      new Map();
 
     const duplicateSlots = [];
 
@@ -6885,10 +6888,113 @@ export function createCharacterCreator(options = {}) {
           );
         });
 
+      if (!feat) {
+        return;
+      }
+
       if (
-        !feat ||
         feat.repeatable === true
       ) {
+        if (
+          feat.repeatByChoice !==
+            true
+        ) {
+          return;
+        }
+
+        const seenByChoice =
+          seenFeatChoiceValues.get(
+            feat.id
+          ) ||
+          new Map();
+        const selectedByChoice =
+          Object.entries(
+            normalizeFeatChoiceSelections(
+              slot.featChoices
+            )
+          ).map(
+            ([choiceId, values]) => {
+              return {
+                choiceId,
+                values:
+                  uniqueCleanArray(
+                    values
+                  )
+                    .map((value) => {
+                      return {
+                        id:
+                          makeSafeId(
+                            value,
+                            ""
+                          ),
+                        value
+                      };
+                    })
+                    .filter(
+                      (entry) => {
+                        return entry.id;
+                      }
+                    )
+              };
+            }
+          );
+        const duplicateChoiceValues =
+          selectedByChoice
+            .flatMap(
+              ({ choiceId, values }) => {
+                const seenValues =
+                  seenByChoice.get(
+                    choiceId
+                  ) ||
+                  new Set();
+
+                return values
+                  .filter((entry) => {
+                    return seenValues
+                      .has(entry.id);
+                  })
+                  .map((entry) => {
+                    return entry.value;
+                  });
+              }
+            );
+
+        if (
+          duplicateChoiceValues.length
+        ) {
+          duplicateSlots.push({
+            slot,
+            feat,
+            duplicateChoiceValues
+          });
+          return;
+        }
+
+        selectedByChoice.forEach(
+          ({ choiceId, values }) => {
+            const seenValues =
+              seenByChoice.get(
+                choiceId
+              ) ||
+              new Set();
+
+            values.forEach(
+              (entry) => {
+                seenValues.add(
+                  entry.id
+                );
+              }
+            );
+            seenByChoice.set(
+              choiceId,
+              seenValues
+            );
+          }
+        );
+        seenFeatChoiceValues.set(
+          feat.id,
+          seenByChoice
+        );
         return;
       }
 
@@ -6970,7 +7076,11 @@ export function createCharacterCreator(options = {}) {
       );
 
     duplicateSlots.forEach(
-      ({ slot, feat }) => {
+      ({
+        slot,
+        feat,
+        duplicateChoiceValues = []
+      }) => {
         const classEntry =
           classEntries[
             slot.classIndex
@@ -7032,7 +7142,9 @@ export function createCharacterCreator(options = {}) {
         ) {
           addMigrationWarning(
             character,
-            `Duplicate feat detected: ${feat.name}. Non-repeatable feats should only be selected once.`
+            duplicateChoiceValues.length
+              ? `Duplicate feat choice detected: ${feat.name} (${uniqueCleanArray(duplicateChoiceValues).join(", ")}). Repeatable instances require different choices.`
+              : `Duplicate feat detected: ${feat.name}. Non-repeatable feats should only be selected once.`
           );
         }
       }
@@ -17612,6 +17724,826 @@ export function createCharacterCreator(options = {}) {
           true
         );
       });
+
+    const getPhase13Feat = (
+      featId
+    ) => {
+      return DEFAULT_FEATS.find(
+        (feat) => {
+          return feat.id === featId;
+        }
+      );
+    };
+
+    const phase13AbilitySlot =
+      createPhase9FighterAsiSlot({
+        dex: 12
+      });
+    setSection12AsiMode(
+      phase13AbilitySlot.id,
+      "feat"
+    );
+    const phase13AbilityRejected =
+      !setSection12AsiFeat(
+        phase13AbilitySlot.id,
+        "defensive-duelist"
+      );
+    creatorState.draft
+      .abilities.base.dex = 13;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    const phase13AbilityAccepted =
+      setSection12AsiFeat(
+        phase13AbilitySlot.id,
+        "defensive-duelist"
+      );
+    creatorState.draft
+      .abilities.base.dex = 12;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+    const phase13LostAbilityWarning =
+      getSection17Warnings()
+        .some((warning) => {
+          return (
+            warning.includes(
+              "Defensive Duelist"
+            ) &&
+            warning.includes(
+              "no longer meets its prerequisites"
+            )
+          );
+        });
+
+    record(
+      "Phase 13: ability-score feat prerequisites are enforced and revalidated",
+      {
+        rejectedBelowMinimum:
+          phase13AbilityRejected,
+        acceptedAtMinimum:
+          phase13AbilityAccepted,
+        warnsAfterAbilityLoss:
+          phase13LostAbilityWarning
+      },
+      {
+        rejectedBelowMinimum: true,
+        acceptedAtMinimum: true,
+        warnsAfterAbilityLoss: true
+      }
+    );
+
+    const phase13ArmorCharacter =
+      createEmptyCharacter();
+    const phase13ArmorFeat =
+      getPhase13Feat(
+        "moderately-armored"
+      );
+    const phase13ArmorWithout =
+      getFeatPrerequisiteResult(
+        phase13ArmorFeat,
+        phase13ArmorCharacter
+      );
+    phase13ArmorCharacter
+      .proficiencies.armor = [
+        "Light Armor"
+      ];
+    const phase13ArmorWith =
+      getFeatPrerequisiteResult(
+        phase13ArmorFeat,
+        phase13ArmorCharacter
+      );
+
+    record(
+      "Phase 13: armor-proficiency feat prerequisites are enforced",
+      {
+        withoutProficiency:
+          phase13ArmorWithout.met,
+        withProficiency:
+          phase13ArmorWith.met
+      },
+      {
+        withoutProficiency: false,
+        withProficiency: true
+      }
+    );
+
+    const phase13WeaponCharacter =
+      createEmptyCharacter();
+    const phase13WeaponFeat =
+      getPhase13Feat(
+        "fighting-initiate"
+      );
+    const phase13WeaponWithout =
+      getFeatPrerequisiteResult(
+        phase13WeaponFeat,
+        phase13WeaponCharacter
+      );
+    phase13WeaponCharacter
+      .proficiencies.weapons = [
+        "Martial Weapons"
+      ];
+    const phase13WeaponWith =
+      getFeatPrerequisiteResult(
+        phase13WeaponFeat,
+        phase13WeaponCharacter
+      );
+
+    record(
+      "Phase 13: weapon-proficiency feat prerequisites are enforced",
+      {
+        withoutProficiency:
+          phase13WeaponWithout.met,
+        withProficiency:
+          phase13WeaponWith.met
+      },
+      {
+        withoutProficiency: false,
+        withProficiency: true
+      }
+    );
+
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "paladin"
+    );
+    const phase13SpellcastingFeat =
+      getPhase13Feat(
+        "war-caster"
+      );
+    const phase13PaladinOneResult =
+      getFeatPrerequisiteResult(
+        phase13SpellcastingFeat,
+        creatorState.draft
+      );
+    creatorState.draft
+      .magic.innateSpells = [
+        {
+          id:
+            "phase13-innate-cantrip",
+          spellId: "light"
+        }
+      ];
+    const phase13InnateSpellResult =
+      getFeatPrerequisiteResult(
+        phase13SpellcastingFeat,
+        creatorState.draft
+      );
+
+    record(
+      "Phase 13: spellcasting prerequisites require actual spell access",
+      {
+        levelOnePaladin:
+          phase13PaladinOneResult.met,
+        innateSpell:
+          phase13InnateSpellResult.met
+      },
+      {
+        levelOnePaladin: false,
+        innateSpell: true
+      }
+    );
+
+    const phase13SpeciesCharacter =
+      createEmptyCharacter();
+    phase13SpeciesCharacter.species = {
+      ...phase13SpeciesCharacter
+        .species,
+      id: "elf",
+      name: "Elf",
+      choices: {
+        ...(
+          phase13SpeciesCharacter
+            .species?.choices ||
+          {}
+        ),
+        subraceId: "high-elf"
+      }
+    };
+    const phase13SpeciesFeat =
+      getPhase13Feat(
+        "drow-high-magic"
+      );
+    const phase13WrongSubrace =
+      getFeatPrerequisiteResult(
+        phase13SpeciesFeat,
+        phase13SpeciesCharacter
+      );
+    phase13SpeciesCharacter
+      .species.choices.subraceId =
+        "drow";
+    const phase13DrowSubrace =
+      getFeatPrerequisiteResult(
+        phase13SpeciesFeat,
+        phase13SpeciesCharacter
+      );
+
+    record(
+      "Phase 13: species and subrace feat prerequisites are enforced together",
+      {
+        highElf:
+          phase13WrongSubrace.met,
+        drow:
+          phase13DrowSubrace.met
+      },
+      {
+        highElf: false,
+        drow: true
+      }
+    );
+
+    const phase13ClassBackgroundFeat =
+      getPhase13Feat(
+        "initiate-of-high-sorcery"
+      );
+    const phase13ClassBackgroundEmpty =
+      createEmptyCharacter();
+    const phase13ClassBackgroundFail =
+      getFeatPrerequisiteResult(
+        phase13ClassBackgroundFeat,
+        phase13ClassBackgroundEmpty
+      );
+    const phase13BackgroundCharacter =
+      createEmptyCharacter();
+    phase13BackgroundCharacter.background = {
+      ...phase13BackgroundCharacter
+        .background,
+      id: "mage-of-high-sorcery",
+      name: "Mage of High Sorcery"
+    };
+    const phase13BackgroundPass =
+      getFeatPrerequisiteResult(
+        phase13ClassBackgroundFeat,
+        phase13BackgroundCharacter
+      );
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "wizard"
+    );
+    const phase13ClassPass =
+      getFeatPrerequisiteResult(
+        phase13ClassBackgroundFeat,
+        creatorState.draft
+      );
+
+    record(
+      "Phase 13: class-or-background feat prerequisites accept either path",
+      {
+        neither:
+          phase13ClassBackgroundFail.met,
+        background:
+          phase13BackgroundPass.met,
+        class:
+          phase13ClassPass.met
+      },
+      {
+        neither: false,
+        background: true,
+        class: true
+      }
+    );
+
+    const phase13RequiredFeatCharacter =
+      createEmptyCharacter();
+    phase13RequiredFeatCharacter
+      .classProgression.totalLevel = 4;
+    phase13RequiredFeatCharacter
+      .level = 4;
+    const phase13RequiredFeat =
+      getPhase13Feat(
+        "baleful-scion"
+      );
+    const phase13RequiredFeatFail =
+      getFeatPrerequisiteResult(
+        phase13RequiredFeat,
+        phase13RequiredFeatCharacter
+      );
+    phase13RequiredFeatCharacter.feats = [
+      "scion-of-the-outer-planes"
+    ];
+    phase13RequiredFeatCharacter
+      .selectedFeats = [
+        "scion-of-the-outer-planes"
+      ];
+    const phase13RequiredFeatPass =
+      getFeatPrerequisiteResult(
+        phase13RequiredFeat,
+        phase13RequiredFeatCharacter
+      );
+
+    record(
+      "Phase 13: prerequisite-feat selections are enforced",
+      {
+        withoutRequiredFeat:
+          phase13RequiredFeatFail.met,
+        withRequiredFeat:
+          phase13RequiredFeatPass.met
+      },
+      {
+        withoutRequiredFeat: false,
+        withRequiredFeat: true
+      }
+    );
+
+    createPhase10FeatSelection(
+      "initiate-of-high-sorcery",
+      {
+        moon: ["Nuitari"]
+      }
+    );
+    const phase13BlackRobeResult =
+      getFeatPrerequisiteResult(
+        getPhase13Feat(
+          "adept-of-the-black-robes"
+        ),
+        creatorState.draft
+      );
+    const phase13RedRobeResult =
+      getFeatPrerequisiteResult(
+        getPhase13Feat(
+          "adept-of-the-red-robes"
+        ),
+        creatorState.draft
+      );
+
+    record(
+      "Phase 13: prerequisite-feat choice combinations match the required value",
+      {
+        NuitariBlackRobes:
+          phase13BlackRobeResult.met,
+        NuitariRedRobes:
+          phase13RedRobeResult.met
+      },
+      {
+        NuitariBlackRobes: true,
+        NuitariRedRobes: false
+      }
+    );
+
+    const phase13SettingResult =
+      getFeatPrerequisiteResult(
+        getPhase13Feat(
+          "aberrant-dragonmark"
+        ),
+        createEmptyCharacter()
+      );
+
+    record(
+      "Phase 13: setting prerequisites use the explicit advisory policy",
+      {
+        met:
+          phase13SettingResult.met,
+        policy:
+          phase13SettingResult
+            .settingPolicy,
+        settings:
+          phase13SettingResult
+            .settingRequirements,
+        advisory:
+          phase13SettingResult
+            .advisories
+            .some((message) => {
+              return message.includes(
+                "advisory; not enforced"
+              );
+            })
+      },
+      {
+        met: true,
+        policy: "advisory",
+        settings: ["Eberron"],
+        advisory: true
+      }
+    );
+
+    const phase13SettingDisplaySlot =
+      createPhase9FighterAsiSlot();
+    setSection12AsiMode(
+      phase13SettingDisplaySlot.id,
+      "feat"
+    );
+    const phase13SettingDisplayHtml =
+      renderSection12CompactAsiChoice(
+        phase13SettingDisplaySlot
+      );
+
+    record(
+      "Phase 13: setting requirements are displayed instead of silently accepted",
+      {
+        setting:
+          phase13SettingDisplayHtml
+            .includes(
+              "Setting:</b> Eberron"
+            ),
+        policy:
+          phase13SettingDisplayHtml
+            .includes(
+              "advisory; not enforced"
+            )
+      },
+      {
+        setting: true,
+        policy: true
+      }
+    );
+
+    const createPhase13WizardSlots =
+      () => {
+        creatorState.draft =
+          createEmptyCharacter();
+        chooseSection12Class(
+          "wizard"
+        );
+
+        for (
+          let levelIndex = 1;
+          levelIndex < 8;
+          levelIndex += 1
+        ) {
+          addCharacterLevelToClass(
+            0
+          );
+        }
+
+        return getUnlockedFeatChoiceSlots(
+          creatorState.draft
+        )
+          .filter((slot) => {
+            return (
+              slot.classId ===
+              "wizard"
+            );
+          })
+          .sort((a, b) => {
+            return (
+              a.classLevel -
+              b.classLevel
+            );
+          });
+      };
+
+    const phase13ElementalSlots =
+      createPhase13WizardSlots();
+    phase13ElementalSlots
+      .forEach((slot) => {
+        setSection12AsiMode(
+          slot.id,
+          "feat"
+        );
+      });
+    const phase13ElementalFirst =
+      setSection12AsiFeat(
+        phase13ElementalSlots[0].id,
+        "elemental-adept"
+      ) &&
+      setSection12FeatChoiceValues(
+        phase13ElementalSlots[0].id,
+        "damage-type",
+        ["Fire"]
+      );
+    const phase13ElementalSecond =
+      setSection12AsiFeat(
+        phase13ElementalSlots[1].id,
+        "elemental-adept"
+      ) &&
+      setSection12FeatChoiceValues(
+        phase13ElementalSlots[1].id,
+        "damage-type",
+        ["Cold"]
+      );
+
+    record(
+      "Phase 13: Elemental Adept repeats only with a different damage type",
+      {
+        ruleset:
+          ACTIVE_RULESET
+            .featRepeatability
+            .elementalAdept,
+        first:
+          phase13ElementalFirst,
+        second:
+          phase13ElementalSecond,
+        damageTypes:
+          uniqueCleanArray(
+            creatorState.draft
+              .featMechanics
+              .elementalAdepts
+              .map((entry) => {
+                return entry
+                  .damageType;
+              })
+          ).sort()
+      },
+      {
+        ruleset:
+          "repeat-by-damage-type",
+        first: true,
+        second: true,
+        damageTypes: [
+          "cold",
+          "fire"
+        ]
+      }
+    );
+
+    const phase13MagicInitiateSlots =
+      createPhase13WizardSlots();
+    phase13MagicInitiateSlots
+      .forEach((slot) => {
+        setSection12AsiMode(
+          slot.id,
+          "feat"
+        );
+      });
+    const phase13MagicInitiateFirst =
+      setSection12AsiFeat(
+        phase13MagicInitiateSlots[0].id,
+        "magic-initiate"
+      );
+    const phase13MagicInitiateSecond =
+      setSection12AsiFeat(
+        phase13MagicInitiateSlots[1].id,
+        "magic-initiate"
+      );
+
+    record(
+      "Phase 13: Magic Initiate repeatability follows the selected 2014 rules edition",
+      {
+        edition:
+          ACTIVE_RULESET.edition,
+        policy:
+          ACTIVE_RULESET
+            .featRepeatability
+            .magicInitiate,
+        repeatable:
+          getPhase13Feat(
+            "magic-initiate"
+          ).repeatable,
+        first:
+          phase13MagicInitiateFirst,
+        second:
+          phase13MagicInitiateSecond
+      },
+      {
+        edition: "2014",
+        policy:
+          "single-selection",
+        repeatable: false,
+        first: true,
+        second: false
+      }
+    );
+
+    const phase13AlertSlots =
+      createPhase13WizardSlots();
+    phase13AlertSlots
+      .forEach((slot) => {
+        setSection12AsiMode(
+          slot.id,
+          "feat"
+        );
+      });
+    const phase13AlertFirst =
+      setSection12AsiFeat(
+        phase13AlertSlots[0].id,
+        "alert"
+      );
+    const phase13AlertSecond =
+      setSection12AsiFeat(
+        phase13AlertSlots[1].id,
+        "alert"
+      );
+
+    record(
+      "Phase 13: non-repeatable feats cannot be selected twice",
+      {
+        first:
+          phase13AlertFirst,
+        second:
+          phase13AlertSecond
+      },
+      {
+        first: true,
+        second: false
+      }
+    );
+
+    const phase13ChoiceSlots =
+      createPhase13WizardSlots();
+    phase13ChoiceSlots
+      .forEach((slot) => {
+        setSection12AsiMode(
+          slot.id,
+          "feat"
+        );
+        setSection12AsiFeat(
+          slot.id,
+          "elemental-adept"
+        );
+      });
+    const phase13FirstFire =
+      setSection12FeatChoiceValues(
+        phase13ChoiceSlots[0].id,
+        "damage-type",
+        ["Fire"]
+      );
+    const phase13DuplicateFire =
+      setSection12FeatChoiceValues(
+        phase13ChoiceSlots[1].id,
+        "damage-type",
+        ["Fire"]
+      );
+    const phase13DistinctCold =
+      setSection12FeatChoiceValues(
+        phase13ChoiceSlots[1].id,
+        "damage-type",
+        ["Cold"]
+      );
+    const phase13SecondChoice =
+      getSection12AsiChoiceState(
+        phase13ChoiceSlots[1].id
+      );
+    const phase13DamageChoice =
+      getPhase13Feat(
+        "elemental-adept"
+      ).choices.find((choice) => {
+        return (
+          choice.id ===
+          "damage-type"
+        );
+      });
+    const phase13SecondOptions =
+      getSection12FeatChoiceOptions(
+        phase13DamageChoice,
+        phase13SecondChoice
+      ).map((option) => {
+        return option.value;
+      });
+
+    record(
+      "Phase 13: repeated feat choice values are rejected and hidden",
+      {
+        first:
+          phase13FirstFire,
+        duplicate:
+          phase13DuplicateFire,
+        distinct:
+          phase13DistinctCold,
+        fireAvailable:
+          phase13SecondOptions
+            .includes("Fire")
+      },
+      {
+        first: true,
+        duplicate: false,
+        distinct: true,
+        fireAvailable: false
+      }
+    );
+
+    const phase13DuplicateChoiceImport =
+      cloneData(
+        creatorState.draft
+      );
+    phase13DuplicateChoiceImport
+      .classProgression.classes
+      .forEach((classEntry) => {
+        classEntry.choices = {
+          ...(
+            classEntry.choices ||
+            {}
+          ),
+          classFeatures: {}
+        };
+      });
+    phase13DuplicateChoiceImport
+      .classChoices = {};
+    phase13DuplicateChoiceImport
+      .advancementChoices =
+        normalizeAdvancementChoices(
+          phase13DuplicateChoiceImport
+            .advancementChoices
+        ).map((choice) => {
+          if (
+            choice.featId !==
+            "elemental-adept"
+          ) {
+            return choice;
+          }
+
+          return {
+            ...choice,
+            mode: "feat",
+            featId:
+              "elemental-adept",
+            featName:
+              "Elemental Adept",
+            featChoices: {
+              "damage-type": [
+                "Fire"
+              ]
+            }
+          };
+        });
+    const phase13CleanedImport =
+      normalizeCharacter(
+        phase13DuplicateChoiceImport
+      );
+    const phase13CleanedElementalCount =
+      getSelectedDefaultFeatInstances(
+        phase13CleanedImport
+      ).filter((instance) => {
+        return (
+          instance.featId ===
+          "elemental-adept"
+        );
+      }).length;
+    const phase13CleanupWarning =
+      cleanArray(
+        phase13CleanedImport
+          .builder
+          .validation
+          .migrationWarnings
+      ).some((warning) => {
+        return (
+          warning.includes(
+            "Duplicate feat choice detected: Elemental Adept (Fire)"
+          ) &&
+          warning.includes(
+            "different choices"
+          )
+        );
+      });
+
+    record(
+      "Phase 13: migration cleans duplicate repeat-by-choice feat selections",
+      {
+        remaining:
+          phase13CleanedElementalCount,
+        warning:
+          phase13CleanupWarning
+      },
+      {
+        remaining: 1,
+        warning: true
+      }
+    );
+
+    const phase13CatalogErrors =
+      validateFeatPrerequisiteDefinitions(
+        DEFAULT_FEATS
+      );
+    const phase13UnsupportedFeat = {
+      id:
+        "phase13-unsupported-prerequisite",
+      name:
+        "Phase 13 Unsupported Prerequisite",
+      prerequisites: [
+        {
+          type:
+            "unsupportedPhase13"
+        }
+      ]
+    };
+    const phase13UnsupportedErrors =
+      validateFeatPrerequisiteDefinitions(
+        [
+          phase13UnsupportedFeat
+        ]
+      );
+    const phase13UnsupportedRuntime =
+      getFeatPrerequisiteResult(
+        phase13UnsupportedFeat,
+        createEmptyCharacter()
+      );
+
+    record(
+      "Phase 13: prerequisite validator rejects unsupported types",
+      {
+        catalogErrors:
+          phase13CatalogErrors.length,
+        fixtureErrors:
+          phase13UnsupportedErrors
+            .length,
+        runtimeAccepted:
+          phase13UnsupportedRuntime.met,
+        errorNamesType:
+          phase13UnsupportedErrors
+            .some((error) => {
+              return error.includes(
+                "unsupportedPhase13"
+              );
+            })
+      },
+      {
+        catalogErrors: 0,
+        fixtureErrors: 1,
+        runtimeAccepted: false,
+        errorNamesType: true
+      }
+    );
 
     creatorState.draft = createEmptyCharacter();
     creatorState.draft.classProgression = {
@@ -43158,6 +44090,11 @@ export function createCharacterCreator(options = {}) {
       [];
 
     return {
+      featureId:
+        cleanString(
+          slot?.id ||
+          featureId
+        ),
       mode: values.includes("mode:feat")
         ? "feat"
         : values.includes("mode:asi")
@@ -43234,24 +44171,114 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function filterRepeatedFeatChoiceOptions(
+    options,
+    choice,
+    state = {}
+  ) {
+    const feat = DEFAULT_FEATS.find(
+      (entry) => {
+        return entry.id ===
+          state.featId;
+      }
+    );
+
+    if (
+      !feat ||
+      feat.repeatable !== true ||
+      feat.repeatByChoice !== true
+    ) {
+      return options;
+    }
+
+    const currentSlot =
+      getSection12UnlockedAsiSlot(
+        state.featureId
+      );
+    const currentSlotIds =
+      new Set(
+        [
+          state.featureId,
+          currentSlot?.id,
+          currentSlot?.legacyId,
+          currentSlot?.featureId
+        ]
+          .map((value) => {
+            return cleanString(value);
+          })
+          .filter(Boolean)
+      );
+    const usedValues =
+      new Set(
+        getSelectedDefaultFeatInstances()
+          .filter((instance) => {
+            return (
+              instance.featId ===
+                feat.id &&
+              !currentSlotIds.has(
+                cleanString(
+                  instance.slotId
+                )
+              )
+            );
+          })
+          .flatMap((instance) => {
+            return uniqueCleanArray(
+              instance
+                .featChoices?.[
+                  choice?.id
+                ]
+            );
+          })
+          .map((value) => {
+            return makeSafeId(
+              value,
+              ""
+            );
+          })
+          .filter(Boolean)
+      );
+
+    return options.filter((option) => {
+      return !usedValues.has(
+        makeSafeId(
+          option?.value,
+          ""
+        )
+      );
+    });
+  }
+
   function getSection12FeatChoiceOptions(choice, state = {}) {
     const directOptions = uniqueCleanArray(choice?.options);
 
     if (directOptions.length) {
-      return directOptions.map((value) => ({ value, label: value }));
+      return filterRepeatedFeatChoiceOptions(
+        directOptions.map((value) => ({
+          value,
+          label: value
+        })),
+        choice,
+        state
+      );
     }
 
     const type = cleanString(choice?.type).toLowerCase();
 
     if (type === "ability" || type === "abilitypoints") {
-      return ABILITY_DEFINITIONS.map((ability) => ({
-        value: ability.name,
-        label: ability.name
-      }));
+      return filterRepeatedFeatChoiceOptions(
+        ABILITY_DEFINITIONS.map((ability) => ({
+          value: ability.name,
+          label: ability.name
+        })),
+        choice,
+        state
+      );
     }
 
     if (type === "skill") {
-      return SKILL_DEFINITIONS
+      return filterRepeatedFeatChoiceOptions(
+        SKILL_DEFINITIONS
         .filter((skill) => {
           if (choice?.proficientOnly !== true) {
             return true;
@@ -43259,11 +44286,26 @@ export function createCharacterCreator(options = {}) {
 
           return getSection14SkillEntry(skill).proficient === true;
         })
-        .map((skill) => ({ value: skill.id, label: skill.name }));
+        .map((skill) => ({
+          value: skill.id,
+          label: skill.name
+        })),
+        choice,
+        state
+      );
     }
 
     if (type === "language") {
-      return STANDARD_LANGUAGE_OPTIONS.map((value) => ({ value, label: value }));
+      return filterRepeatedFeatChoiceOptions(
+        STANDARD_LANGUAGE_OPTIONS.map(
+          (value) => ({
+            value,
+            label: value
+          })
+        ),
+        choice,
+        state
+      );
     }
 
     if (type === "tool") {
@@ -43271,15 +44313,31 @@ export function createCharacterCreator(options = {}) {
         ? ARTISAN_TOOL_OPTIONS
         : FEAT_TOOL_OPTIONS;
 
-      return options.map((value) => ({ value, label: value }));
+      return filterRepeatedFeatChoiceOptions(
+        options.map((value) => ({
+          value,
+          label: value
+        })),
+        choice,
+        state
+      );
     }
 
     if (type === "weapon") {
-      return FEAT_WEAPON_OPTIONS.map((value) => ({ value, label: value }));
+      return filterRepeatedFeatChoiceOptions(
+        FEAT_WEAPON_OPTIONS.map(
+          (value) => ({
+            value,
+            label: value
+          })
+        ),
+        choice,
+        state
+      );
     }
 
     if (type === "skillortool") {
-      return [
+      return filterRepeatedFeatChoiceOptions([
         ...SKILL_DEFINITIONS.map((skill) => ({
           value: `skill:${skill.id}`,
           label: `Skill: ${skill.name}`
@@ -43288,13 +44346,22 @@ export function createCharacterCreator(options = {}) {
           value: `tool:${tool}`,
           label: `Tool: ${tool}`
         }))
-      ];
+      ], choice, state);
     }
 
     if (type === "feature") {
-      return uniqueCleanArray(
-        FEAT_FEATURE_OPTIONS[choice?.source] || []
-      ).map((value) => ({ value, label: value }));
+      return filterRepeatedFeatChoiceOptions(
+        uniqueCleanArray(
+          FEAT_FEATURE_OPTIONS[
+            choice?.source
+          ] || []
+        ).map((value) => ({
+          value,
+          label: value
+        })),
+        choice,
+        state
+      );
     }
 
     if (type === "spell") {
@@ -43307,7 +44374,8 @@ export function createCharacterCreator(options = {}) {
       const schools = uniqueCleanArray(choice?.schools)
         .map((school) => school.toLowerCase());
 
-      return DEFAULT_SPELLS
+      return filterRepeatedFeatChoiceOptions(
+        DEFAULT_SPELLS
         .filter((spell) => {
           const spellLevel = safeNumber(spell?.level, 0);
           const spellClasses = uniqueCleanArray(spell?.classes)
@@ -43325,7 +44393,10 @@ export function createCharacterCreator(options = {}) {
           value: spell.id,
           label: `${spell.name} (${safeNumber(spell.level, 0) ? `Level ${spell.level}` : "Cantrip"})`
         }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+        .sort((a, b) => a.label.localeCompare(b.label)),
+        choice,
+        state
+      );
     }
 
     return [];
@@ -43420,12 +44491,27 @@ export function createCharacterCreator(options = {}) {
     const allowedValues = new Set(
       availableOptions.map((option) => option.value)
     );
-    const cleanValues = uniqueCleanArray(selectedValues)
+    const requestedValues =
+      uniqueCleanArray(
+        selectedValues
+      );
+    const cleanValues = requestedValues
       .filter((value) => !allowedValues.size || allowedValues.has(value))
       .slice(0, limit);
     const featChoices = {
       ...normalizeFeatChoiceSelections(state.featChoices)
     };
+
+    if (
+      requestedValues.length &&
+      cleanValues.length !==
+        Math.min(
+          requestedValues.length,
+          limit
+        )
+    ) {
+      return false;
+    }
 
     if (cleanValues.length) {
       featChoices[choiceId] = cleanValues;
@@ -43442,6 +44528,12 @@ export function createCharacterCreator(options = {}) {
     if (
       feat.repeatByChoice === true &&
       cleanValues.some((value) => {
+        const valueId =
+          makeSafeId(
+            value,
+            ""
+          );
+
         return getSelectedDefaultFeatInstances()
           .some((instance) => {
             return (
@@ -43450,7 +44542,22 @@ export function createCharacterCreator(options = {}) {
                 featureId,
                 getSection12UnlockedAsiSlot(featureId)?.id
               ].includes(instance.slotId) &&
-              uniqueCleanArray(instance.featChoices?.[choiceId]).includes(value)
+              uniqueCleanArray(
+                instance
+                  .featChoices?.[
+                    choiceId
+                  ]
+              ).some(
+                (selectedValue) => {
+                  return (
+                    makeSafeId(
+                      selectedValue,
+                      ""
+                    ) ===
+                    valueId
+                  );
+                }
+              )
             );
           });
       })
@@ -47029,6 +48136,8 @@ export function createCharacterCreator(options = {}) {
       ? feat.prerequisites
       : [];
     const reasons = [];
+    const advisories = [];
+    const settingRequirements = [];
     const currentSlot = getSection12UnlockedAsiSlot(
       options.featureId,
       character
@@ -47050,13 +48159,113 @@ export function createCharacterCreator(options = {}) {
         .map((value) => makeSafeId(value, ""));
     };
     const hasSpellcasting = () => {
-      return getCharacterSpellcastingInfo(character)
+      const classSpellcasting =
+        getCharacterSpellcastingInfo(
+          character
+        )
         .some((entry) => {
           return (
-            entry.progressionType !== "none" ||
-            safeNumber(entry.pactMagic?.slots, 0) > 0
+            safeNumber(
+              entry.cantripsKnown,
+              0
+            ) > 0 ||
+            safeNumber(
+              entry.spellsKnown,
+              0
+            ) > 0 ||
+            Object.values(
+              entry.spellSlots ||
+              {}
+            ).some((slots) => {
+              return safeNumber(
+                slots,
+                0
+              ) > 0;
+            }) ||
+            safeNumber(
+              entry.pactMagic?.slots,
+              0
+            ) > 0
           );
         });
+      const magic =
+        character?.magic || {};
+      const directSpellIds = [
+        ...uniqueCleanArray(
+          magic.knownSpellIds
+        ),
+        ...uniqueCleanArray(
+          magic.preparedSpellIds
+        ),
+        ...uniqueCleanArray(
+          magic.innateSpellIds
+        ),
+        ...uniqueCleanArray(
+          magic.customSpellIds
+        )
+      ];
+      const spellRecords = [
+        ...(
+          Array.isArray(
+            magic.innateSpells
+          )
+            ? magic.innateSpells
+            : []
+        ),
+        ...(
+          Array.isArray(
+            magic.customSpells
+          )
+            ? magic.customSpells
+            : []
+        ),
+        ...(
+          Array.isArray(
+            character
+              ?.featMechanics
+              ?.spellcasting
+          )
+            ? character
+                .featMechanics
+                .spellcasting
+            : []
+        )
+      ];
+      const sourceHasSpells = (
+        source
+      ) => {
+        return (
+          uniqueCleanArray(
+            source?.spellIds
+          ).length > 0 ||
+          (
+            Array.isArray(
+              source?.spellRecords
+            ) &&
+            source.spellRecords
+              .length > 0
+          )
+        );
+      };
+      const storedSources = [
+        ...Object.values(
+          magic.classSources ||
+          {}
+        ),
+        ...Object.values(
+          magic.featSources ||
+          {}
+        )
+      ];
+
+      return (
+        classSpellcasting ||
+        directSpellIds.length > 0 ||
+        spellRecords.length > 0 ||
+        storedSources.some(
+          sourceHasSpells
+        )
+      );
     };
 
     if (selectedElsewhere && feat?.repeatable !== true) {
@@ -47116,10 +48325,11 @@ export function createCharacterCreator(options = {}) {
           requirement.minimum ?? requirement.value,
           13
         );
-        const score = safeNumber(
-          character?.abilities?.scores?.[abilityId],
-          0
-        );
+        const score =
+          getAbilityScore(
+            character,
+            abilityId
+          );
 
         if (!abilityId || score < minimum) {
           reasons.push(
@@ -47137,7 +48347,12 @@ export function createCharacterCreator(options = {}) {
         const abilityIds = uniqueCleanArray(requirement.abilities)
           .map((ability) => cleanString(ability).toLowerCase());
         const met = abilityIds.some((abilityId) => {
-          return safeNumber(character?.abilities?.scores?.[abilityId], 0) >= minimum;
+          return (
+            getAbilityScore(
+              character,
+              abilityId
+            ) >= minimum
+          );
         });
 
         if (!met) {
@@ -47189,7 +48404,21 @@ export function createCharacterCreator(options = {}) {
         const allowedSpecies = uniqueCleanArray(requirement.speciesIds)
           .map((id) => makeSafeId(id, ""));
         const selectedSubraceId = makeSafeId(
-          character?.species?.choices?.subraceId,
+          character?.species
+            ?.choices
+            ?.subraceId ||
+          character?.species
+            ?.choices
+            ?.subraceSnapshot
+            ?.id ||
+          character?.species
+            ?.subraceId ||
+          character?.species
+            ?.subrace
+            ?.id ||
+          character?.species
+            ?.subrace
+            ?.name,
           ""
         );
         const allowedSubraces = uniqueCleanArray(requirement.subraceIds)
@@ -47276,13 +48505,29 @@ export function createCharacterCreator(options = {}) {
 
       if (type === "featChoice") {
         const requiredFeatId = makeSafeId(requirement.featId, "");
-        const requiredValues = uniqueCleanArray(requirement.values);
+        const requiredValues =
+          uniqueCleanArray(
+            requirement.values
+          ).map((value) => {
+            return makeSafeId(
+              value,
+              ""
+            );
+          });
         const met = selectedFeatInstances.some((instance) => {
           return (
             instance.featId === requiredFeatId &&
             uniqueCleanArray(
               instance.featChoices?.[requirement.choiceId]
-            ).some((value) => requiredValues.includes(value))
+            ).some((value) => {
+              return requiredValues
+                .includes(
+                  makeSafeId(
+                    value,
+                    ""
+                  )
+                );
+            })
           );
         });
 
@@ -47293,6 +48538,20 @@ export function createCharacterCreator(options = {}) {
       }
 
       if (type === "setting") {
+        const setting =
+          cleanString(
+            requirement.setting ||
+            requirement.name
+          );
+
+        if (setting) {
+          settingRequirements.push(
+            setting
+          );
+          advisories.push(
+            `Setting requirement: ${setting} (advisory; not enforced)`
+          );
+        }
         return;
       }
 
@@ -47303,7 +48562,19 @@ export function createCharacterCreator(options = {}) {
 
     return {
       met: reasons.length === 0,
-      reasons
+      reasons,
+      advisories:
+        uniqueCleanArray(
+          advisories
+        ),
+      settingRequirements:
+        uniqueCleanArray(
+          settingRequirements
+        ),
+      settingPolicy:
+        ACTIVE_RULESET
+          .featSettingPrerequisites ||
+        "advisory"
     };
   }
 
@@ -47315,14 +48586,19 @@ export function createCharacterCreator(options = {}) {
     );
 
     if (!result.met) {
-      return result.reasons.join("; ");
+      return [
+        ...result.reasons,
+        ...result.advisories
+      ].join("; ");
     }
 
     if (!Array.isArray(feat?.prerequisites) || !feat.prerequisites.length) {
       return "No prerequisite";
     }
 
-    return "Prerequisites met";
+    return result.advisories.length
+      ? result.advisories.join("; ")
+      : "Prerequisites met";
   }
 
   function setSection12AsiFeat(featureId, featId) {
@@ -47892,6 +49168,11 @@ export function createCharacterCreator(options = {}) {
                         ${escapeHtml(feat.description || "No description provided.")}
                         <br><b>Prerequisite:</b>
                         ${escapeHtml(getFeatPrerequisiteLabel(feat, { featureId: feature.id }))}
+                        ${prerequisite.settingRequirements.length
+                          ? `<br><b>Setting:</b> ${escapeHtml(
+                              `${prerequisite.settingRequirements.join(", ")} (advisory; not enforced)`
+                            )}`
+                          : ""}
                         ${feat.repeatable === true ? "<br><b>Repeatable:</b> Yes" : ""}
                       </p>
 
@@ -63987,6 +65268,11 @@ export function createCharacterCreator(options = {}) {
             <br>${escapeHtml(feat.description || "")}
             <br><b>Prerequisite:</b>
             ${escapeHtml(getFeatPrerequisiteLabel(feat))}
+            ${prerequisite.settingRequirements.length
+              ? `<br><b>Setting:</b> ${escapeHtml(
+                  `${prerequisite.settingRequirements.join(", ")} (advisory; not enforced)`
+                )}`
+              : ""}
             <br><br>
             ${renderRulesetMetadata(feat, "feat")}
           </p>
@@ -66202,6 +67488,26 @@ export function createCharacterCreator(options = {}) {
           );
         }
       });
+
+    getSelectedDefaultFeatInstances(
+      draft
+    ).forEach((instance) => {
+      const prerequisite =
+        getFeatPrerequisiteResult(
+          instance.feat,
+          draft,
+          {
+            featureId:
+              instance.slotId
+          }
+        );
+
+      if (!prerequisite.met) {
+        warnings.push(
+          `${instance.featName || instance.feat?.name || "A selected feat"} no longer meets its prerequisites: ${prerequisite.reasons.join("; ")}.`
+        );
+      }
+    });
 
     return [
       ...new Set(

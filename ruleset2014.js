@@ -11,6 +11,11 @@ export const ACTIVE_RULESET = Object.freeze({
   nonSrdLabel: "Legacy 5e supplement (non-SRD)",
   customLabel: "Custom / homebrew (2014 rules mode)",
   catalogPolicy: "srd-plus-labeled-legacy",
+  featSettingPrerequisites: "advisory",
+  featRepeatability: Object.freeze({
+    elementalAdept: "repeat-by-damage-type",
+    magicInitiate: "single-selection"
+  }),
   futureMode: "dnd5e-2024"
 });
 

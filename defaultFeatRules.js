@@ -817,8 +817,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     {
       effects: [{ type: "classChoice", id: "magic-initiate-class", options: ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"] }, { type: "spellChoice", cantrips: 2, levelOneSpells: 1 }],
       choices: [choice("spell-class", "Spellcasting class", "class", ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]), choice("cantrips", "Cantrips", "spell", [], { choose: 2, levels: [0], classChoiceId: "spell-class", atWill: true }), choice("level-one-spell", "1st-level spell", "spell", [], { levels: [1], classChoiceId: "spell-class", uses: 1, recharge: "longRest" })],
-      repeatable: true,
-      repeatByChoice: true,
+      repeatable: false,
+      repeatByChoice: false,
       tags: ["spellcasting"]
     }
   ),

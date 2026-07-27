@@ -11,6 +11,32 @@ const FEAT_ABILITY_EFFECT_TYPES = new Set([
   "abilityScoreImprovement"
 ]);
 
+export const SUPPORTED_FEAT_PREREQUISITE_TYPES = Object.freeze([
+  "ability",
+  "abilityAnyMinimum",
+  "abilityMinimum",
+  "armorProficiency",
+  "class",
+  "classOrBackground",
+  "feat",
+  "featChoice",
+  "level",
+  "minimumLevel",
+  "setting",
+  "species",
+  "speciesSize",
+  "speciesSizeOrSpecies",
+  "spellcasting",
+  "spellcastingOrPactMagic",
+  "spellcastingOrRuneCarver",
+  "weaponProficiency"
+]);
+
+const SUPPORTED_FEAT_PREREQUISITE_TYPE_SET =
+  new Set(
+    SUPPORTED_FEAT_PREREQUISITE_TYPES
+  );
+
 const RAW_DEFAULT_FEATS = [
   {
     id: "tough",
@@ -357,6 +383,45 @@ const normalizeFeatRecord = (rawFeat) => {
   });
 };
 
+export function validateFeatPrerequisiteDefinitions(feats) {
+  const entries = Array.isArray(feats)
+    ? feats
+    : [];
+  const errors = [];
+
+  entries.forEach((feat, featIndex) => {
+    const featId = normalizeFeatId(
+      feat?.id ||
+      feat?.name ||
+      `feat-${featIndex + 1}`
+    );
+
+    (
+      Array.isArray(feat?.prerequisites)
+        ? feat.prerequisites
+        : []
+    ).forEach((requirement, requirementIndex) => {
+      const type =
+        String(
+          requirement?.type ||
+          ""
+        ).trim();
+
+      if (
+        !type ||
+        !SUPPORTED_FEAT_PREREQUISITE_TYPE_SET
+          .has(type)
+      ) {
+        errors.push(
+          `Feat ${featId || featIndex + 1} prerequisite ${requirementIndex + 1} uses unsupported type: ${type || "(missing)"}.`
+        );
+      }
+    });
+  });
+
+  return errors;
+}
+
 export function validateDefaultFeatCollection(feats) {
   const entries = Array.isArray(feats) ? feats : [];
   const errors = [];
@@ -514,6 +579,12 @@ export function validateDefaultFeatCollection(feats) {
       errors.push(`Feat ${id || index + 1} still contains placeholder text.`);
     }
   });
+
+  errors.push(
+    ...validateFeatPrerequisiteDefinitions(
+      entries
+    )
+  );
 
   const expectedIds = new Set(FEAT_NAME_LIST.map(normalizeFeatId));
 
