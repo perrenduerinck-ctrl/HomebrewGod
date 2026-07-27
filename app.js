@@ -4477,6 +4477,112 @@ window.addEventListener("pagehide", function () {
 });
 
 // =====================================================
+// APP SECTION 13F — RELEASE-READINESS TEST API
+// Available only in the explicit smoke-test build.
+// =====================================================
+
+if (window.__HOMEBREW_GOD_SMOKE__) {
+  const releaseTestScreens =
+    Object.freeze([
+      "auth",
+      "lobby",
+      "room",
+      "battle",
+      "monsterCreator",
+      "characterCreator"
+    ]);
+  const releaseScreenElements = {
+    auth:
+      E.authScreen,
+    lobby:
+      E.lobbyScreen,
+    room:
+      E.roomDashboardScreen,
+    battle:
+      E.battleMapScreen,
+    monsterCreator:
+      E.monsterCreatorScreen,
+    characterCreator:
+      E.characterCreatorScreen
+  };
+
+  window.__HOMEBREW_GOD_RELEASE_TEST__ =
+    Object.freeze({
+      openScreen:
+        function (screenName) {
+          if (
+            !releaseTestScreens.includes(
+              screenName
+            )
+          ) {
+            throw new Error(
+              `Unknown release-test screen: ${screenName}`
+            );
+          }
+
+          showAnyMainScreen(
+            screenName
+          );
+
+          if (
+            screenName ===
+            "characterCreator"
+          ) {
+            initCharacterCreatorSystem();
+          }
+
+          if (
+            screenName ===
+            "monsterCreator"
+          ) {
+            initMonsterCreatorSystem();
+          }
+
+          return {
+            screenName,
+            visible:
+              !releaseScreenElements[
+                screenName
+              ]?.classList.contains(
+                "hidden"
+              ),
+            tokenSystemReady:
+              Boolean(tokenSystem),
+            characterCreatorReady:
+              Boolean(
+                characterCreatorSystem
+              ),
+            monsterCreatorReady:
+              Boolean(
+                monsterCreatorSystem
+              )
+          };
+        },
+
+      getVisibleScreen:
+        function () {
+          return (
+            releaseTestScreens.find(
+              (screenName) => {
+                const screen =
+                  releaseScreenElements[
+                    screenName
+                  ];
+
+                return (
+                  screen &&
+                  !screen.classList
+                    .contains("hidden")
+                );
+              }
+            ) ||
+            ""
+          );
+        }
+    });
+}
+
+// =====================================================
 // APP SECTION 14 — STARTUP / AUTH WATCHER
 // Supports startup tabs:
 // ?room=ROOMCODE&view=battle

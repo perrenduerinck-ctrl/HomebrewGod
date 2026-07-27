@@ -36,67 +36,67 @@
       calculateRuleSkillModifier,
       calculateRuleSpellAttackBonus,
       calculateRuleSpellSaveDc
-    } from "../characterCreator/rulesMath.js?v=phase19-20260727";
+    } from "../characterCreator/rulesMath.js?v=phase20-20260727";
     import {
       buildLegacyMigrationReport,
       normalizeCharacterEnvelope
-    } from "../characterCreator/normalization.js?v=phase19-20260727";
+    } from "../characterCreator/normalization.js?v=phase20-20260727";
     import {
       buildClassLevelOrder,
       calculateClassProgressionLevel,
       getProgressionValueByLevel
-    } from "../characterCreator/classProgression.js?v=phase19-20260727";
+    } from "../characterCreator/classProgression.js?v=phase20-20260727";
     import {
       evaluateMulticlassPrerequisites,
       isMulticlassRequirementMet
-    } from "../characterCreator/multiclassing.js?v=phase19-20260727";
+    } from "../characterCreator/multiclassing.js?v=phase20-20260727";
     import {
       decodeFeatChoiceValue,
       encodeFeatChoiceValue,
       getFeatAbilityEffectMaximum,
       normalizeFeatChoiceSelections,
       parseFeatChoiceSelections
-    } from "../characterCreator/featMechanics.js?v=phase19-20260727";
+    } from "../characterCreator/featMechanics.js?v=phase20-20260727";
     import {
       getClassFeaturesThroughLevel,
       getClassResourceMaximum
-    } from "../characterCreator/classMechanics.js?v=phase19-20260727";
+    } from "../characterCreator/classMechanics.js?v=phase20-20260727";
     import {
       getSubclassFeaturesThroughLevel,
       mergeSubclassFeatureLevels
-    } from "../characterCreator/subclassMechanics.js?v=phase19-20260727";
+    } from "../characterCreator/subclassMechanics.js?v=phase20-20260727";
     import {
       calculateSrd2014MulticlassSpellcasting,
       getSrd2014PactMagic,
       getSrd2014SpellSlots,
       slotsArrayToObject
-    } from "../characterCreator/spellcasting.js?v=phase19-20260727";
+    } from "../characterCreator/spellcasting.js?v=phase20-20260727";
     import {
       countRequiredContentChoices,
       normalizeContentChoiceGroup,
       normalizeSpeciesBackgroundChoices
-    } from "../characterCreator/speciesBackgrounds.js?v=phase19-20260727";
+    } from "../characterCreator/speciesBackgrounds.js?v=phase20-20260727";
     import {
       calculateInventoryLineWeight,
       normalizeInventoryItemBase
-    } from "../characterCreator/inventoryEquipment.js?v=phase19-20260727";
+    } from "../characterCreator/inventoryEquipment.js?v=phase20-20260727";
     import {
       escapeHtml,
       renderTextList
-    } from "../characterCreator/rendering.js?v=phase19-20260727";
+    } from "../characterCreator/rendering.js?v=phase20-20260727";
     import {
       buildCharacterSheetPresentation,
       formatPresentationClass
-    } from "../characterCreator/sheetPresentation.js?v=phase19-20260727";
+    } from "../characterCreator/sheetPresentation.js?v=phase20-20260727";
     import {
       createCharacterPersistence
-    } from "../characterCreator/persistence.js?v=phase19-20260727";
+    } from "../characterCreator/persistence.js?v=phase20-20260727";
     import {
       createCharacterCatalogs
-    } from "../characterCreator/catalogs.js?v=phase19-20260727";
+    } from "../characterCreator/catalogs.js?v=phase20-20260727";
     import {
       runCharacterCreatorSelfTests
-    } from "../characterCreator/selfTests.js?v=phase19-20260727";
+    } from "../characterCreator/selfTests.js?v=phase20-20260727";
 
     const result = document.getElementById("result");
     const failures = [];
@@ -230,9 +230,9 @@
         "sheetPresentation"
       ];
       const [creatorSource, ...moduleSources] = await Promise.all([
-        fetch("../characterCreator.fixed.js?v=phase19-20260727").then((response) => response.text()),
+        fetch("../characterCreator.fixed.js?v=phase20-20260727").then((response) => response.text()),
         ...moduleNames.map((name) => {
-          return fetch(`../characterCreator/${name}.js?v=phase19-20260727`).then((response) => response.text());
+          return fetch(`../characterCreator/${name}.js?v=phase20-20260727`).then((response) => response.text());
         })
       ]);
       const creatorLineCount = creatorSource.split(/\r?\n/).length;

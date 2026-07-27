@@ -1,0 +1,25 @@
+{
+  "name": "homebrew-god",
+  "version": "20.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Release-readiness checks for the Homebrew God browser application.",
+  "scripts": {
+    "audit:phases": "node scripts/audit-phases.mjs",
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "check:imports": "node scripts/check-imports.mjs",
+    "validate:data": "node scripts/validate-data.mjs",
+    "test:unit": "node --test --test-isolation=none tests/domain.test.mjs tests/release-contracts.test.mjs",
+    "test:browser": "playwright test tests/browser.spec.mjs",
+    "test:deployed": "playwright test tests/deployed.spec.mjs",
+    "test": "npm run check:syntax && npm run check:imports && npm run validate:data && npm run audit:phases && npm run test:unit",
+    "test:ci": "npm test && npm run test:browser",
+    "build:pages": "node scripts/build-pages.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
