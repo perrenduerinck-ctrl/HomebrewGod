@@ -150,10 +150,10 @@
       createMonsterCreator,
       normalizeMonsterRecord,
       parseMonsterNamedEntries
-    } from "../monsterCreator.js?v=phase17-20260726";
+    } from "../monsterCreator.js?v=phase18-20260727";
     import {
       createTokenSystem
-    } from "../tokens.js?v=phase17-20260726";
+    } from "../tokens.js?v=phase18-20260727";
 
     const result = document.getElementById("testResult");
     const failures = [];
@@ -284,6 +284,23 @@
           id: parts[parts.length - 1]
         };
       },
+      getDoc: async function (reference) {
+        const record =
+          storedMonsters.find(function (entry) {
+            return entry.id === reference.id;
+          });
+
+        return {
+          exists: function () {
+            return Boolean(record);
+          },
+          data: function () {
+            return record
+              ? { ...record }
+              : {};
+          }
+        };
+      },
       addDoc: async function (reference, data) {
         assert(
           reference.parts.slice(-1)[0] === "monsters",
@@ -348,6 +365,11 @@
       },
       getCurrentIsDM: function () {
         return isDm;
+      },
+      getCurrentUserUid: function () {
+        return isDm
+          ? "dm-1"
+          : "player-1";
       },
       createMonsterLinkedToken: async function (monster) {
         tokenRequests.push(monster);
@@ -427,6 +449,18 @@
     await creator.saveMonster();
     assert(storedMonsters.length === 1, "Saving a selected monster updates instead of duplicating.");
     assert(storedMonsters[0].notes === "Updated guardian.", "Update persists current form fields.");
+
+    storedMonsters[0].updatedAtMillis += 1000;
+    setValue("monsterNotesInput", "Stale overwrite attempt.");
+    assert(
+      await creator.saveMonster() === null,
+      "A stale monster update is rejected."
+    );
+    assert(
+      storedMonsters[0].notes === "Updated guardian.",
+      "A rejected stale update does not overwrite the remote monster."
+    );
+    emitMonsterSnapshot();
 
     const copiedJson = await creator.copyMonsterJson();
     assert(copiedJson === clipboardText, "Copy writes the exact exported JSON.");
@@ -588,10 +622,10 @@
     assert(tokenDocuments.length === 1, "Denied token creation does not write a document.");
 
     const [appSource, indexSource] = await Promise.all([
-      fetch("../app.js?v=phase17-20260726").then(function (response) {
+      fetch("../app.js?v=phase18-20260727").then(function (response) {
         return response.text();
       }),
-      fetch("../index.html?v=phase17-20260726").then(function (response) {
+      fetch("../index.html?v=phase18-20260727").then(function (response) {
         return response.text();
       })
     ]);
@@ -617,8 +651,8 @@
       "The outdated stat-block placeholder text is gone."
     );
     assert(
-      indexSource.includes("phase17-20260726"),
-      "The application advertises the Phase 17 release."
+      indexSource.includes("phase18-20260727"),
+      "The application advertises the Phase 18 release."
     );
 
     creator.destroy();
@@ -643,7 +677,7 @@
       result.textContent =
         "PASS — " +
         assertionCount +
-        " Phase 17 Monster Creator assertions";
+        " Phase 18 Monster Creator regression assertions";
     }
   </script>
 </body>

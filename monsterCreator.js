@@ -1,3 +1,10 @@
+import {
+  assertMonsterMutationAccess,
+  assertNoStaleRevision,
+  friendlyServiceError,
+  getRecordRevisionMillis
+} from "./securityPersistence.js";
+
 const MONSTER_SIZES = [
   "Tiny",
   "Small",
@@ -269,6 +276,7 @@ export function normalizeMonsterRecord(rawMonster) {
     "roomCode",
     "ownerUid",
     "ownerName",
+    "updatedAtMillis",
     "createdAt",
     "updatedAt"
   ].forEach(function (field) {
@@ -604,6 +612,111 @@ export function createMonsterCreator(config) {
     );
   }
 
+  function getMutationIdentity() {
+    const roomData =
+      getRoomData();
+
+    return {
+      actorUid:
+        config.getCurrentUserUid
+          ? config.getCurrentUserUid()
+          : "",
+      roomDmUid:
+        roomData.dmUid || ""
+    };
+  }
+
+  function snapshotExists(snapshot) {
+    if (
+      snapshot &&
+      typeof snapshot.exists ===
+        "function"
+    ) {
+      return snapshot.exists();
+    }
+
+    return Boolean(
+      snapshot &&
+      snapshot.exists !== false
+    );
+  }
+
+  function snapshotData(snapshot) {
+    return snapshot &&
+      typeof snapshot.data ===
+        "function"
+      ? snapshot.data() || {}
+      : snapshot?.data || {};
+  }
+
+  async function getValidatedMonsterDocument(
+    monsterId,
+    actionLabel
+  ) {
+    if (
+      typeof config.getDoc !==
+        "function"
+    ) {
+      throw new Error(
+        "The Monster Creator is missing Firestore validation tools."
+      );
+    }
+
+    const roomCode =
+      getRoomCode();
+    const reference =
+      config.doc(
+        config.db,
+        "rooms",
+        roomCode,
+        "monsters",
+        monsterId
+      );
+    const snapshot =
+      await config.getDoc(
+        reference
+      );
+
+    if (!snapshotExists(snapshot)) {
+      throw new Error(
+        `Cannot ${actionLabel} this monster because the saved document no longer exists. Reload the monster library.`
+      );
+    }
+
+    const data =
+      snapshotData(snapshot);
+
+    if (
+      normalizeText(data.roomCode) !==
+        roomCode
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this monster because it belongs to a different room.`
+      );
+    }
+
+    if (
+      normalizeText(data.id) &&
+      normalizeText(data.id) !==
+        monsterId
+    ) {
+      throw new Error(
+        `Cannot ${actionLabel} this monster because its saved ID does not match the selected record.`
+      );
+    }
+
+    assertMonsterMutationAccess({
+      ...getMutationIdentity(),
+      ownerUid:
+        data.ownerUid || ""
+    });
+
+    return {
+      data,
+      ref: reference
+    };
+  }
+
   function setStatus(message) {
     setElementText(elements.status, message);
   }
@@ -858,6 +971,17 @@ export function createMonsterCreator(config) {
       );
     }
 
+    const mutationIdentity =
+      getMutationIdentity();
+
+    assertMonsterMutationAccess({
+      ...mutationIdentity,
+      ownerUid:
+        monsterData.ownerUid || ""
+    });
+
+    const updatedAtMillis =
+      Date.now();
     const createdRef =
       await config.addDoc(
         config.collection(
@@ -869,6 +993,9 @@ export function createMonsterCreator(config) {
         {
           ...monsterData,
           id: null,
+          ownerUid:
+            mutationIdentity.roomDmUid,
+          updatedAtMillis,
           createdAt:
             config.serverTimestamp(),
           updatedAt:
@@ -880,6 +1007,7 @@ export function createMonsterCreator(config) {
       createdRef,
       {
         id: createdRef.id,
+        updatedAtMillis,
         updatedAt:
           config.serverTimestamp()
       }
@@ -920,17 +1048,34 @@ export function createMonsterCreator(config) {
         );
 
       if (selectedMonsterId) {
+        const validatedDocument =
+          await getValidatedMonsterDocument(
+            selectedMonsterId,
+            "update"
+          );
+
+        assertNoStaleRevision({
+          remoteRecord:
+            validatedDocument.data,
+          expectedRevisionMillis:
+            getRecordRevisionMillis(
+              existingMonster
+            ),
+          label: "monster"
+        });
+
         await config.updateDoc(
-          config.doc(
-            config.db,
-            "rooms",
-            getRoomCode(),
-            "monsters",
-            selectedMonsterId
-          ),
+          validatedDocument.ref,
           {
             ...monsterData,
             id: selectedMonsterId,
+            ownerUid:
+              validatedDocument.data
+                .ownerUid ||
+              getMutationIdentity()
+                .roomDmUid,
+            updatedAtMillis:
+              Date.now(),
             updatedAt:
               config.serverTimestamp()
           }
@@ -950,8 +1095,14 @@ export function createMonsterCreator(config) {
         error
       );
       setStatus(
-        "Monster could not be saved: " +
-        error.message
+        error.message ||
+        friendlyServiceError(
+          error,
+          {
+            service: "Firebase",
+            action: "save this monster"
+          }
+        )
       );
       return null;
     } finally {
@@ -1046,14 +1197,24 @@ export function createMonsterCreator(config) {
     setBusy(true);
 
     try {
+      const validatedDocument =
+        await getValidatedMonsterDocument(
+          selectedMonsterId,
+          "delete"
+        );
+
+      assertNoStaleRevision({
+        remoteRecord:
+          validatedDocument.data,
+        expectedRevisionMillis:
+          getRecordRevisionMillis(
+            monster
+          ),
+        label: "monster"
+      });
+
       await config.deleteDoc(
-        config.doc(
-          config.db,
-          "rooms",
-          getRoomCode(),
-          "monsters",
-          selectedMonsterId
-        )
+        validatedDocument.ref
       );
       selectedMonsterId = null;
       loadMonsterIntoForm(
@@ -1068,8 +1229,14 @@ export function createMonsterCreator(config) {
         error
       );
       setStatus(
-        "Monster could not be deleted: " +
-        error.message
+        error.message ||
+        friendlyServiceError(
+          error,
+          {
+            service: "Firebase",
+            action: "delete this monster"
+          }
+        )
       );
       return false;
     } finally {

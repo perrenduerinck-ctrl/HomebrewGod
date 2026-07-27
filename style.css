@@ -196,6 +196,35 @@ button:disabled {
   margin-top: 8px;
 }
 
+.persistenceConnectionStatus {
+  position: sticky;
+  top: 0;
+  z-index: 10000;
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 206, 92, 0.5);
+  border-radius: 0 0 12px 12px;
+  color: #fff4c7;
+  background: rgba(69, 48, 10, 0.97);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.persistenceConnectionStatus[data-connection-state="offline"] {
+  color: #ffd3d3;
+  border-color: rgba(255, 112, 112, 0.65);
+  background: rgba(88, 18, 25, 0.97);
+}
+
+.persistenceConnectionStatus[data-connection-state="connecting"] {
+  color: var(--text-soft);
+  border-color: var(--border);
+  background: rgba(18, 24, 44, 0.97);
+}
+
 .row {
   border-bottom: 1px solid rgba(123, 137, 213, 0.18);
   padding: 12px 0;

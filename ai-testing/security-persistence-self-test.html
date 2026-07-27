@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 18 Security and Persistence Self-Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      color: #e8ecff;
+      background: #0c101f;
+      font: 16px/1.5 system-ui, sans-serif;
+    }
+
+    pre {
+      padding: 16px;
+      border: 1px solid #5263b8;
+      border-radius: 12px;
+      white-space: pre-wrap;
+    }
+
+    .pass {
+      color: #a8e8ba;
+    }
+
+    .fail {
+      color: #ffb8b8;
+    }
+  </style>
+</head>
+<body>
+  <h1>Phase 18 Security and Persistence Self-Test</h1>
+  <pre id="testResult">RUNNING</pre>
+
+  <script type="module">
+    import {
+      MAX_SECURE_IMAGE_BYTES,
+      assertCharacterMutationAccess,
+      assertMonsterMutationAccess,
+      assertNoStaleRevision,
+      buildDeletionRecoveryState,
+      classifyConnectionState,
+      createPersistenceMonitor,
+      friendlyServiceError,
+      getRecordRevisionMillis,
+      getTimestampMillis,
+      validateSecureImageDescriptor
+    } from "../securityPersistence.js?v=phase18-20260727";
+
+    const result = document.getElementById("testResult");
+    const failures = [];
+    let assertions = 0;
+
+    function assert(condition, message) {
+      assertions += 1;
+      if (!condition) failures.push(message);
+    }
+
+    function throws(action, pattern, message) {
+      try {
+        action();
+        assert(false, message);
+      } catch (error) {
+        assert(pattern.test(error.message), message);
+      }
+    }
+
+    const validFile = {
+      name: "map.webp",
+      type: "image/webp",
+      size: 1024
+    };
+    const validated = validateSecureImageDescriptor(validFile);
+    assert(validated.mimeType === "image/webp", "WebP MIME is accepted.");
+    assert(validated.size === 1024, "Image size is preserved.");
+    assert(validated.maximumBytes === MAX_SECURE_IMAGE_BYTES, "The secure 8 MB cap is used.");
+    assert(validateSecureImageDescriptor({ name: "portrait.jpg", type: "", size: 5 }).mimeType === "image/jpeg", "A missing MIME may use a safe extension.");
+    throws(() => validateSecureImageDescriptor(null), /Choose an image/, "Missing files are rejected.");
+    throws(() => validateSecureImageDescriptor({ name: "x.png", type: "image/png", size: 0 }), /empty/, "Empty images are rejected.");
+    throws(() => validateSecureImageDescriptor({ name: "x.png", type: "image/png", size: MAX_SECURE_IMAGE_BYTES + 1 }), /8 MB/, "Oversized images are rejected.");
+    throws(() => validateSecureImageDescriptor({ name: "x.svg", type: "image/svg+xml", size: 10 }), /JPEG/, "SVG uploads are rejected.");
+    throws(() => validateSecureImageDescriptor({ name: "x.exe", type: "", size: 10 }), /JPEG/, "Unknown extensions are rejected.");
+
+    assert(assertCharacterMutationAccess({ actorUid: "owner", roomDmUid: "dm", ownerUid: "owner" }), "A character owner may edit.");
+    assert(assertCharacterMutationAccess({ actorUid: "dm", roomDmUid: "dm", ownerUid: "owner" }), "The room DM may edit a character.");
+    assert(assertCharacterMutationAccess({ actorUid: "dm", roomDmUid: "dm", ownerUid: "" }), "The room DM may repair a legacy unowned character.");
+    throws(() => assertCharacterMutationAccess({ actorUid: "other", roomDmUid: "dm", ownerUid: "owner" }), /owner or the room DM/, "Another player cannot edit a character.");
+    throws(() => assertCharacterMutationAccess({ actorUid: "other", roomDmUid: "dm", ownerUid: "" }), /legacy/, "A player cannot claim a legacy character.");
+    throws(() => assertCharacterMutationAccess({ actorUid: "", roomDmUid: "dm", ownerUid: "owner" }), /Sign in/, "Unsigned character changes are rejected.");
+
+    assert(assertMonsterMutationAccess({ actorUid: "dm", roomDmUid: "dm", ownerUid: "dm" }), "The room DM may edit an owned monster.");
+    assert(assertMonsterMutationAccess({ actorUid: "dm", roomDmUid: "dm", ownerUid: "" }), "The room DM may repair a legacy monster.");
+    throws(() => assertMonsterMutationAccess({ actorUid: "player", roomDmUid: "dm", ownerUid: "dm" }), /Only the room DM/, "Players cannot edit monsters.");
+    throws(() => assertMonsterMutationAccess({ actorUid: "dm", roomDmUid: "dm", ownerUid: "other" }), /invalid ownership/, "Cross-owner monster metadata is rejected.");
+
+    assert(getTimestampMillis({ seconds: 7, nanoseconds: 500000000 }) === 7500, "Firestore timestamp objects normalize.");
+    assert(getTimestampMillis(new Date(9000)) === 9000, "Date revisions normalize.");
+    assert(getRecordRevisionMillis({ updatedAtMillis: 4000, updatedAt: new Date(3000) }) === 4000, "Explicit revision milliseconds win.");
+    assert(getRecordRevisionMillis({ builder: { lastSavedAtMillis: 5000 }, updatedAtMillis: 4000 }) === 5000, "Character builder revisions are recognized.");
+    assert(assertNoStaleRevision({ remoteRecord: { updatedAtMillis: 2000 }, expectedRevisionMillis: 2000, label: "record" }), "Matching revisions may save.");
+    throws(() => assertNoStaleRevision({ remoteRecord: { updatedAtMillis: 2000 }, expectedRevisionMillis: 1000, label: "record" }), /newer version/, "Newer remote revisions block overwrites.");
+    throws(() => assertNoStaleRevision({ remoteRecord: { updatedAtMillis: 2000 }, expectedRevisionMillis: 0, label: "record" }), /did not load/, "Unknown local revisions block overwrites.");
+
+    assert(classifyConnectionState({ online: false }).id === "offline", "Offline state is classified.");
+    assert(classifyConnectionState({ online: true, fromCache: true }).id === "reconnecting", "Cache-only state is classified.");
+    assert(classifyConnectionState({ online: true, hasPendingWrites: true }).id === "reconnecting", "Pending-write state is classified.");
+    assert(classifyConnectionState({ online: true, hasConnected: false }).id === "connecting", "Initial connection state is classified.");
+    assert(classifyConnectionState({ online: true, hasConnected: true }).id === "connected", "Synchronized state is classified.");
+
+    const listeners = {};
+    const states = [];
+    const fakeNavigator = { onLine: true };
+    const fakeWindow = {
+      navigator: fakeNavigator,
+      addEventListener(name, handler) {
+        listeners[name] = handler;
+      },
+      removeEventListener(name, handler) {
+        if (listeners[name] === handler) delete listeners[name];
+      }
+    };
+    const monitor = createPersistenceMonitor({
+      windowObject: fakeWindow,
+      navigatorObject: fakeNavigator,
+      onChange(state) {
+        states.push(state.id);
+      }
+    });
+    assert(states.at(-1) === "connecting", "The monitor starts in connecting state.");
+    assert(monitor.noteSnapshot({ fromCache: false, hasPendingWrites: false }).id === "connected", "A server snapshot connects the monitor.");
+    fakeNavigator.onLine = false;
+    listeners.offline();
+    assert(states.at(-1) === "offline", "A disconnect changes the monitor to offline.");
+    fakeNavigator.onLine = true;
+    listeners.online();
+    assert(states.at(-1) === "reconnecting", "A reconnect waits for a server snapshot.");
+    assert(monitor.noteSnapshot({ fromCache: true }).id === "reconnecting", "A cached reconnect snapshot remains pending.");
+    assert(monitor.noteSnapshot({ fromCache: false, hasPendingWrites: false }).id === "connected", "A confirmed reconnect returns to connected.");
+    monitor.destroy();
+    assert(!listeners.online && !listeners.offline, "Monitor cleanup removes connection listeners.");
+
+    assert(buildDeletionRecoveryState({ roomExists: false, deletionMarkerPresent: true, cleanupCompleted: false }).action === "finish-local-cleanup", "Deleted rooms finish local cleanup.");
+    const interruptedDelete = buildDeletionRecoveryState({ roomExists: true, deletionMarkerPresent: true, cleanupCompleted: false });
+    assert(interruptedDelete.action === "clear-deletion-marker", "Interrupted deletion clears its marker.");
+    assert(interruptedDelete.recoverable, "Interrupted deletion remains recoverable.");
+    assert(buildDeletionRecoveryState({ roomExists: true, deletionMarkerPresent: false, cleanupCompleted: false }).action === "resume-room", "Healthy rooms resume normally.");
+
+    assert(/membership|ownership/i.test(friendlyServiceError({ code: "permission-denied" }, { service: "Firebase" })), "Permission errors explain membership or ownership.");
+    assert(/reconnect/i.test(friendlyServiceError({ code: "unavailable" }, { service: "Firebase" })), "Network errors explain reconnection.");
+    assert(/too large/i.test(friendlyServiceError({ code: "resource-exhausted" }, { service: "Cloudinary" })), "Size errors are friendly.");
+    assert(/Sign in again/.test(friendlyServiceError({ code: "unauthenticated" }, { action: "upload" })), "Authentication errors request sign-in.");
+
+    const [rules, app, functionsSource, firebaseConfig] = await Promise.all([
+      fetch("../firestore.rules?v=phase18-20260727").then((response) => response.text()),
+      fetch("../app.js?v=phase18-20260727").then((response) => response.text()),
+      fetch("../functions/index.js?v=phase18-20260727").then((response) => response.text()),
+      fetch("../firebase.json?v=phase18-20260727").then((response) => response.text())
+    ]);
+
+    assert(rules.includes("allow read:") && rules.includes("if isRoomMember(roomCode)"), "Room reads require membership.");
+    assert(rules.includes("ownsCharacter(resource.data)") && rules.includes("isRoomDm(roomCode)"), "Character writes require ownership or DM access.");
+    assert(rules.includes("match /monsters/{monsterId}") && rules.includes("validDmOwnedWrite(roomCode)"), "Monster writes require DM ownership.");
+    assert(rules.includes("match /{document=**}") && rules.includes("allow read, write: if false"), "Firestore has a deny-by-default fallback.");
+    assert(app.includes("await savePlayerHistory") && app.indexOf("await savePlayerHistory") < app.indexOf("await getDoc(roomRef)"), "Room membership is created before the room is read.");
+    assert(!app.includes("homebrewgod_maps"), "The old unsigned upload preset is absent from client code.");
+    assert(!app.includes("api.cloudinary.com/v1_1/") || app.includes("delete_by_token"), "Client code no longer sends unsigned uploads to Cloudinary.");
+    assert(app.includes("uploadCloudinaryImage") && app.includes("deleteCloudinaryAsset"), "The app uses authenticated image endpoints.");
+    assert(functionsSource.includes("verifyIdToken"), "Image endpoints verify Firebase ID tokens.");
+    assert(functionsSource.includes("detectImageMimeType"), "The server validates image magic bytes.");
+    assert(functionsSource.includes("MAX_IMAGE_BYTES") && functionsSource.includes("8 * 1024 * 1024"), "The server enforces an 8 MB image limit.");
+    assert(functionsSource.includes("isAssetReferenced"), "Cloudinary deletion checks live data references.");
+    assert(functionsSource.includes("homebrewgod/${roomCode}/"), "Cloudinary deletion is restricted to the room folder.");
+    assert(JSON.parse(firebaseConfig).firestore.rules === "firestore.rules", "Firebase deploy configuration includes Firestore rules.");
+
+    window.__SECURITY_PERSISTENCE_TEST__ = {
+      done: true,
+      assertions,
+      failures
+    };
+
+    if (failures.length) {
+      result.className = "fail";
+      result.textContent = `FAIL — ${failures.length} of ${assertions} assertions failed\n\n${failures.join("\n")}`;
+    } else {
+      result.className = "pass";
+      result.textContent = `PASS — ${assertions} Phase 18 security and persistence assertions`;
+    }
+  </script>
+</body>
+</html>

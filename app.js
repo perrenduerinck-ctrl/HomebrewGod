@@ -39,6 +39,12 @@ import {
 import { createTokenSystem } from "./tokens.js";
 import { createCharacterCreator } from "./characterCreator.fixed.js";
 import { createMonsterCreator } from "./monsterCreator.js";
+import {
+  MAX_SECURE_IMAGE_BYTES,
+  createPersistenceMonitor,
+  friendlyServiceError,
+  validateSecureImageDescriptor
+} from "./securityPersistence.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -57,8 +63,10 @@ const firebaseConfig = {
 };
 
 const cloudName = "dkezxpnl6";
-const uploadPreset = "homebrewgod_maps";
-const cloudinaryDeleteEndpoint = "";
+const cloudinaryUploadEndpoint =
+  "https://us-central1-homebrewgd.cloudfunctions.net/uploadCloudinaryImage";
+const cloudinaryDeleteEndpoint =
+  "https://us-central1-homebrewgd.cloudfunctions.net/deleteCloudinaryAsset";
 const CLOUDINARY_DELETE_TOKEN_MAX_AGE_MS = 9 * 60 * 1000;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -85,6 +93,7 @@ const E = {
   battleMapScreen: $("battleMapScreen"),
   monsterCreatorScreen: $("monsterCreatorScreen"),
   characterCreatorScreen: $("characterCreatorScreen"),
+  persistenceConnectionStatus: $("persistenceConnectionStatus"),
 
   // Auth
   guestNameInput: $("guestNameInput"),
@@ -236,22 +245,8 @@ const ROOM_OWNED_SUBCOLLECTIONS = [
   "characters",
   "activePlayers"
 ];
-const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
-const ALLOWED_IMAGE_UPLOAD_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/avif"
-]);
-const ALLOWED_IMAGE_UPLOAD_EXTENSIONS = new Set([
-  "jpg",
-  "jpeg",
-  "png",
-  "webp",
-  "gif",
-  "avif"
-]);
+const MAX_IMAGE_UPLOAD_BYTES =
+  MAX_SECURE_IMAGE_BYTES;
 
 function makeActiveSessionId() {
   if (window.crypto && typeof window.crypto.randomUUID === "function") {
@@ -289,6 +284,30 @@ function showScreen(screenName) {
 function text(el, value) {
   if (el) el.textContent = value;
 }
+
+const persistenceMonitor =
+  createPersistenceMonitor({
+    onChange: function (state) {
+      if (
+        !E.persistenceConnectionStatus
+      ) {
+        return;
+      }
+
+      E.persistenceConnectionStatus
+        .dataset.connectionState =
+          state.id;
+      E.persistenceConnectionStatus
+        .classList.toggle(
+          "hidden",
+          state.id === "connected"
+        );
+      text(
+        E.persistenceConnectionStatus,
+        state.label
+      );
+    }
+  });
 
 function addOptionalEventListener(element, eventName, handler) {
   if (element) {
@@ -558,6 +577,10 @@ function listenToMyRooms() {
   stopListeningToMyRooms = onSnapshot(roomsQuery, {
     includeMetadataChanges: true
   }, function (snap) {
+    persistenceMonitor.noteSnapshot(
+      snap.metadata
+    );
+
     if (snap.metadata.hasPendingWrites) {
       return;
     }
@@ -805,9 +828,49 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
   }
 
   const roomRef = doc(db, "rooms", cleanCode);
-  const roomSnap = await getDoc(roomRef);
+  let membershipCreated = false;
+
+  try {
+    await savePlayerHistory(
+      cleanCode,
+      "player"
+    );
+    membershipCreated = true;
+  } catch (error) {
+    throw new Error(
+      friendlyServiceError(
+        error,
+        {
+          service: "Firebase",
+          action: "join that room"
+        }
+      )
+    );
+  }
+
+  const roomSnap =
+    await getDoc(roomRef);
 
   if (!roomSnap.exists()) {
+    if (membershipCreated) {
+      try {
+        await deleteDoc(
+          doc(
+            db,
+            "rooms",
+            cleanCode,
+            "players",
+            currentUser.uid
+          )
+        );
+      } catch (cleanupError) {
+        console.warn(
+          "Could not clean up a rejected room membership:",
+          cleanupError
+        );
+      }
+    }
+
     alert("Room not found.");
     return;
   }
@@ -815,6 +878,29 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
   const roomData = roomSnap.data();
 
   if (roomData.deletingAt) {
+    if (
+      membershipCreated &&
+      roomData.dmUid !==
+        currentUser.uid
+    ) {
+      try {
+        await deleteDoc(
+          doc(
+            db,
+            "rooms",
+            cleanCode,
+            "players",
+            currentUser.uid
+          )
+        );
+      } catch (cleanupError) {
+        console.warn(
+          "Could not remove membership from a deleting room:",
+          cleanupError
+        );
+      }
+    }
+
     alert("This room is being permanently deleted.");
     return;
   }
@@ -841,6 +927,10 @@ function openRoom(roomCode, screenToShow = "room") {
   stopListeningToRoom = onSnapshot(doc(db, "rooms", cleanCode), {
     includeMetadataChanges: true
   }, async function (roomSnap) {
+    persistenceMonitor.noteSnapshot(
+      roomSnap.metadata
+    );
+
     if (roomSnap.metadata.hasPendingWrites) {
       return;
     }
@@ -1410,55 +1500,140 @@ function getCloudinaryAssetMetadata(cloudinaryResult) {
 }
 
 function validateImageUploadFile(file) {
-  if (!file) {
-    throw new Error("Choose an image file first.");
-  }
-
-  if (!Number.isFinite(file.size) || file.size <= 0) {
-    throw new Error("The selected image file is empty or unreadable.");
-  }
-
-  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
-    throw new Error("Image files must be 10 MB or smaller.");
-  }
-
-  const mimeType = String(file.type || "").trim().toLowerCase();
-  const fileNameParts = String(file.name || "").toLowerCase().split(".");
-  const extension = fileNameParts.length > 1 ? fileNameParts.pop() : "";
-  const hasSupportedType = ALLOWED_IMAGE_UPLOAD_TYPES.has(mimeType);
-  const hasFallbackExtension =
-    !mimeType && ALLOWED_IMAGE_UPLOAD_EXTENSIONS.has(extension);
-
-  if (!hasSupportedType && !hasFallbackExtension) {
-    throw new Error("Use a JPEG, PNG, WebP, GIF, or AVIF image.");
-  }
-}
-
-async function postCloudinaryUpload(file, requestDeleteToken) {
-  const formData = new FormData();
-
-  formData.append("file", file);
-  formData.append("upload_preset", uploadPreset);
-
-  const response = await fetch(
-    "https://api.cloudinary.com/v1_1/" + cloudName + "/image/upload",
+  return validateSecureImageDescriptor(
+    file,
     {
-      method: "POST",
-      body: formData
+      maximumBytes:
+        MAX_IMAGE_UPLOAD_BYTES
     }
   );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error("Cloudinary upload failed: " + errorText);
-  }
-
-  return await response.json();
 }
 
-async function uploadMapToCloudinary(file) {
+function readImageFileAsDataUrl(file) {
+  return new Promise(
+    function (resolve, reject) {
+      const reader =
+        new FileReader();
+
+      reader.addEventListener(
+        "load",
+        function () {
+          resolve(
+            String(
+              reader.result || ""
+            )
+          );
+        }
+      );
+
+      reader.addEventListener(
+        "error",
+        function () {
+          reject(
+            reader.error ||
+            new Error(
+              "The selected image could not be read."
+            )
+          );
+        }
+      );
+
+      reader.readAsDataURL(file);
+    }
+  );
+}
+
+async function postSecureCloudinaryUpload(
+  file,
+  assetKind
+) {
+  if (
+    !currentUser ||
+    !currentRoomCode
+  ) {
+    throw new Error(
+      "Open a room and sign in before uploading an image."
+    );
+  }
+
+  const descriptor =
+    validateImageUploadFile(file);
+  const idToken =
+    await currentUser.getIdToken();
+  const fileBase64 =
+    await readImageFileAsDataUrl(
+      file
+    );
+  const response =
+    await fetch(
+      cloudinaryUploadEndpoint,
+      {
+        method: "POST",
+        headers: {
+          "Authorization":
+            "Bearer " + idToken,
+          "Content-Type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          roomCode:
+            currentRoomCode,
+          assetKind:
+            assetKind || "map",
+          fileName:
+            file.name || "image",
+          mimeType:
+            descriptor.mimeType,
+          fileBase64
+        })
+      }
+    );
+  const payload =
+    await response
+      .json()
+      .catch(function () {
+        return {};
+      });
+
+  if (!response.ok) {
+    const error =
+      new Error(
+        payload?.error?.message ||
+        "The secure upload service rejected the image."
+      );
+    error.code =
+      payload?.error?.code ||
+      "cloudinary/upload-rejected";
+    throw error;
+  }
+
+  return payload;
+}
+
+async function uploadMapToCloudinary(
+  file,
+  assetKind = "map"
+) {
   validateImageUploadFile(file);
-  return await postCloudinaryUpload(file, false);
+
+  try {
+    return await postSecureCloudinaryUpload(
+      file,
+      assetKind
+    );
+  } catch (error) {
+    throw new Error(
+      friendlyServiceError(
+        error,
+        {
+          service:
+            "secure image service",
+          action:
+            "upload that image"
+        }
+      )
+    );
+  }
 }
 
 function getAssetIdentity(asset) {
@@ -1599,9 +1774,22 @@ async function deleteCloudinaryAssetWithEndpoint(asset, reason) {
     return false;
   }
 
+  if (
+    !currentUser ||
+    !currentRoomCode
+  ) {
+    throw new Error(
+      "Open a room and sign in before deleting a hosted image."
+    );
+  }
+
+  const idToken =
+    await currentUser.getIdToken();
   const response = await fetch(cloudinaryDeleteEndpoint, {
     method: "POST",
     headers: {
+      "Authorization":
+        "Bearer " + idToken,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -1609,13 +1797,35 @@ async function deleteCloudinaryAssetWithEndpoint(asset, reason) {
       publicId: asset.publicId || null,
       url: asset.url || null,
       roomCode: currentRoomCode || null,
-      reason: reason || "delete"
+      reason: reason || "delete",
+      assetKind:
+        reason &&
+        String(reason).includes(
+          "portrait"
+        )
+          ? "portrait"
+          : "map",
+      characterId:
+        asset.characterId || null
     })
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error("Cloudinary delete endpoint failed: " + errorText);
+    const payload =
+      await response
+        .json()
+        .catch(function () {
+          return {};
+        });
+    const error =
+      new Error(
+        payload?.error?.message ||
+        "The secure deletion service rejected the request."
+      );
+    error.code =
+      payload?.error?.code ||
+      "cloudinary/delete-rejected";
+    throw error;
   }
 
   return true;
@@ -1631,8 +1841,20 @@ async function deleteCloudinaryAssetIfUnreferenced(asset, options = {}) {
       return "Cloudinary image kept because another room reference still uses it.";
     }
 
-    if (await deleteCloudinaryAssetWithEndpoint(asset, options.reason)) {
-      return "Cloudinary image deleted.";
+    try {
+      if (
+        await deleteCloudinaryAssetWithEndpoint(
+          asset,
+          options.reason
+        )
+      ) {
+        return "Cloudinary image deleted.";
+      }
+    } catch (endpointError) {
+      console.warn(
+        "Secure Cloudinary deletion was unavailable; checking the short-lived recovery token.",
+        endpointError
+      );
     }
 
     if (hasFreshCloudinaryDeleteToken(asset)) {
@@ -1641,10 +1863,10 @@ async function deleteCloudinaryAssetIfUnreferenced(asset, options = {}) {
     }
 
     console.warn(
-      "Cloudinary image was not deleted. Configure a secure delete endpoint or use a fresh delete token.",
+      "Cloudinary image was not deleted. Deploy the secure deletion function or use a fresh delete token.",
       asset.publicId || asset.url
     );
-    return "Cloudinary image was not deleted; no secure delete path was available.";
+    return "Cloudinary image was not deleted; the secure cleanup service was unavailable.";
   } catch (error) {
     console.warn("Could not delete Cloudinary image:", error);
     return "Cloudinary image deletion failed.";
@@ -1677,6 +1899,10 @@ function listenToRoomMaps(roomCode) {
     mapsQuery,
     { includeMetadataChanges: true },
     function (mapsSnap) {
+      persistenceMonitor.noteSnapshot(
+        mapsSnap.metadata
+      );
+
       if (
         mapsSnap.metadata.hasPendingWrites ||
         currentRoomCode !== roomCode
@@ -2660,6 +2886,10 @@ function listenToPuzzleTiles(roomCode) {
     getPuzzleTileCollection(roomCode),
     { includeMetadataChanges: true },
     function (tilesSnap) {
+      persistenceMonitor.noteSnapshot(
+        tilesSnap.metadata
+      );
+
       if (tilesSnap.metadata.hasPendingWrites) {
         return;
       }
@@ -3965,6 +4195,36 @@ function initCharacterCreatorSystem() {
       return currentIsDM;
     },
 
+    getCurrentUserUid: function () {
+      return currentUser
+        ? currentUser.uid
+        : "";
+    },
+
+    uploadCharacterPortrait: function (
+      file
+    ) {
+      return uploadMapToCloudinary(
+        file,
+        "portrait"
+      );
+    },
+
+    deleteCharacterPortrait: function (
+      publicId,
+      context = {}
+    ) {
+      return deleteCloudinaryAssetWithEndpoint(
+        {
+          publicId,
+          characterId:
+            context.characterId ||
+            null
+        },
+        "delete-character-portrait"
+      );
+    },
+
     createCharacterLinkedToken: function (character) {
       if (
         !tokenSystem ||
@@ -4009,6 +4269,7 @@ function initMonsterCreatorSystem() {
     db,
     doc,
     collection,
+    getDoc,
     addDoc,
     updateDoc,
     deleteDoc,
@@ -4025,6 +4286,12 @@ function initMonsterCreatorSystem() {
 
     getCurrentIsDM: function () {
       return currentIsDM;
+    },
+
+    getCurrentUserUid: function () {
+      return currentUser
+        ? currentUser.uid
+        : "";
     },
 
     createMonsterLinkedToken: function (monster) {

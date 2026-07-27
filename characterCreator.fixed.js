@@ -55,6 +55,10 @@ import {
   enrichBuiltinSpeciesTemplate,
   validateBuiltinSpeciesBackgroundCatalog
 } from "./defaultSpeciesBackgroundContent.js?v=phase14-20260726";
+import {
+  assertCharacterMutationAccess,
+  friendlyServiceError
+} from "./securityPersistence.js";
 
 export function createCharacterCreator(options = {}) {
   const deps = {
@@ -71,6 +75,7 @@ export function createCharacterCreator(options = {}) {
     getCurrentRoomCode: options.getCurrentRoomCode,
     getCurrentRoomData: options.getCurrentRoomData,
     getCurrentIsDM: options.getCurrentIsDM,
+    getCurrentUserUid: options.getCurrentUserUid,
 
     createCharacterLinkedToken:
       options.createCharacterLinkedToken,
@@ -116,6 +121,22 @@ export function createCharacterCreator(options = {}) {
       : "";
 
     return String(roomCode || "").trim().toUpperCase();
+  }
+
+  function getSection18MutationIdentity() {
+    const roomData =
+      deps.getCurrentRoomData
+        ? deps.getCurrentRoomData() || {}
+        : {};
+
+    return {
+      actorUid:
+        deps.getCurrentUserUid
+          ? deps.getCurrentUserUid()
+          : "",
+      roomDmUid:
+        roomData.dmUid || ""
+    };
   }
 
 
@@ -74857,6 +74878,13 @@ export function createCharacterCreator(options = {}) {
       actionLabel
     });
 
+    assertCharacterMutationAccess({
+      ...getSection18MutationIdentity(),
+      ownerUid:
+        data.ownerUid || "",
+      label: "character"
+    });
+
     return {
       ref: characterDocument,
       data,
@@ -75388,10 +75416,20 @@ export function createCharacterCreator(options = {}) {
 
       const timestamp =
         deps.serverTimestamp();
+      const mutationIdentity =
+        getSection18MutationIdentity();
+
+      if (!mutationIdentity.actorUid) {
+        throw new Error(
+          "Sign in before saving a character."
+        );
+      }
 
       const firestorePayload = {
         ...characterPayload,
         roomCode,
+        ownerUid:
+          mutationIdentity.actorUid,
         updatedAtMillis:
           savedAtMillis,
         updatedAt: timestamp
@@ -75417,6 +75455,22 @@ export function createCharacterCreator(options = {}) {
           expectedRevisionMillis,
           actionLabel: "update"
         });
+
+        firestorePayload.ownerUid =
+          validatedDocument.data
+            .ownerUid ||
+          (
+            mutationIdentity.actorUid ===
+              mutationIdentity.roomDmUid
+              ? mutationIdentity.actorUid
+              : ""
+          );
+
+        if (!firestorePayload.ownerUid) {
+          throw new Error(
+            "Only the room DM can repair this legacy character before it is changed."
+          );
+        }
 
         await deps.updateDoc(
           validatedDocument.ref,
@@ -75514,12 +75568,24 @@ export function createCharacterCreator(options = {}) {
       );
 
       setStatus(
-        "The character could not be saved."
+        friendlyServiceError(
+          error,
+          {
+            service: "Firebase",
+            action: "save this character"
+          }
+        )
       );
 
       const message =
         error?.message ||
-        "The character could not be saved.";
+        friendlyServiceError(
+          error,
+          {
+            service: "Firebase",
+            action: "save this character"
+          }
+        );
 
       if (typeof alert === "function") {
         alert(message);

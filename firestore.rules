@@ -1,0 +1,261 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function roomPath(roomCode) {
+      return /databases/$(database)/documents/rooms/$(roomCode);
+    }
+
+    function roomExists(roomCode) {
+      return exists(roomPath(roomCode));
+    }
+
+    function roomData(roomCode) {
+      return get(roomPath(roomCode)).data;
+    }
+
+    function isRoomDm(roomCode) {
+      return signedIn()
+        && roomExists(roomCode)
+        && roomData(roomCode).dmUid == request.auth.uid;
+    }
+
+    function membershipPath(roomCode, uid) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/players/$(uid);
+    }
+
+    function isRoomMember(roomCode) {
+      return signedIn()
+        && (
+          isRoomDm(roomCode)
+          || exists(membershipPath(roomCode, request.auth.uid))
+        );
+    }
+
+    function ownsCharacter(data) {
+      return signedIn()
+        && data.get('ownerUid', '') == request.auth.uid;
+    }
+
+    function validCharacterWrite(roomCode) {
+      return request.resource.data.roomCode == roomCode
+        && request.resource.data.ownerUid is string
+        && request.resource.data.ownerUid.size() > 0;
+    }
+
+    function validDmOwnedWrite(roomCode) {
+      return request.resource.data.roomCode == roomCode
+        && request.resource.data.ownerUid == roomData(roomCode).dmUid;
+    }
+
+    match /users/{userId} {
+      allow read, create, update, delete:
+        if isSelf(userId);
+
+      match /rooms/{roomCode} {
+        allow read, create, update, delete:
+          if isSelf(userId);
+      }
+    }
+
+    match /rooms/{roomCode} {
+      allow create:
+        if signedIn()
+        && request.resource.data.dmUid == request.auth.uid
+        && request.resource.data.roomCode == roomCode;
+
+      allow read:
+        if isRoomMember(roomCode);
+
+      allow update:
+        if isRoomDm(roomCode)
+        && request.resource.data.get('dmUid', resource.data.dmUid)
+          == resource.data.dmUid;
+
+      allow delete:
+        if isRoomDm(roomCode);
+
+      match /players/{playerUid} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if signedIn()
+          && request.auth.uid == playerUid
+          && roomExists(roomCode)
+          && request.resource.data.uid == request.auth.uid
+          && (
+            request.resource.data.role == 'player'
+            || (
+              isRoomDm(roomCode)
+              && request.resource.data.role == 'dm'
+            )
+          );
+
+        allow update:
+          if isRoomDm(roomCode)
+          || (
+            isSelf(playerUid)
+            && resource.data.uid == request.auth.uid
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.role == resource.data.role
+          );
+
+        allow delete:
+          if isRoomDm(roomCode)
+          || (
+            isSelf(playerUid)
+            && resource.data.uid == request.auth.uid
+          );
+      }
+
+      match /activePlayers/{sessionId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if isRoomMember(roomCode)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.sessionId == sessionId;
+
+        allow update:
+          if isRoomDm(roomCode)
+          || (
+            isRoomMember(roomCode)
+            && resource.data.uid == request.auth.uid
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.sessionId == sessionId
+          );
+
+        allow delete:
+          if isRoomDm(roomCode)
+          || (
+            signedIn()
+            && resource.data.uid == request.auth.uid
+          );
+      }
+
+      match /characters/{characterId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if isRoomMember(roomCode)
+          && validCharacterWrite(roomCode)
+          && request.resource.data.ownerUid == request.auth.uid;
+
+        allow update:
+          if isRoomMember(roomCode)
+          && validCharacterWrite(roomCode)
+          && (
+            request.resource.data.ownerUid
+              == resource.data.get('ownerUid', '')
+            || (
+              isRoomDm(roomCode)
+              && resource.data.get('ownerUid', '') == ''
+              && request.resource.data.ownerUid == request.auth.uid
+            )
+          )
+          && (
+            ownsCharacter(resource.data)
+            || isRoomDm(roomCode)
+          );
+
+        allow delete:
+          if isRoomMember(roomCode)
+          && (
+            ownsCharacter(resource.data)
+            || isRoomDm(roomCode)
+          );
+      }
+
+      match /monsters/{monsterId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if isRoomDm(roomCode)
+          && validDmOwnedWrite(roomCode);
+
+        allow update:
+          if isRoomDm(roomCode)
+          && validDmOwnedWrite(roomCode)
+          && (
+            request.resource.data.ownerUid
+              == resource.data.get('ownerUid', '')
+            || (
+              resource.data.get('ownerUid', '') == ''
+              && request.resource.data.ownerUid
+                == roomData(roomCode).dmUid
+            )
+          );
+
+        allow delete:
+          if isRoomDm(roomCode)
+          && (
+            resource.data.get('ownerUid', '') == ''
+            || resource.data.ownerUid
+              == roomData(roomCode).dmUid
+          );
+      }
+
+      match /maps/{mapId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create, update, delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /puzzleTiles/{tileId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create, update, delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /tokens/{tokenId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create, update, delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /classes/{classId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create, update, delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /species/{speciesId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create, update, delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /backgrounds/{backgroundId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create, update, delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

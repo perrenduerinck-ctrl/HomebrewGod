@@ -9,10 +9,19 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=phase18-20260727">
 </head>
 
 <body>
+  <div
+    id="persistenceConnectionStatus"
+    class="persistenceConnectionStatus"
+    data-connection-state="connecting"
+    role="status"
+    aria-live="polite"
+  >
+    Connecting to Firebase…
+  </div>
   <!-- =====================================================
        INDEX SECTION 2 — AUTH / START SCREEN
   ====================================================== -->
@@ -157,7 +166,7 @@
           </summary>
 
           <div class="battleEditorInner compactEditorInner">
-            <input id="puzzleTileUploadInput" type="file" accept="image/*">
+            <input id="puzzleTileUploadInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,.jpg,.jpeg,.png,.webp,.gif,.avif">
 
             <button id="addTileNorthButton">Add North</button>
             <button id="addTileSouthButton">Add South</button>
@@ -232,7 +241,7 @@
                   <option value="gargantuan">Gargantuan</option>
                 </select>
 
-                <input id="tokenImageUploadInput" type="file" accept="image/*">
+                <input id="tokenImageUploadInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,.jpg,.jpeg,.png,.webp,.gif,.avif">
 
                 <button id="addTokenButton">Add Token</button>
               </div>
@@ -461,7 +470,7 @@
         <input id="characterRaceInput" type="text" placeholder="Race / species">
         <input id="characterClassInput" type="text" placeholder="Class">
         <input id="characterLevelInput" type="number" min="1" max="20" placeholder="Level">
-        <input id="characterImageUploadInput" type="file" accept="image/*">
+        <input id="characterImageUploadInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,.jpg,.jpeg,.png,.webp,.gif,.avif">
       </section>
 
       <section class="toolPanelMini">
@@ -577,29 +586,30 @@
       }, { once: true });
     })();
   </script>
-  <!-- Phase 17 release marker: finished-monster-creator -->
+  <!-- Phase 18 release marker: security-and-persistence -->
   <script type="importmap">
     {
       "imports": {
-        "./tokens.js": "./tokens.js?v=phase17-20260726",
-        "./monsterCreator.js": "./monsterCreator.js?v=phase17-20260726",
-        "./characterCreator.fixed.js": "./characterCreator.fixed.js?v=phase17-20260726",
-        "./characterSheet.js": "./characterSheet.js?v=phase17-20260726",
-        "./defaultClasses.js": "./defaultClasses.js?v=phase17-20260726",
-        "./defaultClassFeatureCatalog.js": "./defaultClassFeatureCatalog.js?v=phase17-20260726",
-        "./defaultClassFeatureRules.js": "./defaultClassFeatureRules.js?v=phase17-20260726",
-        "./defaultSubclassCatalog.js": "./defaultSubclassCatalog.js?v=phase17-20260726",
-        "./defaultSubclassNames.js": "./defaultSubclassNames.js?v=phase17-20260726",
-        "./defaultSubclasses.js": "./defaultSubclasses.js?v=phase17-20260726",
-        "./defaultFeats.js": "./defaultFeats.js?v=phase17-20260726",
-        "./defaultSpells.js": "./defaultSpells.js?v=phase17-20260726",
-        "./ruleset2014.js": "./ruleset2014.js?v=phase17-20260726"
+        "./tokens.js": "./tokens.js?v=phase18-20260727",
+        "./monsterCreator.js": "./monsterCreator.js?v=phase18-20260727",
+        "./securityPersistence.js": "./securityPersistence.js?v=phase18-20260727",
+        "./characterCreator.fixed.js": "./characterCreator.fixed.js?v=phase18-20260727",
+        "./characterSheet.js": "./characterSheet.js?v=phase18-20260727",
+        "./defaultClasses.js": "./defaultClasses.js?v=phase18-20260727",
+        "./defaultClassFeatureCatalog.js": "./defaultClassFeatureCatalog.js?v=phase18-20260727",
+        "./defaultClassFeatureRules.js": "./defaultClassFeatureRules.js?v=phase18-20260727",
+        "./defaultSubclassCatalog.js": "./defaultSubclassCatalog.js?v=phase18-20260727",
+        "./defaultSubclassNames.js": "./defaultSubclassNames.js?v=phase18-20260727",
+        "./defaultSubclasses.js": "./defaultSubclasses.js?v=phase18-20260727",
+        "./defaultFeats.js": "./defaultFeats.js?v=phase18-20260727",
+        "./defaultSpells.js": "./defaultSpells.js?v=phase18-20260727",
+        "./ruleset2014.js": "./ruleset2014.js?v=phase18-20260727"
       }
     }
   </script>
   <script
     type="module"
-    src="./app.js?v=phase17-20260726"
+    src="./app.js?v=phase18-20260727"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>
