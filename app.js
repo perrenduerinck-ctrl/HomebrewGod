@@ -482,4 +482,3776 @@ addOptionalEventListener(E.signupButton, "click", async function () {
   try {
     const name = E.signupNameInput.value.trim();
     const email = E.signupEmailInput.value.trim();
-    const password = E.signupPaÛÏ9ÞÚ$z{-®éÜj×öÆEF–ÆU6ææFF‚’Â¶W“¢öÆEF–ÆU6ææFF‚’æ¶W’ÇÂF–ÆT¶W’ÕÐÐ¢Ò•³Ó°Ð Ð¢–b†öÆEF–ÆRç‚ÓÓÒæWu‚bböÆEF–ÆRç’ÓÓÒæWu’’°Ð¢&WGW&â°Ð¢F–ÆW3¢7FFRçF–ÆW2ÀÐ¢7F—fUF–ÆS¢öÆEF–ÆRÀÐ¢f–WtÖöFS¢&&ö&B"ÀÐ¢Ö÷fVEF–ÆS¢öÆEF–ÆRÀÐ¢F–DÖ÷fS¢fÇ6PÐ¢Ó°Ð¢ÐÐ Ð¢76W'EW§¦ÆU÷6—F–öäÆÆ÷vVB‡7FFRçF–ÆW2ÂF–ÆT¶W’ÂæWu‚ÂæWu’“°Ð Ð¢–b‡F–ÆTW†—7G4E÷6—F–öâ‡7FFRçF–ÆW2ÂæWu‚ÂæWu’ÂF–ÆT¶W’’’°Ð¢F‡&÷ræWrW'&÷"‚%F†Bw&–B7÷B—2Ç&VG’F¶VââF–ÆR6æVB&6²â"“°Ð¢ÐÐ Ð¢6öç7BæWt¶W’ÒÖ¶UF–ÆT¶W’†æWu‚ÂæWu’“°Ð¢6öç7BæWuF–ÆU&VbÒvWEW§¦ÆUF–ÆTFö7VÖVçB†7W'&VçE&ööÔ6öFRÂæWt¶W’“°Ð¢6öç7BæWuF–ÆU6æÒv—B7FFRçG&ç67F–öâævWB†æWuF–ÆU&Vb“°Ð Ð¢–b†æWuF–ÆU6ææW†—7G2‚’’°Ð¢F‡&÷ræWrW'&÷"‚%F†Bw&–B7÷B—2Ç&VG’F¶VââF–ÆR6æVB&6²â"“°Ð¢ÐÐ Ð¢6öç7BÖ÷fVEF–ÆRÒ°Ð¢ââæöÆEF–ÆRÀÐ¢¶W“¢æWt¶W’ÀÐ¢ƒ¢æWu‚ÀÐ¢“¢æWu’ÀÐ¢Ö÷fVDDÖ–ÆÆ—3¢FFRææ÷r‚Ð¢Ó°Ð Ð¢6öç7BæWuF–ÆW2Ò7FFRçF–ÆW2æÖ†gVæ7F–öâ‡F–ÆR’°Ð¢&WGW&âF–ÆRæ¶W’ÓÓÒF–ÆT¶W’òÖ÷fVEF–ÆR¢F–ÆS°Ð¢Ò“°Ð Ð¢7FFRçG&ç67F–öâæFVÆWFR†öÆEF–ÆU&Vb“°Ð¢7FFRçG&ç67F–öâç6WB†æWuF–ÆU&VbÂÖ÷fVEF–ÆR“°Ð Ð¢&WGW&â°Ð¢F–ÆW3¢æWuF–ÆW2ÀÐ¢7F—fUF–ÆS¢Ö÷fVEF–ÆRÀÐ¢f–WtÖöFS¢&&ö&B"ÀÐ¢Ö÷fVEF–ÆRÀÐ¢F–DÖ÷fS¢G'VPÐ¢Ó°Ð¢Ò“°Ð Ð¢&VæFW%W§¦ÆT&ö&B‡G&ç67F–öå&W7VÇBç&ööÒ“°Ð Ð¢FW‡B€Ð¢RçW§¦ÆTÖ7FGW2ÀÐ¢G&ç67F–öå&W7VÇBæF–DÖ÷fPÐ¢ò%F–ÆRÖ÷fVBæBÆö6¶VBB"²G&ç67F–öå&W7VÇBæÖ÷fVEF–ÆRæ¶W’²"â Ð¢¢%F–ÆR7F–VBÆö6¶VB–âÆ6Râ Ð¢“°Ð¢Ò6F6‚†W'&÷"’°Ð¢FW‡B„RçW§¦ÆTÖ7FGW2ÂW'&÷"æÖW76vR“°Ð¢&VæFW%W§¦ÆT&ö&B†7W'&VçE&ööÔFFÇÂ·Ò“°Ð¢ÐÐ§ÐÐ Ð¦gVæ7F–öâ7F'EW§¦ÆUF–ÆTG&r†WfVçBÂF–ÆRÂF–ÆTF—b’°Ð¢–b‚7W'&VçD—4DÒ’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢–b†WfVçBçö–çFW%G—RÓÓÒ&Ö÷W6R"bbWfVçBæ'WGFöâÓÒ’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢–b†WfVçBçF&vWBæ6Æ÷6W7B‚&'WGFöâ"’’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢WfVçBç&WfVçDFVfVÇB‚“°Ð Ð¢G'’°Ð¢F–ÆTF—bç6WEö–çFW$6GW&R†WfVçBçö–çFW$–B“°Ð¢Ò6F6‚†W'&÷"’°Ð¢òò6fRFò–væ÷&RàÐ¢ÐÐ Ð¢7F—fUW§¦ÆTG&rÒ°Ð¢F–ÆT¶W“¢F–ÆRæ¶W’ÀÐ¢÷&–v–æÅƒ¢F–ÆRç‚ÀÐ¢÷&–v–æÅ“¢F–ÆRç’ÀÐ¢7F'D6Æ–VçEƒ¢WfVçBæ6Æ–VçE‚ÀÐ¢7F'D6Æ–VçE“¢WfVçBæ6Æ–VçE’ÀÐ¢Æ7D6Æ–VçEƒ¢WfVçBæ6Æ–VçE‚ÀÐ¢Æ7D6Æ–VçE“¢WfVçBæ6Æ–VçE’ÀÐ¢F–ÆUv–GFƒ¢ÖF‚æÖ‚ƒÂF–ÆTF—bæöfg6WEv–GF‚’ÀÐ¢F–ÆT†V–v‡C¢ÖF‚æÖ‚ƒÂF–ÆTF—bæöfg6WD†V–v‡B’ÀÐ¢ö–çFW$–C¢WfVçBçö–çFW$–BÀÐ¢F–ÆTF—bÀÐ¢Ö÷fVC¢fÇ6PÐ¢Ó°Ð Ð¢F–ÆTF—bæ6Æ74Æ—7BæFB‚'W§¦ÆRÖG&vv–ær"“°Ð¢FW‡B„RçW§¦ÆTÖ7FGW2Â$G&vv–ærF–ÆRâ&VÆV6RFòÆö6²—BFòF†Rw&–Bâ"“°Ð§ÐÐ Ð¦gVæ7F–öâ†æFÆUW§¦ÆUö–çFW$Ö÷fR†WfVçB’°Ð¢–b‚7F—fUW§¦ÆTG&r’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢WfVçBç&WfVçDFVfVÇB‚“°Ð Ð¢6öç7BG&rÒ7F—fUW§¦ÆTG&s°Ð¢G&ræÆ7D6Æ–VçE‚ÒWfVçBæ6Æ–VçEƒ°Ð¢G&ræÆ7D6Æ–VçE’ÒWfVçBæ6Æ–VçE“°Ð¢G&ræÖ÷fVBÒG'VS°Ð Ð¢6öç7BG‚ÒWfVçBæ6Æ–VçE‚ÒG&rç7F'D6Æ–VçEƒ°Ð¢6öç7BG’ÒWfVçBæ6Æ–VçE’ÒG&rç7F'D6Æ–VçE“°Ð Ð¢G&rçF–ÆTF—bç7G–ÆRçG&ç6f÷&ÒÒ'G&ç6ÆFR‚"²G‚²'‚Â"²G’²'‚’#°Ð§ÐÐ Ð¦7–æ2gVæ7F–öâ†æFÆUW§¦ÆUö–çFW%W†WfVçB’°Ð¢–b‚7F—fUW§¦ÆTG&r’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢6öç7BG&rÒ7F—fUW§¦ÆTG&s°Ð¢7F—fUW§¦ÆTG&rÒçVÆÃ°Ð Ð¢G&rçF–ÆTF—bæ6Æ74Æ—7Bç&VÖ÷fR‚'W§¦ÆRÖG&vv–ær"“°Ð¢G&rçF–ÆTF—bç7G–ÆRçG&ç6f÷&ÒÒ"#°Ð Ð¢G'’°Ð¢–b†G&rçö–çFW$–BÓÒVæFVf–æVBbbG&rçö–çFW$–BÓÒçVÆÂ’°Ð¢G'’°Ð¢G&rçF–ÆTF—bç&VÆV6Uö–çFW$6GW&R†G&rçö–çFW$–B“°Ð¢Ò6F6‚†W'&÷"’°Ð¢òò6fRFò–væ÷&RàÐ¢ÐÐ¢ÐÐ Ð¢6öç7BG‚ÒG&ræÆ7D6Æ–VçE‚ÒG&rç7F'D6Æ–VçEƒ°Ð¢6öç7BG’ÒG&ræÆ7D6Æ–VçE’ÒG&rç7F'D6Æ–VçE“°Ð Ð¢6öç7Bw&–DG‚ÒÖF‚ç&÷VæB†G‚òG&rçF–ÆUv–GF‚“°Ð¢6öç7Bw&–DG’ÒÖF‚ç&÷VæB†G’òG&rçF–ÆT†V–v‡B“°Ð Ð¢6öç7BæWu‚ÒG&ræ÷&–v–æÅ‚²w&–DGƒ°Ð¢6öç7BæWu’ÒG&ræ÷&–v–æÅ’²w&–DG“°Ð Ð¢v—BÖ÷fUW§¦ÆUF–ÆUFò†G&rçF–ÆT¶W’ÂæWu‚ÂæWu’“°Ð¢Ò6F6‚†W'&÷"’°Ð¢ÆW'B†W'&÷"æÖW76vR“°Ð¢&VæFW%W§¦ÆT&ö&B†7W'&VçE&ööÔFFÇÂ·Ò“°Ð¢ÐÐ§ÐÐ Ð¦gVæ7F–öâ6æ6VÅW§¦ÆTG&r‚’°Ð¢–b‚7F—fUW§¦ÆTG&r’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢7F—fUW§¦ÆTG&rçF–ÆTF—bæ6Æ74Æ—7Bç&VÖ÷fR‚'W§¦ÆRÖG&vv–ær"“°Ð¢7F—fUW§¦ÆTG&rçF–ÆTF—bç7G–ÆRçG&ç6f÷&ÒÒ"#°Ð¢7F—fUW§¦ÆTG&rÒçVÆÃ°Ð Ð¢&VæFW%W§¦ÆT&ö&B†7W'&VçE&ööÔFFÇÂ·Ò“°Ð§ÐÐ Ð¦gVæ7F–öâVç7W&UW§¦ÆTG&tÆ—7FVæW'2‚’°Ð¢–b‡v–æF÷ræ†öÖV'&WtvöEW§¦ÆTG&tÆ—7FVæW'5&VG’’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢v–æF÷ræ†öÖV'&WtvöEW§¦ÆTG&tÆ—7FVæW'5&VG’ÒG'VS°Ð Ð¢Fö7VÖVçBæFDWfVçDÆ—7FVæW"‚'ö–çFW&Ö÷fR"Â†æFÆUW§¦ÆUö–çFW$Ö÷fR“°Ð¢Fö7VÖVçBæFDWfVçDÆ—7FVæW"‚'ö–çFW'W"Â†æFÆUW§¦ÆUö–çFW%W“°Ð¢Fö7VÖVçBæFDWfVçDÆ—7FVæW"‚'ö–çFW&6æ6VÂ"Â6æ6VÅW§¦ÆTG&r“°Ð§ÐÐ Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâ$’(	BU¥¤ÄR%UEDôâÄ•5DTäU%0Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ Ð¦–b„RæFEF–ÆTæ÷'F„'WGFöâ’°Ð¢RæFEF–ÆTæ÷'F„'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢FEW§¦ÆUF–ÆR‚&æ÷'F‚"“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„RæFEF–ÆU6÷WF„'WGFöâ’°Ð¢RæFEF–ÆU6÷WF„'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢FEW§¦ÆUF–ÆR‚'6÷WF‚"“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„RæFEF–ÆTV7D'WGFöâ’°Ð¢RæFEF–ÆTV7D'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢FEW§¦ÆUF–ÆR‚&V7B"“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„RæFEF–ÆUvW7D'WGFöâ’°Ð¢RæFEF–ÆUvW7D'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢FEW§¦ÆUF–ÆR‚'vW7B"“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„Ræ6VçFW%W§¦ÆT&ö&D'WGFöâ’°Ð¢Ræ6VçFW%W§¦ÆT&ö&D'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢6†÷tgVÆÅW§¦ÆT&ö&B‚“°Ð¢Ò“°Ð§ÐÐ Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâ$¢(	BDô´Tâ5•5DTÒ4ôääT5D”ôàÐ¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ Ð¦–b‚Fö¶Vå7—7FVÒ’°Ð¢Fö¶Vå7—7FVÒÒ7&VFUFö¶Vå7—7FVÒ‡°Ð¢F"ÀÐ¢Fö2ÀÐ¢6öÆÆV7F–öâÀÐ¢FDFö2ÀÐ¢WFFTFö2ÀÐ¢FVÆWFTFö2ÀÐ¢vWDFö72ÀÐ¢VW'’ÀÐ¢v†W&RÀÐ¢öå6æ6†÷BÀÐ¢6W'fW%F–ÖW7F×ÀÐ Ð¢WÆöD–ÖvS¢WÆöDÖFô6Æ÷VF–æ'’ÀÐ Ð¢vWD7W'&VçE&ööÔ6öFS¢gVæ7F–öâ‚’°Ð¢&WGW&â7W'&VçE&ööÔ6öFS°Ð¢ÒÀÐ Ð¢vWD7W'&VçE&ööÔFF¢gVæ7F–öâ‚’°Ð¢&WGW&â7W'&VçE&ööÔFF°Ð¢ÒÀÐ Ð¢6WD7W'&VçE&ööÔFF¢gVæ7F–öâ†æWu&ööÔFF’°Ð¢7W'&VçE&ööÔFFÒæWu&ööÔFF°Ð¢ÒÀÐ Ð¢vWD7W'&VçD—4DÓ¢gVæ7F–öâ‚’°Ð¢&WGW&â7W'&VçD—4DÓ°Ð¢ÒÀÐ Ð¢vWEW§¦ÆUF–ÆW2ÀÐ¢vWD7F—fUW§¦ÆUF–ÆRÀÐ¢vWEW§¦ÆUf–WtÖöFRÀÐ¢'V–ÆDÖg&öÕ&ööÔf–VÆG0Ð¢Ò“°Ð§ÐÐ Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâ2(	B$EDÄRÔò5$TDõ"D"äd”tD”ôàÐ¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ Ð¦gVæ7F–öâ6†÷tç”Ö–å67&VVâ‡67&VVäæÖR’°Ð¢6öç7B67&VVç2Ò°Ð¢RæWF…67&VVâÀÐ¢RæÆö&'•67&VVâÀÐ¢Rç&ööÔF6†&ö&E67&VVâÀÐ¢Ræ&GFÆTÖ67&VVâÀÐ¢RæÖöç7FW$7&VF÷%67&VVâÀÐ¢Ræ6†&7FW$7&VF÷%67&VVàÐ¢Ó°Ð Ð¢67&VVç2æf÷$V6‚†gVæ7F–öâ‡67&VVâ’°Ð¢–b‡67&VVâ’°Ð¢67&VVâæ6Æ74Æ—7BæFB‚&†–FFVâ"“°Ð¢ÐÐ¢Ò“°Ð Ð¢6öç7B67&VVäÖÒ°Ð¢WFƒ¢RæWF…67&VVâÀÐ¢Æö&'“¢RæÆö&'•67&VVâÀÐ¢&ööÓ¢Rç&ööÔF6†&ö&E67&VVâÀÐ¢&GFÆS¢Ræ&GFÆTÖ67&VVâÀÐ¢Ööç7FW$7&VF÷#¢RæÖöç7FW$7&VF÷%67&VVâÀÐ¢6†&7FW$7&VF÷#¢Ræ6†&7FW$7&VF÷%67&VVàÐ¢Ó°Ð Ð¢–b‡67&VVäÖ·67&VVäæÖUÒ’°Ð¢67&VVäÖ·67&VVäæÖUÒæ6Æ74Æ—7Bç&VÖ÷fR‚&†–FFVâ"“°Ð¢ÐÐ§ÐÐ Ð¦gVæ7F–öâÇ”&GFÆU¦ööÒ‚’°Ð¢6öç7B66ÆRÒ'66ÆR‚"²&GFÆU¦ööÒ²"’#°Ð Ð¢–b„Ræ&GFÆTÖ–ÖvR’°Ð¢Ræ&GFÆTÖ–ÖvRç7G–ÆRçG&ç6f÷&ÒÒ66ÆS°Ð¢ÐÐ Ð¢–b„RçW§¦ÆTÖ&ö&B’°Ð¢RçW§¦ÆTÖ&ö&Bç7G–ÆRçG&ç6f÷&ÒÒ66ÆS°Ð¢RçW§¦ÆTÖ&ö&Bç7G–ÆRçG&ç6f÷&Ô÷&–v–âÒ'F÷ÆVgB#°Ð¢ÐÐ Ð¢FW‡B„Ræ&GFÆU¦ööÕFW‡BÂÖF‚ç&÷VæB†&GFÆU¦ööÒ¢’²"R"“°Ð§ÐÐ Ð¦gVæ7F–öâ÷VåFööÅF"‡f–WtæÖR’°Ð¢–b‚7W'&VçE&ööÔ6öFR’°Ð¢ÆW'B‚$÷Vâ&ööÒf—'7Bâ"“°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢6öç7BFööÅW&ÂÒæWrU$Â‡v–æF÷ræÆö6F–öâæ‡&Vb“°Ð Ð¢FööÅW&Âç6V&6…&×2ç6WB‚'&ööÒ"Â7W'&VçE&ööÔ6öFR“°Ð¢FööÅW&Âç6V&6…&×2ç6WB‚'f–Wr"Âf–WtæÖR“°Ð Ð¢v–æF÷ræ÷Vâ‡FööÅW&ÂçFõ7G&–ær‚’Â%ö&Ææ²"“°Ð§ÐÐ Ð¦gVæ7F–öâ–æ—D6†&7FW$7&VF÷%7—7FVÒ‚’°¢–b†6†&7FW$7&VF÷%7—7FVÒ’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢6†&7FW$7&VF÷%7—7FVÒÒ7&VFT6†&7FW$7&VF÷"‡°Ð¢F"ÀÐ¢Fö2ÀÐ¢6öÆÆV7F–öâÀÐ¢vWDFö2ÀÐ¢FDFö2ÀÐ¢WFFTFö2ÀÐ¢FVÆWFTFö2ÀÐ¢öå6æ6†÷BÀÐ¢6W'fW%F–ÖW7F×ÀÐ Ð¢vWD7W'&VçE&ööÔ6öFS¢gVæ7F–öâ‚’°Ð¢&WGW&â7W'&VçE&ööÔ6öFS°Ð¢ÒÀÐ Ð¢vWD7W'&VçE&ööÔFF¢gVæ7F–öâ‚’°Ð¢&WGW&â7W'&VçE&ööÔFF°Ð¢ÒÀÐ Ð¢vWD7W'&VçD—4DÓ¢gVæ7F–öâ‚’°Ð¢&WGW&â7W'&VçD—4DÓ°Ð¢ÒÀÐ Ð¢7&VFT6†&7FW$Æ–æ¶VEFö¶Vã¢gVæ7F–öâ†6†&7FW"’°Ð¢–b€Ð¢Fö¶Vå7—7FVÒÇÀÐ¢G—VöbFö¶Vå7—7FVÒæ7&VFT6†&7FW$Æ–æ¶VEFö¶VâÓÒ&gVæ7F–öâ Ð¢’°Ð¢F‡&÷ræWrW'&÷"€Ð¢%F†RFö¶Vâ7—7FVÒ—2æ÷B&VG’â Ð¢“°Ð¢ÐÐ Ð¢&WGW&âFö¶Vå7—7FVÒæ7&VFT6†&7FW$Æ–æ¶VEFö¶Vâ€Ð¢6†&7FW Ð¢“°Ð¢ÒÀÐ Ð¢7–æ4Æ–æ¶VD6†&7FW%Fö¶Vç3¢gVæ7F–öâ†6†&7FW"’°Ð¢–b€Ð¢Fö¶Vå7—7FVÒÇÀÐ¢G—VöbFö¶Vå7—7FVÒç7–æ4Æ–æ¶VD6†&7FW%Fö¶Vç2ÓÒ&gVæ7F–öâ Ð¢’°Ð¢&WGW&â°Ð¢6†&7FW$–C Ð¢6†&7FW#òæ–BÇÂçVÆÂÀÐ¢WFFVD6÷VçC¢ Ð¢Ó°Ð¢ÐÐ Ð¢&WGW&âFö¶Vå7—7FVÒç7–æ4Æ–æ¶VD6†&7FW%Fö¶Vç2€Ð¢6†&7FW Ð¢“°Ð¢ÐÐ¢Ò“°§Ð ¦gVæ7F–öâ–æ—DÖöç7FW$7&VF÷%7—7FVÒ‚’°¢–b†Ööç7FW$7&VF÷%7—7FVÒ’°¢Ööç7FW$7&VF÷%7—7FVÒç&Vg&W6‚‚“°¢&WGW&ã°¢Ð ¢Ööç7FW$7&VF÷%7—7FVÒÒ7&VFTÖöç7FW$7&VF÷"‡°¢F"À¢Fö2À¢6öÆÆV7F–öâÀ¢FDFö2À¢WFFTFö2À¢FVÆWFTFö2À¢öå6æ6†÷BÀ¢6W'fW%F–ÖW7F×À ¢vWD7W'&VçE&ööÔ6öFS¢gVæ7F–öâ‚’°¢&WGW&â7W'&VçE&ööÔ6öFS°¢ÒÀ ¢vWD7W'&VçE&ööÔFF¢gVæ7F–öâ‚’°¢&WGW&â7W'&VçE&ööÔFF°¢ÒÀ ¢vWD7W'&VçD—4DÓ¢gVæ7F–öâ‚’°¢&WGW&â7W'&VçD—4DÓ°¢ÒÀ ¢7&VFTÖöç7FW$Æ–æ¶VEFö¶Vã¢gVæ7F–öâ†Ööç7FW"’°¢–b€¢Fö¶Vå7—7FVÒÇÀ¢G—VöbFö¶Vå7—7FVÒæ7&VFTÖöç7FW$Æ–æ¶VEFö¶VâÓÒ&gVæ7F–öâ ¢’°¢F‡&÷ræWrW'&÷"€¢%F†RFö¶Vâ7—7FVÒ—2æ÷B&VG’â ¢“°¢Ð ¢&WGW&âFö¶Vå7—7FVÒæ7&VFTÖöç7FW$Æ–æ¶VEFö¶Vâ€¢Ööç7FW ¢“°¢ÒÀ ¢öä&6³¢gVæ7F–öâ‚’°¢6†÷tç”Ö–å67&VVâ‚&&GFÆR"“°¢Ç”&GFÆU¦ööÒ‚“° ¢–b€¢Fö¶Vå7—7FVÒb`¢G—VöbFö¶Vå7—7FVÒç&VæFW"ÓÓÒ&gVæ7F–öâ ¢’°¢Fö¶Vå7—7FVÒç&VæFW"†7W'&VçE&ööÔFFÇÂ·Ò“°¢Ð¢Ð¢Ò“°§Ð Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâ4(	B$EDÄRÔ%UEDôå0Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ Ð¦–b„Ræ÷Vä&GFÆTÖ'WGFöâ’°Ð¢Ræ÷Vä&GFÆTÖ'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢÷VåFööÅF"‚&&GFÆR"“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„Ræ&6µFõ&ööÔ'WGFöâ’°Ð¢Ræ&6µFõ&ööÔ'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢6†÷tç”Ö–å67&VVâ‚'&ööÒ"“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„Rç¦ööÔ÷WD'WGFöâ’°Ð¢Rç¦ööÔ÷WD'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢&GFÆU¦ööÒÓÒã#S°Ð Ð¢–b†&GFÆU¦ööÒÂã#R’°Ð¢&GFÆU¦ööÒÒã#S°Ð¢ÐÐ Ð¢Ç”&GFÆU¦ööÒ‚“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„Rç¦ööÕ&W6WD'WGFöâ’°Ð¢Rç¦ööÕ&W6WD'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢&GFÆU¦ööÒÒ°Ð¢Ç”&GFÆU¦ööÒ‚“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„Rç¦ööÔ–ä'WGFöâ’°Ð¢Rç¦ööÔ–ä'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢&GFÆU¦ööÒ³Òã#S°Ð Ð¢–b†&GFÆU¦ööÒâB’°Ð¢&GFÆU¦ööÒÒC°Ð¢ÐÐ Ð¢Ç”&GFÆU¦ööÒ‚“°Ð¢Ò“°Ð§ÐÐ Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐ¢òò4T5D”ôâ4"(	B5$TDõ"DôôÂÄTä4„U%0¢òò7&VF÷"FööÇ2÷Vâ–âF†V—"÷vâ'&÷w6W"F'2à¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐ Ð¦–b„Ræ÷Vä6†&7FW$7&VF÷$'WGFöâ’°Ð¢Ræ÷Vä6†&7FW$7&VF÷$'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢÷VåFööÅF"‚&6†&7FW$7&VF÷""“°Ð¢Ò“°Ð§ÐÐ Ð¦–b„Ræ÷VäÖöç7FW$7&VF÷$'WGFöâ’°¢Ræ÷VäÖöç7FW$7&VF÷$'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°¢÷VåFööÅF"‚&Ööç7FW$7&VF÷""“°¢Ò“°§Ð Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâ42(	B5$TDõ"$4²%UEDôå0Ð¢òò–âFööÂF'2ÂF†—2&WGW&ç2FòF†R&GFÆRf–Wr–âF†R6ÖRF"àÐ¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ Ð¦–b„Ræ&6´g&öÔ6†&7FW$7&VF÷$'WGFöâ’°Ð¢Ræ&6´g&öÔ6†&7FW$7&VF÷$'WGFöâæFDWfVçDÆ—7FVæW"‚&6Æ–6²"ÂgVæ7F–öâ‚’°Ð¢6†÷tç”Ö–å67&VVâ‚&&GFÆR"“°Ð¢Ç”&GFÆU¦ööÒ‚“°Ð Ð¢–b€Ð¢v–æF÷rä†öÖV'&WtvöEFö¶Vç2b`Ð¢G—Vöbv–æF÷rä†öÖV'&WtvöEFö¶Vç2ç&VæFW"ÓÓÒ&gVæ7F–öâ Ð¢’°Ð¢v–æF÷rä†öÖV'&WtvöEFö¶Vç2ç&VæFW"†7W'&VçE&ööÔFFÇÂ·Ò“°Ð¢ÐÐ¢Ò“°Ð§ÐÐ Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâ4B(	B5D%EUd”Ur$õUD”är„TÅU%0Ð¢òò6V7F–öâBv–ÆÂ6ÆÂF†—2gFW"F†R&ööÒÆöG2àÐ¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ Ð¦gVæ7F–öâ÷Vå7F'GWf–Wt–dæVVFVB‚’°Ð¢–b†Ç&VG•W6VE7F'GWÆ–æ²’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢–b‚7F'GW&ööÔ6öFRÇÂ7F'GWf–Wr’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢–b‚7W'&VçE&ööÔ6öFRÇÂ7W'&VçE&ööÔ6öFRÓÒ7F'GW&ööÔ6öFR’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢–b‚7W'&VçE&ööÔFF’°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢Ç&VG•W6VE7F'GWÆ–æ²ÒG'VS°Ð Ð¢–b‡7F'GWf–WrÓÓÒ&&GFÆR"’°Ð¢6†÷tç”Ö–å67&VVâ‚&&GFÆR"“°Ð¢Ç”&GFÆU¦ööÒ‚“°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢–b‡7F'GWf–WrÓÓÒ&6†&7FW$7&VF÷""’°Ð¢6†÷tç”Ö–å67&VVâ‚&6†&7FW$7&VF÷""“°Ð¢–æ—D6†&7FW$7&VF÷%7—7FVÒ‚“°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢–b‡7F'GWf–WrÓÓÒ&Ööç7FW$7&VF÷""’°¢6†÷tç”Ö–å67&VVâ‚&Ööç7FW$7&VF÷""“°¢–æ—DÖöç7FW$7&VF÷%7—7FVÒ‚“°¢&WGW&ã°¢Ð§Ð Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâ4R(	BtRÄTdR4ÄTåU Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ Ð¦Fö7VÖVçBæFDWfVçDÆ—7FVæW"‚'f—6–&–Æ—G–6†ævR"ÂgVæ7F–öâ‚’°Ð¢–b‚Fö7VÖVçBæ†–FFVâ’°Ð¢F÷V6„7F—fUÆ–W%6W76–öâ‚“°Ð¢ÐÐ§Ò“°Ð Ð§v–æF÷ræFDWfVçDÆ—7FVæW"‚&fö7W2"ÂgVæ7F–öâ‚’°Ð¢F÷V6„7F—fUÆ–W%6W76–öâ‚“°Ð§Ò“°Ð Ð§v–æF÷ræFDWfVçDÆ—7FVæW"‚'vW6†÷r"ÂgVæ7F–öâ‚’°Ð¢F÷V6„7F—fUÆ–W%6W76–öâ‚“°Ð§Ò“°Ð Ð§v–æF÷ræFDWfVçDÆ—7FVæW"‚'vV†–FR"ÂgVæ7F–öâ‚’°Ð¢&VÖ÷fT7F—fUÆ–W%6W76–öâ‚“°Ð§Ò“°Ð Ð¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐÐ¢òò4T5D”ôâB(	B5D%EUòUD‚tD4„U Ð¢òò7W÷'G27F'GWF'3 ¢òò÷&ööÓÕ$ôôÔ4ôDRgf–WsÖ&GFÆP¢òò÷&ööÓÕ$ôôÔ4ôDRgf–WsÖ6†&7FW$7&VF÷ ¢òò÷&ööÓÕ$ôôÔ4ôDRgf–WsÖÖöç7FW$7&VF÷ ¢òòÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÓÐ Ð¦6öç6öÆRæÆör‚%&Vv—7FW&–ærWF‚Æ—7FVæW""“°Ð Ð¦öäWF…7FFT6†ævVB†WF‚Â7–æ2gVæ7F–öâ‡W6W"’°Ð¢6öç6öÆRæÆör‚$WF‚7FFR6†ævVC¢"ÂW6W"òW6W"çV–B¢&æòW6W""“°Ð Ð¢7W'&VçEW6W"ÒW6W#°Ð Ð¢–b‚W6W"’°Ð¢v—B6†÷tÆövvVD÷WB‚“°Ð¢&WGW&ã°Ð¢ÐÐ Ð¢6†÷tÆövvVD–â‡W6W"“°Ð Ð¢G'’°Ð¢v—B6fUW6W$Fö2‡W6W"“°Ð¢Ò6F6‚†W'&÷"’°Ð¢6öç6öÆRæW'&÷"€Ð¢$WF†VçF–6FVBÂ'WBF†RW6W"&öf–ÆR6÷VÆBæ÷B&R6fVBFòf—&W7F÷&S¢"ÀÐ¢W'&÷ Ð¢“°Ð¢ÐÐ Ð¢Æ—7FVåFô×•&öö×2‚“°Ð Ð¢–b‚Ç&VG•W6VE7F'GWÆ–æ²bb7F'GW&ööÔ6öFR’°Ð¢6öç7B7F'GW67&VVâÐÐ¢7F'GWf–WrÓÓÒ&&GFÆR Ð¢ò&&GFÆR Ð¢¢'&ööÒ#°Ð Ð¢v—B¦ö–å&ööÒ€Ð¢7F'GW&ööÔ6öFRÀÐ¢'Æ–W""ÀÐ¢7F'GW67&VVàÐ¢“°Ð¢ÐÐ§Ò“°Ð
+    const password = E.signupPasswordInput.value;
+
+    if (!name || !email || !password) {
+      alert("Fill out display name, email, and password.");
+      return;
+    }
+
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(result.user, { displayName: name });
+    await saveUserDoc(result.user);
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+addOptionalEventListener(E.loginButton, "click", async function () {
+  try {
+    const email = E.loginEmailInput.value.trim();
+    const password = E.loginPasswordInput.value;
+
+    if (!email || !password) {
+      alert("Enter email and password.");
+      return;
+    }
+
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    await saveUserDoc(result.user);
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+addOptionalEventListener(E.logoutButton, "click", async function () {
+  try {
+    await removeActivePlayerSession();
+    await signOut(auth);
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+// =====================================================
+// APP SECTION 6 â€” MY SAVED ROOMS
+// =====================================================
+
+async function saveRoomToMyRooms(roomCode, roomName, role) {
+  if (!currentUser) return;
+
+  const cleanCode = normalizeRoomCode(roomCode);
+
+  await setDoc(doc(db, "users", currentUser.uid, "rooms", cleanCode), {
+    roomCode: cleanCode,
+    roomName: roomName || "Unnamed Room",
+    role: role || "player",
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+function listenToMyRooms() {
+  if (!currentUser) return;
+  if (stopListeningToMyRooms) stopListeningToMyRooms();
+
+  savedRoomDocs = [];
+  savedRoomsLastDoc = null;
+  savedRoomsHasMore = false;
+  savedRoomsLoadingMore = false;
+
+  const roomsQuery = query(
+    collection(db, "users", currentUser.uid, "rooms"),
+    orderBy("updatedAt", "desc"),
+    limit(COLLECTION_PAGE_SIZE)
+  );
+
+  stopListeningToMyRooms = onSnapshot(roomsQuery, {
+    includeMetadataChanges: true
+  }, function (snap) {
+    if (snap.metadata.hasPendingWrites) {
+      return;
+    }
+
+    savedRoomDocs = snap.docs;
+    savedRoomsLastDoc = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+    savedRoomsHasMore = snap.docs.length === COLLECTION_PAGE_SIZE;
+
+    if (!E.myRoomsList) {
+      return;
+    }
+
+    E.myRoomsList.innerHTML = "";
+
+    if (snap.empty) {
+      E.myRoomsList.textContent = "No saved rooms yet. Create or join a room and it will appear here.";
+      return;
+    }
+
+    snap.forEach(function (roomDoc) {
+      const room = roomDoc.data();
+      const roomCode = roomDoc.id;
+
+      const div = document.createElement("div");
+      div.className = "row";
+
+      const title = document.createElement("div");
+      title.className = "row-title";
+      title.textContent = (room.roomName || "Unnamed Room") + " â€” " + roomCode;
+
+      const role = document.createElement("div");
+      role.className = "small";
+      role.textContent = "Role: " + (room.role || "player");
+
+      const openButton = document.createElement("button");
+      openButton.textContent = "Open Room";
+      openButton.addEventListener("click", () => openRoom(roomCode, "room"));
+
+      const removeButton = document.createElement("button");
+      removeButton.textContent = "Remove From My List";
+      removeButton.addEventListener("click", async function () {
+        if (!confirm("Remove this room from your saved list? The room itself will still exist.")) return;
+        await deleteDoc(doc(db, "users", currentUser.uid, "rooms", roomCode));
+      });
+
+      div.appendChild(title);
+      div.appendChild(role);
+      div.appendChild(openButton);
+      div.appendChild(removeButton);
+
+      E.myRoomsList.appendChild(div);
+    });
+
+    appendSavedRoomsPaginationButton();
+  }, function (error) {
+    text(E.myRoomsList, "Could not load saved rooms: " + error.message);
+  });
+}
+
+function appendSavedRoomsPaginationButton() {
+  if (!E.myRoomsList) {
+    return;
+  }
+
+  const existingButton = document.getElementById("savedRoomsLoadMoreButton");
+
+  if (existingButton) {
+    existingButton.remove();
+  }
+
+  if (!savedRoomsHasMore) {
+    return;
+  }
+
+  const loadMoreButton = document.createElement("button");
+  loadMoreButton.id = "savedRoomsLoadMoreButton";
+  loadMoreButton.type = "button";
+  loadMoreButton.textContent = savedRoomsLoadingMore ? "Loading..." : "Load More Rooms";
+  loadMoreButton.disabled = savedRoomsLoadingMore;
+  loadMoreButton.addEventListener("click", loadMoreMyRooms);
+  E.myRoomsList.appendChild(loadMoreButton);
+}
+
+function appendSavedRoomRow(roomDoc) {
+  if (!E.myRoomsList) {
+    return;
+  }
+
+  const room = roomDoc.data();
+  const roomCode = roomDoc.id;
+  const div = document.createElement("div");
+  div.className = "row";
+
+  const title = document.createElement("div");
+  title.className = "row-title";
+  title.textContent = (room.roomName || "Unnamed Room") + " - " + roomCode;
+
+  const role = document.createElement("div");
+  role.className = "small";
+  role.textContent = "Role: " + (room.role || "player");
+
+  const openButton = document.createElement("button");
+  openButton.textContent = "Open Room";
+  openButton.addEventListener("click", function () {
+    openRoom(roomCode, "room");
+  });
+
+  const removeButton = document.createElement("button");
+  removeButton.textContent = "Remove From My List";
+  removeButton.addEventListener("click", async function () {
+    if (!confirm("Remove this room from your saved list? The room itself will still exist.")) return;
+    if (!currentUser) return;
+
+    try {
+      await deleteDoc(doc(db, "users", currentUser.uid, "rooms", roomCode));
+      savedRoomDocs = savedRoomDocs.filter(function (savedRoomDoc) {
+        return savedRoomDoc.id !== roomCode;
+      });
+      div.remove();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  div.appendChild(title);
+  div.appendChild(role);
+  div.appendChild(openButton);
+  div.appendChild(removeButton);
+  E.myRoomsList.appendChild(div);
+}
+
+async function loadMoreMyRooms() {
+  if (
+    !currentUser ||
+    !savedRoomsLastDoc ||
+    !savedRoomsHasMore ||
+    savedRoomsLoadingMore
+  ) {
+    return;
+  }
+
+  const userId = currentUser.uid;
+  const cursor = savedRoomsLastDoc;
+  savedRoomsLoadingMore = true;
+  appendSavedRoomsPaginationButton();
+
+  try {
+    const nextPage = await getDocs(query(
+      collection(db, "users", userId, "rooms"),
+      orderBy("updatedAt", "desc"),
+      startAfter(cursor),
+      limit(COLLECTION_PAGE_SIZE)
+    ));
+
+    if (!currentUser || currentUser.uid !== userId) {
+      return;
+    }
+
+    const existingButton = document.getElementById("savedRoomsLoadMoreButton");
+    if (existingButton) existingButton.remove();
+
+    const knownRoomIds = new Set(savedRoomDocs.map(function (roomDoc) {
+      return roomDoc.id;
+    }));
+    const newRoomDocs = nextPage.docs.filter(function (roomDoc) {
+      return !knownRoomIds.has(roomDoc.id);
+    });
+
+    newRoomDocs.forEach(appendSavedRoomRow);
+    savedRoomDocs = savedRoomDocs.concat(newRoomDocs);
+
+    if (nextPage.docs.length > 0) {
+      savedRoomsLastDoc = nextPage.docs[nextPage.docs.length - 1];
+    }
+
+    savedRoomsHasMore = nextPage.docs.length === COLLECTION_PAGE_SIZE;
+  } catch (error) {
+    text(E.roomStatusText, "Could not load more saved rooms: " + error.message);
+  } finally {
+    savedRoomsLoadingMore = false;
+
+    if (currentUser && currentUser.uid === userId) {
+      appendSavedRoomsPaginationButton();
+    }
+  }
+}
+
+// =====================================================
+// APP SECTION 7 â€” ROOM CREATE / JOIN / OPEN
+// =====================================================
+
+async function createRoom() {
+  const roomName = E.roomNameInput.value.trim() || "Unnamed Room";
+  let roomCode = null;
+
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidateCode = makeRoomCode();
+    const roomRef = doc(db, "rooms", candidateCode);
+
+    const created = await runTransaction(db, async function (transaction) {
+      const roomSnap = await transaction.get(roomRef);
+
+      if (roomSnap.exists()) {
+        return false;
+      }
+
+      transaction.set(roomRef, {
+        roomCode: candidateCode,
+        roomName,
+        dmUid: currentUser.uid,
+        dmName: currentUser.displayName || "Unnamed",
+        currentMap: null,
+        puzzleTiles: [],
+        activePuzzleTileKey: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      return true;
+    });
+
+    if (created) {
+      roomCode = candidateCode;
+      break;
+    }
+  }
+
+  if (!roomCode) {
+    throw new Error("Could not generate a unique room code. Please try again.");
+  }
+
+  await savePlayerHistory(roomCode, "dm");
+  await saveRoomToMyRooms(roomCode, roomName, "dm");
+
+  openRoom(roomCode, "room");
+  text(E.roomStatusText, "Room created and saved to My Saved Rooms.");
+}
+
+async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") {
+  const cleanCode = normalizeRoomCode(roomCode);
+
+  if (!cleanCode) {
+    alert("Enter a room code.");
+    return;
+  }
+
+  const roomRef = doc(db, "rooms", cleanCode);
+  const roomSnap = await getDoc(roomRef);
+
+  if (!roomSnap.exists()) {
+    alert("Room not found.");
+    return;
+  }
+
+  const roomData = roomSnap.data();
+
+  if (roomData.deletingAt) {
+    alert("This room is being permanently deleted.");
+    return;
+  }
+
+  const finalRole = roomData.dmUid === currentUser.uid ? "dm" : wantedRole;
+
+  await savePlayerHistory(cleanCode, finalRole);
+  await saveRoomToMyRooms(cleanCode, roomData.roomName || "Unnamed Room", finalRole);
+
+  openRoom(cleanCode, screenToShow);
+}
+
+function openRoom(roomCode, screenToShow = "room") {
+  const cleanCode = normalizeRoomCode(roomCode);
+
+  currentRoomCode = cleanCode;
+  latestMapsSnapshot = null;
+  latestActivePlayersSnapshot = null;
+  latestPuzzleTiles = null;
+  hasMigratedLegacyPuzzleTiles = false;
+
+  clearRoomListeners();
+
+  stopListeningToRoom = onSnapshot(doc(db, "rooms", cleanCode), {
+    includeMetadataChanges: true
+  }, async function (roomSnap) {
+    if (roomSnap.metadata.hasPendingWrites) {
+      return;
+    }
+
+    if (!roomSnap.exists()) {
+      alert("This room was deleted or does not exist.");
+      await leaveCurrentRoomView();
+      return;
+    }
+
+    const room = mergeRoomWithPuzzleTileDocs(roomSnap.data());
+
+    if (room.deletingAt && room.dmUid !== currentUser.uid) {
+      alert("This room is being permanently deleted by the DM.");
+      await leaveCurrentRoomView();
+      return;
+    }
+
+    currentRoomData = room;
+    currentIsDM = room.dmUid === currentUser.uid;
+
+    text(E.currentRoomNameText, room.roomName || "Unnamed Room");
+    text(E.roomCodeText, cleanCode);
+    text(E.battleRoomNameText, room.roomName || "Unnamed Room");
+    text(E.battleRoomCodeText, cleanCode);
+    text(E.yourRoleText, currentIsDM ? "DM" : "Player");
+
+    setDmControlsVisible(currentIsDM);
+
+    if (room.deletingAt && currentIsDM) {
+      text(E.roomStatusText, "Room deletion is incomplete. Use Delete Room Permanently to retry.");
+    }
+
+    const nextActiveSessionRole = currentIsDM ? "dm" : "player";
+
+    if (activeSessionRoomCode !== cleanCode) {
+      await setActivePlayerSession(cleanCode, nextActiveSessionRole);
+    } else if (activeSessionRole !== nextActiveSessionRole) {
+      activeSessionRole = nextActiveSessionRole;
+      await touchActivePlayerSession();
+    }
+
+    showSharedMap(buildMapFromRoomFields(currentRoomData));
+    renderPuzzleBoard(currentRoomData);
+    maybeMigrateLegacyPuzzleTilesToSubcollection();
+
+    if (latestMapsSnapshot) renderRoomMaps(latestMapsSnapshot);
+    if (latestActivePlayersSnapshot) renderPlayers(latestActivePlayersSnapshot);
+
+    openStartupViewIfNeeded();
+  }, function (error) {
+    alert("Room listener failed: " + error.message);
+  });
+
+  listenToPlayers(cleanCode);
+  listenToRoomMaps(cleanCode);
+  listenToPuzzleTiles(cleanCode);
+
+  if (screenToShow === "battle") {
+    showScreen("battle");
+    applyBattleZoom();
+  } else {
+    showScreen("room");
+  }
+}
+
+async function leaveCurrentRoomView() {
+  await removeActivePlayerSession();
+
+  clearRoomListeners();
+
+  currentRoomCode = null;
+  currentRoomData = null;
+  currentIsDM = false;
+  currentMapId = null;
+  latestMapsSnapshot = null;
+  latestActivePlayersSnapshot = null;
+
+  setDmControlsVisible(false);
+
+  text(E.mapUploadStatus, "");
+  text(E.battleMapUpdateStatus, "");
+  text(E.puzzleMapStatus, "");
+
+  showScreen("lobby");
+}
+
+function ensureRoomDeletionControl() {
+  if (!E.deleteRoomButton) {
+    const parent = E.saveThisRoomButton && E.saveThisRoomButton.parentElement;
+
+    if (!parent) {
+      return;
+    }
+
+    E.deleteRoomButton = document.createElement("button");
+    E.deleteRoomButton.id = "deleteRoomButton";
+    E.deleteRoomButton.type = "button";
+    E.deleteRoomButton.textContent = "Delete Room Permanently";
+    E.deleteRoomButton.className = E.saveThisRoomButton.className;
+    parent.appendChild(E.deleteRoomButton);
+  }
+
+  E.deleteRoomButton.classList.add("hidden");
+
+  if (E.deleteRoomButton.dataset.listenerReady !== "true") {
+    E.deleteRoomButton.dataset.listenerReady = "true";
+    E.deleteRoomButton.addEventListener("click", deleteCurrentRoomPermanently);
+  }
+}
+
+function rememberRoomCloudinaryAsset(assetMap, asset) {
+  const identity = getAssetIdentity(asset);
+
+  if (!identity.publicId && !identity.url) {
+    return;
+  }
+
+  const assetKey = identity.publicId || identity.url;
+
+  if (!assetMap.has(assetKey)) {
+    assetMap.set(assetKey, {
+      ...asset,
+      publicId: identity.publicId || null,
+      url: identity.url || null
+    });
+  }
+}
+
+async function deleteRoomSubcollectionInBatches(roomCode, subcollectionName, onDocument) {
+  const subcollectionRef = collection(db, "rooms", roomCode, subcollectionName);
+
+  while (true) {
+    const page = await getDocs(query(
+      subcollectionRef,
+      limit(ROOM_DELETE_BATCH_SIZE)
+    ));
+
+    if (page.empty) {
+      return;
+    }
+
+    const batch = writeBatch(db);
+
+    page.docs.forEach(function (documentSnapshot) {
+      if (onDocument) {
+        onDocument(documentSnapshot);
+      }
+
+      batch.delete(documentSnapshot.ref);
+    });
+
+    await batch.commit();
+  }
+}
+
+function resetDeletedRoomState() {
+  currentRoomCode = null;
+  currentRoomData = null;
+  currentIsDM = false;
+  currentMapId = null;
+  displayedSharedMapUrl = null;
+  latestMapsSnapshot = null;
+  latestActivePlayersSnapshot = null;
+  latestPuzzleTiles = null;
+  setDmControlsVisible(false);
+  showScreen("lobby");
+}
+
+async function deleteCurrentRoomPermanently() {
+  if (
+    !currentUser ||
+    !currentRoomCode ||
+    !currentRoomData ||
+    !currentIsDM ||
+    currentRoomData.dmUid !== currentUser.uid
+  ) {
+    alert("Only the room DM can permanently delete this room.");
+    return;
+  }
+
+  const roomCode = currentRoomCode;
+  const userId = currentUser.uid;
+  const typedCode = prompt(
+    "Type the room code " + roomCode + " to permanently delete this room and its history."
+  );
+
+  if (normalizeRoomCode(typedCode) !== roomCode) {
+    alert("Room deletion cancelled. The room code did not match.");
+    return;
+  }
+
+  const roomRef = doc(db, "rooms", roomCode);
+  const roomAssets = new Map();
+  rememberRoomCloudinaryAsset(
+    roomAssets,
+    buildMapFromRoomFields(currentRoomData)
+  );
+
+  if (E.deleteRoomButton) {
+    E.deleteRoomButton.disabled = true;
+  }
+
+  text(E.roomStatusText, "Deleting room data and player history...");
+
+  try {
+    await removeActivePlayerSession();
+    clearRoomListeners();
+
+    await updateDoc(roomRef, {
+      deletingAt: serverTimestamp()
+    });
+
+    for (const subcollectionName of ROOM_OWNED_SUBCOLLECTIONS) {
+      const shouldCollectAssets =
+        subcollectionName === "maps" || subcollectionName === "puzzleTiles";
+
+      await deleteRoomSubcollectionInBatches(
+        roomCode,
+        subcollectionName,
+        shouldCollectAssets
+          ? function (documentSnapshot) {
+              rememberRoomCloudinaryAsset(roomAssets, documentSnapshot.data());
+            }
+          : null
+      );
+    }
+
+    await deleteDoc(roomRef);
+
+    try {
+      await deleteDoc(doc(db, "users", userId, "rooms", roomCode));
+    } catch (error) {
+      console.warn("Room deleted, but its saved-room shortcut could not be removed:", error);
+    }
+
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, null);
+    currentRoomData.puzzleTiles = [];
+    latestMapsSnapshot = [];
+
+    for (const asset of roomAssets.values()) {
+      await deleteCloudinaryAssetIfUnreferenced(asset, {
+        ignoreCurrentMap: true,
+        reason: "delete-room"
+      });
+    }
+
+    resetDeletedRoomState();
+    text(E.roomStatusText, "Room permanently deleted.");
+  } catch (error) {
+    try {
+      const remainingRoom = await getDoc(roomRef);
+
+      if (remainingRoom.exists()) {
+        await updateDoc(roomRef, {
+          deletingAt: deleteField()
+        });
+        openRoom(roomCode, "room");
+      } else {
+        resetDeletedRoomState();
+      }
+    } catch (recoveryError) {
+      console.warn("Could not restore the room after an incomplete deletion:", recoveryError);
+    }
+
+    alert("Room deletion did not finish: " + error.message);
+  } finally {
+    if (E.deleteRoomButton) {
+      E.deleteRoomButton.disabled = false;
+    }
+  }
+}
+
+ensureRoomDeletionControl();
+
+addOptionalEventListener(E.createRoomButton, "click", async () => {
+  try {
+    await createRoom();
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+addOptionalEventListener(E.joinRoomButton, "click", async () => {
+  try {
+    if (!E.joinRoomCodeInput.value.trim()) {
+      alert("Enter a room code.");
+      return;
+    }
+
+    await joinRoom(E.joinRoomCodeInput.value, "player", "room");
+    text(E.roomStatusText, "Room joined and saved to My Saved Rooms.");
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+addOptionalEventListener(E.backToLobbyButton, "click", leaveCurrentRoomView);
+
+addOptionalEventListener(E.copyRoomCodeButton, "click", async () => {
+  if (!currentRoomCode) return;
+
+  await navigator.clipboard.writeText(currentRoomCode);
+  alert("Room code copied.");
+});
+
+addOptionalEventListener(E.saveThisRoomButton, "click", async () => {
+  try {
+    if (!currentRoomCode || !currentRoomData) {
+      alert("Open a room first.");
+      return;
+    }
+
+    await saveRoomToMyRooms(
+      currentRoomCode,
+      currentRoomData.roomName || "Unnamed Room",
+      currentIsDM ? "dm" : "player"
+    );
+
+    alert("Room saved to My Saved Rooms.");
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+
+// =====================================================
+// APP SECTION 8 â€” ACTIVE ROOM PLAYERS
+// =====================================================
+
+async function savePlayerHistory(roomCode, role) {
+  if (!currentUser) return;
+
+  await setDoc(doc(db, "rooms", roomCode, "players", currentUser.uid), {
+    uid: currentUser.uid,
+    displayName: currentUser.displayName || "Unnamed",
+    role: role || "player",
+    joinedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+function getActivePlayerTimestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  if (typeof value.seconds === "number") {
+    return (value.seconds * 1000) + Math.floor((value.nanoseconds || 0) / 1000000);
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function isActivePlayerStale(player, sessionId) {
+  if (sessionId === activeSessionId && activeSessionRoomCode) {
+    return false;
+  }
+
+  const lastSeenMillis = getActivePlayerTimestampMillis(
+    player.lastSeenAt || player.joinedAt
+  );
+
+  if (!lastSeenMillis) {
+    return false;
+  }
+
+  return Date.now() - lastSeenMillis > ACTIVE_PLAYER_STALE_MS;
+}
+
+async function touchActivePlayerSession() {
+  if (!currentUser || !activeSessionRoomCode) return;
+
+  try {
+    await setDoc(doc(db, "rooms", activeSessionRoomCode, "activePlayers", activeSessionId), {
+      sessionId: activeSessionId,
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || "Unnamed",
+      role: activeSessionRole || (currentIsDM ? "dm" : "player"),
+      lastSeenAt: serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.warn("Could not update active player heartbeat:", error);
+  }
+}
+
+function startActivePlayerHeartbeat() {
+  if (activePlayerHeartbeatTimer) {
+    return;
+  }
+
+  activePlayerHeartbeatTimer = window.setInterval(
+    touchActivePlayerSession,
+    ACTIVE_PLAYER_HEARTBEAT_MS
+  );
+}
+
+function stopActivePlayerHeartbeat() {
+  if (!activePlayerHeartbeatTimer) {
+    return;
+  }
+
+  window.clearInterval(activePlayerHeartbeatTimer);
+  activePlayerHeartbeatTimer = null;
+}
+
+function cleanupStaleActivePlayerSession(roomCode, sessionId) {
+  const cleanCode = normalizeRoomCode(roomCode);
+
+  if (!cleanCode || !sessionId) {
+    return;
+  }
+
+  const cleanupKey = cleanCode + "/" + sessionId;
+  const now = Date.now();
+  const lastAttempt = staleActivePlayerCleanupAttempts.get(cleanupKey) || 0;
+
+  if (now - lastAttempt < ACTIVE_PLAYER_CLEANUP_RETRY_MS) {
+    return;
+  }
+
+  staleActivePlayerCleanupAttempts.set(cleanupKey, now);
+
+  deleteDoc(doc(db, "rooms", cleanCode, "activePlayers", sessionId))
+    .then(function () {
+      staleActivePlayerCleanupAttempts.delete(cleanupKey);
+    })
+    .catch(function (error) {
+      console.warn("Could not remove stale active player session:", error);
+    });
+}
+
+async function setActivePlayerSession(roomCode, role) {
+  if (!currentUser || !roomCode) return;
+
+  const cleanCode = normalizeRoomCode(roomCode);
+
+  if (activeSessionRoomCode && activeSessionRoomCode !== cleanCode) {
+    await removeActivePlayerSession();
+  }
+
+  const nextRole = role || "player";
+  const sessionRef = doc(db, "rooms", cleanCode, "activePlayers", activeSessionId);
+
+  await runTransaction(db, async function (transaction) {
+    const sessionSnap = await transaction.get(sessionRef);
+    const sessionData = {
+      sessionId: activeSessionId,
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || "Unnamed",
+      role: nextRole,
+      lastSeenAt: serverTimestamp()
+    };
+
+    if (!sessionSnap.exists()) {
+      sessionData.joinedAt = serverTimestamp();
+    }
+
+    transaction.set(sessionRef, sessionData, { merge: true });
+  });
+
+  activeSessionRoomCode = cleanCode;
+  activeSessionRole = nextRole;
+  startActivePlayerHeartbeat();
+}
+
+async function removeActivePlayerSession() {
+  const roomCodeToRemove = activeSessionRoomCode;
+
+  stopActivePlayerHeartbeat();
+  activeSessionRoomCode = null;
+  activeSessionRole = null;
+
+  if (!roomCodeToRemove) return;
+
+  try {
+    await deleteDoc(doc(db, "rooms", roomCodeToRemove, "activePlayers", activeSessionId));
+  } catch (error) {
+    console.warn("Could not remove active player session:", error);
+  }
+}
+
+function listenToPlayers(roomCode) {
+  stopListeningToPlayers = onSnapshot(
+    collection(db, "rooms", roomCode, "activePlayers"),
+    function (playersSnap) {
+      latestActivePlayersSnapshot = playersSnap;
+      renderPlayers(playersSnap);
+    },
+    function (error) {
+      E.playersList.textContent = "Could not load players: " + error.message;
+    }
+  );
+}
+
+function renderPlayers(playersSnap) {
+  E.playersList.innerHTML = "";
+
+  if (playersSnap.empty) {
+    E.playersList.textContent = "No players in the room right now.";
+    return;
+  }
+
+  const playersByUid = new Map();
+
+  playersSnap.forEach(function (playerDoc) {
+    const player = playerDoc.data();
+
+    if (isActivePlayerStale(player, playerDoc.id)) {
+      cleanupStaleActivePlayerSession(currentRoomCode, playerDoc.id);
+      return;
+    }
+
+    if (!player.uid) return;
+
+    const existingPlayer = playersByUid.get(player.uid);
+
+    if (!existingPlayer || player.role === "dm") {
+      playersByUid.set(player.uid, player);
+    }
+  });
+
+  const players = Array.from(playersByUid.values());
+
+  if (players.length === 0) {
+    E.playersList.textContent = "No players in the room right now.";
+    return;
+  }
+
+  players.sort(function (a, b) {
+    if (a.role === "dm" && b.role !== "dm") return -1;
+    if (a.role !== "dm" && b.role === "dm") return 1;
+    return String(a.displayName || "").localeCompare(String(b.displayName || ""));
+  });
+
+  players.forEach(function (player) {
+    const div = document.createElement("div");
+    div.className = "row";
+
+    const title = document.createElement("div");
+    title.className = "row-title";
+
+    let label = (player.displayName || "Unnamed") + " â€” " + (player.role || "player").toUpperCase();
+
+    if (currentUser && player.uid === currentUser.uid) {
+      label += " â€” YOU";
+    }
+
+    title.textContent = label;
+    div.appendChild(title);
+    E.playersList.appendChild(div);
+  });
+}
+
+
+// =====================================================
+// APP SECTION 9 â€” CLOUDINARY UPLOAD
+// =====================================================
+
+function getCloudinaryAssetMetadata(cloudinaryResult) {
+  const deleteToken = cloudinaryResult.delete_token || null;
+
+  return {
+    publicId: cloudinaryResult.public_id || null,
+    deleteToken,
+    deleteTokenCreatedAtMillis: deleteToken ? Date.now() : null
+  };
+}
+
+function validateImageUploadFile(file) {
+  if (!file) {
+    throw new Error("Choose an image file first.");
+  }
+
+  if (!Number.isFinite(file.size) || file.size <= 0) {
+    throw new Error("The selected image file is empty or unreadable.");
+  }
+
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    throw new Error("Image files must be 10 MB or smaller.");
+  }
+
+  const mimeType = String(file.type || "").trim().toLowerCase();
+  const fileNameParts = String(file.name || "").toLowerCase().split(".");
+  const extension = fileNameParts.length > 1 ? fileNameParts.pop() : "";
+  const hasSupportedType = ALLOWED_IMAGE_UPLOAD_TYPES.has(mimeType);
+  const hasFallbackExtension =
+    !mimeType && ALLOWED_IMAGE_UPLOAD_EXTENSIONS.has(extension);
+
+  if (!hasSupportedType && !hasFallbackExtension) {
+    throw new Error("Use a JPEG, PNG, WebP, GIF, or AVIF image.");
+  }
+}
+
+async function postCloudinaryUpload(file, requestDeleteToken) {
+  const formData = new FormData();
+
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
+
+  const response = await fetch(
+    "https://api.cloudinary.com/v1_1/" + cloudName + "/image/upload",
+    {
+      method: "POST",
+      body: formData
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error("Cloudinary upload failed: " + errorText);
+  }
+
+  return await response.json();
+}
+
+async function uploadMapToCloudinary(file) {
+  validateImageUploadFile(file);
+  return await postCloudinaryUpload(file, false);
+}
+
+function getAssetIdentity(asset) {
+  if (!asset) {
+    return {
+      publicId: "",
+      url: ""
+    };
+  }
+
+  return {
+    publicId: String(asset.publicId || asset.public_id || "").trim(),
+    url: String(asset.url || asset.secure_url || "").trim()
+  };
+}
+
+function assetsMatch(left, right) {
+  const leftIdentity = getAssetIdentity(left);
+  const rightIdentity = getAssetIdentity(right);
+
+  if (leftIdentity.publicId && rightIdentity.publicId) {
+    return leftIdentity.publicId === rightIdentity.publicId;
+  }
+
+  return Boolean(leftIdentity.url && rightIdentity.url && leftIdentity.url === rightIdentity.url);
+}
+
+function hasFreshCloudinaryDeleteToken(asset) {
+  if (!asset || !asset.deleteToken || !asset.deleteTokenCreatedAtMillis) {
+    return false;
+  }
+
+  return Date.now() - asset.deleteTokenCreatedAtMillis < CLOUDINARY_DELETE_TOKEN_MAX_AGE_MS;
+}
+
+async function isCloudinaryAssetStillReferenced(asset, options = {}) {
+  if (!asset || (!asset.publicId && !asset.url)) {
+    return false;
+  }
+
+  const currentMap = buildMapFromRoomFields(currentRoomData || {});
+
+  if (!options.ignoreCurrentMap && assetsMatch(asset, currentMap)) {
+    return true;
+  }
+
+  const puzzleTiles = getPuzzleTiles(currentRoomData || {});
+
+  if (
+    puzzleTiles.some(function (tile) {
+      return tile.key !== options.ignorePuzzleTileKey && assetsMatch(asset, tile);
+    })
+  ) {
+    return true;
+  }
+
+  if (latestMapsSnapshot) {
+    let isReferenced = false;
+
+    latestMapsSnapshot.forEach(function (mapDoc) {
+      if (mapDoc.id === options.ignoreSavedMapId) {
+        return;
+      }
+
+      if (assetsMatch(asset, mapDoc.data())) {
+        isReferenced = true;
+      }
+    });
+
+    if (isReferenced) {
+      return true;
+    }
+  }
+
+  if (!currentRoomCode) {
+    return asset.savedToLibrary === true;
+  }
+
+  const mapsRef = collection(db, "rooms", currentRoomCode, "maps");
+  const identityFields = [];
+
+  if (asset.publicId) {
+    identityFields.push(["publicId", asset.publicId]);
+  }
+
+  if (asset.url) {
+    identityFields.push(["url", asset.url]);
+  }
+
+  for (const identityField of identityFields) {
+    const matchingMaps = await getDocs(query(
+      mapsRef,
+      where(identityField[0], "==", identityField[1]),
+      limit(2)
+    ));
+
+    const hasMatchingMap = matchingMaps.docs.some(function (mapDoc) {
+      return (
+        mapDoc.id !== options.ignoreSavedMapId &&
+        assetsMatch(asset, mapDoc.data())
+      );
+    });
+
+    if (hasMatchingMap) {
+      return true;
+    }
+  }
+
+  if (!latestMapsSnapshot && asset.savedToLibrary === true) {
+    return true;
+  }
+
+  return false;
+}
+
+async function deleteCloudinaryAssetWithToken(deleteToken) {
+  const formData = new FormData();
+  formData.append("token", deleteToken);
+
+  const response = await fetch(
+    "https://api.cloudinary.com/v1_1/" + cloudName + "/delete_by_token",
+    {
+      method: "POST",
+      body: formData
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error("Cloudinary delete failed: " + errorText);
+  }
+
+  return await response.json();
+}
+
+async function deleteCloudinaryAssetWithEndpoint(asset, reason) {
+  if (!cloudinaryDeleteEndpoint) {
+    return false;
+  }
+
+  const response = await fetch(cloudinaryDeleteEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      cloudName,
+      publicId: asset.publicId || null,
+      url: asset.url || null,
+      roomCode: currentRoomCode || null,
+      reason: reason || "delete"
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error("Cloudinary delete endpoint failed: " + errorText);
+  }
+
+  return true;
+}
+
+async function deleteCloudinaryAssetIfUnreferenced(asset, options = {}) {
+  if (!asset || (!asset.publicId && !asset.url)) {
+    return "No Cloudinary asset metadata found.";
+  }
+
+  try {
+    if (await isCloudinaryAssetStillReferenced(asset, options)) {
+      return "Cloudinary image kept because another room reference still uses it.";
+    }
+
+    if (await deleteCloudinaryAssetWithEndpoint(asset, options.reason)) {
+      return "Cloudinary image deleted.";
+    }
+
+    if (hasFreshCloudinaryDeleteToken(asset)) {
+      await deleteCloudinaryAssetWithToken(asset.deleteToken);
+      return "Cloudinary image deleted.";
+    }
+
+    console.warn(
+      "Cloudinary image was not deleted. Configure a secure delete endpoint or use a fresh delete token.",
+      asset.publicId || asset.url
+    );
+    return "Cloudinary image was not deleted; no secure delete path was available.";
+  } catch (error) {
+    console.warn("Could not delete Cloudinary image:", error);
+    return "Cloudinary image deletion failed.";
+  }
+}
+
+
+// =====================================================
+// APP SECTION 10 â€” SAVED MAP LIBRARY
+// =====================================================
+
+function listenToRoomMaps(roomCode) {
+  if (stopListeningToMaps) {
+    stopListeningToMaps();
+  }
+
+  latestMapsSnapshot = [];
+  roomMapsLastDoc = null;
+  roomMapsHasMore = false;
+  roomMapsLoadingMore = false;
+  roomMapsPaginationRoomCode = roomCode;
+
+  const mapsQuery = query(
+    collection(db, "rooms", roomCode, "maps"),
+    orderBy("createdAt", "desc"),
+    limit(COLLECTION_PAGE_SIZE)
+  );
+
+  stopListeningToMaps = onSnapshot(
+    mapsQuery,
+    { includeMetadataChanges: true },
+    function (mapsSnap) {
+      if (
+        mapsSnap.metadata.hasPendingWrites ||
+        currentRoomCode !== roomCode
+      ) {
+        return;
+      }
+
+      latestMapsSnapshot = mapsSnap.docs;
+      roomMapsLastDoc = mapsSnap.docs.length > 0
+        ? mapsSnap.docs[mapsSnap.docs.length - 1]
+        : null;
+      roomMapsHasMore = mapsSnap.docs.length === COLLECTION_PAGE_SIZE;
+      renderRoomMaps(latestMapsSnapshot);
+    },
+    function (error) {
+      text(E.roomMapsList, "Could not load saved maps: " + error.message);
+    }
+  );
+}
+
+function renderRoomMaps(mapDocs) {
+  if (!E.roomMapsList) {
+    return;
+  }
+
+  const docs = Array.isArray(mapDocs) ? mapDocs : [];
+  E.roomMapsList.innerHTML = "";
+
+  if (docs.length === 0) {
+    E.roomMapsList.textContent = "No saved maps in this room yet. Upload a new map as DM.";
+    return;
+  }
+
+  docs.forEach(function (mapDoc) {
+    const map = mapDoc.data();
+    const mapId = mapDoc.id;
+
+    const div = document.createElement("div");
+    div.className = "row";
+
+    const title = document.createElement("div");
+    title.className = "row-title";
+    title.textContent = map.name || "Unnamed Map";
+
+    const url = document.createElement("div");
+    url.className = "small";
+    url.textContent = map.url || "";
+
+    const openImageButton = document.createElement("button");
+    openImageButton.textContent = "Open Image";
+    openImageButton.addEventListener("click", function () {
+      window.open(map.url, "_blank");
+    });
+
+    div.appendChild(title);
+    div.appendChild(url);
+    div.appendChild(openImageButton);
+
+    if (currentIsDM) {
+      const useButton = document.createElement("button");
+      useButton.textContent = "Use Map";
+      useButton.addEventListener("click", function () {
+        useSavedMap(mapId);
+      });
+
+      const forgetButton = document.createElement("button");
+      forgetButton.textContent = "Forget From List";
+      forgetButton.addEventListener("click", function () {
+        forgetSavedMap(mapId);
+      });
+
+      div.appendChild(useButton);
+      div.appendChild(forgetButton);
+    }
+
+    E.roomMapsList.appendChild(div);
+  });
+
+  if (roomMapsHasMore) {
+    const loadMoreButton = document.createElement("button");
+    loadMoreButton.type = "button";
+    loadMoreButton.textContent = roomMapsLoadingMore ? "Loading..." : "Load More Maps";
+    loadMoreButton.disabled = roomMapsLoadingMore;
+    loadMoreButton.addEventListener("click", loadMoreRoomMaps);
+    E.roomMapsList.appendChild(loadMoreButton);
+  }
+}
+
+async function loadMoreRoomMaps() {
+  if (
+    !currentRoomCode ||
+    !roomMapsLastDoc ||
+    !roomMapsHasMore ||
+    roomMapsLoadingMore
+  ) {
+    return;
+  }
+
+  const roomCode = currentRoomCode;
+  const cursor = roomMapsLastDoc;
+  roomMapsLoadingMore = true;
+  renderRoomMaps(latestMapsSnapshot || []);
+
+  try {
+    const nextPage = await getDocs(query(
+      collection(db, "rooms", roomCode, "maps"),
+      orderBy("createdAt", "desc"),
+      startAfter(cursor),
+      limit(COLLECTION_PAGE_SIZE)
+    ));
+
+    if (
+      currentRoomCode !== roomCode ||
+      roomMapsPaginationRoomCode !== roomCode
+    ) {
+      return;
+    }
+
+    const loadedMaps = latestMapsSnapshot || [];
+    const knownMapIds = new Set(loadedMaps.map(function (mapDoc) {
+      return mapDoc.id;
+    }));
+    const newMapDocs = nextPage.docs.filter(function (mapDoc) {
+      return !knownMapIds.has(mapDoc.id);
+    });
+
+    latestMapsSnapshot = loadedMaps.concat(newMapDocs);
+
+    if (nextPage.docs.length > 0) {
+      roomMapsLastDoc = nextPage.docs[nextPage.docs.length - 1];
+    }
+
+    roomMapsHasMore = nextPage.docs.length === COLLECTION_PAGE_SIZE;
+  } catch (error) {
+    text(E.mapUploadStatus, "Could not load more saved maps: " + error.message);
+  } finally {
+    roomMapsLoadingMore = false;
+
+    if (
+      currentRoomCode === roomCode &&
+      roomMapsPaginationRoomCode === roomCode
+    ) {
+      renderRoomMaps(latestMapsSnapshot || []);
+    }
+  }
+}
+
+async function saveMapToRoomLibrary(mapData) {
+  if (!currentRoomCode || !currentIsDM) {
+    alert("Only the DM can save maps.");
+    return null;
+  }
+
+  const mapDocRef = await addDoc(collection(db, "rooms", currentRoomCode, "maps"), {
+    name: mapData.name || "Unnamed Map",
+    url: mapData.url,
+    publicId: mapData.publicId || null,
+    deleteToken: mapData.deleteToken || null,
+    deleteTokenCreatedAtMillis: mapData.deleteTokenCreatedAtMillis || null,
+    createdAt: serverTimestamp()
+  });
+
+  return mapDocRef.id;
+}
+
+async function setCurrentRoomMap(mapData) {
+  if (!currentRoomCode || !currentIsDM) {
+    alert("Only the DM can change maps.");
+    return;
+  }
+
+  const roomRef = doc(db, "rooms", currentRoomCode);
+  const currentMap = normalizeCurrentMapData(mapData);
+
+  await updateDoc(roomRef, {
+    currentMap,
+    ...legacyCurrentMapFieldDeletions(),
+    updatedAt: serverTimestamp()
+  });
+}
+
+async function useSavedMap(mapId) {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      alert("Only the DM can change maps.");
+      return;
+    }
+
+    const mapSnap = await getDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
+
+    if (!mapSnap.exists()) {
+      alert("Map not found.");
+      return;
+    }
+
+    const map = mapSnap.data();
+
+    const selectedMap = {
+      id: mapId,
+      name: map.name || "Unnamed Map",
+      url: map.url,
+      publicId: map.publicId || null,
+      deleteToken: map.deleteToken || null,
+      deleteTokenCreatedAtMillis: map.deleteTokenCreatedAtMillis || null,
+      savedToLibrary: true
+    };
+
+    await setCurrentRoomMap(selectedMap);
+    showSharedMap(selectedMap);
+
+    text(E.mapUploadStatus, "Map switched.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function forgetSavedMap(mapId) {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      alert("Only the DM can forget maps.");
+      return;
+    }
+
+    const mapSnap = await getDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
+
+    if (!mapSnap.exists()) {
+      alert("Map not found.");
+      return;
+    }
+
+    const mapData = mapSnap.data();
+    const mapToForget = {
+      id: mapId,
+      name: mapData.name || "Unnamed Map",
+      url: mapData.url,
+      publicId: mapData.publicId || null,
+      deleteToken: mapData.deleteToken || null,
+      deleteTokenCreatedAtMillis: mapData.deleteTokenCreatedAtMillis || null,
+      savedToLibrary: true
+    };
+
+    if (!confirm("Forget this map from the room list? The Cloudinary image will be deleted if no other room reference uses it.")) {
+      return;
+    }
+
+    await deleteDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
+
+    if (Array.isArray(latestMapsSnapshot)) {
+      latestMapsSnapshot = latestMapsSnapshot.filter(function (mapDoc) {
+        return mapDoc.id !== mapId;
+      });
+      renderRoomMaps(latestMapsSnapshot);
+    }
+
+    if (currentMapId === mapId) {
+      await setCurrentRoomMap(null);
+
+      currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, null);
+
+      showSharedMap(null);
+    }
+
+    const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(mapToForget, {
+      ignoreSavedMapId: mapId,
+      reason: "forget-saved-map"
+    });
+
+    text(E.mapUploadStatus, "Map forgotten. " + cleanupMessage);
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+
+// =====================================================
+// APP SECTION 11 â€” CURRENT MAP DISPLAY / QUICK UPDATE
+// =====================================================
+
+function showSharedMap(currentMap) {
+  const map = currentMap && currentMap.url ? currentMap : null;
+
+  if (!map) {
+    currentMapId = null;
+    displayedSharedMapUrl = null;
+
+    text(E.currentMapNameText, "None");
+    text(E.battleMapNameText, "None");
+
+    if (E.roomMapPreviewImage) {
+      E.roomMapPreviewImage.onload = null;
+      E.roomMapPreviewImage.onerror = null;
+      E.roomMapPreviewImage.removeAttribute("src");
+      E.roomMapPreviewImage.style.display = "none";
+    }
+
+    text(E.noRoomMapPreviewText, "No shared map loaded yet.");
+
+    if (E.noRoomMapPreviewText) {
+      E.noRoomMapPreviewText.style.display = "block";
+    }
+
+    E.battleMapImage.onload = null;
+    E.battleMapImage.onerror = null;
+    E.battleMapImage.removeAttribute("src");
+    E.battleMapImage.style.display = "none";
+
+    text(E.noBattleMapText, "No battle map loaded yet.");
+    E.noBattleMapText.style.display = "block";
+
+    return;
+  }
+
+  currentMapId = map.id || null;
+
+  let mapLabel = map.name || "Current Battle Map";
+
+  if (map.savedToLibrary !== true) {
+    mapLabel += " (Current Only)";
+  }
+
+  text(E.currentMapNameText, mapLabel);
+  text(E.battleMapNameText, mapLabel);
+
+  if (
+    displayedSharedMapUrl === map.url &&
+    (!E.roomMapPreviewImage || E.roomMapPreviewImage.getAttribute("src")) &&
+    E.battleMapImage.getAttribute("src")
+  ) {
+    return;
+  }
+
+  displayedSharedMapUrl = map.url;
+
+  const imageUrl = map.url;
+
+  if (E.roomMapPreviewImage) {
+    text(E.noRoomMapPreviewText, "Loading map preview...");
+
+    if (E.noRoomMapPreviewText) {
+      E.noRoomMapPreviewText.style.display = "block";
+    }
+
+    E.roomMapPreviewImage.style.display = "none";
+
+    E.roomMapPreviewImage.onload = function () {
+      if (E.noRoomMapPreviewText) {
+        E.noRoomMapPreviewText.style.display = "none";
+      }
+
+      E.roomMapPreviewImage.style.display = "block";
+    };
+
+    E.roomMapPreviewImage.onerror = function () {
+      E.roomMapPreviewImage.style.display = "none";
+      text(E.noRoomMapPreviewText, "Map preview failed to load.");
+
+      if (E.noRoomMapPreviewText) {
+        E.noRoomMapPreviewText.style.display = "block";
+      }
+    };
+
+    E.roomMapPreviewImage.src = imageUrl;
+  }
+
+  text(E.noBattleMapText, "Loading battle map...");
+  E.noBattleMapText.style.display = "block";
+  E.battleMapImage.style.display = "none";
+
+  E.battleMapImage.onload = function () {
+    E.noBattleMapText.style.display = "none";
+    E.battleMapImage.style.display = "block";
+    applyBattleZoom();
+  };
+
+  E.battleMapImage.onerror = function () {
+    E.battleMapImage.style.display = "none";
+    text(E.noBattleMapText, "Battle map failed to load.");
+    E.noBattleMapText.style.display = "block";
+  };
+
+  E.battleMapImage.src = imageUrl;
+}
+
+addOptionalEventListener(E.uploadRoomMapButton, "click", async function () {
+  try {
+    if (!currentRoomCode) {
+      alert("Create or join a room first.");
+      return;
+    }
+
+    if (!currentIsDM) {
+      alert("Only the DM can upload the room map.");
+      return;
+    }
+
+    const file = E.roomMapUploadInput.files[0];
+
+    if (!file) {
+      alert("Choose a map image first.");
+      return;
+    }
+
+    text(E.mapUploadStatus, "Uploading map and saving it...");
+    E.uploadRoomMapButton.disabled = true;
+
+    const cloudinaryResult = await uploadMapToCloudinary(file);
+    const cloudinaryAsset = getCloudinaryAssetMetadata(cloudinaryResult);
+
+    const newMap = {
+      name: getSafeMapName(file.name),
+      url: cloudinaryResult.secure_url,
+      publicId: cloudinaryAsset.publicId,
+      deleteToken: cloudinaryAsset.deleteToken,
+      deleteTokenCreatedAtMillis: cloudinaryAsset.deleteTokenCreatedAtMillis
+    };
+
+    const mapId = await saveMapToRoomLibrary(newMap);
+
+    const savedMap = {
+      id: mapId,
+      name: newMap.name,
+      url: newMap.url,
+      publicId: newMap.publicId,
+      deleteToken: newMap.deleteToken,
+      deleteTokenCreatedAtMillis: newMap.deleteTokenCreatedAtMillis,
+      savedToLibrary: true
+    };
+
+    await setCurrentRoomMap(savedMap);
+
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, savedMap);
+
+    showSharedMap(savedMap);
+
+    text(E.mapUploadStatus, "Map uploaded, saved to this room, and shared.");
+    E.roomMapUploadInput.value = "";
+  } catch (error) {
+    text(E.mapUploadStatus, "Upload failed.");
+    alert(error.message);
+  } finally {
+    E.uploadRoomMapButton.disabled = false;
+  }
+});
+
+addOptionalEventListener(E.removeRoomMapButton, "click", async function () {
+  try {
+    if (!currentRoomCode) return;
+
+    if (!currentIsDM) {
+      alert("Only the DM can remove the room map.");
+      return;
+    }
+
+    const mapToRemove = buildMapFromRoomFields(currentRoomData || {});
+
+    if (!mapToRemove || !mapToRemove.url) {
+      alert("There is no current shared map to remove.");
+      return;
+    }
+
+    if (!confirm("Remove the current shared map? It will stay in Saved Maps if it was saved there.")) {
+      return;
+    }
+
+    await setCurrentRoomMap(null);
+
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, null);
+
+    showSharedMap(null);
+
+    const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(mapToRemove, {
+      ignoreCurrentMap: true,
+      reason: "remove-current-map"
+    });
+
+    text(E.mapUploadStatus, "Current map removed. " + cleanupMessage);
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+addOptionalEventListener(E.saveCurrentMapButton, "click", async function () {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      alert("Only the DM can save the current map.");
+      return;
+    }
+
+    const currentMap = buildMapFromRoomFields(currentRoomData || {});
+
+    if (!currentMap || !currentMap.url) {
+      alert("There is no current map to save.");
+      return;
+    }
+
+    if (currentMap.id && currentMap.savedToLibrary === true) {
+      alert("This current map is already saved in the room library.");
+      return;
+    }
+
+    const mapId = await saveMapToRoomLibrary({
+      name: currentMap.name || "Recovered Current Map",
+      url: currentMap.url,
+      publicId: currentMap.publicId || null,
+      deleteToken: currentMap.deleteToken || null,
+      deleteTokenCreatedAtMillis: currentMap.deleteTokenCreatedAtMillis || null
+    });
+
+    const savedMap = {
+      id: mapId,
+      name: currentMap.name || "Recovered Current Map",
+      url: currentMap.url,
+      publicId: currentMap.publicId || null,
+      deleteToken: currentMap.deleteToken || null,
+      deleteTokenCreatedAtMillis: currentMap.deleteTokenCreatedAtMillis || null,
+      savedToLibrary: true
+    };
+
+    await setCurrentRoomMap(savedMap);
+
+    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, savedMap);
+
+    showSharedMap(savedMap);
+    text(E.mapUploadStatus, "Current map saved to room library.");
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+if (E.updateBattleMapButton) {
+  E.updateBattleMapButton.addEventListener("click", async function () {
+    let uploadedCurrentOnlyMap = null;
+
+    try {
+      if (!currentRoomCode) {
+        alert("Create or join a room first.");
+        return;
+      }
+
+      if (!currentIsDM) {
+        alert("Only the DM can update the battle map.");
+        return;
+      }
+
+      const file = E.battleMapUploadInput.files[0];
+
+      if (!file) {
+        alert("Choose the new battle map image first.");
+        return;
+      }
+
+      text(E.battleMapUpdateStatus, "Uploading current-only battle map...");
+      E.updateBattleMapButton.disabled = true;
+
+      const previousMap = buildMapFromRoomFields(currentRoomData || {});
+
+      const cloudinaryResult = await uploadMapToCloudinary(file);
+      const cloudinaryAsset = getCloudinaryAssetMetadata(cloudinaryResult);
+
+      const currentOnlyMap = {
+        id: null,
+        name: getSafeMapName(file.name),
+        url: cloudinaryResult.secure_url,
+        publicId: cloudinaryAsset.publicId,
+        deleteToken: cloudinaryAsset.deleteToken,
+        deleteTokenCreatedAtMillis: cloudinaryAsset.deleteTokenCreatedAtMillis,
+        savedToLibrary: false
+      };
+
+      uploadedCurrentOnlyMap = currentOnlyMap;
+
+      await setCurrentRoomMap(currentOnlyMap);
+
+      currentRoomData = withoutLegacyCurrentMapFields(
+        currentRoomData,
+        currentOnlyMap
+      );
+
+      showSharedMap(currentOnlyMap);
+      uploadedCurrentOnlyMap = null;
+
+      let cleanupMessage = "";
+
+      if (previousMap && !assetsMatch(previousMap, currentOnlyMap)) {
+        cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(previousMap, {
+          reason: "replace-current-only-map"
+        });
+      }
+
+      text(
+        E.battleMapUpdateStatus,
+        "Battle map updated for everyone. Not saved to Saved Maps." +
+          (cleanupMessage ? " Previous image: " + cleanupMessage : "")
+      );
+      E.battleMapUploadInput.value = "";
+    } catch (error) {
+      if (uploadedCurrentOnlyMap) {
+        await deleteCloudinaryAssetIfUnreferenced(uploadedCurrentOnlyMap, {
+          reason: "failed-current-only-map-update"
+        });
+      }
+
+      text(E.battleMapUpdateStatus, "Battle map update failed.");
+      alert(error.message);
+    } finally {
+      E.updateBattleMapButton.disabled = false;
+    }
+  });
+}
+
+// =====================================================
+// APP SECTION 12 â€” PUZZLE MAP / BATTLE MANAGER SYSTEM
+// Split into 12Aâ€“12J for easier future edits
+// =====================================================
+
+
+// =====================================================
+// APP SECTION 12A â€” BATTLE MANAGER DOM / SETUP
+// =====================================================
+
+E.battleManagerBar = $("battleManagerBar");
+E.battleManagerInner = $("battleManagerInner");
+
+E.puzzleMapControls = $("puzzleMapControls");
+E.puzzleTileUploadInput = $("puzzleTileUploadInput");
+E.addTileNorthButton = $("addTileNorthButton");
+E.addTileSouthButton = $("addTileSouthButton");
+E.addTileEastButton = $("addTileEastButton");
+E.addTileWestButton = $("addTileWestButton");
+E.centerPuzzleBoardButton = $("centerPuzzleBoardButton");
+E.puzzleMapStatus = $("puzzleMapStatus");
+
+E.tokenBuilderControls = $("tokenBuilderControls");
+E.tokenLayer = $("tokenLayer");
+
+E.battleMapSurface = $("battleMapSurface");
+E.puzzleMapBoard = $("puzzleMapBoard");
+E.puzzleMapEmptyText = $("puzzleMapEmptyText");
+
+let activePuzzleDrag = null;
+
+ensureBattleManagerPolishStyles();
+syncBattleManagerVisibility();
+ensurePuzzleDragListeners();
+
+
+// =====================================================
+// APP SECTION 12B â€” BATTLE MANAGER POLISH STYLES
+// Keeps Battle Manager UI above map tokens
+// =====================================================
+
+function ensureBattleManagerPolishStyles() {
+  if (document.getElementById("battleManagerPolishStyles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "battleManagerPolishStyles";
+
+  style.textContent = `
+    #battleTopBar {
+      position: relative;
+      z-index: 2000;
+    }
+
+    #battleManagerBar {
+      position: relative;
+      z-index: 2100;
+      max-width: none !important;
+    }
+
+    #battleManagerInner {
+      position: relative;
+      z-index: 2110;
+      display: grid;
+      gap: 10px;
+    }
+
+    #puzzleMapControls,
+    #tokenBuilderControls,
+    #creatorLauncherControls {
+      position: relative;
+      z-index: 2120;
+      max-width: none !important;
+    }
+
+    #battleMapSurface {
+      position: relative;
+      z-index: 1;
+      isolation: isolate;
+    }
+
+    #battleMapViewer,
+    #puzzleMapBoard {
+      position: relative;
+      z-index: 2;
+      isolation: isolate;
+    }
+
+    #puzzleMapBoard {
+      --puzzle-tile-size: 320px;
+    }
+
+    #puzzleMapControls .battleEditorInner,
+    #tokenBuilderControls .battleEditorInner,
+    #creatorLauncherControls .battleEditorInner {
+      padding: 10px 12px 12px 12px !important;
+    }
+
+    #puzzleMapControls input[type="file"] {
+      width: 260px !important;
+      max-width: 100% !important;
+      margin-right: 8px !important;
+    }
+
+    #puzzleMapControls button {
+      width: auto !important;
+      margin: 4px 4px 4px 0 !important;
+      padding: 8px 11px !important;
+      font-size: 14px !important;
+    }
+
+    #puzzleMapStatus {
+      display: inline-block !important;
+      margin: 6px 0 0 4px !important;
+      vertical-align: middle !important;
+    }
+
+    #puzzleMapBoard.hidden {
+      display: none !important;
+    }
+
+    #tokenLayer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .map-tile {
+      width: 320px;
+      height: 320px;
+      position: relative;
+      overflow: hidden;
+      background: #03040a;
+      border: 1px solid rgba(120, 145, 255, 0.18);
+      user-select: none;
+      touch-action: none;
+    }
+
+    .map-tile img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .map-tile.is-active {
+      outline: 3px solid rgba(88, 166, 255, 0.95);
+      outline-offset: -3px;
+      z-index: 3;
+      box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, 0.22),
+        0 0 24px rgba(88, 166, 255, 0.42);
+    }
+
+    .map-tile.puzzle-dragging {
+      opacity: 0.72;
+      z-index: 20;
+      box-shadow:
+        0 0 0 3px rgba(255, 255, 255, 0.20),
+        0 0 30px rgba(157, 107, 255, 0.48);
+    }
+
+    .puzzle-tile-actions {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      opacity: 0;
+      transition: opacity 0.16s ease;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .map-tile:hover .puzzle-tile-actions,
+    .map-tile.is-active .puzzle-tile-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .puzzle-tile-actions button {
+      width: auto !important;
+      padding: 5px 8px !important;
+      font-size: 12px !important;
+      border-radius: 10px !important;
+      margin: 0 !important;
+      background: rgba(6, 9, 18, 0.88) !important;
+      border-color: rgba(130, 160, 255, 0.38) !important;
+    }
+
+    .puzzle-tile-label {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      max-width: calc(100% - 16px);
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: white;
+      background: rgba(0, 0, 0, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .puzzle-grid-empty-cell {
+      width: 320px;
+      height: 320px;
+      border: 1px dashed rgba(120, 145, 255, 0.10);
+      background:
+        linear-gradient(135deg, rgba(90, 120, 255, 0.035), rgba(157, 107, 255, 0.025));
+    }
+
+    @media (max-width: 900px) {
+      #puzzleMapBoard {
+        --puzzle-tile-size: 240px;
+      }
+
+      .map-tile,
+      .puzzle-grid-empty-cell {
+        width: 240px;
+        height: 240px;
+      }
+
+      #puzzleMapControls input[type="file"],
+      #puzzleMapControls button,
+      #puzzleMapStatus {
+        display: block !important;
+        width: 100% !important;
+        margin: 6px 0 !important;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function syncBattleManagerVisibility() {
+  const showDmTools = !!currentIsDM;
+  const showCharacterCreatorLauncher = !!currentUser && !!currentRoomCode;
+  const showBattleManager = showDmTools || showCharacterCreatorLauncher;
+
+  if (E.battleManagerBar) {
+    E.battleManagerBar.classList.toggle("hidden", !showBattleManager);
+  }
+
+  if (E.puzzleMapControls) {
+    E.puzzleMapControls.classList.toggle("hidden", !showDmTools);
+  }
+
+  if (E.tokenBuilderControls) {
+    E.tokenBuilderControls.classList.toggle("hidden", !showDmTools);
+  }
+
+  if (E.creatorLauncherControls) {
+    E.creatorLauncherControls.classList.toggle(
+      "hidden",
+      !showCharacterCreatorLauncher
+    );
+  }
+
+  if (E.openCharacterCreatorButton) {
+    E.openCharacterCreatorButton.classList.toggle(
+      "hidden",
+      !showCharacterCreatorLauncher
+    );
+  }
+
+  if (E.openMonsterCreatorButton) {
+    E.openMonsterCreatorButton.classList.toggle("hidden", !showDmTools);
+  }
+}
+
+function disablePuzzleButtons(disabled) {
+  [
+    E.addTileNorthButton,
+    E.addTileSouthButton,
+    E.addTileEastButton,
+    E.addTileWestButton,
+    E.centerPuzzleBoardButton
+  ].forEach(function (button) {
+    if (button) {
+      button.disabled = !!disabled;
+    }
+  });
+}
+
+
+// =====================================================
+// APP SECTION 12C â€” PUZZLE MAP DATA HELPERS
+// =====================================================
+
+function makeTileKey(x, y) {
+  return String(x) + "," + String(y);
+}
+
+function parseTileKey(key) {
+  const parts = String(key || "0,0").split(",");
+
+  return {
+    x: Number(parts[0]) || 0,
+    y: Number(parts[1]) || 0
+  };
+}
+
+function getPuzzleTiles(room) {
+  if (!room || !Array.isArray(room.puzzleTiles)) {
+    return [];
+  }
+
+  return room.puzzleTiles
+    .filter(function (tile) {
+      return tile && tile.url && tile.key;
+    })
+    .map(function (tile) {
+      const parsed = parseTileKey(tile.key);
+
+      const x = Number.isFinite(Number(tile.x)) ? Number(tile.x) : parsed.x;
+      const y = Number.isFinite(Number(tile.y)) ? Number(tile.y) : parsed.y;
+
+      return {
+        ...tile,
+        x,
+        y,
+        key: makeTileKey(x, y),
+        name: tile.name || "Puzzle Tile",
+        locked: tile.locked !== false
+      };
+    });
+}
+
+function mergeRoomWithPuzzleTileDocs(room) {
+  const safeRoom = room || {};
+  const legacyTiles = getPuzzleTiles(safeRoom);
+  const shouldUseTileDocs =
+    Array.isArray(latestPuzzleTiles) &&
+    (latestPuzzleTiles.length > 0 ||
+      legacyTiles.length === 0 ||
+      hasMigratedLegacyPuzzleTiles);
+
+  return {
+    ...safeRoom,
+    puzzleTiles: shouldUseTileDocs ? latestPuzzleTiles : legacyTiles
+  };
+}
+
+function getPuzzleTileCollection(roomCode) {
+  return collection(db, "rooms", roomCode, "puzzleTiles");
+}
+
+function getPuzzleTileDocument(roomCode, tileKey) {
+  return doc(db, "rooms", roomCode, "puzzleTiles", tileKey);
+}
+
+function listenToPuzzleTiles(roomCode) {
+  if (stopListeningToPuzzleTiles) {
+    stopListeningToPuzzleTiles();
+  }
+
+  stopListeningToPuzzleTiles = onSnapshot(
+    getPuzzleTileCollection(roomCode),
+    { includeMetadataChanges: true },
+    function (tilesSnap) {
+      if (tilesSnap.metadata.hasPendingWrites) {
+        return;
+      }
+
+      const tiles = [];
+
+      tilesSnap.forEach(function (tileDoc) {
+        tiles.push({
+          ...tileDoc.data(),
+          key: tileDoc.data().key || tileDoc.id
+        });
+      });
+
+      latestPuzzleTiles = getPuzzleTiles({ puzzleTiles: tiles });
+
+      if (currentRoomData) {
+        currentRoomData = mergeRoomWithPuzzleTileDocs(currentRoomData);
+        renderPuzzleBoard(currentRoomData);
+      }
+
+      maybeMigrateLegacyPuzzleTilesToSubcollection();
+    },
+    function (error) {
+      text(E.puzzleMapStatus, "Could not load puzzle tiles: " + error.message);
+    }
+  );
+}
+
+async function maybeMigrateLegacyPuzzleTilesToSubcollection(throwOnFailure = false) {
+  if (isMigratingLegacyPuzzleTiles) {
+    if (throwOnFailure && legacyPuzzleTileMigrationPromise) {
+      await legacyPuzzleTileMigrationPromise;
+    }
+
+    return;
+  }
+
+  if (
+    !currentRoomCode ||
+    !currentIsDM ||
+    !currentRoomData
+  ) {
+    return;
+  }
+
+  const legacyTiles = getPuzzleTiles(currentRoomData);
+
+  if (
+    legacyTiles.length === 0 ||
+    (Array.isArray(latestPuzzleTiles) && latestPuzzleTiles.length > 0)
+  ) {
+    return;
+  }
+
+  const migrationRoomCode = currentRoomCode;
+
+  isMigratingLegacyPuzzleTiles = true;
+  legacyPuzzleTileMigrationPromise = (async function () {
+    for (const tile of legacyTiles) {
+      await setDoc(
+        getPuzzleTileDocument(migrationRoomCode, tile.key),
+        tile,
+        { merge: true }
+      );
+    }
+
+    await updateDoc(doc(db, "rooms", migrationRoomCode), {
+      puzzleTiles: [],
+      updatedAt: serverTimestamp()
+    });
+
+    latestPuzzleTiles = legacyTiles;
+    hasMigratedLegacyPuzzleTiles = true;
+
+    if (currentRoomCode === migrationRoomCode && currentRoomData) {
+      currentRoomData = {
+        ...currentRoomData,
+        puzzleTiles: legacyTiles
+      };
+    }
+  })();
+
+  try {
+    await legacyPuzzleTileMigrationPromise;
+  } catch (error) {
+    console.warn("Could not migrate puzzle tiles to subcollection:", error);
+
+    if (throwOnFailure) {
+      throw error;
+    }
+  } finally {
+    isMigratingLegacyPuzzleTiles = false;
+    legacyPuzzleTileMigrationPromise = null;
+  }
+}
+
+async function ensurePuzzleTilesStoredInSubcollection() {
+  await maybeMigrateLegacyPuzzleTilesToSubcollection(true);
+}
+
+function getPuzzleViewMode(room) {
+  if (!room || room.puzzleViewMode !== "focus") {
+    return "board";
+  }
+
+  return "focus";
+}
+
+function getActivePuzzleTile(room) {
+  const tiles = getPuzzleTiles(room || {});
+
+  if (tiles.length === 0) {
+    return null;
+  }
+
+  const activeKey = room && room.activePuzzleTileKey;
+
+  const activeTile = tiles.find(function (tile) {
+    return tile.key === activeKey;
+  });
+
+  return activeTile || tiles[0];
+}
+
+function puzzleTileToCurrentMap(tile) {
+  if (!tile) {
+    return null;
+  }
+
+  return {
+    id: tile.key,
+    name: tile.name || "Puzzle Tile",
+    url: tile.url,
+    publicId: tile.publicId || null,
+    deleteToken: tile.deleteToken || null,
+    deleteTokenCreatedAtMillis: tile.deleteTokenCreatedAtMillis || null,
+    savedToLibrary: false,
+    puzzleTileKey: tile.key
+  };
+}
+
+function getPuzzleBounds(tiles) {
+  if (!tiles.length) {
+    return {
+      minX: 0,
+      maxX: 0,
+      minY: 0,
+      maxY: 0
+    };
+  }
+
+  let minX = tiles[0].x;
+  let maxX = tiles[0].x;
+  let minY = tiles[0].y;
+  let maxY = tiles[0].y;
+
+  tiles.forEach(function (tile) {
+    minX = Math.min(minX, tile.x);
+    maxX = Math.max(maxX, tile.x);
+    minY = Math.min(minY, tile.y);
+    maxY = Math.max(maxY, tile.y);
+  });
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY
+  };
+}
+
+function assertPuzzlePositionAllowed(tiles, tileKey, x, y) {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) {
+    throw new Error("Puzzle tile coordinates must be whole numbers.");
+  }
+
+  if (
+    Math.abs(x) > PUZZLE_COORDINATE_LIMIT ||
+    Math.abs(y) > PUZZLE_COORDINATE_LIMIT
+  ) {
+    throw new Error(
+      "Puzzle tile coordinates must stay between -" +
+      PUZZLE_COORDINATE_LIMIT +
+      " and " +
+      PUZZLE_COORDINATE_LIMIT +
+      "."
+    );
+  }
+
+  const nextTilePositions = tiles
+    .filter(function (tile) {
+      return tile.key !== tileKey;
+    })
+    .map(function (tile) {
+      return { x: tile.x, y: tile.y };
+    });
+
+  nextTilePositions.push({ x, y });
+
+  const bounds = getPuzzleBounds(nextTilePositions);
+  const columnCount = bounds.maxX - bounds.minX + 1;
+  const rowCount = bounds.maxY - bounds.minY + 1;
+
+  if (
+    columnCount > PUZZLE_MAX_GRID_SPAN ||
+    rowCount > PUZZLE_MAX_GRID_SPAN
+  ) {
+    throw new Error(
+      "Puzzle tiles must stay within a " +
+      PUZZLE_MAX_GRID_SPAN +
+      " by " +
+      PUZZLE_MAX_GRID_SPAN +
+      " board area."
+    );
+  }
+}
+
+function tileExistsAtPosition(tiles, x, y, exceptKey) {
+  const key = makeTileKey(x, y);
+
+  return tiles.some(function (tile) {
+    return tile.key === key && tile.key !== exceptKey;
+  });
+}
+
+function getPuzzleTileByKey(tiles, tileKey) {
+  return tiles.find(function (tile) {
+    return tile.key === tileKey;
+  }) || null;
+}
+
+function getTargetPositionForNewTileFromTiles(tiles, direction, baseTile) {
+  if (tiles.length === 0) {
+    return {
+      x: 0,
+      y: 0
+    };
+  }
+
+  const activeTile = baseTile || tiles[0];
+
+  let x = activeTile.x;
+  let y = activeTile.y;
+
+  if (direction === "north") y -= 1;
+  if (direction === "south") y += 1;
+  if (direction === "east") x += 1;
+  if (direction === "west") x -= 1;
+
+  return {
+    x,
+    y
+  };
+}
+
+function buildPuzzleRoomStateFields(tiles, activeTile, viewMode, includeUpdatedAt) {
+  const safeActiveTile = activeTile || null;
+  const safeViewMode = viewMode === "focus" ? "focus" : "board";
+  const activeMap = safeActiveTile ? puzzleTileToCurrentMap(safeActiveTile) : null;
+
+  const fields = {
+    activePuzzleTileKey: safeActiveTile ? safeActiveTile.key : null,
+    puzzleViewMode: safeViewMode,
+    currentMap: normalizeCurrentMapData(activeMap)
+  };
+
+  if (includeUpdatedAt) {
+    Object.assign(fields, legacyCurrentMapFieldDeletions());
+    fields.updatedAt = serverTimestamp();
+  }
+
+  return fields;
+}
+
+async function updateRoomWithPuzzleTiles(mutatePuzzleState) {
+  if (!currentRoomCode) {
+    return null;
+  }
+
+  const roomRef = doc(db, "rooms", currentRoomCode);
+  let finalResult = null;
+
+  await runTransaction(db, async function (transaction) {
+    const roomSnap = await transaction.get(roomRef);
+
+    if (!roomSnap.exists()) {
+      throw new Error("Room not found.");
+    }
+
+    const latestRoom = roomSnap.data() || {};
+    const mergedRoom = mergeRoomWithPuzzleTileDocs(latestRoom);
+    const latestTiles = getPuzzleTiles(mergedRoom);
+    const mutation = await mutatePuzzleState({
+      room: mergedRoom,
+      tiles: latestTiles,
+      transaction,
+      roomRef
+    }) || {};
+
+    const nextTiles = getPuzzleTiles({
+      puzzleTiles: mutation.tiles || latestTiles
+    });
+
+    const requestedActiveKey = mutation.activeTile ? mutation.activeTile.key : null;
+    const nextActiveTile =
+      requestedActiveKey
+        ? getPuzzleTileByKey(nextTiles, requestedActiveKey)
+        : null;
+
+    const nextViewMode = mutation.viewMode === "focus" ? "focus" : "board";
+    const updateFields = buildPuzzleRoomStateFields(
+      nextTiles,
+      nextActiveTile,
+      nextViewMode,
+      true
+    );
+
+    transaction.update(roomRef, updateFields);
+
+    const localFields = buildPuzzleRoomStateFields(
+      nextTiles,
+      nextActiveTile,
+      nextViewMode,
+      false
+    );
+
+    finalResult = {
+      ...mutation,
+      tiles: nextTiles,
+      activeTile: nextActiveTile,
+      viewMode: nextViewMode,
+      room: {
+        ...withoutLegacyCurrentMapFields(mergedRoom, nextActiveTile ? puzzleTileToCurrentMap(nextActiveTile) : null),
+        puzzleTiles: nextTiles,
+        ...localFields
+      }
+    };
+  });
+
+  if (finalResult && finalResult.room) {
+    latestPuzzleTiles = finalResult.tiles;
+    hasMigratedLegacyPuzzleTiles = true;
+    currentRoomData = finalResult.room;
+  }
+
+  return finalResult;
+}
+
+
+// =====================================================
+// APP SECTION 12D â€” PUZZLE MAP VIEW MODE / TOKEN NOTIFY
+// No show()/hide() helpers used here.
+// Uses classList directly because app.js only has showScreen().
+// =====================================================
+
+function showPuzzleBoardView() {
+  if (E.puzzleMapBoard) {
+    E.puzzleMapBoard.classList.remove("hidden");
+  }
+
+  if (E.battleMapViewer) {
+    E.battleMapViewer.classList.add("hidden");
+  }
+}
+
+function showSingleBattleMapView() {
+  if (E.puzzleMapBoard) {
+    E.puzzleMapBoard.classList.add("hidden");
+  }
+
+  if (E.battleMapViewer) {
+    E.battleMapViewer.classList.remove("hidden");
+  }
+}
+
+function keepTokenLayerReadyForExternalFile() {
+  if (!E.tokenLayer) {
+    return;
+  }
+
+  const targetContainer =
+    E.puzzleMapBoard && !E.puzzleMapBoard.classList.contains("hidden")
+      ? E.puzzleMapBoard
+      : E.battleMapViewer || E.battleMapSurface;
+
+  if (!targetContainer) {
+    return;
+  }
+
+  const computedPosition = window.getComputedStyle(targetContainer).position;
+
+  if (computedPosition === "static") {
+    targetContainer.style.position = "relative";
+  }
+
+  if (E.tokenLayer.parentNode !== targetContainer) {
+    targetContainer.appendChild(E.tokenLayer);
+  }
+}
+
+function notifyExternalTokenSystem(room) {
+  keepTokenLayerReadyForExternalFile();
+
+  if (
+    window.HomebrewGodTokens &&
+    typeof window.HomebrewGodTokens.render === "function"
+  ) {
+    window.HomebrewGodTokens.render(room || currentRoomData || {}, {
+      roomCode: currentRoomCode,
+      roomData: currentRoomData,
+      isDM: currentIsDM
+    });
+  }
+}
+
+
+// =====================================================
+// APP SECTION 12E â€” PUZZLE BOARD RENDERING
+// =====================================================
+
+function renderPuzzleBoard(room) {
+  const safeRoom = room || {};
+  const tiles = getPuzzleTiles(safeRoom);
+  const viewMode = getPuzzleViewMode(safeRoom);
+  const activeTile = getActivePuzzleTile(safeRoom);
+
+  syncBattleManagerVisibility();
+
+  if (!E.puzzleMapBoard) {
+    notifyExternalTokenSystem(safeRoom);
+    return;
+  }
+
+  if (tiles.length === 0) {
+    E.puzzleMapBoard.innerHTML = "";
+
+    if (E.puzzleMapEmptyText) {
+      E.puzzleMapBoard.appendChild(E.puzzleMapEmptyText);
+      text(E.puzzleMapEmptyText, "No puzzle tiles yet. Open Puzzle Map Builder to add tiles.");
+    }
+
+    showSingleBattleMapView();
+    notifyExternalTokenSystem(safeRoom);
+    return;
+  }
+
+  if (viewMode === "focus" && activeTile) {
+    showSingleBattleMapView();
+    showSharedMap(puzzleTileToCurrentMap(activeTile));
+    notifyExternalTokenSystem(safeRoom);
+    return;
+  }
+
+  showPuzzleBoardView();
+
+  E.puzzleMapBoard.innerHTML = "";
+
+  const bounds = getPuzzleBounds(tiles);
+  E.puzzleMapBoard.style.gridTemplateColumns =
+    "repeat(" +
+    (bounds.maxX - bounds.minX + 1) +
+    ", var(--puzzle-tile-size))";
+
+  E.puzzleMapBoard.style.gridTemplateRows =
+    "repeat(" +
+    (bounds.maxY - bounds.minY + 1) +
+    ", var(--puzzle-tile-size))";
+
+  tiles.forEach(function (tile) {
+    const tileElement = createPuzzleTileElement(tile, activeTile);
+    tileElement.style.gridColumn = String(tile.x - bounds.minX + 1);
+    tileElement.style.gridRow = String(tile.y - bounds.minY + 1);
+    E.puzzleMapBoard.appendChild(tileElement);
+  });
+
+  keepTokenLayerReadyForExternalFile();
+  notifyExternalTokenSystem(safeRoom);
+}
+
+function createPuzzleTileElement(tile, activeTile) {
+  const tileDiv = document.createElement("div");
+  tileDiv.className = "map-tile";
+
+  if (activeTile && activeTile.key === tile.key) {
+    tileDiv.classList.add("is-active");
+  }
+
+  tileDiv.dataset.tileKey = tile.key;
+  tileDiv.dataset.tileX = String(tile.x);
+  tileDiv.dataset.tileY = String(tile.y);
+  tileDiv.title = tile.name + " â€” " + tile.key;
+
+  const img = document.createElement("img");
+  img.src = tile.url;
+  img.alt = tile.name || "Puzzle tile";
+  tileDiv.appendChild(img);
+
+  const actions = document.createElement("div");
+  actions.className = "puzzle-tile-actions";
+
+  const focusButton = document.createElement("button");
+  focusButton.type = "button";
+  focusButton.textContent = "Focus";
+  focusButton.addEventListener("click", function (event) {
+    event.stopPropagation();
+    focusPuzzleTile(tile.key);
+  });
+  actions.appendChild(focusButton);
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", function (event) {
+    event.stopPropagation();
+    deletePuzzleTile(tile.key);
+  });
+  actions.appendChild(deleteButton);
+
+  tileDiv.appendChild(actions);
+
+  const label = document.createElement("div");
+  label.className = "puzzle-tile-label";
+  label.textContent = tile.name + " / " + tile.key;
+  tileDiv.appendChild(label);
+
+  tileDiv.addEventListener("pointerdown", function (event) {
+    startPuzzleTileDrag(event, tile, tileDiv);
+  });
+
+  return tileDiv;
+}
+
+function centerPuzzleBoardNow() {
+  if (!E.puzzleMapBoard) {
+    return;
+  }
+
+  E.puzzleMapBoard.scrollLeft =
+    Math.max(0, (E.puzzleMapBoard.scrollWidth - E.puzzleMapBoard.clientWidth) / 2);
+
+  E.puzzleMapBoard.scrollTop =
+    Math.max(0, (E.puzzleMapBoard.scrollHeight - E.puzzleMapBoard.clientHeight) / 2);
+}
+
+
+// =====================================================
+// APP SECTION 12F â€” PUZZLE TILE ADDING / UPLOAD
+// =====================================================
+
+function getTargetPositionForNewTile(direction) {
+  const tiles = getPuzzleTiles(currentRoomData || {});
+  const activeTile = getActivePuzzleTile(currentRoomData || {}) || tiles[0];
+  return getTargetPositionForNewTileFromTiles(tiles, direction, activeTile);
+}
+
+async function addPuzzleTile(direction) {
+  let uploadedPuzzleTile = null;
+  let puzzleFailureStage = "DM preflight check";
+  let attemptedPuzzleTilePath = currentRoomCode
+    ? "rooms/" + currentRoomCode + "/puzzleTiles/{tileKey}"
+    : null;
+  let attemptedRoomPath = currentRoomCode
+    ? "rooms/" + currentRoomCode
+    : null;
+
+  try {
+    const isConfirmedRoomDM = !!(
+      currentUser &&
+      currentRoomCode &&
+      currentRoomData &&
+      currentRoomData.dmUid === currentUser.uid
+    );
+
+    if (!isConfirmedRoomDM) {
+      alert("Only the room DM can add puzzle tiles. Reopen the room or create a new room as this account.");
+      return;
+    }
+
+    if (!E.puzzleTileUploadInput || !E.puzzleTileUploadInput.files[0]) {
+      alert("Choose a puzzle tile image first.");
+      return;
+    }
+
+    puzzleFailureStage = "legacy puzzle tile migration";
+    await ensurePuzzleTilesStoredInSubcollection();
+
+    const file = E.puzzleTileUploadInput.files[0];
+    const roomWithTiles = mergeRoomWithPuzzleTileDocs(currentRoomData || {});
+    const oldTiles = getPuzzleTiles(roomWithTiles);
+    const baseTile = getActivePuzzleTile(roomWithTiles) || oldTiles[0] || null;
+    const baseTileKey = baseTile ? baseTile.key : null;
+    const target = getTargetPositionForNewTile(direction);
+    attemptedPuzzleTilePath =
+      "rooms/" +
+      currentRoomCode +
+      "/puzzleTiles/" +
+      makeTileKey(target.x, target.y);
+    attemptedRoomPath = "rooms/" + currentRoomCode;
+
+    assertPuzzlePositionAllowed(oldTiles, null, target.x, target.y);
+
+    if (tileExistsAtPosition(oldTiles, target.x, target.y, null)) {
+      alert("That puzzle grid spot is already taken. Focus another tile or move one first.");
+      return;
+    }
+
+    text(
+      E.puzzleMapStatus,
+      oldTiles.length === 0
+        ? "Uploading first puzzle tile."
+        : "Uploading puzzle tile " + direction + "."
+    );
+
+    disablePuzzleButtons(true);
+
+    puzzleFailureStage = "Cloudinary upload";
+    const cloudinaryResult = await uploadMapToCloudinary(file);
+    const cloudinaryAsset = getCloudinaryAssetMetadata(cloudinaryResult);
+
+    uploadedPuzzleTile = {
+      name: getSafeMapName(file.name),
+      url: cloudinaryResult.secure_url,
+      publicId: cloudinaryAsset.publicId,
+      deleteToken: cloudinaryAsset.deleteToken,
+      deleteTokenCreatedAtMillis: cloudinaryAsset.deleteTokenCreatedAtMillis,
+      savedToLibrary: false
+    };
+
+    puzzleFailureStage = "Firestore puzzle tile transaction";
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const latestTiles = state.tiles;
+      const latestBaseTile =
+        baseTileKey
+          ? getPuzzleTileByKey(latestTiles, baseTileKey)
+          : null;
+      const transactionTarget = getTargetPositionForNewTileFromTiles(
+        latestTiles,
+        direction,
+        latestBaseTile || getActivePuzzleTile(state.room) || latestTiles[0] || null
+      );
+
+      assertPuzzlePositionAllowed(
+        latestTiles,
+        null,
+        transactionTarget.x,
+        transactionTarget.y
+      );
+
+      if (
+        tileExistsAtPosition(
+          latestTiles,
+          transactionTarget.x,
+          transactionTarget.y,
+          null
+        )
+      ) {
+        throw new Error("That puzzle grid spot is already taken. Try again from the updated board.");
+      }
+
+      const key = makeTileKey(transactionTarget.x, transactionTarget.y);
+      attemptedPuzzleTilePath =
+        "rooms/" + currentRoomCode + "/puzzleTiles/" + key;
+      const targetTileRef = getPuzzleTileDocument(currentRoomCode, key);
+      const targetTileSnap = await state.transaction.get(targetTileRef);
+
+      if (targetTileSnap.exists()) {
+        throw new Error("That puzzle grid spot is already taken. Try again from the updated board.");
+      }
+
+      const newTile = {
+        ...uploadedPuzzleTile,
+        key,
+        x: transactionTarget.x,
+        y: transactionTarget.y,
+        locked: true,
+        createdAtMillis: Date.now()
+      };
+
+      state.transaction.set(targetTileRef, newTile);
+
+      return {
+        tiles: latestTiles.concat(newTile),
+        activeTile: newTile,
+        viewMode: "board",
+        addedTile: newTile,
+        previousTileCount: latestTiles.length
+      };
+    });
+
+    uploadedPuzzleTile = null;
+
+    renderPuzzleBoard(transactionResult.room);
+
+    if (E.puzzleTileUploadInput) {
+      E.puzzleTileUploadInput.value = "";
+    }
+
+    setTimeout(function () {
+      centerPuzzleBoardNow();
+    }, 80);
+
+    text(
+      E.puzzleMapStatus,
+      transactionResult.previousTileCount === 0
+        ? "First puzzle tile placed at center 0,0."
+        : "Puzzle tile added " + direction + " at " + transactionResult.addedTile.key + "."
+    );
+  } catch (error) {
+    const currentUserUid = currentUser ? currentUser.uid : null;
+    const roomDmUid = currentRoomData ? currentRoomData.dmUid : null;
+    const isCurrentUserRoomDM = !!(
+      currentUserUid &&
+      roomDmUid &&
+      roomDmUid === currentUserUid
+    );
+    const errorMessage = String(
+      error && error.message ? error.message : error || "Unknown error"
+    );
+
+    console.error("Puzzle tile operation failed.", {
+      stage: puzzleFailureStage,
+      currentRoomCode,
+      "currentUser.uid": currentUserUid,
+      currentIsDM,
+      "currentRoomData.dmUid": roomDmUid,
+      "currentRoomData.dmUid === currentUser.uid": isCurrentUserRoomDM,
+      permissionChecks: {
+        hasCurrentUser: !!currentUser,
+        hasCurrentRoomCode: !!currentRoomCode,
+        hasCurrentRoomData: !!currentRoomData,
+        currentIsDM,
+        roomDmUidMatchesCurrentUser: isCurrentUserRoomDM
+      },
+      attemptedPuzzleTilePath,
+      attemptedRoomPath,
+      firestoreWritesAttempted: [
+        attemptedPuzzleTilePath,
+        attemptedRoomPath
+      ],
+      firebaseErrorCode: error && error.code ? error.code : null,
+      firebaseError: error
+    });
+    console.error("Full puzzle tile Firebase error:", error);
+
+    if (uploadedPuzzleTile) {
+      try {
+        const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(
+          uploadedPuzzleTile,
+          { reason: "failed-puzzle-tile-add" }
+        );
+        console.warn("Puzzle tile upload cleanup result:", cleanupMessage);
+      } catch (cleanupError) {
+        console.warn(
+          "Could not clean up the uploaded puzzle tile image:",
+          cleanupError
+        );
+      }
+    }
+
+    const isPermissionError =
+      (error && error.code === "permission-denied") ||
+      errorMessage
+        .toLowerCase()
+        .includes("insufficient permissions");
+    const userMessage = isPermissionError
+      ? "Puzzle tile could not be saved. You may not be the room DM, or Firestore rules may not be published."
+      : "Puzzle tile could not be saved: " + errorMessage;
+
+    text(E.puzzleMapStatus, userMessage);
+    alert(userMessage);
+  } finally {
+    disablePuzzleButtons(false);
+  }
+}
+
+
+// =====================================================
+// APP SECTION 12G â€” PUZZLE TILE FOCUS / DELETE
+// =====================================================
+
+async function focusPuzzleTile(tileKey) {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      return;
+    }
+
+    await ensurePuzzleTilesStoredInSubcollection();
+
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const tileRef = getPuzzleTileDocument(currentRoomCode, tileKey);
+      const tileSnap = await state.transaction.get(tileRef);
+
+      if (!tileSnap.exists()) {
+        throw new Error("Puzzle tile not found.");
+      }
+
+      const tile = getPuzzleTiles({
+        puzzleTiles: [{ ...tileSnap.data(), key: tileSnap.data().key || tileKey }]
+      })[0];
+
+      return {
+        tiles: state.tiles,
+        activeTile: tile,
+        viewMode: "focus",
+        focusedTile: tile
+      };
+    });
+
+    const tile = transactionResult.focusedTile;
+    showSingleBattleMapView();
+    showSharedMap(puzzleTileToCurrentMap(tile));
+    renderPuzzleBoard(transactionResult.room);
+
+    text(E.puzzleMapStatus, "Focused on tile " + tile.key + ". Press Center Board to return.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function showFullPuzzleBoard() {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      return;
+    }
+
+    const roomRef = doc(db, "rooms", currentRoomCode);
+    let transactionRoomData = null;
+
+    await runTransaction(db, async function (transaction) {
+      const roomSnap = await transaction.get(roomRef);
+
+      if (!roomSnap.exists()) {
+        throw new Error("Room not found.");
+      }
+
+      const latestRoom = mergeRoomWithPuzzleTileDocs(roomSnap.data() || {});
+      const activeTile = getActivePuzzleTile(latestRoom);
+      const activeTileKey = activeTile ? activeTile.key : null;
+
+      transaction.update(roomRef, {
+        puzzleViewMode: "board",
+        activePuzzleTileKey: activeTileKey,
+        updatedAt: serverTimestamp()
+      });
+
+      transactionRoomData = {
+        ...latestRoom,
+        activePuzzleTileKey: activeTileKey,
+        puzzleViewMode: "board"
+      };
+    });
+
+    currentRoomData = transactionRoomData;
+    renderPuzzleBoard(currentRoomData);
+
+    setTimeout(function () {
+      centerPuzzleBoardNow();
+    }, 80);
+
+    text(E.puzzleMapStatus, "Showing full puzzle board.");
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function deletePuzzleTile(tileKey) {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      alert("Only the DM can delete puzzle tiles.");
+      return;
+    }
+
+    if (!confirm("Delete this puzzle tile from the board? The Cloudinary image will be deleted if no other room reference uses it.")) {
+      return;
+    }
+
+    await ensurePuzzleTilesStoredInSubcollection();
+
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const tileRef = getPuzzleTileDocument(currentRoomCode, tileKey);
+      const tileSnap = await state.transaction.get(tileRef);
+
+      if (!tileSnap.exists()) {
+        throw new Error("Puzzle tile not found.");
+      }
+
+      const tileToDelete = getPuzzleTiles({
+        puzzleTiles: [{ ...tileSnap.data(), key: tileSnap.data().key || tileKey }]
+      })[0];
+
+      state.transaction.delete(tileRef);
+
+      const newTiles = state.tiles.filter(function (tile) {
+        return tile.key !== tileKey;
+      });
+
+      const previousActiveTile = getPuzzleTileByKey(
+        newTiles,
+        state.room.activePuzzleTileKey
+      );
+      const newActiveTile = previousActiveTile || (newTiles.length > 0 ? newTiles[0] : null);
+
+      return {
+        tiles: newTiles,
+        activeTile: newActiveTile,
+        viewMode: "board",
+        deletedTile: tileToDelete
+      };
+    });
+
+    if (transactionResult.activeTile) {
+      showSharedMap(puzzleTileToCurrentMap(transactionResult.activeTile));
+    } else {
+      showSharedMap(null);
+    }
+
+    renderPuzzleBoard(transactionResult.room);
+
+    const cleanupMessage = await deleteCloudinaryAssetIfUnreferenced(transactionResult.deletedTile, {
+      ignorePuzzleTileKey: tileKey,
+      reason: "delete-puzzle-tile"
+    });
+
+    text(E.puzzleMapStatus, "Puzzle tile deleted. " + cleanupMessage);
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+
+// =====================================================
+// APP SECTION 12H â€” PUZZLE TILE DRAGGING / GRID LOCK
+// =====================================================
+
+async function movePuzzleTileTo(tileKey, newX, newY) {
+  try {
+    if (!currentRoomCode || !currentIsDM) {
+      return;
+    }
+
+    await ensurePuzzleTilesStoredInSubcollection();
+
+    const transactionResult = await updateRoomWithPuzzleTiles(async function (state) {
+      const oldTileRef = getPuzzleTileDocument(currentRoomCode, tileKey);
+      const oldTileSnap = await state.transaction.get(oldTileRef);
+
+      if (!oldTileSnap.exists()) {
+        throw new Error("Tile not found.");
+      }
+
+      const oldTile = getPuzzleTiles({
+        puzzleTiles: [{ ...oldTileSnap.data(), key: oldTileSnap.data().key || tileKey }]
+      })[0];
+
+      if (oldTile.x === newX && oldTile.y === newY) {
+        return {
+          tiles: state.tiles,
+          activeTile: oldTile,
+          viewMode: "board",
+          movedTile: oldTile,
+          didMove: false
+        };
+      }
+
+      assertPuzzlePositionAllowed(state.tiles, tileKey, newX, newY);
+
+      if (tileExistsAtPosition(state.tiles, newX, newY, tileKey)) {
+        throw new Error("That grid spot is already taken. Tile snapped back.");
+      }
+
+      const newKey = makeTileKey(newX, newY);
+      const newTileRef = getPuzzleTileDocument(currentRoomCode, newKey);
+      const newTileSnap = await state.transaction.get(newTileRef);
+
+      if (newTileSnap.exists()) {
+        throw new Error("That grid spot is already taken. Tile snapped back.");
+      }
+
+      const movedTile = {
+        ...oldTile,
+        key: newKey,
+        x: newX,
+        y: newY,
+        movedAtMillis: Date.now()
+      };
+
+      const newTiles = state.tiles.map(function (tile) {
+        return tile.key === tileKey ? movedTile : tile;
+      });
+
+      state.transaction.delete(oldTileRef);
+      state.transaction.set(newTileRef, movedTile);
+
+      return {
+        tiles: newTiles,
+        activeTile: movedTile,
+        viewMode: "board",
+        movedTile,
+        didMove: true
+      };
+    });
+
+    renderPuzzleBoard(transactionResult.room);
+
+    text(
+      E.puzzleMapStatus,
+      transactionResult.didMove
+        ? "Tile moved and locked at " + transactionResult.movedTile.key + "."
+        : "Tile stayed locked in place."
+    );
+  } catch (error) {
+    text(E.puzzleMapStatus, error.message);
+    renderPuzzleBoard(currentRoomData || {});
+  }
+}
+
+function startPuzzleTileDrag(event, tile, tileDiv) {
+  if (!currentIsDM) {
+    return;
+  }
+
+  if (event.pointerType === "mouse" && event.button !== 0) {
+    return;
+  }
+
+  if (event.target.closest("button")) {
+    return;
+  }
+
+  event.preventDefault();
+
+  try {
+    tileDiv.setPointerCapture(event.pointerId);
+  } catch (error) {
+    // Safe to ignore.
+  }
+
+  activePuzzleDrag = {
+    tileKey: tile.key,
+    originalX: tile.x,
+    originalY: tile.y,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    lastClientX: event.clientX,
+    lastClientY: event.clientY,
+    tileWidth: Math.max(1, tileDiv.offsetWidth),
+    tileHeight: Math.max(1, tileDiv.offsetHeight),
+    pointerId: event.pointerId,
+    tileDiv,
+    moved: false
+  };
+
+  tileDiv.classList.add("puzzle-dragging");
+  text(E.puzzleMapStatus, "Dragging tile. Release to lock it to the grid.");
+}
+
+function handlePuzzlePointerMove(event) {
+  if (!activePuzzleDrag) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const drag = activePuzzleDrag;
+  drag.lastClientX = event.clientX;
+  drag.lastClientY = event.clientY;
+  drag.moved = true;
+
+  const dx = event.clientX - drag.startClientX;
+  const dy = event.clientY - drag.startClientY;
+
+  drag.tileDiv.style.transform = "translate(" + dx + "px, " + dy + "px)";
+}
+
+async function handlePuzzlePointerUp(event) {
+  if (!activePuzzleDrag) {
+    return;
+  }
+
+  const drag = activePuzzleDrag;
+  activePuzzleDrag = null;
+
+  drag.tileDiv.classList.remove("puzzle-dragging");
+  drag.tileDiv.style.transform = "";
+
+  try {
+    if (drag.pointerId !== undefined && drag.pointerId !== null) {
+      try {
+        drag.tileDiv.releasePointerCapture(drag.pointerId);
+      } catch (error) {
+        // Safe to ignore.
+      }
+    }
+
+    const dx = drag.lastClientX - drag.startClientX;
+    const dy = drag.lastClientY - drag.startClientY;
+
+    const gridDx = Math.round(dx / drag.tileWidth);
+    const gridDy = Math.round(dy / drag.tileHeight);
+
+    const newX = drag.originalX + gridDx;
+    const newY = drag.originalY + gridDy;
+
+    await movePuzzleTileTo(drag.tileKey, newX, newY);
+  } catch (error) {
+    alert(error.message);
+    renderPuzzleBoard(currentRoomData || {});
+  }
+}
+
+function cancelPuzzleDrag() {
+  if (!activePuzzleDrag) {
+    return;
+  }
+
+  activePuzzleDrag.tileDiv.classList.remove("puzzle-dragging");
+  activePuzzleDrag.tileDiv.style.transform = "";
+  activePuzzleDrag = null;
+
+  renderPuzzleBoard(currentRoomData || {});
+}
+
+function ensurePuzzleDragListeners() {
+  if (window.homebrewGodPuzzleDragListenersReady) {
+    return;
+  }
+
+  window.homebrewGodPuzzleDragListenersReady = true;
+
+  document.addEventListener("pointermove", handlePuzzlePointerMove);
+  document.addEventListener("pointerup", handlePuzzlePointerUp);
+  document.addEventListener("pointercancel", cancelPuzzleDrag);
+}
+
+
+// =====================================================
+// APP SECTION 12I â€” PUZZLE BUTTON LISTENERS
+// =====================================================
+
+if (E.addTileNorthButton) {
+  E.addTileNorthButton.addEventListener("click", function () {
+    addPuzzleTile("north");
+  });
+}
+
+if (E.addTileSouthButton) {
+  E.addTileSouthButton.addEventListener("click", function () {
+    addPuzzleTile("south");
+  });
+}
+
+if (E.addTileEastButton) {
+  E.addTileEastButton.addEventListener("click", function () {
+    addPuzzleTile("east");
+  });
+}
+
+if (E.addTileWestButton) {
+  E.addTileWestButton.addEventListener("click", function () {
+    addPuzzleTile("west");
+  });
+}
+
+if (E.centerPuzzleBoardButton) {
+  E.centerPuzzleBoardButton.addEventListener("click", function () {
+    showFullPuzzleBoard();
+  });
+}
+
+
+// =====================================================
+// APP SECTION 12J â€” TOKEN SYSTEM CONNECTION
+// =====================================================
+
+if (!tokenSystem) {
+  tokenSystem = createTokenSystem({
+    db,
+    doc,
+    collection,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    getDocs,
+    query,
+    where,
+    onSnapshot,
+    serverTimestamp,
+
+    uploadImage: uploadMapToCloudinary,
+
+    getCurrentRoomCode: function () {
+      return currentRoomCode;
+    },
+
+    getCurrentRoomData: function () {
+      return currentRoomData;
+    },
+
+    setCurrentRoomData: function (newRoomData) {
+      currentRoomData = newRoomData;
+    },
+
+    getCurrentIsDM: function () {
+      return currentIsDM;
+    },
+
+    getPuzzleTiles,
+    getActivePuzzleTile,
+    getPuzzleViewMode,
+    buildMapFromRoomFields
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13 â€” BATTLE MAP / CREATOR TAB NAVIGATION
+// =====================================================
+
+function showAnyMainScreen(screenName) {
+  const screens = [
+    E.authScreen,
+    E.lobbyScreen,
+    E.roomDashboardScreen,
+    E.battleMapScreen,
+    E.monsterCreatorScreen,
+    E.characterCreatorScreen
+  ];
+
+  screens.forEach(function (screen) {
+    if (screen) {
+      screen.classList.add("hidden");
+    }
+  });
+
+  const screenMap = {
+    auth: E.authScreen,
+    lobby: E.lobbyScreen,
+    room: E.roomDashboardScreen,
+    battle: E.battleMapScreen,
+    monsterCreator: E.monsterCreatorScreen,
+    characterCreator: E.characterCreatorScreen
+  };
+
+  if (screenMap[screenName]) {
+    screenMap[screenName].classList.remove("hidden");
+  }
+}
+
+function applyBattleZoom() {
+  const scale = "scale(" + battleZoom + ")";
+
+  if (E.battleMapImage) {
+    E.battleMapImage.style.transform = scale;
+  }
+
+  if (E.puzzleMapBoard) {
+    E.puzzleMapBoard.style.transform = scale;
+    E.puzzleMapBoard.style.transformOrigin = "top left";
+  }
+
+  text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
+}
+
+function openToolTab(viewName) {
+  if (!currentRoomCode) {
+    alert("Open a room first.");
+    return;
+  }
+
+  const toolUrl = new URL(window.location.href);
+
+  toolUrl.searchParams.set("room", currentRoomCode);
+  toolUrl.searchParams.set("view", viewName);
+
+  window.open(toolUrl.toString(), "_blank");
+}
+
+function initCharacterCreatorSystem() {
+  if (characterCreatorSystem) {
+    return;
+  }
+
+  characterCreatorSystem = createCharacterCreator({
+    db,
+    doc,
+    collection,
+    getDoc,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    onSnapshot,
+    serverTimestamp,
+
+    getCurrentRoomCode: function () {
+      return currentRoomCode;
+    },
+
+    getCurrentRoomData: function () {
+      return currentRoomData;
+    },
+
+    getCurrentIsDM: function () {
+      return currentIsDM;
+    },
+
+    createCharacterLinkedToken: function (character) {
+      if (
+        !tokenSystem ||
+        typeof tokenSystem.createCharacterLinkedToken !== "function"
+      ) {
+        throw new Error(
+          "The token system is not ready."
+        );
+      }
+
+      return tokenSystem.createCharacterLinkedToken(
+        character
+      );
+    },
+
+    syncLinkedCharacterTokens: function (character) {
+      if (
+        !tokenSystem ||
+        typeof tokenSystem.syncLinkedCharacterTokens !== "function"
+      ) {
+        return {
+          characterId:
+            character?.id || null,
+          updatedCount: 0
+        };
+      }
+
+      return tokenSystem.syncLinkedCharacterTokens(
+        character
+      );
+    }
+  });
+}
+
+function initMonsterCreatorSystem() {
+  if (monsterCreatorSystem) {
+    monsterCreatorSystem.refresh();
+    return;
+  }
+
+  monsterCreatorSystem = createMonsterCreator({
+    db,
+    doc,
+    collection,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    onSnapshot,
+    serverTimestamp,
+
+    getCurrentRoomCode: function () {
+      return currentRoomCode;
+    },
+
+    getCurrentRoomData: function () {
+      return currentRoomData;
+    },
+
+    getCurrentIsDM: function () {
+      return currentIsDM;
+    },
+
+    createMonsterLinkedToken: function (monster) {
+      if (
+        !tokenSystem ||
+        typeof tokenSystem.createMonsterLinkedToken !== "function"
+      ) {
+        throw new Error(
+          "The token system is not ready."
+        );
+      }
+
+      return tokenSystem.createMonsterLinkedToken(
+        monster
+      );
+    },
+
+    onBack: function () {
+      showAnyMainScreen("battle");
+      applyBattleZoom();
+
+      if (
+        tokenSystem &&
+        typeof tokenSystem.render === "function"
+      ) {
+        tokenSystem.render(currentRoomData || {});
+      }
+    }
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13A â€” BATTLE MAP BUTTONS
+// =====================================================
+
+if (E.openBattleMapButton) {
+  E.openBattleMapButton.addEventListener("click", function () {
+    openToolTab("battle");
+  });
+}
+
+if (E.backToRoomButton) {
+  E.backToRoomButton.addEventListener("click", function () {
+    showAnyMainScreen("room");
+  });
+}
+
+if (E.zoomOutButton) {
+  E.zoomOutButton.addEventListener("click", function () {
+    battleZoom -= 0.25;
+
+    if (battleZoom < 0.25) {
+      battleZoom = 0.25;
+    }
+
+    applyBattleZoom();
+  });
+}
+
+if (E.zoomResetButton) {
+  E.zoomResetButton.addEventListener("click", function () {
+    battleZoom = 1;
+    applyBattleZoom();
+  });
+}
+
+if (E.zoomInButton) {
+  E.zoomInButton.addEventListener("click", function () {
+    battleZoom += 0.25;
+
+    if (battleZoom > 4) {
+      battleZoom = 4;
+    }
+
+    applyBattleZoom();
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13B â€” CREATOR TOOL LAUNCHERS
+// Creator tools open in their own browser tabs.
+// =====================================================
+
+if (E.openCharacterCreatorButton) {
+  E.openCharacterCreatorButton.addEventListener("click", function () {
+    openToolTab("characterCreator");
+  });
+}
+
+if (E.openMonsterCreatorButton) {
+  E.openMonsterCreatorButton.addEventListener("click", function () {
+    openToolTab("monsterCreator");
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13C â€” CREATOR BACK BUTTONS
+// In tool tabs, this returns to the battle view in the same tab.
+// =====================================================
+
+if (E.backFromCharacterCreatorButton) {
+  E.backFromCharacterCreatorButton.addEventListener("click", function () {
+    showAnyMainScreen("battle");
+    applyBattleZoom();
+
+    if (
+      window.HomebrewGodTokens &&
+      typeof window.HomebrewGodTokens.render === "function"
+    ) {
+      window.HomebrewGodTokens.render(currentRoomData || {});
+    }
+  });
+}
+
+
+// =====================================================
+// APP SECTION 13D â€” STARTUP VIEW ROUTING HELPERS
+// Section 14 will call this after the room loads.
+// =====================================================
+
+function openStartupViewIfNeeded() {
+  if (alreadyUsedStartupLink) {
+    return;
+  }
+
+  if (!startupRoomCode || !startupView) {
+    return;
+  }
+
+  if (!currentRoomCode || currentRoomCode !== startupRoomCode) {
+    return;
+  }
+
+  if (!currentRoomData) {
+    return;
+  }
+
+  alreadyUsedStartupLink = true;
+
+  if (startupView === "battle") {
+    showAnyMainScreen("battle");
+    applyBattleZoom();
+    return;
+  }
+
+  if (startupView === "characterCreator") {
+    showAnyMainScreen("characterCreator");
+    initCharacterCreatorSystem();
+    return;
+  }
+
+  if (startupView === "monsterCreator") {
+    showAnyMainScreen("monsterCreator");
+    initMonsterCreatorSystem();
+    return;
+  }
+}
+
+
+// =====================================================
+// APP SECTION 13E â€” PAGE LEAVE CLEANUP
+// =====================================================
+
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) {
+    touchActivePlayerSession();
+  }
+});
+
+window.addEventListener("focus", function () {
+  touchActivePlayerSession();
+});
+
+window.addEventListener("pageshow", function () {
+  touchActivePlayerSession();
+});
+
+window.addEventListener("pagehide", function () {
+  removeActivePlayerSession();
+});
+
+// =====================================================
+// APP SECTION 14 â€” STARTUP / AUTH WATCHER
+// Supports startup tabs:
+// ?room=ROOMCODE&view=battle
+// ?room=ROOMCODE&view=characterCreator
+// ?room=ROOMCODE&view=monsterCreator
+// =====================================================
+
+console.log("Registering auth listener");
+
+onAuthStateChanged(auth, async function (user) {
+  console.log("Auth state changed:", user ? user.uid : "no user");
+
+  currentUser = user;
+
+  if (!user) {
+    await showLoggedOut();
+    return;
+  }
+
+  showLoggedIn(user);
+
+  try {
+    await saveUserDoc(user);
+  } catch (error) {
+    console.error(
+      "Authenticated, but the user profile could not be saved to Firestore:",
+      error
+    );
+  }
+
+  listenToMyRooms();
+
+  if (!alreadyUsedStartupLink && startupRoomCode) {
+    const startupScreen =
+      startupView === "battle"
+        ? "battle"
+        : "room";
+
+    await joinRoom(
+      startupRoomCode,
+      "player",
+      startupScreen
+    );
+  }
+});

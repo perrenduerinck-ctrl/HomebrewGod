@@ -632,4 +632,1002 @@ export function createMonsterCreator(config) {
       elements.con,
       elements.int,
       elements.wis,
-      elements.chÛ_w¶‰ËkºwµçU˜¹¥°(€€€€€€€ÕÁ‘…Ñ•‘Ğè(€€€€€€€€€½¹™¥œ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤(€€€€€ô(€€€€¤ì((€€€Í•±•Ñ•‘5½¹ÍÑ•É%€ôÉ•…Ñ•‘I•˜¹¥ì(€€€É•ÑÕÉ¸É•…Ñ•‘I•˜¹¥ì(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸Í…Ù•5½¹ÍÑ•È ¤ì(€€€¥˜€ ……¹‘¥Ğ ¤¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰=¹±äÑ¡”É½½´4…¸Í…Ù”µ½¹ÍÑ•ÉÌ¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€½¹ÍĞ™½Éµ5½¹ÍÑ•È€ôÉ•…‘5½¹ÍÑ•É½É´ ¤ì((€€€¥˜€ …™½Éµ5½¹ÍÑ•È¹¹…µ”¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰¹Ñ•È„µ½¹ÍÑ•È¹…µ”‰•™½É”Í…Ù¥¹œ¸ˆ(€€€€€€¤ì(€€€€€¥˜€¡•±•µ•¹ÑÌ¹¹…µ”¤ì(€€€€€€€•±•µ•¹ÑÌ¹¹…µ”¹™½ÕÌ ¤ì(€€€€€ô(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€Í•Ñ	ÕÍä¡ÑÉÕ”¤ì((€€€ÑÉäì(€€€€€½¹ÍĞ•á¥ÍÑ¥¹5½¹ÍÑ•È€ô(€€€€€€€•ÑM•±•Ñ•‘5½¹ÍÑ•È ¤ì(€€€€€½¹ÍĞµ½¹ÍÑ•É…Ñ„€ô(€€€€€€€‰Õ¥±‘5½¹ÍÑ•É½Õµ•¹Ğ (€€€€€€€€€•á¥ÍÑ¥¹5½¹ÍÑ•È(€€€€€€€€¤ì((€€€€€¥˜€¡Í•±•Ñ•‘5½¹ÍÑ•É%¤ì(€€€€€€€…İ…¥Ğ½¹™¥œ¹ÕÁ‘…Ñ•½Œ (€€€€€€€€€½¹™¥œ¹‘½Œ (€€€€€€€€€€€½¹™¥œ¹‘ˆ°(€€€€€€€€€€€€‰É½½µÌˆ°(€€€€€€€€€€€•ÑI½½µ½‘” ¤°(€€€€€€€€€€€€‰µ½¹ÍÑ•ÉÌˆ°(€€€€€€€€€€€Í•±•Ñ•‘5½¹ÍÑ•É%(€€€€€€€€€€¤°(€€€€€€€€€ì(€€€€€€€€€€€€¸¸¹µ½¹ÍÑ•É…Ñ„°(€€€€€€€€€€€¥èÍ•±•Ñ•‘5½¹ÍÑ•É%°(€€€€€€€€€€€ÕÁ‘…Ñ•‘Ğè(€€€€€€€€€€€€€½¹™¥œ¹Í•ÉÙ•ÉQ¥µ•ÍÑ…µÀ ¤(€€€€€€€€€ô(€€€€€€€€¤ì(€€€€€€€Í•ÑMÑ…ÑÕÌ ‰5½¹ÍÑ•ÈÕÁ‘…Ñ•¸ˆ¤ì(€€€€€ô•±Í”ì(€€€€€€€…İ…¥ĞÉ•…Ñ•5½¹ÍÑ•É½Õµ•¹Ğ (€€€€€€€€€µ½¹ÍÑ•É…Ñ„(€€€€€€€€¤ì(€€€€€€€Í•ÑMÑ…ÑÕÌ ‰5½¹ÍÑ•ÈÍ…Ù•¸ˆ¤ì(€€€€€ô((€€€€€É•ÑÕÉ¸Í•±•Ñ•‘5½¹ÍÑ•É%ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹•ÉÉ½È (€€€€€€€€‰½Õ±¹½ĞÍ…Ù”µ½¹ÍÑ•Èèˆ°(€€€€€€€•ÉÉ½È(€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰5½¹ÍÑ•È½Õ±¹½Ğ‰”Í…Ù•è€ˆ€¬(€€€€€€€•ÉÉ½È¹µ•ÍÍ…”(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô™¥¹…±±äì(€€€€€Í•Ñ	ÕÍä¡™…±Í”¤ì(€€€ô(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸‘ÕÁ±¥…Ñ•5½¹ÍÑ•È ¤ì(€€€¥˜€ ……¹‘¥Ğ ¤¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰=¹±äÑ¡”É½½´4…¸‘ÕÁ±¥…Ñ”µ½¹ÍÑ•ÉÌ¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€¥˜€ …Í•±•Ñ•‘5½¹ÍÑ•É%¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰M•±•Ğ„Í…Ù•µ½¹ÍÑ•ÈÑ¼‘ÕÁ±¥…Ñ”¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€Í•Ñ	ÕÍä¡ÑÉÕ”¤ì((€€€ÑÉäì(€€€€€½¹ÍĞµ½¹ÍÑ•É…Ñ„€ô(€€€€€€€‰Õ¥±‘5½¹ÍÑ•É½Õµ•¹Ğ (€€€€€€€€€•ÑM•±•Ñ•‘5½¹ÍÑ•È ¤(€€€€€€€€¤ì(€€€€€µ½¹ÍÑ•É…Ñ„¹¹…µ”€ô(€€€€€€€¹½Éµ…±¥é•Q•áĞ (€€€€€€€€€µ½¹ÍÑ•É…Ñ„¹¹…µ”°(€€€€€€€€€€‰5½¹ÍÑ•Èˆ(€€€€€€€€¤€¬€ˆ½Áäˆì((€€€€€½¹ÍĞ‘ÕÁ±¥…Ñ•‘%€ô(€€€€€€€…İ…¥ĞÉ•…Ñ•5½¹ÍÑ•É½Õµ•¹Ğ (€€€€€€€€€µ½¹ÍÑ•É…Ñ„(€€€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ ‰5½¹ÍÑ•È‘ÕÁ±¥…Ñ•¸ˆ¤ì(€€€€€É•ÑÕÉ¸‘ÕÁ±¥…Ñ•‘%ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹•ÉÉ½È (€€€€€€€€‰½Õ±¹½Ğ‘ÕÁ±¥…Ñ”µ½¹ÍÑ•Èèˆ°(€€€€€€€•ÉÉ½È(€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰5½¹ÍÑ•È½Õ±¹½Ğ‰”‘ÕÁ±¥…Ñ•è€ˆ€¬(€€€€€€€•ÉÉ½È¹µ•ÍÍ…”(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô™¥¹…±±äì(€€€€€Í•Ñ	ÕÍä¡™…±Í”¤ì(€€€ô(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸‘•±•Ñ•5½¹ÍÑ•È¡Í­¥Á½¹™¥Éµ…Ñ¥½¸€ô™…±Í”¤ì(€€€¥˜€ ……¹‘¥Ğ ¤¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰=¹±äÑ¡”É½½´4…¸‘•±•Ñ”µ½¹ÍÑ•ÉÌ¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸™…±Í”ì(€€€ô((€€€½¹ÍĞµ½¹ÍÑ•È€ô•ÑM•±•Ñ•‘5½¹ÍÑ•È ¤ì((€€€¥˜€ …µ½¹ÍÑ•Èñğ€…Í•±•Ñ•‘5½¹ÍÑ•É%¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰M•±•Ğ„Í…Ù•µ½¹ÍÑ•ÈÑ¼‘•±•Ñ”¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸™…±Í”ì(€€€ô((€€€½¹ÍĞ½¹™¥Éµ•±•Ñ”€ô(€€€€€ÑåÁ•½˜½¹™¥œ¹½¹™¥Éµ•±•Ñ”€ôôô€‰™Õ¹Ñ¥½¸ˆ(€€€€€€€€ü½¹™¥œ¹½¹™¥Éµ•±•Ñ”(€€€€€€€€è™Õ¹Ñ¥½¸€¡µ•ÍÍ…”¤ì(€€€€€€€€€€€É•ÑÕÉ¸İ¥¹‘½Ü¹½¹™¥É´¡µ•ÍÍ…”¤ì(€€€€€€€€€ôì((€€€¥˜€ (€€€€€€…Í­¥Á½¹™¥Éµ…Ñ¥½¸€˜˜(€€€€€€…½¹™¥Éµ•±•Ñ” (€€€€€€€€‰•±•Ñ”€ˆ€¬(€€€€€€€€¡µ½¹ÍÑ•È¹¹…µ”ñğ€‰Ñ¡¥Ìµ½¹ÍÑ•Èˆ¤€¬(€€€€€€€€ˆüˆ(€€€€€€¤(€€€€¤ì(€€€€€É•ÑÕÉ¸™…±Í”ì(€€€ô((€€€Í•Ñ	ÕÍä¡ÑÉÕ”¤ì((€€€ÑÉäì(€€€€€…İ…¥Ğ½¹™¥œ¹‘•±•Ñ•½Œ (€€€€€€€½¹™¥œ¹‘½Œ (€€€€€€€€€½¹™¥œ¹‘ˆ°(€€€€€€€€€€‰É½½µÌˆ°(€€€€€€€€€•ÑI½½µ½‘” ¤°(€€€€€€€€€€‰µ½¹ÍÑ•ÉÌˆ°(€€€€€€€€€Í•±•Ñ•‘5½¹ÍÑ•É%(€€€€€€€€¤(€€€€€€¤ì(€€€€€Í•±•Ñ•‘5½¹ÍÑ•É%€ô¹Õ±°ì(€€€€€±½…‘5½¹ÍÑ•É%¹Ñ½½É´ (€€€€€€€U1Q}5=9MQH°(€€€€€€€™…±Í”(€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ ‰5½¹ÍÑ•È‘•±•Ñ•¸ˆ¤ì(€€€€€É•ÑÕÉ¸ÑÉÕ”ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹•ÉÉ½È (€€€€€€€€‰½Õ±¹½Ğ‘•±•Ñ”µ½¹ÍÑ•Èèˆ°(€€€€€€€•ÉÉ½È(€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰5½¹ÍÑ•È½Õ±¹½Ğ‰”‘•±•Ñ•è€ˆ€¬(€€€€€€€•ÉÉ½È¹µ•ÍÍ…”(€€€€€€¤ì(€€€€€É•ÑÕÉ¸™…±Í”ì(€€€ô™¥¹…±±äì(€€€€€Í•Ñ	ÕÍä¡™…±Í”¤ì(€€€ô(€ô((€™Õ¹Ñ¥½¸•ÑáÁ½ÉÑ…Ñ„ ¤ì(€€€½¹ÍĞÍ•±•Ñ•€ô(€€€€€•ÑM•±•Ñ•‘5½¹ÍÑ•È ¤ì(€€€½¹ÍĞ™½É´€ô(€€€€€É•…‘5½¹ÍÑ•É½É´ ¤ì(€€€½¹ÍĞÉ½½µ…Ñ„€ô(€€€€€•ÑI½½µ…Ñ„ ¤ì((€€€É•ÑÕÉ¸ì(€€€€€¥è(€€€€€€€Í•±•Ñ•(€€€€€€€€€€üÍ•±•Ñ•¹¥(€€€€€€€€€€è¹Õ±°°(€€€€€É½½µ½‘”è•ÑI½½µ½‘” ¤°(€€€€€½İ¹•ÉU¥è(€€€€€€€Í•±•Ñ•ü¹½İ¹•ÉU¥ñğ(€€€€€€€É½½µ…Ñ„¹‘µU¥ñğ(€€€€€€€¹Õ±°°(€€€€€½İ¹•É9…µ”è(€€€€€€€Í•±•Ñ•ü¹½İ¹•É9…µ”ñğ(€€€€€€€É½½µ…Ñ„¹‘µ9…µ”ñğ(€€€€€€€¹Õ±°°(€€€€€€¸¸¹™½É´°(€€€€€É•…Ñ•‘Ğè(€€€€€€€Í•±•Ñ•(€€€€€€€€€€üÑ¥µ•ÍÑ…µÁQ½)Í½¸ (€€€€€€€€€€€€€Í•±•Ñ•¹É•…Ñ•‘Ğ(€€€€€€€€€€€€¤(€€€€€€€€€€è¹Õ±°°(€€€€€ÕÁ‘…Ñ•‘Ğè(€€€€€€€Í•±•Ñ•(€€€€€€€€€€üÑ¥µ•ÍÑ…µÁQ½)Í½¸ (€€€€€€€€€€€€€Í•±•Ñ•¹ÕÁ‘…Ñ•‘Ğ(€€€€€€€€€€€€¤(€€€€€€€€€€è¹Õ±°(€€€ôì(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸½Áå5½¹ÍÑ•É)Í½¸ ¤ì(€€€½¹ÍĞ©Í½¸€ô(€€€€€)M=8¹ÍÑÉ¥¹¥™ä (€€€€€€€•ÑáÁ½ÉÑ…Ñ„ ¤°(€€€€€€€¹Õ±°°(€€€€€€€€È(€€€€€€¤ì((€€€ÑÉäì(€€€€€¥˜€ (€€€€€€€ÑåÁ•½˜½¹™¥œ¹İÉ¥Ñ•±¥Á‰½…É€ôôô(€€€€€€€€‰™Õ¹Ñ¥½¸ˆ(€€€€€€¤ì(€€€€€€€…İ…¥Ğ½¹™¥œ¹İÉ¥Ñ•±¥Á‰½…É¡©Í½¸¤ì(€€€€€ô•±Í”ì(€€€€€€€…İ…¥Ğ¹…Ù¥…Ñ½È¹±¥Á‰½…É¹İÉ¥Ñ•Q•áĞ (€€€€€€€€€©Í½¸(€€€€€€€€¤ì(€€€€€ô((€€€€€Í•ÑMÑ…ÑÕÌ ‰5½¹ÍÑ•È)M=8½Á¥•¸ˆ¤ì(€€€€€É•ÑÕÉ¸©Í½¸ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹•ÉÉ½È (€€€€€€€€‰½Õ±¹½Ğ½Áäµ½¹ÍÑ•È)M=8èˆ°(€€€€€€€•ÉÉ½È(€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰5½¹ÍÑ•È)M=8½Õ±¹½Ğ‰”½Á¥•¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô(€ô((€™Õ¹Ñ¥½¸•áÁ½ÉÑ5½¹ÍÑ•É)Í½¸ ¤ì(€€€½¹ÍĞ•áÁ½ÉÑ…Ñ„€ô•ÑáÁ½ÉÑ…Ñ„ ¤ì(€€€½¹ÍĞ©Í½¸€ô(€€€€€)M=8¹ÍÑÉ¥¹¥™ä (€€€€€€€•áÁ½ÉÑ…Ñ„°(€€€€€€€¹Õ±°°(€€€€€€€€È(€€€€€€¤ì(€€€½¹ÍĞ™¥±•9…µ”€ô(€€€€€µ…­•)Í½¹¥±•9…µ”¡•áÁ½ÉÑ…Ñ„¹¹…µ”¤ì((€€€¥˜€ (€€€€€ÑåÁ•½˜½¹™¥œ¹‘½İ¹±½…‘)Í½¸€ôôô(€€€€€€‰™Õ¹Ñ¥½¸ˆ(€€€€¤ì(€€€€€½¹™¥œ¹‘½İ¹±½…‘)Í½¸ (€€€€€€€™¥±•9…µ”°(€€€€€€€©Í½¸(€€€€€€¤ì(€€€ô•±Í”ì(€€€€€½¹ÍĞ‰±½ˆ€ô(€€€€€€€¹•Ü	±½ˆ (€€€€€€€€€m©Í½¹t°(€€€€€€€€€ì(€€€€€€€€€€€ÑåÁ”è€‰…ÁÁ±¥…Ñ¥½¸½©Í½¸ˆ(€€€€€€€€€ô(€€€€€€€€¤ì(€€€€€½¹ÍĞ½‰©•ÑUÉ°€ô(€€€€€€€UI0¹É•…Ñ•=‰©•ÑUI0¡‰±½ˆ¤ì(€€€€€½¹ÍĞ±¥¹¬€ô(€€€€€€€‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ‰„ˆ¤ì(€€€€€±¥¹¬¹¡É•˜€ô½‰©•ÑUÉ°ì(€€€€€±¥¹¬¹‘½İ¹±½…€ô™¥±•9…µ”ì(€€€€€‘½Õµ•¹Ğ¹‰½‘ä¹…ÁÁ•¹‘¡¥±¡±¥¹¬¤ì(€€€€€±¥¹¬¹±¥¬ ¤ì(€€€€€±¥¹¬¹É•µ½Ù” ¤ì(€€€€€UI0¹É•Ù½­•=‰©•ÑUI0¡½‰©•ÑUÉ°¤ì(€€€ô((€€€Í•ÑMÑ…ÑÕÌ ‰5½¹ÍÑ•È)M=8•áÁ½ÉÑ•¸ˆ¤ì((€€€É•ÑÕÉ¸ì(€€€€€™¥±•9…µ”°(€€€€€©Í½¸(€€€ôì(€ô((€™Õ¹Ñ¥½¸¥µÁ½ÉÑ5½¹ÍÑ•É…Ñ„¡É…İ…Ñ„¤ì(€€€¥˜€ ……¹‘¥Ğ ¤¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰=¹±äÑ¡”É½½´4…¸¥µÁ½ÉĞµ½¹ÍÑ•ÉÌ¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€½¹ÍĞ¥µÁ½ÉÑ•€ô(€€€€€É…İ…Ñ„€˜˜(€€€€€É…İ…Ñ„¹µ½¹ÍÑ•È(€€€€€€€€üÉ…İ…Ñ„¹µ½¹ÍÑ•È(€€€€€€€€èÉ…İ…Ñ„ì((€€€¥˜€ (€€€€€€…¥µÁ½ÉÑ•ñğ(€€€€€ÑåÁ•½˜¥µÁ½ÉÑ•€„ôô€‰½‰©•Ğˆñğ(€€€€€ÉÉ…ä¹¥ÍÉÉ…ä¡¥µÁ½ÉÑ•¤(€€€€¤ì(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È (€€€€€€€€‰Q¡”)M=8™¥±”‘½•Ì¹½Ğ½¹Ñ…¥¸„µ½¹ÍÑ•È½‰©•Ğ¸ˆ(€€€€€€¤ì(€€€ô((€€€Í•±•Ñ•‘5½¹ÍÑ•É%€ô¹Õ±°ì(€€€½¹ÍĞ¹½Éµ…±¥é•€ô(€€€€€±½…‘5½¹ÍÑ•É%¹Ñ½½É´ (€€€€€€€ì(€€€€€€€€€€¸¸¹¥µÁ½ÉÑ•°(€€€€€€€€€¥è¹Õ±°(€€€€€€€ô°(€€€€€€€™…±Í”(€€€€€€¤ì(€€€Í•ÑMÑ…ÑÕÌ (€€€€€€‰5½¹ÍÑ•È)M=8¥µÁ½ÉÑ•¸M…Ù”Ñ¼É•…Ñ”„¹•Üµ½¹ÍÑ•È¸ˆ(€€€€¤ì(€€€É•ÑÕÉ¸¹½Éµ…±¥é•ì(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸¥µÁ½ÉÑ5½¹ÍÑ•É)Í½¸¡•Ù•¹Ğ¤ì(€€€½¹ÍĞ™¥±”€ô(€€€€€•Ù•¹Ğ¹Ñ…É•Ğ¹™¥±•Ì€˜˜(€€€€€•Ù•¹Ğ¹Ñ…É•Ğ¹™¥±•ÍlÁtì((€€€¥˜€ …™¥±”¤É•ÑÕÉ¸¹Õ±°ì((€€€ÑÉäì(€€€€€½¹ÍĞÁ…ÉÍ•€ô(€€€€€€€)M=8¹Á…ÉÍ” (€€€€€€€€€…İ…¥Ğ™¥±”¹Ñ•áĞ ¤(€€€€€€€€¤ì(€€€€€É•ÑÕÉ¸¥µÁ½ÉÑ5½¹ÍÑ•É…Ñ„¡Á…ÉÍ•¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹•ÉÉ½È (€€€€€€€€‰½Õ±¹½Ğ¥µÁ½ÉĞµ½¹ÍÑ•È)M=8èˆ°(€€€€€€€•ÉÉ½È(€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰5½¹ÍÑ•È)M=8½Õ±¹½Ğ‰”¥µÁ½ÉÑ•è€ˆ€¬(€€€€€€€•ÉÉ½È¹µ•ÍÍ…”(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô™¥¹…±±äì(€€€€€•Ù•¹Ğ¹Ñ…É•Ğ¹Ù…±Õ”€ô€ˆˆì(€€€ô(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸É•…Ñ•5½¹ÍÑ•ÉQ½­•¸ ¤ì(€€€¥˜€ ……¹‘¥Ğ ¤¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰=¹±äÑ¡”É½½´4…¸É•…Ñ”µ½¹ÍÑ•ÈÑ½­•¹Ì¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€¥˜€ …Í•±•Ñ•‘5½¹ÍÑ•É%¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰M…Ù”Ñ¡”µ½¹ÍÑ•È‰•™½É”É•…Ñ¥¹œ¥ÑÌÑ½­•¸¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€¥˜€ (€€€€€ÑåÁ•½˜½¹™¥œ¹É•…Ñ•5½¹ÍÑ•É1¥¹­•‘Q½­•¸€„ôô(€€€€€€‰™Õ¹Ñ¥½¸ˆ(€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰Q¡”µ½¹ÍÑ•ÈÑ½­•¸ÍåÍÑ•´¥Ì¹½Ğ½¹¹•Ñ•¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô((€€€Í•Ñ	ÕÍä¡ÑÉÕ”¤ì((€€€ÑÉäì(€€€€€½¹ÍĞµ½¹ÍÑ•È€ôì(€€€€€€€€¸¸¹‰Õ¥±‘5½¹ÍÑ•É½Õµ•¹Ğ (€€€€€€€€€•ÑM•±•Ñ•‘5½¹ÍÑ•È ¤(€€€€€€€€¤°(€€€€€€€¥èÍ•±•Ñ•‘5½¹ÍÑ•É%(€€€€€ôì(€€€€€½¹ÍĞÑ½­•¸€ô(€€€€€€€…İ…¥Ğ½¹™¥œ¹É•…Ñ•5½¹ÍÑ•É1¥¹­•‘Q½­•¸ (€€€€€€€€€µ½¹ÍÑ•È(€€€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€µ½¹ÍÑ•È¹¹…µ”€¬(€€€€€€€€ˆÑ½­•¸É•…Ñ•½¸Ñ¡”…Ñ¥Ù”µ…À¸ˆ(€€€€€€¤ì(€€€€€É•ÑÕÉ¸Ñ½­•¸ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹•ÉÉ½È (€€€€€€€€‰½Õ±¹½ĞÉ•…Ñ”µ½¹ÍÑ•ÈÑ½­•¸èˆ°(€€€€€€€•ÉÉ½È(€€€€€€¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰5½¹ÍÑ•ÈÑ½­•¸½Õ±¹½Ğ‰”É•…Ñ•è€ˆ€¬(€€€€€€€•ÉÉ½È¹µ•ÍÍ…”(€€€€€€¤ì(€€€€€É•ÑÕÉ¸¹Õ±°ì(€€€ô™¥¹…±±äì(€€€€€Í•Ñ	ÕÍä¡™…±Í”¤ì(€€€ô(€ô((€™Õ¹Ñ¥½¸É•¹‘•É5½¹ÍÑ•É1¥ÍĞ ¤ì(€€€¥˜€ …•±•µ•¹ÑÌ¹±¥‰É…Éä¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô((€€€•±•µ•¹ÑÌ¹±¥‰É…Éä¹¥¹¹•É!Q50€ô€ˆˆì((€€€¥˜€¡µ½¹ÍÑ•ÉÌ¹±•¹Ñ €ôôô€À¤ì(€€€€€•±•µ•¹ÑÌ¹±¥‰É…Éä¹Ñ•áÑ½¹Ñ•¹Ğ€ô(€€€€€€€€‰9¼Í…Ù•µ½¹ÍÑ•ÉÌå•Ğ¸ˆì(€€€€€É•ÑÕÉ¸ì(€€€ô((€€€µ½¹ÍÑ•ÉÌ¹™½É… ¡™Õ¹Ñ¥½¸€¡µ½¹ÍÑ•È¤ì(€€€€€½¹ÍĞ‰ÕÑÑ½¸€ô(€€€€€€€‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ‰‰ÕÑÑ½¸ˆ¤ì(€€€€€‰ÕÑÑ½¸¹ÑåÁ”€ô€‰‰ÕÑÑ½¸ˆì(€€€€€‰ÕÑÑ½¸¹±…ÍÍ9…µ”€ô(€€€€€€€€‰µ½¹ÍÑ•Èµ±¥‰É…Éäµ¥Ñ•´ˆì(€€€€€‰ÕÑÑ½¸¹±…ÍÍ1¥ÍĞ¹Ñ½±” (€€€€€€€€‰¥ÌµÍ•±•Ñ•ˆ°(€€€€€€€µ½¹ÍÑ•È¹¥€ôôôÍ•±•Ñ•‘5½¹ÍÑ•É%(€€€€€€¤ì(€€€€€‰ÕÑÑ½¸¹Í•ÑÑÑÉ¥‰ÕÑ” (€€€€€€€€‰…É¥„µÁÉ•ÍÍ•ˆ°(€€€€€€€µ½¹ÍÑ•È¹¥€ôôôÍ•±•Ñ•‘5½¹ÍÑ•É%(€€€€€€€€€€ü€‰ÑÉÕ”ˆ(€€€€€€€€€€è€‰™…±Í”ˆ(€€€€€€¤ì((€€€€€½¹ÍĞ¹…µ”€ô(€€€€€€€‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ‰ÍÁ…¸ˆ¤ì(€€€€€¹…µ”¹±…ÍÍ9…µ”€ô(€€€€€€€€‰µ½¹ÍÑ•Èµ±¥‰É…Éäµ¹…µ”ˆì(€€€€€¹…µ”¹Ñ•áÑ½¹Ñ•¹Ğ€ô(€€€€€€€µ½¹ÍÑ•È¹¹…µ”ñğ(€€€€€€€€‰U¹¹…µ•5½¹ÍÑ•Èˆì((€€€€€½¹ÍĞµ•Ñ„€ô(€€€€€€€‘½Õµ•¹Ğ¹É•…Ñ•±•µ•¹Ğ ‰ÍÁ…¸ˆ¤ì(€€€€€µ•Ñ„¹±…ÍÍ9…µ”€ô(€€€€€€€€‰µ½¹ÍÑ•Èµ±¥‰É…Éäµµ•Ñ„ˆì(€€€€€µ•Ñ„¹Ñ•áÑ½¹Ñ•¹Ğ€ô(€€€€€€€€¡µ½¹ÍÑ•È¹Í¥é”ñğ€‰5•‘¥Õ´ˆ¤€¬(€€€€€€€€ˆ€ˆ€¬(€€€€€€€€¡µ½¹ÍÑ•È¹ÑåÁ”ñğ€‰5½¹ÍÑ•Èˆ¤€¬(€€€€€€€€ˆ€¼H€ˆ€¬(€€€€€€€€¡µ½¹ÍÑ•È¹Èñğ€ˆÀˆ¤ì((€€€€€‰ÕÑÑ½¸¹…ÁÁ•¹‘¡¥±¡¹…µ”¤ì(€€€€€‰ÕÑÑ½¸¹…ÁÁ•¹‘¡¥±¡µ•Ñ„¤ì(€€€€€‰ÕÑÑ½¸¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È (€€€€€€€€‰±¥¬ˆ°(€€€€€€€™Õ¹Ñ¥½¸€ ¤ì(€€€€€€€€€±½…‘5½¹ÍÑ•É%¹Ñ½½É´ (€€€€€€€€€€€µ½¹ÍÑ•È°(€€€€€€€€€€€ÑÉÕ”(€€€€€€€€€€¤ì(€€€€€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€€€€…¹‘¥Ğ ¤(€€€€€€€€€€€€€€ü€‰1½…‘•€ˆ€¬(€€€€€€€€€€€€€€€€¡µ½¹ÍÑ•È¹¹…µ”ñğ€‰µ½¹ÍÑ•Èˆ¤€¬(€€€€€€€€€€€€€€€€ˆ¸ˆ(€€€€€€€€€€€€€€è€‰Y¥•İ¥¹œ€ˆ€¬(€€€€€€€€€€€€€€€€¡µ½¹ÍÑ•È¹¹…µ”ñğ€‰µ½¹ÍÑ•Èˆ¤€¬(€€€€€€€€€€€€€€€€ˆ¸ˆ(€€€€€€€€€€¤ì(€€€€€€€ô(€€€€€€¤ì(€€€€€•±•µ•¹ÑÌ¹±¥‰É…Éä¹…ÁÁ•¹‘¡¥±¡‰ÕÑÑ½¸¤ì(€€€ô¤ì(€ô((€™Õ¹Ñ¥½¸ÍÕ‰ÍÉ¥‰•Q½I½½µ5½¹ÍÑ•ÉÌ ¤ì(€€€½¹ÍĞÉ½½µ½‘”€ô•ÑI½½µ½‘” ¤ì((€€€¥˜€¡ÍÑ½Á1¥ÍÑ•¹¥¹œ¤ì(€€€€€ÍÑ½Á1¥ÍÑ•¹¥¹œ ¤ì(€€€€€ÍÑ½Á1¥ÍÑ•¹¥¹œ€ô¹Õ±°ì(€€€ô((€€€±¥ÍÑ•¹¥¹I½½µ½‘”€ôÉ½½µ½‘”ì(€€€µ½¹ÍÑ•ÉÌ€ômtì(€€€É•¹‘•É5½¹ÍÑ•É1¥ÍĞ ¤ì((€€€¥˜€ …É½½µ½‘”¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‰=Á•¸„É½½´‰•™½É”ÕÍ¥¹œ5½¹ÍÑ•ÈÉ•…Ñ½È¸ˆ(€€€€€€¤ì(€€€€€Íå¹A•Éµ¥ÍÍ¥½¹MÑ…Ñ” ¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô((€€€Í•ÑMÑ…ÑÕÌ ‰1½…‘¥¹œÍ…Ù•µ½¹ÍÑ•ÉÌ¸¸¸ˆ¤ì(€€€ÍÑ½Á1¥ÍÑ•¹¥¹œ€ô(€€€€€½¹™¥œ¹½¹M¹…ÁÍ¡½Ğ (€€€€€€€½¹™¥œ¹½±±•Ñ¥½¸ (€€€€€€€€€½¹™¥œ¹‘ˆ°(€€€€€€€€€€‰É½½µÌˆ°(€€€€€€€€€É½½µ½‘”°(€€€€€€€€€€‰µ½¹ÍÑ•ÉÌˆ(€€€€€€€€¤°(€€€€€€€™Õ¹Ñ¥½¸€¡Í¹…ÁÍ¡½Ğ¤ì(€€€€€€€€€¥˜€¡•ÑI½½µ½‘” ¤€„ôôÉ½½µ½‘”¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€ô((€€€€€€€€€µ½¹ÍÑ•ÉÌ€ô(€€€€€€€€€€€Í¹…ÁÍ¡½Ğ¹‘½Ì¹µ…À¡™Õ¹Ñ¥½¸€ (€€€€€€€€€€€€€µ½¹ÍÑ•É½Œ(€€€€€€€€€€€€¤ì(€€€€€€€€€€€€€É•ÑÕÉ¸¹½Éµ…±¥é•5½¹ÍÑ•ÉI•½É¡ì(€€€€€€€€€€€€€€€€¸¸¹µ½¹ÍÑ•É½Œ¹‘…Ñ„ ¤°(€€€€€€€€€€€€€€€¥èµ½¹ÍÑ•É½Œ¹¥(€€€€€€€€€€€€€ô¤ì(€€€€€€€€€€€ô¤ì((€€€€€€€€€µ½¹ÍÑ•ÉÌ¹Í½ÉĞ¡™Õ¹Ñ¥½¸€ (€€€€€€€€€€€±•™Ğ°(€€€€€€€€€€€É¥¡Ğ(€€€€€€€€€€¤ì(€€€€€€€€€€€½¹ÍĞ¹…µ•½µÁ…É”€ô(€€€€€€€€€€€€€¹½Éµ…±¥é•Q•áĞ (€€€€€€€€€€€€€€€±•™Ğ¹¹…µ”(€€€€€€€€€€€€€€¤¹±½…±•½µÁ…É” (€€€€€€€€€€€€€€€¹½Éµ…±¥é•Q•áĞ (€€€€€€€€€€€€€€€€€É¥¡Ğ¹¹…µ”(€€€€€€€€€€€€€€€€¤(€€€€€€€€€€€€€€¤ì((€€€€€€€€€€€¥˜€¡¹…µ•½µÁ…É”€„ôô€À¤ì(€€€€€€€€€€€€€É•ÑÕÉ¸¹…µ•½µÁ…É”ì(€€€€€€€€€€€ô((€€€€€€€€€€€É•ÑÕÉ¸€ (€€€€€€€€€€€€€Ñ¥µ•ÍÑ…µÁQ½5¥±±¥Ì (€€€€€€€€€€€€€€€É¥¡Ğ¹ÕÁ‘…Ñ•‘Ğ(€€€€€€€€€€€€€€¤€´(€€€€€€€€€€€€€Ñ¥µ•ÍÑ…µÁQ½5¥±±¥Ì (€€€€€€€€€€€€€€€±•™Ğ¹ÕÁ‘…Ñ•‘Ğ(€€€€€€€€€€€€€€¤(€€€€€€€€€€€€¤ì(€€€€€€€€€ô¤ì((€€€€€€€€€¥˜€ (€€€€€€€€€€€Í•±•Ñ•‘5½¹ÍÑ•É%€˜˜(€€€€€€€€€€€€…µ½¹ÍÑ•ÉÌ¹Í½µ”¡™Õ¹Ñ¥½¸€ (€€€€€€€€€€€€€µ½¹ÍÑ•È(€€€€€€€€€€€€¤ì(€€€€€€€€€€€€€É•ÑÕÉ¸€ (€€€€€€€€€€€€€€€µ½¹ÍÑ•È¹¥€ôôô(€€€€€€€€€€€€€€€Í•±•Ñ•‘5½¹ÍÑ•É%(€€€€€€€€€€€€€€¤ì(€€€€€€€€€€€ô¤(€€€€€€€€€€¤ì(€€€€€€€€€€€Í•±•Ñ•‘5½¹ÍÑ•É%€ô¹Õ±°ì(€€€€€€€€€ô((€€€€€€€€€É•¹‘•É5½¹ÍÑ•É1¥ÍĞ ¤ì(€€€€€€€€€Íå¹A•Éµ¥ÍÍ¥½¹MÑ…Ñ” ¤ì(€€€€€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€€€€…¹‘¥Ğ ¤(€€€€€€€€€€€€€€ü€‰5½¹ÍÑ•ÈÉ•…Ñ½ÈÉ•…‘ä¸ˆ(€€€€€€€€€€€€€€è€‰Y¥•İ¥¹œÍ…Ù•µ½¹ÍÑ•ÉÌ¸=¹±äÑ¡”É½½´4…¸•‘¥Ğ¸ˆ(€€€€€€€€€€¤ì(€€€€€€€ô°(€€€€€€€™Õ¹Ñ¥½¸€¡•ÉÉ½È¤ì(€€€€€€€€€½¹Í½±”¹•ÉÉ½È (€€€€€€€€€€€€‰½Õ±¹½Ğ±½…Í…Ù•µ½¹ÍÑ•ÉÌèˆ°(€€€€€€€€€€€•ÉÉ½È(€€€€€€€€€€¤ì(€€€€€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€€€€€‰M…Ù•µ½¹ÍÑ•ÉÌ½Õ±¹½Ğ‰”±½…‘•è€ˆ€¬(€€€€€€€€€€€•ÉÉ½È¹µ•ÍÍ…”(€€€€€€€€€€¤ì(€€€€€€€ô(€€€€€€¤ì(€ô((€™Õ¹Ñ¥½¸‰…­Q½	…ÑÑ±•5…À ¤ì(€€€¥˜€ (€€€€€ÑåÁ•½˜½¹™¥œ¹½¹	…¬€ôôô(€€€€€€‰™Õ¹Ñ¥½¸ˆ(€€€€¤ì(€€€€€½¹™¥œ¹½¹	…¬ ¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô((€€€½¹ÍĞ‰…ÑÑ±•UÉ°€ô(€€€€€¹•ÜUI0¡İ¥¹‘½Ü¹±½…Ñ¥½¸¹¡É•˜¤ì(€€€‰…ÑÑ±•UÉ°¹Í•…É¡A…É…µÌ¹Í•Ğ (€€€€€€‰Ù¥•Üˆ°(€€€€€€‰‰…ÑÑ±”ˆ(€€€€¤ì(€€€İ¥¹‘½Ü¹±½…Ñ¥½¸¹…ÍÍ¥¸ (€€€€€‰…ÑÑ±•UÉ°¹Ñ½MÑÉ¥¹œ ¤(€€€€¤ì(€ô((€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹¹•İ	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€¹•İ5½¹ÍÑ•È(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹Í…Ù•	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€Í…Ù•5½¹ÍÑ•È(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹‘ÕÁ±¥…Ñ•	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€‘ÕÁ±¥…Ñ•5½¹ÍÑ•È(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹‘•±•Ñ•	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€‘•±•Ñ•5½¹ÍÑ•È(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹Ñ½­•¹	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€É•…Ñ•5½¹ÍÑ•ÉQ½­•¸(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹½Áå	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€½Áå5½¹ÍÑ•É)Í½¸(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹•áÁ½ÉÑ	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€•áÁ½ÉÑ5½¹ÍÑ•É)Í½¸(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹¥µÁ½ÉÑ%¹ÁÕĞ°(€€€€‰¡…¹”ˆ°(€€€¥µÁ½ÉÑ5½¹ÍÑ•É)Í½¸(€€¤ì(€…‘‘½µ1¥ÍÑ•¹•È (€€€•±•µ•¹ÑÌ¹‰…­	ÕÑÑ½¸°(€€€€‰±¥¬ˆ°(€€€‰…­Q½	…ÑÑ±•5…À(€€¤ì((€¥˜€¡…¹‘¥Ğ ¤¤ì(€€€Í•±•Ñ•‘5½¹ÍÑ•É%€ô¹Õ±°ì(€€€±½…‘5½¹ÍÑ•É%¹Ñ½½É´ (€€€€€U1Q}5=9MQH°(€€€€€™…±Í”(€€€€¤ì(€€€Í•ÑMÑ…ÑÕÌ ‰9•Üµ½¹ÍÑ•ÈÉ•…‘ä¸ˆ¤ì(€ô•±Í”ì(€€€±½…‘5½¹ÍÑ•É%¹Ñ½½É´ (€€€€€U1Q}5=9MQH°(€€€€€™…±Í”(€€€€¤ì(€ô((€ÍÕ‰ÍÉ¥‰•Q½I½½µ5½¹ÍÑ•ÉÌ ¤ì((€É•ÑÕÉ¸ì(€€€‘•ÍÑÉ½äè™Õ¹Ñ¥½¸€ ¤ì(€€€€€¥˜€¡ÍÑ½Á1¥ÍÑ•¹¥¹œ¤ì(€€€€€€€ÍÑ½Á1¥ÍÑ•¹¥¹œ ¤ì(€€€€€ô(€€€€€ÍÑ½Á1¥ÍÑ•¹¥¹œ€ô¹Õ±°ì(€€€€€É•µ½Ù•½µ1¥ÍÑ•¹•ÉÌ¹™½É…  (€€€€€€€™Õ¹Ñ¥½¸€¡É•µ½Ù•1¥ÍÑ•¹•È¤ì(€€€€€€€€€É•µ½Ù•1¥ÍÑ•¹•È ¤ì(€€€€€€€ô(€€€€€€¤ì(€€€ô°(€€€É•™É•Í è™Õ¹Ñ¥½¸€ ¤ì(€€€€€¥˜€ (€€€€€€€±¥ÍÑ•¹¥¹I½½µ½‘”€„ôô(€€€€€€€•ÑI½½µ½‘” ¤(€€€€€€¤ì(€€€€€€€ÍÕ‰ÍÉ¥‰•Q½I½½µ5½¹ÍÑ•ÉÌ ¤ì(€€€€€ô•±Í”ì(€€€€€€€Íå¹A•Éµ¥ÍÍ¥½¹MÑ…Ñ” ¤ì(€€€€€€€É•¹‘•É5½¹ÍÑ•É1¥ÍĞ ¤ì(€€€€€ô(€€€ô°(€€€¹•İ5½¹ÍÑ•È°(€€€Í…Ù•5½¹ÍÑ•È°(€€€‘ÕÁ±¥…Ñ•5½¹ÍÑ•È°(€€€‘•±•Ñ•5½¹ÍÑ•È°(€€€É•…Ñ•5½¹ÍÑ•ÉQ½­•¸°(€€€½Áå5½¹ÍÑ•É)Í½¸°(€€€•áÁ½ÉÑ5½¹ÍÑ•É)Í½¸°(€€€¥µÁ½ÉÑ5½¹ÍÑ•É…Ñ„°(€€€•ÑáÁ½ÉÑ…Ñ„°(€€€±½…‘5½¹ÍÑ•É%¹Ñ½½É´°(€€€É•…‘5½¹ÍÑ•É½É´°(€€€•ÑMÑ…Ñ”è™Õ¹Ñ¥½¸€ ¤ì(€€€€€É•ÑÕÉ¸ì(€€€€€€€Í•±•Ñ•‘5½¹ÍÑ•É%°(€€€€€€€µ½¹ÍÑ•ÉÌè(€€€€€€€€€µ½¹ÍÑ•ÉÌ¹µ…À¡™Õ¹Ñ¥½¸€¡µ½¹ÍÑ•È¤ì(€€€€€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€€€¸¸¹µ½¹ÍÑ•È(€€€€€€€€€€€ôì(€€€€€€€€€ô¤°(€€€€€€€…¹‘¥Ğè…¹‘¥Ğ ¤°(€€€€€€€¥Í	ÕÍä(€€€€€ôì(€€€ô(€ôì)ô
+      elements.cha,
+      elements.traits,
+      elements.actions,
+      elements.bonusActions,
+      elements.reactions,
+      elements.legendaryActions,
+      elements.lairActions,
+      elements.senses,
+      elements.savingThrows,
+      elements.skills,
+      elements.damageImmunities,
+      elements.damageResistances,
+      elements.damageVulnerabilities,
+      elements.conditionImmunities,
+      elements.notes
+    ].filter(Boolean);
+  }
+
+  function syncPermissionState() {
+    const editable = canEdit();
+
+    getEditableControls().forEach(function (control) {
+      control.disabled = !editable || isBusy;
+    });
+
+    if (elements.newButton) {
+      elements.newButton.disabled = !editable || isBusy;
+    }
+
+    if (elements.saveButton) {
+      elements.saveButton.disabled = !editable || isBusy;
+    }
+
+    if (elements.duplicateButton) {
+      elements.duplicateButton.disabled =
+        !editable ||
+        isBusy ||
+        !selectedMonsterId;
+    }
+
+    if (elements.deleteButton) {
+      elements.deleteButton.disabled =
+        !editable ||
+        isBusy ||
+        !selectedMonsterId;
+    }
+
+    if (elements.tokenButton) {
+      elements.tokenButton.disabled =
+        !editable ||
+        isBusy ||
+        !selectedMonsterId;
+    }
+
+    if (elements.importInput) {
+      elements.importInput.disabled =
+        !editable ||
+        isBusy;
+    }
+  }
+
+  function setBusy(busy) {
+    isBusy = busy;
+    syncPermissionState();
+  }
+
+  function readMonsterForm() {
+    const raw = {
+      name: elements.name && elements.name.value,
+      size: elements.size && elements.size.value,
+      type: elements.type && elements.type.value,
+      alignment: elements.alignment && elements.alignment.value,
+      imageUrl: elements.imageUrl && elements.imageUrl.value,
+      ac: elements.ac && elements.ac.value,
+      hp: elements.hp && elements.hp.value,
+      speed: elements.speed && elements.speed.value,
+      cr: elements.cr && elements.cr.value,
+      abilities: {
+        str: elements.str && elements.str.value,
+        dex: elements.dex && elements.dex.value,
+        con: elements.con && elements.con.value,
+        int: elements.int && elements.int.value,
+        wis: elements.wis && elements.wis.value,
+        cha: elements.cha && elements.cha.value
+      },
+      traits: elements.traits && elements.traits.value,
+      actions: elements.actions && elements.actions.value,
+      bonusActions: elements.bonusActions && elements.bonusActions.value,
+      reactions: elements.reactions && elements.reactions.value,
+      legendaryActions:
+        elements.legendaryActions &&
+        elements.legendaryActions.value,
+      lairActions: elements.lairActions && elements.lairActions.value,
+      senses: elements.senses && elements.senses.value,
+      savingThrows:
+        elements.savingThrows &&
+        elements.savingThrows.value,
+      skills: elements.skills && elements.skills.value,
+      damageImmunities:
+        elements.damageImmunities &&
+        elements.damageImmunities.value,
+      damageResistances:
+        elements.damageResistances &&
+        elements.damageResistances.value,
+      damageVulnerabilities:
+        elements.damageVulnerabilities &&
+        elements.damageVulnerabilities.value,
+      conditionImmunities:
+        elements.conditionImmunities &&
+        elements.conditionImmunities.value,
+      notes: elements.notes && elements.notes.value
+    };
+
+    return normalizeMonsterRecord(raw);
+  }
+
+  function writeValue(element, value) {
+    if (element) {
+      element.value =
+        value == null
+          ? ""
+          : String(value);
+    }
+  }
+
+  function loadMonsterIntoForm(monster, selectDocument = true) {
+    const source =
+      normalizeMonsterRecord(
+        monster || DEFAULT_MONSTER
+      );
+
+    if (selectDocument) {
+      selectedMonsterId =
+        normalizeText(source.id) ||
+        null;
+    }
+
+    writeValue(elements.name, source.name);
+    writeValue(elements.size, source.size);
+    writeValue(elements.type, source.type);
+    writeValue(elements.alignment, source.alignment);
+    writeValue(elements.imageUrl, source.imageUrl);
+    writeValue(elements.ac, source.ac);
+    writeValue(elements.hp, source.hp);
+    writeValue(elements.speed, source.speed);
+    writeValue(elements.cr, source.cr);
+    writeValue(elements.str, source.abilities.str);
+    writeValue(elements.dex, source.abilities.dex);
+    writeValue(elements.con, source.abilities.con);
+    writeValue(elements.int, source.abilities.int);
+    writeValue(elements.wis, source.abilities.wis);
+    writeValue(elements.cha, source.abilities.cha);
+
+    NAMED_ENTRY_FIELDS.forEach(function (field) {
+      writeValue(
+        elements[field],
+        formatNamedEntries(source[field])
+      );
+    });
+
+    LIST_FIELDS.forEach(function (field) {
+      writeValue(
+        elements[field],
+        formatStringList(source[field])
+      );
+    });
+
+    writeValue(elements.notes, source.notes);
+
+    syncPermissionState();
+    renderMonsterList();
+    return source;
+  }
+
+  function newMonster() {
+    if (!canEdit()) {
+      setStatus(
+        "Players can view and export saved monsters, but only the room DM can edit."
+      );
+      return null;
+    }
+
+    selectedMonsterId = null;
+    const monster =
+      loadMonsterIntoForm(
+        DEFAULT_MONSTER,
+        false
+      );
+    setStatus("New monster ready.");
+    return monster;
+  }
+
+  function getSelectedMonster() {
+    return monsters.find(function (monster) {
+      return monster.id === selectedMonsterId;
+    }) || null;
+  }
+
+  function buildMonsterDocument(existingMonster) {
+    const roomCode = getRoomCode();
+    const roomData = getRoomData();
+    const formMonster = readMonsterForm();
+
+    return {
+      roomCode,
+      ownerUid:
+        existingMonster?.ownerUid ||
+        roomData.dmUid ||
+        "",
+      ownerName:
+        existingMonster?.ownerName ||
+        roomData.dmName ||
+        "Unnamed DM",
+      ...formMonster
+    };
+  }
+
+  async function createMonsterDocument(monsterData) {
+    const roomCode = getRoomCode();
+
+    if (!roomCode) {
+      throw new Error(
+        "Open a room before saving a monster."
+      );
+    }
+
+    const createdRef =
+      await config.addDoc(
+        config.collection(
+          config.db,
+          "rooms",
+          roomCode,
+          "monsters"
+        ),
+        {
+          ...monsterData,
+          id: null,
+          createdAt:
+            config.serverTimestamp(),
+          updatedAt:
+            config.serverTimestamp()
+        }
+      );
+
+    await config.updateDoc(
+      createdRef,
+      {
+        id: createdRef.id,
+        updatedAt:
+          config.serverTimestamp()
+      }
+    );
+
+    selectedMonsterId = createdRef.id;
+    return createdRef.id;
+  }
+
+  async function saveMonster() {
+    if (!canEdit()) {
+      setStatus(
+        "Only the room DM can save monsters."
+      );
+      return null;
+    }
+
+    const formMonster = readMonsterForm();
+
+    if (!formMonster.name) {
+      setStatus(
+        "Enter a monster name before saving."
+      );
+      if (elements.name) {
+        elements.name.focus();
+      }
+      return null;
+    }
+
+    setBusy(true);
+
+    try {
+      const existingMonster =
+        getSelectedMonster();
+      const monsterData =
+        buildMonsterDocument(
+          existingMonster
+        );
+
+      if (selectedMonsterId) {
+        await config.updateDoc(
+          config.doc(
+            config.db,
+            "rooms",
+            getRoomCode(),
+            "monsters",
+            selectedMonsterId
+          ),
+          {
+            ...monsterData,
+            id: selectedMonsterId,
+            updatedAt:
+              config.serverTimestamp()
+          }
+        );
+        setStatus("Monster updated.");
+      } else {
+        await createMonsterDocument(
+          monsterData
+        );
+        setStatus("Monster saved.");
+      }
+
+      return selectedMonsterId;
+    } catch (error) {
+      console.error(
+        "Could not save monster:",
+        error
+      );
+      setStatus(
+        "Monster could not be saved: " +
+        error.message
+      );
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function duplicateMonster() {
+    if (!canEdit()) {
+      setStatus(
+        "Only the room DM can duplicate monsters."
+      );
+      return null;
+    }
+
+    if (!selectedMonsterId) {
+      setStatus(
+        "Select a saved monster to duplicate."
+      );
+      return null;
+    }
+
+    setBusy(true);
+
+    try {
+      const monsterData =
+        buildMonsterDocument(
+          getSelectedMonster()
+        );
+      monsterData.name =
+        normalizeText(
+          monsterData.name,
+          "Monster"
+        ) + " Copy";
+
+      const duplicatedId =
+        await createMonsterDocument(
+          monsterData
+        );
+      setStatus("Monster duplicated.");
+      return duplicatedId;
+    } catch (error) {
+      console.error(
+        "Could not duplicate monster:",
+        error
+      );
+      setStatus(
+        "Monster could not be duplicated: " +
+        error.message
+      );
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteMonster(skipConfirmation = false) {
+    if (!canEdit()) {
+      setStatus(
+        "Only the room DM can delete monsters."
+      );
+      return false;
+    }
+
+    const monster = getSelectedMonster();
+
+    if (!monster || !selectedMonsterId) {
+      setStatus(
+        "Select a saved monster to delete."
+      );
+      return false;
+    }
+
+    const confirmDelete =
+      typeof config.confirmDelete === "function"
+        ? config.confirmDelete
+        : function (message) {
+            return window.confirm(message);
+          };
+
+    if (
+      !skipConfirmation &&
+      !confirmDelete(
+        "Delete " +
+        (monster.name || "this monster") +
+        "?"
+      )
+    ) {
+      return false;
+    }
+
+    setBusy(true);
+
+    try {
+      await config.deleteDoc(
+        config.doc(
+          config.db,
+          "rooms",
+          getRoomCode(),
+          "monsters",
+          selectedMonsterId
+        )
+      );
+      selectedMonsterId = null;
+      loadMonsterIntoForm(
+        DEFAULT_MONSTER,
+        false
+      );
+      setStatus("Monster deleted.");
+      return true;
+    } catch (error) {
+      console.error(
+        "Could not delete monster:",
+        error
+      );
+      setStatus(
+        "Monster could not be deleted: " +
+        error.message
+      );
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function getExportData() {
+    const selected =
+      getSelectedMonster();
+    const form =
+      readMonsterForm();
+    const roomData =
+      getRoomData();
+
+    return {
+      id:
+        selected
+          ? selected.id
+          : null,
+      roomCode: getRoomCode(),
+      ownerUid:
+        selected?.ownerUid ||
+        roomData.dmUid ||
+        null,
+      ownerName:
+        selected?.ownerName ||
+        roomData.dmName ||
+        null,
+      ...form,
+      createdAt:
+        selected
+          ? timestampToJson(
+              selected.createdAt
+            )
+          : null,
+      updatedAt:
+        selected
+          ? timestampToJson(
+              selected.updatedAt
+            )
+          : null
+    };
+  }
+
+  async function copyMonsterJson() {
+    const json =
+      JSON.stringify(
+        getExportData(),
+        null,
+        2
+      );
+
+    try {
+      if (
+        typeof config.writeClipboard ===
+        "function"
+      ) {
+        await config.writeClipboard(json);
+      } else {
+        await navigator.clipboard.writeText(
+          json
+        );
+      }
+
+      setStatus("Monster JSON copied.");
+      return json;
+    } catch (error) {
+      console.error(
+        "Could not copy monster JSON:",
+        error
+      );
+      setStatus(
+        "Monster JSON could not be copied."
+      );
+      return null;
+    }
+  }
+
+  function exportMonsterJson() {
+    const exportData = getExportData();
+    const json =
+      JSON.stringify(
+        exportData,
+        null,
+        2
+      );
+    const fileName =
+      makeJsonFileName(exportData.name);
+
+    if (
+      typeof config.downloadJson ===
+      "function"
+    ) {
+      config.downloadJson(
+        fileName,
+        json
+      );
+    } else {
+      const blob =
+        new Blob(
+          [json],
+          {
+            type: "application/json"
+          }
+        );
+      const objectUrl =
+        URL.createObjectURL(blob);
+      const link =
+        document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    }
+
+    setStatus("Monster JSON exported.");
+
+    return {
+      fileName,
+      json
+    };
+  }
+
+  function importMonsterData(rawData) {
+    if (!canEdit()) {
+      setStatus(
+        "Only the room DM can import monsters."
+      );
+      return null;
+    }
+
+    const imported =
+      rawData &&
+      rawData.monster
+        ? rawData.monster
+        : rawData;
+
+    if (
+      !imported ||
+      typeof imported !== "object" ||
+      Array.isArray(imported)
+    ) {
+      throw new Error(
+        "The JSON file does not contain a monster object."
+      );
+    }
+
+    selectedMonsterId = null;
+    const normalized =
+      loadMonsterIntoForm(
+        {
+          ...imported,
+          id: null
+        },
+        false
+      );
+    setStatus(
+      "Monster JSON imported. Save to create a new monster."
+    );
+    return normalized;
+  }
+
+  async function importMonsterJson(event) {
+    const file =
+      event.target.files &&
+      event.target.files[0];
+
+    if (!file) return null;
+
+    try {
+      const parsed =
+        JSON.parse(
+          await file.text()
+        );
+      return importMonsterData(parsed);
+    } catch (error) {
+      console.error(
+        "Could not import monster JSON:",
+        error
+      );
+      setStatus(
+        "Monster JSON could not be imported: " +
+        error.message
+      );
+      return null;
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function createMonsterToken() {
+    if (!canEdit()) {
+      setStatus(
+        "Only the room DM can create monster tokens."
+      );
+      return null;
+    }
+
+    if (!selectedMonsterId) {
+      setStatus(
+        "Save the monster before creating its token."
+      );
+      return null;
+    }
+
+    if (
+      typeof config.createMonsterLinkedToken !==
+      "function"
+    ) {
+      setStatus(
+        "The monster token system is not connected."
+      );
+      return null;
+    }
+
+    setBusy(true);
+
+    try {
+      const monster = {
+        ...buildMonsterDocument(
+          getSelectedMonster()
+        ),
+        id: selectedMonsterId
+      };
+      const token =
+        await config.createMonsterLinkedToken(
+          monster
+        );
+      setStatus(
+        monster.name +
+        " token created on the active map."
+      );
+      return token;
+    } catch (error) {
+      console.error(
+        "Could not create monster token:",
+        error
+      );
+      setStatus(
+        "Monster token could not be created: " +
+        error.message
+      );
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function renderMonsterList() {
+    if (!elements.library) {
+      return;
+    }
+
+    elements.library.innerHTML = "";
+
+    if (monsters.length === 0) {
+      elements.library.textContent =
+        "No saved monsters yet.";
+      return;
+    }
+
+    monsters.forEach(function (monster) {
+      const button =
+        document.createElement("button");
+      button.type = "button";
+      button.className =
+        "monster-library-item";
+      button.classList.toggle(
+        "is-selected",
+        monster.id === selectedMonsterId
+      );
+      button.setAttribute(
+        "aria-pressed",
+        monster.id === selectedMonsterId
+          ? "true"
+          : "false"
+      );
+
+      const name =
+        document.createElement("span");
+      name.className =
+        "monster-library-name";
+      name.textContent =
+        monster.name ||
+        "Unnamed Monster";
+
+      const meta =
+        document.createElement("span");
+      meta.className =
+        "monster-library-meta";
+      meta.textContent =
+        (monster.size || "Medium") +
+        " " +
+        (monster.type || "Monster") +
+        " / CR " +
+        (monster.cr || "0");
+
+      button.appendChild(name);
+      button.appendChild(meta);
+      button.addEventListener(
+        "click",
+        function () {
+          loadMonsterIntoForm(
+            monster,
+            true
+          );
+          setStatus(
+            canEdit()
+              ? "Loaded " +
+                (monster.name || "monster") +
+                "."
+              : "Viewing " +
+                (monster.name || "monster") +
+                "."
+          );
+        }
+      );
+      elements.library.appendChild(button);
+    });
+  }
+
+  function subscribeToRoomMonsters() {
+    const roomCode = getRoomCode();
+
+    if (stopListening) {
+      stopListening();
+      stopListening = null;
+    }
+
+    listeningRoomCode = roomCode;
+    monsters = [];
+    renderMonsterList();
+
+    if (!roomCode) {
+      setStatus(
+        "Open a room before using Monster Creator."
+      );
+      syncPermissionState();
+      return;
+    }
+
+    setStatus("Loading saved monsters...");
+    stopListening =
+      config.onSnapshot(
+        config.collection(
+          config.db,
+          "rooms",
+          roomCode,
+          "monsters"
+        ),
+        function (snapshot) {
+          if (getRoomCode() !== roomCode) {
+            return;
+          }
+
+          monsters =
+            snapshot.docs.map(function (
+              monsterDoc
+            ) {
+              return normalizeMonsterRecord({
+                ...monsterDoc.data(),
+                id: monsterDoc.id
+              });
+            });
+
+          monsters.sort(function (
+            left,
+            right
+          ) {
+            const nameCompare =
+              normalizeText(
+                left.name
+              ).localeCompare(
+                normalizeText(
+                  right.name
+                )
+              );
+
+            if (nameCompare !== 0) {
+              return nameCompare;
+            }
+
+            return (
+              timestampToMillis(
+                right.updatedAt
+              ) -
+              timestampToMillis(
+                left.updatedAt
+              )
+            );
+          });
+
+          if (
+            selectedMonsterId &&
+            !monsters.some(function (
+              monster
+            ) {
+              return (
+                monster.id ===
+                selectedMonsterId
+              );
+            })
+          ) {
+            selectedMonsterId = null;
+          }
+
+          renderMonsterList();
+          syncPermissionState();
+          setStatus(
+            canEdit()
+              ? "Monster Creator ready."
+              : "Viewing saved monsters. Only the room DM can edit."
+          );
+        },
+        function (error) {
+          console.error(
+            "Could not load saved monsters:",
+            error
+          );
+          setStatus(
+            "Saved monsters could not be loaded: " +
+            error.message
+          );
+        }
+      );
+  }
+
+  function backToBattleMap() {
+    if (
+      typeof config.onBack ===
+      "function"
+    ) {
+      config.onBack();
+      return;
+    }
+
+    const battleUrl =
+      new URL(window.location.href);
+    battleUrl.searchParams.set(
+      "view",
+      "battle"
+    );
+    window.location.assign(
+      battleUrl.toString()
+    );
+  }
+
+  addDomListener(
+    elements.newButton,
+    "click",
+    newMonster
+  );
+  addDomListener(
+    elements.saveButton,
+    "click",
+    saveMonster
+  );
+  addDomListener(
+    elements.duplicateButton,
+    "click",
+    duplicateMonster
+  );
+  addDomListener(
+    elements.deleteButton,
+    "click",
+    deleteMonster
+  );
+  addDomListener(
+    elements.tokenButton,
+    "click",
+    createMonsterToken
+  );
+  addDomListener(
+    elements.copyButton,
+    "click",
+    copyMonsterJson
+  );
+  addDomListener(
+    elements.exportButton,
+    "click",
+    exportMonsterJson
+  );
+  addDomListener(
+    elements.importInput,
+    "change",
+    importMonsterJson
+  );
+  addDomListener(
+    elements.backButton,
+    "click",
+    backToBattleMap
+  );
+
+  if (canEdit()) {
+    selectedMonsterId = null;
+    loadMonsterIntoForm(
+      DEFAULT_MONSTER,
+      false
+    );
+    setStatus("New monster ready.");
+  } else {
+    loadMonsterIntoForm(
+      DEFAULT_MONSTER,
+      false
+    );
+  }
+
+  subscribeToRoomMonsters();
+
+  return {
+    destroy: function () {
+      if (stopListening) {
+        stopListening();
+      }
+      stopListening = null;
+      removeDomListeners.forEach(
+        function (removeListener) {
+          removeListener();
+        }
+      );
+    },
+    refresh: function () {
+      if (
+        listeningRoomCode !==
+        getRoomCode()
+      ) {
+        subscribeToRoomMonsters();
+      } else {
+        syncPermissionState();
+        renderMonsterList();
+      }
+    },
+    newMonster,
+    saveMonster,
+    duplicateMonster,
+    deleteMonster,
+    createMonsterToken,
+    copyMonsterJson,
+    exportMonsterJson,
+    importMonsterData,
+    getExportData,
+    loadMonsterIntoForm,
+    readMonsterForm,
+    getState: function () {
+      return {
+        selectedMonsterId,
+        monsters:
+          monsters.map(function (monster) {
+            return {
+              ...monster
+            };
+          }),
+        canEdit: canEdit(),
+        isBusy
+      };
+    }
+  };
+}
