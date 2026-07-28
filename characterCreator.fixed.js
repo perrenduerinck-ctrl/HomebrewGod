@@ -17815,6 +17815,23 @@ export function createCharacterCreator(options = {}) {
         box-shadow: 0 0 18px rgba(157, 107, 255, 0.12);
       }
 
+      .hg-character-class-feature-group {
+        margin-top: 14px;
+        padding: 12px;
+        border: 1px solid rgba(116, 138, 255, 0.22);
+        border-radius: 14px;
+        background: rgba(8, 12, 25, 0.48);
+      }
+
+      .hg-character-class-feature-group > h4 {
+        margin: 0;
+        color: #dfe6ff;
+      }
+
+      .hg-character-class-feature-group > .small {
+        margin: 6px 0 0;
+      }
+
       .hg-feat-picker-panel {
         min-width: 0;
         margin-top: 8px;
@@ -31830,14 +31847,19 @@ export function createCharacterCreator(options = {}) {
     }
 
     const features = getSection12ClassFeaturesThroughLevel();
-    const skillChoices = selectedClass.skillChoices || {};
+    const classEntries =
+      getClassProgressionEntries(
+        creatorState.draft
+      );
+    const multiclass =
+      classEntries.length > 1;
     const latestAsiSlotId = cleanString(
       getLatestLevelUpContext(
         creatorState.draft
       )?.asiSlot?.id
     );
 
-    const featureCards = features.map((feature) => {
+    const renderFeatureCard = (feature) => {
       const choiceOptionRecords =
         feature.type === "choice"
           ? getSection12FeatureChoiceOptionRecords(feature)
@@ -31861,7 +31883,12 @@ export function createCharacterCreator(options = {}) {
       );
 
       return `
-        <article class="hg-character-choice-card">
+        <article
+          class="hg-character-choice-card"
+          data-class-entry-id="${escapeHtml(feature.classEntryId || "")}"
+          data-feature-card-class-id="${escapeHtml(feature.classId || "")}"
+          data-feature-card-id="${escapeHtml(feature.id || "")}"
+        >
           <h3>${escapeHtml(feature.name)}</h3>
 
           <p class="small">
@@ -31963,38 +31990,225 @@ export function createCharacterCreator(options = {}) {
             : ""}
         </article>
       `;
-    }).join("");
+    };
+
+    const featureCards = features
+      .map(renderFeatureCard)
+      .join("");
+
+    const classProfileCards =
+      classEntries
+        .map((classEntry, classIndex) => {
+          const classTemplate =
+            resolveClassTemplateForEntry(
+              classEntry
+            );
+
+          if (!classTemplate) {
+            return "";
+          }
+
+          const isStartingClass =
+            isStartingClassEntry(
+              classEntry,
+              creatorState.draft,
+              classIndex
+            );
+          const classEntryId =
+            getClassProgressionEntryKey(
+              classEntry,
+              classIndex
+            );
+          const classId = makeSafeId(
+            classEntry?.classId ||
+            classTemplate.id,
+            ""
+          );
+          const className =
+            safeDisplayString(
+              classEntry?.className,
+              classTemplate.name ||
+              `Class ${classIndex + 1}`
+            );
+          const classLevel =
+            getClassEntryLevel(
+              classEntry,
+              1
+            );
+          const proficiencyRule =
+            isStartingClass
+              ? {
+                  armor:
+                    classTemplate
+                      .armorProficiencies ||
+                    [],
+                  weapons:
+                    classTemplate
+                      .weaponProficiencies ||
+                    [],
+                  tools:
+                    classTemplate
+                      .toolProficiencies ||
+                    [],
+                  skillChoices:
+                    classTemplate
+                      .skillChoices ||
+                    {}
+                }
+              : getMulticlassProficiencyRule(
+                  classEntry
+                );
+          const skillChoices =
+            proficiencyRule
+              .skillChoices ||
+            {};
+          const selectedSubclass =
+            getClassEntrySubclassTemplate(
+              classEntry
+            );
+          const subclassLevel =
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  classTemplate
+                    .subclassLevel,
+                  3
+                )
+              )
+            );
+
+          return `
+            <article
+              class="hg-character-choice-card selected"
+              data-class-profile-entry-id="${escapeHtml(classEntryId)}"
+              data-class-profile-id="${escapeHtml(classId)}"
+            >
+              <h3>
+                ${escapeHtml(className)}
+                Level ${classLevel}
+                Proficiencies
+              </h3>
+
+              <p>
+                <b>Class Role:</b>
+                ${isStartingClass ? "Starting class" : "Multiclass addition"}
+                <br><b>Hit Die:</b> ${escapeHtml(classTemplate.hitDie || "d8")}
+                <br><b>Primary Ability:</b> ${escapeHtml(formatSection12List(classTemplate.primaryAbilities) || "None specified")}
+                <br><b>Saving Throws:</b> ${escapeHtml(isStartingClass ? formatSection12List(classTemplate.savingThrows) || "None" : "None gained from multiclassing")}
+                <br><b>Armor:</b> ${escapeHtml(formatSection12List(proficiencyRule.armor) || "None")}
+                <br><b>Weapons:</b> ${escapeHtml(formatSection12List(proficiencyRule.weapons) || "None")}
+                <br><b>Tools:</b> ${escapeHtml(formatSection12List(proficiencyRule.tools) || "None")}
+                <br><b>Skill Choices:</b> Choose ${safeNumber(skillChoices.choose, 0)} from ${escapeHtml(formatSection12List(skillChoices.from) || "none")}
+                <br><b>Subclass:</b> ${escapeHtml(selectedSubclass?.name || (classLevel >= subclassLevel ? "Pending selection" : `Unlocks at class level ${subclassLevel}`))}
+              </p>
+            </article>
+          `;
+        })
+        .join("");
+
+    const multiclassFeatureGroups =
+      multiclass
+        ? classEntries
+            .map((classEntry, classIndex) => {
+              const classEntryId =
+                getClassProgressionEntryKey(
+                  classEntry,
+                  classIndex
+                );
+              const classTemplate =
+                resolveClassTemplateForEntry(
+                  classEntry
+                );
+              const classId = makeSafeId(
+                classEntry?.classId ||
+                classTemplate?.id,
+                ""
+              );
+              const className =
+                safeDisplayString(
+                  classEntry?.className,
+                  classTemplate?.name ||
+                  `Class ${classIndex + 1}`
+                );
+              const classLevel =
+                getClassEntryLevel(
+                  classEntry,
+                  1
+                );
+              const ownedFeatures =
+                features.filter((feature) => {
+                  return (
+                    cleanString(
+                      feature.classEntryId
+                    ) === classEntryId &&
+                    makeSafeId(
+                      feature.classId,
+                      ""
+                    ) === classId
+                  );
+                });
+
+              return `
+                <section
+                  class="hg-character-class-feature-group"
+                  data-class-feature-group-entry-id="${escapeHtml(classEntryId)}"
+                  data-class-feature-group-id="${escapeHtml(classId)}"
+                >
+                  <h4>
+                    ${escapeHtml(className)}
+                    Level ${classLevel} Features
+                  </h4>
+
+                  <p class="small">
+                    Only ${escapeHtml(className)} class and subclass features are shown in this group.
+                  </p>
+
+                  <div class="hg-character-choice-grid">
+                    ${ownedFeatures.length
+                      ? ownedFeatures
+                          .map(
+                            renderFeatureCard
+                          )
+                          .join("")
+                      : `
+                        <div class="hg-character-placeholder">
+                          No ${escapeHtml(className)} features are defined through class level ${classLevel}.
+                        </div>
+                      `}
+                  </div>
+                </section>
+              `;
+            })
+            .join("")
+        : "";
 
     return `
       <hr>
 
-      <h3>${isMulticlassDraft() ? "Multiclass Feature Details" : `${escapeHtml(selectedClass.name)} Details`}</h3>
+      <h3>${multiclass ? "Multiclass Feature Details" : `${escapeHtml(selectedClass.name)} Details`}</h3>
 
       <div class="hg-character-choice-grid">
-        <article class="hg-character-choice-card selected">
-          <h3>Class Proficiencies</h3>
-
-          <p>
-            <b>Hit Die:</b> ${escapeHtml(selectedClass.hitDie || "d8")}
-            <br><b>Primary Ability:</b> ${escapeHtml(formatSection12List(selectedClass.primaryAbilities) || "None specified")}
-            <br><b>Saving Throws:</b> ${escapeHtml(formatSection12List(selectedClass.savingThrows) || "None")}
-            <br><b>Armor:</b> ${escapeHtml(formatSection12List(selectedClass.armorProficiencies) || "None")}
-            <br><b>Weapons:</b> ${escapeHtml(formatSection12List(selectedClass.weaponProficiencies) || "None")}
-            <br><b>Tools:</b> ${escapeHtml(formatSection12List(selectedClass.toolProficiencies) || "None")}
-            <br><b>Skill Choices:</b> Choose ${safeNumber(skillChoices.choose, 0)} from ${escapeHtml(formatSection12List(skillChoices.from) || "none")}
-          </p>
-        </article>
+        ${classProfileCards}
       </div>
 
-      <h3>Class Features Through Level ${clampLevel(creatorState.draft.classProgression.totalLevel)}</h3>
+      <h3>
+        ${multiclass
+          ? "Class Features by Class Level"
+          : `Class Features Through Level ${clampLevel(creatorState.draft.classProgression.totalLevel)}`}
+      </h3>
 
-      <div class="hg-character-choice-grid">
-        ${featureCards || `
-          <div class="hg-character-placeholder">
-            No class features are defined through this level.
+      ${multiclass
+        ? multiclassFeatureGroups
+        : `
+          <div class="hg-character-choice-grid">
+            ${featureCards || `
+              <div class="hg-character-placeholder">
+                No class features are defined through this level.
+              </div>
+            `}
           </div>
         `}
-      </div>
 
       ${renderSelectedClassMechanicsSummary()}
 

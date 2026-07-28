@@ -717,6 +717,371 @@ export function runCharacterCreatorSelfTests(context) {
       }
     );
 
+    const builtInMulticlassPlacementAudit =
+      DEFAULT_CLASS_TEMPLATES
+        .map((classTemplate, classIndex) => {
+          const contaminantTemplate =
+            DEFAULT_CLASS_TEMPLATES[
+              (
+                classIndex + 1
+              ) %
+              DEFAULT_CLASS_TEMPLATES.length
+            ];
+          const contaminantSubclass =
+            contaminantTemplate
+              ?.subclasses
+              ?.find(Boolean) ||
+            null;
+          const classLevel =
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  classTemplate
+                    .subclassLevel,
+                  3
+                )
+              )
+            );
+          const anchorEntryId =
+            `placement-anchor-${classIndex}`;
+          const classEntryId =
+            `placement-${classTemplate.id}`;
+          const anchorEntry = {
+            entryId:
+              anchorEntryId,
+            classId:
+              contaminantTemplate.id,
+            className:
+              contaminantTemplate.name,
+            source:
+              contaminantTemplate.source,
+            level: 1,
+            hitDie:
+              contaminantTemplate.hitDie,
+            choices: {}
+          };
+          const classEntry = {
+            entryId:
+              classEntryId,
+            classId:
+              classTemplate.id,
+            className:
+              classTemplate.name,
+            source:
+              classTemplate.source,
+            level:
+              classLevel,
+            hitDie:
+              classTemplate.hitDie,
+            templateSnapshot: {
+              ...cloneData(
+                contaminantTemplate
+              ),
+              id:
+                classTemplate.id,
+              name:
+                classTemplate.name
+            },
+            subclassId:
+              contaminantSubclass?.id ||
+              "",
+            subclassName:
+              contaminantSubclass?.name ||
+              "",
+            choices: {
+              subclassSnapshot:
+                contaminantSubclass
+                  ? cloneData(
+                      contaminantSubclass
+                    )
+                  : null
+            }
+          };
+
+          creatorState.draft =
+            createEmptyCharacter();
+          creatorState.draft
+            .classProgression
+            .classes = [
+              anchorEntry,
+              classEntry
+            ];
+          creatorState.draft
+            .classProgression
+            .totalLevel =
+              classLevel + 1;
+          creatorState.draft
+            .classProgression
+            .levelOrder = [
+              anchorEntryId,
+              ...Array.from(
+                {
+                  length:
+                    classLevel
+                },
+                () => classEntryId
+              )
+            ];
+          creatorState.roomClassCache = [
+            {
+              ...cloneData(
+                contaminantTemplate
+              ),
+              id:
+                classTemplate.id,
+              name:
+                classTemplate.name,
+              source:
+                "homebrew"
+            }
+          ];
+
+          const resolvedTemplate =
+            resolveClassTemplateForEntry(
+              classEntry
+            );
+          const subclassCatalog =
+            getSection12SubclassTemplates(
+              classEntry
+            );
+          const selectedSubclass =
+            getClassEntrySubclassTemplate(
+              classEntry
+            );
+          const expectedSubclassNames =
+            new Set(
+              (
+                classTemplate
+                  .subclasses ||
+                []
+              ).map((subclass) => {
+                return subclass.name;
+              })
+            );
+          const foreignSubclassNames =
+            new Set(
+              (
+                contaminantTemplate
+                  .subclasses ||
+                []
+              )
+                .map((subclass) => {
+                  return subclass.name;
+                })
+                .filter((name) => {
+                  return !expectedSubclassNames
+                    .has(name);
+                })
+            );
+          const classFeatures =
+            collectSection12FeaturesForClassEntry(
+              classEntry,
+              1
+            );
+          const subclassChoiceFeatures =
+            classFeatures.filter(
+              (feature) => {
+                return (
+                  feature.optionSource ===
+                  "subclasses"
+                );
+              }
+            );
+          const subclassChoiceNames =
+            subclassChoiceFeatures
+              .flatMap((feature) => {
+                return getSection12FeatureChoiceOptionRecords(
+                  feature
+                ).map((option) => {
+                  return option.label;
+                });
+              });
+          const detailsHtml =
+            renderSection12SelectedClassDetails();
+          const groupMarker =
+            `data-class-feature-group-entry-id="${classEntryId}"`;
+          const groupStart =
+            detailsHtml.indexOf(
+              groupMarker
+            );
+          const nextGroupStart =
+            groupStart >= 0
+              ? detailsHtml.indexOf(
+                  'class="hg-character-class-feature-group"',
+                  groupStart +
+                    groupMarker.length
+                )
+              : -1;
+          const groupEnd =
+            groupStart >= 0
+              ? (
+                  nextGroupStart >= 0
+                    ? nextGroupStart
+                    : detailsHtml.length
+                )
+              : -1;
+          const groupHtml =
+            groupStart >= 0 &&
+            groupEnd >= 0
+              ? detailsHtml.slice(
+                  groupStart,
+                  groupEnd
+                )
+              : "";
+
+          return {
+            classId:
+              classTemplate.id,
+            templateIdentity:
+              resolvedTemplate?.id ===
+              classTemplate.id,
+            subclassesOnlyOwn:
+              subclassCatalog.length ===
+                expectedSubclassNames
+                  .size &&
+              subclassCatalog.every(
+                (subclass) => {
+                  return (
+                    expectedSubclassNames
+                      .has(
+                        subclass.name
+                      ) &&
+                    makeSafeId(
+                      subclass.classId,
+                      ""
+                    ) ===
+                      classTemplate.id
+                  );
+                }
+              ),
+            noForeignSelected:
+              !selectedSubclass,
+            featureOwnership:
+              classFeatures.length > 0 &&
+              classFeatures.every(
+                (feature) => {
+                  return (
+                    feature.classIndex ===
+                      1 &&
+                    feature.classEntryId ===
+                      classEntryId &&
+                    feature.classId ===
+                      classTemplate.id &&
+                    feature.className ===
+                      classTemplate.name
+                  );
+                }
+              ),
+            choiceOwnership:
+              subclassChoiceFeatures
+                .length > 0 &&
+              subclassChoiceNames
+                .length ===
+                expectedSubclassNames
+                  .size &&
+              subclassChoiceNames.every(
+                (name) => {
+                  return (
+                    expectedSubclassNames
+                      .has(name) &&
+                    !foreignSubclassNames
+                      .has(name)
+                  );
+                }
+              ),
+            visualGrouping:
+              groupHtml.includes(
+                `data-class-feature-group-id="${classTemplate.id}"`
+              ) &&
+              new RegExp(
+                `${classTemplate.name}\\s+Level ${classLevel}\\s+Features`
+              ).test(
+                groupHtml
+              ) &&
+              classFeatures.every(
+                (feature) => {
+                  return groupHtml.includes(
+                    `data-feature-card-id="${feature.id}"`
+                  );
+                }
+              ) &&
+              Array.from(
+                foreignSubclassNames
+              ).every((name) => {
+                return !groupHtml.includes(
+                  `data-option="${name}"`
+                );
+              }),
+            profileOwnership:
+              detailsHtml.includes(
+                `data-class-profile-entry-id="${classEntryId}"`
+              ) &&
+              detailsHtml.includes(
+                `data-class-profile-id="${classTemplate.id}"`
+              ) &&
+              new RegExp(
+                `${classTemplate.name}\\s+Level ${classLevel}\\s+Proficiencies`
+              ).test(
+                detailsHtml
+              )
+          };
+        });
+
+    record(
+      "Every built-in multiclass keeps profiles, features, and subclass choices inside its owning class section",
+      {
+        classCount:
+          builtInMulticlassPlacementAudit
+            .length,
+        templateIdentity:
+          builtInMulticlassPlacementAudit
+            .every((entry) => {
+              return entry.templateIdentity;
+            }),
+        subclassesOnlyOwn:
+          builtInMulticlassPlacementAudit
+            .every((entry) => {
+              return entry.subclassesOnlyOwn;
+            }),
+        noForeignSelected:
+          builtInMulticlassPlacementAudit
+            .every((entry) => {
+              return entry.noForeignSelected;
+            }),
+        featureOwnership:
+          builtInMulticlassPlacementAudit
+            .every((entry) => {
+              return entry.featureOwnership;
+            }),
+        choiceOwnership:
+          builtInMulticlassPlacementAudit
+            .every((entry) => {
+              return entry.choiceOwnership;
+            }),
+        visualGrouping:
+          builtInMulticlassPlacementAudit
+            .every((entry) => {
+              return entry.visualGrouping;
+            }),
+        profileOwnership:
+          builtInMulticlassPlacementAudit
+            .every((entry) => {
+              return entry.profileOwnership;
+            })
+      },
+      {
+        classCount: 13,
+        templateIdentity: true,
+        subclassesOnlyOwn: true,
+        noForeignSelected: true,
+        featureOwnership: true,
+        choiceOwnership: true,
+        visualGrouping: true,
+        profileOwnership: true
+      }
+    );
+
     creatorState.roomClassCache = [];
 
     creatorState.draft =

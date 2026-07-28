@@ -48,7 +48,7 @@ test(
     expect(result.passed)
       .toBe(true);
     expect(result.total)
-      .toBeGreaterThanOrEqual(457);
+      .toBeGreaterThanOrEqual(458);
     expect(result.failed)
       .toEqual([]);
 

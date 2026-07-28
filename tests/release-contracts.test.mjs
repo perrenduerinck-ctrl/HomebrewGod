@@ -152,3 +152,30 @@ test(
     );
   }
 );
+
+test(
+  "multiclass details preserve explicit class ownership",
+  async () => {
+    const creator =
+      await read(
+        "characterCreator.fixed.js"
+      );
+
+    assert.match(
+      creator,
+      /data-class-profile-entry-id=/
+    );
+    assert.match(
+      creator,
+      /data-class-feature-group-entry-id=/
+    );
+    assert.match(
+      creator,
+      /data-feature-card-class-id=/
+    );
+    assert.match(
+      creator,
+      /Only .* class and subclass features are shown in this group\./
+    );
+  }
+);
