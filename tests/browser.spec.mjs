@@ -81,7 +81,7 @@ test(
   "playable character sheet tracks combat and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-capacity-20260728",
+      "ai-testing/playable-character-sheet.html?release=playable-attunement-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -856,6 +856,99 @@ test(
 
     expect(hasInventoryOverflow)
       .toBe(false);
+  }
+);
+
+test(
+  "playable sheet uses feature-adjusted attunement limits for display and validation",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/playable-character-sheet.html?fixture=attunement-master&release=playable-attunement-20260728",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "pass"
+      );
+    await page.getByRole("button", {
+      name: "Inventory",
+      exact: true
+    }).click();
+
+    const screenPanel = page.locator(
+      ".hg-sheet-screen-panel"
+    );
+    const attunementCard =
+      screenPanel.getByText(
+        "Attunement",
+        { exact: true }
+      ).locator("..");
+
+    await expect(attunementCard)
+      .toContainText("4 / 4");
+    await expect(
+      screenPanel.getByText(
+        "The attunement limit is reached.",
+        { exact: true }
+      )
+    ).toBeVisible();
+
+    const obsidianRing =
+      screenPanel.locator(
+        '[data-inventory-item-id="obsidian-ring"]'
+      );
+
+    await obsidianRing.getByRole(
+      "button",
+      {
+        name: "Attune",
+        exact: true
+      }
+    ).click();
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-last-mutation",
+        /attunement limit of 4 items/i
+      );
+    await expect(
+      screenPanel.locator(
+        '[data-inventory-item-id="obsidian-ring"]'
+      ).getByRole("button", {
+        name: "Attune",
+        exact: true
+      })
+    ).toBeVisible();
+
+    await screenPanel.locator(
+      '[data-inventory-item-id="copper-ring"]'
+    ).getByRole("button", {
+      name: "Unattune",
+      exact: true
+    }).click();
+    await expect(attunementCard)
+      .toContainText("3 / 4");
+
+    await screenPanel.locator(
+      '[data-inventory-item-id="obsidian-ring"]'
+    ).getByRole("button", {
+      name: "Attune",
+      exact: true
+    }).click();
+    await expect(
+      screenPanel.locator(
+        '[data-inventory-item-id="obsidian-ring"]'
+      ).getByRole("button", {
+        name: "Unattune",
+        exact: true
+      })
+    ).toBeVisible();
+    await expect(attunementCard)
+      .toContainText("4 / 4");
   }
 );
 

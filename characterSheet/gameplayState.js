@@ -1,6 +1,11 @@
 // Play-session state is intentionally isolated from permanent character choices.
 // These helpers mutate only the supplied character snapshot/draft.
 
+import {
+  countCharacterAttunedItems,
+  getCharacterAttunementLimit
+} from "../characterCreator/inventoryEquipment.js";
+
 export const STANDARD_CONDITIONS = Object.freeze([
   "Blinded",
   "Charmed",
@@ -164,13 +169,23 @@ function toggleEquipmentState(character, action) {
 
     if (
       item.attuned !== true &&
-      items.filter((candidate) => {
-        return candidate?.attuned === true;
-      }).length >= 3
+      countCharacterAttunedItems(
+        character
+      ) >=
+        getCharacterAttunementLimit(
+          character
+        )
     ) {
+      const limit =
+        getCharacterAttunementLimit(
+          character
+        );
+
       return {
         changed: false,
-        message: "The normal limit of three attuned items is already reached."
+        message:
+          `The attunement limit of ${limit} ` +
+          `${limit === 1 ? "item is" : "items are"} already reached.`
       };
     }
 

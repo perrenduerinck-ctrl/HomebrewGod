@@ -13,7 +13,9 @@ import {
   getDefaultSpellById
 } from "./defaultSpells.js";
 import {
-  calculateInventoryLineWeight
+  calculateInventoryLineWeight,
+  countCharacterAttunedItems,
+  getCharacterAttunementLimit
 } from "./characterCreator/inventoryEquipment.js";
 import {
   calculateCharacterCarryingCapacity
@@ -4357,11 +4359,14 @@ function renderInventoryPanel(
       : weight === capacity
         ? "At capacity"
         : "Within capacity";
-  const attuned = asArray(
-    character?.equipment?.items
-  ).filter((item) => {
-    return item?.attuned === true;
-  }).length;
+  const attuned =
+    countCharacterAttunedItems(
+      character
+    );
+  const attunementLimit =
+    getCharacterAttunementLimit(
+      character
+    );
 
   return `
     <section class="hg-sheet-panel" aria-label="Inventory">
@@ -4384,12 +4389,16 @@ function renderInventoryPanel(
         </article>
         <article class="hg-sheet-stat-card">
           <span>Attunement</span>
-          <strong>${attuned} / 3</strong>
+          <strong>${attuned} / ${attunementLimit}</strong>
         </article>
       </div>
-      ${attuned >= 3 ? `
+      ${attuned >= attunementLimit ? `
         <div class="hg-sheet-callout" role="status">
-          The normal attunement limit is reached.
+          ${
+            attuned > attunementLimit
+              ? `The attunement limit is exceeded by ${attuned - attunementLimit}.`
+              : "The attunement limit is reached."
+          }
         </div>
       ` : ""}
       <article class="hg-sheet-card">

@@ -22,7 +22,9 @@ import {
   normalizeFeatChoiceSelections
 } from "../characterCreator/featMechanics.js";
 import {
-  calculateInventoryLineWeight
+  calculateInventoryLineWeight,
+  countCharacterAttunedItems,
+  getCharacterAttunementLimit
 } from "../characterCreator/inventoryEquipment.js";
 import {
   buildLegacyMigrationReport,
@@ -566,7 +568,238 @@ test(
     );
     assert.match(
       blocked.message,
-      /three attuned items/i
+      /attunement limit of 3 items/i
+    );
+  }
+);
+
+test(
+  "attunement limit defaults, feature increases, overrides, and item validation share one helper",
+  () => {
+    assert.equal(
+      getCharacterAttunementLimit({}),
+      3
+    );
+
+    const makeItem = (
+      id,
+      attuned = false,
+      requiresAttunement = true
+    ) => {
+      return {
+        id,
+        name: `Ring ${id}`,
+        isMagical: true,
+        requiresAttunement,
+        attuned
+      };
+    };
+    const belowLimit = {
+      equipment: {
+        items: [
+          makeItem("a", true),
+          makeItem("b", true),
+          makeItem("c")
+        ]
+      }
+    };
+    const reachesDefault =
+      applyGameplayAction(
+        belowLimit,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "c"
+        }
+      );
+
+    assert.equal(
+      reachesDefault.changed,
+      true
+    );
+    assert.equal(
+      countCharacterAttunedItems(
+        belowLimit
+      ),
+      3
+    );
+
+    belowLimit.equipment.items.push(
+      makeItem("d")
+    );
+    const blockedAtDefault =
+      applyGameplayAction(
+        belowLimit,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "d"
+        }
+      );
+
+    assert.equal(
+      blockedAtDefault.changed,
+      false
+    );
+    assert.match(
+      blockedAtDefault.message,
+      /limit of 3 items/i
+    );
+
+    const featureCharacter = {
+      features: {
+        classFeatures: [
+          {
+            id: "magic-item-adept",
+            name:
+              "Magic Item Adept"
+          }
+        ]
+      },
+      equipment: {
+        items: [
+          makeItem("a", true),
+          makeItem("b", true),
+          makeItem("c", true),
+          makeItem("d"),
+          makeItem("e")
+        ]
+      }
+    };
+
+    assert.equal(
+      getCharacterAttunementLimit(
+        featureCharacter
+      ),
+      4
+    );
+    assert.equal(
+      applyGameplayAction(
+        featureCharacter,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "d"
+        }
+      ).changed,
+      true
+    );
+    assert.equal(
+      countCharacterAttunedItems(
+        featureCharacter
+      ),
+      4
+    );
+
+    const blockedAboveDefault =
+      applyGameplayAction(
+        featureCharacter,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "e"
+        }
+      );
+
+    assert.equal(
+      blockedAboveDefault.changed,
+      false
+    );
+    assert.match(
+      blockedAboveDefault.message,
+      /limit of 4 items/i
+    );
+
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          featureCharacter,
+          {
+            activeTab:
+              "inventory"
+          }
+        );
+
+    assert.match(
+      html,
+      /<strong>4 \/ 4<\/strong>/
+    );
+    assert.match(
+      html,
+      /The attunement limit is reached\./
+    );
+
+    assert.equal(
+      getCharacterAttunementLimit({
+        classProgression: {
+          classes: [
+            {
+              classId:
+                "artificer",
+              level: 18
+            }
+          ]
+        }
+      }),
+      6
+    );
+    assert.equal(
+      getCharacterAttunementLimit({
+        classMechanics: {
+          effects: [
+            {
+              type:
+                "attunementLimitBonus",
+              value: 2
+            }
+          ]
+        }
+      }),
+      5
+    );
+    assert.equal(
+      getCharacterAttunementLimit({
+        equipment: {
+          attunementLimitOverride: 5
+        }
+      }),
+      5
+    );
+
+    const noRequirement = {
+      equipment: {
+        items: [
+          makeItem(
+            "ordinary",
+            false,
+            false
+          )
+        ]
+      }
+    };
+    const rejected =
+      applyGameplayAction(
+        noRequirement,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "ordinary"
+        }
+      );
+
+    assert.equal(
+      rejected.changed,
+      false
+    );
+    assert.match(
+      rejected.message,
+      /does not require attunement/i
+    );
+    assert.equal(
+      countCharacterAttunedItems(
+        noRequirement
+      ),
+      0
     );
   }
 );

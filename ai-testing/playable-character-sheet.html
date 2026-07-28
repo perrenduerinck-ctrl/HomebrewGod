@@ -45,7 +45,7 @@
   <script type="module">
     import {
       createCharacterSheetView
-    } from "../characterSheet.js?v=priority5-20260728";
+    } from "../characterSheet.js?v=priority6-20260728";
     import {
       applyGameplayAction
     } from "../characterSheet/gameplayState.js";
@@ -691,10 +691,13 @@
       onClose: () => true
     });
 
-    if (
+    const fixture =
       new URLSearchParams(
         window.location.search
-      ).get("fixture") ===
+      ).get("fixture");
+
+    if (
+      fixture ===
       "non-spellcaster"
     ) {
       character.id =
@@ -716,6 +719,42 @@
       character.magic = {};
       character.featMechanics
         .spellcasting = [];
+    } else if (
+      fixture ===
+      "attunement-master"
+    ) {
+      character.id =
+        "attunement-master-fixture";
+      character.identity.name =
+        "Tessa Forge";
+      character.features
+        .classFeatures.push({
+          id: "magic-item-adept",
+          name: "Magic Item Adept",
+          sourceLabel:
+            "Artificer 10",
+          summary:
+            "Attune to as many as four magic items at once."
+        });
+      character.equipment.items = [
+        "Copper",
+        "Silver",
+        "Gold",
+        "Platinum",
+        "Obsidian"
+      ].map((metal, index) => {
+        return {
+          id:
+            `${metal.toLowerCase()}-ring`,
+          name: `${metal} Ring`,
+          category: "magic-item",
+          quantity: 1,
+          weight: 0,
+          isMagical: true,
+          requiresAttunement: true,
+          attuned: index < 4
+        };
+      });
     }
 
     view.open(character);

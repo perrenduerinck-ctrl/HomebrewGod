@@ -116,6 +116,8 @@ import {
   normalizeSpeciesBackgroundChoices
 } from "./characterCreator/speciesBackgrounds.js";
 import {
+  countCharacterAttunedItems,
+  getCharacterAttunementLimit,
   normalizeInventoryItemBase
 } from "./characterCreator/inventoryEquipment.js";
 import {
@@ -41108,6 +41110,27 @@ export function createCharacterCreator(options = {}) {
       isMagical &&
       $("ccNewItemRequiresAttunement")
         ?.checked === true;
+    const startsAttuned =
+      requiresAttunement &&
+      $("ccNewItemAttuned")
+        ?.checked === true;
+    const attunementLimit =
+      getCharacterAttunementLimit(
+        creatorState.draft
+      );
+
+    if (
+      startsAttuned &&
+      getSection15AttunedItemCount() >=
+        attunementLimit
+    ) {
+      alert(
+        `This character can attune to no more than ${attunementLimit} ` +
+        `${attunementLimit === 1 ? "item" : "items"}.`
+      );
+
+      return false;
+    }
 
     const item =
       normalizeSection15Item(
@@ -41208,9 +41231,7 @@ export function createCharacterCreator(options = {}) {
           requiresAttunement,
 
           attuned:
-            requiresAttunement &&
-            $("ccNewItemAttuned")
-              ?.checked === true
+            startsAttuned
           ,
 
           isContainer:
@@ -41447,10 +41468,19 @@ export function createCharacterCreator(options = {}) {
       field === "attuned" &&
       nextValue === true &&
       item.attuned !== true &&
-      getSection15AttunedItemCount() >= 3
+      getSection15AttunedItemCount() >=
+        getCharacterAttunementLimit(
+          creatorState.draft
+        )
     ) {
+      const limit =
+        getCharacterAttunementLimit(
+          creatorState.draft
+        );
+
       alert(
-        "A character can normally attune to no more than three items."
+        `This character can attune to no more than ${limit} ` +
+        `${limit === 1 ? "item" : "items"}.`
       );
 
       return false;
@@ -41716,9 +41746,18 @@ export function createCharacterCreator(options = {}) {
         return true;
       }
 
-      if (getSection15AttunedItemCount() >= 3) {
+      const limit =
+        getCharacterAttunementLimit(
+          creatorState.draft
+        );
+
+      if (
+        getSection15AttunedItemCount() >=
+          limit
+      ) {
         alert(
-          "A character can normally attune to no more than three items."
+          `This character can attune to no more than ${limit} ` +
+          `${limit === 1 ? "item" : "items"}.`
         );
 
         return false;
@@ -41831,15 +41870,9 @@ export function createCharacterCreator(options = {}) {
   }
 
   function getSection15AttunedItemCount() {
-    return getSection15Inventory()
-      .filter((item) => {
-        return (
-          item.isMagical === true &&
-          item.requiresAttunement === true &&
-          item.attuned === true
-        );
-      })
-      .length;
+    return countCharacterAttunedItems(
+      creatorState.draft
+    );
   }
 
   function getSection15UnknownWeightCount() {
@@ -43070,6 +43103,10 @@ export function createCharacterCreator(options = {}) {
 
     const attunedCount =
       getSection15AttunedItemCount();
+    const attunementLimit =
+      getCharacterAttunementLimit(
+        creatorState.draft
+      );
 
     const carrying =
       calculateCharacterCarryingCapacity(
@@ -43198,14 +43235,15 @@ export function createCharacterCreator(options = {}) {
 
         <b>Attunement:</b>
 
-        ${attunedCount} / 3
+        ${attunedCount} / ${attunementLimit}
       </div>
 
       ${
-        attunedCount >= 3
+        attunedCount >=
+          attunementLimit
           ? `
             <div class="hg-character-warning">
-              The normal attunement limit is reached.
+              The attunement limit is reached.
             </div>
           `
           : ""
@@ -49749,11 +49787,18 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
+    const attunementLimit =
+      getCharacterAttunementLimit(
+        draft
+      );
+
     if (
-      getSection15AttunedItemCount() > 3
+      getSection15AttunedItemCount() >
+        attunementLimit
     ) {
       warnings.push(
-        "More than three items are attuned."
+        `More than ${attunementLimit} ` +
+        `${attunementLimit === 1 ? "item is" : "items are"} attuned.`
       );
     }
 
@@ -51819,6 +51864,10 @@ export function createCharacterCreator(options = {}) {
 
     const inventoryWeight =
       getSection17InventoryWeight();
+    const attunementLimit =
+      getCharacterAttunementLimit(
+        draft
+      );
 
     const inventoryWeightSummary =
       calculateInventoryWeightSummary(
@@ -52374,7 +52423,7 @@ export function createCharacterCreator(options = {}) {
 
         <b>Attunement:</b>
 
-        ${getSection15AttunedItemCount()} / 3
+        ${getSection15AttunedItemCount()} / ${attunementLimit}
 
         <br>
 
