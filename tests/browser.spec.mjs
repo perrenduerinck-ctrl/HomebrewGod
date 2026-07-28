@@ -81,7 +81,7 @@ test(
   "playable character sheet tracks combat and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-spells-20260728",
+      "ai-testing/playable-character-sheet.html?release=playable-features-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -269,6 +269,107 @@ test(
         exact: true
       })
     ).toBeVisible();
+
+    await page.getByRole("button", {
+      name: "Features",
+      exact: true
+    }).click();
+
+    for (
+      const groupName of [
+        "Class Features",
+        "Subclass Features",
+        "Species Traits",
+        "Background Features",
+        "Feats",
+        "Custom Features"
+      ]
+    ) {
+      await expect(
+        screenPanel.getByRole(
+          "heading",
+          {
+            name: groupName,
+            exact: true
+          }
+        )
+      ).toBeVisible();
+    }
+
+    const actionSurgeFeature =
+      screenPanel.locator(
+        '[data-feature-group="class"] [data-sheet-feature-id="action-surge"]'
+      );
+    await expect(actionSurgeFeature)
+      .toContainText("Fighter 2");
+    await expect(actionSurgeFeature)
+      .toContainText("Level 2");
+    await expect(actionSurgeFeature)
+      .toContainText(
+        "0 / 1 uses remaining"
+      );
+    await actionSurgeFeature
+      .getByRole("button", {
+        name: "Restore",
+        exact: true
+      })
+      .click();
+    await expect(
+      screenPanel.locator(
+        '[data-feature-group="class"] [data-sheet-feature-id="action-surge"]'
+      )
+    ).toContainText(
+      "1 / 1 uses remaining"
+    );
+
+    const actionSurgeDetails =
+      screenPanel.locator(
+        '[data-feature-group="class"] [data-sheet-feature-id="action-surge"] details'
+      );
+    await expect(actionSurgeDetails)
+      .not.toHaveAttribute(
+        "open",
+        ""
+      );
+    await expect(
+      actionSurgeDetails.locator(
+        "summary"
+      )
+    ).toHaveText(
+      "Additional details"
+    );
+    await actionSurgeDetails
+      .locator("summary")
+      .click();
+    await expect(
+      actionSurgeDetails.locator("p")
+    ).toHaveText(
+      "You can use only one Action Surge on a turn."
+    );
+
+    await expect(
+      screenPanel.locator(
+        '[data-feature-group="species"] [data-sheet-feature-id="fey-ancestry"] details'
+      )
+    ).toHaveCount(0);
+    await expect(
+      screenPanel.locator(
+        '[data-feature-group="background"] [data-sheet-feature-id="researcher"]'
+      )
+    ).toContainText(
+      "Specialty: Lost civilizations"
+    );
+
+    const warCasterFeature =
+      screenPanel.locator(
+        '[data-feature-group="feats"] [data-sheet-feature-id="war-caster"]'
+      );
+    await expect(warCasterFeature)
+      .toContainText("Level 4");
+    await expect(warCasterFeature)
+      .toContainText(
+        "1 / 1 uses remaining"
+      );
 
     await page.getByRole("button", {
       name: "Spells",
@@ -481,6 +582,27 @@ test(
         }
       )
     ).toBeVisible();
+
+    await page.getByRole("button", {
+      name: "Features",
+      exact: true
+    }).click();
+    await expect(
+      screenPanel.locator(
+        '[data-feature-group="feats"]'
+      )
+    ).toBeVisible();
+    const hasFeatureOverflow =
+      await page.evaluate(() => {
+        return (
+          document.documentElement
+            .scrollWidth >
+          window.innerWidth
+        );
+      });
+
+    expect(hasFeatureOverflow)
+      .toBe(false);
   }
 );
 
@@ -488,7 +610,7 @@ test(
   "playable sheet hides the Spells tab for a non-spellcaster",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?fixture=non-spellcaster&release=playable-spells-20260728",
+      "ai-testing/playable-character-sheet.html?fixture=non-spellcaster&release=playable-features-20260728",
       {
         waitUntil:
           "domcontentloaded"

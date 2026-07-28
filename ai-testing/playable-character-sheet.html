@@ -229,12 +229,15 @@
             id: "action-surge",
             name: "Action Surge",
             summary: "Take one additional action on your turn.",
+            description: "Take one additional action on your turn. You can use only one Action Surge on a turn.",
+            levelGained: 2,
             sourceLabel: "Fighter 2"
           },
           {
             id: "arcane-recovery",
             name: "Arcane Recovery",
             summary: "Recover spell slots after a short rest.",
+            levelGained: 1,
             sourceLabel: "Wizard 1"
           },
           {
@@ -244,6 +247,7 @@
             description: "When you are hit by an attack or fail a saving throw, use your reaction to gain the recorded defensive benefit.",
             source: "subclass",
             sourceLabel: "School of Evocation",
+            levelGained: 2,
             actionEconomy: "reaction"
           }
         ],
@@ -251,7 +255,9 @@
           {
             id: "fey-ancestry",
             name: "Fey Ancestry",
-            summary: "Advantage against being charmed."
+            summary: "Advantage against being charmed.",
+            description: "Advantage against being charmed.",
+            sourceLabel: "High Elf"
           },
           {
             id: "fey-step",
@@ -267,7 +273,11 @@
           {
             id: "researcher",
             name: "Researcher",
-            summary: "Know where to find lore."
+            summary: "Know where to find lore.",
+            choices: {
+              specialty: "Lost civilizations"
+            },
+            sourceLabel: "Sage"
           }
         ],
         customFeatures: [
@@ -406,7 +416,13 @@
         {
           id: "war-caster",
           name: "War Caster",
-          summary: "Maintain concentration and cast during opportunity attacks."
+          summary: "Maintain concentration and cast during opportunity attacks.",
+          description: "You have practiced casting spells in the midst of combat and gain the recorded benefits while their conditions apply.",
+          levelGained: 4,
+          choices: {
+            concentrationTechnique: "Arcane focus"
+          },
+          sourceLabel: "Level 4 feat"
         }
       ],
       magic: {

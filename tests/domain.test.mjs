@@ -38,6 +38,7 @@ import {
 import {
   characterHasSpellContent,
   collectCharacterActions,
+  collectCharacterFeatures,
   collectCharacterSpells,
   filterCharacterSpells,
   createCharacterSheetView
@@ -831,6 +832,211 @@ test(
     assert.match(
       html,
       /data-character-sheet-action="adjust-class-resource"/
+    );
+  }
+);
+
+test(
+  "playable sheet features stay separated, compact, choice-preserving, and resource-linked",
+  () => {
+    const character = {
+      id: "priority-three-features",
+      features: {
+        classFeatures: [
+          {
+            id: "action-surge",
+            name: "Action Surge",
+            summary:
+              "Take one additional action.",
+            description:
+              "Take one additional action. You can use only one Action Surge on a turn.",
+            levelGained: 2,
+            sourceLabel: "Fighter"
+          },
+          {
+            id: "arcane-ward",
+            name: "Arcane Ward",
+            summary:
+              "A protective ward absorbs damage.",
+            description:
+              "A protective ward absorbs damage.",
+            level: 2,
+            source: "subclass",
+            sourceLabel: "School of Abjuration"
+          }
+        ],
+        speciesTraits: [
+          {
+            id: "fey-ancestry",
+            name: "Fey Ancestry",
+            summary:
+              "Advantage against being charmed.",
+            choices: {
+              lineage: "High Elf"
+            },
+            sourceLabel: "Elf"
+          }
+        ],
+        backgroundFeatures: [],
+        customFeatures: []
+      },
+      feats: [
+        {
+          id: "war-caster",
+          name: "War Caster",
+          summary:
+            "Maintain concentration under pressure.",
+          description:
+            "You have practiced spellcasting in combat.",
+          choicesText:
+            "Technique: Arcane focus",
+          levelGained: 4,
+          sourceLabel: "Level 4 feat"
+        }
+      ],
+      classMechanics: {
+        resources: [
+          {
+            id:
+              "fighter:action-surge",
+            name: "Action Surge",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge:
+              "shortOrLongRest"
+          }
+        ]
+      },
+      featMechanics: {
+        resources: [
+          {
+            id: "war-caster-focus",
+            name:
+              "War Caster Focus",
+            featName: "War Caster",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "longRest"
+          }
+        ]
+      }
+    };
+    const groups =
+      collectCharacterFeatures(
+        character
+      );
+
+    assert.deepEqual(
+      groups.map((group) => {
+        return group.id;
+      }),
+      [
+        "class",
+        "subclass",
+        "species",
+        "background",
+        "feats",
+        "custom"
+      ]
+    );
+
+    const actionSurge =
+      groups[0].entries[0];
+    assert.equal(
+      actionSurge.levelGained,
+      2
+    );
+    assert.equal(
+      actionSurge.description,
+      "You can use only one Action Surge on a turn."
+    );
+    assert.equal(
+      actionSurge.descriptionLabel,
+      "Additional details"
+    );
+    assert.equal(
+      actionSurge.resource.id,
+      "fighter:action-surge"
+    );
+
+    const arcaneWard =
+      groups[1].entries[0];
+    assert.equal(
+      arcaneWard.description,
+      ""
+    );
+    assert.equal(
+      groups[2].entries[0]
+        .choices,
+      "Lineage: High Elf"
+    );
+    assert.equal(
+      groups[4].entries[0]
+        .resource.id,
+      "war-caster-focus"
+    );
+    assert.equal(
+      groups[4].entries[0]
+        .choices,
+      "Technique: Arcane focus"
+    );
+
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          character,
+          {
+            activeTab: "features",
+            sheetContext: {
+              characterId:
+                character.id
+            }
+          }
+        );
+
+    assert.match(
+      html,
+      /data-feature-group="class"/
+    );
+    assert.match(
+      html,
+      /data-feature-group="subclass"/
+    );
+    assert.match(
+      html,
+      /data-feature-group="species"/
+    );
+    assert.match(
+      html,
+      /data-feature-group="feats"/
+    );
+    assert.doesNotMatch(
+      html,
+      /data-feature-group="background"/
+    );
+    assert.doesNotMatch(
+      html,
+      /data-feature-group="custom"/
+    );
+    assert.match(
+      html,
+      /<details class="hg-sheet-feature-description">/
+    );
+    assert.doesNotMatch(
+      html,
+      /<details class="hg-sheet-feature-description" open/
+    );
+    assert.match(
+      html,
+      /data-character-sheet-action="adjust-class-resource"/
+    );
+    assert.match(
+      html,
+      /data-character-sheet-action="adjust-feat-resource"/
+    );
+    assert.match(
+      html,
+      /Choices:/
     );
   }
 );

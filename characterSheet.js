@@ -874,26 +874,127 @@ function normalizeContentEntries(values, fallbackPrefix) {
     if (isRecord(value)) {
       const summary = firstText(
         value.summary,
+        value.shortDescription,
         value.notes
       );
-      const description = firstText(
+      const fullDescription = firstText(
         value.description,
         value.fullDescription
       );
+      const normalizedSummary =
+        cleanText(summary)
+          .replace(/\s+/g, " ")
+          .trim();
+      const normalizedDescription =
+        cleanText(fullDescription)
+          .replace(/\s+/g, " ")
+          .trim();
+      const summaryKey =
+        normalizedSummary.toLocaleLowerCase();
+      const descriptionKey =
+        normalizedDescription.toLocaleLowerCase();
+      let description =
+        normalizedDescription;
+      let descriptionLabel =
+        "Full description";
+
+      if (
+        summaryKey &&
+        descriptionKey === summaryKey
+      ) {
+        description = "";
+      } else if (
+        summaryKey &&
+        descriptionKey.startsWith(
+          summaryKey
+        )
+      ) {
+        description =
+          normalizedDescription
+            .slice(
+              normalizedSummary.length
+            )
+            .replace(
+              /^[\s.:;\u2014\u2013-]+/,
+              ""
+            )
+            .trim();
+        descriptionLabel =
+          "Additional details";
+      }
+
+      const levelGained = [
+        value.levelGained,
+        value.gainedAtLevel,
+        value.unlockLevel,
+        value.unlockedLevel,
+        value.classLevel,
+        value.minimumLevel,
+        value.level
+      ]
+        .map((entry) => {
+          return optionalNumber(entry);
+        })
+        .find((entry) => {
+          return entry !== null &&
+            entry > 0;
+        });
 
       return {
         id: firstText(value.id, `${fallbackPrefix}-${index + 1}`),
         name: firstText(value.name, value.label, titleFromId(value.id, "Unnamed")),
-        summary: firstText(summary, description),
+        summary: firstText(
+          normalizedSummary,
+          normalizedDescription
+        ),
         description:
-          description && description !== summary
+          normalizedSummary
             ? description
             : "",
-        choices: firstText(value.choicesText),
+        descriptionLabel,
+        choices: firstText(
+          value.choicesText,
+          typeof value.choices === "string"
+            ? value.choices
+            : "",
+          formatChoiceMap(
+            value.choices ||
+            value.selections ||
+            value.selectedChoices
+          ),
+          value.choice
+        ),
         source: firstText(
           value.sourceLabel,
           value.sourceName,
+          value.className,
+          value.subclassName,
+          value.speciesName,
+          value.backgroundName,
+          value.featName,
           value.source
+        ),
+        levelGained:
+          levelGained === undefined
+            ? null
+            : Math.max(
+                1,
+                Math.round(levelGained)
+              ),
+        resourceId: firstText(
+          value.resourceId
+        ),
+        canonicalId: firstText(
+          value.canonicalId
+        ),
+        featureId: firstText(
+          value.featureId
+        ),
+        sourceId: firstText(
+          value.sourceId
+        ),
+        featName: firstText(
+          value.featName
         )
       };
     }
@@ -903,8 +1004,16 @@ function normalizeContentEntries(values, fallbackPrefix) {
       name: firstText(value, "Unnamed"),
       summary: "",
       description: "",
+      descriptionLabel:
+        "Full description",
       choices: "",
-      source: ""
+      source: "",
+      levelGained: null,
+      resourceId: "",
+      canonicalId: "",
+      featureId: "",
+      sourceId: "",
+      featName: ""
     };
   });
 }
@@ -962,7 +1071,6 @@ function formatFeatSituationalEntry(entry) {
   const timing = cleanText(entry?.activationTime);
   const details = [
     `${handling} · ${actionEconomy}${timing ? ` (${timing})` : ""}`,
-    cleanText(entry?.summary),
     entry?.condition
       ? `When: ${cleanText(entry.condition)}`
       : "",
@@ -978,8 +1086,16 @@ function formatFeatSituationalEntry(entry) {
       entry?.effectId,
       cleanText(entry?.featName, "Feat effect")
     ),
-    summary: details.join(". "),
-    source: cleanText(entry?.featName)
+    summary: cleanText(
+      entry?.summary,
+      entry?.instructions,
+      details[0]
+    ),
+    description: details.join(". "),
+    source: cleanText(entry?.featName),
+    resourceId: cleanText(
+      entry?.resourceId
+    )
   };
 }
 
@@ -1061,7 +1177,14 @@ function getFeatEntries(character) {
         record.featDescription,
         existing.description
       ),
+      levelGained:
+        record.levelGained ??
+        record.gainedAtLevel ??
+        record.unlockLevel ??
+        record.level ??
+        existing.levelGained,
       choices: firstText(
+        record.choicesText,
         formatChoiceMap(
           record.choices ||
           record.featChoices
@@ -1072,6 +1195,27 @@ function getFeatEntries(character) {
         record.sourceLabel,
         record.source,
         existing.source
+      ),
+      resourceId: firstText(
+        record.resourceId,
+        existing.resourceId
+      ),
+      canonicalId: firstText(
+        record.canonicalId,
+        existing.canonicalId
+      ),
+      featureId: firstText(
+        record.featureId,
+        existing.featureId
+      ),
+      sourceId: firstText(
+        record.sourceId,
+        existing.sourceId
+      ),
+      featName: firstText(
+        record.featName,
+        name,
+        existing.featName
       )
     });
   };
@@ -1096,7 +1240,9 @@ function getFeatEntries(character) {
   return Array.from(byKey.values());
 }
 
-function getFeatureGroups(character) {
+export function collectCharacterFeatures(
+  character
+) {
   const classFeatures = asArray(
     character?.features?.classFeatures
   );
@@ -1110,43 +1256,117 @@ function getFeatureGroups(character) {
   const baseClassFeatures = classFeatures.filter((entry) => {
     return !subclassFeatures.includes(entry);
   });
+  const classResources = asArray(
+    character?.classMechanics?.resources
+  ).map((resource) => {
+    return {
+      ...resource,
+      _featureResourceKind: "class"
+    };
+  });
+  const featResources = asArray(
+    character?.featMechanics?.resources
+  ).filter((resource) => {
+    return resource?.kind !==
+      "featSpell";
+  }).map((resource) => {
+    return {
+      ...resource,
+      _featureResourceKind: "feat"
+    };
+  });
+  const addResources = (
+    entries,
+    resources
+  ) => {
+    return entries.map((entry) => {
+      return {
+        ...entry,
+        resource:
+          getActionResourceMatch(
+            entry,
+            resources
+          )
+      };
+    });
+  };
 
   return [
     {
+      id: "class",
       title: "Class Features",
-      entries: normalizeContentEntries(
-        baseClassFeatures,
-        "class-feature"
+      entries: addResources(
+        normalizeContentEntries(
+          baseClassFeatures,
+          "class-feature"
+        ),
+        classResources
       )
     },
     {
+      id: "subclass",
       title: "Subclass Features",
-      entries: normalizeContentEntries(
-        subclassFeatures,
-        "subclass-feature"
+      entries: addResources(
+        normalizeContentEntries(
+          subclassFeatures,
+          "subclass-feature"
+        ),
+        classResources
       )
     },
     {
+      id: "species",
       title: "Species Traits",
-      entries: normalizeContentEntries(
-        character?.features?.speciesTraits?.length
-          ? character.features.speciesTraits
-          : character?.species?.traits,
-        "species-trait"
+      entries: addResources(
+        normalizeContentEntries(
+          character?.features?.speciesTraits?.length
+            ? character.features.speciesTraits
+            : character?.species?.traits,
+          "species-trait"
+        ),
+        [
+          ...classResources,
+          ...featResources
+        ]
       )
     },
     {
+      id: "background",
       title: "Background Features",
-      entries: normalizeContentEntries(
-        character?.features?.backgroundFeatures,
-        "background-feature"
+      entries: addResources(
+        normalizeContentEntries(
+          character?.features?.backgroundFeatures,
+          "background-feature"
+        ),
+        [
+          ...classResources,
+          ...featResources
+        ]
       )
     },
     {
+      id: "feats",
+      title: "Feats",
+      entries: addResources(
+        normalizeContentEntries(
+          getFeatEntries(character),
+          "feat"
+        ),
+        featResources
+      )
+    },
+    {
+      id: "custom",
       title: "Custom Features",
-      entries: normalizeContentEntries(
-        character?.features?.customFeatures,
-        "custom-feature"
+      entries: addResources(
+        normalizeContentEntries(
+          character?.features?.customFeatures,
+          "custom-feature"
+        ),
+        [
+          ...classResources,
+          ...featResources
+        ]
       )
     }
   ];
@@ -1585,6 +1805,138 @@ function getActionResourceMatch(entry, resources) {
   });
 
   return bestMatch;
+}
+
+function renderFeatureResource(
+  resource,
+  canTrack
+) {
+  if (!resource) {
+    return "";
+  }
+
+  const maximumUses = optionalNumber(
+    resource.maximumUses
+  );
+
+  if (maximumUses === null) {
+    return "";
+  }
+
+  const maximum = Math.max(
+    0,
+    Math.round(maximumUses)
+  );
+  const remaining = Math.min(
+    maximum,
+    clampInteger(
+      resource.currentUses,
+      maximum,
+      0
+    )
+  );
+  const resourceId = firstText(
+    resource.id,
+    resource.resourceId,
+    resource.canonicalId
+  );
+  const kind = firstText(
+    resource._featureResourceKind
+  );
+
+  if (!resourceId || !kind) {
+    return "";
+  }
+
+  return `
+    <div
+      class="hg-sheet-feature-resource"
+      data-feature-resource="${escapeHtml(resourceId)}"
+    >
+      <div>
+        <strong>${remaining} / ${maximum} uses remaining</strong>
+        <span>Recharge: ${escapeHtml(formatResourceRecharge(resource.recharge))}</span>
+      </div>
+      <div class="hg-sheet-inline-actions hg-sheet-no-print">
+        <button
+          type="button"
+          data-character-sheet-action="adjust-${escapeHtml(kind)}-resource"
+          data-resource-id="${escapeHtml(resourceId)}"
+          data-delta="-1"
+          ${!canTrack || remaining <= 0 ? "disabled" : ""}
+        >Spend</button>
+        <button
+          type="button"
+          data-character-sheet-action="adjust-${escapeHtml(kind)}-resource"
+          data-resource-id="${escapeHtml(resourceId)}"
+          data-delta="1"
+          ${!canTrack || remaining >= maximum ? "disabled" : ""}
+        >Restore</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderFeatureList(
+  entries,
+  options = {}
+) {
+  const canTrack =
+    options.canTrack !== false;
+  const showResources =
+    options.showResources !== false;
+
+  return `
+    <div class="hg-sheet-feature-list">
+      ${entries.map((entry) => {
+        const sourceDetails = [
+          entry.source,
+          entry.levelGained
+            ? `Level ${entry.levelGained}`
+            : ""
+        ].filter(Boolean);
+
+        return `
+          <article
+            class="hg-sheet-feature-card"
+            data-sheet-feature-id="${escapeHtml(entry.id)}"
+          >
+            <header>
+              <strong>${escapeHtml(entry.name)}</strong>
+              ${sourceDetails.length ? `
+                <span>${escapeHtml(sourceDetails.join(" \u00b7 "))}</span>
+              ` : ""}
+            </header>
+
+            ${entry.summary ? `
+              <p class="hg-sheet-feature-summary">${escapeHtml(entry.summary)}</p>
+            ` : ""}
+
+            ${entry.choices ? `
+              <p class="hg-sheet-feature-choices">
+                <strong>Choices:</strong>
+                <span>${escapeHtml(entry.choices)}</span>
+              </p>
+            ` : ""}
+
+            ${showResources
+              ? renderFeatureResource(
+                  entry.resource,
+                  canTrack
+                )
+              : ""}
+
+            ${entry.description ? `
+              <details class="hg-sheet-feature-description">
+                <summary>${escapeHtml(firstText(entry.descriptionLabel, "Full description"))}</summary>
+                <p>${escapeHtml(entry.description)}</p>
+              </details>
+            ` : ""}
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 function getActionAttackBonus(entry, character, proficiencyBonus) {
@@ -2876,28 +3228,48 @@ function renderFeatMechanics(character) {
       ${featureEntries.length ? `
         <article class="hg-sheet-card">
           <h2>Selected Feat Features</h2>
-          ${renderContentList(featureEntries)}
+          ${renderFeatureList(
+            normalizeContentEntries(
+              featureEntries,
+              "selected-feat-feature"
+            )
+          )}
         </article>
       ` : ""}
 
       ${defenseEntries.length ? `
         <article class="hg-sheet-card">
           <h2>Feat Defenses</h2>
-          ${renderContentList(defenseEntries)}
+          ${renderFeatureList(
+            normalizeContentEntries(
+              defenseEntries,
+              "feat-defense"
+            )
+          )}
         </article>
       ` : ""}
 
       ${senseEntries.length ? `
         <article class="hg-sheet-card">
           <h2>Feat Senses &amp; Communication</h2>
-          ${renderContentList(senseEntries)}
+          ${renderFeatureList(
+            normalizeContentEntries(
+              senseEntries,
+              "feat-sense"
+            )
+          )}
         </article>
       ` : ""}
 
       ${elementalEntries.length ? `
         <article class="hg-sheet-card">
           <h2>Elemental Adept</h2>
-          ${renderContentList(elementalEntries)}
+          ${renderFeatureList(
+            normalizeContentEntries(
+              elementalEntries,
+              "elemental-adept"
+            )
+          )}
         </article>
       ` : ""}
 
@@ -2915,14 +3287,24 @@ function renderFeatMechanics(character) {
       ${actionEntries.length ? `
         <article class="hg-sheet-card">
           <h2>Feat Actions &amp; Reminders</h2>
-          ${renderContentList(actionEntries)}
+          ${renderFeatureList(
+            normalizeContentEntries(
+              actionEntries,
+              "feat-reminder"
+            )
+          )}
         </article>
       ` : ""}
 
       ${healingEntries.length ? `
         <article class="hg-sheet-card">
           <h2>Feat Healing</h2>
-          ${renderContentList(healingEntries)}
+          ${renderFeatureList(
+            normalizeContentEntries(
+              healingEntries,
+              "feat-healing"
+            )
+          )}
         </article>
       ` : ""}
     </div>
@@ -2949,8 +3331,12 @@ function renderMainPanel(character, summary) {
   const initiative = optionalNumber(combat.initiative) ??
     getAbilityModifier(character, "dex");
   const speed = formatSpeed(combat.speed, character?.speed);
-  const featureGroups = getFeatureGroups(character);
-  const feats = getFeatEntries(character);
+  const featureGroups =
+    collectCharacterFeatures(
+      character
+    ).filter((group) => {
+      return group.entries.length > 0;
+    });
   const classResources = asArray(
     character?.classMechanics?.resources
   );
@@ -3103,18 +3489,19 @@ function renderMainPanel(character, summary) {
         </article>
       </div>
 
-      <div class="hg-sheet-card-grid hg-sheet-feature-grid">
+      <div class="hg-sheet-feature-groups">
         ${featureGroups.map((group) => `
-          <article class="hg-sheet-card">
+          <section
+            class="hg-sheet-card hg-sheet-feature-group"
+            data-feature-group="${escapeHtml(group.id)}"
+          >
             <h2>${escapeHtml(group.title)}</h2>
-            ${renderContentList(group.entries)}
-          </article>
+            ${renderFeatureList(
+              group.entries,
+              { showResources: false }
+            )}
+          </section>
         `).join("")}
-
-        <article class="hg-sheet-card">
-          <h2>Feats</h2>
-          ${renderContentList(feats, "No feats selected.")}
-        </article>
       </div>
 
       ${renderFeatMechanics(character)}
@@ -3491,26 +3878,33 @@ function renderInventoryPanel(character, summary) {
   `;
 }
 
-function renderFeaturesPanel(character) {
-  const featureGroups = getFeatureGroups(
-    character
-  );
-  const feats = getFeatEntries(character);
+function renderFeaturesPanel(
+  character,
+  canTrack = true
+) {
+  const featureGroups =
+    collectCharacterFeatures(
+      character
+    ).filter((group) => {
+      return group.entries.length > 0;
+    });
 
   return `
     <section class="hg-sheet-panel" aria-label="Features">
       ${renderClassProgression(character)}
-      <div class="hg-sheet-card-grid hg-sheet-feature-grid">
+      <div class="hg-sheet-feature-groups">
         ${featureGroups.map((group) => `
-          <article class="hg-sheet-card">
+          <section
+            class="hg-sheet-card hg-sheet-feature-group"
+            data-feature-group="${escapeHtml(group.id)}"
+          >
             <h2>${escapeHtml(group.title)}</h2>
-            ${renderContentList(group.entries)}
-          </article>
+            ${renderFeatureList(
+              group.entries,
+              { canTrack }
+            )}
+          </section>
         `).join("")}
-        <article class="hg-sheet-card">
-          <h2>Feats</h2>
-          ${renderContentList(feats, "No feats selected.")}
-        </article>
       </div>
       ${renderFeatMechanics(character)}
       ${firstText(character?.features?.notes, character?.notes) ? `
@@ -5142,6 +5536,124 @@ function ensureStyles() {
       font-size: 11px;
     }
 
+    .hg-sheet-feature-groups {
+      display: grid;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .hg-sheet-feature-group {
+      min-width: 0;
+    }
+
+    .hg-sheet-feature-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 10px;
+      align-items: start;
+    }
+
+    .hg-sheet-feature-card {
+      display: grid;
+      min-width: 0;
+      gap: 9px;
+      padding: 12px;
+      border: 1px solid rgba(127, 153, 255, 0.18);
+      border-radius: 12px;
+      background: rgba(7, 11, 27, 0.62);
+    }
+
+    .hg-sheet-feature-card > header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 4px 10px;
+      min-width: 0;
+    }
+
+    .hg-sheet-feature-card > header strong {
+      color: #f2f5ff;
+      overflow-wrap: anywhere;
+    }
+
+    .hg-sheet-feature-card > header span {
+      color: #9fabd6;
+      font-size: 11px;
+      line-height: 1.4;
+      text-align: right;
+    }
+
+    .hg-sheet-feature-summary,
+    .hg-sheet-feature-choices {
+      color: #bdc7eb;
+      font-size: 13px;
+      line-height: 1.5 !important;
+    }
+
+    .hg-sheet-feature-choices {
+      display: grid;
+      gap: 2px;
+      padding: 8px 9px;
+      border: 1px solid rgba(244, 216, 139, 0.2);
+      border-radius: 9px;
+      background: rgba(244, 216, 139, 0.06);
+    }
+
+    .hg-sheet-feature-choices strong {
+      color: #f4d88b;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .hg-sheet-feature-resource {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 9px;
+      border: 1px solid rgba(112, 218, 173, 0.24);
+      border-radius: 10px;
+      background: rgba(32, 113, 82, 0.12);
+    }
+
+    .hg-sheet-feature-resource > div:first-child {
+      display: grid;
+      gap: 2px;
+    }
+
+    .hg-sheet-feature-resource strong {
+      color: #ccf7e4;
+      font-size: 12px;
+    }
+
+    .hg-sheet-feature-resource span {
+      color: #a8c9be;
+      font-size: 11px;
+    }
+
+    .hg-sheet-feature-description {
+      min-width: 0;
+      border-top: 1px solid rgba(127, 153, 255, 0.14);
+      padding-top: 8px;
+    }
+
+    .hg-sheet-feature-description summary {
+      width: fit-content;
+      color: #9eb1ff;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .hg-sheet-feature-description p {
+      margin-top: 8px;
+      color: #b8c3e7;
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
     .hg-sheet-action-sections {
       display: grid;
       gap: 14px;
@@ -6023,6 +6535,15 @@ function ensureStyles() {
         grid-template-columns: 1fr;
       }
 
+      .hg-sheet-feature-list,
+      .hg-sheet-feature-resource {
+        grid-template-columns: 1fr;
+      }
+
+      .hg-sheet-feature-card > header span {
+        text-align: left;
+      }
+
       .hg-sheet-definition-list > div {
         grid-template-columns: 1fr;
         gap: 3px;
@@ -6132,6 +6653,8 @@ function ensureStyles() {
       .hg-sheet-action-section,
       .hg-sheet-action-card,
       .hg-sheet-action-resource,
+      .hg-sheet-feature-card,
+      .hg-sheet-feature-resource,
       .hg-sheet-spell-library,
       .hg-sheet-spell-card,
       .hg-sheet-resource-row,
@@ -6150,6 +6673,9 @@ function ensureStyles() {
       .hg-sheet-action-card > header strong,
       .hg-sheet-action-facts dd,
       .hg-sheet-action-resource strong,
+      .hg-sheet-feature-card > header strong,
+      .hg-sheet-feature-choices strong,
+      .hg-sheet-feature-resource strong,
       .hg-sheet-spell-card > header strong,
       .hg-sheet-spell-facts dd,
       .hg-sheet-resource-row strong {
@@ -6170,6 +6696,11 @@ function ensureStyles() {
       .hg-sheet-action-empty,
       .hg-sheet-action-description p,
       .hg-sheet-action-resource span,
+      .hg-sheet-feature-card > header span,
+      .hg-sheet-feature-summary,
+      .hg-sheet-feature-choices,
+      .hg-sheet-feature-resource span,
+      .hg-sheet-feature-description p,
       .hg-sheet-spell-card > header > div:first-child span,
       .hg-sheet-spell-summary,
       .hg-sheet-spell-empty,
@@ -6473,7 +7004,8 @@ export function createCharacterSheetView(options = {}) {
         mainSummary
       ),
       features: () => renderFeaturesPanel(
-        safeCharacter
+        safeCharacter,
+        mainSummary.canTrack
       ),
       spells: () => renderSpellPanel(
         safeCharacter,
@@ -6596,7 +7128,10 @@ export function createCharacterSheetView(options = {}) {
             ...mainSummary,
             canTrack: false
           })}
-          ${renderFeaturesPanel(safeCharacter)}
+          ${renderFeaturesPanel(
+            safeCharacter,
+            false
+          )}
           ${renderStoryPanel(safeCharacter)}
           ${hasSpellContent
             ? renderSpellPanel(
