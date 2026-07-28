@@ -4068,28 +4068,31 @@ function renderCombatStats(character, summary) {
 
   return `
     <div class="hg-sheet-stat-grid hg-sheet-combat-stats">
-      <article class="hg-sheet-stat-card">
+      <article class="hg-sheet-stat-card hg-sheet-stat-card--core hg-sheet-stat-card--ac">
         <span>Armor Class</span>
         <strong>${armorClass}</strong>
       </article>
-      <article class="hg-sheet-stat-card">
+      <article class="hg-sheet-stat-card hg-sheet-stat-card--core hg-sheet-stat-card--hp">
         <span>Current HP</span>
         <strong>${currentHp} / ${maxHp}</strong>
         ${temporaryHp ? `<small>+${temporaryHp} temporary</small>` : ""}
       </article>
-      <article class="hg-sheet-stat-card">
+      <article class="hg-sheet-stat-card hg-sheet-stat-card--core hg-sheet-stat-card--initiative">
         <span>Initiative</span>
         <strong>${escapeHtml(formatModifier(initiative))}</strong>
       </article>
-      <article class="hg-sheet-stat-card">
+      <article class="hg-sheet-stat-card hg-sheet-stat-card--support">
         <span>Speed</span>
         <strong class="hg-sheet-stat-text">${escapeHtml(formatSpeed(combat.speed, character?.speed))}</strong>
       </article>
-      <article class="hg-sheet-stat-card">
+      <article class="hg-sheet-stat-card hg-sheet-stat-card--support">
         <span>Proficiency</span>
         <strong>${escapeHtml(formatModifier(summary.proficiencyBonus))}</strong>
       </article>
-      <article class="hg-sheet-stat-card">
+      <article
+        class="hg-sheet-stat-card hg-sheet-stat-card--support hg-sheet-stat-card--inspiration"
+        data-inspiration="${combat.inspiration === true ? "active" : "inactive"}"
+      >
         <span>Inspiration</span>
         <strong>${combat.inspiration === true ? "Yes" : "No"}</strong>
         <button
@@ -4135,7 +4138,7 @@ function renderHitPointControls(character, canTrack) {
   );
 
   return `
-    <article class="hg-sheet-card hg-sheet-wide-card">
+    <article class="hg-sheet-card hg-sheet-survival-card">
       <h2>Hit Points &amp; Survival</h2>
       <div class="hg-sheet-vitals-layout">
         <div>
@@ -4209,8 +4212,14 @@ function renderConditions(character, canTrack) {
   ).map((condition) => cleanText(condition)).filter(Boolean);
 
   return `
-    <article class="hg-sheet-card">
-      <h2>Conditions</h2>
+    <article
+      class="hg-sheet-card hg-sheet-conditions-card"
+      data-has-active-conditions="${active.length ? "true" : "false"}"
+    >
+      <div class="hg-sheet-card-heading">
+        <h2>Conditions</h2>
+        <span>${active.length} active</span>
+      </div>
       <div class="hg-sheet-chip-list">
         ${active.length
           ? active.map((condition) => `
@@ -4262,9 +4271,11 @@ function renderActionsPanel(character, summary) {
   return `
     <section class="hg-sheet-panel" aria-label="Actions">
       ${renderCombatStats(character, summary)}
-      <div class="hg-sheet-card-grid">
+      <div class="hg-sheet-combat-control-grid">
         ${renderHitPointControls(character, summary.canTrack)}
         ${renderConditions(character, summary.canTrack)}
+      </div>
+      <div class="hg-sheet-card-grid">
         <div class="hg-sheet-wide-card">
           ${renderActionSections(
             character,
@@ -5818,29 +5829,50 @@ function ensureStyles() {
 
     .hg-character-sheet button {
       margin: 0 !important;
+      transition:
+        border-color 150ms ease,
+        background 150ms ease,
+        color 150ms ease,
+        transform 150ms ease;
+    }
+
+    .hg-character-sheet button:not(:disabled):hover,
+    .hg-sheet-more-menu > summary:hover {
+      border-color: rgba(151, 172, 255, 0.7) !important;
+    }
+
+    .hg-character-sheet button:focus-visible,
+    .hg-sheet-more-menu > summary:focus-visible {
+      outline: 3px solid rgba(157, 177, 255, 0.44);
+      outline-offset: 2px;
     }
 
     .hg-character-sheet-header {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 16px;
+      gap: 20px;
       align-items: center;
-      padding: 18px;
-      border: 1px solid rgba(127, 153, 255, 0.3);
-      border-radius: 18px;
+      padding: 22px;
+      border: 1px solid rgba(135, 156, 255, 0.34);
+      border-radius: 20px;
       background:
-        radial-gradient(circle at top left, rgba(92, 112, 255, 0.22), transparent 44%),
+        radial-gradient(circle at top left, rgba(92, 112, 255, 0.28), transparent 44%),
         linear-gradient(145deg, rgba(18, 27, 55, 0.98), rgba(8, 12, 27, 0.99));
-      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3);
+      box-shadow:
+        0 20px 48px rgba(0, 0, 0, 0.32),
+        inset 4px 0 0 rgba(118, 75, 180, 0.7);
     }
 
     .hg-character-sheet-portrait,
     .hg-character-sheet-portrait-placeholder {
-      width: 88px;
-      height: 88px;
-      border-radius: 16px;
-      border: 1px solid rgba(151, 172, 255, 0.36);
+      width: 108px;
+      height: 108px;
+      border-radius: 19px;
+      border: 2px solid rgba(151, 172, 255, 0.48);
       background: rgba(7, 11, 27, 0.78);
+      box-shadow:
+        0 12px 30px rgba(0, 0, 0, 0.28),
+        0 0 0 4px rgba(75, 95, 216, 0.08);
     }
 
     .hg-character-sheet-portrait {
@@ -5852,7 +5884,7 @@ function ensureStyles() {
       display: grid;
       place-items: center;
       color: #aeb8df;
-      font-size: 28px;
+      font-size: 34px;
       font-weight: 800;
     }
 
@@ -5862,8 +5894,9 @@ function ensureStyles() {
 
     .hg-character-sheet-heading h1 {
       margin: 0 0 5px;
-      font-size: clamp(26px, 4vw, 42px);
+      font-size: clamp(30px, 4.2vw, 46px);
       line-height: 1.05;
+      letter-spacing: -0.025em;
     }
 
     .hg-character-sheet-heading p {
@@ -5874,6 +5907,42 @@ function ensureStyles() {
     .hg-character-sheet-heading .hg-sheet-class-line {
       color: #f4d88b;
       font-weight: 750;
+      font-size: 16px;
+    }
+
+    .hg-sheet-identity-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px 0;
+      margin: 8px 0 7px;
+    }
+
+    .hg-sheet-identity-meta > span {
+      display: grid;
+      gap: 1px;
+      min-width: 92px;
+      padding: 0 14px;
+      border-left: 1px solid rgba(151, 172, 255, 0.2);
+    }
+
+    .hg-sheet-identity-meta > span:first-child {
+      min-width: 66px;
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    .hg-sheet-identity-meta small {
+      color: #8f9bc7;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hg-sheet-identity-meta strong {
+      color: #dfe5ff;
+      font-size: 13px;
+      line-height: 1.3;
     }
 
     .hg-character-sheet-tabs {
@@ -5882,7 +5951,7 @@ function ensureStyles() {
       gap: 8px;
       margin: 14px 0;
       padding: 8px;
-      border: 1px solid rgba(127, 153, 255, 0.22);
+      border: 0;
       border-radius: 14px;
       background: rgba(7, 11, 27, 0.82);
     }
@@ -5890,8 +5959,8 @@ function ensureStyles() {
     .hg-character-sheet-tab {
       flex: 1 1 130px;
       min-width: 0;
-      border: 1px solid rgba(127, 153, 255, 0.24) !important;
-      background: rgba(22, 31, 62, 0.82) !important;
+      border: 1px solid transparent !important;
+      background: rgba(22, 31, 62, 0.58) !important;
       color: #dbe3ff !important;
     }
 
@@ -5916,12 +5985,12 @@ function ensureStyles() {
     .hg-sheet-card,
     .hg-sheet-callout {
       min-width: 0;
-      border: 1px solid rgba(127, 153, 255, 0.22);
+      border: 1px solid rgba(127, 153, 255, 0.16);
       border-radius: 15px;
       background:
         radial-gradient(circle at top left, rgba(84, 113, 233, 0.08), transparent 55%),
         linear-gradient(180deg, rgba(15, 22, 45, 0.98), rgba(8, 12, 26, 0.98));
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
     }
 
     .hg-sheet-stat-card {
@@ -5930,6 +5999,31 @@ function ensureStyles() {
       min-height: 100px;
       padding: 13px;
       text-align: center;
+    }
+
+    .hg-sheet-combat-stats .hg-sheet-stat-card--core {
+      min-height: 112px;
+      border-color: rgba(135, 156, 255, 0.42);
+      background:
+        radial-gradient(circle at top, rgba(99, 118, 235, 0.2), transparent 62%),
+        linear-gradient(180deg, rgba(22, 31, 64, 0.99), rgba(8, 12, 27, 0.99));
+      box-shadow:
+        0 12px 30px rgba(0, 0, 0, 0.22),
+        inset 0 3px 0 rgba(118, 75, 180, 0.38);
+    }
+
+    .hg-sheet-combat-stats .hg-sheet-stat-card--core strong {
+      font-size: 31px;
+    }
+
+    .hg-sheet-stat-card--support {
+      background: rgba(10, 15, 32, 0.88);
+      box-shadow: none;
+    }
+
+    .hg-sheet-stat-card--inspiration[data-inspiration="active"] {
+      border-color: rgba(244, 216, 139, 0.5);
+      background: rgba(244, 216, 139, 0.09);
     }
 
     .hg-sheet-stat-card span,
@@ -5977,6 +6071,26 @@ function ensureStyles() {
       letter-spacing: 0.025em;
     }
 
+    .hg-sheet-card-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 11px;
+    }
+
+    .hg-sheet-card-heading h2 {
+      margin: 0;
+    }
+
+    .hg-sheet-card-heading > span {
+      color: #aeb8df;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
     .hg-sheet-card p {
       margin: 0;
       line-height: 1.55;
@@ -5986,6 +6100,33 @@ function ensureStyles() {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 14px;
+    }
+
+    .hg-sheet-combat-control-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.8fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .hg-sheet-survival-card {
+      border-color: rgba(135, 156, 255, 0.3);
+    }
+
+    .hg-sheet-conditions-card {
+      align-content: start;
+      border-color: rgba(244, 216, 139, 0.24);
+    }
+
+    .hg-sheet-conditions-card[data-has-active-conditions="true"] {
+      border-color: rgba(255, 170, 109, 0.52);
+      background:
+        radial-gradient(circle at top left, rgba(255, 144, 104, 0.12), transparent 58%),
+        linear-gradient(180deg, rgba(23, 23, 43, 0.98), rgba(8, 12, 26, 0.98));
+    }
+
+    .hg-sheet-conditions-card[data-has-active-conditions="true"] .hg-sheet-card-heading > span {
+      color: #ffd3a9;
     }
 
     .hg-sheet-wide-card {
@@ -6208,12 +6349,11 @@ function ensureStyles() {
     .hg-sheet-action-section {
       min-width: 0;
       padding: 14px;
-      border: 1px solid rgba(127, 153, 255, 0.22);
-      border-radius: 15px;
-      background:
-        radial-gradient(circle at top left, rgba(84, 113, 233, 0.08), transparent 55%),
-        linear-gradient(180deg, rgba(15, 22, 45, 0.98), rgba(8, 12, 26, 0.98));
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+      border: 0;
+      border-left: 3px solid rgba(127, 153, 255, 0.28);
+      border-radius: 0 14px 14px 0;
+      background: rgba(12, 18, 38, 0.7);
+      box-shadow: none;
     }
 
     .hg-sheet-action-section-heading {
@@ -6257,7 +6397,7 @@ function ensureStyles() {
       min-width: 0;
       gap: 10px;
       padding: 12px;
-      border: 1px solid rgba(127, 153, 255, 0.18);
+      border: 1px solid rgba(127, 153, 255, 0.13);
       border-radius: 12px;
       background: rgba(7, 11, 27, 0.62);
     }
@@ -6830,7 +6970,30 @@ function ensureStyles() {
       flex-wrap: wrap;
       justify-content: flex-end;
       gap: 8px;
-      max-width: 520px;
+      max-width: 560px;
+    }
+
+    .hg-character-sheet-toolbar > button,
+    .hg-sheet-more-menu > summary {
+      font-weight: 750;
+    }
+
+    .hg-sheet-toolbar-rest {
+      border-color: rgba(135, 156, 255, 0.52) !important;
+      color: #f7f9ff !important;
+      background: rgba(75, 95, 216, 0.22) !important;
+    }
+
+    .hg-sheet-toolbar-rest--primary {
+      border-color: rgba(151, 172, 255, 0.68) !important;
+      background: linear-gradient(135deg, #4b5fd8, #764bb4) !important;
+      box-shadow: 0 7px 18px rgba(75, 95, 216, 0.25);
+    }
+
+    .hg-sheet-toolbar-secondary {
+      border-color: rgba(127, 153, 255, 0.2) !important;
+      color: #cbd4f6 !important;
+      background: rgba(11, 17, 36, 0.6) !important;
     }
 
     .hg-sheet-more-menu {
@@ -6842,10 +7005,10 @@ function ensureStyles() {
       align-items: center;
       min-height: 36px;
       padding: 7px 12px;
-      border: 1px solid rgba(127, 153, 255, 0.34);
+      border: 1px solid rgba(127, 153, 255, 0.2);
       border-radius: 9px;
       color: #edf1ff;
-      background: rgba(22, 31, 62, 0.88);
+      background: rgba(11, 17, 36, 0.6);
       cursor: pointer;
       list-style: none;
     }
@@ -6870,8 +7033,22 @@ function ensureStyles() {
     }
 
     .hg-sheet-danger-button {
-      border-color: rgba(255, 114, 132, 0.48) !important;
-      color: #ffd6dc !important;
+      border-color: rgba(255, 102, 124, 0.72) !important;
+      color: #ffe2e6 !important;
+      background: rgba(154, 35, 58, 0.32) !important;
+      font-weight: 850 !important;
+    }
+
+    .hg-sheet-danger-button:not(:disabled):hover {
+      border-color: #ff8297 !important;
+      background: rgba(190, 43, 71, 0.52) !important;
+    }
+
+    .hg-sheet-save-now-button {
+      border-color: rgba(112, 218, 173, 0.48) !important;
+      color: #d8f9ea !important;
+      background: rgba(34, 140, 94, 0.2) !important;
+      font-weight: 800 !important;
     }
 
     .hg-sheet-sync-status {
@@ -6886,11 +7063,32 @@ function ensureStyles() {
       font-weight: 750;
     }
 
+    .hg-sheet-sync-status[data-sheet-save-status="saved"] {
+      gap: 5px;
+      padding: 2px 0;
+      border-color: transparent;
+      color: #9fcab9 !important;
+      background: transparent;
+      font-size: 11px;
+      opacity: 0.72;
+    }
+
+    .hg-sheet-sync-status[data-sheet-save-status="saved"]::before {
+      content: "\\2713";
+    }
+
     .hg-sheet-sync-status[data-sheet-save-status="preview"],
-    .hg-sheet-sync-status[data-sheet-save-status="dirty"] {
+    .hg-sheet-sync-status[data-sheet-save-status="dirty"],
+    .hg-sheet-sync-status[data-sheet-save-status="saving"] {
       border-color: rgba(244, 216, 139, 0.35);
       color: #f4d88b !important;
       background: rgba(244, 216, 139, 0.08);
+    }
+
+    .hg-sheet-sync-status[data-sheet-save-status="saving"] {
+      border-color: rgba(135, 156, 255, 0.4);
+      color: #cdd7ff !important;
+      background: rgba(75, 95, 216, 0.13);
     }
 
     .hg-sheet-value-control,
@@ -6986,6 +7184,20 @@ function ensureStyles() {
       border-color: rgba(244, 216, 139, 0.38) !important;
       color: #f9e7b6 !important;
       background: rgba(244, 216, 139, 0.09) !important;
+    }
+
+    .hg-sheet-value-control [data-character-sheet-action="damage"] {
+      border-color: rgba(255, 114, 132, 0.48) !important;
+      color: #ffdce2 !important;
+      background: rgba(154, 35, 58, 0.2) !important;
+    }
+
+    .hg-sheet-value-control [data-character-sheet-action="heal"],
+    .hg-sheet-condition-controls [data-character-sheet-action="add-standard-condition"] {
+      border-color: rgba(112, 218, 173, 0.42) !important;
+      color: #dcf9eb !important;
+      background: rgba(34, 140, 94, 0.18) !important;
+      font-weight: 800 !important;
     }
 
     .hg-sheet-small-control {
@@ -7225,6 +7437,10 @@ function ensureStyles() {
         grid-template-columns: 1fr;
       }
 
+      .hg-sheet-combat-control-grid {
+        grid-template-columns: 1fr;
+      }
+
       .hg-sheet-inventory-toolbar {
         grid-template-columns: 1fr;
         align-items: stretch;
@@ -7244,9 +7460,18 @@ function ensureStyles() {
 
       .hg-character-sheet-portrait,
       .hg-character-sheet-portrait-placeholder {
-        width: 78px;
-        height: 78px;
+        width: 92px;
+        height: 92px;
         margin: 0 auto;
+      }
+
+      .hg-sheet-identity-meta,
+      .hg-character-sheet-toolbar {
+        justify-content: center;
+      }
+
+      .hg-sheet-identity-meta > span {
+        min-width: 0;
       }
 
       .hg-character-sheet-tabs {
@@ -7817,11 +8042,20 @@ export function createCharacterSheetView(options = {}) {
           <div class="hg-character-sheet-heading">
             <h1>${escapeHtml(presentation.name)}</h1>
             <p class="hg-sheet-class-line">${escapeHtml(classLine)}</p>
-            <p>
-              Level ${totalLevel}
-              &middot; ${escapeHtml(presentation.speciesName)}
-              &middot; ${escapeHtml(presentation.backgroundName)}
-            </p>
+            <div class="hg-sheet-identity-meta" aria-label="Character identity">
+              <span>
+                <small>Level</small>
+                <strong>${totalLevel}</strong>
+              </span>
+              <span>
+                <small>Species</small>
+                <strong>${escapeHtml(presentation.speciesName)}</strong>
+              </span>
+              <span>
+                <small>Background</small>
+                <strong>${escapeHtml(presentation.backgroundName)}</strong>
+              </span>
+            </div>
             <p
               class="hg-sheet-sync-status"
               data-linked-token-status="${savedCharacterId ? (sheetContext.dirty === true ? "dirty" : "ready") : "unsaved"}"
@@ -7832,14 +8066,17 @@ export function createCharacterSheetView(options = {}) {
           <div class="hg-character-sheet-toolbar hg-sheet-no-print">
             <button
               type="button"
+              class="hg-sheet-toolbar-rest"
               data-character-sheet-action="short-rest"
             >Short Rest</button>
             <button
               type="button"
+              class="hg-sheet-toolbar-rest hg-sheet-toolbar-rest--primary"
               data-character-sheet-action="long-rest"
             >Long Rest</button>
             <button
               type="button"
+              class="hg-sheet-toolbar-secondary"
               data-character-sheet-action="edit"
             >Edit Character</button>
             <details class="hg-sheet-more-menu">
@@ -7847,6 +8084,7 @@ export function createCharacterSheetView(options = {}) {
               <div>
                 <button
                   type="button"
+                  class="hg-sheet-save-now-button"
                   data-character-sheet-action="sync-linked-token"
                   ${savedCharacterId ? "" : "disabled"}
                 >Save Now</button>
@@ -7868,11 +8106,12 @@ export function createCharacterSheetView(options = {}) {
                   class="hg-sheet-danger-button"
                   data-character-sheet-action="delete"
                   ${savedCharacterId ? "" : "disabled"}
-                >Delete</button>
+                >Delete Character</button>
               </div>
             </details>
             <button
               type="button"
+              class="hg-sheet-toolbar-secondary hg-sheet-toolbar-back"
               data-character-sheet-action="close"
             >${escapeHtml(returnLabel)}</button>
           </div>

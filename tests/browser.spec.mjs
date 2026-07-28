@@ -78,10 +78,10 @@ test(
 );
 
 test(
-  "playable character sheet tracks combat and remains usable at phone width",
+  "playable character sheet prioritizes play controls, tracks combat, and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-attunement-20260728",
+      "ai-testing/playable-character-sheet.html?release=playable-priority7-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -108,6 +108,107 @@ test(
     )).toContainText(
       "Wizard 5"
     );
+    await expect(
+      page.locator(
+        ".hg-sheet-identity-meta"
+      )
+    ).toContainText(
+      "High Elf"
+    );
+    await expect(
+      page.locator(
+        ".hg-sheet-identity-meta"
+      )
+    ).toContainText(
+      "Sage"
+    );
+    await expect(
+      page.locator(
+        ".hg-sheet-screen-panel .hg-sheet-combat-stats .hg-sheet-stat-card--core"
+      )
+    ).toHaveCount(3);
+    await expect(
+      page.locator(
+        ".hg-sheet-screen-panel .hg-sheet-combat-control-grid > .hg-sheet-survival-card"
+      )
+    ).toBeVisible();
+    await expect(
+      page.locator(
+        ".hg-sheet-screen-panel .hg-sheet-combat-control-grid > .hg-sheet-conditions-card"
+      )
+    ).toContainText(
+      "Poisoned"
+    );
+
+    const presentation =
+      await page.evaluate(() => {
+        const portrait =
+          document.querySelector(
+            ".hg-character-sheet-portrait-placeholder"
+          );
+        const saved =
+          document.querySelector(
+            '[data-sheet-save-status="saved"]'
+          );
+        const longRest =
+          document.querySelector(
+            '[data-character-sheet-action="long-rest"]'
+          );
+        const edit =
+          document.querySelector(
+            '[data-character-sheet-action="edit"]'
+          );
+        const deleteButton =
+          document.querySelector(
+            '[data-character-sheet-action="delete"]'
+          );
+
+        return {
+          portraitWidth:
+            portrait?.getBoundingClientRect()
+              .width,
+          savedOpacity:
+            Number(
+              getComputedStyle(saved)
+                .opacity
+            ),
+          longRestBackground:
+            getComputedStyle(longRest)
+              .backgroundImage,
+          editBackground:
+            getComputedStyle(edit)
+              .backgroundColor,
+          deleteBackground:
+            getComputedStyle(deleteButton)
+              .backgroundColor
+        };
+      });
+
+    expect(presentation.portraitWidth)
+      .toBeGreaterThanOrEqual(100);
+    expect(presentation.savedOpacity)
+      .toBeLessThan(0.9);
+    expect(
+      presentation.longRestBackground
+    ).toContain("gradient");
+    expect(presentation.editBackground)
+      .not.toEqual(
+        presentation.deleteBackground
+      );
+
+    const moreMenu = page.locator(
+      ".hg-sheet-more-menu"
+    );
+    await moreMenu.locator("summary")
+      .click();
+    await expect(
+      moreMenu.getByRole("button", {
+        name: "Delete Character",
+        exact: true
+      })
+    ).toBeVisible();
+    await moreMenu.locator("summary")
+      .click();
 
     for (
       const tabName of [
