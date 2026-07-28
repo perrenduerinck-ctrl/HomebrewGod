@@ -39,6 +39,7 @@ import {
   characterHasSpellContent,
   collectCharacterActions,
   collectCharacterFeatures,
+  collectCharacterInventory,
   collectCharacterSpells,
   filterCharacterSpells,
   createCharacterSheetView
@@ -562,6 +563,241 @@ test(
     assert.match(
       blocked.message,
       /three attuned items/i
+    );
+  }
+);
+
+test(
+  "playable sheet nests containers, filters inventory, and renders each item once",
+  () => {
+    const character = {
+      id: "priority-four-inventory",
+      equipment: {
+        items: [
+          {
+            id: "pack",
+            name: "Explorer's Pack",
+            category:
+              "adventuring-gear",
+            quantity: 1,
+            weight: 5,
+            isContainer: true,
+            notes:
+              "A weathered field pack."
+          },
+          {
+            id: "pouch",
+            name: "Inner Pouch",
+            category:
+              "adventuring-gear",
+            quantity: 1,
+            weight: 1,
+            isContainer: true,
+            containerId: "pack"
+          },
+          {
+            id: "healing-potion",
+            name: "Healing Potion",
+            category: "consumable",
+            quantity: 2,
+            weight: 0.5,
+            isMagical: true,
+            containerId: "pouch",
+            notes:
+              "Two crimson draughts.",
+            description:
+              "Drink a potion to regain hit points."
+          },
+          {
+            id: "moon-blade",
+            name: "Moon Blade",
+            category: "weapon",
+            quantity: 1,
+            weight: 3,
+            equipped: true
+          },
+          {
+            id: "chain-shirt",
+            name: "Chain Shirt",
+            category: "armor",
+            quantity: 1,
+            weight: 20
+          },
+          {
+            id: "orphan-map",
+            name: "Orphan Map",
+            category: "gear",
+            quantity: 1,
+            weight: 0,
+            containerId:
+              "missing-case"
+          }
+        ]
+      }
+    };
+    const inventory =
+      collectCharacterInventory(
+        character
+      );
+    const byId = new Map(
+      inventory.entries.map(
+        (entry) => {
+          return [entry.id, entry];
+        }
+      )
+    );
+
+    assert.equal(
+      byId.get("healing-potion")
+        .parent.id,
+      "pouch"
+    );
+    assert.equal(
+      byId.get("pouch").parent.id,
+      "pack"
+    );
+    assert.equal(
+      byId.get("healing-potion")
+        .lineWeight,
+      1
+    );
+    assert.equal(
+      byId.get("orphan-map")
+        .parent,
+      null
+    );
+
+    const searched =
+      collectCharacterInventory(
+        character,
+        { search: "crimson" }
+      );
+    assert.equal(
+      searched.matchedCount,
+      1
+    );
+    assert.deepEqual(
+      searched.visibleRoots.map(
+        (entry) => entry.id
+      ),
+      ["pack"]
+    );
+
+    const weapons =
+      collectCharacterInventory(
+        character,
+        { filters: ["weapons"] }
+      );
+    assert.deepEqual(
+      weapons.visibleRoots.map(
+        (entry) => entry.id
+      ),
+      ["moon-blade"]
+    );
+
+    const view =
+      createCharacterSheetView();
+    const html =
+      view.renderCharacterSheetHtml(
+        character,
+        {
+          activeTab: "inventory",
+          sheetContext: {
+            characterId:
+              character.id
+          }
+        }
+      );
+    const screenHtml =
+      html.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.equal(
+      (
+        screenHtml.match(
+          /data-inventory-item-id="healing-potion"/g
+        ) || []
+      ).length,
+      1
+    );
+    assert.match(
+      screenHtml,
+      /data-inventory-container="pack"/
+    );
+    assert.doesNotMatch(
+      screenHtml,
+      /data-inventory-container="pack"[^>]*open/
+    );
+    assert.match(
+      screenHtml,
+      /data-inventory-location="pouch"/
+    );
+    assert.match(
+      screenHtml,
+      /Not in a Container/
+    );
+    assert.match(
+      screenHtml,
+      /data-character-sheet-input="inventory-search"/
+    );
+    assert.match(
+      screenHtml,
+      /data-inventory-filter="containers"/
+    );
+    assert.match(
+      screenHtml,
+      /Notes &amp; description/
+    );
+    assert.doesNotMatch(
+      screenHtml,
+      /<details class="hg-sheet-item-details" open/
+    );
+
+    const searchedHtml =
+      view.renderCharacterSheetHtml(
+        character,
+        {
+          activeTab: "inventory",
+          inventorySearch:
+            "Healing Potion",
+          sheetContext: {
+            characterId:
+              character.id
+          }
+        }
+      );
+    const searchedScreenHtml =
+      searchedHtml.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.match(
+      searchedScreenHtml,
+      /data-inventory-container="pack"[^>]*open/
+    );
+    assert.doesNotMatch(
+      searchedScreenHtml,
+      /data-inventory-item-id="moon-blade"/
+    );
+
+    const blocked =
+      applyGameplayAction(
+        character,
+        {
+          type:
+            "toggle-item-equipped",
+          itemId:
+            "healing-potion"
+        }
+      );
+    assert.equal(
+      blocked.changed,
+      false
+    );
+    assert.match(
+      blocked.message,
+      /out of its container/i
     );
   }
 );

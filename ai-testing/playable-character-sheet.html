@@ -219,6 +219,46 @@
             isContainer: true,
             capacityWeight: 30,
             notes: "Rope, rations, and field supplies."
+          },
+          {
+            id: "belt-pouch",
+            name: "Belt Pouch",
+            category: "adventuring-gear",
+            quantity: 1,
+            weight: 1,
+            isContainer: true,
+            capacityWeight: 6,
+            containerId: "pack",
+            notes: "A small pouch kept inside the pack."
+          },
+          {
+            id: "silk-rope",
+            name: "Silk Rope",
+            category: "adventuring-gear",
+            quantity: 1,
+            weight: 5,
+            containerId: "pack",
+            notes: "Fifty feet of silk rope."
+          },
+          {
+            id: "healing-potion",
+            name: "Healing Potion",
+            category: "consumable",
+            quantity: 2,
+            weight: 0.5,
+            isMagical: true,
+            containerId: "belt-pouch",
+            notes: "Two crimson healing draughts.",
+            description: "A creature that drinks one potion regains the recorded amount of hit points."
+          },
+          {
+            id: "chain-shirt",
+            name: "Chain Shirt",
+            category: "armor",
+            quantity: 1,
+            weight: 20,
+            equipped: false,
+            notes: "Medium armor worn beneath traveling clothes."
           }
         ],
         notes: "Spellbook is wrapped against rain."

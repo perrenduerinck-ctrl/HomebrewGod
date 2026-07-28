@@ -81,7 +81,7 @@ test(
   "playable character sheet tracks combat and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-features-20260728",
+      "ai-testing/playable-character-sheet.html?release=playable-inventory-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -259,6 +259,191 @@ test(
         "Equipment & Containers"
       )
     ).toBeVisible();
+    const packContainer =
+      screenPanel.locator(
+        '[data-inventory-container="pack"]'
+      );
+    await expect(packContainer)
+      .not.toHaveAttribute(
+        "open",
+        ""
+      );
+    await packContainer.locator(
+      ":scope > summary"
+    ).click();
+
+    const pouchContainer =
+      packContainer.locator(
+        '[data-inventory-container="belt-pouch"]'
+      );
+    await expect(pouchContainer)
+      .toBeVisible();
+    await expect(pouchContainer)
+      .not.toHaveAttribute(
+        "open",
+        ""
+      );
+    await pouchContainer.locator(
+      ":scope > summary"
+    ).click();
+
+    const healingPotion =
+      pouchContainer.locator(
+        '[data-inventory-item-id="healing-potion"]'
+      );
+    await expect(healingPotion)
+      .toBeVisible();
+    await expect(healingPotion)
+      .toContainText("Quantity");
+    await expect(healingPotion)
+      .toContainText("0.5 lb.");
+    await expect(healingPotion)
+      .toContainText("1 lb.");
+    await expect(healingPotion)
+      .toContainText(
+        "Inside Belt Pouch"
+      );
+    await expect(healingPotion)
+      .toContainText("Magical");
+    await expect(
+      screenPanel.locator(
+        '[data-inventory-item-id="healing-potion"]'
+      )
+    ).toHaveCount(1);
+    await expect(
+      healingPotion.getByRole(
+        "button",
+        {
+          name: "Equip",
+          exact: true
+        }
+      )
+    ).toBeDisabled();
+
+    const potionDetails =
+      healingPotion.locator(
+        ".hg-sheet-item-details"
+      );
+    await expect(potionDetails)
+      .not.toHaveAttribute(
+        "open",
+        ""
+      );
+    await potionDetails.locator(
+      "summary"
+    ).click();
+    await expect(potionDetails)
+      .toContainText(
+        "Two crimson healing draughts."
+      );
+    await expect(potionDetails)
+      .toContainText(
+        "A creature that drinks one potion"
+      );
+
+    const inventorySearch =
+      screenPanel.locator(
+        '[data-character-sheet-input="inventory-search"]'
+      );
+    await inventorySearch.fill(
+      "Healing Potion"
+    );
+    await expect(
+      screenPanel.locator(
+        '[data-inventory-container="pack"]'
+      )
+    ).toHaveAttribute(
+      "open",
+      ""
+    );
+    await expect(
+      screenPanel.locator(
+        '[data-inventory-container="belt-pouch"]'
+      )
+    ).toHaveAttribute(
+      "open",
+      ""
+    );
+    await expect(
+      screenPanel.locator(
+        '[data-inventory-item-id="healing-potion"]'
+      )
+    ).toBeVisible();
+    await expect(
+      screenPanel.locator(
+        '[data-inventory-item-id="moon-blade"]'
+      )
+    ).toHaveCount(0);
+    await inventorySearch.fill("");
+
+    const filters =
+      screenPanel.locator(
+        ".hg-sheet-inventory-filters"
+      );
+
+    for (
+      const [
+        filterName,
+        expectedItem,
+        hiddenItem
+      ] of [
+        [
+          "Containers",
+          "pack",
+          "moon-blade"
+        ],
+        [
+          "Weapons",
+          "moon-blade",
+          "chain-shirt"
+        ],
+        [
+          "Armor",
+          "chain-shirt",
+          "moon-blade"
+        ],
+        [
+          "Magical",
+          "focus",
+          "chain-shirt"
+        ],
+        [
+          "Equipped",
+          "moon-blade",
+          "chain-shirt"
+        ],
+        [
+          "Attuned",
+          "focus",
+          "moon-blade"
+        ]
+      ]
+    ) {
+      const filterButton =
+        filters.getByRole("button", {
+          name: filterName,
+          exact: true
+        });
+
+      await filterButton.click();
+      await expect(filterButton)
+        .toHaveAttribute(
+          "aria-pressed",
+          "true"
+        );
+      await expect(
+        screenPanel.locator(
+          `[data-inventory-item-id="${expectedItem}"]`
+        )
+      ).toBeVisible();
+      await expect(
+        screenPanel.locator(
+          `[data-inventory-item-id="${hiddenItem}"]`
+        )
+      ).toHaveCount(0);
+      await filterButton.click();
+    }
+
     await screenPanel.getByRole("button", {
       name: "Unattune",
       exact: true
@@ -609,6 +794,36 @@ test(
 
     expect(hasFeatureOverflow)
       .toBe(false);
+
+    await page.getByRole("button", {
+      name: "Inventory",
+      exact: true
+    }).click();
+    await expect(
+      screenPanel.locator(
+        '[data-character-sheet-input="inventory-search"]'
+      )
+    ).toBeVisible();
+    await expect(
+      screenPanel.getByRole(
+        "button",
+        {
+          name: "Containers",
+          exact: true
+        }
+      )
+    ).toBeVisible();
+    const hasInventoryOverflow =
+      await page.evaluate(() => {
+        return (
+          document.documentElement
+            .scrollWidth >
+          window.innerWidth
+        );
+      });
+
+    expect(hasInventoryOverflow)
+      .toBe(false);
   }
 );
 
@@ -616,7 +831,7 @@ test(
   "playable sheet hides the Spells tab for a non-spellcaster",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?fixture=non-spellcaster&release=playable-features-20260728",
+      "ai-testing/playable-character-sheet.html?fixture=non-spellcaster&release=playable-inventory-20260728",
       {
         waitUntil:
           "domcontentloaded"

@@ -12,6 +12,9 @@ import {
 import {
   getDefaultSpellById
 } from "./defaultSpells.js";
+import {
+  calculateInventoryLineWeight
+} from "./characterCreator/inventoryEquipment.js";
 
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },
@@ -44,6 +47,16 @@ const SKILLS = Object.freeze([
 ]);
 
 const CURRENCY = Object.freeze(["cp", "sp", "ep", "gp", "pp"]);
+
+const INVENTORY_FILTER_OPTIONS =
+  Object.freeze([
+    ["equipped", "Equipped"],
+    ["attuned", "Attuned"],
+    ["weapons", "Weapons"],
+    ["armor", "Armor"],
+    ["magical", "Magical"],
+    ["containers", "Containers"]
+  ]);
 
 function isRecord(value) {
   return Boolean(
@@ -2817,84 +2830,577 @@ function renderActionSections(
   `;
 }
 
-function renderEquipment(character, options = {}) {
-  const items = asArray(character?.equipment?.items);
-  const interactive = options.interactive === true;
+function inventoryItemMatches(
+  entry,
+  search,
+  filters
+) {
+  const query = cleanText(search)
+    .toLocaleLowerCase();
+  const searchText = [
+    entry.name,
+    entry.category,
+    entry.notes,
+    entry.description,
+    entry.parent?.name,
+    entry.containerId,
+    entry.equipped ? "equipped" : "",
+    entry.attuned ? "attuned" : "",
+    entry.isMagical ? "magical" : "",
+    entry.isContainer ? "container" : ""
+  ].join(" ").toLocaleLowerCase();
 
-  if (!items.length) {
+  if (
+    query &&
+    !searchText.includes(query)
+  ) {
+    return false;
+  }
+
+  return filters.every((filter) => {
+    if (filter === "equipped") {
+      return entry.equipped;
+    }
+    if (filter === "attuned") {
+      return entry.attuned;
+    }
+    if (filter === "weapons") {
+      return entry.isWeapon;
+    }
+    if (filter === "armor") {
+      return entry.isArmor;
+    }
+    if (filter === "magical") {
+      return entry.isMagical;
+    }
+    if (filter === "containers") {
+      return entry.isContainer;
+    }
+
+    return true;
+  });
+}
+
+export function collectCharacterInventory(
+  character,
+  {
+    search = "",
+    filters = []
+  } = {}
+) {
+  const allowedFilters = new Set(
+    INVENTORY_FILTER_OPTIONS.map(
+      ([id]) => id
+    )
+  );
+  const activeFilters = asArray(filters)
+    .map(normalizeKey)
+    .filter((filter) => {
+      return allowedFilters.has(filter);
+    });
+  const query = cleanText(search);
+  const rawItems = asArray(
+    character?.equipment?.items
+  );
+  const entries = rawItems.map(
+    (item, index) => {
+      const category = firstText(
+        item?.category,
+        "miscellaneous"
+      );
+      const categoryKey =
+        normalizeKey(category);
+      const id = firstText(
+        item?.id,
+        `inventory-item-${index + 1}`
+      );
+      const individualWeight =
+        optionalNumber(item?.weight);
+
+      return {
+        id,
+        key: `${id}:${index}`,
+        index,
+        name: firstText(
+          item?.name,
+          "Unnamed Item"
+        ),
+        quantity: clampInteger(
+          item?.quantity,
+          1,
+          1
+        ),
+        individualWeight,
+        lineWeight:
+          calculateInventoryLineWeight(
+            item
+          ),
+        category,
+        notes: firstText(
+          item?.notes
+        ),
+        description: firstText(
+          item?.description,
+          item?.fullDescription
+        ),
+        containerId: firstText(
+          item?.containerId
+        ),
+        isContainer:
+          item?.isContainer === true,
+        isMagical:
+          item?.isMagical === true ||
+          categoryKey === "magic-item",
+        requiresAttunement:
+          item?.requiresAttunement ===
+          true,
+        equipped:
+          item?.equipped === true,
+        attuned:
+          item?.attuned === true,
+        isWeapon:
+          categoryKey.includes(
+            "weapon"
+          ) ||
+          Boolean(item?.weaponType),
+        isArmor:
+          categoryKey.includes(
+            "armor"
+          ) ||
+          categoryKey === "shield" ||
+          item?.isShield === true,
+        parent: null,
+        children: [],
+        visible: true,
+        matchesFilter: true
+      };
+    }
+  );
+  const byId = new Map();
+
+  entries.forEach((entry) => {
+    const rawId = cleanText(
+      rawItems[entry.index]?.id
+    );
+
+    if (rawId && !byId.has(rawId)) {
+      byId.set(rawId, entry);
+    }
+  });
+
+  const createsCycle = (
+    entry,
+    candidateParent
+  ) => {
+    const visited = new Set([
+      entry.key
+    ]);
+    let current = candidateParent;
+
+    while (current) {
+      if (visited.has(current.key)) {
+        return true;
+      }
+
+      visited.add(current.key);
+      current = byId.get(
+        current.containerId
+      ) || null;
+    }
+
+    return false;
+  };
+
+  entries.forEach((entry) => {
+    const parent = byId.get(
+      entry.containerId
+    );
+
+    if (
+      parent &&
+      parent !== entry &&
+      parent.isContainer &&
+      !createsCycle(entry, parent)
+    ) {
+      entry.parent = parent;
+      parent.children.push(entry);
+    }
+  });
+
+  const hasActiveFilters =
+    Boolean(query) ||
+    activeFilters.length > 0;
+  const visible = new Set();
+
+  entries.forEach((entry) => {
+    entry.matchesFilter =
+      inventoryItemMatches(
+        entry,
+        query,
+        activeFilters
+      );
+
+    if (!hasActiveFilters) {
+      visible.add(entry.key);
+      return;
+    }
+
+    if (entry.matchesFilter) {
+      let current = entry;
+
+      while (current) {
+        visible.add(current.key);
+        current = current.parent;
+      }
+    }
+  });
+
+  entries.forEach((entry) => {
+    entry.visible = visible.has(
+      entry.key
+    );
+  });
+
+  const roots = entries.filter(
+    (entry) => {
+      return !entry.parent;
+    }
+  );
+
+  return {
+    entries,
+    roots,
+    visibleRoots: roots.filter(
+      (entry) => entry.visible
+    ),
+    total: entries.length,
+    matchedCount: entries.filter(
+      (entry) => {
+        return entry.matchesFilter;
+      }
+    ).length,
+    search: query,
+    filters: activeFilters,
+    hasActiveFilters
+  };
+}
+
+function formatInventoryWeight(value) {
+  if (value === null) {
+    return "\u2014";
+  }
+
+  return `${Number(
+    Number(value).toFixed(2)
+  )} lb.`;
+}
+
+function renderInventoryItemDetails(entry) {
+  const notes = firstText(entry.notes);
+  const description = firstText(
+    entry.description
+  );
+  const repeated =
+    notes &&
+    description &&
+    notes.replace(/\s+/g, " ")
+      .toLocaleLowerCase() ===
+      description.replace(/\s+/g, " ")
+        .toLocaleLowerCase();
+
+  if (!notes && !description) {
+    return "";
+  }
+
+  return `
+    <details class="hg-sheet-item-details">
+      <summary>Notes &amp; description</summary>
+      ${notes ? `
+        <p>${escapeHtml(notes)}</p>
+      ` : ""}
+      ${description && !repeated ? `
+        <p>${escapeHtml(description)}</p>
+      ` : ""}
+    </details>
+  `;
+}
+
+function renderInventoryItemControls(
+  entry,
+  interactive
+) {
+  if (!interactive) {
+    return "";
+  }
+
+  return `
+    <div class="hg-sheet-inline-actions hg-sheet-no-print">
+      ${entry.isContainer ? "" : `
+        <button
+          type="button"
+          data-character-sheet-action="toggle-item-equipped"
+          data-item-id="${escapeHtml(entry.id)}"
+          data-item-index="${entry.index}"
+          ${entry.containerId ? "disabled" : ""}
+          ${entry.containerId ? 'title="Move this item out of its container before equipping it."' : ""}
+        >${entry.equipped ? "Unequip" : "Equip"}</button>
+      `}
+      ${entry.isMagical && entry.requiresAttunement ? `
+        <button
+          type="button"
+          data-character-sheet-action="toggle-item-attuned"
+          data-item-id="${escapeHtml(entry.id)}"
+          data-item-index="${entry.index}"
+        >${entry.attuned ? "Unattune" : "Attune"}</button>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderInventoryItemFacts(entry) {
+  const location = entry.parent
+    ? `Inside ${entry.parent.name}`
+    : entry.containerId
+      ? `Container not found: ${entry.containerId}`
+      : "Not inside a container";
+
+  return `
+    <dl class="hg-sheet-inventory-facts">
+      <div>
+        <dt>Quantity</dt>
+        <dd>${entry.quantity}</dd>
+      </div>
+      <div>
+        <dt>Each</dt>
+        <dd>${escapeHtml(formatInventoryWeight(entry.individualWeight))}</dd>
+      </div>
+      <div>
+        <dt>Total</dt>
+        <dd>${escapeHtml(formatInventoryWeight(entry.lineWeight))}</dd>
+      </div>
+      <div>
+        <dt>Category</dt>
+        <dd>${escapeHtml(titleFromId(entry.category, "Item"))}</dd>
+      </div>
+      <div>
+        <dt>Location</dt>
+        <dd>${escapeHtml(location)}</dd>
+      </div>
+      <div>
+        <dt>Equipped</dt>
+        <dd>${entry.equipped ? "Yes" : "No"}</dd>
+      </div>
+      <div>
+        <dt>Attuned</dt>
+        <dd>${entry.attuned ? "Yes" : "No"}</dd>
+      </div>
+      <div>
+        <dt>Magical</dt>
+        <dd>${entry.isMagical ? "Yes" : "No"}</dd>
+      </div>
+    </dl>
+  `;
+}
+
+function renderInventoryEntry(
+  entry,
+  {
+    interactive,
+    forceOpen
+  }
+) {
+  const children = entry.children.filter(
+    (child) => child.visible
+  );
+  const badges = [
+    entry.equipped ? "Equipped" : "",
+    entry.attuned ? "Attuned" : "",
+    entry.isMagical ? "Magical" : "",
+    entry.isContainer ? "Container" : ""
+  ].filter(Boolean);
+  const content = `
+    ${renderInventoryItemFacts(entry)}
+    ${renderInventoryItemDetails(entry)}
+    ${renderInventoryItemControls(
+      entry,
+      interactive
+    )}
+  `;
+
+  if (entry.isContainer) {
+    return `
+      <details
+        class="hg-sheet-container-card"
+        data-inventory-item-id="${escapeHtml(entry.id)}"
+        data-inventory-container="${escapeHtml(entry.id)}"
+        ${forceOpen ? "open" : ""}
+      >
+        <summary>
+          <span>
+            <strong>${escapeHtml(entry.name)}</strong>
+            <small>${escapeHtml(titleFromId(entry.category, "Container"))}</small>
+          </span>
+          <span class="hg-sheet-inventory-badges">
+            ${badges.map((badge) => `
+              <span>${escapeHtml(badge)}</span>
+            `).join("")}
+          </span>
+        </summary>
+        <div class="hg-sheet-container-body">
+          ${content}
+          <section class="hg-sheet-container-contents">
+            <h3>Contents</h3>
+            ${children.length ? `
+              <div class="hg-sheet-inventory-list">
+                ${children.map((child) => {
+                  return renderInventoryEntry(
+                    child,
+                    {
+                      interactive,
+                      forceOpen
+                    }
+                  );
+                }).join("")}
+              </div>
+            ` : `
+              <p class="hg-sheet-muted">${
+                forceOpen
+                  ? "No matching contents."
+                  : "This container is empty."
+              }</p>
+            `}
+          </section>
+        </div>
+      </details>
+    `;
+  }
+
+  return `
+    <article
+      class="hg-sheet-inventory-item"
+      data-inventory-item-id="${escapeHtml(entry.id)}"
+      data-inventory-location="${escapeHtml(entry.parent?.id || "")}"
+    >
+      <header>
+        <span>
+          <strong>${escapeHtml(entry.name)}</strong>
+          <small>${escapeHtml(titleFromId(entry.category, "Item"))}</small>
+        </span>
+        <span class="hg-sheet-inventory-badges">
+          ${badges.length
+            ? badges.map((badge) => `
+                <span>${escapeHtml(badge)}</span>
+              `).join("")
+            : "<span>Carried</span>"}
+        </span>
+      </header>
+      ${content}
+    </article>
+  `;
+}
+
+function renderEquipment(character, options = {}) {
+  const interactive =
+    options.interactive === true;
+  const inventory =
+    collectCharacterInventory(
+      character,
+      {
+        search: options.search,
+        filters: options.filters
+      }
+    );
+
+  if (!inventory.total) {
     return `<p class="hg-sheet-muted">No equipment is recorded yet.</p>`;
   }
 
-  const itemById = new Map(
-    items.map((item) => [cleanText(item?.id), item])
-  );
+  const rootContainers =
+    inventory.visibleRoots.filter(
+      (entry) => entry.isContainer
+    );
+  const looseItems =
+    inventory.visibleRoots.filter(
+      (entry) => !entry.isContainer
+    );
 
   return `
-    <div class="hg-sheet-table-wrap">
-      <table class="hg-sheet-table hg-sheet-equipment-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Qty.</th>
-            <th>Weight</th>
-            <th>Status / Location</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map((item, itemIndex) => {
-            const container = itemById.get(cleanText(item?.containerId));
-            const statuses = [
-              item?.equipped ? "Equipped" : "",
-              item?.attuned ? "Attuned" : "",
-              item?.isContainer ? "Container" : "",
-              container ? `Inside ${firstText(container.name, "container")}` : "",
-              item?.notes
-            ].map((value) => cleanText(value)).filter(Boolean);
-            const weight = optionalNumber(item?.weight);
-
-            return `
-              <tr>
-                <td>
-                  <details class="hg-sheet-item-details">
-                    <summary>
-                      <strong>${escapeHtml(firstText(item?.name, "Unnamed Item"))}</strong>
-                      <small>${escapeHtml(titleFromId(item?.category, "Item"))}</small>
-                    </summary>
-                    <p>${escapeHtml(firstText(item?.notes, "No item notes."))}</p>
-                  </details>
-                </td>
-                <td>${clampInteger(item?.quantity, 1, 1)}</td>
-                <td>${weight === null ? "\u2014" : `${escapeHtml(weight)} lb.`}</td>
-                <td>
-                  <span>${escapeHtml(statuses.join(", ") || "Carried")}</span>
-                  ${interactive ? `
-                    <span class="hg-sheet-inline-actions hg-sheet-no-print">
-                      ${item?.isContainer ? "" : `
-                        <button
-                          type="button"
-                          data-character-sheet-action="toggle-item-equipped"
-                          data-item-id="${escapeHtml(cleanText(item?.id))}"
-                          data-item-index="${itemIndex}"
-                          ${cleanText(item?.containerId) ? "disabled" : ""}
-                        >${item?.equipped ? "Unequip" : "Equip"}</button>
-                      `}
-                      ${item?.isMagical && item?.requiresAttunement ? `
-                        <button
-                          type="button"
-                          data-character-sheet-action="toggle-item-attuned"
-                          data-item-id="${escapeHtml(cleanText(item?.id))}"
-                          data-item-index="${itemIndex}"
-                        >${item?.attuned ? "Unattune" : "Attune"}</button>
-                      ` : ""}
-                    </span>
-                  ` : ""}
-                </td>
-              </tr>
-            `;
-          }).join("")}
-        </tbody>
-      </table>
+    <div class="hg-sheet-inventory-toolbar hg-sheet-no-print">
+      <label>
+        <span>Search inventory</span>
+        <input
+          type="search"
+          value="${escapeHtml(inventory.search)}"
+          placeholder="Search name, category, notes, or location"
+          data-character-sheet-input="inventory-search"
+        >
+      </label>
+      <div
+        class="hg-sheet-inventory-filters"
+        aria-label="Inventory filters"
+      >
+        ${INVENTORY_FILTER_OPTIONS.map(
+          ([id, label]) => `
+            <button
+              type="button"
+              class="${inventory.filters.includes(id) ? "active" : ""}"
+              data-character-sheet-action="toggle-inventory-filter"
+              data-inventory-filter="${escapeHtml(id)}"
+              aria-pressed="${inventory.filters.includes(id) ? "true" : "false"}"
+            >${escapeHtml(label)}</button>
+          `
+        ).join("")}
+      </div>
+      <p>
+        Showing ${inventory.matchedCount} of ${inventory.total} item${inventory.total === 1 ? "" : "s"}
+      </p>
     </div>
+
+    ${inventory.visibleRoots.length ? `
+      <div class="hg-sheet-inventory-sections">
+        ${rootContainers.length ? `
+          <section data-inventory-section="containers">
+            <h3>Containers</h3>
+            <div class="hg-sheet-inventory-list">
+              ${rootContainers.map((entry) => {
+                return renderInventoryEntry(
+                  entry,
+                  {
+                    interactive,
+                    forceOpen:
+                      inventory
+                        .hasActiveFilters
+                  }
+                );
+              }).join("")}
+            </div>
+          </section>
+        ` : ""}
+
+        ${looseItems.length ? `
+          <section data-inventory-section="uncontained">
+            <h3>Not in a Container</h3>
+            <div class="hg-sheet-inventory-list">
+              ${looseItems.map((entry) => {
+                return renderInventoryEntry(
+                  entry,
+                  {
+                    interactive,
+                    forceOpen:
+                      inventory
+                        .hasActiveFilters
+                  }
+                );
+              }).join("")}
+            </div>
+          </section>
+        ` : ""}
+      </div>
+    ` : `
+      <p class="hg-sheet-action-empty">
+        No inventory items match the current search and filters.
+      </p>
+    `}
   `;
 }
 
@@ -3826,7 +4332,11 @@ function getInventoryWeight(character) {
     }, 0);
 }
 
-function renderInventoryPanel(character, summary) {
+function renderInventoryPanel(
+  character,
+  summary,
+  options = {}
+) {
   const strength = getAbilityScore(
     character,
     "str"
@@ -3871,7 +4381,9 @@ function renderInventoryPanel(character, summary) {
         <h2>Equipment &amp; Containers</h2>
         <p class="hg-sheet-section-kicker">Expand an item for notes. Equip and attune changes save to this character.</p>
         ${renderEquipment(character, {
-          interactive: summary.canTrack
+          interactive: summary.canTrack,
+          search: options.search,
+          filters: options.filters
         })}
       </article>
       <div class="hg-sheet-card-grid">
@@ -6459,13 +6971,195 @@ function ensureStyles() {
       font-size: 11px !important;
     }
 
-    .hg-sheet-item-details summary {
+    .hg-sheet-inventory-toolbar {
+      display: grid;
+      grid-template-columns: minmax(230px, 0.75fr) minmax(0, 1.5fr) auto;
+      gap: 10px 14px;
+      align-items: end;
+      margin-bottom: 14px;
+      padding: 12px;
+      border: 1px solid rgba(127, 153, 255, 0.18);
+      border-radius: 12px;
+      background: rgba(7, 11, 27, 0.48);
+    }
+
+    .hg-sheet-inventory-toolbar label {
+      display: grid;
+      min-width: 0;
+      gap: 5px;
+    }
+
+    .hg-sheet-inventory-toolbar label > span {
+      color: #aeb8df;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .hg-sheet-inventory-toolbar p {
+      align-self: center;
+      color: #9fabd6;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .hg-sheet-inventory-filters,
+    .hg-sheet-inventory-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .hg-sheet-inventory-filters button {
+      min-height: 34px;
+      padding: 6px 10px !important;
+      border-color: rgba(127, 153, 255, 0.28) !important;
+      color: #dbe3ff !important;
+      background: rgba(22, 31, 62, 0.82) !important;
+      font-size: 11px !important;
+    }
+
+    .hg-sheet-inventory-filters button.active {
+      border-color: #879cff !important;
+      color: #fff !important;
+      background: linear-gradient(135deg, #4b5fd8, #764bb4) !important;
+    }
+
+    .hg-sheet-inventory-sections,
+    .hg-sheet-inventory-sections > section,
+    .hg-sheet-inventory-list {
+      display: grid;
+      min-width: 0;
+      gap: 10px;
+    }
+
+    .hg-sheet-inventory-sections {
+      gap: 16px;
+    }
+
+    .hg-sheet-inventory-sections h3,
+    .hg-sheet-container-contents h3 {
+      margin: 0;
+      color: #dce4ff;
+      font-size: 14px;
+      letter-spacing: 0.035em;
+    }
+
+    .hg-sheet-container-card,
+    .hg-sheet-inventory-item {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid rgba(127, 153, 255, 0.2);
+      border-radius: 12px;
+      background: rgba(7, 11, 27, 0.62);
+    }
+
+    .hg-sheet-container-card > summary,
+    .hg-sheet-inventory-item > header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 7px 12px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .hg-sheet-container-card > summary {
       cursor: pointer;
     }
 
-    .hg-sheet-item-details summary strong,
-    .hg-sheet-item-details summary small {
-      display: block;
+    .hg-sheet-container-card > summary > span:first-child,
+    .hg-sheet-inventory-item > header > span:first-child {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    .hg-sheet-container-card > summary strong,
+    .hg-sheet-inventory-item > header strong {
+      color: #f2f5ff;
+      overflow-wrap: anywhere;
+    }
+
+    .hg-sheet-container-card > summary small,
+    .hg-sheet-inventory-item > header small {
+      color: #9fabd6;
+      font-size: 11px;
+    }
+
+    .hg-sheet-inventory-badges > span {
+      padding: 3px 7px;
+      border: 1px solid rgba(127, 153, 255, 0.22);
+      border-radius: 999px;
+      color: #cfd8fb;
+      background: rgba(75, 95, 216, 0.12);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .hg-sheet-container-body {
+      display: grid;
+      gap: 10px;
+      margin-top: 11px;
+      padding-top: 11px;
+      border-top: 1px solid rgba(127, 153, 255, 0.14);
+    }
+
+    .hg-sheet-container-contents {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+      padding: 10px;
+      border-left: 3px solid rgba(135, 156, 255, 0.32);
+      border-radius: 0 10px 10px 0;
+      background: rgba(38, 49, 94, 0.12);
+    }
+
+    .hg-sheet-inventory-facts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+      gap: 6px;
+      margin: 10px 0 0;
+    }
+
+    .hg-sheet-inventory-facts > div {
+      min-width: 0;
+      padding: 7px 8px;
+      border: 1px solid rgba(127, 153, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(9, 14, 31, 0.56);
+    }
+
+    .hg-sheet-inventory-facts dt {
+      color: #8f9ac5;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hg-sheet-inventory-facts dd {
+      margin: 2px 0 0;
+      color: #e2e7fa;
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .hg-sheet-inventory-item {
+      display: grid;
+      gap: 9px;
+    }
+
+    .hg-sheet-item-details {
+      border-top: 1px solid rgba(127, 153, 255, 0.12);
+      padding-top: 7px;
+    }
+
+    .hg-sheet-item-details summary {
+      width: fit-content;
+      color: #9eb1ff;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
     }
 
     .hg-sheet-item-details p {
@@ -6505,6 +7199,15 @@ function ensureStyles() {
 
       .hg-sheet-vitals-layout {
         grid-template-columns: 1fr;
+      }
+
+      .hg-sheet-inventory-toolbar {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+
+      .hg-sheet-inventory-toolbar p {
+        white-space: normal;
       }
     }
 
@@ -6585,6 +7288,14 @@ function ensureStyles() {
         flex: 1 1 105px;
       }
 
+      .hg-sheet-inventory-filters button {
+        flex: 1 1 105px;
+      }
+
+      .hg-sheet-inventory-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .hg-sheet-spell-facts {
         grid-template-columns: 1fr;
       }
@@ -6649,12 +7360,20 @@ function ensureStyles() {
       .hg-sheet-callout,
       .hg-sheet-level-order li,
       .hg-sheet-resource-row,
+      .hg-sheet-container-card,
+      .hg-sheet-inventory-item,
+      .hg-sheet-inventory-facts > div,
       .hg-sheet-currency-grid > div,
       .hg-sheet-slot-grid > div {
         color: #111 !important;
         border-color: #777 !important;
         background: #fff !important;
         box-shadow: none !important;
+      }
+
+      .hg-sheet-container-card > .hg-sheet-container-body,
+      .hg-sheet-item-details > p {
+        display: block !important;
       }
 
       .hg-sheet-card,
@@ -6665,6 +7384,8 @@ function ensureStyles() {
       .hg-sheet-action-resource,
       .hg-sheet-feature-card,
       .hg-sheet-feature-resource,
+      .hg-sheet-container-card,
+      .hg-sheet-inventory-item,
       .hg-sheet-spell-library,
       .hg-sheet-spell-card,
       .hg-sheet-resource-row,
@@ -6686,6 +7407,9 @@ function ensureStyles() {
       .hg-sheet-feature-card > header strong,
       .hg-sheet-feature-choices strong,
       .hg-sheet-feature-resource strong,
+      .hg-sheet-container-card > summary strong,
+      .hg-sheet-inventory-item > header strong,
+      .hg-sheet-inventory-facts dd,
       .hg-sheet-spell-card > header strong,
       .hg-sheet-spell-facts dd,
       .hg-sheet-resource-row strong {
@@ -6711,6 +7435,10 @@ function ensureStyles() {
       .hg-sheet-feature-choices,
       .hg-sheet-feature-resource span,
       .hg-sheet-feature-description p,
+      .hg-sheet-container-card > summary small,
+      .hg-sheet-inventory-item > header small,
+      .hg-sheet-inventory-facts dt,
+      .hg-sheet-item-details p,
       .hg-sheet-spell-card > header > div:first-child span,
       .hg-sheet-spell-summary,
       .hg-sheet-spell-empty,
@@ -6883,6 +7611,8 @@ export function createCharacterSheetView(options = {}) {
     root: null,
     character: {},
     activeTab: "actions",
+    inventorySearch: "",
+    inventoryFilters: [],
     spellSearch: "",
     spellFilters: [],
     isOpen: false,
@@ -6954,6 +7684,22 @@ export function createCharacterSheetView(options = {}) {
         : asArray(
             renderOptions.spellFilters
           );
+    const inventorySearch =
+      renderOptions.inventorySearch ===
+        undefined
+        ? state.inventorySearch
+        : cleanText(
+            renderOptions
+              .inventorySearch
+          );
+    const inventoryFilters =
+      renderOptions.inventoryFilters ===
+        undefined
+        ? state.inventoryFilters
+        : asArray(
+            renderOptions
+              .inventoryFilters
+          );
     const portraitUrl =
       presentation.portraitUrl;
     const classLine =
@@ -7011,7 +7757,11 @@ export function createCharacterSheetView(options = {}) {
       ),
       inventory: () => renderInventoryPanel(
         safeCharacter,
-        mainSummary
+        mainSummary,
+        {
+          search: inventorySearch,
+          filters: inventoryFilters
+        }
       ),
       features: () => renderFeaturesPanel(
         safeCharacter,
@@ -7167,6 +7917,10 @@ export function createCharacterSheetView(options = {}) {
 
     const html = renderCharacterSheetHtml(state.character, {
       activeTab: state.activeTab,
+      inventorySearch:
+        state.inventorySearch,
+      inventoryFilters:
+        state.inventoryFilters,
       spellSearch: state.spellSearch,
       spellFilters:
         state.spellFilters
@@ -7320,6 +8074,40 @@ export function createCharacterSheetView(options = {}) {
             )
           : [
               ...state.spellFilters,
+              filter
+            ];
+      render();
+      return;
+    }
+
+    if (
+      action ===
+      "toggle-inventory-filter"
+    ) {
+      const filter = normalizeKey(
+        button.dataset.inventoryFilter
+      );
+      const allowedFilters = new Set(
+        INVENTORY_FILTER_OPTIONS.map(
+          ([id]) => id
+        )
+      );
+
+      if (!allowedFilters.has(filter)) {
+        return;
+      }
+
+      state.inventoryFilters =
+        state.inventoryFilters.includes(
+          filter
+        )
+          ? state.inventoryFilters.filter(
+              (entry) => {
+                return entry !== filter;
+              }
+            )
+          : [
+              ...state.inventoryFilters,
               filter
             ];
       render();
@@ -7535,7 +8323,10 @@ export function createCharacterSheetView(options = {}) {
 
   function handleInput(event) {
     const input = event.target.closest(
-      '[data-character-sheet-input="spell-search"]'
+      [
+        '[data-character-sheet-input="spell-search"]',
+        '[data-character-sheet-input="inventory-search"]'
+      ].join(", ")
     );
 
     if (
@@ -7545,13 +8336,25 @@ export function createCharacterSheetView(options = {}) {
       return;
     }
 
-    state.spellSearch =
-      cleanText(input.value);
+    const inputKind = cleanText(
+      input.dataset.characterSheetInput
+    );
+
+    if (
+      inputKind ===
+      "inventory-search"
+    ) {
+      state.inventorySearch =
+        cleanText(input.value);
+    } else {
+      state.spellSearch =
+        cleanText(input.value);
+    }
     render();
 
     const replacement =
       state.root.querySelector(
-        '[data-character-sheet-input="spell-search"]'
+        `[data-character-sheet-input="${inputKind}"]`
       );
 
     if (replacement) {
@@ -7594,6 +8397,8 @@ export function createCharacterSheetView(options = {}) {
     // the live Character Creator draft passed by the caller.
     state.character = cloneSnapshot(source);
     state.activeTab = "actions";
+    state.inventorySearch = "";
+    state.inventoryFilters = [];
     state.spellSearch = "";
     state.spellFilters = [];
     state.isOpen = true;
