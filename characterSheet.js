@@ -971,8 +971,8 @@ function normalizeContentEntries(values, fallbackPrefix) {
           value.subclassName,
           value.speciesName,
           value.backgroundName,
-          value.featName,
-          value.source
+          value.source,
+          value.featName
         ),
         levelGained:
           levelGained === undefined
@@ -1139,7 +1139,17 @@ function formatChoiceMap(value) {
         .filter(Boolean);
 
       return values.length
-        ? [`${titleFromId(key)}: ${values.join(", ")}`]
+        ? [
+            `${
+              titleFromId(
+                cleanText(key)
+                  .replace(
+                    /([a-z0-9])([A-Z])/g,
+                    "$1-$2"
+                  )
+              )
+            }: ${values.join(", ")}`
+          ]
         : [];
     })
     .join("; ");

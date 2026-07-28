@@ -367,6 +367,12 @@ test(
     await expect(warCasterFeature)
       .toContainText("Level 4");
     await expect(warCasterFeature)
+      .toContainText("Level 4 feat");
+    await expect(warCasterFeature)
+      .toContainText(
+        "Concentration Technique: Arcane focus"
+      );
+    await expect(warCasterFeature)
       .toContainText(
         "1 / 1 uses remaining"
       );

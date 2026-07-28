@@ -888,8 +888,10 @@ test(
             "Maintain concentration under pressure.",
           description:
             "You have practiced spellcasting in combat.",
-          choicesText:
-            "Technique: Arcane focus",
+          choices: {
+            concentrationTechnique:
+              "Arcane focus"
+          },
           levelGained: 4,
           sourceLabel: "Level 4 feat"
         }
@@ -978,7 +980,12 @@ test(
     assert.equal(
       groups[4].entries[0]
         .choices,
-      "Technique: Arcane focus"
+      "Concentration Technique: Arcane focus"
+    );
+    assert.equal(
+      groups[4].entries[0]
+        .source,
+      "Level 4 feat"
     );
 
     const html =
