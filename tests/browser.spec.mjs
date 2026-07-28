@@ -81,7 +81,7 @@ test(
   "playable character sheet tracks combat and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-inventory-20260728",
+      "ai-testing/playable-character-sheet.html?release=playable-capacity-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -259,6 +259,38 @@ test(
         "Equipment & Containers"
       )
     ).toBeVisible();
+    await expect(
+      screenPanel.getByText(
+        "Carried Weight",
+        { exact: true }
+      ).locator("..")
+    ).toContainText(
+      "43 lb."
+    );
+    await expect(
+      screenPanel.getByText(
+        "Capacity",
+        { exact: true }
+      ).locator("..")
+    ).toContainText(
+      "150 lb."
+    );
+    await expect(
+      screenPanel.getByText(
+        "Remaining Capacity",
+        { exact: true }
+      ).locator("..")
+    ).toContainText(
+      "107 lb."
+    );
+    await expect(
+      screenPanel.getByText(
+        "Encumbrance",
+        { exact: true }
+      ).locator("..")
+    ).toContainText(
+      "Within capacity"
+    );
     const packContainer =
       screenPanel.locator(
         '[data-inventory-container="pack"]'

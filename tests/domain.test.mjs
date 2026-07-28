@@ -32,6 +32,10 @@ import {
   buildCharacterSheetPresentation
 } from "../characterCreator/sheetPresentation.js";
 import {
+  calculateCharacterCarryingCapacity,
+  calculateRuleCarryingCapacity
+} from "../characterCreator/rulesMath.js";
+import {
   applyGameplayAction,
   ensureGameplayState
 } from "../characterSheet/gameplayState.js";
@@ -1280,6 +1284,178 @@ test(
     assert.match(
       html,
       /Choices:/
+    );
+  }
+);
+
+test(
+  "carrying capacity is shared, size-aware, mechanic-aware, and counts container contents once",
+  () => {
+    for (
+      const [
+        size,
+        expectedCapacity
+      ] of [
+        ["medium", 150],
+        ["small", 150],
+        ["large", 300]
+      ]
+    ) {
+      assert.equal(
+        calculateRuleCarryingCapacity({
+          strength: 10,
+          size
+        }).carryingCapacity,
+        expectedCapacity
+      );
+    }
+
+    const powerfulBuildCharacter = {
+      identity: {
+        size: "medium"
+      },
+      abilities: {
+        scores: {
+          str: 10
+        }
+      },
+      features: {
+        speciesTraits: [
+          {
+            id: "powerful-build",
+            name: "Powerful Build"
+          }
+        ]
+      }
+    };
+    const powerfulBuild =
+      calculateCharacterCarryingCapacity(
+        powerfulBuildCharacter
+      );
+
+    assert.equal(
+      powerfulBuild.carryingCapacity,
+      300
+    );
+    assert.equal(
+      powerfulBuild.effectiveSize,
+      "large"
+    );
+    assert.equal(
+      powerfulBuild.powerfulBuild,
+      true
+    );
+
+    const adjusted =
+      calculateCharacterCarryingCapacity({
+        identity: {
+          size: "medium"
+        },
+        abilities: {
+          scores: {
+            str: 10
+          }
+        },
+        mechanics: {
+          effects: [
+            {
+              type:
+                "carryingCapacityMultiplier",
+              value: 2
+            },
+            {
+              type:
+                "carryingCapacityBonus",
+              value: 25
+            }
+          ]
+        }
+      });
+
+    assert.equal(
+      adjusted.carryingCapacity,
+      325
+    );
+    assert.equal(
+      adjusted.capacityMultiplier,
+      2
+    );
+    assert.equal(
+      adjusted.capacityBonus,
+      25
+    );
+
+    const containerCharacter = {
+      id:
+        "priority-five-capacity",
+      identity: {
+        size: "medium"
+      },
+      abilities: {
+        scores: {
+          str: 10
+        }
+      },
+      equipment: {
+        items: [
+          {
+            id: "pack",
+            name: "Pack",
+            weight: 5,
+            quantity: 1,
+            isContainer: true
+          },
+          {
+            id: "pouch",
+            name: "Pouch",
+            weight: 1,
+            quantity: 1,
+            isContainer: true,
+            containerId: "pack"
+          },
+          {
+            id: "rations",
+            name: "Rations",
+            weight: 0.5,
+            quantity: 2,
+            containerId: "pouch"
+          }
+        ]
+      }
+    };
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          containerCharacter,
+          {
+            activeTab:
+              "inventory",
+            sheetContext: {
+              characterId:
+                containerCharacter.id
+            }
+          }
+        );
+    const screenHtml =
+      html.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.match(
+      screenHtml,
+      /<span>Carried Weight<\/span>\s*<strong>7 lb\.<\/strong>/
+    );
+    assert.match(
+      screenHtml,
+      /<span>Capacity<\/span>\s*<strong>150 lb\.<\/strong>/
+    );
+    assert.match(
+      screenHtml,
+      /<span>Remaining Capacity<\/span>\s*<strong>143 lb\.<\/strong>/
+    );
+    assert.match(
+      screenHtml,
+      /<span>Encumbrance<\/span>\s*<strong class="hg-sheet-stat-text">Within capacity<\/strong>/
     );
   }
 );

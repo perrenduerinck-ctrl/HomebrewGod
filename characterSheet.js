@@ -15,6 +15,9 @@ import {
 import {
   calculateInventoryLineWeight
 } from "./characterCreator/inventoryEquipment.js";
+import {
+  calculateCharacterCarryingCapacity
+} from "./characterCreator/rulesMath.js";
 
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },
@@ -4319,16 +4322,14 @@ function renderAbilitiesPanel(character, summary) {
 function getInventoryWeight(character) {
   return asArray(character?.equipment?.items)
     .reduce((total, item) => {
-      const weight = optionalNumber(item?.weight);
-      const quantity = clampInteger(
-        item?.quantity,
-        1,
-        1
-      );
+      const weight =
+        calculateInventoryLineWeight(
+          item
+        );
 
       return weight === null
         ? total
-        : total + (weight * quantity);
+        : total + weight;
     }, 0);
 }
 
@@ -4337,15 +4338,25 @@ function renderInventoryPanel(
   summary,
   options = {}
 ) {
-  const strength = getAbilityScore(
-    character,
-    "str"
-  );
-  const capacity = Math.max(
-    0,
-    Math.round(strength * 15)
-  );
+  const carrying =
+    calculateCharacterCarryingCapacity(
+      character
+    );
+  const capacity =
+    carrying.carryingCapacity;
   const weight = getInventoryWeight(character);
+  const remaining = Math.max(
+    0,
+    capacity - weight
+  );
+  const encumbranceStatus =
+    weight > capacity
+      ? `Over capacity by ${Number(
+          (weight - capacity).toFixed(2)
+        )} lb.`
+      : weight === capacity
+        ? "At capacity"
+        : "Within capacity";
   const attuned = asArray(
     character?.equipment?.items
   ).filter((item) => {
@@ -4361,11 +4372,15 @@ function renderInventoryPanel(
         </article>
         <article class="hg-sheet-stat-card">
           <span>Capacity</span>
-          <strong>${capacity} lb.</strong>
+          <strong>${Number(capacity.toFixed(2))} lb.</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Remaining Capacity</span>
+          <strong>${Number(remaining.toFixed(2))} lb.</strong>
         </article>
         <article class="hg-sheet-stat-card">
           <span>Encumbrance</span>
-          <strong class="hg-sheet-stat-text">${weight > capacity ? "Over capacity" : "Within capacity"}</strong>
+          <strong class="hg-sheet-stat-text">${encumbranceStatus}</strong>
         </article>
         <article class="hg-sheet-stat-card">
           <span>Attunement</span>

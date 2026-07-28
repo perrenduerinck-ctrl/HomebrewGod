@@ -92,6 +92,7 @@ import {
 } from "./characterCreator/normalization.js";
 import { escapeHtml } from "./characterCreator/rendering.js";
 import {
+  calculateCharacterCarryingCapacity,
   calculateRuleCarryingCapacity,
   calculateRuleFixedAverageHp,
   calculateRulePassiveScore,
@@ -43071,17 +43072,9 @@ export function createCharacterCreator(options = {}) {
       getSection15AttunedItemCount();
 
     const carrying =
-      calculateRuleCarryingCapacity({
-        strength:
-          creatorState.draft
-            .abilities
-            .scores
-            .str,
-        size:
-          creatorState.draft
-            .identity
-            .size
-      });
+      calculateCharacterCarryingCapacity(
+        creatorState.draft
+      );
 
     const categories = [
       {
@@ -49010,17 +49003,9 @@ export function createCharacterCreator(options = {}) {
   }
 
   function getSection17CarryingCapacity() {
-    return calculateRuleCarryingCapacity({
-      strength:
-        creatorState.draft
-          .abilities
-          .scores
-          .str,
-      size:
-        creatorState.draft
-          .identity
-          .size
-    }).carryingCapacity;
+    return calculateCharacterCarryingCapacity(
+      creatorState.draft
+    ).carryingCapacity;
   }
 
   function getSection17InventoryWeight() {
@@ -49750,12 +49735,9 @@ export function createCharacterCreator(options = {}) {
       );
 
     const carrying =
-      calculateRuleCarryingCapacity({
-        strength:
-          draft.abilities.scores.str,
-        size:
-          draft.identity.size
-      });
+      calculateCharacterCarryingCapacity(
+        draft
+      );
 
     if (
       inventoryWeight.unknownCount === 0 &&
