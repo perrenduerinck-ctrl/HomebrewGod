@@ -9,6 +9,9 @@ import {
 import {
   STANDARD_CONDITIONS
 } from "./characterSheet/gameplayState.js";
+import {
+  getDefaultSpellById
+} from "./defaultSpells.js";
 
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },
@@ -3575,53 +3578,738 @@ function renderStoryPanel(character) {
   `;
 }
 
-function collectSpellIds(source) {
+const SPELL_STATUS_ORDER = Object.freeze([
+  "Prepared",
+  "Always prepared",
+  "Known",
+  "Spellbook",
+  "Innate",
+  "Species-granted",
+  "Feat-granted",
+  "Subclass-granted",
+  "Mystic Arcanum",
+  "Custom spell"
+]);
+
+const SPELL_FILTER_OPTIONS = Object.freeze([
+  ["prepared", "Prepared"],
+  ["known", "Known"],
+  ["concentration", "Concentration"],
+  ["ritual", "Ritual"],
+  ["action", "Action"],
+  ["bonus-action", "Bonus Action"],
+  ["reaction", "Reaction"],
+  ["damage", "Damage"],
+  ["healing", "Healing"]
+]);
+
+const SPELL_REFERENCE_ALIASES = Object.freeze({
+  "melfs-acid-arrow": "acid-arrow",
+  "melf-s-acid-arrow": "acid-arrow",
+  "leomunds-secret-chest": "secret-chest",
+  "mordenkainens-faithful-hound": "faithful-hound",
+  "mordenkainens-private-sanctum": "private-sanctum",
+  "otilukes-resilient-sphere": "resilient-sphere",
+  "bigbys-hand": "arcane-hand"
+});
+
+function getSpellReferenceId(reference) {
+  const rawId = normalizeKey(
+    isRecord(reference)
+      ? firstText(
+          reference.spellId,
+          reference.id,
+          reference.name
+        )
+      : reference
+  );
+
+  return SPELL_REFERENCE_ALIASES[rawId] || rawId;
+}
+
+function getSpellLevelLabel(level) {
+  const safeLevel = clampInteger(level, 0, 0);
+  return safeLevel === 0
+    ? "Cantrip"
+    : `Level ${Math.min(9, safeLevel)}`;
+}
+
+function getSpellGroupLabel(level) {
+  return finiteNumber(level, 0) === 0
+    ? "Cantrips"
+    : `Level ${finiteNumber(level, 0)}`;
+}
+
+function formatSpellComponents(components) {
+  if (typeof components === "string") {
+    return cleanText(components, "Not recorded");
+  }
+
+  if (!isRecord(components)) {
+    return "Not recorded";
+  }
+
+  const values = [];
+
+  if (components.verbal === true) {
+    values.push("V");
+  }
+  if (components.somatic === true) {
+    values.push("S");
+  }
+  if (components.material === true) {
+    values.push(
+      components.materialText
+        ? `M (${components.materialText})`
+        : "M"
+    );
+  }
+
+  return values.join(", ") || "Not recorded";
+}
+
+function spellHasEffect(spell, effectType) {
+  const normalizedType = normalizeKey(effectType);
+
+  if (
+    asArray(spell?.effects).some((effect) => {
+      return normalizeKey(effect?.type) === normalizedType;
+    })
+  ) {
+    return true;
+  }
+
+  const value = spell?.[normalizedType];
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (isRecord(value)) {
+    return Object.keys(value).length > 0;
+  }
+
+  if (cleanText(value)) {
+    return true;
+  }
+
+  return asArray(spell?.tags).some((tag) => {
+    return normalizeKey(tag) === normalizedType;
+  });
+}
+
+function getSpellActionKind(castingTime) {
+  const normalized = cleanText(castingTime).toLowerCase();
+
+  if (normalized.includes("bonus action")) {
+    return "bonus-action";
+  }
+
+  if (normalized.includes("reaction")) {
+    return "reaction";
+  }
+
+  return normalized.includes("action")
+    ? "action"
+    : "";
+}
+
+function createSpellCollectionRecord(reference) {
+  const referenceRecord = isRecord(reference)
+    ? reference
+    : {};
+  const id = getSpellReferenceId(reference);
+  const catalogSpell = getDefaultSpellById(id);
+  const spell = catalogSpell || referenceRecord;
+  const level = Math.max(
+    0,
+    Math.min(
+      9,
+      clampInteger(
+        firstText(
+          spell.level,
+          referenceRecord.spellLevel
+        ),
+        0,
+        0
+      )
+    )
+  );
+
   return {
-    cantrips: asArray(source?.cantripIds),
-    known: asArray(source?.knownSpellIds),
-    prepared: asArray(source?.preparedSpellIds),
-    spellbook: asArray(source?.spellbookSpellIds),
-    alwaysPrepared: asArray(source?.alwaysPreparedSpellIds),
-    arcanum: isRecord(source?.mysticArcanumSpellIds)
-      ? Object.values(source.mysticArcanumSpellIds)
-      : []
+    ...spell,
+    id: firstText(
+      catalogSpell?.id,
+      id,
+      `spell-${normalizeKey(spell.name)}`
+    ),
+    name: firstText(
+      catalogSpell?.name,
+      spell.name,
+      referenceRecord.spellName,
+      titleFromId(id, "Unnamed Spell")
+    ),
+    level,
+    school: firstText(spell.school, "unknown"),
+    castingTime: firstText(
+      spell.castingTime,
+      "Not recorded"
+    ),
+    range: firstText(spell.range, "Not recorded"),
+    components:
+      spell.components ??
+      referenceRecord.components ??
+      "",
+    duration: firstText(
+      spell.duration,
+      "Not recorded"
+    ),
+    concentration:
+      spell.concentration === true,
+    ritual: spell.ritual === true,
+    summary: firstText(
+      spell.summary,
+      spell.description
+    ),
+    description: firstText(
+      spell.description,
+      spell.summary
+    ),
+    higherLevelDescription: firstText(
+      spell.higherLevelDescription,
+      spell.higherLevel
+    ),
+    rulesSource: firstText(
+      spell.sourceLabel,
+      spell.source
+    ),
+    statuses: new Set(),
+    sources: new Set()
   };
 }
 
-function renderSpellNameList(values, fallback = "None recorded") {
-  const names = asArray(values)
-    .map((value) => {
-      if (isRecord(value)) {
-        return firstText(value.name, titleFromId(value.id, "Spell"));
-      }
+function addSpellReference(
+  records,
+  reference,
+  {
+    statuses = [],
+    sources = []
+  } = {}
+) {
+  const id = getSpellReferenceId(reference);
 
-      return titleFromId(value, "Spell");
-    })
-    .filter(Boolean);
+  if (!id) {
+    return;
+  }
 
-  return names.length ? names.join(", ") : fallback;
+  let spell = records.get(id);
+
+  if (!spell) {
+    spell = createSpellCollectionRecord(reference);
+    records.set(id, spell);
+  } else if (
+    isRecord(reference) &&
+    !getDefaultSpellById(id)
+  ) {
+    const merged = createSpellCollectionRecord({
+      ...spell,
+      ...reference,
+      statuses: undefined,
+      sources: undefined
+    });
+    merged.statuses = spell.statuses;
+    merged.sources = spell.sources;
+    spell = merged;
+    records.set(id, spell);
+  }
+
+  statuses
+    .map(cleanText)
+    .filter(Boolean)
+    .forEach((status) => {
+      spell.statuses.add(status);
+    });
+
+  sources
+    .map(cleanText)
+    .filter(Boolean)
+    .forEach((source) => {
+      spell.sources.add(source);
+    });
 }
 
-function renderSpellSource(source, fallbackKey) {
-  const spells = collectSpellIds(source);
+function getClassSpellSourceLabel(source, fallbackKey) {
   const classLabel = firstText(
     source?.className,
-    titleFromId(source?.classId || fallbackKey, "Spellcasting Source")
+    titleFromId(
+      source?.classId || fallbackKey,
+      "Spellcasting"
+    )
   );
-  const subclass = firstText(source?.subclassName);
+  const subclassLabel = firstText(
+    source?.subclassName
+  );
 
+  return subclassLabel
+    ? `${classLabel} \u2014 ${subclassLabel}`
+    : classLabel;
+}
+
+export function collectCharacterSpells(character) {
+  const magic = isRecord(character?.magic)
+    ? character.magic
+    : {};
+  const records = new Map();
+  const classSources = isRecord(magic.classSources)
+    ? Object.entries(magic.classSources)
+    : [];
+
+  const addMany = (
+    references,
+    statuses,
+    sources
+  ) => {
+    asArray(references).forEach((reference) => {
+      addSpellReference(
+        records,
+        reference,
+        { statuses, sources }
+      );
+    });
+  };
+
+  addMany(
+    magic.knownSpellIds,
+    ["Known"],
+    ["Spellcasting"]
+  );
+  addMany(
+    magic.preparedSpellIds,
+    ["Prepared"],
+    ["Spellcasting"]
+  );
+
+  classSources.forEach(
+    ([sourceKey, source]) => {
+      const sourceLabel =
+        getClassSpellSourceLabel(
+          source,
+          sourceKey
+        );
+      const subclassLabel = firstText(
+        source?.subclassName
+      );
+      const subclassStatuses =
+        subclassLabel
+          ? ["Subclass-granted"]
+          : [];
+
+      addMany(
+        source?.cantripIds,
+        ["Known"],
+        [sourceLabel]
+      );
+      addMany(
+        source?.knownSpellIds,
+        ["Known"],
+        [sourceLabel]
+      );
+      addMany(
+        source?.preparedSpellIds,
+        ["Prepared"],
+        [sourceLabel]
+      );
+      addMany(
+        source?.spellbookSpellIds,
+        ["Spellbook"],
+        [sourceLabel]
+      );
+      addMany(
+        source?.alwaysPreparedSpellIds,
+        [
+          "Prepared",
+          "Always prepared",
+          ...subclassStatuses
+        ],
+        [sourceLabel]
+      );
+      addMany(
+        source?.subclassSpellIds,
+        [
+          "Subclass-granted",
+          "Always prepared",
+          "Prepared"
+        ],
+        [sourceLabel]
+      );
+      addMany(
+        isRecord(
+          source?.mysticArcanumSpellIds
+        )
+          ? Object.values(
+              source.mysticArcanumSpellIds
+            )
+          : [],
+        ["Known", "Mystic Arcanum"],
+        [sourceLabel]
+      );
+
+      const expandedSpells = isRecord(
+        source?.expandedSpells
+      )
+        ? Object.values(
+            source.expandedSpells
+          ).flat()
+        : [];
+
+      expandedSpells.forEach((reference) => {
+        addSpellReference(
+          records,
+          reference,
+          {
+            statuses: [
+              "Subclass-granted",
+              ...(
+                reference
+                  ?.alwaysPrepared === true
+                  ? [
+                      "Prepared",
+                      "Always prepared"
+                    ]
+                  : []
+              )
+            ],
+            sources: [sourceLabel]
+          }
+        );
+      });
+    }
+  );
+
+  asArray(magic.innateSpells)
+    .forEach((spell) => {
+      const source = firstText(
+        spell?.sourceLabel,
+        spell?.sourceName,
+        spell?.innateSource,
+        spell?.source,
+        "Innate magic"
+      );
+      const isSpeciesSpell =
+        /species|ancestry|race/i.test(
+          [
+            spell?.sourceType,
+            spell?.source,
+            spell?.innateSource
+          ].join(" ")
+        );
+
+      addSpellReference(
+        records,
+        spell,
+        {
+          statuses: [
+            "Innate",
+            ...(
+              isSpeciesSpell
+                ? ["Species-granted"]
+                : []
+            )
+          ],
+          sources: [source]
+        }
+      );
+    });
+
+  const featRecords =
+    getFeatSpellRecords(character);
+
+  featRecords.forEach((record) => {
+    addSpellReference(
+      records,
+      firstText(
+        record?.spellId,
+        record?.spellName
+      ),
+      {
+        statuses: ["Feat-granted"],
+        sources: [
+          firstText(
+            record?.featName,
+            titleFromId(
+              record?.featId,
+              "Feat"
+            )
+          )
+        ]
+      }
+    );
+  });
+
+  if (isRecord(magic.featSources)) {
+    Object.entries(magic.featSources)
+      .forEach(([sourceKey, source]) => {
+        const sourceLabel = firstText(
+          source?.featName,
+          titleFromId(
+            source?.featId || sourceKey,
+            "Feat"
+          )
+        );
+
+        addMany(
+          source?.spellIds,
+          ["Feat-granted"],
+          [sourceLabel]
+        );
+        asArray(source?.grants)
+          .forEach((grant) => {
+            addSpellReference(
+              records,
+              firstText(
+                grant?.spellId,
+                grant?.id,
+                grant?.name
+              ),
+              {
+                statuses: [
+                  "Feat-granted"
+                ],
+                sources: [sourceLabel]
+              }
+            );
+          });
+      });
+  }
+
+  asArray(magic.customSpells)
+    .forEach((spell) => {
+      addSpellReference(
+        records,
+        spell,
+        {
+          statuses: ["Custom spell"],
+          sources: [
+            firstText(
+              spell?.sourceLabel,
+              spell?.sourceName,
+              spell?.source,
+              "Custom spell"
+            )
+          ]
+        }
+      );
+    });
+
+  return [...records.values()]
+    .map((spell) => {
+      const statuses =
+        SPELL_STATUS_ORDER.filter(
+          (status) => {
+            return spell.statuses.has(
+              status
+            );
+          }
+        );
+      const sources = [
+        ...spell.sources
+      ];
+      const actionKind =
+        getSpellActionKind(
+          spell.castingTime
+        );
+
+      return {
+        ...spell,
+        statuses,
+        sources,
+        prepared:
+          statuses.includes(
+            "Prepared"
+          ) ||
+          statuses.includes(
+            "Always prepared"
+          ),
+        known:
+          statuses.includes("Known"),
+        actionKind,
+        dealsDamage:
+          spellHasEffect(
+            spell,
+            "damage"
+          ),
+        heals:
+          spellHasEffect(
+            spell,
+            "healing"
+          )
+      };
+    })
+    .sort((left, right) => {
+      return (
+        left.level - right.level ||
+        left.name.localeCompare(
+          right.name
+        )
+      );
+    });
+}
+
+export function filterCharacterSpells(
+  spells,
+  {
+    search = "",
+    filters = []
+  } = {}
+) {
+  const query = cleanText(search)
+    .toLowerCase();
+  const activeFilters = new Set(
+    asArray(filters)
+      .map(normalizeKey)
+      .filter(Boolean)
+  );
+
+  return asArray(spells).filter((spell) => {
+    const searchText = [
+      spell?.name,
+      spell?.school,
+      spell?.castingTime,
+      spell?.range,
+      spell?.duration,
+      spell?.summary,
+      spell?.description,
+      spell?.rulesSource,
+      ...asArray(spell?.statuses),
+      ...asArray(spell?.sources)
+    ].join(" ").toLowerCase();
+
+    if (
+      query &&
+      !searchText.includes(query)
+    ) {
+      return false;
+    }
+
+    return [...activeFilters]
+      .every((filter) => {
+        if (filter === "prepared") {
+          return spell.prepared === true;
+        }
+        if (filter === "known") {
+          return spell.known === true;
+        }
+        if (filter === "concentration") {
+          return spell.concentration === true;
+        }
+        if (filter === "ritual") {
+          return spell.ritual === true;
+        }
+        if (
+          [
+            "action",
+            "bonus-action",
+            "reaction"
+          ].includes(filter)
+        ) {
+          return spell.actionKind === filter;
+        }
+        if (filter === "damage") {
+          return spell.dealsDamage === true;
+        }
+        if (filter === "healing") {
+          return spell.heals === true;
+        }
+
+        return true;
+      });
+  });
+}
+
+export function characterHasSpellContent(character) {
+  const magic = isRecord(character?.magic)
+    ? character.magic
+    : {};
+
+  return Boolean(
+    collectCharacterSpells(character)
+      .length ||
+    Object.keys(
+      isRecord(magic.classSources)
+        ? magic.classSources
+        : {}
+    ).length ||
+    Object.values(
+      isRecord(magic.slots)
+        ? magic.slots
+        : {}
+    ).some((value) => {
+      return finiteNumber(value, 0) > 0;
+    }) ||
+    finiteNumber(
+      magic?.pactMagic?.slots,
+      0
+    ) > 0 ||
+    asArray(magic.pactMagicSources)
+      .some((source) => {
+        return finiteNumber(
+          source?.slots,
+          0
+        ) > 0;
+      }) ||
+    cleanText(
+      magic.spellcastingAbility
+    ) ||
+    optionalNumber(
+      magic.spellSaveDc
+    ) !== null ||
+    optionalNumber(
+      magic.spellAttackBonus
+    ) !== null
+  );
+}
+
+function renderSpellSourceSummary(
+  source,
+  fallbackKey
+) {
   return `
     <article class="hg-sheet-card">
-      <h2>${escapeHtml(`${classLabel}${subclass ? ` \u2014 ${subclass}` : ""}`)}</h2>
+      <h2>${escapeHtml(
+        getClassSpellSourceLabel(
+          source,
+          fallbackKey
+        )
+      )}</h2>
       ${renderDefinitionList([
-        ["Spellcasting Ability", titleFromId(source?.spellcastingAbility, "Not recorded")],
-        ["Spell Save DC", optionalNumber(source?.spellSaveDc) === null ? "Not recorded" : String(source.spellSaveDc)],
-        ["Spell Attack Bonus", optionalNumber(source?.spellAttackBonus) === null ? "Not recorded" : formatModifier(source.spellAttackBonus)],
-        ["Cantrips", renderSpellNameList(spells.cantrips)],
-        ["Known", renderSpellNameList(spells.known)],
-        ["Prepared", renderSpellNameList([...spells.prepared, ...spells.alwaysPrepared])],
-        ["Spellbook", renderSpellNameList(spells.spellbook)],
-        ["Mystic Arcanum", renderSpellNameList(spells.arcanum)]
+        [
+          "Spellcasting Ability",
+          titleFromId(
+            source?.spellcastingAbility,
+            "Not recorded"
+          )
+        ],
+        [
+          "Spell Save DC",
+          optionalNumber(
+            source?.spellSaveDc
+          ) === null
+            ? "Not recorded"
+            : String(
+                source.spellSaveDc
+              )
+        ],
+        [
+          "Spell Attack Bonus",
+          optionalNumber(
+            source?.spellAttackBonus
+          ) === null
+            ? "Not recorded"
+            : formatModifier(
+                source
+                  .spellAttackBonus
+              )
+        ]
       ])}
     </article>
   `;
@@ -3797,15 +4485,249 @@ function renderFeatSpellResources(character) {
   `;
 }
 
-function renderSpellPanel(character) {
+function renderSpellStatusBadges(spell) {
+  return `
+    <div class="hg-sheet-spell-badges" aria-label="Spell status">
+      ${spell.statuses.map((status) => `
+        <span>${escapeHtml(status)}</span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderSpellCard(spell) {
+  const source = [
+    ...spell.sources,
+    ...(
+      spell.rulesSource &&
+      !spell.sources.includes(
+        spell.rulesSource
+      )
+        ? [spell.rulesSource]
+        : []
+    )
+  ].join(" \u00b7 ");
+  const completeDescription = [
+    spell.description,
+    spell.higherLevelDescription
+      ? `At Higher Levels: ${spell.higherLevelDescription}`
+      : ""
+  ].filter(Boolean).join("\n\n");
+
+  return `
+    <article
+      class="hg-sheet-spell-card"
+      data-sheet-spell-id="${escapeHtml(spell.id)}"
+      data-sheet-spell-level="${spell.level}"
+    >
+      <header>
+        <div>
+          <strong>${escapeHtml(spell.name)}</strong>
+          <span>${escapeHtml(
+            `${getSpellLevelLabel(
+              spell.level
+            )} \u00b7 ${titleFromId(
+              spell.school,
+              "Unknown school"
+            )}`
+          )}</span>
+        </div>
+        ${renderSpellStatusBadges(spell)}
+      </header>
+
+      <dl class="hg-sheet-spell-facts">
+        ${[
+          [
+            "Casting Time",
+            spell.castingTime
+          ],
+          ["Range", spell.range],
+          [
+            "Components",
+            formatSpellComponents(
+              spell.components
+            )
+          ],
+          ["Duration", spell.duration],
+          [
+            "Concentration",
+            spell.concentration
+              ? "Yes"
+              : "No"
+          ],
+          [
+            "Ritual",
+            spell.ritual
+              ? "Yes"
+              : "No"
+          ],
+          [
+            "Source",
+            firstText(
+              source,
+              "Not recorded"
+            )
+          ],
+          [
+            "Status",
+            spell.statuses.join(", ")
+          ]
+        ].map(([label, value]) => `
+          <div>
+            <dt>${escapeHtml(label)}</dt>
+            <dd>${escapeHtml(
+              firstText(
+                value,
+                "Not recorded"
+              )
+            )}</dd>
+          </div>
+        `).join("")}
+      </dl>
+
+      ${spell.summary ? `
+        <p class="hg-sheet-spell-summary">${escapeHtml(spell.summary)}</p>
+      ` : ""}
+
+      ${completeDescription ? `
+        <details class="hg-sheet-spell-description">
+          <summary>Full spell description</summary>
+          <p>${escapeHtml(completeDescription)}</p>
+        </details>
+      ` : ""}
+    </article>
+  `;
+}
+
+function renderSpellLibrary(
+  character,
+  {
+    search = "",
+    filters = []
+  } = {}
+) {
+  const allSpells =
+    collectCharacterSpells(character);
+  const activeFilters = asArray(filters)
+    .map(normalizeKey)
+    .filter(Boolean);
+  const visibleSpells =
+    filterCharacterSpells(
+      allSpells,
+      {
+        search,
+        filters: activeFilters
+      }
+    );
+  const groups = Array.from(
+    { length: 10 },
+    (_, level) => {
+      return {
+        level,
+        spells:
+          visibleSpells.filter(
+            (spell) => {
+              return (
+                spell.level === level
+              );
+            }
+          )
+      };
+    }
+  ).filter((group) => {
+    return group.spells.length > 0;
+  });
+
+  return `
+    <section class="hg-sheet-spell-library" aria-label="Spell library">
+      <header class="hg-sheet-spell-library-heading">
+        <div>
+          <h2>Spells</h2>
+          <span>
+            ${visibleSpells.length} of ${allSpells.length}
+            spell${allSpells.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <label>
+          <span>Search spells</span>
+          <input
+            type="search"
+            value="${escapeHtml(search)}"
+            placeholder="Name, school, source, or description"
+            autocomplete="off"
+            data-character-sheet-input="spell-search"
+          >
+        </label>
+      </header>
+
+      <div
+        class="hg-sheet-spell-filters hg-sheet-no-print"
+        aria-label="Spell filters"
+      >
+        ${SPELL_FILTER_OPTIONS.map(
+          ([id, label]) => {
+            const active =
+              activeFilters.includes(id);
+
+            return `
+              <button
+                type="button"
+                class="${active ? "active" : ""}"
+                data-character-sheet-action="toggle-spell-filter"
+                data-spell-filter="${id}"
+                aria-pressed="${active ? "true" : "false"}"
+              >${escapeHtml(label)}</button>
+            `;
+          }
+        ).join("")}
+      </div>
+
+      ${groups.length ? `
+        <div class="hg-sheet-spell-groups">
+          ${groups.map((group) => `
+            <section
+              class="hg-sheet-spell-group"
+              data-spell-level-group="${group.level}"
+            >
+              <header>
+                <h3>${escapeHtml(
+                  getSpellGroupLabel(
+                    group.level
+                  )
+                )}</h3>
+                <span>${group.spells.length}</span>
+              </header>
+              <div class="hg-sheet-spell-card-grid">
+                ${group.spells.map(
+                  renderSpellCard
+                ).join("")}
+              </div>
+            </section>
+          `).join("")}
+        </div>
+      ` : `
+        <p
+          class="hg-sheet-spell-empty"
+          role="status"
+        >
+          No spells match the current search and filters.
+        </p>
+      `}
+    </section>
+  `;
+}
+
+function renderSpellPanel(
+  character,
+  {
+    search = "",
+    filters = []
+  } = {}
+) {
   const magic = isRecord(character?.magic) ? character.magic : {};
   const classSources = isRecord(magic.classSources)
     ? Object.entries(magic.classSources)
     : [];
-  const innate = normalizeContentEntries(magic.innateSpells, "innate-spell");
-  const custom = normalizeContentEntries(magic.customSpells, "custom-spell");
-  const globalKnown = asArray(magic.knownSpellIds);
-  const globalPrepared = asArray(magic.preparedSpellIds);
   const pactSlots = clampInteger(magic?.pactMagic?.slots, 0, 0);
   const pactUsed = Math.min(pactSlots, clampInteger(magic?.slotUsage?.pact, 0, 0));
   const pactSources = (
@@ -3854,16 +4776,14 @@ function renderSpellPanel(character) {
 
       <div class="hg-sheet-card-grid">
         ${classSources.length
-          ? classSources.map(([key, source]) => renderSpellSource(source, key)).join("")
+          ? classSources.map(([key, source]) => renderSpellSourceSummary(source, key)).join("")
           : `
             <article class="hg-sheet-card">
               <h2>Spellcasting</h2>
               ${renderDefinitionList([
                 ["Ability", titleFromId(magic.spellcastingAbility, "Not recorded")],
                 ["Save DC", optionalNumber(magic.spellSaveDc) === null ? "Not recorded" : String(magic.spellSaveDc)],
-                ["Attack Bonus", optionalNumber(magic.spellAttackBonus) === null ? "Not recorded" : formatModifier(magic.spellAttackBonus)],
-                ["Known Spells", renderSpellNameList(globalKnown)],
-                ["Prepared Spells", renderSpellNameList(globalPrepared)]
+                ["Attack Bonus", optionalNumber(magic.spellAttackBonus) === null ? "Not recorded" : formatModifier(magic.spellAttackBonus)]
               ])}
             </article>
           `}
@@ -3911,18 +4831,8 @@ function renderSpellPanel(character) {
         </article>
 
         <article class="hg-sheet-card">
-          <h2>Innate Spells</h2>
-          ${renderContentList(innate, "No innate spells recorded.")}
-        </article>
-
-        <article class="hg-sheet-card">
           <h2>Feat Spells</h2>
           ${renderFeatSpellResources(character)}
-        </article>
-
-        <article class="hg-sheet-card">
-          <h2>Custom Spells</h2>
-          ${renderContentList(custom, "No custom spells recorded.")}
         </article>
 
         ${cleanText(magic.notes) ? `
@@ -3932,6 +4842,11 @@ function renderSpellPanel(character) {
           </article>
         ` : ""}
       </div>
+
+      ${renderSpellLibrary(
+        character,
+        { search, filters }
+      )}
     </section>
   `;
 }
@@ -4407,6 +5322,233 @@ function ensureStyles() {
     }
 
     .hg-sheet-action-description p {
+      margin: 8px 0 0;
+      color: #c5cdef;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .hg-sheet-spell-library {
+      display: grid;
+      min-width: 0;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid rgba(127, 153, 255, 0.22);
+      border-radius: 15px;
+      background:
+        radial-gradient(circle at top left, rgba(84, 113, 233, 0.08), transparent 55%),
+        linear-gradient(180deg, rgba(15, 22, 45, 0.98), rgba(8, 12, 26, 0.98));
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    }
+
+    .hg-sheet-spell-library-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 0.65fr);
+      gap: 14px;
+      align-items: end;
+    }
+
+    .hg-sheet-spell-library-heading > div {
+      display: grid;
+      gap: 3px;
+    }
+
+    .hg-sheet-spell-library-heading h2 {
+      margin: 0;
+      color: #f4d88b;
+      font-size: 20px;
+    }
+
+    .hg-sheet-spell-library-heading > div > span,
+    .hg-sheet-spell-library-heading label > span {
+      color: #aeb8df;
+      font-size: 12px;
+    }
+
+    .hg-sheet-spell-library-heading label {
+      display: grid;
+      min-width: 0;
+      gap: 5px;
+      font-weight: 700;
+    }
+
+    .hg-sheet-spell-filters,
+    .hg-sheet-spell-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .hg-sheet-spell-filters button {
+      min-height: 34px;
+      padding: 6px 10px !important;
+      border-color: rgba(127, 153, 255, 0.28) !important;
+      color: #dbe3ff !important;
+      background: rgba(22, 31, 62, 0.82) !important;
+      font-size: 11px !important;
+    }
+
+    .hg-sheet-spell-filters button.active {
+      border-color: #879cff !important;
+      color: #fff !important;
+      background: linear-gradient(135deg, #4b5fd8, #764bb4) !important;
+    }
+
+    .hg-sheet-spell-groups {
+      display: grid;
+      min-width: 0;
+      gap: 14px;
+    }
+
+    .hg-sheet-spell-group {
+      display: grid;
+      min-width: 0;
+      gap: 9px;
+    }
+
+    .hg-sheet-spell-group > header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid rgba(127, 153, 255, 0.16);
+      padding-bottom: 7px;
+    }
+
+    .hg-sheet-spell-group > header h3 {
+      margin: 0;
+      color: #dce4ff;
+      font-size: 17px;
+    }
+
+    .hg-sheet-spell-group > header span {
+      display: grid;
+      place-items: center;
+      min-width: 27px;
+      min-height: 27px;
+      padding: 3px 8px;
+      border: 1px solid rgba(135, 156, 255, 0.34);
+      border-radius: 999px;
+      color: #dbe3ff;
+      background: rgba(75, 95, 216, 0.18);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .hg-sheet-spell-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 10px;
+    }
+
+    .hg-sheet-spell-card {
+      display: grid;
+      align-content: start;
+      min-width: 0;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(127, 153, 255, 0.18);
+      border-radius: 12px;
+      background: rgba(7, 11, 27, 0.62);
+    }
+
+    .hg-sheet-spell-card > header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .hg-sheet-spell-card > header > div:first-child {
+      display: grid;
+      min-width: 0;
+      gap: 3px;
+    }
+
+    .hg-sheet-spell-card > header strong {
+      color: #fff;
+      font-size: 16px;
+      line-height: 1.25;
+    }
+
+    .hg-sheet-spell-card > header > div:first-child span {
+      color: #9eabd8;
+      font-size: 11px;
+    }
+
+    .hg-sheet-spell-badges {
+      justify-content: flex-end;
+      max-width: 190px;
+    }
+
+    .hg-sheet-spell-badges span {
+      padding: 3px 7px;
+      border: 1px solid rgba(151, 172, 255, 0.3);
+      border-radius: 999px;
+      color: #dbe3ff;
+      background: rgba(75, 95, 216, 0.16);
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.035em;
+    }
+
+    .hg-sheet-spell-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      margin: 0;
+    }
+
+    .hg-sheet-spell-facts > div {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+      padding: 7px;
+      border: 1px solid rgba(127, 153, 255, 0.13);
+      border-radius: 8px;
+      background: rgba(15, 22, 45, 0.72);
+    }
+
+    .hg-sheet-spell-facts dt {
+      color: #8f9bc7;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.045em;
+    }
+
+    .hg-sheet-spell-facts dd {
+      min-width: 0;
+      margin: 0;
+      color: #f2f4ff;
+      font-size: 12px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .hg-sheet-spell-summary,
+    .hg-sheet-spell-empty {
+      margin: 0;
+      color: #aeb8df;
+      line-height: 1.45;
+    }
+
+    .hg-sheet-spell-description {
+      border-top: 1px solid rgba(127, 153, 255, 0.12);
+      padding-top: 8px;
+    }
+
+    .hg-sheet-spell-description summary {
+      width: fit-content;
+      color: #aebeff;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .hg-sheet-spell-description p {
       margin: 8px 0 0;
       color: #c5cdef;
       font-size: 12px;
@@ -4894,6 +6036,28 @@ function ensureStyles() {
         grid-template-columns: 1fr;
       }
 
+      .hg-sheet-spell-library-heading,
+      .hg-sheet-spell-card > header {
+        grid-template-columns: 1fr;
+      }
+
+      .hg-sheet-spell-card-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hg-sheet-spell-badges {
+        justify-content: flex-start;
+        max-width: none;
+      }
+
+      .hg-sheet-spell-filters button {
+        flex: 1 1 105px;
+      }
+
+      .hg-sheet-spell-facts {
+        grid-template-columns: 1fr;
+      }
+
       .hg-sheet-action-card > header,
       .hg-sheet-action-resource {
         grid-template-columns: 1fr;
@@ -4968,6 +6132,8 @@ function ensureStyles() {
       .hg-sheet-action-section,
       .hg-sheet-action-card,
       .hg-sheet-action-resource,
+      .hg-sheet-spell-library,
+      .hg-sheet-spell-card,
       .hg-sheet-resource-row,
       .hg-sheet-level-order li,
       .hg-sheet-table tr {
@@ -4984,6 +6150,8 @@ function ensureStyles() {
       .hg-sheet-action-card > header strong,
       .hg-sheet-action-facts dd,
       .hg-sheet-action-resource strong,
+      .hg-sheet-spell-card > header strong,
+      .hg-sheet-spell-facts dd,
       .hg-sheet-resource-row strong {
         color: #111 !important;
       }
@@ -5002,6 +6170,10 @@ function ensureStyles() {
       .hg-sheet-action-empty,
       .hg-sheet-action-description p,
       .hg-sheet-action-resource span,
+      .hg-sheet-spell-card > header > div:first-child span,
+      .hg-sheet-spell-summary,
+      .hg-sheet-spell-empty,
+      .hg-sheet-spell-description p,
       .hg-sheet-level-order span,
       .hg-sheet-selected-rule span {
         color: #333 !important;
@@ -5170,6 +6342,8 @@ export function createCharacterSheetView(options = {}) {
     root: null,
     character: {},
     activeTab: "actions",
+    spellSearch: "",
+    spellFilters: [],
     isOpen: false,
     isSaving: false
   };
@@ -5190,26 +6364,55 @@ export function createCharacterSheetView(options = {}) {
       safeCharacter,
       proficiencyBonus
     );
-    const requestedTab = firstText(
+    const rawRequestedTab = firstText(
       renderOptions.activeTab,
       state.activeTab,
       "actions"
     ).toLowerCase();
-    const tabs = [
-      "actions",
-      "abilities",
-      "inventory",
-      "features",
-      "spells",
-      "description"
-    ];
-    const activeTab = tabs.includes(requestedTab)
-      ? requestedTab
-      : requestedTab === "spell"
+    const requestedTab =
+      rawRequestedTab === "spell"
         ? "spells"
-        : requestedTab === "story"
+        : rawRequestedTab === "story"
           ? "description"
-          : "actions";
+          : rawRequestedTab;
+    const hasSpellContent =
+      characterHasSpellContent(
+        safeCharacter
+      );
+    const tabOptions = [
+      ["actions", "Actions"],
+      ["abilities", "Abilities"],
+      ["inventory", "Inventory"],
+      ["features", "Features"],
+      ...(
+        hasSpellContent
+          ? [["spells", "Spells"]]
+          : []
+      ),
+      ["description", "Description"]
+    ];
+    const tabs = tabOptions.map(
+      ([id]) => id
+    );
+    const activeTab = tabs.includes(
+      requestedTab
+    )
+      ? requestedTab
+      : "actions";
+    const spellSearch =
+      renderOptions.spellSearch ===
+        undefined
+        ? state.spellSearch
+        : cleanText(
+            renderOptions.spellSearch
+          );
+    const spellFilters =
+      renderOptions.spellFilters ===
+        undefined
+        ? state.spellFilters
+        : asArray(
+            renderOptions.spellFilters
+          );
     const portraitUrl =
       presentation.portraitUrl;
     const classLine =
@@ -5273,7 +6476,11 @@ export function createCharacterSheetView(options = {}) {
         safeCharacter
       ),
       spells: () => renderSpellPanel(
-        safeCharacter
+        safeCharacter,
+        {
+          search: spellSearch,
+          filters: spellFilters
+        }
       ),
       description: () => renderStoryPanel(
         safeCharacter
@@ -5362,14 +6569,7 @@ export function createCharacterSheetView(options = {}) {
         `}
 
         <nav class="hg-character-sheet-tabs hg-sheet-no-print" aria-label="Character sheet sections">
-          ${[
-            ["actions", "Actions"],
-            ["abilities", "Abilities"],
-            ["inventory", "Inventory"],
-            ["features", "Features"],
-            ["spells", "Spells"],
-            ["description", "Description"]
-          ].map(([id, label]) => `
+          ${tabOptions.map(([id, label]) => `
             <button
               type="button"
               class="hg-character-sheet-tab ${activeTab === id ? "active" : ""}"
@@ -5398,7 +6598,11 @@ export function createCharacterSheetView(options = {}) {
           })}
           ${renderFeaturesPanel(safeCharacter)}
           ${renderStoryPanel(safeCharacter)}
-          ${renderSpellPanel(safeCharacter)}
+          ${hasSpellContent
+            ? renderSpellPanel(
+                safeCharacter
+              )
+            : ""}
         </div>
       </div>
     `;
@@ -5417,7 +6621,10 @@ export function createCharacterSheetView(options = {}) {
     }
 
     const html = renderCharacterSheetHtml(state.character, {
-      activeTab: state.activeTab
+      activeTab: state.activeTab,
+      spellSearch: state.spellSearch,
+      spellFilters:
+        state.spellFilters
     });
 
     state.root.innerHTML = html;
@@ -5524,13 +6731,53 @@ export function createCharacterSheetView(options = {}) {
         "abilities",
         "inventory",
         "features",
-        "spells",
+        ...(
+          characterHasSpellContent(
+            state.character
+          )
+            ? ["spells"]
+            : []
+        ),
         "description"
       ].includes(tab)) {
         state.activeTab = tab;
         render();
       }
 
+      return;
+    }
+
+    if (
+      action ===
+      "toggle-spell-filter"
+    ) {
+      const filter = normalizeKey(
+        button.dataset.spellFilter
+      );
+      const allowedFilters = new Set(
+        SPELL_FILTER_OPTIONS.map(
+          ([id]) => id
+        )
+      );
+
+      if (!allowedFilters.has(filter)) {
+        return;
+      }
+
+      state.spellFilters =
+        state.spellFilters.includes(
+          filter
+        )
+          ? state.spellFilters.filter(
+              (entry) => {
+                return entry !== filter;
+              }
+            )
+          : [
+              ...state.spellFilters,
+              filter
+            ];
+      render();
       return;
     }
 
@@ -5741,6 +6988,38 @@ export function createCharacterSheetView(options = {}) {
     }
   }
 
+  function handleInput(event) {
+    const input = event.target.closest(
+      '[data-character-sheet-input="spell-search"]'
+    );
+
+    if (
+      !input ||
+      !state.root?.contains(input)
+    ) {
+      return;
+    }
+
+    state.spellSearch =
+      cleanText(input.value);
+    render();
+
+    const replacement =
+      state.root.querySelector(
+        '[data-character-sheet-input="spell-search"]'
+      );
+
+    if (replacement) {
+      replacement.focus();
+      const cursor =
+        replacement.value.length;
+      replacement.setSelectionRange?.(
+        cursor,
+        cursor
+      );
+    }
+  }
+
   function init() {
     ensureStyles();
 
@@ -5748,13 +7027,16 @@ export function createCharacterSheetView(options = {}) {
 
     if (state.root && state.root !== nextRoot) {
       state.root.removeEventListener("click", handleClick);
+      state.root.removeEventListener("input", handleInput);
     }
 
     state.root = nextRoot;
 
     if (state.root) {
       state.root.removeEventListener("click", handleClick);
+      state.root.removeEventListener("input", handleInput);
       state.root.addEventListener("click", handleClick);
+      state.root.addEventListener("input", handleInput);
     }
 
     return api;
@@ -5767,6 +7049,8 @@ export function createCharacterSheetView(options = {}) {
     // the live Character Creator draft passed by the caller.
     state.character = cloneSnapshot(source);
     state.activeTab = "actions";
+    state.spellSearch = "";
+    state.spellFilters = [];
     state.isOpen = true;
 
     init();

@@ -334,6 +334,23 @@
             recharge: "longRest"
           }
         ],
+        spellcasting: [
+          {
+            id: "magic-initiate:spell:healing-word",
+            sourceType: "feat",
+            sourceId: "magic-initiate",
+            featId: "magic-initiate",
+            featName: "Magic Initiate",
+            spellId: "healing-word",
+            spellName: "Healing Word",
+            spellLevel: 1,
+            spellcastingAbility: "wis",
+            maximumUses: 1,
+            currentUses: 1,
+            recharge: "longRest",
+            canUseSpellSlots: true
+          }
+        ],
         naturalWeapons: [
           {
             id: "spectral-claw",
@@ -437,11 +454,35 @@
             spellAttackBonus: 7,
             cantripIds: ["fire-bolt", "mage-hand"],
             preparedSpellIds: ["magic-missile", "shield", "fireball"],
-            spellbookSpellIds: ["detect-magic", "misty-step"]
+            spellbookSpellIds: ["detect-magic", "misty-step", "web"],
+            alwaysPreparedSpellIds: ["shield"],
+            subclassSpellIds: ["shield"]
           }
         },
-        customSpells: [],
-        innateSpells: [],
+        customSpells: [
+          {
+            id: "asters-aegis",
+            name: "Aster's Aegis",
+            level: 2,
+            school: "abjuration",
+            castingTime: "1 reaction",
+            range: "Self",
+            components: "V, S",
+            duration: "1 round",
+            summary: "A custom ward briefly reinforces your defenses.",
+            description: "When you are hit by an attack, gain a +2 bonus to Armor Class until the start of your next turn.",
+            source: "Aster's field research"
+          }
+        ],
+        innateSpells: [
+          {
+            id: "light",
+            name: "Light",
+            source: "species:high-elf",
+            innateSource: "species:high-elf",
+            innate: true
+          }
+        ],
         pactMagic: {
           slots: 0,
           slotLevel: 0
@@ -513,6 +554,27 @@
         resourceId,
         delta
       ) => {
+        const featSpell =
+          character.featMechanics
+            .spellcasting
+            .find((entry) => {
+              return entry.id ===
+                resourceId;
+            });
+
+        if (featSpell) {
+          featSpell.currentUses =
+            Math.max(
+              0,
+              Math.min(
+                featSpell.maximumUses,
+                featSpell.currentUses +
+                  delta
+              )
+            );
+          return character;
+        }
+
         return adjustResource(
           "feat",
           resourceId,
@@ -572,6 +634,33 @@
       onPrint: () => true,
       onClose: () => true
     });
+
+    if (
+      new URLSearchParams(
+        window.location.search
+      ).get("fixture") ===
+      "non-spellcaster"
+    ) {
+      character.id =
+        "non-spellcaster-fixture";
+      character.identity.name =
+        "Brann Stone";
+      character.classProgression = {
+        totalLevel: 7,
+        classes: [
+          {
+            entryId: "fighter-entry",
+            classId: "fighter",
+            className: "Fighter",
+            level: 7,
+            subclassName: "Champion"
+          }
+        ]
+      };
+      character.magic = {};
+      character.featMechanics
+        .spellcasting = [];
+    }
 
     view.open(character);
     window.__PLAYABLE_SHEET_TEST__ = {

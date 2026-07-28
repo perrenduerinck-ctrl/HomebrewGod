@@ -81,7 +81,7 @@ test(
   "playable character sheet tracks combat and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-sheet-20260727",
+      "ai-testing/playable-character-sheet.html?release=playable-spells-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -270,6 +270,182 @@ test(
       })
     ).toBeVisible();
 
+    await page.getByRole("button", {
+      name: "Spells",
+      exact: true
+    }).click();
+
+    const spellLibrary =
+      screenPanel.locator(
+        ".hg-sheet-spell-library"
+      );
+    const levelOneSlots =
+      screenPanel.locator(
+        '[data-normal-spell-slot="1"]'
+      );
+    await expect(levelOneSlots)
+      .toContainText("3 / 4");
+    await levelOneSlots
+      .getByRole("button", {
+        name: "Spend",
+        exact: true
+      })
+      .click();
+    await expect(
+      screenPanel.locator(
+        '[data-normal-spell-slot="1"]'
+      )
+    ).toContainText("2 / 4");
+    await expect(
+      spellLibrary.getByRole(
+        "heading",
+        {
+          name: "Cantrips",
+          exact: true
+        }
+      )
+    ).toBeVisible();
+    await expect(
+      spellLibrary.getByRole(
+        "heading",
+        {
+          name: "Level 1",
+          exact: true
+        }
+      )
+    ).toBeVisible();
+    await expect(
+      spellLibrary.locator(
+        '[data-sheet-spell-id="fire-bolt"]'
+      )
+    ).toHaveCount(1);
+
+    const shieldCard =
+      spellLibrary.locator(
+        '[data-sheet-spell-id="shield"]'
+      );
+    await expect(shieldCard)
+      .toContainText(
+        "Always prepared"
+      );
+    await expect(shieldCard)
+      .toContainText(
+        "Subclass-granted"
+      );
+    await expect(shieldCard)
+      .toContainText(
+        "Casting Time"
+      );
+    await expect(shieldCard)
+      .toContainText(
+        "Components"
+      );
+    await expect(shieldCard)
+      .toContainText(
+        "Concentration"
+      );
+    await expect(shieldCard)
+      .toContainText("Ritual");
+    await expect(
+      shieldCard.locator("details")
+    ).not.toHaveAttribute(
+      "open",
+      ""
+    );
+    await shieldCard.locator(
+      "details summary"
+    ).click();
+    await expect(
+      shieldCard.locator(
+        "details p"
+      )
+    ).toBeVisible();
+
+    const spellSearch =
+      spellLibrary.locator(
+        '[data-character-sheet-input="spell-search"]'
+      );
+    await spellSearch.fill(
+      "Misty Step"
+    );
+    await expect(
+      spellLibrary.locator(
+        ".hg-sheet-spell-card"
+      )
+    ).toHaveCount(1);
+    await expect(
+      spellLibrary.locator(
+        '[data-sheet-spell-id="misty-step"]'
+      )
+    ).toBeVisible();
+    await spellSearch.fill("");
+
+    for (
+      const [
+        filterName,
+        expectedSpellId
+      ] of [
+        ["Prepared", "magic-missile"],
+        ["Known", "fire-bolt"],
+        ["Concentration", "web"],
+        ["Ritual", "detect-magic"],
+        ["Action", "fire-bolt"],
+        ["Bonus Action", "misty-step"],
+        ["Reaction", "shield"],
+        ["Damage", "fire-bolt"],
+        ["Healing", "healing-word"]
+      ]
+    ) {
+      const filterButton =
+        spellLibrary.getByRole(
+          "button",
+          {
+            name: filterName,
+            exact: true
+          }
+        );
+
+      await filterButton.click();
+      await expect(filterButton)
+        .toHaveAttribute(
+          "aria-pressed",
+          "true"
+        );
+      await expect(
+        spellLibrary.locator(
+          `[data-sheet-spell-id="${expectedSpellId}"]`
+        )
+      ).toBeVisible();
+      await filterButton.click();
+      await expect(filterButton)
+        .toHaveAttribute(
+          "aria-pressed",
+          "false"
+        );
+    }
+
+    const featSpellResource =
+      screenPanel.locator(
+        '[data-feat-spell-resource="magic-initiate:spell:healing-word"]'
+      );
+    await expect(featSpellResource)
+      .toContainText(
+        "1 / 1 use remaining"
+      );
+    await featSpellResource
+      .getByRole("button", {
+        name: "Spend",
+        exact: true
+      })
+      .click();
+    await expect(
+      screenPanel.locator(
+        '[data-feat-spell-resource="magic-initiate:spell:healing-word"]'
+      )
+    ).toContainText(
+      "0 / 1 use remaining"
+    );
+
     await page.setViewportSize({
       width: 390,
       height: 844
@@ -291,6 +467,55 @@ test(
 
     expect(hasPageOverflow)
       .toBe(false);
+    await expect(
+      spellLibrary.locator(
+        '[data-character-sheet-input="spell-search"]'
+      )
+    ).toBeVisible();
+    await expect(
+      spellLibrary.getByRole(
+        "button",
+        {
+          name: "Prepared",
+          exact: true
+        }
+      )
+    ).toBeVisible();
+  }
+);
+
+test(
+  "playable sheet hides the Spells tab for a non-spellcaster",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/playable-character-sheet.html?fixture=non-spellcaster&release=playable-spells-20260728",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "pass"
+      );
+    await expect(
+      page.getByRole("heading", {
+        name: "Brann Stone"
+      })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "Spells",
+        exact: true
+      })
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        '[aria-label="Spell character sheet"]'
+      )
+    ).toHaveCount(0);
   }
 );
 

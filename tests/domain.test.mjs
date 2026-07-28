@@ -36,7 +36,10 @@ import {
   ensureGameplayState
 } from "../characterSheet/gameplayState.js";
 import {
+  characterHasSpellContent,
   collectCharacterActions,
+  collectCharacterSpells,
+  filterCharacterSpells,
   createCharacterSheetView
 } from "../characterSheet.js";
 import {
@@ -828,6 +831,410 @@ test(
     assert.match(
       html,
       /data-character-sheet-action="adjust-class-resource"/
+    );
+  }
+);
+
+test(
+  "playable sheet resolves, groups, labels, searches, and filters complete spell records",
+  () => {
+    const character = {
+      id: "spell-sheet-test",
+      identity: {
+        name: "Spell Tester"
+      },
+      classProgression: {
+        totalLevel: 17,
+        classes: [
+          {
+            entryId: "wizard-entry",
+            classId: "wizard",
+            className: "Wizard",
+            level: 10,
+            subclassName:
+              "School of Evocation"
+          },
+          {
+            entryId: "warlock-entry",
+            classId: "warlock",
+            className: "Warlock",
+            level: 7,
+            subclassName:
+              "The Fiend"
+          }
+        ]
+      },
+      featMechanics: {
+        spellcasting: [
+          {
+            id:
+              "magic-initiate:spell:healing-word",
+            featId: "magic-initiate",
+            featName:
+              "Magic Initiate",
+            spellId:
+              "healing-word",
+            spellName:
+              "Healing Word",
+            maximumUses: 1,
+            currentUses: 1,
+            recharge: "longRest"
+          }
+        ]
+      },
+      magic: {
+        spellcastingAbility: "int",
+        spellSaveDc: 17,
+        spellAttackBonus: 9,
+        knownSpellIds: [
+          "fire-bolt",
+          "mage-hand"
+        ],
+        preparedSpellIds: [
+          "magic-missile",
+          "shield"
+        ],
+        slots: {
+          1: 4,
+          2: 3,
+          3: 3
+        },
+        pactMagic: {
+          slots: 2,
+          slotLevel: 4
+        },
+        classSources: {
+          "wizard-entry": {
+            classEntryId:
+              "wizard-entry",
+            classId: "wizard",
+            className: "Wizard",
+            subclassName:
+              "School of Evocation",
+            spellcastingAbility: "int",
+            spellSaveDc: 17,
+            spellAttackBonus: 9,
+            cantripIds: [
+              "fire-bolt",
+              "mage-hand"
+            ],
+            preparedSpellIds: [
+              "magic-missile",
+              "shield"
+            ],
+            spellbookSpellIds: [
+              "detect-magic",
+              "misty-step",
+              "web"
+            ],
+            alwaysPreparedSpellIds: [
+              "shield"
+            ],
+            subclassSpellIds: [
+              "shield"
+            ]
+          },
+          "warlock-entry": {
+            classEntryId:
+              "warlock-entry",
+            classId: "warlock",
+            className: "Warlock",
+            subclassName: "The Fiend",
+            spellcastingAbility: "cha",
+            mysticArcanumSpellIds: {
+              6: "circle-of-death"
+            }
+          }
+        },
+        innateSpells: [
+          {
+            id: "light",
+            source:
+              "species:high-elf",
+            innateSource:
+              "species:high-elf",
+            innate: true
+          }
+        ],
+        customSpells: [
+          {
+            id: "testing-aegis",
+            name: "Testing Aegis",
+            level: 2,
+            school: "abjuration",
+            castingTime:
+              "1 reaction",
+            range: "Self",
+            components: "V, S",
+            duration: "1 round",
+            description:
+              "A complete custom spell description.",
+            source: "Custom test"
+          }
+        ]
+      }
+    };
+    const spells =
+      collectCharacterSpells(
+        character
+      );
+    const byId = new Map(
+      spells.map((spell) => {
+        return [spell.id, spell];
+      })
+    );
+
+    assert.equal(
+      spells.filter((spell) => {
+        return spell.id === "shield";
+      }).length,
+      1
+    );
+    assert.equal(
+      byId.get("fire-bolt").level,
+      0
+    );
+    assert.equal(
+      byId.get("fire-bolt")
+        .school,
+      "evocation"
+    );
+    assert.ok(
+      byId.get("fire-bolt")
+        .description.length > 20
+    );
+    assert.deepEqual(
+      byId.get("shield").statuses,
+      [
+        "Prepared",
+        "Always prepared",
+        "Subclass-granted"
+      ]
+    );
+    assert.ok(
+      byId.get("detect-magic")
+        .statuses.includes(
+          "Spellbook"
+        )
+    );
+    assert.ok(
+      byId.get("light")
+        .statuses.includes(
+          "Species-granted"
+        )
+    );
+    assert.ok(
+      byId.get("healing-word")
+        .statuses.includes(
+          "Feat-granted"
+        )
+    );
+    assert.ok(
+      byId.get("circle-of-death")
+        .statuses.includes(
+          "Mystic Arcanum"
+        )
+    );
+    assert.ok(
+      byId.get("testing-aegis")
+        .statuses.includes(
+          "Custom spell"
+        )
+    );
+
+    assert.deepEqual(
+      filterCharacterSpells(
+        spells,
+        { search: "misty step" }
+      ).map((spell) => spell.id),
+      ["misty-step"]
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: [
+            "concentration"
+          ]
+        }
+      ).some((spell) => {
+        return spell.id === "web";
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: [
+            "ritual"
+          ]
+        }
+      ).some((spell) => {
+        return (
+          spell.id ===
+          "detect-magic"
+        );
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: [
+            "bonus-action"
+          ]
+        }
+      ).some((spell) => {
+        return (
+          spell.id ===
+          "misty-step"
+        );
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: ["reaction"]
+        }
+      ).some((spell) => {
+        return spell.id === "shield";
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: ["damage"]
+        }
+      ).some((spell) => {
+        return (
+          spell.id === "fire-bolt"
+        );
+      })
+    );
+    assert.deepEqual(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: ["healing"]
+        }
+      ).map((spell) => spell.id),
+      ["healing-word"]
+    );
+
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          character,
+          {
+            activeTab: "spells",
+            spellSearch:
+              "magic missile",
+            sheetContext: {
+              characterId:
+                character.id
+            }
+          }
+        );
+    const screenHtml =
+      html.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.match(
+      screenHtml,
+      /data-spell-level-group="1"/
+    );
+    assert.match(
+      screenHtml,
+      /data-sheet-spell-id="magic-missile"/
+    );
+    assert.doesNotMatch(
+      screenHtml,
+      /data-sheet-spell-id="fire-bolt"/
+    );
+    assert.match(
+      html,
+      /<details class="hg-sheet-spell-description">/
+    );
+    assert.doesNotMatch(
+      html,
+      /<details class="hg-sheet-spell-description" open/
+    );
+    assert.match(
+      html,
+      /Casting Time/
+    );
+    assert.match(
+      html,
+      /Components/
+    );
+    assert.match(
+      html,
+      /Concentration/
+    );
+    assert.match(
+      html,
+      /data-normal-spell-slot="1"/
+    );
+    assert.match(
+      html,
+      /data-pact-source=/
+    );
+    assert.match(
+      html,
+      /data-feat-spell-resource=/
+    );
+
+    const nonSpellcaster = {
+      id: "fighter-only",
+      identity: {
+        name: "Fighter Only"
+      },
+      classProgression: {
+        totalLevel: 5,
+        classes: [
+          {
+            entryId: "fighter-entry",
+            classId: "fighter",
+            className: "Fighter",
+            level: 5
+          }
+        ]
+      },
+      magic: {}
+    };
+    const nonSpellHtml =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          nonSpellcaster,
+          {
+            activeTab: "spells",
+            sheetContext: {
+              characterId:
+                nonSpellcaster.id
+            }
+          }
+        );
+
+    assert.equal(
+      characterHasSpellContent(
+        nonSpellcaster
+      ),
+      false
+    );
+    assert.doesNotMatch(
+      nonSpellHtml,
+      /data-character-sheet-tab="spells"/
+    );
+    assert.doesNotMatch(
+      nonSpellHtml,
+      /aria-label="Spell character sheet"/
+    );
+    assert.match(
+      nonSpellHtml,
+      /aria-label="Actions"/
     );
   }
 );
