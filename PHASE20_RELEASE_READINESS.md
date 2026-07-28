@@ -8,7 +8,7 @@ The root `package.json` defines syntax, import-graph, data-validation, phase-aud
 
 The browser runner executes the existing internal suites instead of replacing them:
 
-- 456 character-creator assertions, including final character and multiclass flows.
+- 457 character-creator assertions, including class/subclass isolation and final character and multiclass flows.
 - 97 monster-creator assertions, including create, duplicate, import, export, permissions, and token behavior.
 - 60 security and persistence assertions.
 - 88 character-module contract assertions.

@@ -33,7 +33,7 @@ This audit combines static release gates, schema validators, fixtures, browser s
 - 101 feats validate, including prerequisite and structured-effect rules.
 - 340 spells validate: 319 SRD spells and 21 reviewed additional cantrips.
 - 399 feat/subclass spell references validate.
-- 456 character, 97 monster, 60 security/persistence, and 88 module browser assertions pass.
+- 457 character, 97 monster, 60 security/persistence, and 88 module browser assertions pass.
 - 130 local import references resolve with exact filename capitalization.
 - 12 release fixture and workflow contract tests pass.
 

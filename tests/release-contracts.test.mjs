@@ -133,3 +133,22 @@ test(
     );
   }
 );
+
+test(
+  "character choice cards keep their natural height",
+  async () => {
+    const creator =
+      await read(
+        "characterCreator.fixed.js"
+      );
+
+    assert.match(
+      creator,
+      /\.hg-character-choice-grid\s*\{[^}]*align-items:\s*start;/s
+    );
+    assert.match(
+      creator,
+      /\.hg-character-choice-card\s*\{[^}]*align-self:\s*start;/s
+    );
+  }
+);

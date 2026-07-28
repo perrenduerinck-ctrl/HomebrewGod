@@ -591,6 +591,137 @@ export function runCharacterCreatorSelfTests(context) {
     creatorState.draft =
       createEmptyCharacter();
 
+    chooseSection12Class(
+      "wizard"
+    );
+
+    const wizardEntryForSubclassIsolation =
+      getSection12PrimaryClass();
+
+    const artificerTemplateForSubclassIsolation =
+      DEFAULT_CLASS_TEMPLATES.find(
+        (template) => {
+          return (
+            template.id ===
+            "artificer"
+          );
+        }
+      );
+
+    const alchemistForSubclassIsolation =
+      artificerTemplateForSubclassIsolation
+        ?.subclasses
+        ?.find((subclass) => {
+          return (
+            subclass.id ===
+            "alchemist"
+          );
+        });
+
+    wizardEntryForSubclassIsolation.level =
+      6;
+    wizardEntryForSubclassIsolation
+      .templateSnapshot = {
+        ...cloneData(
+          artificerTemplateForSubclassIsolation
+        ),
+        id: "wizard",
+        name: "Wizard"
+      };
+    wizardEntryForSubclassIsolation.subclassId =
+      "alchemist";
+    wizardEntryForSubclassIsolation.subclassName =
+      "Alchemist";
+    wizardEntryForSubclassIsolation.choices = {
+      subclassSnapshot:
+        cloneData(
+          alchemistForSubclassIsolation
+        )
+    };
+
+    creatorState.draft
+      .classProgression
+      .totalLevel = 6;
+
+    creatorState.roomClassCache = [
+      {
+        ...cloneData(
+          artificerTemplateForSubclassIsolation
+        ),
+        id: "wizard",
+        name: "Wizard",
+        source: "homebrew"
+      }
+    ];
+
+    const arcaneTraditionForSubclassIsolation =
+      getSection12ClassFeaturesThroughLevel()
+        .find((feature) => {
+          return (
+            feature.id ===
+            "arcane-tradition"
+          );
+        });
+
+    const wizardSubclassNames =
+      getSection12SubclassTemplates()
+        .map((subclass) => {
+          return subclass.name;
+        });
+
+    const arcaneTraditionOptions =
+      getSection12FeatureChoiceOptionRecords(
+        arcaneTraditionForSubclassIsolation
+      ).map((option) => {
+        return option.label;
+      });
+
+    const wizardClassDetailsHtml =
+      renderSection12SelectedClassDetails();
+
+    record(
+      "Wizard subclass choices reject Artificer snapshots and duplicate room templates",
+      {
+        resolvedClass:
+          getSelectedClassTemplate()
+            ?.id ||
+          "",
+        selectedSubclass:
+          getSelectedSection12Subclass()
+            ?.name ||
+          "",
+        wizardCatalog:
+          wizardSubclassNames
+            .includes("Evocation") &&
+          !wizardSubclassNames
+            .includes("Alchemist"),
+        arcaneTradition:
+          arcaneTraditionOptions
+            .includes("Evocation") &&
+          !arcaneTraditionOptions
+            .includes("Alchemist"),
+        renderedChoices:
+          /Choose\s+Evocation/.test(
+            wizardClassDetailsHtml
+          ) &&
+          !/Choose\s+Alchemist/.test(
+            wizardClassDetailsHtml
+          )
+      },
+      {
+        resolvedClass: "wizard",
+        selectedSubclass: "",
+        wizardCatalog: true,
+        arcaneTradition: true,
+        renderedChoices: true
+      }
+    );
+
+    creatorState.roomClassCache = [];
+
+    creatorState.draft =
+      createEmptyCharacter();
+
     chooseSection12Class("rogue");
 
     const duplicateMulticlassResult =

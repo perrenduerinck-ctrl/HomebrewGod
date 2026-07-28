@@ -5147,6 +5147,42 @@ export function createCharacterCreator(options = {}) {
       return null;
     }
 
+    const classId =
+      cleanString(classEntry.classId);
+
+    const className =
+      cleanString(classEntry.className);
+
+    const defaultTemplates =
+      DEFAULT_CLASS_TEMPLATES.map((template) => {
+        return normalizeClassTemplate(
+          template,
+          template?.source || "template"
+        );
+      });
+
+    const defaultTemplate =
+      defaultTemplates.find((template) => {
+        return template.id === classId;
+      }) ||
+      defaultTemplates.find((template) => {
+        return (
+          template.name.toLowerCase() ===
+          className.toLowerCase()
+        );
+      }) ||
+      null;
+
+    if (
+      defaultTemplate &&
+      findDefaultClassDefinition(
+        classId,
+        className
+      )
+    ) {
+      return defaultTemplate;
+    }
+
     if (classEntry.templateSnapshot) {
       return normalizeClassTemplate(
         classEntry.templateSnapshot,
@@ -5154,38 +5190,31 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
-    const classId =
-      cleanString(classEntry.classId);
-
-    const className =
-      cleanString(classEntry.className);
-
-    const templates = [
-      ...DEFAULT_CLASS_TEMPLATES,
-      ...(
+    const roomTemplates =
+      (
         Array.isArray(
           creatorState?.roomClassCache
         )
           ? creatorState.roomClassCache
           : []
-      )
-    ].map((template) => {
-      return normalizeClassTemplate(
-        template,
-        template?.source || "template"
-      );
-    });
+      ).map((template) => {
+        return normalizeClassTemplate(
+          template,
+          template?.source || "homebrew"
+        );
+      });
 
     return (
-      templates.find((template) => {
+      roomTemplates.find((template) => {
         return template.id === classId;
       }) ||
-      templates.find((template) => {
+      roomTemplates.find((template) => {
         return (
           template.name.toLowerCase() ===
           className.toLowerCase()
         );
       }) ||
+      defaultTemplate ||
       null
     );
   }
@@ -11199,6 +11228,10 @@ export function createCharacterCreator(options = {}) {
         "homebrew"
       );
 
+      if (classMap.has(normalized.id)) {
+        return;
+      }
+
       classMap.set(
         normalized.id,
         normalized
@@ -11261,17 +11294,8 @@ export function createCharacterCreator(options = {}) {
       return null;
     }
 
-    const allClasses = getAllClassTemplates();
-
-    return (
-      allClasses.find((classData) => {
-        return classData.id === primaryClass?.classId;
-      }) ||
-
-      allClasses.find((classData) => {
-        return classData.name === primaryClass?.className;
-      }) ||
-      null
+    return resolveClassTemplateForEntry(
+      primaryClass
     );
   }
 
@@ -15006,6 +15030,59 @@ export function createCharacterCreator(options = {}) {
         }) ||
       null;
 
+    const classId =
+      makeSafeId(
+        classEntry.classId ||
+        template?.id,
+        ""
+      );
+
+    const snapshotClassId =
+      makeSafeId(
+        normalizedSavedSnapshot?.classId,
+        ""
+      );
+
+    const customSnapshot =
+      Boolean(
+        savedSnapshot &&
+        (
+          /custom|homebrew/i.test(
+            savedSnapshot.source ||
+            ""
+          ) ||
+          /custom|homebrew/i.test(
+            savedSnapshot.sourceType ||
+            ""
+          )
+        )
+      );
+
+    const snapshotBelongsToClass =
+      Boolean(
+        normalizedSavedSnapshot &&
+        (
+          matchedTemplateSubclass ||
+          (
+            customSnapshot &&
+            (
+              !snapshotClassId ||
+              snapshotClassId === classId
+            )
+          ) ||
+          (
+            !findDefaultClassDefinition(
+              classEntry.classId,
+              classEntry.className
+            ) &&
+            (
+              !snapshotClassId ||
+              snapshotClassId === classId
+            )
+          )
+        )
+      );
+
     if (
       normalizedSavedSnapshot &&
       matchedTemplateSubclass &&
@@ -15028,7 +15105,10 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
-    if (normalizedSavedSnapshot) {
+    if (
+      normalizedSavedSnapshot &&
+      snapshotBelongsToClass
+    ) {
       return normalizedSavedSnapshot;
     }
 
@@ -17716,11 +17796,13 @@ export function createCharacterCreator(options = {}) {
       .hg-character-choice-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        align-items: start;
         gap: 10px;
         margin-top: 12px;
       }
 
       .hg-character-choice-card {
+        align-self: start;
         padding: 12px;
         border-radius: 14px;
         border: 1px solid rgba(116, 138, 255, 0.18);
@@ -24545,9 +24627,14 @@ export function createCharacterCreator(options = {}) {
     };
   }
 
-  function getSection12SubclassTemplates() {
+  function getSection12SubclassTemplates(
+    classEntry =
+      getSection12PrimaryClass()
+  ) {
     const selectedClass =
-      getSelectedClassTemplate();
+      resolveClassTemplateForEntry(
+        classEntry
+      );
 
     const subclassMap =
       new Map();
@@ -24565,7 +24652,13 @@ export function createCharacterCreator(options = {}) {
 
       const normalized =
         normalizeSection12Subclass(
-          subclass,
+          {
+            ...cloneData(subclass),
+            classId:
+              subclass?.classId ||
+              selectedClass?.id ||
+              ""
+          },
 
           subclass?.source ||
           selectedClass?.source ||
@@ -24578,17 +24671,25 @@ export function createCharacterCreator(options = {}) {
       );
     });
 
-    const primaryClass =
-      getSection12PrimaryClass();
-
     const savedSubclass =
-      primaryClass?.choices
-        ?.subclassSnapshot;
+      getClassEntrySubclassTemplate(
+        classEntry
+      );
 
-    if (savedSubclass && isActiveRulesetEntry(savedSubclass)) {
+    if (
+      savedSubclass &&
+      isActiveRulesetEntry(savedSubclass) &&
+      !subclassMap.has(savedSubclass.id)
+    ) {
       const normalized =
         normalizeSection12Subclass(
-          savedSubclass,
+          {
+            ...cloneData(savedSubclass),
+            classId:
+              savedSubclass.classId ||
+              selectedClass?.id ||
+              ""
+          },
           "character"
         );
 
@@ -25169,6 +25270,10 @@ export function createCharacterCreator(options = {}) {
           ),
 
           name,
+          classId:
+            primaryClass.classId ||
+            selectedClass?.id ||
+            "",
           source: "custom",
 
           summary:
@@ -25613,7 +25718,22 @@ export function createCharacterCreator(options = {}) {
     let values = uniqueCleanArray(feature?.options);
 
     if (!values.length && optionSource === "subclasses") {
-      values = getSection12SubclassTemplates().map(
+      const classEntry =
+        getClassEntryAtIndex(
+          Math.max(
+            0,
+            Math.round(
+              safeNumber(
+                feature?.classIndex,
+                0
+              )
+            )
+          )
+        );
+
+      values = getSection12SubclassTemplates(
+        classEntry
+      ).map(
         (subclass) => subclass.name
       );
     }
