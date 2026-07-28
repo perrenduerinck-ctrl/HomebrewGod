@@ -6,6 +6,9 @@
 import {
   buildCharacterSheetPresentation
 } from "./characterCreator/sheetPresentation.js";
+import {
+  STANDARD_CONDITIONS
+} from "./characterSheet/gameplayState.js";
 
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },
@@ -1287,8 +1290,9 @@ function renderAttackTable(character, proficiencyBonus) {
   `;
 }
 
-function renderEquipment(character) {
+function renderEquipment(character, options = {}) {
   const items = asArray(character?.equipment?.items);
+  const interactive = options.interactive === true;
 
   if (!items.length) {
     return `<p class="hg-sheet-muted">No equipment is recorded yet.</p>`;
@@ -1310,7 +1314,7 @@ function renderEquipment(character) {
           </tr>
         </thead>
         <tbody>
-          ${items.map((item) => {
+          ${items.map((item, itemIndex) => {
             const container = itemById.get(cleanText(item?.containerId));
             const statuses = [
               item?.equipped ? "Equipped" : "",
@@ -1324,12 +1328,40 @@ function renderEquipment(character) {
             return `
               <tr>
                 <td>
-                  <strong>${escapeHtml(firstText(item?.name, "Unnamed Item"))}</strong>
-                  <small>${escapeHtml(titleFromId(item?.category, "Item"))}</small>
+                  <details class="hg-sheet-item-details">
+                    <summary>
+                      <strong>${escapeHtml(firstText(item?.name, "Unnamed Item"))}</strong>
+                      <small>${escapeHtml(titleFromId(item?.category, "Item"))}</small>
+                    </summary>
+                    <p>${escapeHtml(firstText(item?.notes, "No item notes."))}</p>
+                  </details>
                 </td>
                 <td>${clampInteger(item?.quantity, 1, 1)}</td>
                 <td>${weight === null ? "\u2014" : `${escapeHtml(weight)} lb.`}</td>
-                <td>${escapeHtml(statuses.join(", ") || "Carried")}</td>
+                <td>
+                  <span>${escapeHtml(statuses.join(", ") || "Carried")}</span>
+                  ${interactive ? `
+                    <span class="hg-sheet-inline-actions hg-sheet-no-print">
+                      ${item?.isContainer ? "" : `
+                        <button
+                          type="button"
+                          data-character-sheet-action="toggle-item-equipped"
+                          data-item-id="${escapeHtml(cleanText(item?.id))}"
+                          data-item-index="${itemIndex}"
+                          ${cleanText(item?.containerId) ? "disabled" : ""}
+                        >${item?.equipped ? "Unequip" : "Equip"}</button>
+                      `}
+                      ${item?.isMagical && item?.requiresAttunement ? `
+                        <button
+                          type="button"
+                          data-character-sheet-action="toggle-item-attuned"
+                          data-item-id="${escapeHtml(cleanText(item?.id))}"
+                          data-item-index="${itemIndex}"
+                        >${item?.attuned ? "Unattune" : "Attune"}</button>
+                      ` : ""}
+                    </span>
+                  ` : ""}
+                </td>
               </tr>
             `;
           }).join("")}
@@ -1925,6 +1957,430 @@ function renderMainPanel(character, summary) {
       ${firstText(character?.features?.notes, character?.notes) ? `
         <article class="hg-sheet-card">
           <h2>Notes</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(character?.features?.notes, character?.notes))}</p>
+        </article>
+      ` : ""}
+    </section>
+  `;
+}
+
+function renderCombatStats(character, summary) {
+  const combat = isRecord(character?.combat)
+    ? character.combat
+    : {};
+  const currentHp = clampInteger(
+    combat.currentHp ?? character?.currentHp,
+    0,
+    0
+  );
+  const maxHp = clampInteger(
+    combat.maxHp ?? character?.maxHp,
+    1,
+    1
+  );
+  const temporaryHp = clampInteger(
+    combat.temporaryHp,
+    0,
+    0
+  );
+  const armorClass = Math.round(
+    finiteNumber(
+      combat.armorClass ?? character?.armorClass,
+      10
+    )
+  );
+  const initiative =
+    optionalNumber(combat.initiative) ??
+    getAbilityModifier(character, "dex");
+
+  return `
+    <div class="hg-sheet-stat-grid hg-sheet-combat-stats">
+      <article class="hg-sheet-stat-card">
+        <span>Armor Class</span>
+        <strong>${armorClass}</strong>
+      </article>
+      <article class="hg-sheet-stat-card">
+        <span>Current HP</span>
+        <strong>${currentHp} / ${maxHp}</strong>
+        ${temporaryHp ? `<small>+${temporaryHp} temporary</small>` : ""}
+      </article>
+      <article class="hg-sheet-stat-card">
+        <span>Initiative</span>
+        <strong>${escapeHtml(formatModifier(initiative))}</strong>
+      </article>
+      <article class="hg-sheet-stat-card">
+        <span>Speed</span>
+        <strong class="hg-sheet-stat-text">${escapeHtml(formatSpeed(combat.speed, character?.speed))}</strong>
+      </article>
+      <article class="hg-sheet-stat-card">
+        <span>Proficiency</span>
+        <strong>${escapeHtml(formatModifier(summary.proficiencyBonus))}</strong>
+      </article>
+      <article class="hg-sheet-stat-card">
+        <span>Inspiration</span>
+        <strong>${combat.inspiration === true ? "Yes" : "No"}</strong>
+        <button
+          type="button"
+          class="hg-sheet-small-control hg-sheet-no-print"
+          data-character-sheet-action="toggle-inspiration"
+          ${summary.canTrack ? "" : "disabled"}
+        >${combat.inspiration === true ? "Spend" : "Gain"}</button>
+      </article>
+    </div>
+  `;
+}
+
+function renderHitPointControls(character, canTrack) {
+  const combat = isRecord(character?.combat)
+    ? character.combat
+    : {};
+  const currentHp = clampInteger(
+    combat.currentHp ?? character?.currentHp,
+    0,
+    0
+  );
+  const maxHp = clampInteger(
+    combat.maxHp ?? character?.maxHp,
+    1,
+    1
+  );
+  const temporaryHp = clampInteger(
+    combat.temporaryHp,
+    0,
+    0
+  );
+  const deathSaves = isRecord(combat.deathSaves)
+    ? combat.deathSaves
+    : {};
+  const successes = Math.min(
+    3,
+    clampInteger(deathSaves.successes, 0, 0)
+  );
+  const failures = Math.min(
+    3,
+    clampInteger(deathSaves.failures, 0, 0)
+  );
+
+  return `
+    <article class="hg-sheet-card hg-sheet-wide-card">
+      <h2>Hit Points &amp; Survival</h2>
+      <div class="hg-sheet-vitals-layout">
+        <div>
+          <div class="hg-sheet-hp-display">
+            <span>Current</span>
+            <strong>${currentHp}</strong>
+            <span>of ${maxHp}</span>
+            <small>${temporaryHp} temporary HP</small>
+          </div>
+          <div class="hg-sheet-value-control hg-sheet-no-print">
+            <label>
+              Amount
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value="1"
+                inputmode="numeric"
+                data-character-sheet-input="hp-amount"
+                ${canTrack ? "" : "disabled"}
+              >
+            </label>
+            <button type="button" data-character-sheet-action="damage" ${canTrack ? "" : "disabled"}>Damage</button>
+            <button type="button" data-character-sheet-action="heal" ${canTrack ? "" : "disabled"}>Heal</button>
+            <button type="button" data-character-sheet-action="set-current-hp" ${canTrack ? "" : "disabled"}>Set Current</button>
+            <button type="button" data-character-sheet-action="set-temp-hp" ${canTrack ? "" : "disabled"}>Set Temp</button>
+          </div>
+        </div>
+        <div class="hg-sheet-death-saves">
+          <h3>Death Saves</h3>
+          ${[
+            ["success", "Successes", successes],
+            ["failure", "Failures", failures]
+          ].map(([kind, label, value]) => `
+            <div>
+              <span>${label}</span>
+              <strong aria-label="${label}: ${value}">${"\u25cf".repeat(value)}${"\u25cb".repeat(3 - value)}</strong>
+              <span class="hg-sheet-inline-actions hg-sheet-no-print">
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-death-save"
+                  data-death-save-kind="${kind}"
+                  data-delta="-1"
+                  ${!canTrack || value <= 0 ? "disabled" : ""}
+                >&minus;</button>
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-death-save"
+                  data-death-save-kind="${kind}"
+                  data-delta="1"
+                  ${!canTrack || value >= 3 ? "disabled" : ""}
+                >+</button>
+              </span>
+            </div>
+          `).join("")}
+          <button
+            type="button"
+            class="hg-sheet-no-print"
+            data-character-sheet-action="reset-death-saves"
+            ${!canTrack || (!successes && !failures) ? "disabled" : ""}
+          >Reset Death Saves</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderConditions(character, canTrack) {
+  const active = asArray(
+    character?.combat?.conditions
+  ).map((condition) => cleanText(condition)).filter(Boolean);
+
+  return `
+    <article class="hg-sheet-card">
+      <h2>Conditions</h2>
+      <div class="hg-sheet-chip-list">
+        ${active.length
+          ? active.map((condition) => `
+              <button
+                type="button"
+                class="hg-sheet-condition-chip"
+                data-character-sheet-action="toggle-condition"
+                data-condition="${escapeHtml(condition)}"
+                ${canTrack ? "" : "disabled"}
+              >${escapeHtml(condition)} <span aria-hidden="true">&times;</span></button>
+            `).join("")
+          : `<span class="hg-sheet-muted">No active conditions.</span>`}
+      </div>
+      <div class="hg-sheet-condition-controls hg-sheet-no-print">
+        <label>
+          Standard condition
+          <select data-character-sheet-input="standard-condition" ${canTrack ? "" : "disabled"}>
+            ${STANDARD_CONDITIONS.map((condition) => `
+              <option value="${escapeHtml(condition)}">${escapeHtml(condition)}</option>
+            `).join("")}
+          </select>
+        </label>
+        <button
+          type="button"
+          data-character-sheet-action="add-standard-condition"
+          ${canTrack ? "" : "disabled"}
+        >Add</button>
+        <label>
+          Custom condition
+          <input
+            type="text"
+            maxlength="60"
+            placeholder="Custom condition"
+            data-character-sheet-input="custom-condition"
+            ${canTrack ? "" : "disabled"}
+          >
+        </label>
+        <button
+          type="button"
+          data-character-sheet-action="add-custom-condition"
+          ${canTrack ? "" : "disabled"}
+        >Add Custom</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderActionsPanel(character, summary) {
+  const classResources = asArray(
+    character?.classMechanics?.resources
+  );
+  const featResources = asArray(
+    character?.featMechanics?.resources
+  ).filter((entry) => {
+    return entry?.kind !== "featSpell";
+  });
+
+  return `
+    <section class="hg-sheet-panel" aria-label="Actions">
+      ${renderCombatStats(character, summary)}
+      <div class="hg-sheet-card-grid">
+        ${renderHitPointControls(character, summary.canTrack)}
+        ${renderConditions(character, summary.canTrack)}
+        <article class="hg-sheet-card hg-sheet-wide-card">
+          <h2>Actions &amp; Attacks</h2>
+          <p class="hg-sheet-section-kicker">Weapons, natural weapons, spell attacks, and special actions</p>
+          ${renderAttackTable(character, summary.proficiencyBonus)}
+        </article>
+        <article class="hg-sheet-card">
+          <h2>Class Resources</h2>
+          ${renderTrackedResources(
+            classResources,
+            "class",
+            "No limited class resources are recorded."
+          )}
+        </article>
+        <article class="hg-sheet-card">
+          <h2>Feat &amp; Other Resources</h2>
+          ${renderTrackedResources(
+            featResources,
+            "feat",
+            "No limited feat resources are recorded."
+          )}
+        </article>
+        <article class="hg-sheet-card">
+          <h2>Hit Dice</h2>
+          ${renderHitDiceByClass(character)}
+        </article>
+        <article class="hg-sheet-card">
+          <h2>Quick Reminders</h2>
+          ${renderContentList(
+            getManualSituationalEntries(character),
+            "No situational reminders are recorded."
+          )}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderAbilitiesPanel(character, summary) {
+  return `
+    <section class="hg-sheet-panel" aria-label="Abilities">
+      <div class="hg-sheet-card-grid">
+        <article class="hg-sheet-card">
+          <h2>Ability Scores</h2>
+          ${renderAbilities(character)}
+        </article>
+        <article class="hg-sheet-card">
+          <h2>Saving Throws</h2>
+          ${renderSavingThrows(character, summary.proficiencyBonus)}
+        </article>
+        <article class="hg-sheet-card">
+          <h2>Passive Scores</h2>
+          ${renderDefinitionList([
+            ["Perception", String(summary.passivePerception)],
+            ["Investigation", String(getPassiveSkillScore(character, "investigation", summary.proficiencyBonus))],
+            ["Insight", String(getPassiveSkillScore(character, "insight", summary.proficiencyBonus))]
+          ])}
+        </article>
+        <article class="hg-sheet-card hg-sheet-wide-card">
+          <h2>Skills</h2>
+          ${renderSkills(character, summary.proficiencyBonus)}
+        </article>
+        ${renderDefensesAndMovement(character)}
+        ${renderArmorClassOptions(character)}
+        <article class="hg-sheet-card">
+          <h2>Proficiencies</h2>
+          ${renderDefinitionList([
+            ["Armor", listText(character?.proficiencies?.armor)],
+            ["Weapons", listText(character?.proficiencies?.weapons)],
+            ["Tools", listText(character?.proficiencies?.tools)],
+            ["Languages", listText(character?.proficiencies?.languages)]
+          ])}
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function getInventoryWeight(character) {
+  return asArray(character?.equipment?.items)
+    .reduce((total, item) => {
+      const weight = optionalNumber(item?.weight);
+      const quantity = clampInteger(
+        item?.quantity,
+        1,
+        1
+      );
+
+      return weight === null
+        ? total
+        : total + (weight * quantity);
+    }, 0);
+}
+
+function renderInventoryPanel(character, summary) {
+  const strength = getAbilityScore(
+    character,
+    "str"
+  );
+  const capacity = Math.max(
+    0,
+    Math.round(strength * 15)
+  );
+  const weight = getInventoryWeight(character);
+  const attuned = asArray(
+    character?.equipment?.items
+  ).filter((item) => {
+    return item?.attuned === true;
+  }).length;
+
+  return `
+    <section class="hg-sheet-panel" aria-label="Inventory">
+      <div class="hg-sheet-stat-grid">
+        <article class="hg-sheet-stat-card">
+          <span>Carried Weight</span>
+          <strong>${Number(weight.toFixed(2))} lb.</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Capacity</span>
+          <strong>${capacity} lb.</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Encumbrance</span>
+          <strong class="hg-sheet-stat-text">${weight > capacity ? "Over capacity" : "Within capacity"}</strong>
+        </article>
+        <article class="hg-sheet-stat-card">
+          <span>Attunement</span>
+          <strong>${attuned} / 3</strong>
+        </article>
+      </div>
+      ${attuned >= 3 ? `
+        <div class="hg-sheet-callout" role="status">
+          The normal attunement limit is reached.
+        </div>
+      ` : ""}
+      <article class="hg-sheet-card">
+        <h2>Equipment &amp; Containers</h2>
+        <p class="hg-sheet-section-kicker">Expand an item for notes. Equip and attune changes save to this character.</p>
+        ${renderEquipment(character, {
+          interactive: summary.canTrack
+        })}
+      </article>
+      <div class="hg-sheet-card-grid">
+        <article class="hg-sheet-card">
+          <h2>Currency</h2>
+          ${renderCurrency(character)}
+        </article>
+        <article class="hg-sheet-card">
+          <h2>Inventory Notes</h2>
+          <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(character?.equipment?.notes, "No inventory notes."))}</p>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderFeaturesPanel(character) {
+  const featureGroups = getFeatureGroups(
+    character
+  );
+  const feats = getFeatEntries(character);
+
+  return `
+    <section class="hg-sheet-panel" aria-label="Features">
+      ${renderClassProgression(character)}
+      <div class="hg-sheet-card-grid hg-sheet-feature-grid">
+        ${featureGroups.map((group) => `
+          <article class="hg-sheet-card">
+            <h2>${escapeHtml(group.title)}</h2>
+            ${renderContentList(group.entries)}
+          </article>
+        `).join("")}
+        <article class="hg-sheet-card">
+          <h2>Feats</h2>
+          ${renderContentList(feats, "No feats selected.")}
+        </article>
+      </div>
+      ${renderFeatMechanics(character)}
+      ${firstText(character?.features?.notes, character?.notes) ? `
+        <article class="hg-sheet-card">
+          <h2>Feature Notes &amp; Reminders</h2>
           <p class="hg-sheet-preserve-lines">${escapeHtml(firstText(character?.features?.notes, character?.notes))}</p>
         </article>
       ` : ""}
@@ -2850,6 +3306,191 @@ function ensureStyles() {
       align-items: center;
     }
 
+    .hg-character-sheet-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: 520px;
+    }
+
+    .hg-sheet-more-menu {
+      position: relative;
+    }
+
+    .hg-sheet-more-menu > summary {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 7px 12px;
+      border: 1px solid rgba(127, 153, 255, 0.34);
+      border-radius: 9px;
+      color: #edf1ff;
+      background: rgba(22, 31, 62, 0.88);
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .hg-sheet-more-menu > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .hg-sheet-more-menu > div {
+      position: absolute;
+      z-index: 12;
+      top: calc(100% + 6px);
+      right: 0;
+      display: grid;
+      min-width: 170px;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid rgba(127, 153, 255, 0.3);
+      border-radius: 12px;
+      background: #0c132a;
+      box-shadow: 0 14px 35px rgba(0, 0, 0, 0.42);
+    }
+
+    .hg-sheet-danger-button {
+      border-color: rgba(255, 114, 132, 0.48) !important;
+      color: #ffd6dc !important;
+    }
+
+    .hg-sheet-sync-status {
+      display: inline-flex;
+      width: fit-content;
+      padding: 4px 9px;
+      border: 1px solid rgba(105, 222, 168, 0.28);
+      border-radius: 999px;
+      color: #bdf3d8 !important;
+      background: rgba(34, 140, 94, 0.13);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .hg-sheet-sync-status[data-sheet-save-status="preview"],
+    .hg-sheet-sync-status[data-sheet-save-status="dirty"] {
+      border-color: rgba(244, 216, 139, 0.35);
+      color: #f4d88b !important;
+      background: rgba(244, 216, 139, 0.08);
+    }
+
+    .hg-sheet-value-control,
+    .hg-sheet-condition-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: end;
+      margin-top: 12px;
+    }
+
+    .hg-sheet-value-control label,
+    .hg-sheet-condition-controls label {
+      display: grid;
+      flex: 1 1 150px;
+      gap: 5px;
+      color: #aeb8df;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .hg-character-sheet input,
+    .hg-character-sheet select {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid rgba(127, 153, 255, 0.3);
+      border-radius: 9px;
+      color: #edf1ff;
+      background: rgba(7, 11, 27, 0.82);
+    }
+
+    .hg-sheet-vitals-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 0.7fr);
+      gap: 18px;
+    }
+
+    .hg-sheet-hp-display {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    .hg-sheet-hp-display strong {
+      color: #fff;
+      font-size: clamp(36px, 7vw, 62px);
+      line-height: 1;
+    }
+
+    .hg-sheet-hp-display span,
+    .hg-sheet-hp-display small,
+    .hg-sheet-section-kicker {
+      color: #aeb8df;
+    }
+
+    .hg-sheet-hp-display small {
+      flex-basis: 100%;
+    }
+
+    .hg-sheet-death-saves {
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      padding: 12px;
+      border: 1px solid rgba(127, 153, 255, 0.18);
+      border-radius: 12px;
+      background: rgba(7, 11, 27, 0.48);
+    }
+
+    .hg-sheet-death-saves h3,
+    .hg-sheet-section-kicker {
+      margin: 0 0 4px;
+    }
+
+    .hg-sheet-death-saves > div {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .hg-sheet-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .hg-sheet-condition-chip {
+      padding: 6px 9px !important;
+      border-radius: 999px !important;
+      border-color: rgba(244, 216, 139, 0.38) !important;
+      color: #f9e7b6 !important;
+      background: rgba(244, 216, 139, 0.09) !important;
+    }
+
+    .hg-sheet-small-control {
+      justify-self: center;
+      margin-top: 8px !important;
+      padding: 5px 9px !important;
+      font-size: 11px !important;
+    }
+
+    .hg-sheet-item-details summary {
+      cursor: pointer;
+    }
+
+    .hg-sheet-item-details summary strong,
+    .hg-sheet-item-details summary small {
+      display: block;
+    }
+
+    .hg-sheet-item-details p {
+      margin-top: 8px;
+      color: #aeb8df;
+      font-size: 12px;
+    }
+
     .hg-sheet-slot-row {
       grid-template-columns: 1fr !important;
       place-items: stretch !important;
@@ -2878,6 +3519,10 @@ function ensureStyles() {
       .hg-sheet-two-column {
         grid-template-columns: 1fr;
       }
+
+      .hg-sheet-vitals-layout {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 560px) {
@@ -2898,10 +3543,14 @@ function ensureStyles() {
         position: sticky;
         top: 0;
         z-index: 5;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
       }
 
       .hg-character-sheet-tab {
-        flex-basis: calc(33.333% - 6px);
+        flex: 0 0 auto;
+        min-width: 105px;
         padding-inline: 6px !important;
       }
 
@@ -2928,6 +3577,16 @@ function ensureStyles() {
 
       .hg-sheet-inline-actions button {
         flex: 1 1 100px;
+      }
+
+      .hg-sheet-value-control button,
+      .hg-sheet-condition-controls button {
+        flex: 1 1 120px;
+      }
+
+      .hg-sheet-more-menu > div {
+        right: auto;
+        left: 0;
       }
     }
 
@@ -3097,6 +3756,19 @@ export function createCharacterSheetView(options = {}) {
     onClose: typeof options.onClose === "function"
       ? options.onClose
       : () => {},
+    onEdit: typeof options.onEdit === "function"
+      ? options.onEdit
+      : () => false,
+    onDuplicate: typeof options.onDuplicate === "function"
+      ? options.onDuplicate
+      : () => false,
+    onDelete: typeof options.onDelete === "function"
+      ? options.onDelete
+      : () => false,
+    onGameplayAction:
+      typeof options.onGameplayAction === "function"
+        ? options.onGameplayAction
+        : () => false,
     getSheetContext: typeof options.getSheetContext === "function"
       ? options.getSheetContext
       : () => ({}),
@@ -3119,6 +3791,16 @@ export function createCharacterSheetView(options = {}) {
     onRest: typeof options.onRest === "function"
       ? options.onRest
       : () => false,
+    confirmRest:
+      typeof options.confirmRest === "function"
+        ? options.confirmRest
+        : (message) => {
+            return (
+              typeof window === "undefined" ||
+              typeof window.confirm !== "function" ||
+              window.confirm(message)
+            );
+          },
     onExportJson: typeof options.onExportJson === "function"
       ? options.onExportJson
       : downloadCharacterSheetJson,
@@ -3144,8 +3826,9 @@ export function createCharacterSheetView(options = {}) {
   const state = {
     root: null,
     character: {},
-    activeTab: "main",
-    isOpen: false
+    activeTab: "actions",
+    isOpen: false,
+    isSaving: false
   };
 
   function renderCharacterSheetHtml(
@@ -3167,11 +3850,23 @@ export function createCharacterSheetView(options = {}) {
     const requestedTab = firstText(
       renderOptions.activeTab,
       state.activeTab,
-      "main"
+      "actions"
     ).toLowerCase();
-    const activeTab = ["main", "story", "spell"].includes(requestedTab)
+    const tabs = [
+      "actions",
+      "abilities",
+      "inventory",
+      "features",
+      "spells",
+      "description"
+    ];
+    const activeTab = tabs.includes(requestedTab)
       ? requestedTab
-      : "main";
+      : requestedTab === "spell"
+        ? "spells"
+        : requestedTab === "story"
+          ? "description"
+          : "actions";
     const portraitUrl =
       presentation.portraitUrl;
     const classLine =
@@ -3202,16 +3897,49 @@ export function createCharacterSheetView(options = {}) {
       safeCharacter.docId,
       safeCharacter.firestoreDocumentId
     );
-    const tokenStatus = !savedCharacterId
-      ? "Save the character before synchronizing linked tokens."
-      : sheetContext.dirty === true
-        ? "Unsaved changes must be saved before linked tokens are current."
-        : "Saved character data is ready to synchronize with linked tokens.";
-    const panel = activeTab === "story"
-      ? renderStoryPanel(safeCharacter)
-      : activeTab === "spell"
-        ? renderSpellPanel(safeCharacter)
-        : renderMainPanel(safeCharacter, mainSummary);
+    const canTrack = Boolean(
+      savedCharacterId
+    );
+    mainSummary.canTrack = canTrack;
+    const saveStatus = !savedCharacterId
+      ? "Preview only \u2014 save this character to track gameplay"
+      : state.isSaving
+        ? "Saving\u2026"
+        : sheetContext.dirty === true
+          ? "Unsaved changes"
+          : "Saved";
+    const panel = requestedTab === "main"
+      ? renderMainPanel(
+          safeCharacter,
+          mainSummary
+        )
+      : {
+      actions: () => renderActionsPanel(
+        safeCharacter,
+        mainSummary
+      ),
+      abilities: () => renderAbilitiesPanel(
+        safeCharacter,
+        mainSummary
+      ),
+      inventory: () => renderInventoryPanel(
+        safeCharacter,
+        mainSummary
+      ),
+      features: () => renderFeaturesPanel(
+        safeCharacter
+      ),
+      spells: () => renderSpellPanel(
+        safeCharacter
+      ),
+      description: () => renderStoryPanel(
+        safeCharacter
+      )
+    }[activeTab]();
+    const returnLabel = firstText(
+      sheetContext.returnLabel,
+      "Back to Library"
+    );
 
     return `
       <div class="hg-character-sheet" data-character-sheet-view="true">
@@ -3231,7 +3959,8 @@ export function createCharacterSheetView(options = {}) {
             <p
               class="hg-sheet-sync-status"
               data-linked-token-status="${savedCharacterId ? (sheetContext.dirty === true ? "dirty" : "ready") : "unsaved"}"
-            >${escapeHtml(tokenStatus)}</p>
+              data-sheet-save-status="${savedCharacterId ? (state.isSaving ? "saving" : sheetContext.dirty === true ? "dirty" : "saved") : "preview"}"
+            >${escapeHtml(saveStatus)}</p>
           </div>
 
           <div class="hg-character-sheet-toolbar hg-sheet-no-print">
@@ -3245,29 +3974,58 @@ export function createCharacterSheetView(options = {}) {
             >Long Rest</button>
             <button
               type="button"
-              data-character-sheet-action="sync-linked-token"
-              ${savedCharacterId ? "" : "disabled"}
-            >Save &amp; Sync Tokens</button>
-            <button
-              type="button"
-              data-character-sheet-action="export-json"
-            >Export JSON</button>
-            <button
-              type="button"
-              data-character-sheet-action="print"
-            >Print</button>
+              data-character-sheet-action="edit"
+            >Edit Character</button>
+            <details class="hg-sheet-more-menu">
+              <summary>More</summary>
+              <div>
+                <button
+                  type="button"
+                  data-character-sheet-action="sync-linked-token"
+                  ${savedCharacterId ? "" : "disabled"}
+                >Save Now</button>
+                <button
+                  type="button"
+                  data-character-sheet-action="export-json"
+                >Export JSON</button>
+                <button
+                  type="button"
+                  data-character-sheet-action="print"
+                >Print</button>
+                <button
+                  type="button"
+                  data-character-sheet-action="duplicate"
+                  ${savedCharacterId ? "" : "disabled"}
+                >Duplicate</button>
+                <button
+                  type="button"
+                  class="hg-sheet-danger-button"
+                  data-character-sheet-action="delete"
+                  ${savedCharacterId ? "" : "disabled"}
+                >Delete</button>
+              </div>
+            </details>
             <button
               type="button"
               data-character-sheet-action="close"
-            >Back to Creator</button>
+            >${escapeHtml(returnLabel)}</button>
           </div>
         </header>
 
+        ${canTrack ? "" : `
+          <div class="hg-sheet-callout hg-sheet-no-print" role="status">
+            This is a preview. Save the character before using HP, rests, slots, resources, conditions, or equipment controls.
+          </div>
+        `}
+
         <nav class="hg-character-sheet-tabs hg-sheet-no-print" aria-label="Character sheet sections">
           ${[
-            ["main", "Main"],
-            ["story", "Story"],
-            ["spell", "Spell"]
+            ["actions", "Actions"],
+            ["abilities", "Abilities"],
+            ["inventory", "Inventory"],
+            ["features", "Features"],
+            ["spells", "Spells"],
+            ["description", "Description"]
           ].map(([id, label]) => `
             <button
               type="button"
@@ -3286,7 +4044,16 @@ export function createCharacterSheetView(options = {}) {
         </div>
 
         <div class="hg-sheet-print-only" aria-hidden="true">
-          ${renderMainPanel(safeCharacter, mainSummary)}
+          ${renderActionsPanel(safeCharacter, {
+            ...mainSummary,
+            canTrack: false
+          })}
+          ${renderAbilitiesPanel(safeCharacter, mainSummary)}
+          ${renderInventoryPanel(safeCharacter, {
+            ...mainSummary,
+            canTrack: false
+          })}
+          ${renderFeaturesPanel(safeCharacter)}
           ${renderStoryPanel(safeCharacter)}
           ${renderSpellPanel(safeCharacter)}
         </div>
@@ -3324,8 +4091,11 @@ export function createCharacterSheetView(options = {}) {
   }
 
   function completeTrackedAction(result, successMessage) {
+    state.isSaving = false;
+
     if (result === false) {
       deps.setStatus("That character-sheet action could not be completed.");
+      render();
       return false;
     }
 
@@ -3346,6 +4116,9 @@ export function createCharacterSheetView(options = {}) {
         result &&
         typeof result.then === "function"
       ) {
+        state.isSaving = true;
+        render();
+
         result
           .then((value) => {
             completeTrackedAction(
@@ -3354,6 +4127,7 @@ export function createCharacterSheetView(options = {}) {
             );
           })
           .catch((error) => {
+            state.isSaving = false;
             console.error(
               "Character-sheet action failed.",
               error
@@ -3362,6 +4136,7 @@ export function createCharacterSheetView(options = {}) {
               error?.message ||
               "The character-sheet action failed."
             );
+            render();
           });
 
         return true;
@@ -3401,11 +4176,120 @@ export function createCharacterSheetView(options = {}) {
     if (action === "tab") {
       const tab = cleanText(button.dataset.characterSheetTab).toLowerCase();
 
-      if (["main", "story", "spell"].includes(tab)) {
+      if ([
+        "actions",
+        "abilities",
+        "inventory",
+        "features",
+        "spells",
+        "description"
+      ].includes(tab)) {
         state.activeTab = tab;
         render();
       }
 
+      return;
+    }
+
+    if ([
+      "damage",
+      "heal",
+      "set-current-hp",
+      "set-temp-hp"
+    ].includes(action)) {
+      const input = state.root.querySelector(
+        '[data-character-sheet-input="hp-amount"]'
+      );
+
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: action,
+          amount: finiteNumber(input?.value, 0)
+        }),
+        ""
+      );
+      return;
+    }
+
+    if (action === "toggle-inspiration") {
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: "toggle-inspiration"
+        }),
+        ""
+      );
+      return;
+    }
+
+    if (action === "adjust-death-save") {
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: "adjust-death-save",
+          kind: cleanText(
+            button.dataset.deathSaveKind
+          ),
+          delta: finiteNumber(
+            button.dataset.delta,
+            0
+          )
+        }),
+        ""
+      );
+      return;
+    }
+
+    if (action === "reset-death-saves") {
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: "reset-death-saves"
+        }),
+        ""
+      );
+      return;
+    }
+
+    if (
+      action === "toggle-condition" ||
+      action === "add-standard-condition" ||
+      action === "add-custom-condition"
+    ) {
+      const condition = action === "toggle-condition"
+        ? cleanText(button.dataset.condition)
+        : cleanText(
+            state.root.querySelector(
+              action === "add-standard-condition"
+                ? '[data-character-sheet-input="standard-condition"]'
+                : '[data-character-sheet-input="custom-condition"]'
+            )?.value
+          );
+
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: "toggle-condition",
+          condition
+        }),
+        ""
+      );
+      return;
+    }
+
+    if (
+      action === "toggle-item-equipped" ||
+      action === "toggle-item-attuned"
+    ) {
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: action,
+          itemId: cleanText(
+            button.dataset.itemId
+          ),
+          itemIndex: finiteNumber(
+            button.dataset.itemIndex,
+            -1
+          )
+        }),
+        ""
+      );
       return;
     }
 
@@ -3463,10 +4347,17 @@ export function createCharacterSheetView(options = {}) {
         ? "shortRest"
         : "longRest";
 
-      runTrackedAction(
-        () => deps.onRest(restType),
-        `${action === "short-rest" ? "Short" : "Long"} rest completed.`
-      );
+      const confirmed =
+        deps.confirmRest(
+          `Take a ${action === "short-rest" ? "short" : "long"} rest and restore every matching resource?`
+        );
+
+      if (confirmed) {
+        runTrackedAction(
+          () => deps.onRest(restType),
+          `${action === "short-rest" ? "Short" : "Long"} rest completed.`
+        );
+      }
       return;
     }
 
@@ -3483,6 +4374,21 @@ export function createCharacterSheetView(options = {}) {
     if (action === "export-json") {
       deps.onExportJson(state.character);
       deps.setStatus("Character JSON export prepared.");
+      return;
+    }
+
+    if (action === "edit") {
+      deps.onEdit(state.character);
+      return;
+    }
+
+    if (action === "duplicate") {
+      deps.onDuplicate(state.character);
+      return;
+    }
+
+    if (action === "delete") {
+      deps.onDelete(state.character);
       return;
     }
 
@@ -3517,7 +4423,7 @@ export function createCharacterSheetView(options = {}) {
     // Snapshotting is deliberate: viewing and tab changes can never mutate
     // the live Character Creator draft passed by the caller.
     state.character = cloneSnapshot(source);
-    state.activeTab = "main";
+    state.activeTab = "actions";
     state.isOpen = true;
 
     init();

@@ -1,4 +1,4 @@
-# Phase 16 — Character Sheet
+# Phase 16 — Playable Character Sheet
 
 Phase 16 finishes the character sheet as the play-facing view of the existing Character Creator data. The sheet renders from a protected snapshot while all tracked changes are sent back through creator callbacks, so tab changes and rendering never mutate the draft by accident.
 
@@ -18,12 +18,16 @@ The sheet now includes:
 
 ## Play controls
 
-The character sheet can spend and restore class resources, feat resources, Hit Dice, normal spell slots, and Pact Magic slots. Short rests restore short-rest resources and Pact Magic. Long rests also restore long-rest resources, normal spell slots, HP, and half the character’s total Hit Dice, and clear temporary HP and Rage.
+The visible sheet is organized into Actions, Abilities, Inventory, Features, Spells, and Description. It can apply damage, healing, current HP, and temporary HP; track inspiration, death saves, standard or custom conditions, equipment, attunement, class and feat resources, Hit Dice, normal spell slots, and Pact Magic slots. Short rests restore short-rest resources and Pact Magic. Long rests also restore long-rest resources, normal spell slots, HP, and half the character’s total Hit Dice, and clear temporary HP, death saves, and Rage.
 
-The toolbar provides short-rest, long-rest, JSON export, print, and saved-character/linked-token synchronization controls. Linked-token synchronization uses the existing character save path, which keeps the saved character authoritative and refreshes linked tokens through the token system.
+The toolbar provides confirmed short and long rests, permanent editing, JSON export, print, duplication, deletion, and return-to-library controls. Gameplay mutations use the existing ownership-checked update path and preserve the same saved character ID and finalization state, so normal play never creates duplicate characters.
+
+## Library flow
+
+Saved-character cards show the portrait, name, class/subclass and multiclass summary, species, last-updated time, and separate Open Sheet, Edit, Duplicate, Export, and Delete actions. Opening the sheet loads the saved character without entering the permanent-decision builder. An unsaved Review-sheet remains a read-only preview until the character is saved.
 
 ## Compatibility
 
-JSON export preserves the existing character schema and `sheetType: "character"` contract. Print mode renders the Main, Story, and Spell sections together with light, page-friendly styling and hides interactive controls.
+JSON export preserves the existing character schema and `sheetType: "character"` contract. Existing saved and imported characters receive safe defaults for gameplay-only fields. Print mode renders every visible sheet section with light, page-friendly styling and hides interactive controls.
 
-Phase 16 adds one regression assertion for every checklist item plus an additional rest-rules assertion.
+The gameplay reducer has focused unit tests, the existing 458 creator assertions remain green, and a browser test exercises damage, temporary-HP absorption, attunement, multiclass presentation, and the 390×844 mobile layout.

@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playable Character Sheet Test</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #050817;
+    }
+
+    body {
+      margin: 0;
+      min-width: 0;
+      background:
+        radial-gradient(circle at top, #151f48 0, #050817 46rem);
+    }
+
+    button {
+      min-height: 36px;
+      padding: 7px 12px;
+      border: 1px solid #40508c;
+      border-radius: 9px;
+      color: #edf1ff;
+      background: #172047;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    main {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 14px;
+    }
+  </style>
+</head>
+<body data-test-status="running">
+  <main id="sheetRoot"></main>
+  <script type="module">
+    import {
+      createCharacterSheetView
+    } from "../characterSheet.js";
+    import {
+      applyGameplayAction
+    } from "../characterSheet/gameplayState.js";
+
+    const character = {
+      id: "playable-sheet-fixture",
+      identity: {
+        name: "Aster Vale",
+        size: "medium",
+        pronouns: "they/them",
+        appearance: "Silver hair, travel-worn coat, and a brass arcane focus."
+      },
+      species: {
+        name: "High Elf"
+      },
+      background: {
+        name: "Sage",
+        traits: "Always takes careful notes.",
+        ideals: "Knowledge should protect people.",
+        bonds: "Carries a mentor's unfinished research.",
+        flaws: "Cannot leave a mystery alone.",
+        backstory: "Aster left the academy to test arcane theory in the field."
+      },
+      classProgression: {
+        totalLevel: 7,
+        classes: [
+          {
+            entryId: "fighter-entry",
+            classId: "fighter",
+            className: "Fighter",
+            level: 2,
+            subclassName: ""
+          },
+          {
+            entryId: "wizard-entry",
+            classId: "wizard",
+            className: "Wizard",
+            level: 5,
+            subclassName: "School of Evocation"
+          }
+        ]
+      },
+      abilities: {
+        scores: {
+          str: 10,
+          dex: 14,
+          con: 14,
+          int: 18,
+          wis: 12,
+          cha: 8
+        },
+        modifiers: {
+          str: 0,
+          dex: 2,
+          con: 2,
+          int: 4,
+          wis: 1,
+          cha: -1
+        }
+      },
+      proficiencies: {
+        savingThrows: ["str", "con"],
+        skills: {
+          arcana: {
+            proficient: true,
+            expertise: true
+          },
+          history: {
+            proficient: true
+          },
+          perception: {
+            proficient: true
+          }
+        },
+        armor: ["Light armor", "Medium armor", "Shields"],
+        weapons: ["Simple weapons", "Martial weapons"],
+        tools: ["Calligrapher's supplies"],
+        languages: ["Common", "Elvish", "Draconic"]
+      },
+      combat: {
+        armorClass: 17,
+        maxHp: 48,
+        currentHp: 36,
+        temporaryHp: 4,
+        initiative: 2,
+        proficiencyBonus: 3,
+        attacksPerAction: 1,
+        inspiration: false,
+        conditions: ["Poisoned"],
+        deathSaves: {
+          successes: 1,
+          failures: 0
+        },
+        speed: {
+          walk: 30
+        },
+        hitDice: [
+          {
+            classEntryId: "fighter-entry",
+            className: "Fighter",
+            die: "d10",
+            count: 2
+          },
+          {
+            classEntryId: "wizard-entry",
+            className: "Wizard",
+            die: "d6",
+            count: 5
+          }
+        ],
+        hitDiceUsage: {
+          "fighter-entry": 1,
+          "wizard-entry": 2
+        }
+      },
+      equipment: {
+        currency: {
+          cp: 2,
+          sp: 8,
+          ep: 0,
+          gp: 74,
+          pp: 1
+        },
+        items: [
+          {
+            id: "moon-blade",
+            name: "Moon Blade",
+            category: "weapon",
+            quantity: 1,
+            weight: 3,
+            equipped: true,
+            damageDice: "1d8",
+            damageType: "slashing",
+            attackAbility: "dex",
+            finesse: true,
+            proficient: true,
+            notes: "A silvered longsword."
+          },
+          {
+            id: "focus",
+            name: "Brass Arcane Focus",
+            category: "adventuring-gear",
+            quantity: 1,
+            weight: 1,
+            equipped: false,
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: true,
+            notes: "Warm when an evocation spell is prepared."
+          },
+          {
+            id: "pack",
+            name: "Explorer's Pack",
+            category: "adventuring-gear",
+            quantity: 1,
+            weight: 12,
+            isContainer: true,
+            capacityWeight: 30,
+            notes: "Rope, rations, and field supplies."
+          }
+        ],
+        notes: "Spellbook is wrapped against rain."
+      },
+      features: {
+        classFeatures: [
+          {
+            id: "action-surge",
+            name: "Action Surge",
+            summary: "Take one additional action on your turn.",
+            sourceLabel: "Fighter 2"
+          },
+          {
+            id: "arcane-recovery",
+            name: "Arcane Recovery",
+            summary: "Recover spell slots after a short rest.",
+            sourceLabel: "Wizard 1"
+          }
+        ],
+        speciesTraits: [
+          {
+            id: "fey-ancestry",
+            name: "Fey Ancestry",
+            summary: "Advantage against being charmed."
+          }
+        ],
+        backgroundFeatures: [
+          {
+            id: "researcher",
+            name: "Researcher",
+            summary: "Know where to find lore."
+          }
+        ],
+        customFeatures: []
+      },
+      classMechanics: {
+        resources: [
+          {
+            id: "fighter-entry:action-surge",
+            name: "Action Surge",
+            className: "Fighter",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "shortOrLongRest"
+          },
+          {
+            id: "wizard-entry:arcane-recovery",
+            name: "Arcane Recovery",
+            className: "Wizard",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "longRest"
+          }
+        ]
+      },
+      featMechanics: {
+        resources: [],
+        naturalWeapons: [],
+        selectedFeatures: [],
+        actions: []
+      },
+      feats: [
+        {
+          id: "war-caster",
+          name: "War Caster",
+          summary: "Maintain concentration and cast during opportunity attacks."
+        }
+      ],
+      magic: {
+        spellcastingAbility: "int",
+        spellSaveDc: 15,
+        spellAttackBonus: 7,
+        knownSpellIds: ["fire-bolt", "mage-hand"],
+        preparedSpellIds: ["magic-missile", "shield", "fireball"],
+        slots: {
+          1: 4,
+          2: 3,
+          3: 2
+        },
+        slotUsage: {
+          normal: {
+            1: 1,
+            2: 0,
+            3: 1
+          },
+          pact: 0,
+          pactSources: {}
+        },
+        classSources: {
+          "wizard-entry": {
+            classEntryId: "wizard-entry",
+            classId: "wizard",
+            className: "Wizard",
+            subclassName: "School of Evocation",
+            spellcastingAbility: "int",
+            spellSaveDc: 15,
+            spellAttackBonus: 7,
+            cantripIds: ["fire-bolt", "mage-hand"],
+            preparedSpellIds: ["magic-missile", "shield", "fireball"],
+            spellbookSpellIds: ["detect-magic", "misty-step"]
+          }
+        },
+        customSpells: [],
+        innateSpells: [],
+        pactMagic: {
+          slots: 0,
+          slotLevel: 0
+        }
+      },
+      builder: {
+        status: "finalized",
+        currentStep: "review",
+        lastSavedAtMillis: Date.now()
+      }
+    };
+
+    function adjustResource(kind, resourceId, delta) {
+      const resources =
+        kind === "class"
+          ? character.classMechanics.resources
+          : character.featMechanics.resources;
+      const resource = resources.find((entry) => {
+        return entry.id === resourceId;
+      });
+
+      if (!resource) {
+        return false;
+      }
+
+      resource.currentUses = Math.max(
+        0,
+        Math.min(
+          resource.maximumUses,
+          resource.currentUses + delta
+        )
+      );
+      return character;
+    }
+
+    const view = createCharacterSheetView({
+      root: "#sheetRoot",
+      getCharacter: () => character,
+      getSheetContext: () => ({
+        characterId: character.id,
+        dirty: false,
+        returnLabel: "Back to Library"
+      }),
+      setStatus: (message) => {
+        document.body.dataset.lastStatus =
+          String(message || "");
+      },
+      onGameplayAction: async (action) => {
+        const result =
+          applyGameplayAction(
+            character,
+            action
+          );
+        document.body.dataset.lastMutation =
+          result.message;
+        return character;
+      },
+      onAdjustClassResource: (
+        resourceId,
+        delta
+      ) => {
+        return adjustResource(
+          "class",
+          resourceId,
+          delta
+        );
+      },
+      onAdjustFeatResource: (
+        resourceId,
+        delta
+      ) => {
+        return adjustResource(
+          "feat",
+          resourceId,
+          delta
+        );
+      },
+      onAdjustHitDie: (
+        hitDieId,
+        delta
+      ) => {
+        character.combat
+          .hitDiceUsage[hitDieId] =
+            Math.max(
+              0,
+              (character.combat
+                .hitDiceUsage[hitDieId] || 0) +
+              delta
+            );
+        return character;
+      },
+      onAdjustSpellSlot: (
+        kind,
+        level,
+        delta
+      ) => {
+        if (kind === "normal") {
+          const maximum =
+            character.magic.slots[level] || 0;
+          character.magic
+            .slotUsage.normal[level] =
+              Math.max(
+                0,
+                Math.min(
+                  maximum,
+                  (character.magic
+                    .slotUsage.normal[level] || 0) +
+                  delta
+                )
+              );
+        }
+        return character;
+      },
+      onRest: (restType) => {
+        if (restType === "longRest") {
+          character.combat.currentHp =
+            character.combat.maxHp;
+          character.combat.temporaryHp = 0;
+          character.magic.slotUsage.normal = {
+            1: 0,
+            2: 0,
+            3: 0
+          };
+        }
+        return character;
+      },
+      onExportJson: () => true,
+      onPrint: () => true,
+      onClose: () => true
+    });
+
+    view.open(character);
+    window.__PLAYABLE_SHEET_TEST__ = {
+      character,
+      view
+    };
+    document.body.dataset.testStatus = "pass";
+  </script>
+</body>
+</html>

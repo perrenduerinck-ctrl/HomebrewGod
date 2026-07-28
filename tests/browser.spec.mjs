@@ -45,12 +45,12 @@ test(
         "ai-testing/character-creator-self-test.html?release=phase20-20260727"
       );
 
+    expect(result.failed)
+      .toEqual([]);
     expect(result.passed)
       .toBe(true);
     expect(result.total)
       .toBeGreaterThanOrEqual(458);
-    expect(result.failed)
-      .toEqual([]);
 
     const names =
       result.results.map(
@@ -74,6 +74,124 @@ test(
         ).toBe(true);
       }
     );
+  }
+);
+
+test(
+  "playable character sheet tracks combat and remains usable at phone width",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/playable-character-sheet.html?release=playable-sheet-20260727",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "pass"
+      );
+    await expect(
+      page.getByRole("heading", {
+        name: "Aster Vale"
+      })
+    ).toBeVisible();
+    await expect(page.locator(
+      ".hg-sheet-class-line"
+    )).toContainText(
+      "Fighter 2"
+    );
+    await expect(page.locator(
+      ".hg-sheet-class-line"
+    )).toContainText(
+      "Wizard 5"
+    );
+
+    for (
+      const tabName of [
+        "Actions",
+        "Abilities",
+        "Inventory",
+        "Features",
+        "Spells",
+        "Description"
+      ]
+    ) {
+      await expect(
+        page.getByRole("button", {
+          name: tabName,
+          exact: true
+        })
+      ).toBeVisible();
+    }
+
+    const screenPanel = page.locator(
+      ".hg-sheet-screen-panel"
+    );
+    const hpInput = screenPanel.locator(
+      '[data-character-sheet-input="hp-amount"]'
+    );
+    await hpInput.fill("8");
+    await screenPanel.getByRole("button", {
+      name: "Damage",
+      exact: true
+    }).click();
+    await expect(
+      screenPanel.locator(
+        ".hg-sheet-hp-display strong"
+      )
+    ).toHaveText("32");
+    await expect(
+      screenPanel.locator(
+        ".hg-sheet-hp-display small"
+      )
+    ).toContainText(
+      "0 temporary"
+    );
+
+    await page.getByRole("button", {
+      name: "Inventory",
+      exact: true
+    }).click();
+    await expect(
+      screenPanel.getByText(
+        "Equipment & Containers"
+      )
+    ).toBeVisible();
+    await screenPanel.getByRole("button", {
+      name: "Unattune",
+      exact: true
+    }).click();
+    await expect(
+      screenPanel.getByRole("button", {
+        name: "Attune",
+        exact: true
+      })
+    ).toBeVisible();
+
+    await page.setViewportSize({
+      width: 390,
+      height: 844
+    });
+    await expect(
+      page.getByRole("button", {
+        name: "Spells",
+        exact: true
+      })
+    ).toBeVisible();
+    const hasPageOverflow =
+      await page.evaluate(() => {
+        return (
+          document.documentElement
+            .scrollWidth >
+          window.innerWidth
+        );
+      });
+
+    expect(hasPageOverflow)
+      .toBe(false);
   }
 );
 

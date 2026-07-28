@@ -102,7 +102,8 @@ for (
   const directory of
   [
     "ai-testing",
-    "characterCreator"
+    "characterCreator",
+    "characterSheet"
   ]
 ) {
   await cp(

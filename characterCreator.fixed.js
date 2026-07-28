@@ -39,7 +39,10 @@ import {
   DEFAULT_SUBCLASSES,
   validateDefaultSubclassCollection
 } from "./defaultSubclasses.js";
-import { createCharacterSheetView } from "./characterSheet.js";
+import {
+  createCharacterSheetJson,
+  createCharacterSheetView
+} from "./characterSheet.js";
 import {
   ACTIVE_RULESET,
   getLegacy2014Metadata,
@@ -114,6 +117,10 @@ import {
 import {
   normalizeInventoryItemBase
 } from "./characterCreator/inventoryEquipment.js";
+import {
+  applyGameplayAction,
+  ensureGameplayState
+} from "./characterSheet/gameplayState.js";
 export function createCharacterCreator(options = {}) {
   const deps = {
     db: options.db,
@@ -148,7 +155,7 @@ export function createCharacterCreator(options = {}) {
       options.deleteImage
   };
 
-  const CHARACTER_SCHEMA_VERSION = 12;
+  const CHARACTER_SCHEMA_VERSION = 13;
   const CLASS_SCHEMA_VERSION =
     DEFAULT_CLASS_SCHEMA_VERSION;
   const SPECIES_SCHEMA_VERSION = 1;
@@ -446,6 +453,7 @@ export function createCharacterCreator(options = {}) {
       },
 
       combat: {
+        gameplaySchemaVersion: 1,
         armorClass: 10,
         armorClassMode: "auto",
         selectedArmorClassMethod: "",
@@ -458,6 +466,12 @@ export function createCharacterCreator(options = {}) {
         maxHp: 1,
         currentHp: 1,
         temporaryHp: 0,
+        inspiration: false,
+        conditions: [],
+        deathSaves: {
+          successes: 0,
+          failures: 0
+        },
         initiative: 0,
         initiativeBonus: 0,
         initiativeProficient: false,
@@ -4239,6 +4253,8 @@ export function createCharacterCreator(options = {}) {
 
       notes: cleanString(raw.notes)
     };
+
+    ensureGameplayState(normalized);
 
     // Old characters sometimes stored skills as an array.
     if (
@@ -20639,7 +20655,7 @@ export function createCharacterCreator(options = {}) {
       );
 
     const className =
-      getCharacterLibraryClassName(
+      formatSection17ClassLevelSummary(
         character
       );
 
@@ -20656,6 +20672,16 @@ export function createCharacterCreator(options = {}) {
     const disabled =
       !characterId ||
       isCharacterCreatorBusy();
+    const lastUpdatedMillis =
+      safeNumber(
+        character?.builder?.lastSavedAtMillis ??
+        character?.updatedAtMillis,
+        0
+      );
+    const lastUpdated = lastUpdatedMillis
+      ? new Date(lastUpdatedMillis)
+          .toLocaleString()
+      : "Not recorded";
 
     return `
       <article class="hg-character-card">
@@ -20688,15 +20714,31 @@ export function createCharacterCreator(options = {}) {
         </h3>
 
         <div class="hg-character-card-meta">
-          Level ${level}
           ${escapeHtml(className)}
 
           <br>
 
           ${escapeHtml(speciesName)}
+
+          <br>
+
+          Last updated:
+          ${escapeHtml(lastUpdated)}
         </div>
 
         <div class="hg-character-card-actions">
+          <button
+            type="button"
+            class="primary"
+            data-cc-action="open-character-sheet-from-library"
+            data-character-id="${escapeHtml(
+              characterId
+            )}"
+            ${disabled ? "disabled" : ""}
+          >
+            Open Sheet
+          </button>
+
           <button
             type="button"
             data-cc-action="edit-character"
@@ -20717,6 +20759,17 @@ export function createCharacterCreator(options = {}) {
             ${disabled ? "disabled" : ""}
           >
             Duplicate
+          </button>
+
+          <button
+            type="button"
+            data-cc-action="export-library-character"
+            data-character-id="${escapeHtml(
+              characterId
+            )}"
+            ${disabled ? "disabled" : ""}
+          >
+            Export
           </button>
 
           <button
@@ -20929,6 +20982,129 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function exportCharacterFromLibrary(
+    characterId
+  ) {
+    const character =
+      findCachedCharacter(
+        characterId
+      );
+
+    if (!character) {
+      setStatus(
+        "That character could not be found in the library."
+      );
+      renderCharacterLibraryView();
+      return false;
+    }
+
+    const json =
+      createCharacterSheetJson(
+        character
+      );
+    const blob = new Blob(
+      [json],
+      {
+        type:
+          "application/json;charset=utf-8"
+      }
+    );
+    const url =
+      URL.createObjectURL(blob);
+    const link =
+      document.createElement("a");
+
+    link.href = url;
+    link.download =
+      `${makeSafeFileName(
+        getCharacterLibraryDisplayName(
+          character
+        )
+      )}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+
+    setStatus(
+      `${getCharacterLibraryDisplayName(
+        character
+      )} was exported.`
+    );
+
+    return true;
+  }
+
+  function openCharacterSheetFromLibrary(
+    characterId
+  ) {
+    if (
+      blockCharacterBusyAction(
+        "edit-character"
+      )
+    ) {
+      return false;
+    }
+
+    const character =
+      findCachedCharacter(
+        characterId
+      );
+
+    if (!character) {
+      setStatus(
+        "That character could not be found in the library."
+      );
+      renderCharacterLibraryView();
+      return false;
+    }
+
+    if (
+      !confirmDiscardUnsavedDraft(
+        "opening another character sheet"
+      )
+    ) {
+      return false;
+    }
+
+    replaceDraft(
+      character,
+      {
+        characterId:
+          character.id,
+        dirty: false,
+        stepId:
+          getStepById(
+            character?.builder?.currentStep ||
+            "review"
+          ).id
+      }
+    );
+
+    creatorState.draft =
+      sanitizeDraftStrings(
+        creatorState.draft
+      );
+    creatorState.viewMode =
+      "library";
+    persistDraftToSession();
+
+    setStatus(
+      `Opened ${getCharacterLibraryDisplayName(
+        character
+      )}.`
+    );
+
+    getSection17CharacterSheetView()
+      .open(
+        getCharacterSnapshot()
+      );
+
+    return true;
+  }
+
   function duplicateCharacterFromLibrary(
     characterId
   ) {
@@ -21020,10 +21196,30 @@ export function createCharacterCreator(options = {}) {
   );
 
   registerCharacterCreatorAction(
+    "open-character-sheet-from-library",
+
+    ({ button }) => {
+      openCharacterSheetFromLibrary(
+        button.dataset.characterId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
     "duplicate-character",
 
     ({ button }) => {
       duplicateCharacterFromLibrary(
+        button.dataset.characterId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "export-library-character",
+
+    ({ button }) => {
+      exportCharacterFromLibrary(
         button.dataset.characterId
       );
     }
@@ -53251,6 +53447,142 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  async function persistSection17SheetMutation(
+    mutation,
+    successMessage
+  ) {
+    if (
+      !creatorState
+        .currentCharacterId
+    ) {
+      setStatus(
+        "Save this character before tracking gameplay."
+      );
+      return false;
+    }
+
+    const builderState = {
+      status:
+        creatorState.draft
+          ?.builder?.status ||
+        "draft",
+      finalizedAtMillis:
+        creatorState.draft
+          ?.builder
+          ?.finalizedAtMillis ||
+        null
+    };
+    const result =
+      typeof mutation === "function"
+        ? mutation()
+        : mutation;
+    const changed =
+      typeof result === "object" &&
+      result !== null &&
+      "changed" in result
+        ? result.changed === true
+        : result !== false;
+    const message =
+      typeof result === "object" &&
+      result !== null
+        ? cleanString(
+            result.message,
+            successMessage
+          )
+        : successMessage;
+
+    if (!changed) {
+      setStatus(
+        message ||
+        "Nothing needed to change."
+      );
+      return getCharacterSnapshot();
+    }
+
+    creatorState.draft.builder = {
+      ...(creatorState.draft
+        .builder || {}),
+      status:
+        builderState.status,
+      finalizedAtMillis:
+        builderState
+          .finalizedAtMillis
+    };
+    creatorState.dirty = true;
+    scheduleDraftPersistence();
+    renderActionBar();
+
+    const saved =
+      await saveSection18Character({
+        asNew: false,
+        copyName: false,
+        preserveFinalization: true
+      });
+
+    if (!saved) {
+      return false;
+    }
+
+    setStatus(
+      message ||
+      "Gameplay saved."
+    );
+
+    return getCharacterSnapshot();
+  }
+
+  function handleSection17SheetGameplayAction(
+    action
+  ) {
+    return persistSection17SheetMutation(
+      () => {
+        return applyGameplayAction(
+          creatorState.draft,
+          action
+        );
+      },
+      "Gameplay saved."
+    );
+  }
+
+  function handleSection17SheetRest(
+    restType
+  ) {
+    return persistSection17SheetMutation(
+      () => {
+        const restChanged =
+          performSection16Rest(
+            restType
+          );
+        const cleanup =
+          restType === "longRest"
+            ? applyGameplayAction(
+                creatorState.draft,
+                {
+                  type:
+                    "long-rest-cleanup"
+                }
+              )
+            : {
+                changed: false
+              };
+
+        return {
+          changed:
+            restChanged ||
+            cleanup.changed === true,
+          message:
+            `${
+              restType === "longRest"
+                ? "Long"
+                : "Short"
+            } rest completed and saved.`
+        };
+      },
+      "Rest completed and saved."
+    );
+  }
+
   function getSection17CharacterSheetView() {
     if (!characterSheetView) {
       characterSheetView = createCharacterSheetView({
@@ -53271,19 +53603,73 @@ export function createCharacterCreator(options = {}) {
             lastSavedAtMillis:
               creatorState.draft
                 ?.builder
-                ?.lastSavedAtMillis
+                ?.lastSavedAtMillis,
+            returnLabel:
+              creatorState.viewMode ===
+              "library"
+                ? "Back to Library"
+                : "Back to Review"
           };
         },
         onAdjustClassResource:
-          adjustSelectedClassResource,
+          (resourceId, delta) => {
+            return persistSection17SheetMutation(
+              () => {
+                return adjustSelectedClassResource(
+                  resourceId,
+                  delta
+                );
+              },
+              "Class resource updated and saved."
+            );
+          },
         onAdjustFeatResource:
-          adjustSelectedFeatResource,
+          (resourceId, delta) => {
+            return persistSection17SheetMutation(
+              () => {
+                return adjustSelectedFeatResource(
+                  resourceId,
+                  delta
+                );
+              },
+              "Feat resource updated and saved."
+            );
+          },
         onAdjustHitDie:
-          adjustSection16HitDieUsage,
+          (hitDieId, delta) => {
+            return persistSection17SheetMutation(
+              () => {
+                return adjustSection16HitDieUsage(
+                  hitDieId,
+                  delta
+                );
+              },
+              "Hit Die usage updated and saved."
+            );
+          },
         onAdjustSpellSlot:
-          adjustSection12SpellSlotUsage,
+          (
+            slotKind,
+            slotLevel,
+            delta,
+            slotSourceId
+          ) => {
+            return persistSection17SheetMutation(
+              () => {
+                return adjustSection12SpellSlotUsage(
+                  slotKind,
+                  slotLevel,
+                  delta,
+                  slotSourceId
+                );
+              },
+              "Spell-slot usage updated and saved."
+            );
+          },
         onRest:
-          performSection16Rest,
+          handleSection17SheetRest,
+        onGameplayAction:
+          handleSection17SheetGameplayAction,
         onExportJson: () => {
           return exportSection18Json();
         },
@@ -53292,8 +53678,51 @@ export function createCharacterCreator(options = {}) {
             return await handleSection18Save();
           },
 
+        onEdit: () => {
+          const stepId =
+            getStepById(
+              creatorState.draft
+                ?.builder
+                ?.currentStep ||
+              "review"
+            ).id;
+
+          characterSheetView.close();
+          creatorState.viewMode =
+            "builder";
+          navigateToStep(stepId);
+          return true;
+        },
+
+        onDuplicate: () => {
+          const characterId =
+            creatorState
+              .currentCharacterId;
+
+          characterSheetView.close();
+          return duplicateCharacterFromLibrary(
+            characterId
+          );
+        },
+
+        onDelete: async () => {
+          const characterId =
+            creatorState
+              .currentCharacterId;
+
+          characterSheetView.close();
+          return await deleteSection18Character(
+            characterId
+          );
+        },
+
         onClose: () => {
-          setStatus("Returned to the Character Creator.");
+          setStatus(
+            creatorState.viewMode ===
+              "library"
+              ? "Returned to the character library."
+              : "Returned to the Character Creator."
+          );
           renderCreatorView();
         }
       });

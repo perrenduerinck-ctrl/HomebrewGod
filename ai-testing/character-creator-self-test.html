@@ -66,11 +66,16 @@
     try {
       const creator = createCharacterCreator();
       const result = creator.runRulesSelfTests();
+      window.__CHARACTER_CREATOR_SELF_TEST_RESULT__ =
+        result;
       document.body.dataset.testStatus = result.passed ? "pass" : "fail";
       output.textContent = JSON.stringify(result, null, 2);
 
       if (!result.passed) {
-        throw new Error(`${result.failed.length} of ${result.total} self-tests failed`);
+        console.error(
+          `${result.failed.length} of ${result.total} self-tests failed`,
+          result.failed
+        );
       }
     } catch (error) {
       document.body.dataset.testStatus = "fail";

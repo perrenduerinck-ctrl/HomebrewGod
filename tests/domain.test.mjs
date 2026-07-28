@@ -32,6 +32,10 @@ import {
   buildCharacterSheetPresentation
 } from "../characterCreator/sheetPresentation.js";
 import {
+  applyGameplayAction,
+  ensureGameplayState
+} from "../characterSheet/gameplayState.js";
+import {
   calculateSrd2014MulticlassSpellcasting
 } from "../characterCreator/spellcasting.js";
 import {
@@ -389,6 +393,167 @@ test(
     assert.notEqual(
       reloaded.identity,
       ROUND_TRIP_FIXTURE.identity
+    );
+  }
+);
+
+test(
+  "playable sheet damage, healing, temporary HP, and death saves are normalized",
+  () => {
+    const character = {
+      combat: {
+        maxHp: 30,
+        currentHp: 24,
+        temporaryHp: 5
+      }
+    };
+
+    ensureGameplayState(character);
+    applyGameplayAction(
+      character,
+      {
+        type: "damage",
+        amount: 8
+      }
+    );
+
+    assert.equal(
+      character.combat.temporaryHp,
+      0
+    );
+    assert.equal(
+      character.combat.currentHp,
+      21
+    );
+
+    applyGameplayAction(
+      character,
+      {
+        type: "heal",
+        amount: 20
+      }
+    );
+    assert.equal(
+      character.combat.currentHp,
+      30
+    );
+
+    applyGameplayAction(
+      character,
+      {
+        type: "adjust-death-save",
+        kind: "failure",
+        delta: 9
+      }
+    );
+    assert.equal(
+      character.combat
+        .deathSaves.failures,
+      3
+    );
+  }
+);
+
+test(
+  "playable sheet tracks conditions, inspiration, equipment, and attunement safely",
+  () => {
+    const character = {
+      combat: {
+        maxHp: 10,
+        currentHp: 10
+      },
+      equipment: {
+        items: [
+          {
+            id: "blade",
+            name: "Moon Blade",
+            equipped: false
+          },
+          {
+            id: "ring-1",
+            name: "Ring One",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: true
+          },
+          {
+            id: "ring-2",
+            name: "Ring Two",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: true
+          },
+          {
+            id: "ring-3",
+            name: "Ring Three",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: true
+          },
+          {
+            id: "ring-4",
+            name: "Ring Four",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: false
+          }
+        ]
+      }
+    };
+
+    applyGameplayAction(
+      character,
+      {
+        type:
+          "toggle-inspiration"
+      }
+    );
+    applyGameplayAction(
+      character,
+      {
+        type:
+          "toggle-condition",
+        condition: "Poisoned"
+      }
+    );
+    applyGameplayAction(
+      character,
+      {
+        type:
+          "toggle-item-equipped",
+        itemId: "blade"
+      }
+    );
+    const blocked =
+      applyGameplayAction(
+        character,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "ring-4"
+        }
+      );
+
+    assert.equal(
+      character.combat.inspiration,
+      true
+    );
+    assert.deepEqual(
+      character.combat.conditions,
+      ["Poisoned"]
+    );
+    assert.equal(
+      character.equipment
+        .items[0].equipped,
+      true
+    );
+    assert.equal(
+      blocked.changed,
+      false
+    );
+    assert.match(
+      blocked.message,
+      /three attuned items/i
     );
   }
 );

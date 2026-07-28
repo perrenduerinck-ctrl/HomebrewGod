@@ -10442,6 +10442,8 @@ export function runCharacterCreatorSelfTests(context) {
             );
             return true;
           },
+        confirmRest:
+          () => true,
         onExportJson:
           (character) => {
             phase16ActionLog.push(

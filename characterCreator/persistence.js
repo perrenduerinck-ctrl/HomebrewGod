@@ -924,6 +924,8 @@ export function createCharacterPersistence(context) {
 
     const finalizeRequested =
       options.finalize === true;
+    const preserveFinalization =
+      options.preserveFinalization === true;
 
     const busyAction =
       finalizeRequested
@@ -1012,11 +1014,20 @@ export function createCharacterPersistence(context) {
         status:
           finalizeRequested
             ? "finalized"
-            : "draft",
+            : preserveFinalization &&
+                previousFinalizationState
+                  .status === "finalized"
+              ? "finalized"
+              : "draft",
         finalizedAtMillis:
           finalizeRequested
             ? savedAtMillis
-            : null,
+            : preserveFinalization &&
+                previousFinalizationState
+                  .status === "finalized"
+              ? previousFinalizationState
+                  .finalizedAtMillis
+              : null,
         validation: {
           ...(character.builder
             ?.validation || {}),
@@ -1153,7 +1164,14 @@ export function createCharacterPersistence(context) {
         {
           characterId: savedId,
           dirty: false,
-          stepId: "save"
+          stepId:
+            preserveFinalization
+              ? character.builder
+                  .currentStep ||
+                creatorState
+                  .currentStepId ||
+                "review"
+              : "save"
         }
       );
 
@@ -1173,6 +1191,8 @@ export function createCharacterPersistence(context) {
             ? `${getSafeCharacterName() || "Unnamed Character"} was finalized.`
             : saveAsNew
               ? `${getSafeCharacterName() || "Unnamed Character"} was saved as a separate draft.`
+              : preserveFinalization
+                ? `${getSafeCharacterName() || "Unnamed Character"} gameplay was saved.`
               : `${getSafeCharacterName() || "Unnamed Character"} draft was saved.`
         ) + linkedTokenSyncWarning
       );

@@ -7,6 +7,9 @@ const deployedBaseUrl =
   "";
 const localBaseUrl =
   "http://127.0.0.1:4173";
+const browserExecutablePath =
+  process.env.PLAYWRIGHT_EXECUTABLE_PATH ||
+  "";
 
 export default defineConfig({
   testDir: "./tests",
@@ -33,6 +36,13 @@ export default defineConfig({
       localBaseUrl,
     browserName: "chromium",
     headless: true,
+    launchOptions:
+      browserExecutablePath
+        ? {
+            executablePath:
+              browserExecutablePath
+          }
+        : {},
     trace: "retain-on-failure",
     screenshot: "only-on-failure"
   },
