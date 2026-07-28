@@ -183,6 +183,11 @@ test(
           }
         )
     ).toHaveCount(0);
+    await expect(
+      actionSections.locator(
+        '[data-sheet-action-key="war-caster"]'
+      )
+    ).toHaveCount(0);
 
     const actionSurgeCard =
       actionSections.locator(

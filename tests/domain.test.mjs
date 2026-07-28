@@ -672,6 +672,13 @@ test(
           }
         ]
       },
+      feats: [
+        {
+          id: "war-caster",
+          name: "War Caster",
+          summary: "Maintain concentration and cast during opportunity attacks."
+        }
+      ],
       featMechanics: {
         resources: [],
         actions: [
@@ -747,6 +754,10 @@ test(
       names.includes(
         "War Caster Passive"
       ),
+      false
+    );
+    assert.equal(
+      names.includes("War Caster"),
       false
     );
     assert.deepEqual(

@@ -1479,7 +1479,10 @@ function inferActionSection(entry, options = {}) {
     return "other";
   }
 
-  return options.hasResource
+  return (
+    options.hasResource &&
+    options.allowResourceOnly !== false
+  )
     ? "other"
     : "";
 }
@@ -1747,7 +1750,8 @@ export function collectCharacterActions(
       defaultSection = "",
       source = "",
       sourceKind = "",
-      numberOfAttacks = null
+      numberOfAttacks = null,
+      allowResourceOnly = true
     } = {}
   ) => {
     if (!rawEntry) {
@@ -1779,7 +1783,8 @@ export function collectCharacterActions(
       entry,
       {
         defaultSection,
-        hasResource: Boolean(resource)
+        hasResource: Boolean(resource),
+        allowResourceOnly
       }
     );
 
@@ -2076,7 +2081,8 @@ export function collectCharacterActions(
           entry?.feat?.name,
           "Feat"
         ),
-        sourceKind: "Feat"
+        sourceKind: "Feat",
+        allowResourceOnly: false
       }
     );
   });
