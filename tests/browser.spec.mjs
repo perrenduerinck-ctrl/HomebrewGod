@@ -130,6 +130,100 @@ test(
     const screenPanel = page.locator(
       ".hg-sheet-screen-panel"
     );
+    const actionSections =
+      screenPanel.locator(
+        ".hg-sheet-action-sections"
+      );
+
+    for (
+      const sectionName of [
+        "Actions",
+        "Bonus Actions",
+        "Reactions",
+        "Other Actions"
+      ]
+    ) {
+      await expect(
+        actionSections.getByRole(
+          "heading",
+          {
+            name: sectionName,
+            exact: true
+          }
+        )
+      ).toBeVisible();
+    }
+
+    await expect(
+      actionSections.locator(
+        '[data-sheet-action-key="moon-blade"]'
+      )
+    ).toHaveCount(1);
+    await expect(
+      actionSections.locator(
+        '[data-sheet-action-key="fire-bolt"]'
+      )
+    ).toContainText("+7");
+    await expect(
+      actionSections.locator(
+        '[data-sheet-action-key="second-wind"]'
+      )
+    ).toContainText("1d10 + 2");
+    await expect(
+      actionSections.locator(
+        '[data-sheet-action-key="war-caster-opportunity-spell"]'
+      )
+    ).toContainText("Reaction");
+    await expect(
+      actionSections
+        .getByText(
+          "Gain advantage on concentration saving throws.",
+          {
+            exact: true
+          }
+        )
+    ).toHaveCount(0);
+
+    const actionSurgeCard =
+      actionSections.locator(
+        '[data-sheet-action-key="action-surge"]'
+      );
+    await expect(actionSurgeCard)
+      .toContainText(
+        "1 / 1 uses remaining"
+      );
+    await actionSurgeCard
+      .getByRole("button", {
+        name: "Spend",
+        exact: true
+      })
+      .click();
+    await expect(
+      actionSections.locator(
+        '[data-sheet-action-key="action-surge"]'
+      )
+    ).toContainText(
+      "0 / 1 uses remaining"
+    );
+
+    const fireBoltDetails =
+      actionSections
+        .locator(
+          '[data-sheet-action-key="fire-bolt"]'
+        )
+        .locator("details");
+    await expect(fireBoltDetails)
+      .not.toHaveAttribute(
+        "open",
+        ""
+      );
+    await fireBoltDetails
+      .locator("summary")
+      .click();
+    await expect(
+      fireBoltDetails.locator("p")
+    ).toBeVisible();
+
     const hpInput = screenPanel.locator(
       '[data-character-sheet-input="hp-amount"]'
     );

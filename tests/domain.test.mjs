@@ -36,6 +36,10 @@ import {
   ensureGameplayState
 } from "../characterSheet/gameplayState.js";
 import {
+  collectCharacterActions,
+  createCharacterSheetView
+} from "../characterSheet.js";
+import {
   calculateSrd2014MulticlassSpellcasting
 } from "../characterCreator/spellcasting.js";
 import {
@@ -554,6 +558,265 @@ test(
     assert.match(
       blocked.message,
       /three attuned items/i
+    );
+  }
+);
+
+test(
+  "playable sheet actions are grouped, deduplicated, expandable, and resource-linked",
+  () => {
+    const character = {
+      id: "priority-one-actions",
+      abilities: {
+        scores: {
+          str: 14,
+          dex: 16,
+          int: 18
+        }
+      },
+      combat: {
+        proficiencyBonus: 3,
+        attacksPerAction: 2
+      },
+      attacks: [
+        {
+          id: "moon-blade",
+          name: "Moon Blade",
+          attackBonus: 6,
+          damage: "1d8",
+          damageType: "slashing"
+        }
+      ],
+      equipment: {
+        items: [
+          {
+            id: "moon-blade",
+            name: "Moon Blade",
+            category: "weapon",
+            equipped: true,
+            proficient: true,
+            attackAbility: "dex",
+            damageDice: "1d8",
+            damageType: "slashing"
+          },
+          {
+            id: "spare-bow",
+            name: "Spare Bow",
+            category: "weapon",
+            equipped: false,
+            damageDice: "1d8"
+          }
+        ]
+      },
+      features: {
+        classFeatures: [
+          {
+            id: "action-surge",
+            name: "Action Surge",
+            summary: "Take one additional action.",
+            description: "Use this burst of effort on your turn.",
+            sourceLabel: "Fighter 2"
+          },
+          {
+            id: "arcane-deflection",
+            name: "Arcane Deflection",
+            summary: "Raise a quick defense.",
+            description: "Use this when an attack hits you.",
+            source: "subclass",
+            actionEconomy: "reaction"
+          },
+          {
+            id: "improved-critical",
+            name: "Improved Critical",
+            summary: "Weapon attacks score critical hits more often.",
+            actionEconomy: "passive"
+          }
+        ],
+        speciesTraits: [
+          {
+            id: "fey-step",
+            name: "Fey Step",
+            actionEconomy: "bonusAction",
+            range: "Self",
+            summary: "Teleport up to 30 feet."
+          }
+        ],
+        customFeatures: [
+          {
+            id: "study-field",
+            name: "Study the Field",
+            activationType: "other",
+            activationTime: "1 minute",
+            summary: "Study the battlefield."
+          }
+        ]
+      },
+      classMechanics: {
+        resources: [
+          {
+            id: "fighter:action-surge",
+            name: "Action Surge",
+            className: "Fighter",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "shortOrLongRest"
+          }
+        ],
+        actions: [
+          {
+            id: "second-wind",
+            name: "Second Wind",
+            className: "Fighter",
+            actionEconomy: "bonusAction",
+            healing: "1d10 + 2"
+          }
+        ]
+      },
+      featMechanics: {
+        resources: [],
+        actions: [
+          {
+            id: "arcane-shove",
+            name: "Arcane Shove",
+            featName: "Telekinetic",
+            actionEconomy: "bonusAction",
+            saveDc: 15,
+            target: "One creature"
+          }
+        ],
+        situationalEffects: [
+          {
+            id: "war-caster-spell",
+            effectId: "war-caster-spell",
+            featName: "War Caster",
+            actionEconomy: "reaction",
+            summary: "Cast a spell for an opportunity attack.",
+            instructions: "Target only the provoking creature."
+          },
+          {
+            id: "war-caster-passive",
+            effectId: "war-caster-passive",
+            featName: "War Caster",
+            actionEconomy: "passive",
+            summary: "Advantage on concentration saves."
+          }
+        ]
+      },
+      magic: {
+        spellAttacks: [
+          {
+            id: "fire-bolt",
+            name: "Fire Bolt",
+            attackBonus: 7,
+            damage: "2d10",
+            damageType: "fire",
+            range: "120 ft.",
+            target: "One creature",
+            summary: "Hurl a mote of fire.",
+            description: "Make a ranged spell attack."
+          }
+        ]
+      }
+    };
+    const actions =
+      collectCharacterActions(
+        character,
+        3
+      );
+    const names = actions.map(
+      (entry) => entry.name
+    );
+
+    assert.equal(
+      names.filter((name) => {
+        return name === "Moon Blade";
+      }).length,
+      1
+    );
+    assert.equal(
+      names.includes("Spare Bow"),
+      false
+    );
+    assert.equal(
+      names.includes(
+        "Improved Critical"
+      ),
+      false
+    );
+    assert.equal(
+      names.includes(
+        "War Caster Passive"
+      ),
+      false
+    );
+    assert.deepEqual(
+      new Set(
+        actions.map((entry) => {
+          return entry.section;
+        })
+      ),
+      new Set([
+        "action",
+        "bonusAction",
+        "reaction",
+        "other"
+      ])
+    );
+
+    const actionSurge = actions.find(
+      (entry) => {
+        return entry.name ===
+          "Action Surge";
+      }
+    );
+    assert.equal(
+      actionSurge.resource.id,
+      "fighter:action-surge"
+    );
+    assert.equal(
+      actionSurge.resource.currentUses,
+      1
+    );
+
+    const html = createCharacterSheetView()
+      .renderCharacterSheetHtml(
+        character,
+        {
+          activeTab: "actions",
+          sheetContext: {
+            characterId:
+              character.id
+          }
+        }
+      );
+
+    assert.match(
+      html,
+      /<h2>Actions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<h2>Bonus Actions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<h2>Reactions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<h2>Other Actions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<details class="hg-sheet-action-description">/
+    );
+    assert.doesNotMatch(
+      html,
+      /<details class="hg-sheet-action-description" open/
+    );
+    assert.match(
+      html,
+      /data-character-sheet-action="adjust-class-resource"/
     );
   }
 );

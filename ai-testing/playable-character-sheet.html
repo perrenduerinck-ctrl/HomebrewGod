@@ -161,6 +161,18 @@
           "wizard-entry": 2
         }
       },
+      attacks: [
+        {
+          id: "moon-blade",
+          name: "Moon Blade",
+          attackBonus: 5,
+          damage: "1d8",
+          damageType: "slashing",
+          range: "5 ft.",
+          target: "One creature",
+          notes: "A silvered longsword."
+        }
+      ],
       equipment: {
         currency: {
           cp: 2,
@@ -182,6 +194,8 @@
             attackAbility: "dex",
             finesse: true,
             proficient: true,
+            range: "5 ft.",
+            target: "One creature",
             notes: "A silvered longsword."
           },
           {
@@ -222,6 +236,15 @@
             name: "Arcane Recovery",
             summary: "Recover spell slots after a short rest.",
             sourceLabel: "Wizard 1"
+          },
+          {
+            id: "arcane-deflection",
+            name: "Arcane Deflection",
+            summary: "Raise a quick magical defense against an attack or saving throw.",
+            description: "When you are hit by an attack or fail a saving throw, use your reaction to gain the recorded defensive benefit.",
+            source: "subclass",
+            sourceLabel: "School of Evocation",
+            actionEconomy: "reaction"
           }
         ],
         speciesTraits: [
@@ -229,6 +252,15 @@
             id: "fey-ancestry",
             name: "Fey Ancestry",
             summary: "Advantage against being charmed."
+          },
+          {
+            id: "fey-step",
+            name: "Fey Step",
+            summary: "Teleport to an unoccupied space you can see.",
+            description: "Teleport up to 30 feet to an unoccupied space you can see.",
+            actionEconomy: "bonusAction",
+            range: "Self",
+            target: "Self"
           }
         ],
         backgroundFeatures: [
@@ -238,7 +270,17 @@
             summary: "Know where to find lore."
           }
         ],
-        customFeatures: []
+        customFeatures: [
+          {
+            id: "tactical-assessment",
+            name: "Tactical Assessment",
+            summary: "Spend one minute studying a battlefield.",
+            description: "After studying the area, the DM reveals one useful tactical detail.",
+            activationType: "other",
+            activationTime: "1 minute",
+            source: "Custom feature"
+          }
+        ]
       },
       classMechanics: {
         resources: [
@@ -257,14 +299,91 @@
             currentUses: 1,
             maximumUses: 1,
             recharge: "longRest"
+          },
+          {
+            id: "fighter-entry:second-wind",
+            name: "Second Wind",
+            className: "Fighter",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "shortOrLongRest"
+          }
+        ],
+        actions: [
+          {
+            id: "fighter-entry:second-wind-action",
+            resourceId: "fighter-entry:second-wind",
+            name: "Second Wind",
+            className: "Fighter",
+            actionEconomy: "bonusAction",
+            healing: "1d10 + 2",
+            target: "Self",
+            summary: "Regain hit points using your fighter training.",
+            description: "Roll 1d10 and add your Fighter level, then regain that many hit points."
           }
         ]
       },
       featMechanics: {
-        resources: [],
-        naturalWeapons: [],
+        resources: [
+          {
+            id: "war-caster-focus",
+            name: "War Caster Focus",
+            featName: "War Caster",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "longRest"
+          }
+        ],
+        naturalWeapons: [
+          {
+            id: "spectral-claw",
+            name: "Spectral Claw",
+            featName: "Arcane Mutation",
+            damageDice: "1d6",
+            damageType: "force",
+            attackAbility: "int",
+            proficient: true,
+            range: "5 ft.",
+            target: "One creature",
+            summary: "Strike with a temporary arcane claw."
+          }
+        ],
         selectedFeatures: [],
-        actions: []
+        actions: [
+          {
+            id: "arcane-shove",
+            name: "Arcane Shove",
+            featName: "Telekinetic Adept",
+            actionEconomy: "bonusAction",
+            saveDc: 15,
+            range: "30 ft.",
+            target: "One creature",
+            summary: "Push or pull a creature with telekinetic force.",
+            description: "The target makes a Strength saving throw and moves 5 feet on a failure."
+          }
+        ],
+        situationalEffects: [
+          {
+            id: "war-caster-opportunity-spell",
+            effectId: "war-caster-opportunity-spell",
+            featName: "War Caster",
+            resourceId: "war-caster-focus",
+            handling: "tracked",
+            actionEconomy: "reaction",
+            recharge: "longRest",
+            condition: "A creature's movement provokes an opportunity attack.",
+            summary: "Cast a qualifying spell instead of making the opportunity attack.",
+            instructions: "Cast a spell with a casting time of one action that targets only the provoking creature."
+          },
+          {
+            id: "war-caster-concentration",
+            effectId: "war-caster-concentration",
+            featName: "War Caster",
+            handling: "automatic",
+            actionEconomy: "passive",
+            summary: "Gain advantage on concentration saving throws."
+          }
+        ]
       },
       feats: [
         {
@@ -277,6 +396,20 @@
         spellcastingAbility: "int",
         spellSaveDc: 15,
         spellAttackBonus: 7,
+        spellAttacks: [
+          {
+            id: "fire-bolt-attack",
+            name: "Fire Bolt",
+            source: "Wizard spell",
+            attackBonus: 7,
+            damage: "2d10",
+            damageType: "fire",
+            range: "120 ft.",
+            target: "One creature",
+            summary: "Hurl a mote of fire at a creature or object.",
+            description: "Make a ranged spell attack. On a hit, the target takes fire damage."
+          }
+        ],
         knownSpellIds: ["fire-bolt", "mage-hand"],
         preparedSpellIds: ["magic-missile", "shield", "fireball"],
         slots: {
