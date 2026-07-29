@@ -179,3 +179,44 @@ test(
     );
   }
 );
+
+test(
+  "existing gameplay saves use guarded update-only persistence",
+  async () => {
+    const creatorPersistence =
+      await read(
+        "characterCreator/persistence.js"
+      );
+    const gameplayPersistence =
+      await read(
+        "characterSheet/persistence.js"
+      );
+    const index =
+      await read("index.html");
+
+    assert.match(
+      creatorPersistence,
+      /persistExistingGameplayCharacter/
+    );
+    assert.match(
+      gameplayPersistence,
+      /assertCharacterMutationAccess/
+    );
+    assert.match(
+      gameplayPersistence,
+      /assertNoStaleRevision/
+    );
+    assert.match(
+      gameplayPersistence,
+      /await updateDoc/
+    );
+    assert.doesNotMatch(
+      gameplayPersistence,
+      /\baddDoc\b/
+    );
+    assert.match(
+      index,
+      /characterSheet\/persistence\.js\?v=persistence-20260729/
+    );
+  }
+);
