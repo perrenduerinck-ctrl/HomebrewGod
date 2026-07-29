@@ -81,7 +81,7 @@ test(
   "playable character sheet prioritizes play controls, tracks combat, and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-priority7-20260728",
+      "ai-testing/playable-character-sheet.html?release=playable-priority8-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -957,6 +957,351 @@ test(
 
     expect(hasInventoryOverflow)
       .toBe(false);
+  }
+);
+
+test(
+  "playable sheet keeps mobile gameplay controls and long content touch-friendly",
+  async ({ page }) => {
+    await page.setViewportSize({
+      width: 390,
+      height: 844
+    });
+    await page.goto(
+      "ai-testing/playable-character-sheet.html?fixture=mobile-stress&release=playable-priority8-20260728",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "pass"
+      );
+    await expect(
+      page.getByRole("heading", {
+        name:
+          "Seraphina Aster Vale of the Endless Astral Archive"
+      })
+    ).toBeVisible();
+
+    const mobileMetrics =
+      await page.evaluate(() => {
+        const visibleElements =
+          (selector) => {
+            return [
+              ...document.querySelectorAll(
+                `.hg-sheet-screen-panel ${selector}`
+              )
+            ].filter((element) => {
+              return (
+                element.getClientRects()
+                  .length > 0
+              );
+            });
+          };
+        const heights =
+          (selector) => {
+            return visibleElements(
+              selector
+            ).map((element) => {
+              return element
+                .getBoundingClientRect()
+                .height;
+            });
+          };
+        const tabs =
+          document.querySelector(
+            ".hg-character-sheet-tabs"
+          );
+
+        return {
+          hasPageOverflow:
+            document.documentElement
+              .scrollWidth >
+            window.innerWidth,
+          tabsScrollable:
+            tabs.scrollWidth >
+            tabs.clientWidth,
+          tabOverflow:
+            getComputedStyle(tabs)
+              .overflowX,
+          tabHeights:
+            [
+              ...tabs.querySelectorAll(
+                ".hg-character-sheet-tab"
+              )
+            ].map((element) => {
+              return element
+                .getBoundingClientRect()
+                .height;
+            }),
+          hpButtonHeights:
+            heights(
+              ".hg-sheet-value-control button"
+            ),
+          deathSaveButtonHeights:
+            heights(
+              ".hg-sheet-death-saves button"
+            ),
+          conditionButtonHeights:
+            heights(
+              ".hg-sheet-condition-controls button"
+            )
+        };
+      });
+
+    expect(mobileMetrics.hasPageOverflow)
+      .toBe(false);
+    expect(mobileMetrics.tabsScrollable)
+      .toBe(true);
+    expect(mobileMetrics.tabOverflow)
+      .toMatch(/auto|scroll/);
+    for (
+      const heights of [
+        mobileMetrics.tabHeights,
+        mobileMetrics.hpButtonHeights,
+        mobileMetrics.deathSaveButtonHeights,
+        mobileMetrics.conditionButtonHeights
+      ]
+    ) {
+      expect(heights.length)
+        .toBeGreaterThan(0);
+      expect(
+        heights.every(
+          (height) => height >= 44
+        )
+      ).toBe(true);
+    }
+
+    const moreMenu = page.locator(
+      ".hg-sheet-more-menu"
+    );
+    await moreMenu.locator(
+      ":scope > summary"
+    ).click();
+    await expect(
+      moreMenu.getByRole("button", {
+        name: "Delete Character",
+        exact: true
+      })
+    ).toBeVisible();
+    const menuBounds =
+      await moreMenu.locator(
+        ":scope > div"
+      ).evaluate((menu) => {
+        const rect =
+          menu.getBoundingClientRect();
+
+        return {
+          left: rect.left,
+          right: rect.right,
+          viewportWidth:
+            window.innerWidth,
+          hasPageOverflow:
+            document.documentElement
+              .scrollWidth >
+            window.innerWidth
+        };
+      });
+
+    expect(menuBounds.left)
+      .toBeGreaterThanOrEqual(0);
+    expect(menuBounds.right)
+      .toBeLessThanOrEqual(
+        menuBounds.viewportWidth
+      );
+    expect(menuBounds.hasPageOverflow)
+      .toBe(false);
+    await moreMenu.locator(
+      ":scope > summary"
+    ).click();
+
+    const screenPanel = page.locator(
+      ".hg-sheet-screen-panel"
+    );
+    const hpInput = screenPanel.locator(
+      '[data-character-sheet-input="hp-amount"]'
+    );
+    await hpInput.fill("5");
+    await screenPanel.getByRole(
+      "button",
+      {
+        name: "Damage",
+        exact: true
+      }
+    ).click();
+    await expect(
+      screenPanel.locator(
+        ".hg-sheet-hp-display strong"
+      )
+    ).toHaveText("35");
+    await hpInput.fill("99");
+    await screenPanel.getByRole(
+      "button",
+      {
+        name: "Heal",
+        exact: true
+      }
+    ).click();
+    await expect(
+      screenPanel.locator(
+        ".hg-sheet-hp-display strong"
+      )
+    ).toHaveText("48");
+
+    await screenPanel.locator(
+      [
+        '[data-character-sheet-action="adjust-death-save"]',
+        '[data-death-save-kind="success"]',
+        '[data-delta="1"]'
+      ].join("")
+    ).click();
+    await expect(
+      screenPanel.locator(
+        'strong[aria-label="Successes: 2"]'
+      )
+    ).toBeVisible();
+    await screenPanel.locator(
+      '[data-character-sheet-action="reset-death-saves"]'
+    ).click();
+    await expect(
+      screenPanel.locator(
+        'strong[aria-label="Successes: 0"]'
+      )
+    ).toBeVisible();
+
+    await screenPanel.locator(
+      '[data-character-sheet-input="standard-condition"]'
+    ).selectOption("Blinded");
+    await screenPanel.locator(
+      '[data-character-sheet-action="add-standard-condition"]'
+    ).click();
+    await expect(
+      screenPanel.locator(
+        '[data-condition="Blinded"]'
+      )
+    ).toBeVisible();
+    const longCondition =
+      "Restrained by an Unusually Long Arcane Condition";
+    await screenPanel.locator(
+      '[data-character-sheet-input="custom-condition"]'
+    ).fill(longCondition);
+    await screenPanel.locator(
+      '[data-character-sheet-action="add-custom-condition"]'
+    ).click();
+    await expect(
+      screenPanel.locator(
+        `[data-condition="${longCondition}"]`
+      )
+    ).toBeVisible();
+
+    const fireBoltDetails =
+      screenPanel.locator(
+        '[data-sheet-action-key="fire-bolt"] details'
+      );
+    await fireBoltDetails.locator(
+      "summary"
+    ).click();
+    await expect(
+      fireBoltDetails.locator("p")
+    ).toBeVisible();
+    expect(
+      await fireBoltDetails.locator(
+        "summary"
+      ).evaluate((summary) => {
+        return summary
+          .getBoundingClientRect()
+          .height;
+      })
+    ).toBeGreaterThanOrEqual(44);
+
+    await page.getByRole("button", {
+      name: "Features",
+      exact: true
+    }).click();
+    const longFeature =
+      screenPanel.locator(
+        '[data-sheet-feature-id="impossibly-long-mobile-feature"]'
+      );
+    await expect(longFeature)
+      .toContainText(
+        "Chronicle of the Converging Celestial Pathways"
+      );
+    await longFeature.locator(
+      "details summary"
+    ).click();
+    await expect(
+      longFeature.locator(
+        "details p"
+      )
+    ).toBeVisible();
+
+    for (
+      const tabName of [
+        "Actions",
+        "Abilities",
+        "Inventory",
+        "Features",
+        "Spells",
+        "Description"
+      ]
+    ) {
+      await page.getByRole("button", {
+        name: tabName,
+        exact: true
+      }).click();
+      await expect(
+        screenPanel.locator(
+          ".hg-sheet-panel"
+        )
+      ).toBeVisible();
+      const layout =
+        await page.evaluate(() => {
+          const visibleCards = [
+            ...document.querySelectorAll(
+              [
+                ".hg-sheet-screen-panel .hg-sheet-action-card",
+                ".hg-sheet-screen-panel .hg-sheet-inventory-item",
+                ".hg-sheet-screen-panel .hg-sheet-spell-card",
+                ".hg-sheet-screen-panel .hg-sheet-feature-card"
+              ].join(",")
+            )
+          ].filter((element) => {
+            return (
+              element.getClientRects()
+                .length > 0
+            );
+          });
+
+          return {
+            hasPageOverflow:
+              document.documentElement
+                .scrollWidth >
+              window.innerWidth,
+            cardsFit:
+              visibleCards.every(
+                (card) => {
+                  const rect =
+                    card.getBoundingClientRect();
+
+                  return (
+                    rect.left >= 0 &&
+                    rect.right <=
+                      window.innerWidth
+                  );
+                }
+              )
+          };
+        });
+
+      expect(layout.hasPageOverflow)
+        .toBe(false);
+      expect(layout.cardsFit)
+        .toBe(true);
+    }
   }
 );
 

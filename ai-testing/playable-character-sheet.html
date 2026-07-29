@@ -45,7 +45,7 @@
   <script type="module">
     import {
       createCharacterSheetView
-    } from "../characterSheet.js?v=priority7-20260728";
+    } from "../characterSheet.js?v=priority8-20260728";
     import {
       applyGameplayAction
     } from "../characterSheet/gameplayState.js";
@@ -719,6 +719,35 @@
       character.magic = {};
       character.featMechanics
         .spellcasting = [];
+    } else if (
+      fixture ===
+      "mobile-stress"
+    ) {
+      character.id =
+        "mobile-stress-fixture";
+      character.identity.name =
+        "Seraphina Aster Vale of the Endless Astral Archive";
+      character.species.name =
+        "Astral High Elf of the Sapphire Expanse";
+      character.background.name =
+        "Keeper of the Impossible Observatory";
+      character.classProgression
+        .classes[1].subclassName =
+          "School of Chronospatial Evocation and Applied Aetherics";
+      character.features
+        .customFeatures.push({
+          id:
+            "impossibly-long-mobile-feature",
+          name:
+            "Chronicle of the Converging Celestial Pathways",
+          source:
+            "The Impossible Observatory",
+          summary:
+            "Read the shifting constellations to identify a safe route through unstable planar terrain.",
+          description:
+            "When the stars align across several overlapping planes, you can spend ten uninterrupted minutes comparing your annotated charts, brass instruments, and remembered observations. The group learns the safest visible route through the surrounding magical hazard, along with one important complication the route cannot avoid. This description is intentionally long so the phone layout proves that expandable content remains readable, touch-friendly, and contained within the viewport.",
+          activationType: "other"
+        });
     } else if (
       fixture ===
       "attunement-master"

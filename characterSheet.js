@@ -1522,10 +1522,10 @@ function renderAttackTable(character, proficiencyBonus) {
           <tbody>
             ${rows.map((row) => `
               <tr>
-                <td>${escapeHtml(row.name)}</td>
-                <td>${row.attackBonus === null ? "\u2014" : escapeHtml(formatModifier(row.attackBonus))}</td>
-                <td>${escapeHtml(row.damage)}</td>
-                <td>${escapeHtml(row.notes)}</td>
+                <td data-label="Attack">${escapeHtml(row.name)}</td>
+                <td data-label="To Hit">${row.attackBonus === null ? "\u2014" : escapeHtml(formatModifier(row.attackBonus))}</td>
+                <td data-label="Damage">${escapeHtml(row.damage)}</td>
+                <td data-label="Notes">${escapeHtml(row.notes)}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -7452,6 +7452,10 @@ function ensureStyles() {
     }
 
     @media (max-width: 560px) {
+      .hg-character-sheet {
+        touch-action: manipulation;
+      }
+
       .hg-character-sheet-header {
         grid-template-columns: 1fr;
         padding: 13px;
@@ -7470,8 +7474,35 @@ function ensureStyles() {
         justify-content: center;
       }
 
+      .hg-character-sheet-heading h1 {
+        font-size: clamp(27px, 8.5vw, 38px);
+        overflow-wrap: anywhere;
+      }
+
+      .hg-character-sheet-heading .hg-sheet-class-line,
+      .hg-sheet-identity-meta strong {
+        overflow-wrap: anywhere;
+      }
+
       .hg-sheet-identity-meta > span {
         min-width: 0;
+      }
+
+      .hg-character-sheet-toolbar {
+        position: relative;
+        gap: 8px;
+      }
+
+      .hg-character-sheet-toolbar > button,
+      .hg-sheet-more-menu {
+        flex: 1 1 105px;
+      }
+
+      .hg-character-sheet-toolbar > button,
+      .hg-sheet-more-menu > summary {
+        justify-content: center;
+        min-height: 44px;
+        padding: 9px 11px !important;
       }
 
       .hg-character-sheet-tabs {
@@ -7481,12 +7512,27 @@ function ensureStyles() {
         flex-wrap: nowrap;
         overflow-x: auto;
         overscroll-behavior-inline: contain;
+        scroll-snap-type: inline proximity;
+        scrollbar-color: rgba(127, 153, 255, 0.62) rgba(7, 11, 27, 0.42);
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .hg-character-sheet-tabs::-webkit-scrollbar {
+        height: 5px;
+      }
+
+      .hg-character-sheet-tabs::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: rgba(127, 153, 255, 0.62);
       }
 
       .hg-character-sheet-tab {
         flex: 0 0 auto;
-        min-width: 105px;
-        padding-inline: 6px !important;
+        min-width: 112px;
+        min-height: 44px;
+        padding: 9px 8px !important;
+        scroll-snap-align: start;
       }
 
       .hg-sheet-stat-grid {
@@ -7564,16 +7610,161 @@ function ensureStyles() {
 
       .hg-sheet-inline-actions button {
         flex: 1 1 100px;
+        min-height: 44px;
       }
 
-      .hg-sheet-value-control button,
+      .hg-sheet-value-control {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .hg-sheet-value-control label {
+        grid-column: 1 / -1;
+      }
+
+      .hg-sheet-value-control button {
+        width: 100%;
+        min-height: 48px;
+        padding: 10px 8px !important;
+        font-size: 13px !important;
+      }
+
+      .hg-sheet-condition-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+      }
+
+      .hg-sheet-condition-controls label {
+        min-width: 0;
+      }
+
       .hg-sheet-condition-controls button {
-        flex: 1 1 120px;
+        min-width: 96px;
+        min-height: 44px;
+        padding: 9px 10px !important;
+      }
+
+      .hg-character-sheet input,
+      .hg-character-sheet select {
+        min-height: 44px;
+        font-size: 16px;
+      }
+
+      .hg-sheet-death-saves > div {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 7px;
+      }
+
+      .hg-sheet-death-saves .hg-sheet-inline-actions {
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+      }
+
+      .hg-sheet-death-saves .hg-sheet-inline-actions button {
+        flex: 0 0 44px;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 8px !important;
+        font-size: 18px !important;
+      }
+
+      .hg-sheet-death-saves > button {
+        width: 100%;
+        min-height: 44px;
+      }
+
+      .hg-sheet-condition-chip,
+      .hg-sheet-small-control,
+      .hg-sheet-spell-filters button,
+      .hg-sheet-inventory-filters button {
+        min-height: 44px !important;
+      }
+
+      .hg-sheet-feature-description summary,
+      .hg-sheet-action-description summary,
+      .hg-sheet-spell-description summary,
+      .hg-sheet-item-details summary,
+      .hg-sheet-container-card > summary {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        min-height: 44px;
+        padding: 7px 0;
+      }
+
+      .hg-sheet-table-wrap {
+        overflow: visible;
+        border: 0;
+      }
+
+      .hg-sheet-table,
+      .hg-sheet-table tbody,
+      .hg-sheet-table tr,
+      .hg-sheet-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .hg-sheet-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        clip-path: inset(50%);
+      }
+
+      .hg-sheet-table tbody {
+        display: grid;
+        gap: 9px;
+      }
+
+      .hg-sheet-table tr {
+        padding: 7px 9px;
+        border: 1px solid rgba(127, 153, 255, 0.14);
+        border-radius: 10px;
+        background: rgba(7, 11, 27, 0.62);
+      }
+
+      .hg-sheet-table td {
+        display: grid;
+        grid-template-columns: 70px minmax(0, 1fr);
+        gap: 8px;
+        padding: 6px 0;
+        overflow-wrap: anywhere;
+      }
+
+      .hg-sheet-table td::before {
+        content: attr(data-label);
+        color: #9eabd8;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .hg-sheet-more-menu {
+        position: static;
+      }
+
+      .hg-sheet-more-menu > summary {
+        width: 100%;
       }
 
       .hg-sheet-more-menu > div {
-        right: auto;
         left: 0;
+        right: 0;
+        top: calc(100% + 8px);
+        width: auto;
+        min-width: 0;
+      }
+
+      .hg-sheet-more-menu > div button {
+        min-height: 44px;
+        font-size: 13px !important;
       }
     }
 
