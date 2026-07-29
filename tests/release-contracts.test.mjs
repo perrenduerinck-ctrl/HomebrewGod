@@ -224,3 +224,66 @@ test(
     );
   }
 );
+
+test(
+  "character walking speed is guarded at input, load, and save boundaries",
+  async () => {
+    const walkingSpeed =
+      await read(
+        "characterCreator/walkingSpeed.js"
+      );
+    const persistenceGuard =
+      await read(
+        "characterCreator/persistenceGuard.js"
+      );
+    const packageJson =
+      JSON.parse(
+        await read("package.json")
+      );
+
+    assert.match(
+      walkingSpeed,
+      /MINIMUM_WALKING_SPEED\s*=\s*\n?\s*0/
+    );
+    assert.match(
+      walkingSpeed,
+      /MAXIMUM_WALKING_SPEED\s*=\s*\n?\s*100/
+    );
+    assert.match(
+      walkingSpeed,
+      /DEFAULT_WALKING_SPEED\s*=\s*\n?\s*30/
+    );
+    assert.match(
+      walkingSpeed,
+      /setAttribute\(\s*"min"/
+    );
+    assert.match(
+      walkingSpeed,
+      /setAttribute\(\s*"max"/
+    );
+    assert.match(
+      walkingSpeed,
+      /setAttribute\(\s*"step"/
+    );
+    assert.match(
+      persistenceGuard,
+      /guardCharacterDraftWalkingSpeed/
+    );
+    assert.match(
+      persistenceGuard,
+      /normalizeCharacterWalkingSpeed/
+    );
+    assert.match(
+      packageJson.scripts[
+        "test:browser"
+      ],
+      /walking-speed\.spec\.mjs/
+    );
+    assert.match(
+      packageJson.scripts[
+        "test:deployed"
+      ],
+      /walking-speed\.spec\.mjs/
+    );
+  }
+);

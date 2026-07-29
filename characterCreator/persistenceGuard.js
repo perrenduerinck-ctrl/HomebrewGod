@@ -1,6 +1,11 @@
 import {
   mergeCharacterRecordPreservingUnknownFields
 } from "../characterSheet/persistence.js?v=persistence-20260729";
+import {
+  guardCharacterDraftWalkingSpeed,
+  installWalkingSpeedInputGuard,
+  normalizeCharacterWalkingSpeed
+} from "./walkingSpeed.js?v=walking-speed-20260729";
 
 const basePersistencePath =
   import.meta.url.includes(
@@ -42,6 +47,26 @@ export function createCharacterPersistence(
     dependencies.updateDoc;
   const getDoc =
     dependencies.getDoc;
+  const originalAddDoc =
+    dependencies.addDoc;
+  const originalNormalizeCharacter =
+    context?.normalizeCharacter;
+  const originalSanitizeDraftStrings =
+    context?.sanitizeDraftStrings;
+  const originalCreateCharacterPayload =
+    context?.createCharacterPayload;
+  const originalReplaceDraft =
+    context?.replaceDraft;
+
+  guardCharacterDraftWalkingSpeed(
+    context?.creatorState
+  );
+  installWalkingSpeedInputGuard({
+    getCharacter: () => {
+      return context
+        ?.creatorState?.draft;
+    }
+  });
 
   if (
     typeof originalUpdateDoc !==
@@ -55,11 +80,30 @@ export function createCharacterPersistence(
 
   const guardedDependencies = {
     ...dependencies,
+    addDoc:
+      typeof originalAddDoc ===
+        "function"
+        ? (
+            collectionReference,
+            character
+          ) => {
+            return originalAddDoc(
+              collectionReference,
+              normalizeCharacterWalkingSpeed(
+                character
+              )
+            );
+          }
+        : originalAddDoc,
     updateDoc:
       async (
         documentRef,
         nextRecord
       ) => {
+        normalizeCharacterWalkingSpeed(
+          nextRecord
+        );
+
         const snapshot =
           await getDoc(documentRef);
         const remoteRecord =
@@ -74,7 +118,9 @@ export function createCharacterPersistence(
         ) {
           return originalUpdateDoc(
             documentRef,
-            nextRecord
+            normalizeCharacterWalkingSpeed(
+              nextRecord
+            )
           );
         }
 
@@ -83,6 +129,10 @@ export function createCharacterPersistence(
             remoteRecord,
             nextRecord
           );
+
+        normalizeCharacterWalkingSpeed(
+          payload
+        );
 
         payload.ownerUid =
           remoteRecord.ownerUid ||
@@ -111,6 +161,58 @@ export function createCharacterPersistence(
 
   return createBaseCharacterPersistence({
     ...context,
+    normalizeCharacter:
+      typeof originalNormalizeCharacter ===
+        "function"
+        ? (character) => {
+            return normalizeCharacterWalkingSpeed(
+              originalNormalizeCharacter(
+                character
+              )
+            );
+          }
+        : originalNormalizeCharacter,
+    sanitizeDraftStrings:
+      typeof originalSanitizeDraftStrings ===
+        "function"
+        ? (character) => {
+            return normalizeCharacterWalkingSpeed(
+              originalSanitizeDraftStrings(
+                normalizeCharacterWalkingSpeed(
+                  character
+                )
+              )
+            );
+          }
+        : originalSanitizeDraftStrings,
+    createCharacterPayload:
+      typeof originalCreateCharacterPayload ===
+        "function"
+        ? (character) => {
+            return normalizeCharacterWalkingSpeed(
+              originalCreateCharacterPayload(
+                normalizeCharacterWalkingSpeed(
+                  character
+                )
+              )
+            );
+          }
+        : originalCreateCharacterPayload,
+    replaceDraft:
+      typeof originalReplaceDraft ===
+        "function"
+        ? (
+            character,
+            options
+          ) => {
+            return originalReplaceDraft(
+              normalizeCharacterWalkingSpeed(
+                character
+              ),
+              options
+            );
+          }
+        : originalReplaceDraft,
     deps: guardedDependencies
   });
 }

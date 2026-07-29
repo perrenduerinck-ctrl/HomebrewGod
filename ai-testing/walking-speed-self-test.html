@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>Walking Speed Self Test</title>
+  </head>
+  <body data-test-status="running">
+    <main>
+      <label for="ccCustomSpeciesSpeed">
+        Walking Speed
+      </label>
+      <input
+        id="ccCustomSpeciesSpeed"
+        type="number"
+      >
+      <output id="walkingSpeedResult">
+        RUNNING
+      </output>
+    </main>
+
+    <script type="module">
+      import {
+        installWalkingSpeedInputGuard
+      } from "../characterCreator/walkingSpeed.js?v=walking-speed-20260729";
+
+      const character = {
+        combat: {
+          speed: {
+            walk:
+              30000000000000000000
+          }
+        }
+      };
+
+      installWalkingSpeedInputGuard({
+        root: document,
+        getCharacter: () => {
+          return character;
+        }
+      });
+
+      window.__WALKING_SPEED_TEST__ = {
+        character,
+        ping() {
+          return "responsive";
+        }
+      };
+
+      document.body.dataset
+        .testStatus = "pass";
+      document.getElementById(
+        "walkingSpeedResult"
+      ).textContent = "PASS";
+    </script>
+  </body>
+</html>
