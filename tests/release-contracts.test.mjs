@@ -199,6 +199,10 @@ test(
       /mergeCharacterRecordPreservingUnknownFields/
     );
     assert.match(
+      creatorPersistence,
+      /persistence\.base\.js/
+    );
+    assert.match(
       gameplayPersistence,
       /assertCharacterMutationAccess/
     );
@@ -216,7 +220,7 @@ test(
     );
     assert.match(
       index,
-      /characterSheet\/persistence\.js\?v=persistence-20260729/
+      /"\.\/characterCreator\/persistence\.js":\s*"\.\/characterCreator\/(?:persistence|persistenceGuard)\.js\?v=/
     );
   }
 );
