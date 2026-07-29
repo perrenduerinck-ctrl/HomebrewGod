@@ -185,7 +185,7 @@ test(
   async () => {
     const creatorPersistence =
       await read(
-        "characterCreator/persistence.js"
+        "characterCreator/persistenceGuard.js"
       );
     const gameplayPersistence =
       await read(
@@ -196,7 +196,7 @@ test(
 
     assert.match(
       creatorPersistence,
-      /persistExistingGameplayCharacter/
+      /mergeCharacterRecordPreservingUnknownFields/
     );
     assert.match(
       gameplayPersistence,

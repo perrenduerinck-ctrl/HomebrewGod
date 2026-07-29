@@ -42,9 +42,6 @@ import {
   ensureGameplayState
 } from "../characterSheet/gameplayState.js";
 import {
-  persistExistingGameplayCharacter
-} from "../characterSheet/persistence.js";
-import {
   characterHasSpellContent,
   collectCharacterActions,
   collectCharacterFeatures,
@@ -416,328 +413,1686 @@ test(
 );
 
 test(
-  "gameplay persistence updates the original character without duplicates and survives reload",
-  async () => {
-    const characterId =
-      "saved-character-17";
-    const remoteRecord = {
-      schemaVersion: 12,
-      sheetType: "character",
-      firestoreDocumentId:
-        characterId,
-      docId: characterId,
-      ownerUid: "owner-1",
-      roomCode: "TEST",
-      createdAt: {
-        seconds: 40
-      },
-      creator: {
-        uid: "creator-1",
-        displayName:
-          "Original Creator",
-        futureCreatorField:
-          "keep this"
-      },
-      builder: {
-        status: "finalized",
-        finalizedAtMillis: 900,
-        lastSavedAtMillis: 1000,
-        futureBuilderField:
-          "keep this too"
-      },
-      identity: {
-        name:
-          "Persistence Hero"
-      },
+  "playable sheet damage, healing, temporary HP, and death saves are normalized",
+  () => {
+    const character = {
       combat: {
-        maxHp: 48,
-        currentHp: 40,
-        temporaryHp: 3,
-        inspiration: false,
-        conditions: [],
-        futureDefense: {
-          ward: 5
-        }
-      },
-      magic: {
-        spellSlots: {
-          "1": {
-            maximum: 4,
-            used: 0
-          }
-        }
-      },
-      classMechanics: {
-        resources: [
-          {
-            id: "arcane-recovery",
-            name:
-              "Arcane Recovery",
-            maximumUses: 1,
-            currentUses: 1,
-            futureResourceField:
-              "preserve resource metadata"
-          }
-        ]
-      },
-      futureTopLevel: {
-        enabled: true
-      },
-      updatedAtMillis: 1000
+        maxHp: 30,
+        currentHp: 24,
+        temporaryHp: 5
+      }
     };
-    const nextRecord =
-      structuredClone(
-        remoteRecord
-      );
 
-    delete nextRecord
-      .futureTopLevel;
-    delete nextRecord.combat
-      .futureDefense;
-    delete nextRecord.creator
-      .futureCreatorField;
-    delete nextRecord.classMechanics
-      .resources[0]
-      .futureResourceField;
-    nextRecord.schemaVersion = 13;
-    nextRecord.builder.status =
-      "draft";
-    nextRecord.builder
-      .finalizedAtMillis = null;
-
-    ensureGameplayState(
-      nextRecord
-    );
+    ensureGameplayState(character);
     applyGameplayAction(
-      nextRecord,
+      character,
       {
         type: "damage",
         amount: 8
       }
     );
+
+    assert.equal(
+      character.combat.temporaryHp,
+      0
+    );
+    assert.equal(
+      character.combat.currentHp,
+      21
+    );
+
     applyGameplayAction(
-      nextRecord,
+      character,
       {
-        type: "set-temp-hp",
-        amount: 7
+        type: "heal",
+        amount: 20
       }
     );
+    assert.equal(
+      character.combat.currentHp,
+      30
+    );
+
     applyGameplayAction(
-      nextRecord,
+      character,
+      {
+        type: "adjust-death-save",
+        kind: "failure",
+        delta: 9
+      }
+    );
+    assert.equal(
+      character.combat
+        .deathSaves.failures,
+      3
+    );
+  }
+);
+
+test(
+  "playable sheet tracks conditions, inspiration, equipment, and attunement safely",
+  () => {
+    const character = {
+      combat: {
+        maxHp: 10,
+        currentHp: 10
+      },
+      equipment: {
+        items: [
+          {
+            id: "blade",
+            name: "Moon Blade",
+            equipped: false
+          },
+          {
+            id: "ring-1",
+            name: "Ring One",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: true
+          },
+          {
+            id: "ring-2",
+            name: "Ring Two",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: true
+          },
+          {
+            id: "ring-3",
+            name: "Ring Three",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: true
+          },
+          {
+            id: "ring-4",
+            name: "Ring Four",
+            isMagical: true,
+            requiresAttunement: true,
+            attuned: false
+          }
+        ]
+      }
+    };
+
+    applyGameplayAction(
+      character,
       {
         type:
           "toggle-inspiration"
       }
     );
     applyGameplayAction(
-      nextRecord,
+      character,
       {
         type:
           "toggle-condition",
-        condition: "Blinded"
+        condition: "Poisoned"
       }
     );
-    nextRecord.magic
-      .spellSlots["1"].used = 2;
-    nextRecord.classMechanics
-      .resources[0]
-      .currentUses = 0;
-
-    const store =
-      new Map([
-        [
-          characterId,
-          structuredClone(
-            remoteRecord
-          )
-        ]
-      ]);
-    let updateCalls = 0;
-    let addCalls = 0;
-    const timestamp = {
-      serverTimestamp: true
-    };
-    const result =
-      await persistExistingGameplayCharacter({
-        updateDoc:
-          async (
-            documentRef,
-            payload
-          ) => {
-            updateCalls += 1;
-            store.set(
-              documentRef.id,
-              structuredClone(
-                payload
-              )
-            );
-          },
-        documentRef: {
-          id: characterId
-        },
-        remoteRecord:
-          store.get(characterId),
-        nextRecord,
-        characterId,
-        roomCode: "TEST",
-        actorUid: "owner-1",
-        roomDmUid: "dm-1",
-        expectedRevisionMillis:
-          1000,
-        savedAtMillis: 2000,
-        timestamp
-      });
-
-    assert.equal(
-      result.writeMethod,
-      "updateDoc"
+    applyGameplayAction(
+      character,
+      {
+        type:
+          "toggle-item-equipped",
+        itemId: "blade"
+      }
     );
-    assert.equal(
-      result.characterId,
-      characterId
-    );
-    assert.equal(
-      updateCalls,
-      1
-    );
-    assert.equal(
-      addCalls,
-      0
-    );
-    assert.equal(
-      store.size,
-      1
-    );
-
-    const reloaded =
-      structuredClone(
-        store.get(characterId)
+    const blocked =
+      applyGameplayAction(
+        character,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "ring-4"
+        }
       );
 
     assert.equal(
-      reloaded.combat
-        .currentHp,
-      35
-    );
-    assert.equal(
-      reloaded.combat
-        .temporaryHp,
-      7
-    );
-    assert.equal(
-      reloaded.combat
-        .inspiration,
+      character.combat.inspiration,
       true
     );
     assert.deepEqual(
-      reloaded.combat
-        .conditions,
-      ["Blinded"]
+      character.combat.conditions,
+      ["Poisoned"]
     );
     assert.equal(
-      reloaded.magic
-        .spellSlots["1"].used,
-      2
-    );
-    assert.equal(
-      reloaded.classMechanics
-        .resources[0]
-        .currentUses,
-      0
-    );
-    assert.equal(
-      reloaded.builder.status,
-      "finalized"
-    );
-    assert.equal(
-      reloaded.builder
-        .finalizedAtMillis,
-      900
-    );
-    assert.equal(
-      reloaded.builder
-        .lastSavedAtMillis,
-      2000
-    );
-    assert.equal(
-      reloaded.ownerUid,
-      "owner-1"
-    );
-    assert.equal(
-      reloaded.roomCode,
-      "TEST"
-    );
-    assert.deepEqual(
-      reloaded.createdAt,
-      remoteRecord.createdAt
-    );
-    assert.equal(
-      reloaded.creator
-        .futureCreatorField,
-      "keep this"
-    );
-    assert.equal(
-      reloaded.combat
-        .futureDefense.ward,
-      5
-    );
-    assert.equal(
-      reloaded.futureTopLevel
-        .enabled,
+      character.equipment
+        .items[0].equipped,
       true
     );
     assert.equal(
-      reloaded.classMechanics
-        .resources[0]
-        .futureResourceField,
-      "preserve resource metadata"
+      blocked.changed,
+      false
     );
-    assert.equal(
-      reloaded.schemaVersion,
-      13
-    );
-    assert.equal(
-      reloaded.updatedAtMillis,
-      2000
-    );
-    assert.deepEqual(
-      reloaded.updatedAt,
-      timestamp
+    assert.match(
+      blocked.message,
+      /attunement limit of 3 items/i
     );
   }
 );
 
 test(
-  "gameplay persistence rejects stale and unauthorized saves while preserving DM access",
-  async () => {
-    const makeRecord = () => {
+  "attunement limit defaults, feature increases, overrides, and item validation share one helper",
+  () => {
+    assert.equal(
+      getCharacterAttunementLimit({}),
+      3
+    );
+
+    const makeItem = (
+      id,
+      attuned = false,
+      requiresAttunement = true
+    ) => {
       return {
-        schemaVersion: 13,
-        firestoreDocumentId:
-          "access-character",
-        ownerUid: "owner-1",
-        roomCode: "TEST",
-        builder: {
-          status: "finalized",
-          finalizedAtMillis: 500,
-          lastSavedAtMillis: 2000
-        },
-        updatedAtMillis: 2000
+        id,
+        name: `Ring ${id}`,
+        isMagical: true,
+        requiresAttunement,
+        attuned
       };
     };
-    let updateCalls = 0;
-    const updateDoc =
-      async () => {
-        updateCalls += 1;
-      };
+    const belowLimit = {
+      equipment: {
+        items: [
+          makeItem("a", true),
+          makeItem("b", true),
+          makeItem("c")
+        ]
+      }
+    };
+    const reachesDefault =
+      applyGameplayAction(
+        belowLimit,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "c"
+        }
+      );
 
-    await assert.rejects(
-      persistExistingGameplayCharacter({
-        updateDoc,
-        documentRef: {
-          id: "access-character"
+    assert.equal(
+      reachesDefault.changed,
+      true
+    );
+    assert.equal(
+      countCharacterAttunedItems(
+        belowLimit
+      ),
+      3
+    );
+
+    belowLimit.equipment.items.push(
+      makeItem("d")
+    );
+    const blockedAtDefault =
+      applyGameplayAction(
+        belowLimit,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "d"
+        }
+      );
+
+    assert.equal(
+      blockedAtDefault.changed,
+      false
+    );
+    assert.match(
+      blockedAtDefault.message,
+      /limit of 3 items/i
+    );
+
+    const featureCharacter = {
+      features: {
+        classFeatures: [
+          {
+            id: "magic-item-adept",
+            name:
+              "Magic Item Adept"
+          }
+        ]
+      },
+      equipment: {
+        items: [
+          makeItem("a", true),
+          makeItem("b", true),
+          makeItem("c", true),
+          makeItem("d"),
+          makeItem("e")
+        ]
+      }
+    };
+
+    assert.equal(
+      getCharacterAttunementLimit(
+        featureCharacter
+      ),
+      4
+    );
+    assert.equal(
+      applyGameplayAction(
+        featureCharacter,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "d"
+        }
+      ).changed,
+      true
+    );
+    assert.equal(
+      countCharacterAttunedItems(
+        featureCharacter
+      ),
+      4
+    );
+
+    const blockedAboveDefault =
+      applyGameplayAction(
+        featureCharacter,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "e"
+        }
+      );
+
+    assert.equal(
+      blockedAboveDefault.changed,
+      false
+    );
+    assert.match(
+      blockedAboveDefault.message,
+      /limit of 4 items/i
+    );
+
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          featureCharacter,
+          {
+            activeTab:
+              "inventory"
+          }
+        );
+
+    assert.match(
+      html,
+      /<strong>4 \/ 4<\/strong>/
+    );
+    assert.match(
+      html,
+      /The attunement limit is reached\./
+    );
+
+    assert.equal(
+      getCharacterAttunementLimit({
+        classProgression: {
+          classes: [
+            {
+              classId:
+                "artificer",
+              level: 18
+            }
+          ]
+        }
+      }),
+      6
+    );
+    assert.equal(
+      getCharacterAttunementLimit({
+        classMechanics: {
+          effects: [
+            {
+              type:
+                "attunementLimitBonus",
+              value: 2
+            }
+          ]
+        }
+      }),
+      5
+    );
+    assert.equal(
+      getCharacterAttunementLimit({
+        equipment: {
+          attunementLimitOverride: 5
+        }
+      }),
+      5
+    );
+
+    const noRequirement = {
+      equipment: {
+        items: [
+          makeItem(
+            "ordinary",
+            false,
+            false
+          )
+        ]
+      }
+    };
+    const rejected =
+      applyGameplayAction(
+        noRequirement,
+        {
+          type:
+            "toggle-item-attuned",
+          itemId: "ordinary"
+        }
+      );
+
+    assert.equal(
+      rejected.changed,
+      false
+    );
+    assert.match(
+      rejected.message,
+      /does not require attunement/i
+    );
+    assert.equal(
+      countCharacterAttunedItems(
+        noRequirement
+      ),
+      0
+    );
+  }
+);
+
+test(
+  "playable sheet nests containers, filters inventory, and renders each item once",
+  () => {
+    const character = {
+      id: "priority-four-inventory",
+      equipment: {
+        items: [
+          {
+            id: "pack",
+            name: "Explorer's Pack",
+            category:
+              "adventuring-gear",
+            quantity: 1,
+            weight: 5,
+            isContainer: true,
+            notes:
+              "A weathered field pack."
+          },
+          {
+            id: "pouch",
+            name: "Inner Pouch",
+            category:
+              "adventuring-gear",
+            quantity: 1,
+            weight: 1,
+            isContainer: true,
+            containerId: "pack"
+          },
+          {
+            id: "healing-potion",
+            name: "Healing Potion",
+            category: "consumable",
+            quantity: 2,
+            weight: 0.5,
+            isMagical: true,
+            containerId: "pouch",
+            notes:
+              "Two crimson draughts.",
+            description:
+              "Drink a potion to regain hit points."
+          },
+          {
+            id: "moon-blade",
+            name: "Moon Blade",
+            category: "weapon",
+            quantity: 1,
+            weight: 3,
+            equipped: true
+          },
+          {
+            id: "chain-shirt",
+            name: "Chain Shirt",
+            category: "armor",
+            quantity: 1,
+            weight: 20
+          },
+          {
+            id: "orphan-map",
+            name: "Orphan Map",
+            category: "gear",
+            quantity: 1,
+            weight: 0,
+            containerId:
+              "missing-case"
+          }
+        ]
+      }
+    };
+    const inventory =
+      collectCharacterInventory(
+        character
+      );
+    const byId = new Map(
+      inventory.entries.map(
+        (entry) => {
+          return [entry.id, entry];
+        }
+      )
+    );
+
+    assert.equal(
+      byId.get("healing-potion")
+        .parent.id,
+      "pouch"
+    );
+    assert.equal(
+      byId.get("pouch").parent.id,
+      "pack"
+    );
+    assert.equal(
+      byId.get("healing-potion")
+        .lineWeight,
+      1
+    );
+    assert.equal(
+      byId.get("orphan-map")
+        .parent,
+      null
+    );
+
+    const searched =
+      collectCharacterInventory(
+        character,
+        { search: "crimson" }
+      );
+    assert.equal(
+      searched.matchedCount,
+      1
+    );
+    assert.deepEqual(
+      searched.visibleRoots.map(
+        (entry) => entry.id
+      ),
+      ["pack"]
+    );
+
+    const weapons =
+      collectCharacterInventory(
+        character,
+        { filters: ["weapons"] }
+      );
+    assert.deepEqual(
+      weapons.visibleRoots.map(
+        (entry) => entry.id
+      ),
+      ["moon-blade"]
+    );
+
+    const view =
+      createCharacterSheetView();
+    const html =
+      view.renderCharacterSheetHtml(
+        character,
+        {
+          activeTab: "inventory",
+          sheetContext: {
+            characterId:
+              character.id
+          }
+        }
+      );
+    const screenHtml =
+      html.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.equal(
+      (
+        screenHtml.match(
+          /data-inventory-item-id="healing-potion"/g
+        ) || []
+      ).length,
+      1
+    );
+    assert.match(
+      screenHtml,
+      /data-inventory-container="pack"/
+    );
+    assert.doesNotMatch(
+      screenHtml,
+      /data-inventory-container="pack"[^>]*open/
+    );
+    assert.match(
+      screenHtml,
+      /data-inventory-location="pouch"/
+    );
+    assert.match(
+      screenHtml,
+      /Not in a Container/
+    );
+    assert.match(
+      screenHtml,
+      /data-character-sheet-input="inventory-search"/
+    );
+    assert.match(
+      screenHtml,
+      /data-inventory-filter="containers"/
+    );
+    assert.match(
+      screenHtml,
+      /Notes &amp; description/
+    );
+    assert.doesNotMatch(
+      screenHtml,
+      /<details class="hg-sheet-item-details" open/
+    );
+
+    const searchedHtml =
+      view.renderCharacterSheetHtml(
+        character,
+        {
+          activeTab: "inventory",
+          inventorySearch:
+            "Healing Potion",
+          sheetContext: {
+            characterId:
+              character.id
+          }
+        }
+      );
+    const searchedScreenHtml =
+      searchedHtml.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.match(
+      searchedScreenHtml,
+      /data-inventory-container="pack"[^>]*open/
+    );
+    assert.doesNotMatch(
+      searchedScreenHtml,
+      /data-inventory-item-id="moon-blade"/
+    );
+
+    const blocked =
+      applyGameplayAction(
+        character,
+        {
+          type:
+            "toggle-item-equipped",
+          itemId:
+            "healing-potion"
+        }
+      );
+    assert.equal(
+      blocked.changed,
+      false
+    );
+    assert.match(
+      blocked.message,
+      /out of its container/i
+    );
+  }
+);
+
+test(
+  "playable sheet actions are grouped, deduplicated, expandable, and resource-linked",
+  () => {
+    const character = {
+      id: "priority-one-actions",
+      abilities: {
+        scores: {
+          str: 14,
+          dex: 16,
+          int: 18
+        }
+      },
+      combat: {
+        proficiencyBonus: 3,
+        attacksPerAction: 2
+      },
+      attacks: [
+        {
+          id: "moon-blade",
+          name: "Moon Blade",
+          attackBonus: 6,
+          damage: "1d8",
+          damageType: "slashing"
+        }
+      ],
+      equipment: {
+        items: [
+          {
+            id: "moon-blade",
+            name: "Moon Blade",
+            category: "weapon",
+            equipped: true,
+            proficient: true,
+            attackAbility: "dex",
+            damageDice: "1d8",
+            damageType: "slashing"
+          },
+          {
+            id: "spare-bow",
+            name: "Spare Bow",
+            category: "weapon",
+            equipped: false,
+            damageDice: "1d8"
+          }
+        ]
+      },
+      features: {
+        classFeatures: [
+          {
+            id: "action-surge",
+            name: "Action Surge",
+            summary: "Take one additional action.",
+            description: "Use this burst of effort on your turn.",
+            sourceLabel: "Fighter 2"
+          },
+          {
+            id: "arcane-deflection",
+            name: "Arcane Deflection",
+            summary: "Raise a quick defense.",
+            description: "Use this when an attack hits you.",
+            source: "subclass",
+            actionEconomy: "reaction"
+          },
+          {
+            id: "improved-critical",
+            name: "Improved Critical",
+            summary: "Weapon attacks score critical hits more often.",
+            actionEconomy: "passive"
+          }
+        ],
+        speciesTraits: [
+          {
+            id: "fey-step",
+            name: "Fey Step",
+            actionEconomy: "bonusAction",
+            range: "Self",
+            summary: "Teleport up to 30 feet."
+          }
+        ],
+        customFeatures: [
+          {
+            id: "study-field",
+            name: "Study the Field",
+            activationType: "other",
+            activationTime: "1 minute",
+            summary: "Study the battlefield."
+          }
+        ]
+      },
+      classMechanics: {
+        resources: [
+          {
+            id: "fighter:action-surge",
+            name: "Action Surge",
+            className: "Fighter",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "shortOrLongRest"
+          }
+        ],
+        actions: [
+          {
+            id: "second-wind",
+            name: "Second Wind",
+            className: "Fighter",
+            actionEconomy: "bonusAction",
+            healing: "1d10 + 2"
+          }
+        ]
+      },
+      feats: [
+        {
+          id: "war-caster",
+          name: "War Caster",
+          summary: "Maintain concentration and cast during opportunity attacks."
+        }
+      ],
+      featMechanics: {
+        resources: [],
+        actions: [
+          {
+            id: "arcane-shove",
+            name: "Arcane Shove",
+            featName: "Telekinetic",
+            actionEconomy: "bonusAction",
+            saveDc: 15,
+            target: "One creature"
+          }
+        ],
+        situationalEffects: [
+          {
+            id: "war-caster-spell",
+            effectId: "war-caster-spell",
+            featName: "War Caster",
+            actionEconomy: "reaction",
+            summary: "Cast a spell for an opportunity attack.",
+            instructions: "Target only the provoking creature."
+          },
+          {
+            id: "war-caster-passive",
+            effectId: "war-caster-passive",
+            featName: "War Caster",
+            actionEconomy: "passive",
+            summary: "Advantage on concentration saves."
+          }
+        ]
+      },
+      magic: {
+        spellAttacks: [
+          {
+            id: "fire-bolt",
+            name: "Fire Bolt",
+            attackBonus: 7,
+            damage: "2d10",
+            damageType: "fire",
+            range: "120 ft.",
+            target: "One creature",
+            summary: "Hurl a mote of fire.",
+            description: "Make a ranged spell attack."
+          }
+        ]
+      }
+    };
+    const actions =
+      collectCharacterActions(
+        character,
+        3
+      );
+    const names = actions.map(
+      (entry) => entry.name
+    );
+
+    assert.equal(
+      names.filter((name) => {
+        return name === "Moon Blade";
+      }).length,
+      1
+    );
+    assert.equal(
+      names.includes("Spare Bow"),
+      false
+    );
+    assert.equal(
+      names.includes(
+        "Improved Critical"
+      ),
+      false
+    );
+    assert.equal(
+      names.includes(
+        "War Caster Passive"
+      ),
+      false
+    );
+    assert.equal(
+      names.includes("War Caster"),
+      false
+    );
+    assert.deepEqual(
+      new Set(
+        actions.map((entry) => {
+          return entry.section;
+        })
+      ),
+      new Set([
+        "action",
+        "bonusAction",
+        "reaction",
+        "other"
+      ])
+    );
+
+    const actionSurge = actions.find(
+      (entry) => {
+        return entry.name ===
+          "Action Surge";
+      }
+    );
+    assert.equal(
+      actionSurge.resource.id,
+      "fighter:action-surge"
+    );
+    assert.equal(
+      actionSurge.resource.currentUses,
+      1
+    );
+
+    const html = createCharacterSheetView()
+      .renderCharacterSheetHtml(
+        character,
+        {
+          activeTab: "actions",
+          sheetContext: {
+            characterId:
+              character.id
+          }
+        }
+      );
+
+    assert.match(
+      html,
+      /<h2>Actions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<h2>Bonus Actions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<h2>Reactions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<h2>Other Actions<\/h2>/
+    );
+    assert.match(
+      html,
+      /<details class="hg-sheet-action-description">/
+    );
+    assert.doesNotMatch(
+      html,
+      /<details class="hg-sheet-action-description" open/
+    );
+    assert.match(
+      html,
+      /data-character-sheet-action="adjust-class-resource"/
+    );
+  }
+);
+
+test(
+  "playable sheet features stay separated, compact, choice-preserving, and resource-linked",
+  () => {
+    const character = {
+      id: "priority-three-features",
+      features: {
+        classFeatures: [
+          {
+            id: "action-surge",
+            name: "Action Surge",
+            summary:
+              "Take one additional action.",
+            description:
+              "Take one additional action. You can use only one Action Surge on a turn.",
+            levelGained: 2,
+            sourceLabel: "Fighter"
+          },
+          {
+            id: "arcane-ward",
+            name: "Arcane Ward",
+            summary:
+              "A protective ward absorbs damage.",
+            description:
+              "A protective ward absorbs damage.",
+            level: 2,
+            source: "subclass",
+            sourceLabel: "School of Abjuration"
+          }
+        ],
+        speciesTraits: [
+          {
+            id: "fey-ancestry",
+            name: "Fey Ancestry",
+            summary:
+              "Advantage against being charmed.",
+            choices: {
+              lineage: "High Elf"
+            },
+            sourceLabel: "Elf"
+          }
+        ],
+        backgroundFeatures: [],
+        customFeatures: []
+      },
+      feats: [
+        {
+          id: "war-caster",
+          name: "War Caster",
+          summary:
+            "Maintain concentration under pressure.",
+          description:
+            "You have practiced spellcasting in combat.",
+          choices: {
+            concentrationTechnique:
+              "Arcane focus"
+          },
+          levelGained: 4,
+          sourceLabel: "Level 4 feat"
+        }
+      ],
+      classMechanics: {
+        resources: [
+          {
+            id:
+              "fighter:action-surge",
+            name: "Action Surge",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge:
+              "shortOrLongRest"
+          }
+        ]
+      },
+      featMechanics: {
+        resources: [
+          {
+            id: "war-caster-focus",
+            name:
+              "War Caster Focus",
+            featName: "War Caster",
+            currentUses: 1,
+            maximumUses: 1,
+            recharge: "longRest"
+          }
+        ]
+      }
+    };
+    const groups =
+      collectCharacterFeatures(
+        character
+      );
+
+    assert.deepEqual(
+      groups.map((group) => {
+        return group.id;
+      }),
+      [
+        "class",
+        "subclass",
+        "species",
+        "background",
+        "feats",
+        "custom"
+      ]
+    );
+
+    const actionSurge =
+      groups[0].entries[0];
+    assert.equal(
+      actionSurge.levelGained,
+      2
+    );
+    assert.equal(
+      actionSurge.description,
+      "You can use only one Action Surge on a turn."
+    );
+    assert.equal(
+      actionSurge.descriptionLabel,
+      "Additional details"
+    );
+    assert.equal(
+      actionSurge.resource.id,
+      "fighter:action-surge"
+    );
+
+    const arcaneWard =
+      groups[1].entries[0];
+    assert.equal(
+      arcaneWard.description,
+      ""
+    );
+    assert.equal(
+      groups[2].entries[0]
+        .choices,
+      "Lineage: High Elf"
+    );
+    assert.equal(
+      groups[4].entries[0]
+        .resource.id,
+      "war-caster-focus"
+    );
+    assert.equal(
+      groups[4].entries[0]
+        .choices,
+      "Concentration Technique: Arcane focus"
+    );
+    assert.equal(
+      groups[4].entries[0]
+        .source,
+      "Level 4 feat"
+    );
+
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          character,
+          {
+            activeTab: "features",
+            sheetContext: {
+              characterId:
+                character.id
+            }
+          }
+        );
+
+    assert.match(
+      html,
+      /data-feature-group="class"/
+    );
+    assert.match(
+      html,
+      /data-feature-group="subclass"/
+    );
+    assert.match(
+      html,
+      /data-feature-group="species"/
+    );
+    assert.match(
+      html,
+      /data-feature-group="feats"/
+    );
+    assert.doesNotMatch(
+      html,
+      /data-feature-group="background"/
+    );
+    assert.doesNotMatch(
+      html,
+      /data-feature-group="custom"/
+    );
+    assert.match(
+      html,
+      /<details class="hg-sheet-feature-description">/
+    );
+    assert.doesNotMatch(
+      html,
+      /<details class="hg-sheet-feature-description" open/
+    );
+    assert.match(
+      html,
+      /data-character-sheet-action="adjust-class-resource"/
+    );
+    assert.match(
+      html,
+      /data-character-sheet-action="adjust-feat-resource"/
+    );
+    assert.match(
+      html,
+      /Choices:/
+    );
+  }
+);
+
+test(
+  "carrying capacity is shared, size-aware, mechanic-aware, and counts container contents once",
+  () => {
+    for (
+      const [
+        size,
+        expectedCapacity
+      ] of [
+        ["medium", 150],
+        ["small", 150],
+        ["large", 300]
+      ]
+    ) {
+      assert.equal(
+        calculateRuleCarryingCapacity({
+          strength: 10,
+          size
+        }).carryingCapacity,
+        expectedCapacity
+      );
+    }
+
+    const powerfulBuildCharacter = {
+      identity: {
+        size: "medium"
+      },
+      abilities: {
+        scores: {
+          str: 10
+        }
+      },
+      features: {
+        speciesTraits: [
+          {
+            id: "powerful-build",
+            name: "Powerful Build"
+          }
+        ]
+      }
+    };
+    const powerfulBuild =
+      calculateCharacterCarryingCapacity(
+        powerfulBuildCharacter
+      );
+
+    assert.equal(
+      powerfulBuild.carryingCapacity,
+      300
+    );
+    assert.equal(
+      powerfulBuild.effectiveSize,
+      "large"
+    );
+    assert.equal(
+      powerfulBuild.powerfulBuild,
+      true
+    );
+
+    const adjusted =
+      calculateCharacterCarryingCapacity({
+        identity: {
+          size: "medium"
         },
-        remoteRecord:
-          makeRecord(),
-        nextRecord:
-          makeRecordó]ü¶‰žËkºwµç@€€€±…ÍÍ5•¡…¹¥Ìèì(€€€€€€€É•Í½ÕÉ•Ìèl(€€€€€€€€€ì(€€€€€€€€€€€¥è(€€€€€€€€€€€€€€‰™¥¡Ñ•Èé…Ñ¥½¸µÍÕÉ”ˆ°(€€€€€€€€€€€¹…µ”è€‰Ñ¥½¸MÕÉ”ˆ°(€€€€€€€€€€€ÕÉÉ•¹ÑUÍ•Ìè€Ä°(€€€€€€€€€€€µ…á¥µÕµUÍ•Ìè€Ä°(€€€€€€€€€€€É•¡…É”è(€€€€€€€€€€€€€€‰Í¡½ÉÑ=É1½¹I•ÍÐˆ(€€€€€€€€€ô(€€€€€€€t(€€€€€ô°(€€€€€™•…Ñ5•¡…¹¥Ìèì(€€€€€€€É•Í½ÕÉ•Ìèl(€€€€€€€€€ì(€€€€€€€€€€€¥è€‰Ý…Èµ…ÍÑ•Èµ™½ÕÌˆ°(€€€€€€€€€€€¹…µ”è(€€€€€€€€€€€€€€‰]…È…ÍÑ•È½ÕÌˆ°(€€€€€€€€€€€™•…Ñ9…µ”è€‰]…È…ÍÑ•Èˆ°(€€€€€€€€€€€ÕÉÉ•¹ÑUÍ•Ìè€Ä°(€€€€€€€€€€€µ…á¥µÕµUÍ•Ìè€Ä°(€€€€€€€€€€€É•¡…É”è€‰±½¹I•ÍÐˆ(€€€€€€€€€ô(€€€€€€€t(€€€€€ô(€€€ôì(€€€½¹ÍÐÉ½ÕÁÌ€ô(€€€€€½±±•Ñ¡…É…Ñ•É•…ÑÕÉ•Ì (€€€€€€€¡…É…Ñ•È(€€€€€€¤ì((€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…° (€€€€€É½ÕÁÌ¹µ…À ¡É½ÕÀ¤€ôøì(€€€€€€€É•ÑÕÉ¸É½ÕÀ¹¥ì(€€€€€ô¤°(€€€€€l(€€€€€€€€‰±…ÍÌˆ°(€€€€€€€€‰ÍÕ‰±…ÍÌˆ°(€€€€€€€€‰ÍÁ•¥•Ìˆ°(€€€€€€€€‰‰…­É½Õ¹ˆ°(€€€€€€€€‰™•…ÑÌˆ°(€€€€€€€€‰ÕÍÑ½´ˆ(€€€€€t(€€€€¤ì((€€€½¹ÍÐ…Ñ¥½¹MÕÉ”€ô(€€€€€É½ÕÁÍlÁt¹•¹ÑÉ¥•ÍlÁtì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…Ñ¥½¹MÕÉ”¹±•Ù•±…¥¹•°(€€€€€€È(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…Ñ¥½¹MÕÉ”¹‘•ÍÉ¥ÁÑ¥½¸°(€€€€€€‰e½Ô…¸ÕÍ”½¹±ä½¹”Ñ¥½¸MÕÉ”½¸„ÑÕÉ¸¸ˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…Ñ¥½¹MÕÉ”¹‘•ÍÉ¥ÁÑ¥½¹1…‰•°°(€€€€€€‰‘‘¥Ñ¥½¹…°‘•Ñ…¥±Ìˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…Ñ¥½¹MÕÉ”¹É•Í½ÕÉ”¹¥°(€€€€€€‰™¥¡Ñ•Èé…Ñ¥½¸µÍÕÉ”ˆ(€€€€¤ì((€€€½¹ÍÐ…É…¹•]…É€ô(€€€€€É½ÕÁÍlÅt¹•¹ÑÉ¥•ÍlÁtì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…É…¹•]…É¹‘•ÍÉ¥ÁÑ¥½¸°(€€€€€€ˆˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€É½ÕÁÍlÉt¹•¹ÑÉ¥•ÍlÁt(€€€€€€€€¹¡½¥•Ì°(€€€€€€‰1¥¹•…”è!¥ ±˜ˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€É½ÕÁÍlÑt¹•¹ÑÉ¥•ÍlÁt(€€€€€€€€¹É•Í½ÕÉ”¹¥°(€€€€€€‰Ý…Èµ…ÍÑ•Èµ™½ÕÌˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€É½ÕÁÍlÑt¹•¹ÑÉ¥•ÍlÁt(€€€€€€€€¹¡½¥•Ì°(€€€€€€‰½¹•¹ÑÉ…Ñ¥½¸Q•¡¹¥ÅÕ”èÉ…¹”™½ÕÌˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€É½ÕÁÍlÑt¹•¹ÑÉ¥•ÍlÁt(€€€€€€€€¹Í½ÕÉ”°(€€€€€€‰1•Ù•°€Ð™•…Ðˆ(€€€€¤ì((€€€½¹ÍÐ¡Ñµ°€ô(€€€€€É•…Ñ•¡…É…Ñ•ÉM¡••ÑY¥•Ü ¤(€€€€€€€€¹É•¹‘•É¡…É…Ñ•ÉM¡••Ñ!Ñµ° (€€€€€€€€€¡…É…Ñ•È°(€€€€€€€€€ì(€€€€€€€€€€€…Ñ¥Ù•Q…ˆè€‰™•…ÑÕÉ•Ìˆ°(€€€€€€€€€€€Í¡••Ñ½¹Ñ•áÐèì(€€€€€€€€€€€€€¡…É…Ñ•É%è(€€€€€€€€€€€€€€€¡…É…Ñ•È¹¥(€€€€€€€€€€€ô(€€€€€€€€€ô(€€€€€€€€¤ì((€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ™•…ÑÕÉ”µÉ½ÕÀô‰±…ÍÌˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ™•…ÑÕÉ”µÉ½ÕÀô‰ÍÕ‰±…ÍÌˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ™•…ÑÕÉ”µÉ½ÕÀô‰ÍÁ•¥•Ìˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ™•…ÑÕÉ”µÉ½ÕÀô‰™•…ÑÌˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘½•Í9½Ñ5…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ™•…ÑÕÉ”µÉ½ÕÀô‰‰…­É½Õ¹ˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘½•Í9½Ñ5…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ™•…ÑÕÉ”µÉ½ÕÀô‰ÕÍÑ½´ˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€¼ñ‘•Ñ…¥±Ì±…ÍÌô‰¡œµÍ¡••Ðµ™•…ÑÕÉ”µ‘•ÍÉ¥ÁÑ¥½¸ˆø¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘½•Í9½Ñ5…Ñ  (€€€€€¡Ñµ°°(€€€€€€¼ñ‘•Ñ…¥±Ì±…ÍÌô‰¡œµÍ¡••Ðµ™•…ÑÕÉ”µ‘•ÍÉ¥ÁÑ¥½¸ˆ½Á•¸¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ¡…É…Ñ•ÈµÍ¡••Ðµ…Ñ¥½¸ô‰…‘©ÕÍÐµ±…ÍÌµÉ•Í½ÕÉ”ˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ¡…É…Ñ•ÈµÍ¡••Ðµ…Ñ¥½¸ô‰…‘©ÕÍÐµ™•…ÐµÉ•Í½ÕÉ”ˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½¡½¥•Ìè¼(€€€€¤ì(€ô(¤ì()Ñ•ÍÐ (€€‰…ÉÉå¥¹œ…Á…¥Ñä¥ÌÍ¡…É•°Í¥é”µ…Ý…É”°µ•¡…¹¥Œµ…Ý…É”°…¹½Õ¹ÑÌ½¹Ñ…¥¹•È½¹Ñ•¹ÑÌ½¹”ˆ°(€€ ¤€ôøì(€€€™½È€ (€€€€€½¹ÍÐl(€€€€€€€Í¥é”°(€€€€€€€•áÁ•Ñ•‘…Á…¥Ñä(€€€€€t½˜l(€€€€€€€l‰µ•‘¥Õ´ˆ°€ÄÔÁt°(€€€€€€€l‰Íµ…±°ˆ°€ÄÔÁt°(€€€€€€€l‰±…É”ˆ°€ÌÀÁt(€€€€€t(€€€€¤ì(€€€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€€€…±Õ±…Ñ•IÕ±•…ÉÉå¥¹…Á…¥Ñä¡ì(€€€€€€€€€ÍÑÉ•¹Ñ è€ÄÀ°(€€€€€€€€€Í¥é”(€€€€€€€ô¤¹…ÉÉå¥¹…Á…¥Ñä°(€€€€€€€•áÁ•Ñ•‘…Á…¥Ñä(€€€€€€¤ì(€€€ô((€€€½¹ÍÐÁ½Ý•É™Õ±	Õ¥±‘¡…É…Ñ•È€ôì(€€€€€¥‘•¹Ñ¥Ñäèì(€€€€€€€Í¥é”è€‰µ•‘¥Õ´ˆ(€€€€€ô°(€€€€€…‰¥±¥Ñ¥•Ìèì(€€€€€€€Í½É•Ìèì(€€€€€€€€€ÍÑÈè€ÄÀ(€€€€€€€ô(€€€€€ô°(€€€€€™•…ÑÕÉ•Ìèì(€€€€€€€ÍÁ•¥•ÍQÉ…¥ÑÌèl(€€€€€€€€€ì(€€€€€€€€€€€¥è€‰Á½Ý•É™Õ°µ‰Õ¥±ˆ°(€€€€€€€€€€€¹…µ”è€‰A½Ý•É™Õ°	Õ¥±ˆ(€€€€€€€€€ô(€€€€€€€t(€€€€€ô(€€€ôì(€€€½¹ÍÐÁ½Ý•É™Õ±	Õ¥±€ô(€€€€€…±Õ±…Ñ•¡…É…Ñ•É…ÉÉå¥¹…Á…¥Ñä (€€€€€€€Á½Ý•É™Õ±	Õ¥±‘¡…É…Ñ•È(€€€€€€¤ì((€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€Á½Ý•É™Õ±	Õ¥±¹…ÉÉå¥¹…Á…¥Ñä°(€€€€€€ÌÀÀ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€Á½Ý•É™Õ±	Õ¥±¹•™™•Ñ¥Ù•M¥é”°(€€€€€€‰±…É”ˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€Á½Ý•É™Õ±	Õ¥±¹Á½Ý•É™Õ±	Õ¥±°(€€€€€ÑÉÕ”(€€€€¤ì((€€€½¹ÍÐ…‘©ÕÍÑ•€ô(€€€€€…±Õ±…Ñ•¡…É…Ñ•É…ÉÉå¥¹…Á…¥Ñä¡ì(€€€€€€€¥‘•¹Ñ¥Ñäèì(€€€€€€€€€Í¥é”è€‰µ•‘¥Õ´ˆ(€€€€€€€ô°(€€€€€€€…‰¥±¥Ñ¥•Ìèì(€€€€€€€€€Í½É•Ìèì(€€€€€€€€€€€ÍÑÈè€ÄÀ(€€€€€€€€€ô(€€€€€€€ô°(€€€€€€€µ•¡…¹¥Ìèì(€€€€€€€€€•™™•ÑÌèl(€€€€€€€€€€€ì(€€€€€€€€€€€€€ÑåÁ”è(€€€€€€€€€€€€€€€€‰…ÉÉå¥¹…Á…¥Ñå5Õ±Ñ¥Á±¥•Èˆ°(€€€€€€€€€€€€€Ù…±Õ”è€È(€€€€€€€€€€€ô°(€€€€€€€€€€€ì(€€€€€€€€€€€€€ÑåÁ”è(€€€€€€€€€€€€€€€€‰…ÉÉå¥¹…Á…¥Ñå	½¹ÕÌˆ°(€€€€€€€€€€€€€Ù…±Õ”è€ÈÔ(€€€€€€€€€€€ô(€€€€€€€€€t(€€€€€€€ô(€€€€€ô¤ì((€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…‘©ÕÍÑ•¹…ÉÉå¥¹…Á…¥Ñä°(€€€€€€ÌÈÔ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…‘©ÕÍÑ•¹…Á…¥Ñå5Õ±Ñ¥Á±¥•È°(€€€€€€È(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€…‘©ÕÍÑ•¹…Á…¥Ñå	½¹ÕÌ°(€€€€€€ÈÔ(€€€€¤ì((€€€½¹ÍÐ½¹Ñ…¥¹•É¡…É…Ñ•È€ôì(€€€€€¥è(€€€€€€€€‰ÁÉ¥½É¥Ñäµ™¥Ù”µ…Á…¥Ñäˆ°(€€€€€¥‘•¹Ñ¥Ñäèì(€€€€€€€Í¥é”è€‰µ•‘¥Õ´ˆ(€€€€€ô°(€€€€€…‰¥±¥Ñ¥•Ìèì(€€€€€€€Í½É•Ìèì(€€€€€€€€€ÍÑÈè€ÄÀ(€€€€€€€ô(€€€€€ô°(€€€€€•ÅÕ¥Áµ•¹Ðèì(€€€€€€€¥Ñ•µÌèl(€€€€€€€€€ì(€€€€€€€€€€€¥è€‰Á…¬ˆ°(€€€€€€€€€€€¹…µ”è€‰A…¬ˆ°(€€€€€€€€€€€Ý•¥¡Ðè€Ô°(€€€€€€€€€€€ÅÕ…¹Ñ¥Ñäè€Ä°(€€€€€€€€€€€¥Í½¹Ñ…¥¹•ÈèÑÉÕ”(€€€€€€€€€ô°(€€€€€€€€€ì(€€€€€€€€€€€¥è€‰Á½Õ ˆ°(€€€€€€€€€€€¹…µ”è€‰A½Õ ˆ°(€€€€€€€€€€€Ý•¥¡Ðè€Ä°(€€€€€€€€€€€ÅÕ…¹Ñ¥Ñäè€Ä°(€€€€€€€€€€€¥Í½¹Ñ…¥¹•ÈèÑÉÕ”°(€€€€€€€€€€€½¹Ñ…¥¹•É%è€‰Á…¬ˆ(€€€€€€€€€ô°(€€€€€€€€€ì(€€€€€€€€€€€¥è€‰É…Ñ¥½¹Ìˆ°(€€€€€€€€€€€¹…µ”è€‰I…Ñ¥½¹Ìˆ°(€€€€€€€€€€€Ý•¥¡Ðè€À¸Ô°(€€€€€€€€€€€ÅÕ…¹Ñ¥Ñäè€È°(€€€€€€€€€€€½¹Ñ…¥¹•É%è€‰Á½Õ ˆ(€€€€€€€€€ô(€€€€€€€t(€€€€€ô(€€€ôì(€€€½¹ÍÐ¡Ñµ°€ô(€€€€€É•…Ñ•¡…É…Ñ•ÉM¡••ÑY¥•Ü ¤(€€€€€€€€¹É•¹‘•É¡…É…Ñ•ÉM¡••Ñ!Ñµ° (€€€€€€€€€½¹Ñ…¥¹•É¡…É…Ñ•È°(€€€€€€€€€ì(€€€€€€€€€€€…Ñ¥Ù•Q…ˆè(€€€€€€€€€€€€€€‰¥¹Ù•¹Ñ½Éäˆ°(€€€€€€€€€€€Í¡••Ñ½¹Ñ•áÐèì(€€€€€€€€€€€€€¡…É…Ñ•É%è(€€€€€€€€€€€€€€€½¹Ñ…¥¹•É¡…É…Ñ•È¹¥(€€€€€€€€€€€ô(€€€€€€€€€ô(€€€€€€€€¤ì(€€€½¹ÍÐÍÉ••¹!Ñµ°€ô(€€€€€¡Ñµ°¹µ…Ñ  (€€€€€€€€¼ñ‘¥Ø±…ÍÌô‰¡œµÍ¡••ÐµÍÉ••¸µÁ…¹•°ˆø¡mqÍqMt¨ü¤ñ‘¥Ø±…ÍÌô‰¡œµÍ¡••ÐµÁÉ¥¹Ðµ½¹±äˆ¼(€€€€€€¤ü¹lÅtñð€ˆˆì((€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€ÍÉ••¹!Ñµ°°(€€€€€€¼ñÍÁ…¸ù…ÉÉ¥•]•¥¡Ðñp½ÍÁ…¸ùqÌ¨ñÍÑÉ½¹œøÜ±‰p¸ñp½ÍÑÉ½¹œø¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€ÍÉ••¹!Ñµ°°(€€€€€€¼ñÍÁ…¸ù…Á…¥Ñäñp½ÍÁ…¸ùqÌ¨ñÍÑÉ½¹œøÄÔÀ±‰p¸ñp½ÍÑÉ½¹œø¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€ÍÉ••¹!Ñµ°°(€€€€€€¼ñÍÁ…¸ùI•µ…¥¹¥¹œ…Á…¥Ñäñp½ÍÁ…¸ùqÌ¨ñÍÑÉ½¹œøÄÐÌ±‰p¸ñp½ÍÑÉ½¹œø¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€ÍÉ••¹!Ñµ°°(€€€€€€¼ñÍÁ…¸ù¹Õµ‰É…¹”ñp½ÍÁ…¸ùqÌ¨ñÍÑÉ½¹œ±…ÍÌô‰¡œµÍ¡••ÐµÍÑ…ÐµÑ•áÐˆù]¥Ñ¡¥¸…Á…¥Ñäñp½ÍÑÉ½¹œø¼(€€€€¤ì(€ô(¤ì()Ñ•ÍÐ (€€‰Á±…å…‰±”Í¡••ÐÉ•Í½±Ù•Ì°É½ÕÁÌ°±…‰•±Ì°Í•…É¡•Ì°…¹™¥±Ñ•ÉÌ½µÁ±•Ñ”ÍÁ•±°É•½É‘Ìˆ°(€€ ¤€ôøì(€€€½¹ÍÐ¡…É…Ñ•È€ôì(€€€€€¥è€‰ÍÁ•±°µÍ¡••ÐµÑ•ÍÐˆ°(€€€€€¥‘•¹Ñ¥Ñäèì(€€€€€€€¹…µ”è€‰MÁ•±°Q•ÍÑ•Èˆ(€€€€€ô°(€€€€€±…ÍÍAÉ½É•ÍÍ¥½¸èì(€€€€€€€Ñ½Ñ…±1•Ù•°è€ÄÜ°(€€€€€€€±…ÍÍ•Ìèl(€€€€€€€€€ì(€€€€€€€€€€€•¹ÑÉå%è€‰Ý¥é…Éµ•¹ÑÉäˆ°(€€€€€€€€€€€±…ÍÍ%è€‰Ý¥é…Éˆ°(€€€€€€€€€€€±…ÍÍ9…µ”è€‰]¥é…Éˆ°(€€€€€€€€€€€±•Ù•°è€ÄÀ°(€€€€€€€€€€€ÍÕ‰±…ÍÍ9…µ”è(€€€€€€€€€€€€€€‰M¡½½°½˜Ù½…Ñ¥½¸ˆ(€€€€€€€€€ô°(€€€€€€€€€ì(€€€€€€€€€€€•¹ÑÉå%è€‰Ý…É±½¬µ•¹ÑÉäˆ°(€€€€€€€€€€€±…ÍÍ%è€‰Ý…É±½¬ˆ°(€€€€€€€€€€€±…ÍÍ9…µ”è€‰]…É±½¬ˆ°(€€€€€€€€€€€±•Ù•°è€Ü°(€€€€€€€€€€€ÍÕ‰±…ÍÍ9…µ”è(€€€€€€€€€€€€€€‰Q¡”¥•¹ˆ(€€€€€€€€€ô(€€€€€€€t(€€€€€ô°(€€€€€™•…Ñ5•¡…¹¥Ìèì(€€€€€€€ÍÁ•±±…ÍÑ¥¹œèl(€€€€€€€€€ì(€€€€€€€€€€€¥è(€€€€€€€€€€€€€€‰µ…¥Œµ¥¹¥Ñ¥…Ñ”éÍÁ•±°é¡•…±¥¹œµÝ½Éˆ°(€€€€€€€€€€€™•…Ñ%è€‰µ…¥Œµ¥¹¥Ñ¥…Ñ”ˆ°(€€€€€€€€€€€™•…Ñ9…µ”è(€€€€€€€€€€€€€€‰5…¥Œ%¹¥Ñ¥…Ñ”ˆ°(€€€€€€€€€€€ÍÁ•±±%è(€€€€€€€€€€€€€€‰¡•…±¥¹œµÝ½Éˆ°(€€€€€€€€€€€ÍÁ•±±9…µ”è(€€€€€€€€€€€€€€‰!•…±¥¹œ]½Éˆ°(€€€€€€€€€€€µ…á¥µÕµUÍ•Ìè€Ä°(€€€€€€€€€€€ÕÉÉ•¹ÑUÍ•Ìè€Ä°(€€€€€€€€€€€É•¡…É”è€‰±½¹I•ÍÐˆ(€€€€€€€€€ô(€€€€€€€t(€€€€€ô°(€€€€€µ…¥Œèì(€€€€€€€ÍÁ•±±…ÍÑ¥¹‰¥±¥Ñäè€‰¥¹Ðˆ°(€€€€€€€ÍÁ•±±M…Ù•Œè€ÄÜ°(€€€€€€€ÍÁ•±±ÑÑ…­	½¹ÕÌè€ä°(€€€€€€€­¹½Ý¹MÁ•±±%‘Ìèl(€€€€€€€€€€‰™¥É”µ‰½±Ðˆ°(€€€€€€€€€€‰µ…”µ¡…¹ˆ(€€€€€€€t°(€€€€€€€ÁÉ•Á…É•‘MÁ•±±%‘Ìèl(€€€€€€€€€€‰µ…¥Œµµ¥ÍÍ¥±”ˆ°(€€€€€€€€€€‰Í¡¥•±ˆ(€€€€€€€t°(€€€€€€€Í±½ÑÌèì(€€€€€€€€€€Äè€Ð°(€€€€€€€€€€Èè€Ì°(€€€€€€€€€€Ìè€Ì(€€€€€€€ô°(€€€€€€€Á…Ñ5…¥Œèì(€€€€€€€€€Í±½ÑÌè€È°(€€€€€€€€€Í±½Ñ1•Ù•°è€Ð(€€€€€€€ô°(€€€€€€€±…ÍÍM½ÕÉ•Ìèì(€€€€€€€€€€‰Ý¥é…Éµ•¹ÑÉäˆèì(€€€€€€€€€€€±…ÍÍ¹ÑÉå%è(€€€€€€€€€€€€€€‰Ý¥é…Éµ•¹ÑÉäˆ°(€€€€€€€€€€€±…ÍÍ%è€‰Ý¥é…Éˆ°(€€€€€€€€€€€±…ÍÍ9…µ”è€‰]¥é…Éˆ°(€€€€€€€€€€€ÍÕ‰±…ÍÍ9…µ”è(€€€€€€€€€€€€€€‰M¡½½°½˜Ù½…Ñ¥½¸ˆ°(€€€€€€€€€€€ÍÁ•±±…ÍÑ¥¹‰¥±¥Ñäè€‰¥¹Ðˆ°(€€€€€€€€€€€ÍÁ•±±M…Ù•Œè€ÄÜ°(€€€€€€€€€€€ÍÁ•±±ÑÑ…­	½¹ÕÌè€ä°(€€€€€€€€€€€…¹ÑÉ¥Á%‘Ìèl(€€€€€€€€€€€€€€‰™¥É”µ‰½±Ðˆ°(€€€€€€€€€€€€€€‰µ…”µ¡…¹ˆ(€€€€€€€€€€€t°(€€€€€€€€€€€ÁÉ•Á…É•‘MÁ•±±%‘Ìèl(€€€€€€€€€€€€€€‰µ…¥Œµµ¥ÍÍ¥±”ˆ°(€€€€€€€€€€€€€€‰Í¡¥•±ˆ(€€€€€€€€€€€t°(€€€€€€€€€€€ÍÁ•±±‰½½­MÁ•±±%‘Ìèl(€€€€€€€€€€€€€€‰‘•Ñ•Ðµµ…¥Œˆ°(€€€€€€€€€€€€€€‰µ¥ÍÑäµÍÑ•Àˆ°(€€€€€€€€€€€€€€‰Ý•ˆˆ(€€€€€€€€€€€t°(€€€€€€€€€€€…±Ý…åÍAÉ•Á…É•‘MÁ•±±%‘Ìèl(€€€€€€€€€€€€€€‰Í¡¥•±ˆ(€€€€€€€€€€€t°(€€€€€€€€€€€ÍÕ‰±…ÍÍMÁ•±±%‘Ìèl(€€€€€€€€€€€€€€‰Í¡¥•±ˆ(€€€€€€€€€€€t(€€€€€€€€€ô°(€€€€€€€€€€‰Ý…É±½¬µ•¹ÑÉäˆèì(€€€€€€€€€€€±…ÍÍ¹ÑÉå%è(€€€€€€€€€€€€€€‰Ý…É±½¬µ•¹ÑÉäˆ°(€€€€€€€€€€€±…ÍÍ%è€‰Ý…É±½¬ˆ°(€€€€€€€€€€€±…ÍÍ9…µ”è€‰]…É±½¬ˆ°(€€€€€€€€€€€ÍÕ‰±…ÍÍ9…µ”è€‰Q¡”¥•¹ˆ°(€€€€€€€€€€€ÍÁ•±±…ÍÑ¥¹‰¥±¥Ñäè€‰¡„ˆ°(€€€€€€€€€€€µåÍÑ¥É…¹ÕµMÁ•±±%‘Ìèì(€€€€€€€€€€€€€€Øè€‰¥É±”µ½˜µ‘•…Ñ ˆ(€€€€€€€€€€€ô(€€€€€€€€€ô(€€€€€€€ô°(€€€€€€€¥¹¹…Ñ•MÁ•±±Ìèl(€€€€€€€€€ì(€€€€€€€€€€€¥è€‰±¥¡Ðˆ°(€€€€€€€€€€€Í½ÕÉ”è(€€€€€€€€€€€€€€‰ÍÁ•¥•Ìé¡¥ µ•±˜ˆ°(€€€€€€€€€€€¥¹¹…Ñ•M½ÕÉ”è(€€€€€€€€€€€€€€‰ÍÁ•¥•Ìé¡¥ µ•±˜ˆ°(€€€€€€€€€€€¥¹¹…Ñ”èÑÉÕ”(€€€€€€€€€ô(€€€€€€€t°(€€€€€€€ÕÍÑ½µMÁ•±±Ìèl(€€€€€€€€€ì(€€€€€€€€€€€¥è€‰Ñ•ÍÑ¥¹œµ…•¥Ìˆ°(€€€€€€€€€€€¹…µ”è€‰Q•ÍÑ¥¹œ•¥Ìˆ°(€€€€€€€€€€€±•Ù•°è€È°(€€€€€€€€€€€Í¡½½°è€‰…‰©ÕÉ…Ñ¥½¸ˆ°(€€€€€€€€€€€…ÍÑ¥¹Q¥µ”è(€€€€€€€€€€€€€€ˆÄÉ•…Ñ¥½¸ˆ°(€€€€€€€€€€€É…¹”è€‰M•±˜ˆ°(€€€€€€€€€€€½µÁ½¹•¹ÑÌè€‰X°Lˆ°(€€€€€€€€€€€‘ÕÉ…Ñ¥½¸è€ˆÄÉ½Õ¹ˆ°(€€€€€€€€€€€‘•ÍÉ¥ÁÑ¥½¸è(€€€€€€€€€€€€€€‰½µÁ±•Ñ”ÕÍÑ½´ÍÁ•±°‘•ÍÉ¥ÁÑ¥½¸¸ˆ°(€€€€€€€€€€€Í½ÕÉ”è€‰ÕÍÑ½´Ñ•ÍÐˆ(€€€€€€€€€ô(€€€€€€€t(€€€€€ô(€€€ôì(€€€½¹ÍÐÍÁ•±±Ì€ô(€€€€€½±±•Ñ¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€¡…É…Ñ•È(€€€€€€¤ì(€€€½¹ÍÐ‰å%€ô¹•Ü5…À (€€€€€ÍÁ•±±Ì¹µ…À ¡ÍÁ•±°¤€ôøì(€€€€€€€É•ÑÕÉ¸mÍÁ•±°¹¥°ÍÁ•±±tì(€€€€€ô¤(€€€€¤ì((€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€ÍÁ•±±Ì¹™¥±Ñ•È ¡ÍÁ•±°¤€ôøì(€€€€€€€É•ÑÕÉ¸ÍÁ•±°¹¥€ôôô€‰Í¡¥•±ˆì(€€€€€ô¤¹±•¹Ñ °(€€€€€€Ä(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€‰å%¹•Ð ‰™¥É”µ‰½±Ðˆ¤¹±•Ù•°°(€€€€€€À(€€€€¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€‰å%¹•Ð ‰™¥É”µ‰½±Ðˆ¤(€€€€€€€€¹Í¡½½°°(€€€€€€‰•Ù½…Ñ¥½¸ˆ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€‰å%¹•Ð ‰™¥É”µ‰½±Ðˆ¤(€€€€€€€€¹‘•ÍÉ¥ÁÑ¥½¸¹±•¹Ñ €ø€ÈÀ(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…° (€€€€€‰å%¹•Ð ‰Í¡¥•±ˆ¤¹ÍÑ…ÑÕÍ•Ì°(€€€€€l(€€€€€€€€‰AÉ•Á…É•ˆ°(€€€€€€€€‰±Ý…åÌÁÉ•Á…É•ˆ°(€€€€€€€€‰MÕ‰±…ÍÌµÉ…¹Ñ•ˆ(€€€€€t(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€‰å%¹•Ð ‰‘•Ñ•Ðµµ…¥Œˆ¤(€€€€€€€€¹ÍÑ…ÑÕÍ•Ì¹¥¹±Õ‘•Ì (€€€€€€€€€€‰MÁ•±±‰½½¬ˆ(€€€€€€€€¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€‰å%¹•Ð ‰±¥¡Ðˆ¤(€€€€€€€€¹ÍÑ…ÑÕÍ•Ì¹¥¹±Õ‘•Ì (€€€€€€€€€€‰MÁ•¥•ÌµÉ…¹Ñ•ˆ(€€€€€€€€¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€‰å%¹•Ð ‰¡•…±¥¹œµÝ½Éˆ¤(€€€€€€€€¹ÍÑ…ÑÕÍ•Ì¹¥¹±Õ‘•Ì (€€€€€€€€€€‰•…ÐµÉ…¹Ñ•ˆ(€€€€€€€€¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€‰å%¹•Ð ‰¥É±”µ½˜µ‘•…Ñ ˆ¤(€€€€€€€€¹ÍÑ…ÑÕÍ•Ì¹¥¹±Õ‘•Ì (€€€€€€€€€€‰5åÍÑ¥ŒÉ…¹Õ´ˆ(€€€€€€€€¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€‰å%¹•Ð ‰Ñ•ÍÑ¥¹œµ…•¥Ìˆ¤(€€€€€€€€¹ÍÑ…ÑÕÍ•Ì¹¥¹±Õ‘•Ì (€€€€€€€€€€‰ÕÍÑ½´ÍÁ•±°ˆ(€€€€€€€€¤(€€€€¤ì((€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…° (€€€€€™¥±Ñ•É¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€ÍÁ•±±Ì°(€€€€€€€ìÍ•…É è€‰µ¥ÍÑäÍÑ•Àˆô(€€€€€€¤¹µ…À ¡ÍÁ•±°¤€ôøÍÁ•±°¹¥¤°(€€€€€l‰µ¥ÍÑäµÍÑ•À‰t(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€™¥±Ñ•É¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€ÍÁ•±±Ì°(€€€€€€€ì(€€€€€€€€€™¥±Ñ•ÉÌèl(€€€€€€€€€€€€‰½¹•¹ÑÉ…Ñ¥½¸ˆ(€€€€€€€€€t(€€€€€€€ô(€€€€€€¤¹Í½µ” ¡ÍÁ•±°¤€ôøì(€€€€€€€É•ÑÕÉ¸ÍÁ•±°¹¥€ôôô€‰Ý•ˆˆì(€€€€€ô¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€™¥±Ñ•É¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€ÍÁ•±±Ì°(€€€€€€€ì(€€€€€€€€€™¥±Ñ•ÉÌèl(€€€€€€€€€€€€‰É¥ÑÕ…°ˆ(€€€€€€€€€t(€€€€€€€ô(€€€€€€¤¹Í½µ” ¡ÍÁ•±°¤€ôøì(€€€€€€€É•ÑÕÉ¸€ (€€€€€€€€€ÍÁ•±°¹¥€ôôô(€€€€€€€€€€‰‘•Ñ•Ðµµ…¥Œˆ(€€€€€€€€¤ì(€€€€€ô¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€™¥±Ñ•É¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€ÍÁ•±±Ì°(€€€€€€€ì(€€€€€€€€€™¥±Ñ•ÉÌèl(€€€€€€€€€€€€‰‰½¹ÕÌµ…Ñ¥½¸ˆ(€€€€€€€€€t(€€€€€€€ô(€€€€€€¤¹Í½µ” ¡ÍÁ•±°¤€ôøì(€€€€€€€É•ÑÕÉ¸€ (€€€€€€€€€ÍÁ•±°¹¥€ôôô(€€€€€€€€€€‰µ¥ÍÑäµÍÑ•Àˆ(€€€€€€€€¤ì(€€€€€ô¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€™¥±Ñ•É¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€ÍÁ•±±Ì°(€€€€€€€ì(€€€€€€€€€™¥±Ñ•ÉÌèl‰É•…Ñ¥½¸‰t(€€€€€€€ô(€€€€€€¤¹Í½µ” ¡ÍÁ•±°¤€ôøì(€€€€€€€É•ÑÕÉ¸ÍÁ•±°¹¥€ôôô€‰Í¡¥•±ˆì(€€€€€ô¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹½¬ (€€€€€™¥±Ñ•É¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€ÍÁ•±±Ì°(€€€€€€€ì(€€€€€€€€€™¥±Ñ•ÉÌèl‰‘…µ…”‰t(€€€€€€€ô(€€€€€€¤¹Í½µ” ¡ÍÁ•±°¤€ôøì(€€€€€€€É•ÑÕÉ¸€ (€€€€€€€€€ÍÁ•±°¹¥€ôôô€‰™¥É”µ‰½±Ðˆ(€€€€€€€€¤ì(€€€€€ô¤(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…° (€€€€€™¥±Ñ•É¡…É…Ñ•ÉMÁ•±±Ì (€€€€€€€ÍÁ•±±Ì°(€€€€€€€ì(€€€€€€€€€™¥±Ñ•ÉÌèl‰¡•…±¥¹œ‰t(€€€€€€€ô(€€€€€€¤¹µ…À ¡ÍÁ•±°¤€ôøÍÁ•±°¹¥¤°(€€€€€l‰¡•…±¥¹œµÝ½É‰t(€€€€¤ì((€€€½¹ÍÐ¡Ñµ°€ô(€€€€€É•…Ñ•¡…É…Ñ•ÉM¡••ÑY¥•Ü ¤(€€€€€€€€¹É•¹‘•É¡…É…Ñ•ÉM¡••Ñ!Ñµ° (€€€€€€€€€¡…É…Ñ•È°(€€€€€€€€€ì(€€€€€€€€€€€…Ñ¥Ù•Q…ˆè€‰ÍÁ•±±Ìˆ°(€€€€€€€€€€€ÍÁ•±±M•…É è(€€€€€€€€€€€€€€‰µ…¥Œµ¥ÍÍ¥±”ˆ°(€€€€€€€€€€€Í¡••Ñ½¹Ñ•áÐèì(€€€€€€€€€€€€€¡…É…Ñ•É%è(€€€€€€€€€€€€€€€¡…É…Ñ•È¹¥(€€€€€€€€€€€ô(€€€€€€€€€ô(€€€€€€€€¤ì(€€€½¹ÍÐÍÉ••¹!Ñµ°€ô(€€€€€¡Ñµ°¹µ…Ñ  (€€€€€€€€¼ñ‘¥Ø±…ÍÌô‰¡œµÍ¡••ÐµÍÉ••¸µÁ…¹•°ˆø¡mqÍqMt¨ü¤ñ‘¥Ø±…ÍÌô‰¡œµÍ¡••ÐµÁÉ¥¹Ðµ½¹±äˆ¼(€€€€€€¤ü¹lÅtñð€ˆˆì((€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€ÍÉ••¹!Ñµ°°(€€€€€€½‘…Ñ„µÍÁ•±°µ±•Ù•°µÉ½ÕÀôˆÄˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€ÍÉ••¹!Ñµ°°(€€€€€€½‘…Ñ„µÍ¡••ÐµÍÁ•±°µ¥ô‰µ…¥Œµµ¥ÍÍ¥±”ˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘½•Í9½Ñ5…Ñ  (€€€€€ÍÉ••¹!Ñµ°°(€€€€€€½‘…Ñ„µÍ¡••ÐµÍÁ•±°µ¥ô‰™¥É”µ‰½±Ðˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€¼ñ‘•Ñ…¥±Ì±…ÍÌô‰¡œµÍ¡••ÐµÍÁ•±°µ‘•ÍÉ¥ÁÑ¥½¸ˆø¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘½•Í9½Ñ5…Ñ  (€€€€€¡Ñµ°°(€€€€€€¼ñ‘•Ñ…¥±Ì±…ÍÌô‰¡œµÍ¡••ÐµÍÁ•±°µ‘•ÍÉ¥ÁÑ¥½¸ˆ½Á•¸¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½…ÍÑ¥¹œQ¥µ”¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½½µÁ½¹•¹ÑÌ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½½¹•¹ÑÉ…Ñ¥½¸¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ¹½Éµ…°µÍÁ•±°µÍ±½ÐôˆÄˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µÁ…ÐµÍ½ÕÉ”ô¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¡Ñµ°°(€€€€€€½‘…Ñ„µ™•…ÐµÍÁ•±°µÉ•Í½ÕÉ”ô¼(€€€€¤ì((€€€½¹ÍÐ¹½¹MÁ•±±…ÍÑ•È€ôì(€€€€€¥è€‰™¥¡Ñ•Èµ½¹±äˆ°(€€€€€¥‘•¹Ñ¥Ñäèì(€€€€€€€¹…µ”è€‰¥¡Ñ•È=¹±äˆ(€€€€€ô°(€€€€€±…ÍÍAÉ½É•ÍÍ¥½¸èì(€€€€€€€Ñ½Ñ…±1•Ù•°è€Ô°(€€€€€€€±…ÍÍ•Ìèl(€€€€€€€€€ì(€€€€€€€€€€€•¹ÑÉå%è€‰™¥¡Ñ•Èµ•¹ÑÉäˆ°(€€€€€€€€€€€±…ÍÍ%è€‰™¥¡Ñ•Èˆ°(€€€€€€€€€€€±…ÍÍ9…µ”è€‰¥¡Ñ•Èˆ°(€€€€€€€€€€€±•Ù•°è€Ô(€€€€€€€€€ô(€€€€€€€t(€€€€€ô°(€€€€€µ…¥Œèíô(€€€ôì(€€€½¹ÍÐ¹½¹MÁ•±±!Ñµ°€ô(€€€€€É•…Ñ•¡…É…Ñ•ÉM¡••ÑY¥•Ü ¤(€€€€€€€€¹É•¹‘•É¡…É…Ñ•ÉM¡••Ñ!Ñµ° (€€€€€€€€€¹½¹MÁ•±±…ÍÑ•È°(€€€€€€€€€ì(€€€€€€€€€€€…Ñ¥Ù•Q…ˆè€‰ÍÁ•±±Ìˆ°(€€€€€€€€€€€Í¡••Ñ½¹Ñ•áÐèì(€€€€€€€€€€€€€¡…É…Ñ•É%è(€€€€€€€€€€€€€€€¹½¹MÁ•±±…ÍÑ•È¹¥(€€€€€€€€€€€ô(€€€€€€€€€ô(€€€€€€€€¤ì((€€€…ÍÍ•ÉÐ¹•ÅÕ…° (€€€€€¡…É…Ñ•É!…ÍMÁ•±±½¹Ñ•¹Ð (€€€€€€€¹½¹MÁ•±±…ÍÑ•È(€€€€€€¤°(€€€€€™…±Í”(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘½•Í9½Ñ5…Ñ  (€€€€€¹½¹MÁ•±±!Ñµ°°(€€€€€€½‘…Ñ„µ¡…É…Ñ•ÈµÍ¡••ÐµÑ…ˆô‰ÍÁ•±±Ìˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹‘½•Í9½Ñ5…Ñ  (€€€€€¹½¹MÁ•±±!Ñµ°°(€€€€€€½…É¥„µ±…‰•°ô‰MÁ•±°¡…É…Ñ•ÈÍ¡••Ðˆ¼(€€€€¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ  (€€€€€¹½¹MÁ•±±!Ñµ°°(€€€€€€½…É¥„µ±…‰•°ô‰Ñ¥½¹Ìˆ¼(€€€€¤ì(€ô(¤ì(
+        abilities: {
+          scores: {
+            str: 10
+          }
+        },
+        mechanics: {
+          effects: [
+            {
+              type:
+                "carryingCapacityMultiplier",
+              value: 2
+            },
+            {
+              type:
+                "carryingCapacityBonus",
+              value: 25
+            }
+          ]
+        }
+      });
+
+    assert.equal(
+      adjusted.carryingCapacity,
+      325
+    );
+    assert.equal(
+      adjusted.capacityMultiplier,
+      2
+    );
+    assert.equal(
+      adjusted.capacityBonus,
+      25
+    );
+
+    const containerCharacter = {
+      id:
+        "priority-five-capacity",
+      identity: {
+        size: "medium"
+      },
+      abilities: {
+        scores: {
+          str: 10
+        }
+      },
+      equipment: {
+        items: [
+          {
+            id: "pack",
+            name: "Pack",
+            weight: 5,
+            quantity: 1,
+            isContainer: true
+          },
+          {
+            id: "pouch",
+            name: "Pouch",
+            weight: 1,
+            quantity: 1,
+            isContainer: true,
+            containerId: "pack"
+          },
+          {
+            id: "rations",
+            name: "Rations",
+            weight: 0.5,
+            quantity: 2,
+            containerId: "pouch"
+          }
+        ]
+      }
+    };
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          containerCharacter,
+          {
+            activeTab:
+              "inventory",
+            sheetContext: {
+              characterId:
+                containerCharacter.id
+            }
+          }
+        );
+    const screenHtml =
+      html.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.match(
+      screenHtml,
+      /<span>Carried Weight<\/span>\s*<strong>7 lb\.<\/strong>/
+    );
+    assert.match(
+      screenHtml,
+      /<span>Capacity<\/span>\s*<strong>150 lb\.<\/strong>/
+    );
+    assert.match(
+      screenHtml,
+      /<span>Remaining Capacity<\/span>\s*<strong>143 lb\.<\/strong>/
+    );
+    assert.match(
+      screenHtml,
+      /<span>Encumbrance<\/span>\s*<strong class="hg-sheet-stat-text">Within capacity<\/strong>/
+    );
+  }
+);
+
+test(
+  "playable sheet resolves, groups, labels, searches, and filters complete spell records",
+  () => {
+    const character = {
+      id: "spell-sheet-test",
+      identity: {
+        name: "Spell Tester"
+      },
+      classProgression: {
+        totalLevel: 17,
+        classes: [
+          {
+            entryId: "wizard-entry",
+            classId: "wizard",
+            className: "Wizard",
+            level: 10,
+            subclassName:
+              "School of Evocation"
+          },
+          {
+            entryId: "warlock-entry",
+            classId: "warlock",
+            className: "Warlock",
+            level: 7,
+            subclassName:
+              "The Fiend"
+          }
+        ]
+      },
+      featMechanics: {
+        spellcasting: [
+          {
+            id:
+              "magic-initiate:spell:healing-word",
+            featId: "magic-initiate",
+            featName:
+              "Magic Initiate",
+            spellId:
+              "healing-word",
+            spellName:
+              "Healing Word",
+            maximumUses: 1,
+            currentUses: 1,
+            recharge: "longRest"
+          }
+        ]
+      },
+      magic: {
+        spellcastingAbility: "int",
+        spellSaveDc: 17,
+        spellAttackBonus: 9,
+        knownSpellIds: [
+          "fire-bolt",
+          "mage-hand"
+        ],
+        preparedSpellIds: [
+          "magic-missile",
+          "shield"
+        ],
+        slots: {
+          1: 4,
+          2: 3,
+          3: 3
+        },
+        pactMagic: {
+          slots: 2,
+          slotLevel: 4
+        },
+        classSources: {
+          "wizard-entry": {
+            classEntryId:
+              "wizard-entry",
+            classId: "wizard",
+            className: "Wizard",
+            subclassName:
+              "School of Evocation",
+            spellcastingAbility: "int",
+            spellSaveDc: 17,
+            spellAttackBonus: 9,
+            cantripIds: [
+              "fire-bolt",
+              "mage-hand"
+            ],
+            preparedSpellIds: [
+              "magic-missile",
+              "shield"
+            ],
+            spellbookSpellIds: [
+              "detect-magic",
+              "misty-step",
+              "web"
+            ],
+            alwaysPreparedSpellIds: [
+              "shield"
+            ],
+            subclassSpellIds: [
+              "shield"
+            ]
+          },
+          "warlock-entry": {
+            classEntryId:
+              "warlock-entry",
+            classId: "warlock",
+            className: "Warlock",
+            subclassName: "The Fiend",
+            spellcastingAbility: "cha",
+            mysticArcanumSpellIds: {
+              6: "circle-of-death"
+            }
+          }
+        },
+        innateSpells: [
+          {
+            id: "light",
+            source:
+              "species:high-elf",
+            innateSource:
+              "species:high-elf",
+            innate: true
+          }
+        ],
+        customSpells: [
+          {
+            id: "testing-aegis",
+            name: "Testing Aegis",
+            level: 2,
+            school: "abjuration",
+            castingTime:
+              "1 reaction",
+            range: "Self",
+            components: "V, S",
+            duration: "1 round",
+            description:
+              "A complete custom spell description.",
+            source: "Custom test"
+          }
+        ]
+      }
+    };
+    const spells =
+      collectCharacterSpells(
+        character
+      );
+    const byId = new Map(
+      spells.map((spell) => {
+        return [spell.id, spell];
+      })
+    );
+
+    assert.equal(
+      spells.filter((spell) => {
+        return spell.id === "shield";
+      }).length,
+      1
+    );
+    assert.equal(
+      byId.get("fire-bolt").level,
+      0
+    );
+    assert.equal(
+      byId.get("fire-bolt")
+        .school,
+      "evocation"
+    );
+    assert.ok(
+      byId.get("fire-bolt")
+        .description.length > 20
+    );
+    assert.deepEqual(
+      byId.get("shield").statuses,
+      [
+        "Prepared",
+        "Always prepared",
+        "Subclass-granted"
+      ]
+    );
+    assert.ok(
+      byId.get("detect-magic")
+        .statuses.includes(
+          "Spellbook"
+        )
+    );
+    assert.ok(
+      byId.get("light")
+        .statuses.includes(
+          "Species-granted"
+        )
+    );
+    assert.ok(
+      byId.get("healing-word")
+        .statuses.includes(
+          "Feat-granted"
+        )
+    );
+    assert.ok(
+      byId.get("circle-of-death")
+        .statuses.includes(
+          "Mystic Arcanum"
+        )
+    );
+    assert.ok(
+      byId.get("testing-aegis")
+        .statuses.includes(
+          "Custom spell"
+        )
+    );
+
+    assert.deepEqual(
+      filterCharacterSpells(
+        spells,
+        { search: "misty step" }
+      ).map((spell) => spell.id),
+      ["misty-step"]
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: [
+            "concentration"
+          ]
+        }
+      ).some((spell) => {
+        return spell.id === "web";
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: [
+            "ritual"
+          ]
+        }
+      ).some((spell) => {
+        return (
+          spell.id ===
+          "detect-magic"
+        );
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: [
+            "bonus-action"
+          ]
+        }
+      ).some((spell) => {
+        return (
+          spell.id ===
+          "misty-step"
+        );
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: ["reaction"]
+        }
+      ).some((spell) => {
+        return spell.id === "shield";
+      })
+    );
+    assert.ok(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: ["damage"]
+        }
+      ).some((spell) => {
+        return (
+          spell.id === "fire-bolt"
+        );
+      })
+    );
+    assert.deepEqual(
+      filterCharacterSpells(
+        spells,
+        {
+          filters: ["healing"]
+        }
+      ).map((spell) => spell.id),
+      ["healing-word"]
+    );
+
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          character,
+          {
+            activeTab: "spells",
+            spellSearch:
+              "magic missile",
+            sheetContext: {
+              characterId:
+                character.id
+            }
+          }
+        );
+    const screenHtml =
+      html.match(
+        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+      )?.[1] || "";
+
+    assert.match(
+      screenHtml,
+      /data-spell-level-group="1"/
+    );
+    assert.match(
+      screenHtml,
+      /data-sheet-spell-id="magic-missile"/
+    );
+    assert.doesNotMatch(
+      screenHtml,
+      /data-sheet-spell-id="fire-bolt"/
+    );
+    assert.match(
+      html,
+      /<details class="hg-sheet-spell-description">/
+    );
+    assert.doesNotMatch(
+      html,
+      /<details class="hg-sheet-spell-description" open/
+    );
+    assert.match(
+      html,
+      /Casting Time/
+    );
+    assert.match(
+      html,
+      /Components/
+    );
+    assert.match(
+      html,
+      /Concentration/
+    );
+    assert.match(
+      html,
+      /data-normal-spell-slot="1"/
+    );
+    assert.match(
+      html,
+      /data-pact-source=/
+    );
+    assert.match(
+      html,
+      /data-feat-spell-resource=/
+    );
+
+    const nonSpellcaster = {
+      id: "fighter-only",
+      identity: {
+        name: "Fighter Only"
+      },
+      classProgression: {
+        totalLevel: 5,
+        classes: [
+          {
+            entryId: "fighter-entry",
+            classId: "fighter",
+            className: "Fighter",
+            level: 5
+          }
+        ]
+      },
+      magic: {}
+    };
+    const nonSpellHtml =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          nonSpellcaster,
+          {
+            activeTab: "spells",
+            sheetContext: {
+              characterId:
+                nonSpellcaster.id
+            }
+          }
+        );
+
+    assert.equal(
+      characterHasSpellContent(
+        nonSpellcaster
+      ),
+      false
+    );
+    assert.doesNotMatch(
+      nonSpellHtml,
+      /data-character-sheet-tab="spells"/
+    );
+    assert.doesNotMatch(
+      nonSpellHtml,
+      /aria-label="Spell character sheet"/
+    );
+    assert.match(
+      nonSpellHtml,
+      /aria-label="Actions"/
+    );
+  }
+);
