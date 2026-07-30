@@ -50,6 +50,13 @@ test(
     await cantrips.locator(
       ":scope > summary"
     ).click();
+
+    await page.evaluate(() => {
+      window
+        .__CHARACTER_CREATOR_UI_TEST__
+        .enhance();
+    });
+
     await expect(cantrips)
       .not.toHaveAttribute("open", "");
     await expect(
@@ -323,5 +330,23 @@ test(
       });
 
     expect(overflow).toBe(false);
+
+    await page.setViewportSize({
+      width: 390,
+      height: 844
+    });
+
+    const phoneOverflow =
+      await page.evaluate(() => {
+        return (
+          document.documentElement
+            .scrollWidth >
+          document.documentElement
+            .clientWidth
+        );
+      });
+
+    expect(phoneOverflow)
+      .toBe(false);
   }
 );

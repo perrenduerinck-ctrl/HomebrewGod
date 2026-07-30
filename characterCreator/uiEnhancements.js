@@ -19,8 +19,7 @@ const REQUIRED_STEPS =
 const state = {
   spellQuery: "",
   selectedSpellsOnly: false,
-  openSpellLevels: new Set(),
-  closedSpellLevels: new Set(),
+  spellLevelIntent: new Map(),
   classQuery: ""
 };
 
@@ -315,14 +314,15 @@ function filterSpellViewer(viewer) {
     if (query || selectedOnly) {
       group.open = visible > 0;
     } else {
+      const manualIntent =
+        state.spellLevelIntent
+          .get(level);
+
       group.open =
-        !state.closedSpellLevels
-          .has(level) &&
-        (
-          selected > 0 ||
-          state.openSpellLevels
-            .has(level)
-        );
+        manualIntent ===
+          undefined
+          ? selected > 0
+          : manualIntent;
     }
   });
 }
@@ -1153,6 +1153,32 @@ export function installCharacterCreatorUiEnhancements(
   };
 
   const onClick = (event) => {
+    const spellSummary =
+      event.target?.closest?.(
+        "[data-hg-spell-level] > summary"
+      );
+
+    if (spellSummary) {
+      const group =
+        spellSummary.parentElement;
+      const level =
+        Number(
+          group?.dataset
+            ?.hgSpellLevel
+        );
+
+      if (
+        group &&
+        Number.isInteger(level)
+      ) {
+        state.spellLevelIntent
+          .set(
+            level,
+            !group.open
+          );
+      }
+    }
+
     const remove =
       event.target?.closest?.(
         '[data-cc-action="remove-multiclass-class"]'
@@ -1219,37 +1245,6 @@ export function installCharacterCreatorUiEnhancements(
     }
   };
 
-  const onToggle = (event) => {
-    const group =
-      event.target;
-
-    if (
-      !group?.matches?.(
-        "[data-hg-spell-level]"
-      )
-    ) {
-      return;
-    }
-
-    const level =
-      Number(
-        group.dataset
-          .hgSpellLevel
-      );
-
-    if (group.open) {
-      state.openSpellLevels
-        .add(level);
-      state.closedSpellLevels
-        .delete(level);
-    } else {
-      state.openSpellLevels
-        .delete(level);
-      state.closedSpellLevels
-        .add(level);
-    }
-  };
-
   doc.addEventListener(
     "input",
     onInput,
@@ -1263,11 +1258,6 @@ export function installCharacterCreatorUiEnhancements(
   doc.addEventListener(
     "click",
     onClick,
-    true
-  );
-  doc.addEventListener(
-    "toggle",
-    onToggle,
     true
   );
 
@@ -1288,11 +1278,6 @@ export function installCharacterCreatorUiEnhancements(
       doc.removeEventListener(
         "click",
         onClick,
-        true
-      );
-      doc.removeEventListener(
-        "toggle",
-        onToggle,
         true
       );
       installations.delete(doc);
