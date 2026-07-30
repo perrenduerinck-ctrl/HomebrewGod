@@ -47933,6 +47933,7 @@ export function createCharacterCreator(options = {}) {
     creatorState.draft.feats = selectedIds.includes(featId)
       ? selectedIds.filter((id) => id !== featId)
       : [...selectedIds, featId];
+    creatorState.draft.selectedFeats = [...creatorState.draft.feats];
 
     applySelectedFeatMechanics();
     applyCompatibilityAliases(creatorState.draft);

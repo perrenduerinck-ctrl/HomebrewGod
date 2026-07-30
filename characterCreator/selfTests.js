@@ -5150,6 +5150,35 @@ export function runCharacterCreatorSelfTests(context) {
       }
     );
 
+    creatorState.draft =
+      createEmptyCharacter();
+    creatorState.draft.feats = [
+      "lucky"
+    ];
+    creatorState.draft.selectedFeats = [
+      "lucky"
+    ];
+    const phase9FeatRemoved =
+      toggleSection16Feat("lucky");
+
+    record(
+      "Phase 9: removing a Spells-step feat clears its compatibility alias",
+      {
+        removed:
+          phase9FeatRemoved,
+        feats:
+          creatorState.draft.feats,
+        selectedFeats:
+          creatorState.draft
+            .selectedFeats
+      },
+      {
+        removed: true,
+        feats: [],
+        selectedFeats: []
+      }
+    );
+
     const createPhase9FighterAsiSlot = (
       baseScores = {}
     ) => {

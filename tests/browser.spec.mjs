@@ -61,6 +61,7 @@ test(
       /Multiclass add returns/i,
       /Save screen separates/i,
       /Finalization status persists/i,
+      /removing a Spells-step feat clears/i,
       /Adding a class requires both existing and new class prerequisites/i,
       /Lowering or removing a class prunes/i
     ];
@@ -74,6 +75,56 @@ test(
         ).toBe(true);
       }
     );
+  }
+);
+
+test(
+  "Spells-step Remove Feat clears the feat instead of re-adding its compatibility alias",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/character-feat-removal-self-test.html?release=feat-remove-20260730",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "ready"
+      );
+
+    const button =
+      page.locator(
+        '[data-cc-action="toggle-default-feat"][data-feat-id="lucky"]'
+      );
+
+    await expect(button)
+      .toHaveText("Remove Feat");
+    await button.click();
+    await expect(button)
+      .toHaveText("Add Feat");
+
+    const featState =
+      await page.evaluate(() => {
+        const draft =
+          window
+            .__FEAT_REMOVAL_TEST__
+            .getDraft();
+
+        return {
+          feats:
+            draft.feats,
+          selectedFeats:
+            draft.selectedFeats
+        };
+      });
+
+    expect(featState)
+      .toEqual({
+        feats: [],
+        selectedFeats: []
+      });
   }
 );
 

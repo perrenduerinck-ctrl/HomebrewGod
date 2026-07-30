@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Homebrew God Feat Removal Self-Test</title>
+</head>
+<body data-test-status="running">
+  <section id="characterCreatorScreen">
+    <div class="creatorTopBar">
+      <p class="small"></p>
+    </div>
+    <div class="creatorActionBar"></div>
+    <div class="creatorFullGrid"></div>
+    <p id="characterCreatorStatus" role="status"></p>
+  </section>
+
+  <script>
+    window.alert = () => {};
+    window.confirm = () => true;
+    window.addEventListener("error", (event) => {
+      document.body.dataset.testStatus = "fail";
+      document.getElementById("characterCreatorStatus").textContent =
+        event.error?.stack || event.message;
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      document.body.dataset.testStatus = "fail";
+      document.getElementById("characterCreatorStatus").textContent =
+        event.reason?.stack || event.reason;
+    });
+  </script>
+
+  <script type="module">
+    import {
+      createCharacterCreator
+    } from "../characterCreator.fixed.js?feat-remove-20260730";
+
+    const creator =
+      createCharacterCreator();
+    const draft =
+      creator.getDraft();
+
+    creator.state.viewMode =
+      "builder";
+    draft.feats = ["lucky"];
+    draft.selectedFeats = ["lucky"];
+    draft.builder.currentStep =
+      "spells";
+    creator.replaceDraft(
+      draft,
+      {
+        dirty: false,
+        skipDiscardGuard: true,
+        stepId: "spells"
+      }
+    );
+
+    window.__FEAT_REMOVAL_TEST__ =
+      creator;
+    document.body.dataset.testStatus =
+      "ready";
+  </script>
+</body>
+</html>
