@@ -9552,6 +9552,10 @@ export function createCharacterSheetView(options = {}) {
     }
 
     if (action === "print") {
+      button.closest(
+        ".hg-sheet-more-menu"
+      )?.removeAttribute("open");
+
       if (prepareAndPrint()) {
         deps.setStatus(
           "Print-friendly character sheet opened."

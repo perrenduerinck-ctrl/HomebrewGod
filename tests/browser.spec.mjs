@@ -926,6 +926,14 @@ test(
     }).click();
     await expect(
       page.locator(
+        ".hg-sheet-more-menu"
+      )
+    ).not.toHaveAttribute(
+      "open",
+      ""
+    );
+    await expect(
+      page.locator(
         "[data-character-sheet-print-area]"
       )
     ).toHaveCount(1);
