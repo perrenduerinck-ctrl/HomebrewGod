@@ -10518,10 +10518,18 @@ export function runCharacterCreatorSelfTests(context) {
           "[data-hit-die-id=\"phase16-fighter\"][data-delta=\"1\"]"
         ),
       spellSlot:
-        clickPhase16SheetAction(
-          "adjust-spell-slot",
-          "[data-slot-kind=\"normal\"][data-slot-level=\"1\"][data-delta=\"1\"]"
-        ),
+        (() => {
+          phase16Root
+            ?.querySelector(
+              "[data-character-sheet-tab=\"spells\"]"
+            )
+            ?.click();
+
+          return clickPhase16SheetAction(
+            "adjust-spell-slot",
+            "[data-slot-kind=\"normal\"][data-slot-level=\"1\"][data-delta=\"1\"]"
+          );
+        })(),
       exportJson:
         clickPhase16SheetAction(
           "export-json"
@@ -10642,11 +10650,18 @@ export function runCharacterCreatorSelfTests(context) {
         printControl:
           phase16ControlPresence
             .print,
-        printPanel:
+        normalScreenPrintPanel:
           phase16MainHtml
             .includes(
-              "hg-sheet-print-only"
+              "data-character-sheet-print-area"
             ),
+        printPanel:
+          Boolean(
+            phase16Root
+              ?.querySelector(
+                "[data-character-sheet-print-area]"
+              )
+          ),
         printMedia:
           Boolean(
             typeof document !==
@@ -10673,6 +10688,8 @@ export function runCharacterCreatorSelfTests(context) {
       },
       {
         printControl: true,
+        normalScreenPrintPanel:
+          false,
         printPanel: true,
         printMedia: true,
         callback: true
