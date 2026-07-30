@@ -287,3 +287,70 @@ test(
     );
   }
 );
+
+test(
+  "character creator UI uses compact searchable and focused selection controls",
+  async () => {
+    const enhancements =
+      await read(
+        "characterCreator/uiEnhancements.js"
+      );
+    const styles =
+      await read(
+        "characterCreator/uiEnhancements.css"
+      );
+    const persistenceGuard =
+      await read(
+        "characterCreator/persistenceGuard.js"
+      );
+    const packageJson =
+      JSON.parse(
+        await read("package.json")
+      );
+
+    assert.match(
+      enhancements,
+      /data-hg-spell-level/
+    );
+    assert.match(
+      enhancements,
+      /selected-spells-only/
+    );
+    assert.match(
+      enhancements,
+      /Add Another Class/
+    );
+    assert.match(
+      enhancements,
+      /remove-multiclass-class/
+    );
+    assert.match(
+      enhancements,
+      /data-hg-feat-filter/
+    );
+    assert.match(
+      enhancements,
+      /CORE_STEPS/
+    );
+    assert.match(
+      styles,
+      /\.hg-character-step-footer\s*\{[^}]*position:\s*sticky/s
+    );
+    assert.match(
+      persistenceGuard,
+      /uiEnhancements\.js/
+    );
+    assert.match(
+      packageJson.scripts[
+        "test:browser"
+      ],
+      /character-creator-ui\.spec\.mjs/
+    );
+    assert.match(
+      packageJson.scripts[
+        "test:deployed"
+      ],
+      /character-creator-ui\.spec\.mjs/
+    );
+  }
+);

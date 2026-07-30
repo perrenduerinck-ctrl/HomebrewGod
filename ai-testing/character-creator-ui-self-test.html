@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>Character Creator UI Self Test</title>
+  </head>
+  <body data-test-status="running">
+    <main
+      id="characterWizardRoot"
+      class="hg-character-wizard-root"
+    >
+      <div class="hg-character-progress-track">
+        <div class="hg-character-progress-fill"></div>
+      </div>
+
+      <div class="hg-character-builder-layout">
+        <aside class="hg-character-step-rail">
+          <button
+            class="hg-character-step-button active visited"
+            data-cc-action="go-step"
+            data-step-id="class"
+          >Class</button>
+          <button
+            class="hg-character-step-button complete"
+            data-cc-action="go-step"
+            data-step-id="background"
+          >Background</button>
+          <button
+            class="hg-character-step-button"
+            data-cc-action="go-step"
+            data-step-id="species"
+          >Species</button>
+          <button
+            class="hg-character-step-button"
+            data-cc-action="go-step"
+            data-step-id="abilities"
+          >Abilities</button>
+          <button
+            class="hg-character-step-button complete"
+            data-cc-action="go-step"
+            data-step-id="equipment"
+          >Equipment</button>
+        </aside>
+
+        <section class="hg-character-builder-main">
+          <div class="hg-character-step-panel">
+            <div class="hg-character-current-choice">
+              <b>Current class:</b> Fighter
+            </div>
+
+            <div class="hg-character-choice-grid" id="classGrid">
+              <article class="hg-character-choice-card selected">
+                <h3>Fighter</h3>
+                <p>Reliable martial specialist.</p>
+                <p>
+                  <b>Hit Die:</b> d10
+                  <br><b>Primary Abilities:</b> Strength or Dexterity
+                </p>
+                <button
+                  data-cc-action="choose-class"
+                >Selected</button>
+              </article>
+              <article class="hg-character-choice-card">
+                <h3>Wizard</h3>
+                <p>Studious arcane spellcaster.</p>
+                <p>
+                  <b>Hit Die:</b> d6
+                  <br><b>Primary Abilities:</b> Intelligence
+                </p>
+                <button
+                  data-cc-action="choose-class"
+                >Choose Class</button>
+              </article>
+            </div>
+
+            <div class="hg-character-current-choice">
+              <b>Total Character Level:</b> 3 / 20
+            </div>
+
+            <hr>
+            <div class="hg-character-beginner-note">
+              <strong>Add Multiclass</strong>
+              <p>Add one class at level 1.</p>
+            </div>
+            <div class="hg-character-field-grid three">
+              <label class="hg-character-field">
+                Choose class to add
+                <select id="ccMulticlassAddClass">
+                  <option value="">Choose a class</option>
+                  <option value="cleric">Cleric</option>
+                  <option value="wizard">Wizard</option>
+                </select>
+              </label>
+              <button
+                data-cc-action="add-multiclass-class"
+              >Add Selected Class</button>
+            </div>
+            <div
+              id="ccMulticlassAddStatus"
+              hidden
+            ></div>
+
+            <article class="hg-character-choice-card">
+              <h3>Cleric</h3>
+              <p>Level 1 multiclass entry.</p>
+              <button
+                data-cc-action="remove-multiclass-class"
+              >Remove Class</button>
+            </article>
+
+            <section
+              data-cc-default-spell-viewer="true"
+            >
+              <label for="ccDefaultSpellSearch">
+                Search Default Spells
+              </label>
+              <input
+                id="ccDefaultSpellSearch"
+                type="search"
+              >
+              <div class="hg-character-choice-grid">
+                <article
+                  class="hg-character-choice-card selected"
+                  data-cc-default-spell-option="true"
+                  data-spell-search-text="fire bolt cantrip evocation"
+                >
+                  <h3>Fire Bolt</h3>
+                  <p>
+                    <b>Cantrip</b><br>
+                    Ranged spell attack.
+                  </p>
+                  <p class="small">
+                    Casting Time: 1 action. Range: 120 feet.
+                    A mote of fire streaks toward a creature.
+                  </p>
+                  <button>Forget</button>
+                </article>
+                <article
+                  class="hg-character-choice-card selected"
+                  data-cc-default-spell-option="true"
+                  data-spell-search-text="shield level 1 abjuration"
+                >
+                  <h3>Shield</h3>
+                  <p>
+                    <b>Level 1</b><br>
+                    A sudden protective barrier.
+                  </p>
+                  <p class="small">
+                    Casting Time: 1 reaction. Gain a temporary
+                    bonus to Armor Class.
+                  </p>
+                  <button>Unprepare</button>
+                </article>
+                <article
+                  class="hg-character-choice-card"
+                  data-cc-default-spell-option="true"
+                  data-spell-search-text="meteor swarm level 9 evocation"
+                >
+                  <h3>Meteor Swarm</h3>
+                  <p>
+                    <b>Level 9</b><br>
+                    Blazing meteors strike the ground.
+                  </p>
+                  <p class="small">
+                    Casting Time: 1 action. Four meteors deal
+                    fire and bludgeoning damage.
+                  </p>
+                  <button>Learn</button>
+                </article>
+              </div>
+              <div
+                data-cc-default-spell-no-results
+                hidden
+              >No results</div>
+            </section>
+
+            <details
+              data-cc-asi-feat-picker="true"
+              open
+            >
+              <summary>Choose Feat</summary>
+              <div class="hg-feat-picker-toolbar">
+                <input
+                  type="search"
+                  placeholder="Search feats"
+                >
+              </div>
+              <div class="hg-character-choice-grid">
+                <article
+                  class="hg-character-choice-card selected"
+                  data-cc-feat-option="true"
+                  data-feat-search-text="alert general feat"
+                >
+                  <h3>Alert</h3>
+                  <p>Stay ready for danger.</p>
+                  <button disabled>Selected</button>
+                </article>
+                <article
+                  class="hg-character-choice-card unavailable"
+                  data-cc-feat-option="true"
+                  data-feat-search-text="heavy armor master prerequisite heavy armor"
+                >
+                  <h3>Heavy Armor Master</h3>
+                  <p>Reduce incoming physical damage.</p>
+                  <p class="hg-feat-option-status">
+                    Prerequisite not met: heavy armor proficiency.
+                  </p>
+                  <button disabled>Prerequisite not met</button>
+                </article>
+              </div>
+            </details>
+
+            <div class="hg-character-step-footer">
+              <button
+                data-cc-action="previous-step"
+              >Previous</button>
+              <div class="hg-character-step-footer-right">
+                <button data-cc-action="save-character">
+                  Save Draft
+                </button>
+                <button data-cc-action="next-step">
+                  Next Step
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module">
+      import {
+        enhanceCharacterCreatorUi,
+        installCharacterCreatorUiEnhancements
+      } from "../characterCreator/uiEnhancements.js?v=creator-ui-20260729";
+
+      window.__allowClassRemoval = false;
+      window.__classRemovalCount = 0;
+      window.confirm = () => {
+        return window.__allowClassRemoval;
+      };
+
+      document
+        .getElementById("characterWizardRoot")
+        .addEventListener(
+          "click",
+          (event) => {
+            if (
+              event.target.closest(
+                '[data-cc-action="remove-multiclass-class"]'
+              )
+            ) {
+              window.__classRemovalCount += 1;
+            }
+          }
+        );
+
+      installCharacterCreatorUiEnhancements(
+        document
+      );
+      enhanceCharacterCreatorUi();
+
+      window.__CHARACTER_CREATOR_UI_TEST__ = {
+        enhance:
+          enhanceCharacterCreatorUi,
+        allowClassRemoval(value) {
+          window.__allowClassRemoval =
+            value === true;
+        },
+        removalCount() {
+          return window
+            .__classRemovalCount;
+        }
+      };
+
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        });
+      });
+
+      document.body.dataset
+        .testStatus = "pass";
+    </script>
+  </body>
+</html>
