@@ -1794,7 +1794,7 @@ test(
   "spell stress fixture keeps all 340 catalog spells and stale sources responsive",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet-spell-stress.html?release=spell-hard-limit-20260730",
+      "ai-testing/playable-character-sheet-spell-stress.html?release=spell-performance-final-20260730",
       {
         waitUntil:
           "domcontentloaded"
@@ -1843,12 +1843,43 @@ test(
         .stressSentinel = "stable";
     });
 
-    const startedAt = Date.now();
+    const spellOpenDuration =
+      await page.evaluate(async () => {
+        const button =
+          Array.from(
+            document.querySelectorAll(
+              "button"
+            )
+          ).find((candidate) => {
+            return (
+              candidate.textContent
+                ?.trim() ===
+              "Spells"
+            );
+          });
+        const startedAt =
+          performance.now();
 
-    await page.getByRole("button", {
-      name: "Spells",
-      exact: true
-    }).click();
+        button.click();
+
+        await new Promise((resolve) => {
+          requestAnimationFrame(
+            () => resolve()
+          );
+        });
+
+        return (
+          performance.now() -
+          startedAt
+        );
+      });
+
+    test.info().annotations.push({
+      type:
+        "spell-open-duration",
+      description:
+        `${spellOpenDuration.toFixed(1)} ms`
+    });
 
     const library =
       page.locator(
@@ -1873,12 +1904,12 @@ test(
         "[data-spell-results-meta]"
       )
     ).toContainText(
-      "340 matching"
+      "343 matching"
     );
 
     expect(
-      Date.now() - startedAt
-    ).toBeLessThan(5000);
+      spellOpenDuration
+    ).toBeLessThan(1500);
 
     await library.getByRole(
       "button",

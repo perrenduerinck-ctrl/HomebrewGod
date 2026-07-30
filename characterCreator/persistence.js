@@ -5,7 +5,11 @@ import {
   guardCharacterDraftWalkingSpeed,
   installWalkingSpeedInputGuard,
   normalizeCharacterWalkingSpeed
-} from "./walkingSpeed.js?v=movement-speed-20260730";
+} from "./walkingSpeed.js?v=creator-fix-pass-20260730";
+import {
+  assertCharacterSerializedSize,
+  normalizeCharacterTextFields
+} from "./fieldLimits.js?v=creator-fix-pass-20260730";
 import "./uiEnhancements.js?v=creator-ui-20260729";
 
 const basePersistencePath =
@@ -88,6 +92,13 @@ export function createCharacterPersistence(
             collectionReference,
             character
           ) => {
+            normalizeCharacterTextFields(
+              character
+            );
+            assertCharacterSerializedSize(
+              character
+            );
+
             return originalAddDoc(
               collectionReference,
               normalizeCharacterWalkingSpeed(
@@ -101,7 +112,13 @@ export function createCharacterPersistence(
         documentRef,
         nextRecord
       ) => {
+        normalizeCharacterTextFields(
+          nextRecord
+        );
         normalizeCharacterWalkingSpeed(
+          nextRecord
+        );
+        assertCharacterSerializedSize(
           nextRecord
         );
 
@@ -134,6 +151,9 @@ export function createCharacterPersistence(
         normalizeCharacterWalkingSpeed(
           payload
         );
+        normalizeCharacterTextFields(
+          payload
+        );
 
         payload.ownerUid =
           remoteRecord.ownerUid ||
@@ -152,6 +172,10 @@ export function createCharacterPersistence(
           payload.createdAt =
             remoteRecord.createdAt;
         }
+
+        assertCharacterSerializedSize(
+          payload
+        );
 
         return originalUpdateDoc(
           documentRef,

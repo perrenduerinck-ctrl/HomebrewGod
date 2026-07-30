@@ -1,3 +1,8 @@
+import {
+  assertCharacterImportSize,
+  assertCharacterSerializedSize
+} from "./fieldLimits.js?v=creator-fix-pass-20260730";
+
 export function createCharacterPersistence(context) {
   const {
     $, ABILITY_DEFINITIONS, ABILITY_SCORE_METHODS, ACTIVE_RULESET, ADDITIONAL_CANTRIP_COUNT_2014, ADDITIONAL_CANTRIP_EXPECTATIONS_2014,
@@ -1055,6 +1060,10 @@ export function createCharacterPersistence(context) {
           character
         );
 
+      assertCharacterSerializedSize(
+        characterPayload
+      );
+
       const timestamp =
         deps.serverTimestamp();
       const mutationIdentity =
@@ -1558,6 +1567,10 @@ export function createCharacterPersistence(context) {
   function parseSection18ImportedCharacter(
     jsonText
   ) {
+    assertCharacterImportSize(
+      jsonText
+    );
+
     const parsed = JSON.parse(
       String(jsonText || "")
     );
@@ -1732,6 +1745,10 @@ export function createCharacterPersistence(context) {
     }
 
     try {
+      assertCharacterImportSize(
+        Number(file.size) || 0
+      );
+
       const jsonText =
         await file.text();
 

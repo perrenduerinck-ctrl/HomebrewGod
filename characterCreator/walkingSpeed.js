@@ -7,6 +7,11 @@ export const MAXIMUM_WALKING_SPEED =
 
 const WALKING_SPEED_INPUT_SELECTOR = [
   "#ccCustomSpeciesSpeed",
+  "#ccCustomClassWalkBonus",
+  "#ccCustomClassClimbBonus",
+  "#ccCustomClassSwimBonus",
+  "#ccCustomClassFlyBonus",
+  "#ccCustomClassBurrowBonus",
   "#ccWalkSpeed",
   "#ccClimbSpeed",
   "#ccSwimSpeed",
@@ -21,6 +26,12 @@ const MOVEMENT_SPEED_DEFAULTS =
     fly: 0,
     burrow: 0
   });
+export const MOVEMENT_SPEED_TYPES =
+  Object.freeze(
+    Object.keys(
+      MOVEMENT_SPEED_DEFAULTS
+    )
+  );
 
 const guardedCreatorStates =
   new WeakSet();
@@ -123,15 +134,26 @@ export function normalizeCharacterWalkingSpeed(
     character.combat.speed = {};
   }
 
+  const hadBaseSpeed =
+    isObject(
+      character.combat.baseSpeed
+    );
+
+  if (!hadBaseSpeed) {
+    character.combat.baseSpeed = {
+      ...character.combat.speed
+    };
+  }
+
   const hasCanonicalWalkingSpeed =
     Object.hasOwn(
-      character.combat.speed,
+      character.combat.baseSpeed,
       "walk"
     );
   const rawWalkingSpeed =
     hasCanonicalWalkingSpeed
       ? character.combat
-          .speed.walk
+          .baseSpeed.walk
       : parseLegacyWalkingSpeed(
           character.speed
         );
@@ -140,7 +162,7 @@ export function normalizeCharacterWalkingSpeed(
       rawWalkingSpeed
     );
 
-  character.combat.speed.walk =
+  character.combat.baseSpeed.walk =
     walkingSpeed;
 
   [
@@ -149,10 +171,10 @@ export function normalizeCharacterWalkingSpeed(
     "fly",
     "burrow"
   ].forEach((movementType) => {
-    character.combat.speed[
+    character.combat.baseSpeed[
       movementType
     ] = normalizeMovementSpeed(
-      character.combat.speed[
+      character.combat.baseSpeed[
         movementType
       ],
       MOVEMENT_SPEED_DEFAULTS[
@@ -160,6 +182,28 @@ export function normalizeCharacterWalkingSpeed(
       ]
     );
   });
+
+  if (!hadBaseSpeed) {
+    character.combat.speed = {
+      ...character.combat.speed,
+      ...character.combat.baseSpeed
+    };
+  } else {
+    Object.keys(
+      MOVEMENT_SPEED_DEFAULTS
+    ).forEach((movementType) => {
+      character.combat.speed[
+        movementType
+      ] = normalizeMovementSpeed(
+        character.combat.speed[
+          movementType
+        ],
+        character.combat.baseSpeed[
+          movementType
+        ]
+      );
+    });
+  }
 
   if (
     Object.hasOwn(
@@ -186,13 +230,211 @@ export function normalizeCharacterWalkingSpeed(
   return character;
 }
 
+function getProgressionValue(values, level) {
+  if (!isObject(values)) {
+    return 0;
+  }
+
+  return Object.entries(values)
+    .filter(([requiredLevel]) => {
+      return Number(requiredLevel) <= level;
+    })
+    .sort((left, right) => {
+      return Number(right[0]) - Number(left[0]);
+    })[0]?.[1] ?? 0;
+}
+
+function getStoredChoiceValues(value, result = []) {
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      getStoredChoiceValues(entry, result);
+    });
+  } else if (isObject(value)) {
+    Object.values(value).forEach((entry) => {
+      getStoredChoiceValues(entry, result);
+    });
+  } else if (
+    typeof value === "string"
+  ) {
+    result.push(value);
+  }
+
+  return result;
+}
+
+function isMovementEffectActive(
+  effect,
+  character
+) {
+  if (effect?.duration) {
+    return false;
+  }
+
+  const requires = effect?.requires;
+
+  if (!isObject(requires)) {
+    return true;
+  }
+
+  const equipped = (
+    Array.isArray(
+      character?.equipment?.items
+    )
+      ? character.equipment.items
+      : []
+  ).filter((item) => {
+    return item?.equipped === true;
+  });
+  const wornArmor = equipped.filter((item) => {
+    const type = [
+      item?.type,
+      item?.category,
+      item?.armorType
+    ].join(" ").toLowerCase();
+
+    return (
+      type.includes("armor") &&
+      !type.includes("shield")
+    );
+  });
+
+  if (
+    requires.unarmored === true &&
+    wornArmor.length
+  ) {
+    return false;
+  }
+
+  if (
+    requires.noHeavyArmor === true &&
+    wornArmor.some((item) => {
+      return [
+        item?.armorCategory,
+        item?.armorType,
+        item?.category,
+        item?.name
+      ].join(" ").toLowerCase()
+        .includes("heavy");
+    })
+  ) {
+    return false;
+  }
+
+  if (requires.choiceId && requires.option) {
+    const choices = character
+      ?.classProgression?.classes
+      ?.flatMap((entry) => {
+        return getStoredChoiceValues(
+          entry?.choices
+        );
+      }) || [];
+
+    return choices.includes(
+      String(requires.option)
+    );
+  }
+
+  return true;
+}
+
+export function applyDerivedMovementSpeeds(
+  character,
+  {
+    classEffects = [],
+    featWalkBonus = 0
+  } = {}
+) {
+  normalizeCharacterWalkingSpeed(character);
+
+  if (!isObject(character)) {
+    return character;
+  }
+
+  const bonuses = Object.fromEntries(
+    MOVEMENT_SPEED_TYPES.map(
+      (type) => [type, 0]
+    )
+  );
+  const seen = new Set();
+
+  classEffects.forEach((effect, index) => {
+    const movement = String(
+      effect?.movement || "walk"
+    ).trim().toLowerCase();
+    const id = String(
+      effect?.id || `movement-${index}`
+    );
+
+    if (
+      !MOVEMENT_SPEED_TYPES.includes(movement) ||
+      seen.has(id) ||
+      !isMovementEffectActive(
+        effect,
+        character
+      )
+    ) {
+      return;
+    }
+
+    seen.add(id);
+
+    if (effect?.type === "speedBonus") {
+      bonuses[movement] +=
+        Number(effect.value) || 0;
+    } else if (
+      effect?.type === "speedBonusByLevel"
+    ) {
+      bonuses[movement] += Number(
+        getProgressionValue(
+          effect.values,
+          Math.max(
+            1,
+            Number(effect.classLevel) || 1
+          )
+        )
+      ) || 0;
+    }
+  });
+
+  bonuses.walk += Math.max(
+    0,
+    Number(featWalkBonus) || 0
+  );
+
+  MOVEMENT_SPEED_TYPES.forEach((movement) => {
+    const base = normalizeMovementSpeed(
+      character.combat.baseSpeed[movement],
+      MOVEMENT_SPEED_DEFAULTS[movement]
+    );
+
+    character.combat.speed[movement] =
+      normalizeMovementSpeed(
+        base +
+        Math.max(
+          0,
+          Math.round(bonuses[movement])
+        ),
+        base
+      );
+  });
+
+  character.combat.speed.special =
+    String(
+      character.combat.baseSpeed.special ??
+      character.combat.speed.special ??
+      ""
+    ).trim();
+
+  return character;
+}
+
 function getInputMovementType(input) {
   const draftPath =
     input?.dataset?.draftPath;
   const pathMatch =
     typeof draftPath === "string"
       ? draftPath.match(
-          /^combat\.speed\.(walk|climb|swim|fly|burrow)$/
+          /^combat\.(?:baseSpeed|speed)\.(walk|climb|swim|fly|burrow)$/
         )
       : null;
 
@@ -217,6 +459,23 @@ function getInputMovementType(input) {
 
   return inputTypes[input?.id] ||
     "walk";
+}
+
+function getInputDefaultSpeed(
+  input,
+  movementType
+) {
+  if (
+    /^ccCustomClass/.test(
+      input?.id || ""
+    )
+  ) {
+    return 0;
+  }
+
+  return MOVEMENT_SPEED_DEFAULTS[
+    movementType
+  ];
 }
 
 export function correctWalkingSpeedInput(
@@ -252,9 +511,10 @@ export function correctWalkingSpeedInput(
   const movementSpeed =
     normalizeMovementSpeed(
       input.value,
-      MOVEMENT_SPEED_DEFAULTS[
+      getInputDefaultSpeed(
+        input,
         movementType
-      ]
+      )
     );
 
   input.value =
@@ -367,14 +627,14 @@ export function installWalkingSpeedInputGuard({
 
       if (
         input.dataset?.draftPath ===
-          `combat.speed.${movementType}`
+          `combat.baseSpeed.${movementType}`
       ) {
         normalizeCharacterWalkingSpeed(
           character
         );
 
-        if (character?.combat?.speed) {
-          character.combat.speed[
+        if (character?.combat?.baseSpeed) {
+          character.combat.baseSpeed[
             movementType
           ] = corrected;
         }
@@ -407,13 +667,13 @@ export function installWalkingSpeedInputGuard({
 
     if (
       input.dataset?.draftPath ===
-        `combat.speed.${movementType}` &&
+        `combat.baseSpeed.${movementType}` &&
       isObject(character)
     ) {
       normalizeCharacterWalkingSpeed(
         character
       );
-      character.combat.speed[
+      character.combat.baseSpeed[
         movementType
       ] = corrected;
     }

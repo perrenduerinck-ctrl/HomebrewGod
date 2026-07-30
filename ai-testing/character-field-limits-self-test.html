@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>Character Field Limits Self-Test</title>
+  </head>
+  <body data-test-status="running">
+    <main>
+      <label for="testCharacterName">
+        Character Name
+      </label>
+      <input
+        id="testCharacterName"
+        type="text"
+        data-draft-path="identity.name"
+      >
+
+      <label for="testSearch">
+        Search
+      </label>
+      <input
+        id="testSearch"
+        type="search"
+      >
+
+      <label for="testAppearance">
+        Appearance
+      </label>
+      <textarea
+        id="testAppearance"
+        data-draft-path="identity.appearance"
+      ></textarea>
+
+      <label for="testBackstory">
+        Backstory
+      </label>
+      <textarea
+        id="testBackstory"
+        data-draft-path="background.backstory"
+      ></textarea>
+
+      <label for="testSpellDescription">
+        Spell Description
+      </label>
+      <textarea
+        id="testSpellDescription"
+        data-draft-path="magic.customSpells.0.description"
+      ></textarea>
+
+      <label for="ccCustomClassFlyBonus">
+        Custom Class Flying Speed Bonus
+      </label>
+      <input
+        id="ccCustomClassFlyBonus"
+        type="number"
+      >
+    </main>
+
+    <script type="module">
+      import {
+        applyCharacterCreatorFieldLimits,
+        installCharacterCreatorTextInputGuard
+      } from "../characterCreator/fieldLimits.js?v=creator-fix-pass-20260730";
+      import {
+        installWalkingSpeedInputGuard
+      } from "../characterCreator/walkingSpeed.js?v=creator-fix-pass-20260730";
+
+      installCharacterCreatorTextInputGuard({
+        root: document
+      });
+      applyCharacterCreatorFieldLimits(
+        document
+      );
+      installWalkingSpeedInputGuard({
+        root: document
+      });
+
+      document.body.dataset
+        .testStatus = "pass";
+    </script>
+  </body>
+</html>

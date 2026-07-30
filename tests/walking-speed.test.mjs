@@ -4,6 +4,7 @@ import {
   DEFAULT_WALKING_SPEED,
   MAXIMUM_WALKING_SPEED,
   MINIMUM_WALKING_SPEED,
+  applyDerivedMovementSpeeds,
   normalizeCharacterWalkingSpeed,
   normalizeMovementSpeed,
   normalizeWalkingSpeed
@@ -42,6 +43,97 @@ test(
         0
       ),
       100
+    );
+  }
+);
+
+test(
+  "species base, class movement effects, and feat bonuses combine once and cap at one hundred",
+  () => {
+    const character = {
+      combat: {
+        baseSpeed: {
+          walk: 30,
+          climb: 5,
+          swim: 0,
+          fly: 90,
+          burrow: 0
+        },
+        speed: {}
+      }
+    };
+    const effects = [
+      {
+        id: "class-walk",
+        type: "speedBonus",
+        movement: "walk",
+        value: 10
+      },
+      {
+        id: "class-climb",
+        type: "speedBonus",
+        movement: "climb",
+        value: 15
+      },
+      {
+        id: "class-fly",
+        type: "speedBonus",
+        movement: "fly",
+        value: 20
+      },
+      {
+        id: "class-walk",
+        type: "speedBonus",
+        movement: "walk",
+        value: 10
+      },
+      {
+        id: "temporary-walk",
+        type: "speedBonus",
+        movement: "walk",
+        value: 50,
+        duration: "1 hour"
+      }
+    ];
+
+    applyDerivedMovementSpeeds(
+      character,
+      {
+        classEffects: effects,
+        featWalkBonus: 10
+      }
+    );
+
+    assert.deepEqual(
+      {
+        walk:
+          character.combat
+            .speed.walk,
+        climb:
+          character.combat
+            .speed.climb,
+        fly:
+          character.combat
+            .speed.fly
+      },
+      {
+        walk: 50,
+        climb: 20,
+        fly: 100
+      }
+    );
+
+    applyDerivedMovementSpeeds(
+      character,
+      {
+        classEffects: effects,
+        featWalkBonus: 10
+      }
+    );
+
+    assert.equal(
+      character.combat.speed.walk,
+      50
     );
   }
 );
@@ -102,6 +194,11 @@ test(
     assert.equal(
       character.combat
         .speed.walk,
+      100
+    );
+    assert.equal(
+      character.combat
+        .baseSpeed.walk,
       100
     );
     assert.equal(
@@ -167,6 +264,8 @@ test(
       "40 ft."
     );
 
+    character.combat.baseSpeed.walk =
+      Number.NaN;
     character.combat.speed.walk =
       Number.NaN;
     normalizeCharacterWalkingSpeed(

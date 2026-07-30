@@ -40,7 +40,7 @@
     <script type="module">
       import {
         createCharacterSheetView
-      } from "../characterSheet.js?v=spell-hard-limit-20260730";
+      } from "../characterSheet.js?v=spell-performance-final-20260730";
       import {
         DEFAULT_SPELLS
       } from "../defaultSpells.js?v=spell-performance-20260730";
@@ -155,6 +155,103 @@
                 allSpellIds,
               preparedSpellIds
             }
+          },
+          customSpells: [
+            {
+              id: "custom-astral-lance",
+              name: "Astral Lance",
+              level: 5,
+              school: "Evocation",
+              castingTime: "1 action",
+              range: "120 feet",
+              duration: "Instantaneous",
+              components: [
+                "V",
+                "S"
+              ],
+              description:
+                "A focused beam crosses the battlefield. ".repeat(180),
+              sourceLabel:
+                "Stress-test grimoire"
+            },
+            {
+              id: "custom-clockwork-garden",
+              name: "Clockwork Garden",
+              level: 3,
+              school: "Conjuration",
+              description:
+                "Mechanical flowers create difficult terrain. ".repeat(140),
+              sourceLabel:
+                "Stress-test grimoire"
+            },
+            {
+              id: "custom-quiet-star",
+              name: "Quiet Star",
+              level: 0,
+              school: "Illusion",
+              description:
+                "A tiny star sheds dim light.",
+              sourceLabel:
+                "Stress-test grimoire"
+            }
+          ],
+          innateSpells: [
+            {
+              spellId: "misty-step",
+              sourceType: "species",
+              sourceLabel:
+                "Stress ancestry"
+            }
+          ],
+          featSources: {
+            "stress-feat": {
+              featId: "stress-feat",
+              featName:
+                "Stress Magic",
+              spellIds: [
+                "magic-missile",
+                "magic-missile"
+              ],
+              spellRecords: [
+                {
+                  id:
+                    "stress-feat:magic-missile",
+                  spellId:
+                    "magic-missile",
+                  spellName:
+                    "Magic Missile",
+                  featId:
+                    "stress-feat",
+                  featName:
+                    "Stress Magic",
+                  recharge:
+                    "longRest",
+                  uses: 1,
+                  currentUses: 0
+                }
+              ]
+            }
+          },
+          pactMagic: {
+            slots: 4,
+            slotLevel: 5
+          },
+          pactMagicSources: [
+            {
+              classEntryId:
+                "warlock-stress",
+              className:
+                "Archived Warlock",
+              slots: 4,
+              slotLevel: 5
+            }
+          ],
+          slotUsage: {
+            normal: {},
+            pact: 1,
+            pactSources: {
+              "warlock-stress": 1
+            }
           }
         }
       };
@@ -183,6 +280,8 @@
       window.__SPELL_STRESS_TEST__ = {
         totalSpells:
           DEFAULT_SPELLS.length,
+        expectedRenderedSpells:
+          DEFAULT_SPELLS.length + 3,
         staleSourceCount,
         ping() {
           return "responsive";

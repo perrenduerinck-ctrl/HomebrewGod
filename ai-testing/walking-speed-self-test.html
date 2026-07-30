@@ -23,7 +23,7 @@
       <input
         id="ccClimbSpeed"
         type="number"
-        data-draft-path="combat.speed.climb"
+        data-draft-path="combat.baseSpeed.climb"
       >
       <label for="ccSwimSpeed">
         Swimming Speed
@@ -31,7 +31,7 @@
       <input
         id="ccSwimSpeed"
         type="number"
-        data-draft-path="combat.speed.swim"
+        data-draft-path="combat.baseSpeed.swim"
       >
       <label for="ccFlySpeed">
         Flying Speed
@@ -39,7 +39,7 @@
       <input
         id="ccFlySpeed"
         type="number"
-        data-draft-path="combat.speed.fly"
+        data-draft-path="combat.baseSpeed.fly"
       >
       <label for="ccBurrowSpeed">
         Burrowing Speed
@@ -47,7 +47,7 @@
       <input
         id="ccBurrowSpeed"
         type="number"
-        data-draft-path="combat.speed.burrow"
+        data-draft-path="combat.baseSpeed.burrow"
       >
       <output id="walkingSpeedResult">
         RUNNING
@@ -57,7 +57,7 @@
     <script type="module">
       import {
         installWalkingSpeedInputGuard
-      } from "../characterCreator/walkingSpeed.js?v=movement-speed-20260730";
+      } from "../characterCreator/walkingSpeed.js?v=creator-fix-pass-20260730";
 
       const character = {
         combat: {

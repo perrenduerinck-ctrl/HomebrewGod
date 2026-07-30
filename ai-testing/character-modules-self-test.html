@@ -230,7 +230,7 @@
         "sheetPresentation"
       ];
       const [creatorSource, ...moduleSources] = await Promise.all([
-        fetch("../characterCreator.fixed.js?v=phase20-20260727").then((response) => response.text()),
+        fetch("../characterCreator.fixed.js?v=creator-fix-pass-20260730").then((response) => response.text()),
         ...moduleNames.map((name) => {
           return fetch(`../characterCreator/${name}.js?v=phase20-20260727`).then((response) => response.text());
         })

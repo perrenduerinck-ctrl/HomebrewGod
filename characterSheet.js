@@ -70,6 +70,7 @@ const SPELL_REFERENCE_SCAN_LIMIT = 2048;
 const SPELL_SOURCE_SCAN_LIMIT = 32;
 const SPELL_FEAT_RECORD_LIMIT = 128;
 const SPELL_SIGNATURE_TEXT_LIMIT = 256;
+const SPELL_SUMMARY_TEXT_LIMIT = 280;
 
 function isRecord(value) {
   return Boolean(
@@ -231,6 +232,22 @@ function firstText(...values) {
   }
 
   return "";
+}
+
+function getSpellSummaryPreview(
+  ...values
+) {
+  const text = firstText(...values);
+
+  return text.length >
+    SPELL_SUMMARY_TEXT_LIMIT
+      ? `${
+          text.slice(
+            0,
+            SPELL_SUMMARY_TEXT_LIMIT - 3
+          ).trimEnd()
+        }...`
+      : text;
 }
 
 function finiteNumber(value, fallback = 0) {
@@ -4846,7 +4863,7 @@ function createSpellCollectionRecord(reference) {
     concentration:
       spell.concentration === true,
     ritual: spell.ritual === true,
-    summary: firstText(
+    summary: getSpellSummaryPreview(
       spell.summary,
       spell.description
     ),
@@ -9111,7 +9128,11 @@ export function createCharacterSheetView(options = {}) {
         state.spellVisibleCount,
       expandedSpellIds:
         state.expandedSpellIds,
-      spellCache: getSpellCache()
+      spellCache:
+        state.activeTab ===
+          "spells"
+          ? getSpellCache()
+          : state.spellCache
     });
 
     state.root.innerHTML = html;
@@ -9559,21 +9580,30 @@ export function createCharacterSheetView(options = {}) {
     if (action === "tab") {
       const tab = cleanText(button.dataset.characterSheetTab).toLowerCase();
 
-      if ([
+      const ordinaryTab = [
         "actions",
         "abilities",
         "inventory",
         "features",
-        ...(
-          getSpellCache().count ||
+        "description"
+      ].includes(tab);
+      const spellTab =
+        tab === "spells" &&
+        (
           characterHasSpellContent(
             state.character
-          )
-            ? ["spells"]
-            : []
-        ),
-        "description"
-      ].includes(tab)) {
+          ) ||
+          getSpellCache().count > 0
+        );
+
+      if (
+        ordinaryTab ||
+        spellTab
+      ) {
+        if (spellTab) {
+          getSpellCache();
+        }
+
         state.activeTab = tab;
         updateActivePanelOnly();
       }
@@ -10045,7 +10075,6 @@ export function createCharacterSheetView(options = {}) {
     state.expandedSpellIds =
       new Set();
     state.spellCache = null;
-    getSpellCache({ force: true });
     state.isOpen = true;
 
     init();

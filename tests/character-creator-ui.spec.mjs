@@ -3,6 +3,81 @@ import {
   test
 } from "@playwright/test";
 
+test(
+  "character text fields and custom class movement inputs enforce central limits",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/character-field-limits-self-test.html?release=creator-fix-pass-20260730",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "pass"
+      );
+
+    const expectations = [
+      ["#testCharacterName", "100"],
+      ["#testSearch", "100"],
+      ["#testAppearance", "2000"],
+      ["#testBackstory", "10000"],
+      [
+        "#testSpellDescription",
+        "6000"
+      ]
+    ];
+
+    for (
+      const [
+        selector,
+        maximum
+      ] of expectations
+    ) {
+      await expect(
+        page.locator(selector)
+      ).toHaveAttribute(
+        "maxlength",
+        maximum
+      );
+    }
+
+    await expect(
+      page.locator(
+        "[data-character-counter-for='testAppearance']"
+      )
+    ).toContainText("0 / 2000");
+
+    const flyBonus =
+      page.locator(
+        "#ccCustomClassFlyBonus"
+      );
+
+    await expect(flyBonus)
+      .toHaveAttribute("min", "0");
+    await expect(flyBonus)
+      .toHaveAttribute("max", "100");
+    await expect(flyBonus)
+      .toHaveAttribute("step", "1");
+
+    await flyBonus.fill(
+      "30000000000000000000"
+    );
+    await expect(flyBonus)
+      .toHaveValue("100");
+    await flyBonus.press(
+      "Control+A"
+    );
+    await flyBonus.press(
+      "Backspace"
+    );
+    await expect(flyBonus)
+      .toHaveValue("0");
+  }
+);
+
 test.beforeEach(async ({ page }) => {
   await page.goto(
     "ai-testing/character-creator-ui-self-test.html?release=creator-ui-20260729",

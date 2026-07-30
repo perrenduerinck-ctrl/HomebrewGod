@@ -116,6 +116,17 @@ import {
   normalizeSpeciesBackgroundChoices
 } from "./characterCreator/speciesBackgrounds.js";
 import {
+  applyCharacterCreatorFieldLimits,
+  getCharacterFieldLimit,
+  installCharacterCreatorTextInputGuard,
+  normalizeCharacterTextFields,
+  truncateUnicode
+} from "./characterCreator/fieldLimits.js?v=creator-fix-pass-20260730";
+import { applyDerivedMovementSpeeds, normalizeCharacterWalkingSpeed, normalizeMovementSpeed }
+  from "./characterCreator/walkingSpeed.js?v=creator-fix-pass-20260730";
+import { deleteSelectedRoomClass, readCustomClassMovementEffects, renderCustomClassMovementFields }
+  from "./characterCreator/customClassTools.js?v=creator-fix-pass-20260730";
+import {
   countCharacterAttunedItems,
   getCharacterAttunementLimit,
   normalizeInventoryItemBase
@@ -490,6 +501,15 @@ export function createCharacterCreator(options = {}) {
           laterLevelValues: [],
           manualOverride: null,
           lastCalculatedConModifier: 0
+        },
+
+        baseSpeed: {
+          walk: 30,
+          climb: 0,
+          swim: 0,
+          fly: 0,
+          burrow: 0,
+          special: ""
         },
 
         speed: {
@@ -2811,12 +2831,28 @@ export function createCharacterCreator(options = {}) {
     const classEntries = getCharacterClassEntries(
       clean
     );
-    const baseWalkSpeed = safeNumber(clean.combat?.speed?.walk, 30);
-    const featSpeedBonus = calculateSelectedFeatNumericEffect(
-      clean,
-      "speedBonus"
+
+    applyDerivedMovementSpeeds(clean, {
+      classEffects:
+        clean.classMechanics
+          ?.passiveEffects || [],
+      featWalkBonus: Math.max(
+        calculateSelectedFeatNumericEffect(
+          clean,
+          "speedBonus"
+        ),
+        safeNumber(
+          clean.featMechanics
+            ?.speedBonus,
+          0
+        )
+      )
+    });
+
+    const walkSpeed = safeNumber(
+      clean.combat?.speed?.walk,
+      30
     );
-    const walkSpeed = baseWalkSpeed + featSpeedBonus;
 
     clean.classChoices = normalizeClassChoiceMap(
       clean.classChoices ||
@@ -3823,6 +3859,20 @@ export function createCharacterCreator(options = {}) {
             raw.combat?.maxHp ??
             raw.maxHp
           ),
+
+        baseSpeed: {
+          ...empty.combat.baseSpeed,
+          ...(
+            raw.combat?.baseSpeed ||
+            raw.combat?.speed ||
+            {}
+          ),
+          walk: safeNumber(
+            raw.combat?.baseSpeed
+              ?.walk,
+            walkSpeed
+          )
+        },
 
         speed: {
           ...empty.combat.speed,
@@ -11097,6 +11147,14 @@ export function createCharacterCreator(options = {}) {
         raw.toolProficiencies
       ),
 
+      effects:
+        Array.isArray(raw.effects)
+          ? raw.effects.filter((effect) => {
+              return effect &&
+                typeof effect === "object";
+            }).map(cloneData)
+          : [],
+
       skillChoices: {
         choose: Math.max(
           0,
@@ -17414,7 +17472,23 @@ export function createCharacterCreator(options = {}) {
       cursor = cursor[part];
     }
 
-    cursor[parts[parts.length - 1]] = value;
+    const normalizedValue =
+      typeof value === "string"
+        ? truncateUnicode(
+            value,
+            getCharacterFieldLimit({
+              path,
+              type:
+                /description|summary|appearance|traits?|ideals?|bonds?|flaws?|backstory|notes?/i
+                  .test(path)
+                  ? "textarea"
+                  : "text"
+            })
+          )
+        : value;
+
+    cursor[parts[parts.length - 1]] =
+      normalizedValue;
     creatorState.dirty = true;
     markCharacterBuilderAsDraft(
       creatorState.draft
@@ -17744,6 +17818,11 @@ export function createCharacterCreator(options = {}) {
       .hg-character-field textarea {
         min-height: 120px;
         resize: vertical;
+      }
+
+      .hg-character-text-counter {
+        display: block; color: #aeb8d4; font-size: 12px;
+        text-align: right;
       }
 
       .hg-character-wide-field {
@@ -18300,7 +18379,10 @@ export function createCharacterCreator(options = {}) {
   }
 
   function sanitizeDraftStrings(character) {
-    const clean = normalizeCharacter(character);
+    const clean =
+      normalizeCharacterTextFields(
+        normalizeCharacter(character)
+      );
     const primaryClass = getPrimaryClassEntry(clean);
 
     clean.identity.name = getSafeCharacterName(clean);
@@ -18423,7 +18505,12 @@ export function createCharacterCreator(options = {}) {
     return {
       version: 2,
       persistedAtMillis: Date.now(),
-      draft: creatorState.draft,
+      draft:
+        normalizeCharacterTextFields(
+          cloneData(
+            creatorState.draft
+          )
+        ),
       currentCharacterId:
         creatorState.currentCharacterId,
       currentStepId:
@@ -18808,8 +18895,12 @@ export function createCharacterCreator(options = {}) {
     creatorState.draft.identity.size =
       template.size || "medium";
 
-    creatorState.draft.combat.speed.walk =
-      safeNumber(template.speed, 30);
+    creatorState.draft.combat
+      .baseSpeed.walk =
+        normalizeMovementSpeed(
+          template.speed,
+          30
+        );
 
     applyCompatibilityAliases(
       creatorState.draft
@@ -19051,6 +19142,18 @@ export function createCharacterCreator(options = {}) {
     if (valueType === "integer") {
       value = Math.round(
         safeNumber(rawValue, 0)
+      );
+    }
+
+    if (
+      /^combat\.baseSpeed\.(?:walk|climb|swim|fly|burrow)$/
+        .test(path)
+    ) {
+      value = normalizeMovementSpeed(
+        rawValue,
+        path.endsWith(".walk")
+          ? 30
+          : 0
       );
     }
 
@@ -19525,6 +19628,27 @@ export function createCharacterCreator(options = {}) {
 
     const extra =
       options.extra || "";
+    const textLimit =
+      [
+        "text",
+        "search",
+        "url",
+        "textarea"
+      ].includes(type)
+        ? getCharacterFieldLimit({
+            id,
+            path,
+            type,
+            category:
+              options.fieldCategory,
+            maxLength:
+              options.maxLength
+          })
+        : null;
+    const textLimitAttributes =
+      textLimit
+        ? `maxlength="${textLimit}" data-character-field-limit="${textLimit}"`
+        : "";
 
     const wideClass =
       options.wide === true
@@ -19546,6 +19670,7 @@ export function createCharacterCreator(options = {}) {
                 : ""
             }
             placeholder="${escapeHtml(placeholder)}"
+            ${textLimitAttributes}
             ${extra}
           >${escapeHtml(value ?? "")}</textarea>
         </div>
@@ -19573,6 +19698,7 @@ export function createCharacterCreator(options = {}) {
           }
           value="${escapeHtml(value ?? "")}"
           placeholder="${escapeHtml(placeholder)}"
+          ${textLimitAttributes}
           ${extra}
         >
       </div>
@@ -19826,6 +19952,9 @@ export function createCharacterCreator(options = {}) {
     }
 
     refreshWizardElements();
+    applyCharacterCreatorFieldLimits(
+      W.root
+    );
     connectWizardEvents();
 
     return true;
@@ -20268,6 +20397,9 @@ export function createCharacterCreator(options = {}) {
     }
 
     refreshWizardElements();
+    applyCharacterCreatorFieldLimits(
+      W.root
+    );
   }
 
   async function runCharacterCreatorAction(
@@ -22925,15 +23057,12 @@ export function createCharacterCreator(options = {}) {
 
     creatorState.draft
       .combat
-      .speed
+      .baseSpeed
       .walk =
-        Math.max(
-          0,
-          safeNumber(
-            subrace?.speed ??
-            species.speed,
-            30
-          )
+        normalizeMovementSpeed(
+          subrace?.speed ??
+          species.speed,
+          30
         );
 
     const traits = [
@@ -23420,15 +23549,12 @@ export function createCharacterCreator(options = {}) {
 
     creatorState.draft
       .combat
-      .speed
+      .baseSpeed
       .walk =
-        Math.max(
-          0,
-          safeNumber(
-            $("ccCustomSpeciesSpeed")
-              ?.value,
-            30
-          )
+        normalizeMovementSpeed(
+          $("ccCustomSpeciesSpeed")
+            ?.value,
+          30
         );
 
     creatorState.draft
@@ -24213,7 +24339,7 @@ export function createCharacterCreator(options = {}) {
 
           creatorState.draft
             .combat
-            .speed
+            .baseSpeed
             .walk,
 
           {
@@ -25219,6 +25345,8 @@ export function createCharacterCreator(options = {}) {
           .classProgression
           .totalLevel
       );
+    const movementEffects =
+      readCustomClassMovementEffects($);
 
     const customClass =
       normalizeClassTemplate(
@@ -25272,6 +25400,9 @@ export function createCharacterCreator(options = {}) {
               $("ccCustomClassTools")
                 ?.value
             ),
+
+          effects:
+            movementEffects,
 
           skillChoices: {
             choose: Math.max(
@@ -29512,6 +29643,42 @@ export function createCharacterCreator(options = {}) {
             )
         });
 
+        (Array.isArray(template?.effects)
+          ? template.effects.filter((effect) =>
+              ["speedBonus", "speedBonusByLevel"].includes(cleanString(effect?.type)))
+          : []
+        ).forEach((effect, effectIndex) => {
+          const classLevel = getClassEntryLevel(
+            classEntry,
+            1
+          );
+          const classFeature = {
+            id: "class-template-effects",
+            name: `${cleanString(
+              classEntry.className,
+              template?.name || "Class"
+            )} movement`,
+            classId: cleanString(
+              classEntry.classId,
+              template?.id
+            ),
+            className: cleanString(
+              classEntry.className,
+              template?.name
+            )
+          };
+
+          applyEffect(effect, {
+            feature: classFeature,
+            classEntry,
+            classEntryId,
+            classLevel,
+            choiceKey: `${classEntryId}:template-effect-${effectIndex + 1}`,
+            sourceName: `class-template:${classEntryId}`,
+            option: ""
+          });
+        });
+
         features.forEach((feature) => {
           const classLevel = Math.max(
             1,
@@ -32495,6 +32662,19 @@ export function createCharacterCreator(options = {}) {
                 .savingThrows
             ) ||
             "Not specified";
+          const isRoomTemplate = Boolean(
+            classData.docId &&
+            creatorState.roomClassCache.some(
+              (cachedClass) => {
+                return cleanString(cachedClass?.docId) ===
+                  cleanString(classData.docId);
+              }
+            )
+          );
+          const canDeleteSelectedTemplate =
+            selected &&
+            isRoomTemplate &&
+            deps.getCurrentIsDM?.() === true;
 
           return wizardChoiceCard(
             classData.name ||
@@ -32549,6 +32729,19 @@ export function createCharacterCreator(options = {}) {
               <p>
                 ${renderRulesetMetadata(classData, "class")}
               </p>
+
+              ${
+                canDeleteSelectedTemplate
+                  ? `
+                    <button type="button" class="danger"
+                      data-cc-action="delete-room-class"
+                      data-class-doc-id="${escapeHtml(classData.docId)}"
+                      data-class-name="${escapeHtml(classData.name || "Unnamed Class")}">
+                      Delete ${escapeHtml(classData.name || "Unnamed Class")}
+                    </button>
+                  `
+                  : ""
+              }
             `,
 
             selected
@@ -32736,6 +32929,11 @@ export function createCharacterCreator(options = {}) {
               'min="1" max="20" step="1"'
           }
         )}
+
+        ${renderCustomClassMovementFields({
+          template: customTemplate,
+          wizardField
+        })}
 
         ${wizardField(
           "Primary Abilities",
@@ -33206,6 +33404,56 @@ export function createCharacterCreator(options = {}) {
       );
 
       renderCreatorView();
+    }
+  }
+
+  async function handleSection12DeleteRoomClass(
+    ...values
+  ) {
+    try {
+      const button = findSection12ActionElement(...values);
+      const result = await deleteSelectedRoomClass({
+        deps,
+        isDm: deps.getCurrentIsDM?.() === true,
+        roomCode: getRoomCode(),
+        collectionName: getSection19CollectionName(
+          "classCollectionName",
+          "classTemplatesCollectionName",
+          "classes"
+        ),
+        documentId: cleanString(button?.dataset?.classDocId),
+        selectedDocumentId: cleanString(
+          getSelectedClassTemplate()?.docId
+        ),
+        roomClassCache: creatorState.roomClassCache,
+        confirmDelete: (message) => window.confirm(message)
+      });
+
+      if (!result.deleted) {
+        return false;
+      }
+
+      creatorState.roomClassCache = result.cache;
+      setStatus(
+        `Deleted room class "${result.name}". Existing character snapshots were kept.`
+      );
+      renderCreatorView();
+      return true;
+    } catch (error) {
+      console.error(
+        "Could not delete room class:",
+        error
+      );
+      setStatus(
+        /^(Only|Select)/.test(error?.message || "")
+          ? error.message
+          : friendlyServiceError(error, {
+              service: "class library",
+              action: "delete the selected room class"
+            })
+      );
+      renderCreatorView();
+      return false;
     }
   }
 
@@ -33974,6 +34222,11 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "choose-class",
     handleSection12ChooseClass
+  );
+
+  registerCharacterCreatorAction(
+    "delete-room-class",
+    handleSection12DeleteRoomClass
   );
 
   registerCharacterCreatorAction(
@@ -35729,14 +35982,27 @@ export function createCharacterCreator(options = {}) {
 
       <h3>Movement Speeds</h3>
 
+      <p class="small">
+        Enter base speeds here. Class, subclass, and feat bonuses are added automatically. Final speeds are capped at 100 feet.
+      </p>
+
+      <div class="hg-character-current-choice">
+        <b>Final movement:</b>
+        Walk ${draft.combat.speed.walk} ft.,
+        climb ${draft.combat.speed.climb} ft.,
+        swim ${draft.combat.speed.swim} ft.,
+        fly ${draft.combat.speed.fly} ft.,
+        burrow ${draft.combat.speed.burrow} ft.
+      </div>
+
       <div class="hg-character-field-grid three">
         ${wizardField(
-          "Walking Speed",
+          "Base Walking Speed",
           "ccWalkSpeed",
-          draft.combat.speed.walk,
+          draft.combat.baseSpeed.walk,
           {
             type: "number",
-            path: "combat.speed.walk",
+            path: "combat.baseSpeed.walk",
             valueType: "number",
             extra:
               'min="0" max="100" step="1"'
@@ -35744,12 +36010,12 @@ export function createCharacterCreator(options = {}) {
         )}
 
         ${wizardField(
-          "Climbing Speed",
+          "Base Climbing Speed",
           "ccClimbSpeed",
-          draft.combat.speed.climb,
+          draft.combat.baseSpeed.climb,
           {
             type: "number",
-            path: "combat.speed.climb",
+            path: "combat.baseSpeed.climb",
             valueType: "number",
             extra:
               'min="0" max="100" step="1"'
@@ -35757,12 +36023,12 @@ export function createCharacterCreator(options = {}) {
         )}
 
         ${wizardField(
-          "Swimming Speed",
+          "Base Swimming Speed",
           "ccSwimSpeed",
-          draft.combat.speed.swim,
+          draft.combat.baseSpeed.swim,
           {
             type: "number",
-            path: "combat.speed.swim",
+            path: "combat.baseSpeed.swim",
             valueType: "number",
             extra:
               'min="0" max="100" step="1"'
@@ -35770,12 +36036,12 @@ export function createCharacterCreator(options = {}) {
         )}
 
         ${wizardField(
-          "Flying Speed",
+          "Base Flying Speed",
           "ccFlySpeed",
-          draft.combat.speed.fly,
+          draft.combat.baseSpeed.fly,
           {
             type: "number",
-            path: "combat.speed.fly",
+            path: "combat.baseSpeed.fly",
             valueType: "number",
             extra:
               'min="0" max="100" step="1"'
@@ -35783,12 +36049,12 @@ export function createCharacterCreator(options = {}) {
         )}
 
         ${wizardField(
-          "Burrowing Speed",
+          "Base Burrowing Speed",
           "ccBurrowSpeed",
-          draft.combat.speed.burrow,
+          draft.combat.baseSpeed.burrow,
           {
             type: "number",
-            path: "combat.speed.burrow",
+            path: "combat.baseSpeed.burrow",
             valueType: "number",
             extra:
               'min="0" max="100" step="1"'
@@ -35802,7 +36068,7 @@ export function createCharacterCreator(options = {}) {
             draft.combat.speed.special
           ),
           {
-            path: "combat.speed.special",
+            path: "combat.baseSpeed.special",
             placeholder:
               "Hover, teleport, conditional movement..."
           }
@@ -52256,10 +52522,6 @@ export function createCharacterCreator(options = {}) {
                     .speed
                     .walk,
                   30
-                ) +
-                calculateSelectedFeatNumericEffect(
-                  draft,
-                  "speedBonus"
                 )
               )}
               ft.
@@ -54565,6 +54827,9 @@ export function createCharacterCreator(options = {}) {
 
     refreshElements();
     ensureWizardStyles();
+    installCharacterCreatorTextInputGuard({
+      root: document
+    });
     connectDraftPersistenceLifecycle();
     connectPopstateRouting();
     connectSection19PermanentListeners();
