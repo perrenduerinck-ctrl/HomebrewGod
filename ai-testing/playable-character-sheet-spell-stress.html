@@ -40,7 +40,7 @@
     <script type="module">
       import {
         createCharacterSheetView
-      } from "../characterSheet.js?v=spell-performance-20260730";
+      } from "../characterSheet.js?v=spell-hard-limit-20260730";
       import {
         DEFAULT_SPELLS
       } from "../defaultSpells.js?v=spell-performance-20260730";
@@ -55,6 +55,37 @@
             return index % 3 === 0;
           }
         ).map((spell) => spell.id);
+      const staleSourceCount =
+        1500;
+      const staleClassSources =
+        Object.fromEntries(
+          Array.from(
+            {
+              length:
+                staleSourceCount
+            },
+            (_, index) => {
+              return [
+                `stale-source-${index}`,
+                {
+                  classId:
+                    "archived-wizard",
+                  className:
+                    "Archived Wizard",
+                  knownSpellIds: [
+                    "fire-bolt",
+                    "fire-bolt",
+                    "shield"
+                  ],
+                  preparedSpellIds: [
+                    "shield",
+                    "shield"
+                  ]
+                }
+              ];
+            }
+          )
+        );
       const character = {
         id: "spell-stress-fixture",
         identity: {
@@ -114,6 +145,7 @@
             9: 1
           },
           classSources: {
+            ...staleClassSources,
             "wizard-stress": {
               classId: "wizard",
               className: "Wizard",
@@ -151,6 +183,7 @@
       window.__SPELL_STRESS_TEST__ = {
         totalSpells:
           DEFAULT_SPELLS.length,
+        staleSourceCount,
         ping() {
           return "responsive";
         }

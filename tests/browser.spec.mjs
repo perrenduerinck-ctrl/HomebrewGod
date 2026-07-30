@@ -1791,10 +1791,10 @@ test(
 );
 
 test(
-  "spell stress fixture keeps all 340 catalog spells responsive",
+  "spell stress fixture keeps all 340 catalog spells and stale sources responsive",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet-spell-stress.html?release=spell-performance-20260730",
+      "ai-testing/playable-character-sheet-spell-stress.html?release=spell-hard-limit-20260730",
       {
         waitUntil:
           "domcontentloaded"
@@ -1824,6 +1824,15 @@ test(
       });
 
     expect(totalSpells).toBe(340);
+    await expect.poll(
+      async () => {
+        return page.evaluate(() => {
+          return window
+            .__SPELL_STRESS_TEST__
+            .staleSourceCount;
+        });
+      }
+    ).toBe(1500);
 
     const header =
       page.locator(
@@ -1851,13 +1860,13 @@ test(
       library.locator(
         ".hg-sheet-spell-card"
       )
-    ).toHaveCount(40);
+    ).toHaveCount(12);
     await expect(
       library.locator(
         "[data-spell-results-meta]"
       )
     ).toContainText(
-      "40 shown"
+      "12 shown"
     );
     await expect(
       library.locator(
@@ -1874,7 +1883,7 @@ test(
     await library.getByRole(
       "button",
       {
-        name: "Show 40 more spells",
+        name: "Show 12 more spells",
         exact: true
       }
     ).click();
@@ -1882,7 +1891,24 @@ test(
       library.locator(
         ".hg-sheet-spell-card"
       )
-    ).toHaveCount(80);
+    ).toHaveCount(24);
+    await expect(
+      page.getByRole("heading", {
+        name: "Catalog Arcanist"
+      })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "Wizard",
+        exact: true
+      })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", {
+        name: "Archived spell sources",
+        exact: true
+      })
+    ).toBeVisible();
 
     const search =
       library.locator(
@@ -1917,7 +1943,7 @@ test(
       library.locator(
         ".hg-sheet-spell-card"
       )
-    ).toHaveCount(40);
+    ).toHaveCount(12);
 
     await page.setViewportSize({
       width: 390,

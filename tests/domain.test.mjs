@@ -2135,3 +2135,126 @@ test(
     );
   }
 );
+
+test(
+  "playable sheet bounds stale spell sources while preserving the active multiclass source",
+  () => {
+    const staleClassSources =
+      Object.fromEntries(
+        Array.from(
+          { length: 1500 },
+          (_, index) => {
+            return [
+              `stale-${index}`,
+              {
+                classId:
+                  "archived-wizard",
+                className:
+                  "Archived Wizard",
+                knownSpellIds: [
+                  "fire-bolt",
+                  "fire-bolt",
+                  "shield"
+                ],
+                preparedSpellIds: [
+                  "shield"
+                ]
+              }
+            ];
+          }
+        )
+      );
+    const character = {
+      id: "stale-spell-source-test",
+      identity: {
+        name: "Bounded Arcanist"
+      },
+      classProgression: {
+        totalLevel: 20,
+        classes: [
+          {
+            entryId:
+              "active-wizard",
+            classId: "wizard",
+            className: "Wizard",
+            level: 20
+          }
+        ]
+      },
+      magic: {
+        knownSpellIds:
+          Array(50000).fill(
+            "magic-missile"
+          ),
+        classSources: {
+          ...staleClassSources,
+          "active-wizard": {
+            classId: "wizard",
+            className: "Wizard",
+            knownSpellIds: [
+              "wish"
+            ]
+          }
+        }
+      }
+    };
+    const startedAt =
+      performance.now();
+    const spellCache =
+      createCharacterSpellCache(
+        character
+      );
+    const html =
+      createCharacterSheetView()
+        .renderCharacterSheetHtml(
+          character,
+          {
+            activeTab:
+              "spells",
+            spellCache,
+            sheetContext: {
+              characterId:
+                character.id
+            }
+          }
+        );
+    const elapsed =
+      performance.now() -
+      startedAt;
+    const wish =
+      spellCache.spells.find(
+        (spell) => {
+          return (
+            spell.id === "wish"
+          );
+        }
+      );
+
+    assert.ok(
+      elapsed < 3000,
+      `bounded spell render took ${elapsed.toFixed(1)} ms`
+    );
+    assert.ok(wish);
+    assert.ok(
+      wish.sources.includes(
+        "Wizard"
+      )
+    );
+    assert.match(
+      html,
+      /<h2>Wizard<\/h2>/
+    );
+    assert.match(
+      html,
+      /Archived spell sources/
+    );
+    assert.equal(
+      (
+        html.match(
+          /<h2>Archived Wizard<\/h2>/g
+        ) || []
+      ).length,
+      31
+    );
+  }
+);

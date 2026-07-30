@@ -64,8 +64,12 @@ const INVENTORY_FILTER_OPTIONS =
   ]);
 
 const SPELL_SEARCH_DEBOUNCE_MS = 200;
-const SPELL_INITIAL_VISIBLE_COUNT = 40;
-const SPELL_VISIBLE_COUNT_INCREMENT = 40;
+const SPELL_INITIAL_VISIBLE_COUNT = 12;
+const SPELL_VISIBLE_COUNT_INCREMENT = 12;
+const SPELL_REFERENCE_SCAN_LIMIT = 2048;
+const SPELL_SOURCE_SCAN_LIMIT = 32;
+const SPELL_FEAT_RECORD_LIMIT = 128;
+const SPELL_SIGNATURE_TEXT_LIMIT = 256;
 
 function isRecord(value) {
   return Boolean(
@@ -73,6 +77,126 @@ function isRecord(value) {
     typeof value === "object" &&
     !Array.isArray(value)
   );
+}
+
+function getBoundedRecordEntries(
+  value,
+  limit =
+    SPELL_SOURCE_SCAN_LIMIT
+) {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const entries = [];
+
+  for (const key in value) {
+    if (
+      !Object.hasOwn(
+        value,
+        key
+      )
+    ) {
+      continue;
+    }
+
+    entries.push([
+      key,
+      value[key]
+    ]);
+
+    if (
+      entries.length >= limit
+    ) {
+      break;
+    }
+  }
+
+  return entries;
+}
+
+function getBoundedClassSourceEntries(
+  character,
+  limit =
+    SPELL_SOURCE_SCAN_LIMIT
+) {
+  const sources =
+    character?.magic
+      ?.classSources;
+
+  if (!isRecord(sources)) {
+    return [];
+  }
+
+  const entries = [];
+  const includedKeys =
+    new Set();
+  const includeKey = (value) => {
+    const key = cleanText(value);
+
+    if (
+      !key ||
+      includedKeys.has(key) ||
+      !Object.hasOwn(
+        sources,
+        key
+      )
+    ) {
+      return false;
+    }
+
+    includedKeys.add(key);
+    entries.push([
+      key,
+      sources[key]
+    ]);
+    return true;
+  };
+
+  asArray(
+    character?.classProgression
+      ?.classes
+  ).some((entry) => {
+    [
+      entry?.entryId,
+      entry?.classEntryId,
+      entry?.classId
+    ].some(includeKey);
+
+    return (
+      entries.length >= limit
+    );
+  });
+
+  if (entries.length >= limit) {
+    return entries;
+  }
+
+  for (const key in sources) {
+    if (
+      !Object.hasOwn(
+        sources,
+        key
+      ) ||
+      includedKeys.has(key)
+    ) {
+      continue;
+    }
+
+    includedKeys.add(key);
+    entries.push([
+      key,
+      sources[key]
+    ]);
+
+    if (
+      entries.length >= limit
+    ) {
+      break;
+    }
+  }
+
+  return entries;
 }
 
 function asArray(value) {
@@ -4815,22 +4939,47 @@ export function collectCharacterSpells(character) {
     ? character.magic
     : {};
   const records = new Map();
-  const classSources = isRecord(magic.classSources)
-    ? Object.entries(magic.classSources)
-    : [];
+  const classSources =
+    getBoundedClassSourceEntries(
+      character
+    );
 
   const addMany = (
     references,
     statuses,
     sources
   ) => {
-    asArray(references).forEach((reference) => {
-      addSpellReference(
-        records,
-        reference,
-        { statuses, sources }
-      );
-    });
+    const seenReferences = new Set();
+
+    asArray(references)
+      .slice(
+        0,
+        SPELL_REFERENCE_SCAN_LIMIT
+      )
+      .forEach((reference) => {
+        const referenceId =
+          getSpellReferenceId(
+            reference
+          );
+
+        if (
+          !referenceId ||
+          seenReferences.has(
+            referenceId
+          )
+        ) {
+          return;
+        }
+
+        seenReferences.add(
+          referenceId
+        );
+        addSpellReference(
+          records,
+          reference,
+          { statuses, sources }
+        );
+      });
   };
 
   addMany(
@@ -4901,21 +5050,44 @@ export function collectCharacterSpells(character) {
         isRecord(
           source?.mysticArcanumSpellIds
         )
-          ? Object.values(
-              source.mysticArcanumSpellIds
-            )
+          ? getBoundedRecordEntries(
+              source.mysticArcanumSpellIds,
+              SPELL_REFERENCE_SCAN_LIMIT
+            ).map(([, reference]) => {
+              return reference;
+            })
           : [],
         ["Known", "Mystic Arcanum"],
         [sourceLabel]
       );
 
-      const expandedSpells = isRecord(
-        source?.expandedSpells
-      )
-        ? Object.values(
-            source.expandedSpells
-          ).flat()
-        : [];
+      const expandedSpells = [];
+
+      if (
+        isRecord(
+          source?.expandedSpells
+        )
+      ) {
+        getBoundedRecordEntries(
+          source.expandedSpells,
+          SPELL_SOURCE_SCAN_LIMIT
+        ).some(([, references]) => {
+          const remaining =
+            SPELL_REFERENCE_SCAN_LIMIT -
+            expandedSpells.length;
+
+          if (remaining <= 0) {
+            return true;
+          }
+
+          expandedSpells.push(
+            ...asArray(
+              references
+            ).slice(0, remaining)
+          );
+          return false;
+        });
+      }
 
       expandedSpells.forEach((reference) => {
         addSpellReference(
@@ -4942,6 +5114,10 @@ export function collectCharacterSpells(character) {
   );
 
   asArray(magic.innateSpells)
+    .slice(
+      0,
+      SPELL_REFERENCE_SCAN_LIMIT
+    )
     .forEach((spell) => {
       const source = firstText(
         spell?.sourceLabel,
@@ -5002,7 +5178,9 @@ export function collectCharacterSpells(character) {
   });
 
   if (isRecord(magic.featSources)) {
-    Object.entries(magic.featSources)
+    getBoundedRecordEntries(
+      magic.featSources
+    )
       .forEach(([sourceKey, source]) => {
         const sourceLabel = firstText(
           source?.featName,
@@ -5018,6 +5196,10 @@ export function collectCharacterSpells(character) {
           [sourceLabel]
         );
         asArray(source?.grants)
+          .slice(
+            0,
+            SPELL_REFERENCE_SCAN_LIMIT
+          )
           .forEach((grant) => {
             addSpellReference(
               records,
@@ -5038,6 +5220,10 @@ export function collectCharacterSpells(character) {
   }
 
   asArray(magic.customSpells)
+    .slice(
+      0,
+      SPELL_REFERENCE_SCAN_LIMIT
+    )
     .forEach((spell) => {
       addSpellReference(
         records,
@@ -5201,16 +5387,25 @@ export function characterHasSpellContent(character) {
   const magic = isRecord(character?.magic)
     ? character.magic
     : {};
-  const classSources = Object.values(
-    isRecord(magic.classSources)
-      ? magic.classSources
-      : {}
-  );
-  const featSources = Object.values(
-    isRecord(magic.featSources)
-      ? magic.featSources
-      : {}
-  );
+  const classSources =
+    getBoundedClassSourceEntries(
+      character,
+      1
+    );
+  const featSources =
+    getBoundedRecordEntries(
+      magic.featSources,
+      SPELL_SOURCE_SCAN_LIMIT
+    ).map(([, source]) => {
+      return source;
+    });
+  const slotEntries =
+    getBoundedRecordEntries(
+      magic.slots,
+      10
+    ).map(([, value]) => {
+      return value;
+    });
   const hasDirectSpellReferences = [
     magic.knownSpellIds,
     magic.preparedSpellIds,
@@ -5231,11 +5426,7 @@ export function characterHasSpellContent(character) {
         asArray(source?.spellRecords).length
       );
     }) ||
-    Object.values(
-      isRecord(magic.slots)
-        ? magic.slots
-        : {}
-    ).some((value) => {
+    slotEntries.some((value) => {
       return finiteNumber(value, 0) > 0;
     }) ||
     finiteNumber(
@@ -5286,62 +5477,108 @@ export function createCharacterSpellCache(character) {
   };
 }
 
+function createBoundedSpellSignature(
+  value,
+  depth = 0
+) {
+  if (
+    value == null ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value.slice(
+      0,
+      SPELL_SIGNATURE_TEXT_LIMIT
+    );
+  }
+
+  if (depth >= 4) {
+    return getSpellReferenceId(
+      value
+    );
+  }
+
+  if (Array.isArray(value)) {
+    return {
+      length: value.length,
+      values: value.slice(
+        0,
+        SPELL_REFERENCE_SCAN_LIMIT
+      ).map((entry) => {
+        return createBoundedSpellSignature(
+          entry,
+          depth + 1
+        );
+      })
+    };
+  }
+
+  if (isRecord(value)) {
+    const entries =
+      getBoundedRecordEntries(
+        value,
+        SPELL_SOURCE_SCAN_LIMIT + 1
+      );
+    const truncated = (
+      entries.length >
+      SPELL_SOURCE_SCAN_LIMIT
+    );
+
+    return {
+      truncated,
+      entries: entries.slice(
+        0,
+        SPELL_SOURCE_SCAN_LIMIT
+      ).map(([key, entry]) => {
+        return [
+          key,
+          createBoundedSpellSignature(
+            entry,
+            depth + 1
+          )
+        ];
+      })
+    };
+  }
+
+  return "";
+}
+
 function createSpellCollectionSignature(character) {
   const magic = isRecord(character?.magic)
     ? character.magic
     : {};
-  const classSources = isRecord(
-    magic.classSources
-  )
-    ? Object.fromEntries(
-        Object.entries(
-          magic.classSources
-        ).map(([key, source]) => {
-          return [
-            key,
-            {
-              classId: source?.classId,
-              className: source?.className,
-              subclassName:
-                source?.subclassName,
-              cantripIds:
-                source?.cantripIds,
-              knownSpellIds:
-                source?.knownSpellIds,
-              preparedSpellIds:
-                source?.preparedSpellIds,
-              spellbookSpellIds:
-                source?.spellbookSpellIds,
-              alwaysPreparedSpellIds:
-                source?.alwaysPreparedSpellIds,
-              subclassSpellIds:
-                source?.subclassSpellIds,
-              mysticArcanumSpellIds:
-                source?.mysticArcanumSpellIds,
-              expandedSpells:
-                source?.expandedSpells
-            }
-          ];
-        })
+  const classSources =
+    Object.fromEntries(
+      getBoundedClassSourceEntries(
+        character,
+        SPELL_SOURCE_SCAN_LIMIT + 1
       )
-    : {};
+    );
 
-  return JSON.stringify({
-    knownSpellIds:
-      magic.knownSpellIds,
-    preparedSpellIds:
-      magic.preparedSpellIds,
-    classSources,
-    innateSpells:
-      magic.innateSpells,
-    featSources:
-      magic.featSources,
-    customSpells:
-      magic.customSpells,
-    featSpellcasting:
-      character?.featMechanics
-        ?.spellcasting
-  });
+  return JSON.stringify(
+    createBoundedSpellSignature({
+      knownSpellIds:
+        magic.knownSpellIds,
+      preparedSpellIds:
+        magic.preparedSpellIds,
+      classSources:
+        classSources,
+      innateSpells:
+        magic.innateSpells,
+      featSources:
+        magic.featSources,
+      customSpells:
+        magic.customSpells,
+      featSpellcasting:
+        character?.featMechanics
+          ?.spellcasting
+    })
+  );
 }
 
 function renderSpellSourceSummary(
@@ -5395,8 +5632,24 @@ function renderSpellSlots(magic) {
   const usage = isRecord(magic?.slotUsage?.normal)
     ? magic.slotUsage.normal
     : {};
-  const levels = Object.keys(slots)
-    .filter((level) => optionalNumber(slots[level]) !== null)
+  const levels =
+    getBoundedRecordEntries(
+      slots,
+      10
+    ).map(([level]) => {
+      return level;
+    }).filter((level) => {
+      const numericLevel =
+        finiteNumber(level, 0);
+
+      return (
+        numericLevel >= 1 &&
+        numericLevel <= 9 &&
+        optionalNumber(
+          slots[level]
+        ) !== null
+      );
+    })
     .sort((a, b) => finiteNumber(a) - finiteNumber(b));
 
   if (!levels.length) {
@@ -5443,16 +5696,38 @@ function renderSpellSlots(magic) {
 function getFeatSpellRecords(character) {
   const direct = asArray(
     character?.featMechanics?.spellcasting
+  ).slice(
+    0,
+    SPELL_FEAT_RECORD_LIMIT
   );
-  const fromSources = isRecord(
-    character?.magic?.featSources
-  )
-    ? Object.values(
-        character.magic.featSources
-      ).flatMap((source) => {
-        return asArray(source?.spellRecords);
-      })
-    : [];
+  const fromSources = [];
+
+  if (
+    isRecord(
+      character?.magic?.featSources
+    )
+  ) {
+    getBoundedRecordEntries(
+      character.magic.featSources,
+      SPELL_SOURCE_SCAN_LIMIT
+    ).some(([, source]) => {
+      const remaining =
+        SPELL_FEAT_RECORD_LIMIT -
+        fromSources.length;
+
+      if (remaining <= 0) {
+        return true;
+      }
+
+      fromSources.push(
+        ...asArray(
+          source?.spellRecords
+        ).slice(0, remaining)
+      );
+      return false;
+    });
+  }
+
   const records = new Map();
 
   [...direct, ...fromSources]
@@ -5944,14 +6219,30 @@ function renderSpellPanel(
   } = {}
 ) {
   const magic = isRecord(character?.magic) ? character.magic : {};
-  const classSources = isRecord(magic.classSources)
-    ? Object.entries(magic.classSources)
-    : [];
+  const boundedClassSources =
+    getBoundedClassSourceEntries(
+      character,
+      SPELL_SOURCE_SCAN_LIMIT + 1
+    );
+  const classSources =
+    boundedClassSources.slice(
+      0,
+      SPELL_SOURCE_SCAN_LIMIT
+    );
+  const hasOmittedClassSources = (
+    boundedClassSources.length >
+    classSources.length
+  );
   const pactSlots = clampInteger(magic?.pactMagic?.slots, 0, 0);
   const pactUsed = Math.min(pactSlots, clampInteger(magic?.slotUsage?.pact, 0, 0));
   const pactSources = (
     asArray(magic.pactMagicSources).length
-      ? asArray(magic.pactMagicSources)
+      ? asArray(
+          magic.pactMagicSources
+        ).slice(
+          0,
+          SPELL_SOURCE_SCAN_LIMIT
+        )
       : pactSlots
         ? [{
           classEntryId: "legacy:pact-magic",
@@ -6006,6 +6297,16 @@ function renderSpellPanel(
               ])}
             </article>
           `}
+        ${hasOmittedClassSources
+          ? `
+            <article class="hg-sheet-card">
+              <h2>Archived spell sources</h2>
+              <p class="hg-sheet-muted">
+                Additional malformed or stale source records were skipped to keep this sheet responsive.
+              </p>
+            </article>
+          `
+          : ""}
 
         <article class="hg-sheet-card">
           <h2>Spell Slots</h2>
@@ -8448,18 +8749,26 @@ export function createCharacterSheetView(options = {}) {
   };
 
   function getSpellCache({
-    force = false
+    force = false,
+    verify = false
   } = {}) {
+    const shouldCreateSignature =
+      force ||
+      verify ||
+      !state.spellCache;
     const signature =
-      createSpellCollectionSignature(
-        state.character
-      );
+      shouldCreateSignature
+        ? createSpellCollectionSignature(
+            state.character
+          )
+        : state.spellCache.signature;
 
     if (
       force ||
       !state.spellCache ||
-      state.spellCache.signature !==
-        signature
+      (verify &&
+        state.spellCache.signature !==
+          signature)
     ) {
       state.spellCache = {
         signature,
@@ -9157,7 +9466,9 @@ export function createCharacterSheetView(options = {}) {
       : deps.getCharacter() || state.character;
 
     state.character = cloneSnapshot(source);
-    getSpellCache();
+    getSpellCache({
+      verify: true
+    });
     updateSaveStatusOnly();
     return updateActivePanelOnly();
   }
