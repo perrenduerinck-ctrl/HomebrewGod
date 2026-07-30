@@ -47,6 +47,7 @@ import {
   collectCharacterFeatures,
   collectCharacterInventory,
   collectCharacterSpells,
+  createCharacterSpellCache,
   filterCharacterSpells,
   createCharacterSheetView
 } from "../characterSheet.js";
@@ -947,7 +948,7 @@ test(
       );
     const screenHtml =
       html.match(
-        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+        /<div class="hg-sheet-screen-panel">([\s\S]*)<\/div>\s*<\/div>\s*$/
       )?.[1] || "";
 
     assert.equal(
@@ -1006,7 +1007,7 @@ test(
       );
     const searchedScreenHtml =
       searchedHtml.match(
-        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+        /<div class="hg-sheet-screen-panel">([\s\S]*)<\/div>\s*<\/div>\s*$/
       )?.[1] || "";
 
     assert.match(
@@ -1671,7 +1672,7 @@ test(
         );
     const screenHtml =
       html.match(
-        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
+        /<div class="hg-sheet-screen-panel">([\s\S]*)<\/div>\s*<\/div>\s*$/
       )?.[1] || "";
 
     assert.match(
@@ -1861,6 +1862,12 @@ test(
       byId.get("fire-bolt")
         .description.length > 20
     );
+    assert.ok(
+      byId.get("fire-bolt")
+        .searchText.includes(
+          "evocation"
+        )
+    );
     assert.deepEqual(
       byId.get("shield").statuses,
       [
@@ -1981,6 +1988,24 @@ test(
       ["healing-word"]
     );
 
+    const spellCache =
+      createCharacterSpellCache(
+        character
+      );
+
+    assert.equal(
+      spellCache.count,
+      spells.length
+    );
+    assert.equal(
+      spellCache.groupsByLevel[0]
+        .some((spell) => {
+          return spell.id ===
+            "fire-bolt";
+        }),
+      true
+    );
+
     const html =
       createCharacterSheetView()
         .renderCharacterSheetHtml(
@@ -1995,30 +2020,44 @@ test(
             }
           }
         );
-    const screenHtml =
-      html.match(
-        /<div class="hg-sheet-screen-panel">([\s\S]*?)<div class="hg-sheet-print-only"/
-      )?.[1] || "";
-
     assert.match(
-      screenHtml,
+      html,
       /data-spell-level-group="1"/
     );
     assert.match(
-      screenHtml,
+      html,
       /data-sheet-spell-id="magic-missile"/
     );
     assert.doesNotMatch(
-      screenHtml,
+      html,
       /data-sheet-spell-id="fire-bolt"/
     );
     assert.match(
       html,
-      /<details class="hg-sheet-spell-description">/
+      /class="hg-sheet-spell-description"/
     );
     assert.doesNotMatch(
       html,
-      /<details class="hg-sheet-spell-description" open/
+      /data-character-sheet-spell-description="magic-missile"[^>]*\sopen/
+    );
+    assert.equal(
+      html.includes(
+        byId.get("magic-missile")
+          .description
+      ),
+      false
+    );
+    assert.equal(
+      (
+        html.match(
+          /class="hg-sheet-spell-library"/g
+        ) || []
+      ).length,
+      1
+    );
+    assert.doesNotMatch(
+      html,
+      /data-character-sheet-print-area/
     );
     assert.match(
       html,

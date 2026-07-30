@@ -5,6 +5,7 @@ import {
   MAXIMUM_WALKING_SPEED,
   MINIMUM_WALKING_SPEED,
   normalizeCharacterWalkingSpeed,
+  normalizeMovementSpeed,
   normalizeWalkingSpeed
 } from "../characterCreator/walkingSpeed.js";
 
@@ -34,6 +35,13 @@ test(
         42.6
       ),
       43
+    );
+    assert.equal(
+      normalizeMovementSpeed(
+        30000000000000000000,
+        0
+      ),
+      100
     );
   }
 );
@@ -75,7 +83,10 @@ test(
         speed: {
           walk:
             30000000000000000000,
-          fly: 120
+          climb: Infinity,
+          swim: Number.NaN,
+          fly: 120,
+          burrow: -20
         }
       }
     };
@@ -100,7 +111,22 @@ test(
     assert.equal(
       character.combat
         .speed.fly,
-      120
+      100
+    );
+    assert.equal(
+      character.combat
+        .speed.climb,
+      0
+    );
+    assert.equal(
+      character.combat
+        .speed.swim,
+      0
+    );
+    assert.equal(
+      character.combat
+        .speed.burrow,
+      0
     );
 
     const legacyOnly = {

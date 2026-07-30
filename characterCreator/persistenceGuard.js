@@ -5,7 +5,7 @@ import {
   guardCharacterDraftWalkingSpeed,
   installWalkingSpeedInputGuard,
   normalizeCharacterWalkingSpeed
-} from "./walkingSpeed.js?v=walking-speed-20260729";
+} from "./walkingSpeed.js?v=movement-speed-20260730";
 import "./uiEnhancements.js?v=creator-ui-20260729";
 
 const basePersistencePath =

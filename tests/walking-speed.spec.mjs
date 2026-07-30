@@ -7,7 +7,7 @@ test(
   "custom walking speed caps huge values without freezing the website",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/walking-speed-self-test.html?release=walking-speed-20260729",
+      "ai-testing/walking-speed-self-test.html?release=movement-speed-20260730",
       {
         waitUntil:
           "domcontentloaded"
@@ -56,6 +56,48 @@ test(
     await input.fill("-20");
     await expect(input)
       .toHaveValue("0");
+
+    for (
+      const selector of [
+        "#ccClimbSpeed",
+        "#ccSwimSpeed",
+        "#ccFlySpeed",
+        "#ccBurrowSpeed"
+      ]
+    ) {
+      const movementInput =
+        page.locator(selector);
+
+      await expect(movementInput)
+        .toHaveAttribute("min", "0");
+      await expect(movementInput)
+        .toHaveAttribute(
+          "max",
+          "100"
+        );
+      await expect(movementInput)
+        .toHaveAttribute("step", "1");
+      await expect(movementInput)
+        .toHaveValue("100");
+
+      await movementInput.fill(
+        "30000000000000000000"
+      );
+      await expect(movementInput)
+        .toHaveValue("100");
+
+      await movementInput.fill("");
+      await expect(movementInput)
+        .toHaveValue("0");
+
+      await movementInput.fill("42.6");
+      await expect(movementInput)
+        .toHaveValue("43");
+
+      await movementInput.fill("-20");
+      await expect(movementInput)
+        .toHaveValue("0");
+    }
 
     const pageResponse =
       await page.evaluate(

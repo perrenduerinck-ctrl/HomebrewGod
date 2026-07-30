@@ -63,6 +63,10 @@ const INVENTORY_FILTER_OPTIONS =
     ["containers", "Containers"]
   ]);
 
+const SPELL_SEARCH_DEBOUNCE_MS = 200;
+const SPELL_INITIAL_VISIBLE_COUNT = 40;
+const SPELL_VISIBLE_COUNT_INCREMENT = 40;
+
 function isRecord(value) {
   return Boolean(
     value &&
@@ -5093,7 +5097,20 @@ export function collectCharacterSpells(character) {
           spellHasEffect(
             spell,
             "healing"
-          )
+          ),
+        searchText: [
+          spell?.name,
+          spell?.school,
+          spell?.castingTime,
+          spell?.range,
+          spell?.duration,
+          spell?.summary,
+          spell?.description,
+          spell?.higherLevelDescription,
+          spell?.rulesSource,
+          ...statuses,
+          ...sources
+        ].join(" ").toLowerCase()
       };
     })
     .sort((left, right) => {
@@ -5122,7 +5139,9 @@ export function filterCharacterSpells(
   );
 
   return asArray(spells).filter((spell) => {
-    const searchText = [
+    const searchText = cleanText(
+      spell?.searchText
+    ) || [
       spell?.name,
       spell?.school,
       spell?.castingTime,
@@ -5130,6 +5149,7 @@ export function filterCharacterSpells(
       spell?.duration,
       spell?.summary,
       spell?.description,
+      spell?.higherLevelDescription,
       spell?.rulesSource,
       ...asArray(spell?.statuses),
       ...asArray(spell?.sources)
@@ -5181,15 +5201,36 @@ export function characterHasSpellContent(character) {
   const magic = isRecord(character?.magic)
     ? character.magic
     : {};
+  const classSources = Object.values(
+    isRecord(magic.classSources)
+      ? magic.classSources
+      : {}
+  );
+  const featSources = Object.values(
+    isRecord(magic.featSources)
+      ? magic.featSources
+      : {}
+  );
+  const hasDirectSpellReferences = [
+    magic.knownSpellIds,
+    magic.preparedSpellIds,
+    magic.innateSpells,
+    magic.customSpells,
+    character?.featMechanics?.spellcasting
+  ].some((entries) => {
+    return asArray(entries).length > 0;
+  });
 
   return Boolean(
-    collectCharacterSpells(character)
-      .length ||
-    Object.keys(
-      isRecord(magic.classSources)
-        ? magic.classSources
-        : {}
-    ).length ||
+    hasDirectSpellReferences ||
+    classSources.length ||
+    featSources.some((source) => {
+      return (
+        asArray(source?.spellIds).length ||
+        asArray(source?.grants).length ||
+        asArray(source?.spellRecords).length
+      );
+    }) ||
     Object.values(
       isRecord(magic.slots)
         ? magic.slots
@@ -5218,6 +5259,89 @@ export function characterHasSpellContent(character) {
       magic.spellAttackBonus
     ) !== null
   );
+}
+
+export function createCharacterSpellCache(character) {
+  const spells = collectCharacterSpells(
+    character
+  );
+  const groupsByLevel = Object.fromEntries(
+    Array.from(
+      { length: 10 },
+      (_, level) => {
+        return [
+          level,
+          spells.filter((spell) => {
+            return spell.level === level;
+          })
+        ];
+      }
+    )
+  );
+
+  return {
+    spells,
+    count: spells.length,
+    groupsByLevel
+  };
+}
+
+function createSpellCollectionSignature(character) {
+  const magic = isRecord(character?.magic)
+    ? character.magic
+    : {};
+  const classSources = isRecord(
+    magic.classSources
+  )
+    ? Object.fromEntries(
+        Object.entries(
+          magic.classSources
+        ).map(([key, source]) => {
+          return [
+            key,
+            {
+              classId: source?.classId,
+              className: source?.className,
+              subclassName:
+                source?.subclassName,
+              cantripIds:
+                source?.cantripIds,
+              knownSpellIds:
+                source?.knownSpellIds,
+              preparedSpellIds:
+                source?.preparedSpellIds,
+              spellbookSpellIds:
+                source?.spellbookSpellIds,
+              alwaysPreparedSpellIds:
+                source?.alwaysPreparedSpellIds,
+              subclassSpellIds:
+                source?.subclassSpellIds,
+              mysticArcanumSpellIds:
+                source?.mysticArcanumSpellIds,
+              expandedSpells:
+                source?.expandedSpells
+            }
+          ];
+        })
+      )
+    : {};
+
+  return JSON.stringify({
+    knownSpellIds:
+      magic.knownSpellIds,
+    preparedSpellIds:
+      magic.preparedSpellIds,
+    classSources,
+    innateSpells:
+      magic.innateSpells,
+    featSources:
+      magic.featSources,
+    customSpells:
+      magic.customSpells,
+    featSpellcasting:
+      character?.featMechanics
+        ?.spellcasting
+  });
 }
 
 function renderSpellSourceSummary(
@@ -5446,7 +5570,21 @@ function renderSpellStatusBadges(spell) {
   `;
 }
 
-function renderSpellCard(spell) {
+function getCompleteSpellDescription(spell) {
+  return [
+    spell?.description,
+    spell?.higherLevelDescription
+      ? `At Higher Levels: ${spell.higherLevelDescription}`
+      : ""
+  ].filter(Boolean).join("\n\n");
+}
+
+function renderSpellCard(
+  spell,
+  {
+    expanded = false
+  } = {}
+) {
   const source = [
     ...spell.sources,
     ...(
@@ -5458,12 +5596,8 @@ function renderSpellCard(spell) {
         : []
     )
   ].join(" \u00b7 ");
-  const completeDescription = [
-    spell.description,
-    spell.higherLevelDescription
-      ? `At Higher Levels: ${spell.higherLevelDescription}`
-      : ""
-  ].filter(Boolean).join("\n\n");
+  const completeDescription =
+    getCompleteSpellDescription(spell);
 
   return `
     <article
@@ -5541,28 +5675,34 @@ function renderSpellCard(spell) {
       ` : ""}
 
       ${completeDescription ? `
-        <details class="hg-sheet-spell-description">
+        <details
+          class="hg-sheet-spell-description"
+          data-character-sheet-spell-description="${escapeHtml(spell.id)}"
+          ${expanded ? "open" : ""}
+        >
           <summary>Full spell description</summary>
-          <p>${escapeHtml(completeDescription)}</p>
+          <p data-spell-description-body>${expanded ? escapeHtml(completeDescription) : ""}</p>
         </details>
       ` : ""}
     </article>
   `;
 }
 
-function renderSpellLibrary(
-  character,
+function createSpellLibraryView(
+  spells,
   {
     search = "",
-    filters = []
+    filters = [],
+    visibleCount =
+      SPELL_INITIAL_VISIBLE_COUNT,
+    printMode = false
   } = {}
 ) {
-  const allSpells =
-    collectCharacterSpells(character);
+  const allSpells = asArray(spells);
   const activeFilters = asArray(filters)
     .map(normalizeKey)
     .filter(Boolean);
-  const visibleSpells =
+  const matchingSpells =
     filterCharacterSpells(
       allSpells,
       {
@@ -5570,13 +5710,29 @@ function renderSpellLibrary(
         filters: activeFilters
       }
     );
+  const requestedVisibleCount =
+    printMode
+      ? matchingSpells.length
+      : Math.max(
+          SPELL_INITIAL_VISIBLE_COUNT,
+          clampInteger(
+            visibleCount,
+            SPELL_INITIAL_VISIBLE_COUNT,
+            0
+          )
+        );
+  const displayedSpells =
+    matchingSpells.slice(
+      0,
+      requestedVisibleCount
+    );
   const groups = Array.from(
     { length: 10 },
     (_, level) => {
       return {
         level,
         spells:
-          visibleSpells.filter(
+          displayedSpells.filter(
             (spell) => {
               return (
                 spell.level === level
@@ -5589,81 +5745,188 @@ function renderSpellLibrary(
     return group.spells.length > 0;
   });
 
+  return {
+    allSpells,
+    activeFilters,
+    matchingSpells,
+    displayedSpells,
+    groups,
+    hasMore:
+      displayedSpells.length <
+      matchingSpells.length
+  };
+}
+
+function renderSpellLibraryResults(
+  view,
+  {
+    expandedSpellIds = new Set(),
+    printMode = false
+  } = {}
+) {
+  const expanded = expandedSpellIds
+    instanceof Set
+      ? expandedSpellIds
+      : new Set(
+          asArray(expandedSpellIds)
+        );
+
   return `
-    <section class="hg-sheet-spell-library" aria-label="Spell library">
+    <p
+      class="hg-sheet-spell-results-meta"
+      data-spell-results-meta
+      role="status"
+    >
+      ${view.displayedSpells.length} shown
+      \u00b7 ${view.matchingSpells.length} matching
+      \u00b7 ${view.allSpells.length} total
+    </p>
+    ${view.groups.length ? `
+      <div class="hg-sheet-spell-groups">
+        ${view.groups.map((group) => `
+          <section
+            class="hg-sheet-spell-group"
+            data-spell-level-group="${group.level}"
+          >
+            <header>
+              <h3>${escapeHtml(
+                getSpellGroupLabel(
+                  group.level
+                )
+              )}</h3>
+              <span>${group.spells.length}</span>
+            </header>
+            <div class="hg-sheet-spell-card-grid">
+              ${group.spells.map(
+                (spell) => {
+                  return renderSpellCard(
+                    spell,
+                    {
+                      expanded:
+                        expanded.has(
+                          spell.id
+                        )
+                    }
+                  );
+                }
+              ).join("")}
+            </div>
+          </section>
+        `).join("")}
+      </div>
+    ` : `
+      <p
+        class="hg-sheet-spell-empty"
+        role="status"
+      >
+        No spells match the current search and filters.
+      </p>
+    `}
+    ${!printMode && view.hasMore ? `
+      <div class="hg-sheet-spell-show-more hg-sheet-no-print">
+        <button
+          type="button"
+          data-character-sheet-action="show-more-spells"
+        >
+          Show ${Math.min(
+            SPELL_VISIBLE_COUNT_INCREMENT,
+            view.matchingSpells.length -
+              view.displayedSpells.length
+          )} more spells
+        </button>
+      </div>
+    ` : ""}
+  `;
+}
+
+function renderSpellLibrary(
+  character,
+  {
+    search = "",
+    filters = [],
+    spells = null,
+    visibleCount =
+      SPELL_INITIAL_VISIBLE_COUNT,
+    expandedSpellIds = new Set(),
+    printMode = false
+  } = {}
+) {
+  const allSpells = Array.isArray(spells)
+    ? spells
+    : collectCharacterSpells(
+        character
+      );
+  const view = createSpellLibraryView(
+    allSpells,
+    {
+      search,
+      filters,
+      visibleCount,
+      printMode
+    }
+  );
+
+  return `
+    <section
+      class="hg-sheet-spell-library"
+      aria-label="Spell library"
+      data-spell-library-total="${view.allSpells.length}"
+    >
       <header class="hg-sheet-spell-library-heading">
         <div>
           <h2>Spells</h2>
-          <span>
-            ${visibleSpells.length} of ${allSpells.length}
-            spell${allSpells.length === 1 ? "" : "s"}
+          <span data-spell-library-count>
+            ${view.matchingSpells.length} of ${view.allSpells.length}
+            spell${view.allSpells.length === 1 ? "" : "s"}
           </span>
         </div>
-        <label>
-          <span>Search spells</span>
-          <input
-            type="search"
-            value="${escapeHtml(search)}"
-            placeholder="Name, school, source, or description"
-            autocomplete="off"
-            data-character-sheet-input="spell-search"
-          >
-        </label>
+        ${printMode ? "" : `
+          <label>
+            <span>Search spells</span>
+            <input
+              type="search"
+              value="${escapeHtml(search)}"
+              placeholder="Name, school, source, or description"
+              autocomplete="off"
+              data-character-sheet-input="spell-search"
+            >
+          </label>
+        `}
       </header>
 
-      <div
-        class="hg-sheet-spell-filters hg-sheet-no-print"
-        aria-label="Spell filters"
-      >
-        ${SPELL_FILTER_OPTIONS.map(
-          ([id, label]) => {
-            const active =
-              activeFilters.includes(id);
-
-            return `
-              <button
-                type="button"
-                class="${active ? "active" : ""}"
-                data-character-sheet-action="toggle-spell-filter"
-                data-spell-filter="${id}"
-                aria-pressed="${active ? "true" : "false"}"
-              >${escapeHtml(label)}</button>
-            `;
-          }
-        ).join("")}
-      </div>
-
-      ${groups.length ? `
-        <div class="hg-sheet-spell-groups">
-          ${groups.map((group) => `
-            <section
-              class="hg-sheet-spell-group"
-              data-spell-level-group="${group.level}"
-            >
-              <header>
-                <h3>${escapeHtml(
-                  getSpellGroupLabel(
-                    group.level
-                  )
-                )}</h3>
-                <span>${group.spells.length}</span>
-              </header>
-              <div class="hg-sheet-spell-card-grid">
-                ${group.spells.map(
-                  renderSpellCard
-                ).join("")}
-              </div>
-            </section>
-          `).join("")}
-        </div>
-      ` : `
-        <p
-          class="hg-sheet-spell-empty"
-          role="status"
+      ${printMode ? "" : `
+        <div
+          class="hg-sheet-spell-filters hg-sheet-no-print"
+          aria-label="Spell filters"
         >
-          No spells match the current search and filters.
-        </p>
+          ${SPELL_FILTER_OPTIONS.map(
+            ([id, label]) => {
+              const active =
+                view.activeFilters.includes(id);
+
+              return `
+                <button
+                  type="button"
+                  class="${active ? "active" : ""}"
+                  data-character-sheet-action="toggle-spell-filter"
+                  data-spell-filter="${id}"
+                  aria-pressed="${active ? "true" : "false"}"
+                >${escapeHtml(label)}</button>
+              `;
+            }
+          ).join("")}
+        </div>
       `}
+
+      <div data-spell-library-results>
+        ${renderSpellLibraryResults(
+          view,
+          {
+            expandedSpellIds,
+            printMode
+          }
+        )}
+      </div>
     </section>
   `;
 }
@@ -5672,7 +5935,12 @@ function renderSpellPanel(
   character,
   {
     search = "",
-    filters = []
+    filters = [],
+    spells = null,
+    visibleCount =
+      SPELL_INITIAL_VISIBLE_COUNT,
+    expandedSpellIds = new Set(),
+    printMode = false
   } = {}
 ) {
   const magic = isRecord(character?.magic) ? character.magic : {};
@@ -5796,9 +6064,92 @@ function renderSpellPanel(
 
       ${renderSpellLibrary(
         character,
-        { search, filters }
+        {
+          search,
+          filters,
+          spells,
+          visibleCount,
+          expandedSpellIds,
+          printMode
+        }
       )}
     </section>
+  `;
+}
+
+function renderPrintableCharacterSheet(
+  character,
+  spellCache
+) {
+  const safeCharacter = isRecord(character)
+    ? character
+    : {};
+  const classEntries =
+    getClassEntries(safeCharacter);
+  const totalLevel = getTotalLevel(
+    safeCharacter,
+    classEntries
+  );
+  const proficiencyBonus =
+    getProficiencyBonus(
+      safeCharacter,
+      totalLevel
+    );
+  const mainSummary = {
+    proficiencyBonus,
+    passivePerception:
+      getPassivePerception(
+        safeCharacter,
+        proficiencyBonus
+      ),
+    canTrack: false
+  };
+  const spells = spellCache?.spells ||
+    [];
+  const hasSpellContent = (
+    spells.length > 0 ||
+    characterHasSpellContent(
+      safeCharacter
+    )
+  );
+
+  return `
+    <div
+      class="hg-sheet-print-only"
+      data-character-sheet-print-area
+      aria-hidden="true"
+    >
+      ${renderActionsPanel(
+        safeCharacter,
+        mainSummary
+      )}
+      ${renderAbilitiesPanel(
+        safeCharacter,
+        mainSummary
+      )}
+      ${renderInventoryPanel(
+        safeCharacter,
+        mainSummary
+      )}
+      ${renderFeaturesPanel(
+        safeCharacter,
+        false
+      )}
+      ${renderStoryPanel(
+        safeCharacter
+      )}
+      ${hasSpellContent
+        ? renderSpellPanel(
+            safeCharacter,
+            {
+              spells,
+              visibleCount:
+                spells.length,
+              printMode: true
+            }
+          )
+        : ""}
+    </div>
   `;
 }
 
@@ -6603,6 +6954,8 @@ function ensureStyles() {
       display: grid;
       min-width: 0;
       gap: 9px;
+      content-visibility: auto;
+      contain-intrinsic-size: auto 720px;
     }
 
     .hg-sheet-spell-group > header {
@@ -6727,10 +7080,23 @@ function ensureStyles() {
     }
 
     .hg-sheet-spell-summary,
-    .hg-sheet-spell-empty {
+    .hg-sheet-spell-empty,
+    .hg-sheet-spell-results-meta {
       margin: 0;
       color: #aeb8df;
       line-height: 1.45;
+    }
+
+    .hg-sheet-spell-results-meta {
+      margin-bottom: 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .hg-sheet-spell-show-more {
+      display: flex;
+      justify-content: center;
+      margin-top: 14px;
     }
 
     .hg-sheet-spell-description {
@@ -7543,6 +7909,15 @@ function ensureStyles() {
         grid-template-columns: 1fr;
       }
 
+      .hg-sheet-slot-grid {
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+      }
+
+      .hg-sheet-slot-row {
+        min-width: 0 !important;
+      }
+
       .hg-sheet-feature-list,
       .hg-sheet-feature-resource {
         grid-template-columns: 1fr;
@@ -7792,6 +8167,11 @@ function ensureStyles() {
       .hg-sheet-print-only {
         display: grid !important;
         gap: 12px;
+      }
+
+      .hg-sheet-spell-group {
+        content-visibility: visible;
+        contain-intrinsic-size: none;
       }
 
       .hg-character-sheet-header,
@@ -8055,9 +8435,42 @@ export function createCharacterSheetView(options = {}) {
     inventoryFilters: [],
     spellSearch: "",
     spellFilters: [],
+    spellVisibleCount:
+      SPELL_INITIAL_VISIBLE_COUNT,
+    expandedSpellIds: new Set(),
+    spellCache: null,
+    spellSearchTimer: null,
+    printCleanupTimer: null,
+    afterPrintHandler: null,
     isOpen: false,
-    isSaving: false
+    isSaving: false,
+    isPreparingPrint: false
   };
+
+  function getSpellCache({
+    force = false
+  } = {}) {
+    const signature =
+      createSpellCollectionSignature(
+        state.character
+      );
+
+    if (
+      force ||
+      !state.spellCache ||
+      state.spellCache.signature !==
+        signature
+    ) {
+      state.spellCache = {
+        signature,
+        ...createCharacterSpellCache(
+          state.character
+        )
+      };
+    }
+
+    return state.spellCache;
+  }
 
   function renderCharacterSheetHtml(
     character = state.character,
@@ -8086,10 +8499,18 @@ export function createCharacterSheetView(options = {}) {
         : rawRequestedTab === "story"
           ? "description"
           : rawRequestedTab;
-    const hasSpellContent =
+    const spellCache =
+      isRecord(
+        renderOptions.spellCache
+      )
+        ? renderOptions.spellCache
+        : null;
+    const hasSpellContent = Boolean(
+      spellCache?.count ||
       characterHasSpellContent(
         safeCharacter
-      );
+      )
+    );
     const tabOptions = [
       ["actions", "Actions"],
       ["abilities", "Abilities"],
@@ -8124,6 +8545,22 @@ export function createCharacterSheetView(options = {}) {
         : asArray(
             renderOptions.spellFilters
           );
+    const spellVisibleCount =
+      renderOptions.spellVisibleCount ===
+        undefined
+        ? state.spellVisibleCount
+        : clampInteger(
+            renderOptions
+              .spellVisibleCount,
+            SPELL_INITIAL_VISIBLE_COUNT,
+            0
+          );
+    const expandedSpellIds =
+      renderOptions.expandedSpellIds
+        instanceof Set
+        ? renderOptions
+            .expandedSpellIds
+        : state.expandedSpellIds;
     const inventorySearch =
       renderOptions.inventorySearch ===
         undefined
@@ -8211,7 +8648,12 @@ export function createCharacterSheetView(options = {}) {
         safeCharacter,
         {
           search: spellSearch,
-          filters: spellFilters
+          filters: spellFilters,
+          spells:
+            spellCache?.spells,
+          visibleCount:
+            spellVisibleCount,
+          expandedSpellIds
         }
       ),
       description: () => renderStoryPanel(
@@ -8331,28 +8773,6 @@ export function createCharacterSheetView(options = {}) {
         <div class="hg-sheet-screen-panel">
           ${panel}
         </div>
-
-        <div class="hg-sheet-print-only" aria-hidden="true">
-          ${renderActionsPanel(safeCharacter, {
-            ...mainSummary,
-            canTrack: false
-          })}
-          ${renderAbilitiesPanel(safeCharacter, mainSummary)}
-          ${renderInventoryPanel(safeCharacter, {
-            ...mainSummary,
-            canTrack: false
-          })}
-          ${renderFeaturesPanel(
-            safeCharacter,
-            false
-          )}
-          ${renderStoryPanel(safeCharacter)}
-          ${hasSpellContent
-            ? renderSpellPanel(
-                safeCharacter
-              )
-            : ""}
-        </div>
       </div>
     `;
   }
@@ -8377,11 +8797,358 @@ export function createCharacterSheetView(options = {}) {
         state.inventoryFilters,
       spellSearch: state.spellSearch,
       spellFilters:
-        state.spellFilters
+        state.spellFilters,
+      spellVisibleCount:
+        state.spellVisibleCount,
+      expandedSpellIds:
+        state.expandedSpellIds,
+      spellCache: getSpellCache()
     });
 
     state.root.innerHTML = html;
     return html;
+  }
+
+  function getCurrentMainSummary() {
+    const classEntries =
+      getClassEntries(state.character);
+    const totalLevel = getTotalLevel(
+      state.character,
+      classEntries
+    );
+    const proficiencyBonus =
+      getProficiencyBonus(
+        state.character,
+        totalLevel
+      );
+    const sheetContext =
+      deps.getSheetContext();
+    const savedCharacterId = firstText(
+      sheetContext?.characterId,
+      state.character?.id,
+      state.character?.docId,
+      state.character
+        ?.firestoreDocumentId
+    );
+
+    return {
+      proficiencyBonus,
+      passivePerception:
+        getPassivePerception(
+          state.character,
+          proficiencyBonus
+        ),
+      canTrack: Boolean(
+        savedCharacterId
+      )
+    };
+  }
+
+  function renderActivePanelHtml() {
+    const mainSummary =
+      getCurrentMainSummary();
+
+    if (state.activeTab === "abilities") {
+      return renderAbilitiesPanel(
+        state.character,
+        mainSummary
+      );
+    }
+
+    if (state.activeTab === "inventory") {
+      return renderInventoryPanel(
+        state.character,
+        mainSummary,
+        {
+          search:
+            state.inventorySearch,
+          filters:
+            state.inventoryFilters
+        }
+      );
+    }
+
+    if (state.activeTab === "features") {
+      return renderFeaturesPanel(
+        state.character,
+        mainSummary.canTrack
+      );
+    }
+
+    if (state.activeTab === "spells") {
+      return renderSpellPanel(
+        state.character,
+        {
+          search: state.spellSearch,
+          filters: state.spellFilters,
+          spells:
+            getSpellCache().spells,
+          visibleCount:
+            state.spellVisibleCount,
+          expandedSpellIds:
+            state.expandedSpellIds
+        }
+      );
+    }
+
+    if (
+      state.activeTab === "description"
+    ) {
+      return renderStoryPanel(
+        state.character
+      );
+    }
+
+    return renderActionsPanel(
+      state.character,
+      mainSummary
+    );
+  }
+
+  function updateActivePanelOnly() {
+    const panel =
+      state.root?.querySelector(
+        ".hg-sheet-screen-panel"
+      );
+
+    if (!panel) {
+      return render();
+    }
+
+    panel.innerHTML =
+      renderActivePanelHtml();
+
+    state.root.querySelectorAll(
+      "[data-character-sheet-tab]"
+    ).forEach((button) => {
+      const isActive = (
+        button.dataset
+          .characterSheetTab ===
+        state.activeTab
+      );
+
+      button.classList.toggle(
+        "active",
+        isActive
+      );
+      button.setAttribute(
+        "aria-selected",
+        isActive ? "true" : "false"
+      );
+    });
+
+    return panel.innerHTML;
+  }
+
+  function updateSaveStatusOnly() {
+    const status =
+      state.root?.querySelector(
+        "[data-sheet-save-status]"
+      );
+
+    if (!status) {
+      return;
+    }
+
+    const sheetContext =
+      deps.getSheetContext();
+    const hasSavedCharacter =
+      Boolean(firstText(
+        sheetContext?.characterId,
+        state.character?.id,
+        state.character?.docId,
+        state.character
+          ?.firestoreDocumentId
+      ));
+    const dirty =
+      sheetContext?.dirty === true;
+    const nextStatus =
+      !hasSavedCharacter
+        ? "Preview only \u2014 save this character to track gameplay"
+        : state.isSaving
+          ? "Saving\u2026"
+          : dirty
+            ? "Unsaved changes"
+            : "Saved";
+
+    status.textContent = nextStatus;
+    status.dataset.sheetSaveStatus =
+      !hasSavedCharacter
+        ? "preview"
+        : state.isSaving
+          ? "saving"
+          : dirty
+            ? "dirty"
+            : "saved";
+  }
+
+  function updateSpellLibraryOnly() {
+    if (state.activeTab !== "spells") {
+      return false;
+    }
+
+    const library =
+      state.root?.querySelector(
+        ".hg-sheet-spell-library"
+      );
+    const results =
+      library?.querySelector(
+        "[data-spell-library-results]"
+      );
+
+    if (!library || !results) {
+      updateActivePanelOnly();
+      return true;
+    }
+
+    const cache = getSpellCache();
+    const view = createSpellLibraryView(
+      cache.spells,
+      {
+        search: state.spellSearch,
+        filters: state.spellFilters,
+        visibleCount:
+          state.spellVisibleCount
+      }
+    );
+    const matchingIds = new Set(
+      view.matchingSpells.map(
+        (spell) => spell.id
+      )
+    );
+
+    state.expandedSpellIds =
+      new Set(
+        [
+          ...state.expandedSpellIds
+        ].filter((spellId) => {
+          return matchingIds.has(
+            spellId
+          );
+        })
+      );
+
+    const count =
+      library.querySelector(
+        "[data-spell-library-count]"
+      );
+
+    if (count) {
+      count.textContent =
+        `${view.matchingSpells.length} of ${view.allSpells.length} spell${view.allSpells.length === 1 ? "" : "s"}`;
+    }
+
+    library.dataset.spellLibraryTotal =
+      String(view.allSpells.length);
+
+    library.querySelectorAll(
+      "[data-spell-filter]"
+    ).forEach((button) => {
+      const active =
+        view.activeFilters.includes(
+          button.dataset
+            .spellFilter
+        );
+
+      button.classList.toggle(
+        "active",
+        active
+      );
+      button.setAttribute(
+        "aria-pressed",
+        active ? "true" : "false"
+      );
+    });
+
+    results.innerHTML =
+      renderSpellLibraryResults(
+        view,
+        {
+          expandedSpellIds:
+            state.expandedSpellIds
+        }
+      );
+
+    return true;
+  }
+
+  function cleanupPrintContent() {
+    state.root?.querySelectorAll(
+      "[data-character-sheet-print-area]"
+    ).forEach((element) => {
+      element.remove();
+    });
+
+    if (
+      typeof window !== "undefined" &&
+      state.afterPrintHandler
+    ) {
+      window.removeEventListener(
+        "afterprint",
+        state.afterPrintHandler
+      );
+    }
+
+    if (state.printCleanupTimer) {
+      clearTimeout(
+        state.printCleanupTimer
+      );
+    }
+
+    state.afterPrintHandler = null;
+    state.printCleanupTimer = null;
+    state.isPreparingPrint = false;
+  }
+
+  function prepareAndPrint() {
+    const sheet =
+      state.root?.querySelector(
+        ".hg-character-sheet"
+      );
+
+    if (
+      !sheet ||
+      state.isPreparingPrint
+    ) {
+      return false;
+    }
+
+    cleanupPrintContent();
+    state.isPreparingPrint = true;
+    sheet.insertAdjacentHTML(
+      "beforeend",
+      renderPrintableCharacterSheet(
+        state.character,
+        getSpellCache()
+      )
+    );
+
+    state.afterPrintHandler = () => {
+      cleanupPrintContent();
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener(
+        "afterprint",
+        state.afterPrintHandler,
+        { once: true }
+      );
+    }
+
+    state.printCleanupTimer =
+      setTimeout(
+        cleanupPrintContent,
+        5000
+      );
+
+    const result =
+      deps.onPrint(state.character);
+
+    if (result === false) {
+      cleanupPrintContent();
+    }
+
+    return result !== false;
   }
 
   function refreshCharacterSnapshot(result) {
@@ -8390,7 +9157,9 @@ export function createCharacterSheetView(options = {}) {
       : deps.getCharacter() || state.character;
 
     state.character = cloneSnapshot(source);
-    return render();
+    getSpellCache();
+    updateSaveStatusOnly();
+    return updateActivePanelOnly();
   }
 
   function completeTrackedAction(result, successMessage) {
@@ -8398,7 +9167,7 @@ export function createCharacterSheetView(options = {}) {
 
     if (result === false) {
       deps.setStatus("That character-sheet action could not be completed.");
-      render();
+      updateSaveStatusOnly();
       return false;
     }
 
@@ -8420,7 +9189,7 @@ export function createCharacterSheetView(options = {}) {
         typeof result.then === "function"
       ) {
         state.isSaving = true;
-        render();
+        updateSaveStatusOnly();
 
         result
           .then((value) => {
@@ -8439,7 +9208,7 @@ export function createCharacterSheetView(options = {}) {
               error?.message ||
               "The character-sheet action failed."
             );
-            render();
+            updateSaveStatusOnly();
           });
 
         return true;
@@ -8485,6 +9254,7 @@ export function createCharacterSheetView(options = {}) {
         "inventory",
         "features",
         ...(
+          getSpellCache().count ||
           characterHasSpellContent(
             state.character
           )
@@ -8494,7 +9264,7 @@ export function createCharacterSheetView(options = {}) {
         "description"
       ].includes(tab)) {
         state.activeTab = tab;
-        render();
+        updateActivePanelOnly();
       }
 
       return;
@@ -8530,7 +9300,19 @@ export function createCharacterSheetView(options = {}) {
               ...state.spellFilters,
               filter
             ];
-      render();
+      state.spellVisibleCount =
+        SPELL_INITIAL_VISIBLE_COUNT;
+      updateSpellLibraryOnly();
+      return;
+    }
+
+    if (
+      action ===
+      "show-more-spells"
+    ) {
+      state.spellVisibleCount +=
+        SPELL_VISIBLE_COUNT_INCREMENT;
+      updateSpellLibraryOnly();
       return;
     }
 
@@ -8770,8 +9552,11 @@ export function createCharacterSheetView(options = {}) {
     }
 
     if (action === "print") {
-      deps.onPrint(state.character);
-      deps.setStatus("Print-friendly character sheet opened.");
+      if (prepareAndPrint()) {
+        deps.setStatus(
+          "Print-friendly character sheet opened."
+        );
+      }
     }
   }
 
@@ -8800,25 +9585,95 @@ export function createCharacterSheetView(options = {}) {
     ) {
       state.inventorySearch =
         cleanText(input.value);
-    } else {
-      state.spellSearch =
-        cleanText(input.value);
+      render();
+
+      const replacement =
+        state.root.querySelector(
+          `[data-character-sheet-input="${inputKind}"]`
+        );
+
+      if (replacement) {
+        replacement.focus();
+        const cursor =
+          replacement.value.length;
+        replacement.setSelectionRange?.(
+          cursor,
+          cursor
+        );
+      }
+
+      return;
     }
-    render();
 
-    const replacement =
-      state.root.querySelector(
-        `[data-character-sheet-input="${inputKind}"]`
+    state.spellSearch =
+      cleanText(input.value);
+    state.spellVisibleCount =
+      SPELL_INITIAL_VISIBLE_COUNT;
+
+    if (state.spellSearchTimer) {
+      clearTimeout(
+        state.spellSearchTimer
+      );
+    }
+
+    state.spellSearchTimer =
+      setTimeout(() => {
+        state.spellSearchTimer = null;
+        updateSpellLibraryOnly();
+      }, SPELL_SEARCH_DEBOUNCE_MS);
+  }
+
+  function handleToggle(event) {
+    const details = event.target;
+
+    if (
+      details?.matches?.(
+        "details[data-character-sheet-spell-description]"
+      ) !== true ||
+      !state.root?.contains(details)
+    ) {
+      return;
+    }
+
+    const spellId = cleanText(
+      details.dataset
+        .characterSheetSpellDescription
+    );
+
+    if (!spellId) {
+      return;
+    }
+
+    if (!details.open) {
+      state.expandedSpellIds.delete(
+        spellId
+      );
+      return;
+    }
+
+    const spell = getSpellCache()
+      .spells.find((entry) => {
+        return entry.id === spellId;
+      });
+    const description =
+      getCompleteSpellDescription(
+        spell
+      );
+    const descriptionBody =
+      details.querySelector(
+        "[data-spell-description-body]"
       );
 
-    if (replacement) {
-      replacement.focus();
-      const cursor =
-        replacement.value.length;
-      replacement.setSelectionRange?.(
-        cursor,
-        cursor
-      );
+    state.expandedSpellIds.add(
+      spellId
+    );
+
+    if (
+      descriptionBody &&
+      !descriptionBody.textContent
+    ) {
+      descriptionBody.textContent =
+        description;
     }
   }
 
@@ -8830,6 +9685,11 @@ export function createCharacterSheetView(options = {}) {
     if (state.root && state.root !== nextRoot) {
       state.root.removeEventListener("click", handleClick);
       state.root.removeEventListener("input", handleInput);
+      state.root.removeEventListener(
+        "toggle",
+        handleToggle,
+        true
+      );
     }
 
     state.root = nextRoot;
@@ -8837,8 +9697,18 @@ export function createCharacterSheetView(options = {}) {
     if (state.root) {
       state.root.removeEventListener("click", handleClick);
       state.root.removeEventListener("input", handleInput);
+      state.root.removeEventListener(
+        "toggle",
+        handleToggle,
+        true
+      );
       state.root.addEventListener("click", handleClick);
       state.root.addEventListener("input", handleInput);
+      state.root.addEventListener(
+        "toggle",
+        handleToggle,
+        true
+      );
     }
 
     return api;
@@ -8855,6 +9725,12 @@ export function createCharacterSheetView(options = {}) {
     state.inventoryFilters = [];
     state.spellSearch = "";
     state.spellFilters = [];
+    state.spellVisibleCount =
+      SPELL_INITIAL_VISIBLE_COUNT;
+    state.expandedSpellIds =
+      new Set();
+    state.spellCache = null;
+    getSpellCache({ force: true });
     state.isOpen = true;
 
     init();
@@ -8869,6 +9745,14 @@ export function createCharacterSheetView(options = {}) {
 
   function close() {
     state.isOpen = false;
+    cleanupPrintContent();
+
+    if (state.spellSearchTimer) {
+      clearTimeout(
+        state.spellSearchTimer
+      );
+      state.spellSearchTimer = null;
+    }
 
     if (state.root) {
       state.root.innerHTML = "";

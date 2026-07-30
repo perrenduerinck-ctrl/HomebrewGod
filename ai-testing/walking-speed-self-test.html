@@ -17,6 +17,38 @@
         id="ccCustomSpeciesSpeed"
         type="number"
       >
+      <label for="ccClimbSpeed">
+        Climbing Speed
+      </label>
+      <input
+        id="ccClimbSpeed"
+        type="number"
+        data-draft-path="combat.speed.climb"
+      >
+      <label for="ccSwimSpeed">
+        Swimming Speed
+      </label>
+      <input
+        id="ccSwimSpeed"
+        type="number"
+        data-draft-path="combat.speed.swim"
+      >
+      <label for="ccFlySpeed">
+        Flying Speed
+      </label>
+      <input
+        id="ccFlySpeed"
+        type="number"
+        data-draft-path="combat.speed.fly"
+      >
+      <label for="ccBurrowSpeed">
+        Burrowing Speed
+      </label>
+      <input
+        id="ccBurrowSpeed"
+        type="number"
+        data-draft-path="combat.speed.burrow"
+      >
       <output id="walkingSpeedResult">
         RUNNING
       </output>
@@ -25,12 +57,20 @@
     <script type="module">
       import {
         installWalkingSpeedInputGuard
-      } from "../characterCreator/walkingSpeed.js?v=walking-speed-20260729";
+      } from "../characterCreator/walkingSpeed.js?v=movement-speed-20260730";
 
       const character = {
         combat: {
           speed: {
             walk:
+              30000000000000000000,
+            climb:
+              30000000000000000000,
+            swim:
+              30000000000000000000,
+            fly:
+              30000000000000000000,
+            burrow:
               30000000000000000000
           }
         }

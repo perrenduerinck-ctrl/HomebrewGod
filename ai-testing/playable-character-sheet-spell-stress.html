@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    >
+    <title>Playable Character Sheet Spell Stress Test</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          sans-serif;
+        background: #050817;
+      }
+
+      body {
+        margin: 0;
+        min-width: 0;
+      }
+
+      button {
+        min-height: 36px;
+      }
+
+      main {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 14px;
+      }
+    </style>
+  </head>
+  <body data-test-status="running">
+    <main id="sheetRoot"></main>
+
+    <script type="module">
+      import {
+        createCharacterSheetView
+      } from "../characterSheet.js?v=spell-performance-20260730";
+      import {
+        DEFAULT_SPELLS
+      } from "../defaultSpells.js?v=spell-performance-20260730";
+
+      const allSpellIds =
+        DEFAULT_SPELLS.map(
+          (spell) => spell.id
+        );
+      const preparedSpellIds =
+        DEFAULT_SPELLS.filter(
+          (_, index) => {
+            return index % 3 === 0;
+          }
+        ).map((spell) => spell.id);
+      const character = {
+        id: "spell-stress-fixture",
+        identity: {
+          name: "Catalog Arcanist"
+        },
+        species: {
+          name: "Human"
+        },
+        background: {
+          name: "Sage"
+        },
+        classProgression: {
+          totalLevel: 20,
+          classes: [
+            {
+              entryId:
+                "wizard-stress",
+              classId: "wizard",
+              className: "Wizard",
+              level: 20
+            }
+          ]
+        },
+        abilities: {
+          scores: {
+            str: 10,
+            dex: 14,
+            con: 14,
+            int: 20,
+            wis: 12,
+            cha: 10
+          }
+        },
+        combat: {
+          armorClass: 15,
+          maxHp: 122,
+          currentHp: 122,
+          speed: {
+            walk: 30
+          }
+        },
+        magic: {
+          spellcastingAbility: "int",
+          spellSaveDc: 19,
+          spellAttackBonus: 11,
+          knownSpellIds: allSpellIds,
+          preparedSpellIds,
+          slots: {
+            1: 4,
+            2: 3,
+            3: 3,
+            4: 3,
+            5: 3,
+            6: 2,
+            7: 2,
+            8: 1,
+            9: 1
+          },
+          classSources: {
+            "wizard-stress": {
+              classId: "wizard",
+              className: "Wizard",
+              spellcastingAbility:
+                "int",
+              knownSpellIds:
+                allSpellIds,
+              preparedSpellIds
+            }
+          }
+        }
+      };
+      const view =
+        createCharacterSheetView({
+          root: () => {
+            return document
+              .getElementById(
+                "sheetRoot"
+              );
+          },
+          getCharacter: () => {
+            return character;
+          },
+          getSheetContext: () => {
+            return {
+              characterId:
+                character.id
+            };
+          },
+          onPrint: () => true
+        });
+
+      view.open(character);
+
+      window.__SPELL_STRESS_TEST__ = {
+        totalSpells:
+          DEFAULT_SPELLS.length,
+        ping() {
+          return "responsive";
+        }
+      };
+      document.body.dataset
+        .testStatus = "pass";
+    </script>
+  </body>
+</html>

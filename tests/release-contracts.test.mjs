@@ -226,7 +226,7 @@ test(
 );
 
 test(
-  "character walking speed is guarded at input, load, and save boundaries",
+  "character movement speeds are guarded at input, load, and save boundaries",
   async () => {
     const walkingSpeed =
       await read(
@@ -264,6 +264,23 @@ test(
     assert.match(
       walkingSpeed,
       /setAttribute\(\s*"step"/
+    );
+    [
+      "ccCustomSpeciesSpeed",
+      "ccWalkSpeed",
+      "ccClimbSpeed",
+      "ccSwimSpeed",
+      "ccFlySpeed",
+      "ccBurrowSpeed"
+    ].forEach((inputId) => {
+      assert.match(
+        walkingSpeed,
+        new RegExp(inputId)
+      );
+    });
+    assert.match(
+      walkingSpeed,
+      /normalizeMovementSpeed/
     );
     assert.match(
       persistenceGuard,

@@ -7,8 +7,20 @@ export const MAXIMUM_WALKING_SPEED =
 
 const WALKING_SPEED_INPUT_SELECTOR = [
   "#ccCustomSpeciesSpeed",
-  "#ccWalkSpeed"
+  "#ccWalkSpeed",
+  "#ccClimbSpeed",
+  "#ccSwimSpeed",
+  "#ccFlySpeed",
+  "#ccBurrowSpeed"
 ].join(",");
+const MOVEMENT_SPEED_DEFAULTS =
+  Object.freeze({
+    walk: DEFAULT_WALKING_SPEED,
+    climb: 0,
+    swim: 0,
+    fly: 0,
+    burrow: 0
+  });
 
 const guardedCreatorStates =
   new WeakSet();
@@ -23,7 +35,7 @@ function isObject(value) {
   );
 }
 
-function isInvalidWalkingSpeed(value) {
+function isInvalidMovementSpeed(value) {
   if (
     value == null ||
     (
@@ -39,9 +51,12 @@ function isInvalidWalkingSpeed(value) {
   );
 }
 
-function parseWalkingSpeed(value) {
-  if (isInvalidWalkingSpeed(value)) {
-    return DEFAULT_WALKING_SPEED;
+function parseMovementSpeed(
+  value,
+  defaultValue
+) {
+  if (isInvalidMovementSpeed(value)) {
+    return defaultValue;
   }
 
   return Math.round(
@@ -67,11 +82,24 @@ function parseLegacyWalkingSpeed(value) {
 export function normalizeWalkingSpeed(
   value
 ) {
+  return normalizeMovementSpeed(
+    value,
+    DEFAULT_WALKING_SPEED
+  );
+}
+
+export function normalizeMovementSpeed(
+  value,
+  defaultValue = 0
+) {
   return Math.min(
     MAXIMUM_WALKING_SPEED,
     Math.max(
       MINIMUM_WALKING_SPEED,
-      parseWalkingSpeed(value)
+      parseMovementSpeed(
+        value,
+        defaultValue
+      )
     )
   );
 }
@@ -115,6 +143,24 @@ export function normalizeCharacterWalkingSpeed(
   character.combat.speed.walk =
     walkingSpeed;
 
+  [
+    "climb",
+    "swim",
+    "fly",
+    "burrow"
+  ].forEach((movementType) => {
+    character.combat.speed[
+      movementType
+    ] = normalizeMovementSpeed(
+      character.combat.speed[
+        movementType
+      ],
+      MOVEMENT_SPEED_DEFAULTS[
+        movementType
+      ]
+    );
+  });
+
   if (
     Object.hasOwn(
       character,
@@ -123,7 +169,7 @@ export function normalizeCharacterWalkingSpeed(
   ) {
     const legacyWalkingSpeed =
       hasCanonicalWalkingSpeed &&
-      isInvalidWalkingSpeed(
+      isInvalidMovementSpeed(
         rawWalkingSpeed
       )
         ? DEFAULT_WALKING_SPEED
@@ -138,6 +184,39 @@ export function normalizeCharacterWalkingSpeed(
   }
 
   return character;
+}
+
+function getInputMovementType(input) {
+  const draftPath =
+    input?.dataset?.draftPath;
+  const pathMatch =
+    typeof draftPath === "string"
+      ? draftPath.match(
+          /^combat\.speed\.(walk|climb|swim|fly|burrow)$/
+        )
+      : null;
+
+  if (pathMatch) {
+    return pathMatch[1];
+  }
+
+  if (
+    input?.id ===
+      "ccCustomSpeciesSpeed" ||
+    input?.id === "ccWalkSpeed"
+  ) {
+    return "walk";
+  }
+
+  const inputTypes = {
+    ccClimbSpeed: "climb",
+    ccSwimSpeed: "swim",
+    ccFlySpeed: "fly",
+    ccBurrowSpeed: "burrow"
+  };
+
+  return inputTypes[input?.id] ||
+    "walk";
 }
 
 export function correctWalkingSpeedInput(
@@ -168,15 +247,20 @@ export function correctWalkingSpeedInput(
     "1"
   );
 
-  const walkingSpeed =
-    normalizeWalkingSpeed(
-      input.value
+  const movementType =
+    getInputMovementType(input);
+  const movementSpeed =
+    normalizeMovementSpeed(
+      input.value,
+      MOVEMENT_SPEED_DEFAULTS[
+        movementType
+      ]
     );
 
   input.value =
-    String(walkingSpeed);
+    String(movementSpeed);
 
-  return walkingSpeed;
+  return movementSpeed;
 }
 
 export function guardCharacterDraftWalkingSpeed(
@@ -251,15 +335,20 @@ export function installWalkingSpeedInputGuard({
       normalizeCharacterWalkingSpeed(
         getCharacter()
       );
-    const characterWalkingSpeed =
-      character?.combat
-        ?.speed?.walk;
 
     root.querySelectorAll(
       WALKING_SPEED_INPUT_SELECTOR
     ).forEach((input) => {
+      const movementType =
+        getInputMovementType(input);
+      const characterMovementSpeed =
+        character?.combat
+          ?.speed?.[
+            movementType
+          ];
+
       if (
-        characterWalkingSpeed != null &&
+        characterMovementSpeed != null &&
         (
           input.value == null ||
           input.value === ""
@@ -267,7 +356,7 @@ export function installWalkingSpeedInputGuard({
       ) {
         input.value =
           String(
-            characterWalkingSpeed
+            characterMovementSpeed
           );
       }
 
@@ -277,18 +366,17 @@ export function installWalkingSpeedInputGuard({
         );
 
       if (
-        input.dataset
-          ?.draftPath ===
-        "combat.speed.walk"
+        input.dataset?.draftPath ===
+          `combat.speed.${movementType}`
       ) {
         normalizeCharacterWalkingSpeed(
           character
         );
 
         if (character?.combat?.speed) {
-          character.combat
-            .speed.walk =
-              corrected;
+          character.combat.speed[
+            movementType
+          ] = corrected;
         }
       }
     });
@@ -314,18 +402,20 @@ export function installWalkingSpeedInputGuard({
       );
     const character =
       getCharacter();
+    const movementType =
+      getInputMovementType(input);
 
     if (
-      input.dataset
-        ?.draftPath ===
-        "combat.speed.walk" &&
+      input.dataset?.draftPath ===
+        `combat.speed.${movementType}` &&
       isObject(character)
     ) {
       normalizeCharacterWalkingSpeed(
         character
       );
-      character.combat.speed.walk =
-        corrected;
+      character.combat.speed[
+        movementType
+      ] = corrected;
     }
   };
 

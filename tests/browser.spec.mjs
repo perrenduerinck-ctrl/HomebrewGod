@@ -695,6 +695,28 @@ test(
         "1 / 1 uses remaining"
       );
 
+    const sheetHeader =
+      page.locator(
+        ".hg-character-sheet-header"
+      );
+    await sheetHeader.evaluate(
+      (element) => {
+        element.dataset
+          .performanceSentinel =
+            "stable";
+      }
+    );
+    await expect(
+      page.locator(
+        ".hg-sheet-spell-library"
+      )
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        "[data-character-sheet-print-area]"
+      )
+    ).toHaveCount(0);
+
     await page.getByRole("button", {
       name: "Spells",
       exact: true
@@ -703,6 +725,21 @@ test(
     const spellLibrary =
       screenPanel.locator(
         ".hg-sheet-spell-library"
+      );
+    await expect(
+      page.locator(
+        ".hg-sheet-spell-library"
+      )
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        "[data-character-sheet-print-area]"
+      )
+    ).toHaveCount(0);
+    await expect(sheetHeader)
+      .toHaveAttribute(
+        "data-performance-sentinel",
+        "stable"
       );
     const levelOneSlots =
       screenPanel.locator(
@@ -777,6 +814,11 @@ test(
       "open",
       ""
     );
+    await expect(
+      shieldCard.locator(
+        "[data-spell-description-body]"
+      )
+    ).toHaveText("");
     await shieldCard.locator(
       "details summary"
     ).click();
@@ -790,6 +832,15 @@ test(
       spellLibrary.locator(
         '[data-character-sheet-input="spell-search"]'
       );
+    await spellSearch.evaluate(
+      (element) => {
+        element.dataset
+          .performanceSentinel =
+            "stable";
+      }
+    );
+    await spellSearch.fill("M");
+    await spellSearch.fill("Misty");
     await spellSearch.fill(
       "Misty Step"
     );
@@ -803,6 +854,18 @@ test(
         '[data-sheet-spell-id="misty-step"]'
       )
     ).toBeVisible();
+    await expect(spellSearch)
+      .toBeFocused();
+    await expect(spellSearch)
+      .toHaveAttribute(
+        "data-performance-sentinel",
+        "stable"
+      );
+    await expect(sheetHeader)
+      .toHaveAttribute(
+        "data-performance-sentinel",
+        "stable"
+      );
     await spellSearch.fill("");
 
     for (
@@ -847,7 +910,47 @@ test(
           "aria-pressed",
           "false"
         );
+      await expect(sheetHeader)
+        .toHaveAttribute(
+          "data-performance-sentinel",
+          "stable"
+        );
     }
+
+    await page.locator(
+      ".hg-sheet-more-menu summary"
+    ).click();
+    await page.getByRole("button", {
+      name: "Print",
+      exact: true
+    }).click();
+    await expect(
+      page.locator(
+        "[data-character-sheet-print-area]"
+      )
+    ).toHaveCount(1);
+    await expect(
+      page.locator(
+        "[data-character-sheet-print-area] .hg-sheet-spell-library"
+      )
+    ).toHaveCount(1);
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new Event("afterprint")
+      );
+    });
+    await expect(
+      page.locator(
+        "[data-character-sheet-print-area]"
+      )
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        ".hg-sheet-spell-library"
+      )
+    ).toHaveCount(1);
+    await expect(spellSearch)
+      .toHaveValue("");
 
     const featSpellResource =
       screenPanel.locator(
@@ -1676,5 +1779,151 @@ test(
     ).toBeLessThanOrEqual(
       dimensions.viewport + 1
     );
+  }
+);
+
+test(
+  "spell stress fixture keeps all 340 catalog spells responsive",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/playable-character-sheet-spell-stress.html?release=spell-performance-20260730",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "pass"
+      );
+    await expect(
+      page.locator(
+        ".hg-sheet-spell-library"
+      )
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        "[data-character-sheet-print-area]"
+      )
+    ).toHaveCount(0);
+
+    const totalSpells =
+      await page.evaluate(() => {
+        return window
+          .__SPELL_STRESS_TEST__
+          .totalSpells;
+      });
+
+    expect(totalSpells).toBe(340);
+
+    const header =
+      page.locator(
+        ".hg-character-sheet-header"
+      );
+    await header.evaluate((element) => {
+      element.dataset
+        .stressSentinel = "stable";
+    });
+
+    const startedAt = Date.now();
+
+    await page.getByRole("button", {
+      name: "Spells",
+      exact: true
+    }).click();
+
+    const library =
+      page.locator(
+        ".hg-sheet-spell-library"
+      );
+    await expect(library)
+      .toHaveCount(1);
+    await expect(
+      library.locator(
+        ".hg-sheet-spell-card"
+      )
+    ).toHaveCount(40);
+    await expect(
+      library.locator(
+        "[data-spell-results-meta]"
+      )
+    ).toContainText(
+      "40 shown"
+    );
+    await expect(
+      library.locator(
+        "[data-spell-results-meta]"
+      )
+    ).toContainText(
+      "340 matching"
+    );
+
+    expect(
+      Date.now() - startedAt
+    ).toBeLessThan(5000);
+
+    await library.getByRole(
+      "button",
+      {
+        name: "Show 40 more spells",
+        exact: true
+      }
+    ).click();
+    await expect(
+      library.locator(
+        ".hg-sheet-spell-card"
+      )
+    ).toHaveCount(80);
+
+    const search =
+      library.locator(
+        '[data-character-sheet-input="spell-search"]'
+      );
+    await search.evaluate((element) => {
+      element.dataset
+        .stressSentinel = "stable";
+    });
+    await search.fill("w");
+    await search.fill("wi");
+    await search.fill("wish");
+    await expect(
+      library.locator(
+        '[data-sheet-spell-id="wish"]'
+      )
+    ).toBeVisible();
+    await expect(search).toBeFocused();
+    await expect(search)
+      .toHaveAttribute(
+        "data-stress-sentinel",
+        "stable"
+      );
+    await expect(header)
+      .toHaveAttribute(
+        "data-stress-sentinel",
+        "stable"
+      );
+
+    await search.fill("");
+    await expect(
+      library.locator(
+        ".hg-sheet-spell-card"
+      )
+    ).toHaveCount(40);
+
+    await page.setViewportSize({
+      width: 390,
+      height: 844
+    });
+    const hasOverflow =
+      await page.evaluate(() => {
+        return (
+          document.documentElement
+            .scrollWidth >
+          window.innerWidth
+        );
+      });
+
+    expect(hasOverflow).toBe(false);
   }
 );

@@ -24219,7 +24219,8 @@ export function createCharacterCreator(options = {}) {
           {
             type: "number",
             valueType: "number",
-            extra: 'min="0" step="5"'
+            extra:
+              'min="0" max="100" step="1"'
           }
         )}
       </div>
@@ -35738,7 +35739,7 @@ export function createCharacterCreator(options = {}) {
             path: "combat.speed.walk",
             valueType: "number",
             extra:
-              'min="0" step="5"'
+              'min="0" max="100" step="1"'
           }
         )}
 
@@ -35751,7 +35752,7 @@ export function createCharacterCreator(options = {}) {
             path: "combat.speed.climb",
             valueType: "number",
             extra:
-              'min="0" step="5"'
+              'min="0" max="100" step="1"'
           }
         )}
 
@@ -35764,7 +35765,7 @@ export function createCharacterCreator(options = {}) {
             path: "combat.speed.swim",
             valueType: "number",
             extra:
-              'min="0" step="5"'
+              'min="0" max="100" step="1"'
           }
         )}
 
@@ -35777,7 +35778,7 @@ export function createCharacterCreator(options = {}) {
             path: "combat.speed.fly",
             valueType: "number",
             extra:
-              'min="0" step="5"'
+              'min="0" max="100" step="1"'
           }
         )}
 
@@ -35790,7 +35791,7 @@ export function createCharacterCreator(options = {}) {
             path: "combat.speed.burrow",
             valueType: "number",
             extra:
-              'min="0" step="5"'
+              'min="0" max="100" step="1"'
           }
         )}
 
