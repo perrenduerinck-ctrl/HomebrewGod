@@ -60,9 +60,9 @@ test(
     await expect(cantrips)
       .not.toHaveAttribute("open", "");
     await expect(
-      page.getByRole("heading", {
-        name: "Fire Bolt"
-      }).locator("..")
+      page.locator(
+        '[data-spell-search-text*="fire bolt"]'
+      )
     ).toHaveClass(/selected/);
 
     const details =
