@@ -7,7 +7,7 @@ test(
   "custom walking speed caps huge values without freezing the website",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/walking-speed-self-test.html?release=creator-fix-pass-20260730",
+      "ai-testing/walking-speed-self-test.html?release=custom-movement-speeds-20260731",
       {
         waitUntil:
           "domcontentloaded"

@@ -139,6 +139,65 @@ test(
 );
 
 test(
+  "custom class movement speeds replace the matching base before bonuses",
+  () => {
+    const character = {
+      combat: {
+        baseSpeed: {
+          walk: 25,
+          climb: 0,
+          swim: 0,
+          fly: 0,
+          burrow: 0
+        },
+        speed: {}
+      }
+    };
+
+    applyDerivedMovementSpeeds(
+      character,
+      {
+        classEffects: [
+          {
+            id: "custom-walk",
+            type: "speedBonus",
+            mode: "replace",
+            movement: "walk",
+            value: 30
+          },
+          {
+            id: "custom-climb",
+            type: "speedBonus",
+            mode: "replace",
+            movement: "climb",
+            value: 20
+          },
+          {
+            id: "class-walk-bonus",
+            type: "speedBonus",
+            movement: "walk",
+            value: 5
+          }
+        ],
+        featWalkBonus: 10
+      }
+    );
+
+    assert.deepEqual(
+      character.combat.speed,
+      {
+        walk: 45,
+        climb: 20,
+        swim: 0,
+        fly: 0,
+        burrow: 0,
+        special: ""
+      }
+    );
+  }
+);
+
+test(
   "invalid walking speeds use the default of thirty",
   () => {
     assert.equal(

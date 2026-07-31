@@ -12,6 +12,11 @@ const WALKING_SPEED_INPUT_SELECTOR = [
   "#ccCustomClassSwimBonus",
   "#ccCustomClassFlyBonus",
   "#ccCustomClassBurrowBonus",
+  "#ccCustomClassWalkSpeed",
+  "#ccCustomClassClimbSpeed",
+  "#ccCustomClassSwimSpeed",
+  "#ccCustomClassFlySpeed",
+  "#ccCustomClassBurrowSpeed",
   "#ccWalkSpeed",
   "#ccClimbSpeed",
   "#ccSwimSpeed",
@@ -355,6 +360,11 @@ export function applyDerivedMovementSpeeds(
       (type) => [type, 0]
     )
   );
+  const classSpeeds = Object.fromEntries(
+    MOVEMENT_SPEED_TYPES.map(
+      (type) => [type, null]
+    )
+  );
   const seen = new Set();
 
   classEffects.forEach((effect, index) => {
@@ -378,7 +388,18 @@ export function applyDerivedMovementSpeeds(
 
     seen.add(id);
 
-    if (effect?.type === "speedBonus") {
+    if (
+      effect?.type === "speedBonus" &&
+      effect?.mode === "replace"
+    ) {
+      classSpeeds[movement] =
+        normalizeMovementSpeed(
+          effect.value,
+          MOVEMENT_SPEED_DEFAULTS[
+            movement
+          ]
+        );
+    } else if (effect?.type === "speedBonus") {
       bonuses[movement] +=
         Number(effect.value) || 0;
     } else if (
@@ -407,14 +428,18 @@ export function applyDerivedMovementSpeeds(
       MOVEMENT_SPEED_DEFAULTS[movement]
     );
 
+    const effectiveBase =
+      classSpeeds[movement] ??
+      base;
+
     character.combat.speed[movement] =
       normalizeMovementSpeed(
-        base +
+        effectiveBase +
         Math.max(
           0,
           Math.round(bonuses[movement])
         ),
-        base
+        effectiveBase
       );
   });
 
@@ -451,6 +476,11 @@ function getInputMovementType(input) {
   }
 
   const inputTypes = {
+    ccCustomClassWalkSpeed: "walk",
+    ccCustomClassClimbSpeed: "climb",
+    ccCustomClassSwimSpeed: "swim",
+    ccCustomClassFlySpeed: "fly",
+    ccCustomClassBurrowSpeed: "burrow",
     ccClimbSpeed: "climb",
     ccSwimSpeed: "swim",
     ccFlySpeed: "fly",
@@ -466,9 +496,14 @@ function getInputDefaultSpeed(
   movementType
 ) {
   if (
-    /^ccCustomClass/.test(
-      input?.id || ""
-    )
+    input?.id ===
+      "ccCustomClassWalkSpeed"
+  ) {
+    return DEFAULT_WALKING_SPEED;
+  }
+
+  if (
+    /^ccCustomClass/.test(input?.id || "")
   ) {
     return 0;
   }

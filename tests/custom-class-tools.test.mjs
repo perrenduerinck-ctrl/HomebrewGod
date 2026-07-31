@@ -2,20 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   deleteSelectedRoomClass,
-  getClassTemplateMovementBonus,
-  readCustomClassMovementEffects
+  getClassTemplateMovementSpeed,
+  readCustomClassMovementEffects,
+  renderCustomClassMovementFields
 } from "../characterCreator/customClassTools.js";
 
 test(
-  "custom class movement bonuses store only nonzero whole-number effects",
+  "custom classes store actual movement speeds as whole-number effects",
   () => {
     const values = {
-      ccCustomClassWalkBonus: "10.4",
-      ccCustomClassClimbBonus: "",
-      ccCustomClassSwimBonus: "20",
-      ccCustomClassFlyBonus:
+      ccCustomClassWalkSpeed: "30.4",
+      ccCustomClassClimbSpeed: "",
+      ccCustomClassSwimSpeed: "20",
+      ccCustomClassFlySpeed:
         "30000000000000000000",
-      ccCustomClassBurrowBonus: "-2"
+      ccCustomClassBurrowSpeed: "-2"
     };
     const effects =
       readCustomClassMovementEffects(
@@ -29,23 +30,26 @@ test(
       [
         {
           type: "speedBonus",
+          mode: "replace",
           movement: "walk",
-          value: 10
+          value: 30
         },
         {
           type: "speedBonus",
+          mode: "replace",
           movement: "swim",
           value: 20
         },
         {
           type: "speedBonus",
+          mode: "replace",
           movement: "fly",
           value: 100
         }
       ]
     );
     assert.equal(
-      getClassTemplateMovementBonus(
+      getClassTemplateMovementSpeed(
         {
           effects
         },
@@ -54,11 +58,53 @@ test(
       20
     );
     assert.equal(
-      getClassTemplateMovementBonus(
+      getClassTemplateMovementSpeed(
         {},
         "walk"
       ),
-      0
+      30
+    );
+  }
+);
+
+test(
+  "custom class movement fields use speed labels without bonus wording",
+  () => {
+    const rendered =
+      renderCustomClassMovementFields({
+        template: {},
+        wizardField(
+          label,
+          id,
+          value
+        ) {
+          return `${label}|${id}|${value}\n`;
+        }
+      });
+
+    assert.match(
+      rendered,
+      /Walking Speed\|ccCustomClassWalkSpeed\|30/
+    );
+    assert.match(
+      rendered,
+      /Climbing Speed\|ccCustomClassClimbSpeed\|0/
+    );
+    assert.match(
+      rendered,
+      /Swimming Speed\|ccCustomClassSwimSpeed\|0/
+    );
+    assert.match(
+      rendered,
+      /Flying Speed\|ccCustomClassFlySpeed\|0/
+    );
+    assert.match(
+      rendered,
+      /Burrowing Speed\|ccCustomClassBurrowSpeed\|0/
+    );
+    assert.doesNotMatch(
+      rendered,
+      /Bonus/
     );
   }
 );

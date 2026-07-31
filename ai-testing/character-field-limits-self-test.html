@@ -51,13 +51,10 @@
         data-draft-path="magic.customSpells.0.description"
       ></textarea>
 
-      <label for="ccCustomClassFlyBonus">
-        Custom Class Flying Speed Bonus
-      </label>
-      <input
-        id="ccCustomClassFlyBonus"
-        type="number"
-      >
+      <section
+        id="customClassMovementFields"
+        aria-label="Custom Class Movement"
+      ></section>
     </main>
 
     <script type="module">
@@ -67,7 +64,35 @@
       } from "../characterCreator/fieldLimits.js?v=creator-fix-pass-20260730";
       import {
         installWalkingSpeedInputGuard
-      } from "../characterCreator/walkingSpeed.js?v=creator-fix-pass-20260730";
+      } from "../characterCreator/walkingSpeed.js?v=custom-movement-speeds-20260731";
+      import {
+        renderCustomClassMovementFields
+      } from "../characterCreator/customClassTools.js?v=custom-movement-speeds-20260731";
+
+      document.getElementById(
+        "customClassMovementFields"
+      ).innerHTML =
+        renderCustomClassMovementFields({
+          template: {},
+          wizardField(
+            label,
+            id,
+            value,
+            options
+          ) {
+            return `
+              <label for="${id}">
+                ${label}
+              </label>
+              <input
+                id="${id}"
+                type="${options.type}"
+                value="${value}"
+                ${options.extra}
+              >
+            `;
+          }
+        });
 
       installCharacterCreatorTextInputGuard({
         root: document

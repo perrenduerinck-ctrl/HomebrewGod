@@ -1,37 +1,58 @@
 import {
   MOVEMENT_SPEED_TYPES,
   normalizeMovementSpeed
-} from "./walkingSpeed.js?v=creator-fix-pass-20260730";
+} from "./walkingSpeed.js?v=custom-movement-speeds-20260731";
 
 const MOVEMENT_INPUT_IDS = Object.freeze({
-  walk: "ccCustomClassWalkBonus",
-  climb: "ccCustomClassClimbBonus",
-  swim: "ccCustomClassSwimBonus",
-  fly: "ccCustomClassFlyBonus",
-  burrow: "ccCustomClassBurrowBonus"
+  walk: "ccCustomClassWalkSpeed",
+  climb: "ccCustomClassClimbSpeed",
+  swim: "ccCustomClassSwimSpeed",
+  fly: "ccCustomClassFlySpeed",
+  burrow: "ccCustomClassBurrowSpeed"
 });
 
-export function getClassTemplateMovementBonus(
+const MOVEMENT_DEFAULTS = Object.freeze({
+  walk: 30,
+  climb: 0,
+  swim: 0,
+  fly: 0,
+  burrow: 0
+});
+
+export function getClassTemplateMovementSpeed(
   template,
   movement
 ) {
-  const effect = (
+  const effects = (
     Array.isArray(template?.effects)
       ? template.effects
       : []
-  ).find((candidate) => {
-    return (
-      String(candidate?.type || "") ===
-        "speedBonus" &&
-      String(
-        candidate?.movement || "walk"
-      ).toLowerCase() === movement
-    );
-  });
+  );
+  const effect =
+    effects.find((candidate) => {
+      return (
+        String(candidate?.type || "") ===
+          "speedBonus" &&
+        String(candidate?.mode || "") ===
+          "replace" &&
+        String(
+          candidate?.movement || "walk"
+        ).toLowerCase() === movement
+      );
+    }) ||
+    effects.find((candidate) => {
+      return (
+        String(candidate?.type || "") ===
+          "speedBonus" &&
+        String(
+          candidate?.movement || "walk"
+        ).toLowerCase() === movement
+      );
+    });
 
   return normalizeMovementSpeed(
     effect?.value,
-    0
+    MOVEMENT_DEFAULTS[movement] ?? 0
   );
 }
 
@@ -43,12 +64,13 @@ export function readCustomClassMovementEffects(
   ).flatMap(([movement, inputId]) => {
     const value = normalizeMovementSpeed(
       getElementById(inputId)?.value,
-      0
+      MOVEMENT_DEFAULTS[movement] ?? 0
     );
 
     return value > 0
       ? [{
           type: "speedBonus",
+          mode: "replace",
           movement,
           value
         }]
@@ -71,9 +93,9 @@ export function renderCustomClassMovementFields({
   return MOVEMENT_SPEED_TYPES.map(
     (movement) => {
       return wizardField(
-        `${labels[movement]} Speed Bonus`,
+        `${labels[movement]} Speed`,
         MOVEMENT_INPUT_IDS[movement],
-        getClassTemplateMovementBonus(
+        getClassTemplateMovementSpeed(
           template,
           movement
         ),

@@ -7,7 +7,7 @@ test(
   "character text fields and custom class movement inputs enforce central limits",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-field-limits-self-test.html?release=creator-fix-pass-20260730",
+      "ai-testing/character-field-limits-self-test.html?release=custom-movement-speeds-20260731",
       {
         waitUntil:
           "domcontentloaded"
@@ -50,30 +50,84 @@ test(
       )
     ).toContainText("0 / 2000");
 
-    const flyBonus =
+    const movementFields = [
+      [
+        "Walking Speed",
+        "#ccCustomClassWalkSpeed",
+        "30"
+      ],
+      [
+        "Climbing Speed",
+        "#ccCustomClassClimbSpeed",
+        "0"
+      ],
+      [
+        "Swimming Speed",
+        "#ccCustomClassSwimSpeed",
+        "0"
+      ],
+      [
+        "Flying Speed",
+        "#ccCustomClassFlySpeed",
+        "0"
+      ],
+      [
+        "Burrowing Speed",
+        "#ccCustomClassBurrowSpeed",
+        "0"
+      ]
+    ];
+
+    for (
+      const [
+        label,
+        selector,
+        defaultValue
+      ] of movementFields
+    ) {
+      const input =
+        page.locator(selector);
+
+      await expect(
+        page.getByLabel(
+          label,
+          { exact: true }
+        )
+      ).toHaveCount(1);
+      await expect(input)
+        .toHaveValue(defaultValue);
+      await expect(input)
+        .toHaveAttribute("min", "0");
+      await expect(input)
+        .toHaveAttribute("max", "100");
+      await expect(input)
+        .toHaveAttribute("step", "1");
+    }
+
+    await expect(
+      page.getByText(
+        "Speed Bonus",
+        { exact: false }
+      )
+    ).toHaveCount(0);
+
+    const flySpeed =
       page.locator(
-        "#ccCustomClassFlyBonus"
+        "#ccCustomClassFlySpeed"
       );
 
-    await expect(flyBonus)
-      .toHaveAttribute("min", "0");
-    await expect(flyBonus)
-      .toHaveAttribute("max", "100");
-    await expect(flyBonus)
-      .toHaveAttribute("step", "1");
-
-    await flyBonus.fill(
+    await flySpeed.fill(
       "30000000000000000000"
     );
-    await expect(flyBonus)
+    await expect(flySpeed)
       .toHaveValue("100");
-    await flyBonus.press(
+    await flySpeed.press(
       "Control+A"
     );
-    await flyBonus.press(
+    await flySpeed.press(
       "Backspace"
     );
-    await expect(flyBonus)
+    await expect(flySpeed)
       .toHaveValue("0");
   }
 );

@@ -5,7 +5,7 @@ import {
   guardCharacterDraftWalkingSpeed,
   installWalkingSpeedInputGuard,
   normalizeCharacterWalkingSpeed
-} from "./walkingSpeed.js?v=creator-fix-pass-20260730";
+} from "./walkingSpeed.js?v=custom-movement-speeds-20260731";
 import {
   assertCharacterSerializedSize,
   normalizeCharacterTextFields
