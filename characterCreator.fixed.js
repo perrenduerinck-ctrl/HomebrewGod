@@ -88,6 +88,7 @@ import {
 import {
   normalizeCharacterEnvelope
 } from "./characterCreator/normalization.js";
+import { renderMagicalSecretsPanels } from "./characterCreator/magicalSecrets.js";
 import { escapeHtml } from "./characterCreator/rendering.js";
 import {
   calculateCharacterCarryingCapacity,
@@ -107,7 +108,7 @@ import {
   SRD_2014_FULL_CASTER_SLOTS,
   SRD_2014_PACT_MAGIC
 } from "./characterCreator/spellcasting.js";
-import { normalizeSpellSources, SPELL_SOURCE_MODEL_VERSION, synchronizeCanonicalSpellSources } from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
+import { clearMagicalSecretsCompatibilitySources, normalizeSpellSources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
 import {
   mergeSubclassFeatureLevels
 } from "./characterCreator/subclassMechanics.js";
@@ -9492,7 +9493,7 @@ export function createCharacterCreator(options = {}) {
         character?.magic
           ?.spellSourceModelVersion,
         0
-      ) === 2 &&
+      ) >= 2 &&
       classSources.length > 0;
 
     const knownIds = [...new Set([
@@ -9548,11 +9549,14 @@ export function createCharacterCreator(options = {}) {
       })
     )];
 
+    const magicalSecretIds = [...new Set(classSources.flatMap(
+      (source) => cleanArray(source?.magicalSecretSpellIds)
+    ))];
+
     const knownIdsForLimits =
       knownIds.filter((spellId) => {
-        return !mysticArcanumIds.includes(
-          spellId
-        );
+        return !mysticArcanumIds.includes(spellId) &&
+          !magicalSecretIds.includes(spellId);
       });
 
     const spellById = new Map(
@@ -9662,7 +9666,8 @@ export function createCharacterCreator(options = {}) {
       knownIds,
       preparedIds,
       alwaysPreparedIds,
-      mysticArcanumIds
+      mysticArcanumIds,
+      magicalSecretIds
     };
   }
 
@@ -9694,8 +9699,10 @@ export function createCharacterCreator(options = {}) {
           ),
         cantripIds:
           cleanArray(source.cantripIds),
-        knownSpellIds:
-          cleanArray(source.knownSpellIds),
+        knownSpellIds: cleanArray(source.knownSpellIds).filter(
+          (spellId) => !cleanArray(source.magicalSecretSpellIds).includes(spellId)
+        ),
+        magicalSecretSpellIds: cleanArray(source.magicalSecretSpellIds),
         preparedSpellIds:
           cleanArray(source.preparedSpellIds),
         spellbookSpellIds:
@@ -29040,8 +29047,7 @@ export function createCharacterCreator(options = {}) {
       infusions: []
     };
     const resourceById = new Map();
-    const classSourceStore =
-      getSection16ClassSourceStore(draft);
+    clearMagicalSecretsCompatibilitySources(draft);
     const firstUnarmoredDefenseSource =
       syncFirstUnarmoredDefenseSource(
         draft
@@ -29054,20 +29060,6 @@ export function createCharacterCreator(options = {}) {
           return rule.featureId;
         })
       );
-
-    Object.values(classSourceStore)
-      .forEach((source) => {
-        const previousSecretIds = cleanArray(
-          source.magicalSecretSpellIds
-        );
-
-        source.knownSpellIds = cleanArray(
-          source.knownSpellIds
-        ).filter((spellId) => {
-          return !previousSecretIds.includes(spellId);
-        });
-        source.magicalSecretSpellIds = [];
-      });
 
     removeSkillProficiencySourcesByPrefix([
       "class-feature:"
@@ -29733,33 +29725,29 @@ export function createCharacterCreator(options = {}) {
             );
           }
 
-          if (
-            (Array.isArray(feature.effects)
-              ? feature.effects
-              : []
-            ).some((effect) => effect.type === "magicalSecrets")
-          ) {
+          const magicalSecretsEffect = (Array.isArray(feature.effects)
+            ? feature.effects : []).find(
+              (effect) => effect.type === "magicalSecrets"
+            );
+
+          if (magicalSecretsEffect) {
             const sourceEntry = getSpellcastingClassOptions(draft)
               .find((entry) => {
                 return getSection16SourceKey(entry) === classEntryId;
               });
-            const source = sourceEntry
-              ? getSection16SourceState(
-                  sourceEntry,
-                  { character: draft }
-                )
-              : classSourceStore[classEntryId];
-
-            if (source) {
-              source.magicalSecretSpellIds = uniqueCleanArray([
-                ...cleanArray(source.magicalSecretSpellIds),
-                ...selections
-              ]);
-              source.knownSpellIds = uniqueCleanArray([
-                ...cleanArray(source.knownSpellIds),
-                ...selections
-              ]);
-            }
+            storeMagicalSecretsCompatibilitySource(draft, {
+                sourceId: `magical-secrets:${choiceKey}`,
+                sourceName: feature.name,
+                sourceFeatureId: feature.id,
+                classId: feature.classId || classEntry?.classId,
+                classEntryId,
+                subclassId: classEntry?.subclassId,
+                choiceCount: magicalSecretsEffect.count,
+                selectedSpellIds: selections,
+                maximumSpellLevel: sourceEntry?.maxSpellLevel,
+                spellcastingAbility: sourceEntry?.spellcastingAbility,
+                rulesSource: feature.rulesSource || feature.sourceLabel || feature.source
+            });
           }
 
           selections.forEach((selection) => {
@@ -45578,10 +45566,8 @@ export function createCharacterCreator(options = {}) {
         "known" &&
       safeNumber(entry.spellsKnown, 0) > 0 &&
       source.knownSpellIds.filter((id) => {
-        return safeNumber(
-          getSection16SpellById(id)?.level,
-          0
-        ) > 0;
+        return !cleanArray(source.magicalSecretSpellIds).includes(id) &&
+          safeNumber(getSection16SpellById(id)?.level, 0) > 0;
       }).length >=
         safeNumber(entry.spellsKnown, 0)
     ) {
@@ -46643,6 +46629,12 @@ export function createCharacterCreator(options = {}) {
     return parts.join(" · ");
   }
 
+  function renderSection16MagicalSecrets() {
+    return renderMagicalSecretsPanels(getSection12ClassFeaturesThroughLevel(), {
+      classOptions: getSpellcastingClassOptions(creatorState.draft), getChoiceKey: getSection12FeatureChoiceKey, getChoiceCount: getSection12FeatureChooseCount,
+      getSelections: getSection12FeatureStoredChoices, getOptions: getSection12FeatureChoiceOptionRecords, getSourceKey: getSection16SourceKey, getSpellById: getSection16SpellById
+    });
+  }
   function renderSection16DefaultSpellViewer() {
     migrateSection16LegacySpellSelections();
 
@@ -48515,6 +48507,8 @@ export function createCharacterCreator(options = {}) {
       </div>
 
       <hr>
+
+      ${renderSection16MagicalSecrets()}
 
       <h3>Default Spell List</h3>
 
@@ -51017,6 +51011,10 @@ export function createCharacterCreator(options = {}) {
         const arcanumCount = Object.values(
           source?.mysticArcanumSpellIds || {}
         ).filter(Boolean).length;
+        const secretIds = cleanArray(source?.magicalSecretSpellIds);
+        const magicalSecretsCount = secretIds.length;
+        const ordinaryKnownCount = cleanArray(source?.knownSpellIds)
+          .filter((spellId) => !secretIds.includes(spellId)).length;
 
         const slotText =
           Object.entries(
@@ -51072,9 +51070,11 @@ export function createCharacterCreator(options = {}) {
               <br>
               <b>Selections:</b>
               ${source?.cantripIds?.length || 0} cantrip(s),
-              ${source?.knownSpellIds?.length || 0} known,
+              ${ordinaryKnownCount} known,
               ${source?.spellbookSpellIds?.length || 0} in spellbook,
               ${source?.preparedSpellIds?.length || 0} prepared
+
+              ${magicalSecretsCount ? `, ${magicalSecretsCount} Magical Secrets` : ""}
 
               ${
                 source?.alwaysPreparedSpellIds?.length

@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildSpellLibraryFromSources,
+  clearMagicalSecretsCompatibilitySources,
   collectLegacySpellSources,
+  createMagicalSecretsSpellSource,
   createStableSpellSourceId,
   getCanonicalSpellSources,
   normalizeSpellSource,
@@ -12,8 +14,12 @@ import {
   SPELL_SELECTION_MODES,
   SPELL_SOURCE_MODEL_VERSION,
   SPELL_SOURCE_TYPES,
+  storeMagicalSecretsCompatibilitySource,
   synchronizeCanonicalSpellSources
 } from "../characterCreator/spellSources.js";
+import {
+  renderMagicalSecretsPanels
+} from "../characterCreator/magicalSecrets.js";
 import {
   collectCharacterSpells
 } from "../characterSheet.js";
@@ -24,6 +30,9 @@ import {
 import {
   DEFAULT_SPELLS
 } from "../defaultSpells.js";
+import {
+  DEFAULT_CLASSES
+} from "../defaultClasses.js";
 import {
   createFeatSpellSourceMetadata,
   describeFeatSpellChoiceRestrictions,
@@ -876,6 +885,232 @@ test(
     assert.equal(
       longstrider.recharge,
       "longRest"
+    );
+  }
+);
+
+test(
+  "Magical Secrets source records use Bard casting rules and stable feature IDs",
+  () => {
+    const source = createMagicalSecretsSpellSource({
+      classEntryId: "bard-main",
+      sourceFeatureId: "magical-secrets-10",
+      selectedSpellIds: ["counterspell", "fireball"],
+      maximumSpellLevel: 5
+    });
+
+    assert.equal(
+      source.sourceId,
+      "magical-secrets:bard-main:magical-secrets-10"
+    );
+    assert.equal(source.sourceType, "magical-secrets");
+    assert.equal(source.choiceCount, 2);
+    assert.equal(source.maximumSpellLevel, 5);
+    assert.equal(source.spellcastingAbility, "cha");
+    assert.equal(source.grantsKnown, true);
+    assert.equal(source.canUseSpellSlots, true);
+    assert.equal(
+      source.spellStates.fireball.known,
+      true
+    );
+  }
+);
+
+test(
+  "normal and Additional Magical Secrets remain separate through save and reload",
+  () => {
+    const character = {
+      magic: {
+        classSources: {
+          "bard-main": {
+            classEntryId: "bard-main",
+            classId: "bard",
+            className: "Bard",
+            spellcastingAbility: "cha",
+            knownSpellIds: ["cure-wounds"],
+            magicalSecretSpellIds: []
+          }
+        },
+        featSources: {}
+      },
+      featMechanics: {}
+    };
+
+    clearMagicalSecretsCompatibilitySources(character);
+    storeMagicalSecretsCompatibilitySource(character, {
+      sourceId: "magical-secrets:bard-main:magical-secrets-10",
+      sourceFeatureId: "magical-secrets-10",
+      classEntryId: "bard-main",
+      selectedSpellIds: ["counterspell", "fireball"],
+      maximumSpellLevel: 5
+    });
+    storeMagicalSecretsCompatibilitySource(character, {
+      sourceId: "magical-secrets:bard-main:lore-additional-magical-secrets",
+      sourceName: "Additional Magical Secrets",
+      sourceFeatureId: "lore-additional-magical-secrets",
+      classEntryId: "bard-main",
+      subclassId: "lore",
+      selectedSpellIds: ["spiritual-weapon", "spike-growth"],
+      maximumSpellLevel: 3
+    });
+    synchronizeCanonicalSpellSources(
+      character,
+      { fromCompatibility: true }
+    );
+
+    const reloaded = JSON.parse(
+      JSON.stringify(character)
+    );
+    const sources = getCanonicalSpellSources(reloaded);
+    const magicalSources = sources.filter((source) => {
+      return source.sourceType === "magical-secrets";
+    });
+    const classSource = sources.find((source) => {
+      return source.sourceType === "class";
+    });
+
+    assert.equal(magicalSources.length, 2);
+    assert.deepEqual(
+      magicalSources.map((source) => source.sourceId),
+      [
+        "magical-secrets:bard-main:magical-secrets-10",
+        "magical-secrets:bard-main:lore-additional-magical-secrets"
+      ]
+    );
+    assert.deepEqual(
+      classSource.selectedSpellIds,
+      ["cure-wounds"]
+    );
+
+    const sheetSpells = collectCharacterSpells(reloaded);
+    const fireball = sheetSpells.find((spell) => {
+      return spell.id === "fireball";
+    });
+
+    assert.deepEqual(fireball.sources, ["Magical Secrets"]);
+    assert.ok(fireball.statuses.includes("Magical Secrets"));
+    assert.equal(
+      fireball.statuses.includes("Feat-granted"),
+      false
+    );
+  }
+);
+
+test(
+  "Lore Additional Magical Secrets is an independent catalog choice feature",
+  () => {
+    const lore = DEFAULT_CLASSES.bard.subclasses
+      .find((subclass) => subclass.id === "lore");
+    const feature = lore.featuresByLevel[6]
+      .find((entry) => {
+        return entry.id ===
+          "lore-additional-magical-secrets";
+      });
+
+    assert.equal(feature.type, "choice");
+    assert.equal(feature.choose, 2);
+    assert.equal(
+      feature.optionSource,
+      "castableSpellsAllClasses"
+    );
+    assert.equal(
+      feature.effects[0].type,
+      "magicalSecrets"
+    );
+    assert.equal(feature.effects[0].additional, true);
+  }
+);
+
+test(
+  "Magical Secrets panel preserves and marks selections invalidated by a lower Bard level",
+  () => {
+    const html = renderMagicalSecretsPanels(
+      [
+        {
+          id: "magical-secrets-10",
+          name: "Magical Secrets",
+          classEntryId: "bard-main",
+          level: 10,
+          effects: [{ type: "magicalSecrets" }]
+        }
+      ],
+      {
+        classOptions: [
+          {
+            classEntryId: "bard-main",
+            maxSpellLevel: 2
+          }
+        ],
+        getChoiceKey: () =>
+          "bard-main:magical-secrets-10",
+        getChoiceCount: () => 2,
+        getSelections: () => ["fireball"],
+        getOptions: () => [],
+        getSourceKey: (entry) =>
+          entry.classEntryId,
+        getSpellById: () => ({
+          id: "fireball",
+          name: "Fireball"
+        })
+      }
+    );
+
+    assert.match(html, /Needs attention/);
+    assert.match(html, /Fireball/);
+    assert.match(html, /selection is preserved/i);
+    assert.match(html, /Remaining:<\/b> 2/);
+  }
+);
+
+test(
+  "removing Magical Secrets preserves the same spell when Bard also knows it normally",
+  () => {
+    const character = {
+      magic: { classSources: {}, featSources: {} },
+      featMechanics: {}
+    };
+    const sources = [
+      {
+        sourceId: "class:bard-main",
+        sourceType: "class",
+        sourceName: "Bard",
+        classId: "bard",
+        classEntryId: "bard-main",
+        selectedSpellIds: ["fireball"],
+        grantsKnown: true,
+        spellStates: { fireball: { known: true } }
+      },
+      createMagicalSecretsSpellSource({
+        sourceId: "magical-secrets:bard-main:magical-secrets-10",
+        classEntryId: "bard-main",
+        sourceFeatureId: "magical-secrets-10",
+        selectedSpellIds: ["fireball"],
+        maximumSpellLevel: 5
+      })
+    ];
+
+    character.magic.spellSources = sources;
+    character.magic.spellSourceModelVersion =
+      SPELL_SOURCE_MODEL_VERSION;
+    populateSpellSourceCompatibility(character, sources);
+    clearMagicalSecretsCompatibilitySources(character);
+    const rebuilt = collectLegacySpellSources(character);
+
+    assert.ok(
+      character.magic.classSources["bard-main"]
+        .knownSpellIds.includes("fireball")
+    );
+    assert.equal(
+      rebuilt.some((source) => {
+        return source.sourceType ===
+          "magical-secrets";
+      }),
+      false
+    );
+    assert.ok(
+      rebuilt.find((source) => {
+        return source.sourceType === "class";
+      }).selectedSpellIds.includes("fireball")
     );
   }
 );

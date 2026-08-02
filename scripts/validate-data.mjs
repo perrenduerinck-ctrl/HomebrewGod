@@ -53,6 +53,7 @@ const allowedEffects = {
   ]),
   subclassFeature: new Set([
     "extraAttack",
+    "magicalSecrets",
     "subclassFeature"
   ]),
   subclass: new Set([

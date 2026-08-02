@@ -698,11 +698,223 @@ function getFeatSpellIds(grant) {
   );
 }
 
+export function createMagicalSecretsSpellSource({
+  sourceId = "",
+  sourceName = "Magical Secrets",
+  sourceFeatureId = "magical-secrets",
+  classId = "bard",
+  classEntryId = "",
+  subclassId = "",
+  choiceCount = 2,
+  selectedSpellIds = [],
+  maximumSpellLevel = null,
+  spellcastingAbility = "cha",
+  rulesSource = ""
+} = {}) {
+  const selectedIds = uniqueText(
+    selectedSpellIds
+  );
+  const spellStates = Object.fromEntries(
+    selectedIds.map((spellId) => {
+      return [spellId, { known: true }];
+    })
+  );
+
+  return normalizeSpellSource({
+    sourceId: cleanText(
+      sourceId,
+      `magical-secrets:${stablePart(
+        classEntryId,
+        "bard"
+      )}:${stablePart(
+        sourceFeatureId,
+        "feature"
+      )}`
+    ),
+    sourceType: "magical-secrets",
+    sourceName,
+    sourceFeatureId,
+    sourceFeatureName: sourceName,
+    classId,
+    classEntryId,
+    subclassId,
+    selectionMode: "choose-from-catalog",
+    choiceCount,
+    selectedSpellIds: selectedIds,
+    minimumSpellLevel: 0,
+    maximumSpellLevel,
+    spellcastingAbility,
+    grantsKnown: true,
+    grantsPrepared: false,
+    alwaysPrepared: false,
+    canUseSpellSlots: true,
+    rulesSource,
+    spellStates
+  });
+}
+
+export function clearMagicalSecretsCompatibilitySources(
+  character
+) {
+  if (!isRecord(character)) {
+    return character;
+  }
+
+  character.magic = isRecord(character.magic)
+    ? character.magic
+    : {};
+  character.magic.featSources = isRecord(
+    character.magic.featSources
+  )
+    ? character.magic.featSources
+    : {};
+
+  Object.entries(character.magic.featSources)
+    .forEach(([sourceId, source]) => {
+      if (
+        cleanText(source?.sourceType) ===
+        "magical-secrets"
+      ) {
+        delete character.magic.featSources[
+          sourceId
+        ];
+      }
+    });
+
+  if (isRecord(character.featMechanics)) {
+    character.featMechanics.spellcasting = (
+      Array.isArray(
+        character.featMechanics.spellcasting
+      )
+        ? character.featMechanics.spellcasting
+        : []
+    ).filter((record) => {
+      return (
+        cleanText(record?.sourceType) !==
+          "magical-secrets" &&
+        !cleanText(record?.sourceId)
+          .startsWith("magical-secrets:") &&
+        !/magical secrets/i.test(
+          cleanText(record?.featName)
+        )
+      );
+    });
+  }
+
+  const ordinaryClassSpellIds = new Map();
+  normalizeSpellSources(
+    character.magic.spellSources
+  )
+    .filter((source) => {
+      return source.sourceType === "class" &&
+        Boolean(source.classEntryId);
+    })
+    .forEach((source) => {
+      ordinaryClassSpellIds.set(
+        source.classEntryId,
+        new Set([
+          ...source.selectedSpellIds,
+          ...source.fixedSpellIds
+        ])
+      );
+    });
+
+  Object.entries(
+    isRecord(character.magic.classSources)
+      ? character.magic.classSources
+      : {}
+  ).forEach(([sourceKey, source]) => {
+    const previousIds = uniqueText(
+      source.magicalSecretSpellIds
+    );
+    const ordinaryIds =
+      ordinaryClassSpellIds.get(
+        cleanText(
+          source.classEntryId,
+          sourceKey
+        )
+      ) || new Set();
+    source.knownSpellIds = uniqueText(
+      source.knownSpellIds
+    ).filter((spellId) => {
+      return !previousIds.includes(spellId) ||
+        ordinaryIds.has(spellId);
+    });
+    source.magicalSecretSpellIds = [];
+  });
+
+  return character;
+}
+
+export function storeMagicalSecretsCompatibilitySource(
+  character,
+  options = {}
+) {
+  if (!isRecord(character)) {
+    return null;
+  }
+
+  character.magic = isRecord(character.magic)
+    ? character.magic
+    : {};
+  character.magic.featSources = isRecord(
+    character.magic.featSources
+  )
+    ? character.magic.featSources
+    : {};
+  const source =
+    createMagicalSecretsSpellSource(options);
+  character.magic.featSources[source.sourceId] =
+    source;
+
+  const classSource = isRecord(
+    character.magic.classSources
+  )
+    ? character.magic.classSources[
+        source.classEntryId
+      ]
+    : null;
+
+  if (isRecord(classSource)) {
+    classSource.magicalSecretSpellIds =
+      uniqueText([
+        ...uniqueText(
+          classSource.magicalSecretSpellIds
+        ),
+        ...source.selectedSpellIds
+      ]);
+    classSource.knownSpellIds = uniqueText([
+      ...uniqueText(classSource.knownSpellIds),
+      ...source.selectedSpellIds
+    ]);
+  }
+
+  return source;
+}
+
 export function collectLegacySpellSources(character) {
   const magic = isRecord(character?.magic)
     ? character.magic
     : {};
   const sourceMap = new Map();
+  const canonicalClassSelections = new Map();
+
+  if (Array.isArray(magic.spellSources)) {
+    normalizeSpellSources(magic.spellSources)
+      .filter((source) => {
+        return source.sourceType === "class" &&
+          Boolean(source.classEntryId);
+      })
+      .forEach((source) => {
+        canonicalClassSelections.set(
+          source.classEntryId,
+          new Set([
+            ...source.selectedSpellIds,
+            ...source.fixedSpellIds
+          ])
+        );
+      });
+  }
 
   Object.entries(
     isRecord(magic.classSources)
@@ -720,12 +932,23 @@ export function collectLegacySpellSources(character) {
       source.className || source.classId,
       "Spellcasting"
     );
+    const magicalSecretSpellIds = uniqueText(
+      source.magicalSecretSpellIds
+    );
+    const independentClassSpellIds =
+      canonicalClassSelections.get(
+        classEntryId
+      ) || new Set();
     const selectedSpellIds = uniqueText([
       ...uniqueText(source.cantripIds),
       ...uniqueText(source.knownSpellIds),
       ...uniqueText(source.preparedSpellIds),
       ...uniqueText(source.spellbookSpellIds)
-    ]);
+    ]).filter((spellId) => {
+      return !magicalSecretSpellIds.includes(
+        spellId
+      ) || independentClassSpellIds.has(spellId);
+    });
 
     if (selectedSpellIds.length) {
       addSource(sourceMap, {
@@ -1383,6 +1606,7 @@ export function populateSpellSourceCompatibility(
                 preparedSpellIds: [],
                 spellbookSpellIds: [],
                 alwaysPreparedSpellIds: [],
+                magicalSecretSpellIds: [],
                 subclassSpellIds: [],
                 mysticArcanumSpellIds: {}
               }
@@ -1439,6 +1663,15 @@ export function populateSpellSourceCompatibility(
         if (source.sourceType === "subclass") {
           add("alwaysPreparedSpellIds");
           add("subclassSpellIds");
+          return;
+        }
+
+        if (
+          source.sourceType ===
+          "magical-secrets"
+        ) {
+          add("knownSpellIds");
+          add("magicalSecretSpellIds");
           return;
         }
 
@@ -1508,6 +1741,8 @@ export function populateSpellSourceCompatibility(
           ...sourceRecord,
           spellId,
           sourceId: source.sourceId,
+          sourceType: source.sourceType,
+          sourceName: source.sourceName,
           featId: source.featId,
           featName: source.sourceName,
           spellcastingAbility:

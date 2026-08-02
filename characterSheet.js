@@ -4687,6 +4687,7 @@ const SPELL_STATUS_ORDER = Object.freeze([
   "Innate",
   "Species-granted",
   "Feat-granted",
+  "Magical Secrets",
   "Subclass-granted",
   "Mystic Arcanum",
   "Custom spell"
@@ -5015,11 +5016,12 @@ function getCanonicalSpellStatuses(source) {
     "Species-granted"
   );
   add(
-    [
-      "feat",
-      "magical-secrets"
-    ].includes(sourceType),
+    sourceType === "feat",
     "Feat-granted"
+  );
+  add(
+    sourceType === "magical-secrets",
+    "Magical Secrets"
   );
   add(
     sourceType === "subclass",

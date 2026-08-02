@@ -25,6 +25,72 @@ const mergeFeature = (classes, classId, featureId, overlay) => {
   return feature;
 };
 
+const mergeSubclassFeature = (
+  classes,
+  classId,
+  subclassId,
+  featureId,
+  overlay
+) => {
+  const classData = classes?.[classId];
+  const subclassIndex = (classData?.subclasses || [])
+    .findIndex((entry) => {
+      return normalizeId(entry?.id || entry?.name) ===
+        normalizeId(subclassId);
+    });
+  const subclass = classData?.subclasses?.[
+    subclassIndex
+  ];
+
+  if (!subclass || subclassIndex < 0) {
+    return null;
+  }
+
+  let matchedFeature = null;
+  const overlayFeature = (feature) => {
+    if (
+      normalizeId(feature?.id || feature?.name) !==
+      normalizeId(featureId)
+    ) {
+      return feature;
+    }
+
+    matchedFeature = {
+      ...feature,
+      ...overlay
+    };
+    return matchedFeature;
+  };
+  const featuresByLevel = Object.fromEntries(
+    Object.entries(subclass.featuresByLevel || {})
+      .map(([level, features]) => {
+        return [level, (features || []).map(overlayFeature)];
+      })
+  );
+  const levels = Object.fromEntries(
+    Object.entries(subclass.levels || {})
+      .map(([level, levelData]) => {
+        return [
+          level,
+          {
+            ...levelData,
+            features: (levelData?.features || [])
+              .map(overlayFeature)
+          }
+        ];
+      })
+  );
+
+  classData.subclasses = classData.subclasses
+    .map((entry, index) => {
+      return index === subclassIndex
+        ? { ...entry, featuresByLevel, levels }
+        : entry;
+    });
+
+  return matchedFeature;
+};
+
 const FIGHTING_STYLE_EFFECTS = {
   Archery: {
     type: "weaponAttackBonus",
@@ -585,6 +651,26 @@ export function applyDefaultClassFeatureRules(classes) {
       summary: "Choose two spells from any class that you can cast at your current bard level."
     });
   });
+
+  mergeSubclassFeature(
+    classes,
+    "bard",
+    "lore",
+    "lore-additional-magical-secrets",
+    {
+      type: "choice",
+      choose: 2,
+      optionSource: "castableSpellsAllClasses",
+      effects: [
+        {
+          type: "magicalSecrets",
+          count: 2,
+          additional: true
+        }
+      ],
+      summary: "Choose two additional spells from any class that you can cast at your current bard level."
+    }
+  );
 
   mergeFeature(classes, "ranger", "favored-enemy", {
     chooseByLevel: { 1: 1, 6: 2, 14: 3 },
