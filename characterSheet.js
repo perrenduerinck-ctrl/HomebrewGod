@@ -20,6 +20,11 @@ import {
 import {
   calculateCharacterCarryingCapacity
 } from "./characterCreator/rulesMath.js";
+import {
+  buildSpellLibraryFromSources,
+  getCanonicalSpellSources,
+  SPELL_SOURCE_MODEL_VERSION
+} from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
 
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },
@@ -4951,6 +4956,88 @@ function getClassSpellSourceLabel(source, fallbackKey) {
     : classLabel;
 }
 
+function getCanonicalSpellStatuses(source) {
+  const state = isRecord(source?.spellState)
+    ? source.spellState
+    : {};
+  const sourceType = cleanText(
+    source?.sourceType
+  );
+  const hasSpellState =
+    Object.keys(state).length > 0;
+  const statuses = [];
+  const add = (condition, status) => {
+    if (condition && !statuses.includes(status)) {
+      statuses.push(status);
+    }
+  };
+
+  add(
+    state.prepared === true ||
+      state.alwaysPrepared === true ||
+      (
+        !hasSpellState &&
+        (
+          source?.grantsPrepared === true ||
+          source?.alwaysPrepared === true
+        )
+      ),
+    "Prepared"
+  );
+  add(
+    state.alwaysPrepared === true ||
+      (
+        !hasSpellState &&
+        source?.alwaysPrepared === true
+      ),
+    "Always prepared"
+  );
+  add(
+    state.known === true ||
+      (
+        !hasSpellState &&
+        source?.grantsKnown === true
+      ),
+    "Known"
+  );
+  add(state.spellbook === true, "Spellbook");
+  add(
+    state.innate === true ||
+      [
+        "innate",
+        "species",
+        "background"
+      ].includes(sourceType),
+    "Innate"
+  );
+  add(
+    sourceType === "species",
+    "Species-granted"
+  );
+  add(
+    [
+      "feat",
+      "magical-secrets"
+    ].includes(sourceType),
+    "Feat-granted"
+  );
+  add(
+    sourceType === "subclass",
+    "Subclass-granted"
+  );
+  add(
+    state.mysticArcanum === true ||
+      sourceType === "mystic-arcanum",
+    "Mystic Arcanum"
+  );
+  add(
+    sourceType === "custom-spell",
+    "Custom spell"
+  );
+
+  return statuses;
+}
+
 export function collectCharacterSpells(character) {
   const magic = isRecord(character?.magic)
     ? character.magic
@@ -4960,6 +5047,12 @@ export function collectCharacterSpells(character) {
     getBoundedClassSourceEntries(
       character
     );
+  const usesCanonicalSources = Boolean(
+    Number(
+      magic.spellSourceModelVersion
+    ) >= SPELL_SOURCE_MODEL_VERSION &&
+    Array.isArray(magic.spellSources)
+  );
 
   const addMany = (
     references,
@@ -4999,19 +5092,38 @@ export function collectCharacterSpells(character) {
       });
   };
 
-  addMany(
-    magic.knownSpellIds,
-    ["Known"],
-    ["Spellcasting"]
-  );
-  addMany(
-    magic.preparedSpellIds,
-    ["Prepared"],
-    ["Spellcasting"]
-  );
+  if (usesCanonicalSources) {
+    buildSpellLibraryFromSources(
+      getCanonicalSpellSources(character)
+    ).forEach((spell) => {
+      spell.sources.forEach((source) => {
+        addSpellReference(
+          records,
+          spell.spell || spell.spellId,
+          {
+            statuses:
+              getCanonicalSpellStatuses(
+                source
+              ),
+            sources: [source.sourceName]
+          }
+        );
+      });
+    });
+  } else {
+    addMany(
+      magic.knownSpellIds,
+      ["Known"],
+      ["Spellcasting"]
+    );
+    addMany(
+      magic.preparedSpellIds,
+      ["Prepared"],
+      ["Spellcasting"]
+    );
 
-  classSources.forEach(
-    ([sourceKey, source]) => {
+    classSources.forEach(
+      ([sourceKey, source]) => {
       const sourceLabel =
         getClassSpellSourceLabel(
           source,
@@ -5127,8 +5239,8 @@ export function collectCharacterSpells(character) {
           }
         );
       });
-    }
-  );
+      }
+    );
 
   asArray(magic.innateSpells)
     .slice(
@@ -5236,28 +5348,29 @@ export function collectCharacterSpells(character) {
       });
   }
 
-  asArray(magic.customSpells)
-    .slice(
-      0,
-      SPELL_REFERENCE_SCAN_LIMIT
-    )
-    .forEach((spell) => {
-      addSpellReference(
-        records,
-        spell,
-        {
-          statuses: ["Custom spell"],
-          sources: [
-            firstText(
-              spell?.sourceLabel,
-              spell?.sourceName,
-              spell?.source,
-              "Custom spell"
-            )
-          ]
-        }
-      );
-    });
+    asArray(magic.customSpells)
+      .slice(
+        0,
+        SPELL_REFERENCE_SCAN_LIMIT
+      )
+      .forEach((spell) => {
+        addSpellReference(
+          records,
+          spell,
+          {
+            statuses: ["Custom spell"],
+            sources: [
+              firstText(
+                spell?.sourceLabel,
+                spell?.sourceName,
+                spell?.source,
+                "Custom spell"
+              )
+            ]
+          }
+        );
+      });
+  }
 
   return [...records.values()]
     .map((spell) => {
