@@ -441,6 +441,59 @@ test(
 );
 
 test(
+  "regenerating a species source keeps newly unlocked innate spells",
+  () => {
+    const character = {
+      magic: {
+        spellSourceModelVersion:
+          SPELL_SOURCE_MODEL_VERSION,
+        spellSources: [
+          {
+            sourceId: "species:dark-elf",
+            sourceType: "species",
+            sourceName: "Dark Elf",
+            fixedSpellIds: [
+              "dancing-lights"
+            ],
+            grantsKnown: true
+          }
+        ],
+        innateSpells: [
+          {
+            id: "dancing-lights",
+            source: "species:dark-elf"
+          },
+          {
+            id: "faerie-fire",
+            source: "species:dark-elf"
+          },
+          {
+            id: "darkness",
+            source: "species:dark-elf"
+          }
+        ]
+      }
+    };
+
+    synchronizeCanonicalSpellSources(
+      character,
+      { fromCompatibility: true }
+    );
+
+    assert.deepEqual(
+      buildSpellLibraryFromSources(
+        character.magic.spellSources
+      ).map((spell) => spell.spellId),
+      [
+        "dancing-lights",
+        "faerie-fire",
+        "darkness"
+      ]
+    );
+  }
+);
+
+test(
   "playable sheet uses canonical sources and does not resurrect a removed source",
   () => {
     const baseSources = [

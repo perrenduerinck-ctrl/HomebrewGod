@@ -22598,7 +22598,6 @@ export function createCharacterCreator(options = {}) {
 
     const magic =
       creatorState.draft.magic;
-
     magic.innateSpells =
       (Array.isArray(magic.innateSpells)
         ? magic.innateSpells
@@ -22616,6 +22615,7 @@ export function createCharacterCreator(options = {}) {
           }
         );
       });
+    synchronizeCanonicalSpellSources(creatorState.draft, { fromCompatibility: true });
   }
 
   function setInnateSpellsForSource(
@@ -22631,7 +22631,6 @@ export function createCharacterCreator(options = {}) {
 
     const magic =
       creatorState.draft.magic;
-
     magic.innateSpells =
       (Array.isArray(magic.innateSpells)
         ? magic.innateSpells
@@ -22667,6 +22666,7 @@ export function createCharacterCreator(options = {}) {
           )
         );
       });
+    synchronizeCanonicalSpellSources(creatorState.draft, { fromCompatibility: true });
   }
 
   function getSection11HalfElfAbilityChoices() {
