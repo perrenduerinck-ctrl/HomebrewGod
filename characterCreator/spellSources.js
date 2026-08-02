@@ -176,6 +176,63 @@ function normalizeSpellStates(value) {
   );
 }
 
+function normalizeSelectionGroups(value) {
+  return (Array.isArray(value) ? value : [])
+    .filter(isRecord)
+    .map((group, index) => {
+      const selectedSpellIds = uniqueText(
+        group.selectedSpellIds
+      );
+      const levels = uniqueText(group.levels)
+        .map(Number)
+        .filter((level) => {
+          return (
+            Number.isInteger(level) &&
+            level >= 0 &&
+            level <= 9
+          );
+        });
+
+      return {
+        ...group,
+        sourceFeatureId: cleanText(
+          group.sourceFeatureId,
+          `spell-choice-${index + 1}`
+        ),
+        sourceFeatureName: cleanText(
+          group.sourceFeatureName,
+          "Spell choice"
+        ),
+        selectionMode: normalizeSelectionMode(
+          group.selectionMode,
+          group
+        ),
+        choiceCount: wholeNumber(
+          group.choiceCount,
+          0
+        ),
+        selectedSpellIds,
+        allowedSpellIds: uniqueText(
+          group.allowedSpellIds
+        ),
+        allowedClassLists: uniqueText(
+          group.allowedClassLists
+        ),
+        allowedSchools: uniqueText(
+          group.allowedSchools
+        ),
+        levels,
+        ritualOnly:
+          group.ritualOnly === true,
+        attackRollOnly:
+          group.attackRollOnly === true,
+        unresolvedReason: cleanText(
+          group.unresolvedReason
+        )
+      };
+    });
+}
+
 function normalizeSourceType(value) {
   const type = cleanText(value)
     .toLowerCase()
@@ -363,7 +420,11 @@ export function normalizeSpellSource(
     ),
     spellStates: normalizeSpellStates(
       raw.spellStates
-    )
+    ),
+    selectionGroups:
+      normalizeSelectionGroups(
+        raw.selectionGroups
+      )
   };
 }
 
@@ -520,6 +581,10 @@ function mergeSourceRecords(first, second) {
       ...first.spellRecords,
       ...second.spellRecords
     ],
+    selectionGroups: [
+      ...first.selectionGroups,
+      ...second.selectionGroups
+    ],
     spellStates: mergeSpellStates(
       first.spellStates,
       second.spellStates
@@ -620,8 +685,17 @@ function getInnateSourceType(spell) {
   return "innate";
 }
 
-function getFeatSpellId(grant) {
-  return spellReferenceId(grant);
+function getFeatSpellIds(grant) {
+  if (!isRecord(grant)) {
+    return uniqueText(grant);
+  }
+
+  return uniqueText(
+    grant.spellIds ||
+    grant.spellId ||
+    grant.id ||
+    grant.name
+  );
 }
 
 export function collectLegacySpellSources(character) {
@@ -778,19 +852,36 @@ export function collectLegacySpellSources(character) {
     const grantRecords = Array.isArray(source.grants)
       ? source.grants
       : [];
-    const fixedSpellIds = uniqueText(
-      grantRecords.map(getFeatSpellId)
-    );
+    const spellRecords = Array.isArray(
+      source.spellRecords
+    )
+      ? source.spellRecords
+      : [];
+    const fixedSpellIds = uniqueText([
+      ...uniqueText(source.fixedSpellIds),
+      ...grantRecords.flatMap(
+        getFeatSpellIds
+      ),
+      ...spellRecords.filter((record) => {
+        return (
+          record?.fixed === true ||
+          cleanText(record?.origin) !==
+            "choice"
+        );
+      })
+    ]);
     const selectedSpellIds = uniqueText([
-      ...uniqueText(source.spellIds),
       ...uniqueText(
-        (Array.isArray(source.spellRecords)
-          ? source.spellRecords
-          : []
-        ).filter((record) => {
-          return record?.fixed !== true;
-        })
-      )
+        source.selectedSpellIds
+      ),
+      ...uniqueText(source.spellIds),
+      ...spellRecords.filter((record) => {
+        return (
+          record?.fixed !== true &&
+          cleanText(record?.origin) ===
+            "choice"
+        );
+      })
     ]).filter((spellId) => {
       return !fixedSpellIds.includes(spellId);
     });
@@ -807,7 +898,8 @@ export function collectLegacySpellSources(character) {
 
     if (
       !selectedSpellIds.length &&
-      !fixedSpellIds.length
+      !fixedSpellIds.length &&
+      wholeNumber(source.choiceCount, 0) < 1
     ) {
       return;
     }
@@ -878,11 +970,11 @@ export function collectLegacySpellSources(character) {
       resourceId: source.resourceId,
       rulesSource: source.rulesSource,
       spellRecords: [
-        ...(Array.isArray(source.spellRecords)
-          ? source.spellRecords
-          : []),
+        ...spellRecords,
         ...grantRecords
-      ]
+      ],
+      selectionGroups:
+        source.selectionGroups
     });
   });
 
@@ -1406,34 +1498,58 @@ export function populateSpellSourceCompatibility(
     .forEach((source) => {
       const spellIds = getSourceSpellIds(source);
       const records = spellIds.map((spellId) => {
-        return {
-          ...getSourceSpellRecord(
+        const sourceRecord =
+          getSourceSpellRecord(
             source,
             spellId
-          ),
+          );
+
+        return {
+          ...sourceRecord,
           spellId,
           sourceId: source.sourceId,
           featId: source.featId,
           featName: source.sourceName,
           spellcastingAbility:
-            source.spellcastingAbility,
+            cleanText(
+              sourceRecord
+                ?.spellcastingAbility,
+              source.spellcastingAbility
+            ),
+          fixed:
+            source.fixedSpellIds
+              .includes(spellId),
           known:
             source.spellStates[spellId]
               ?.known === true ||
+            sourceRecord?.known === true ||
             source.grantsKnown,
           prepared:
             source.spellStates[spellId]
               ?.prepared === true ||
+            sourceRecord?.prepared === true ||
             source.grantsPrepared,
           alwaysPrepared:
             source.spellStates[spellId]
               ?.alwaysPrepared === true ||
+            sourceRecord
+              ?.alwaysPrepared === true ||
             source.alwaysPrepared,
-          freeCastUses: source.freeCastUses,
-          recharge: source.recharge,
+          freeCastUses:
+            sourceRecord?.freeCastUses ??
+            source.freeCastUses,
+          recharge: cleanText(
+            sourceRecord?.recharge,
+            source.recharge
+          ),
           canUseSpellSlots:
+            sourceRecord
+              ?.canUseSpellSlots === true ||
             source.canUseSpellSlots,
-          resourceId: source.resourceId
+          resourceId: cleanText(
+            sourceRecord?.resourceId,
+            source.resourceId
+          )
         };
       });
 
@@ -1455,6 +1571,10 @@ export function populateSpellSourceCompatibility(
         selectionMode: source.selectionMode,
         choiceCount: source.choiceCount,
         spellIds,
+        selectedSpellIds:
+          source.selectedSpellIds,
+        fixedSpellIds:
+          source.fixedSpellIds,
         grants: source.fixedSpellIds.map(
           (spellId) => {
             return getSourceSpellRecord(
@@ -1487,7 +1607,9 @@ export function populateSpellSourceCompatibility(
         canUseSpellSlots:
           source.canUseSpellSlots,
         resourceId: source.resourceId,
-        rulesSource: source.rulesSource
+        rulesSource: source.rulesSource,
+        selectionGroups:
+          source.selectionGroups
       };
       featSpellcastingRecords.push(
         ...records

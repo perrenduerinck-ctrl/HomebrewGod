@@ -76,11 +76,9 @@ import {
   getClassFeaturesThroughLevel
 } from "./characterCreator/classMechanics.js";
 import {
-  decodeFeatChoiceValue,
-  encodeFeatChoiceValue,
-  FEAT_CHOICE_VALUE_PREFIX,
-  getFeatAbilityEffectMaximum,
-  normalizeFeatChoiceSelections,
+  createFeatSpellSourceMetadata, decodeFeatChoiceValue, describeFeatSpellChoiceRestrictions,
+  encodeFeatChoiceValue, FEAT_CHOICE_VALUE_PREFIX, getFeatAbilityEffectMaximum,
+  getFeatSpellChoiceLimit, isSpellEligibleForFeatChoice, normalizeFeatChoiceSelections,
   parseFeatChoiceSelections
 } from "./characterCreator/featMechanics.js";
 import {
@@ -26347,16 +26345,11 @@ export function createCharacterCreator(options = {}) {
   });
 
   function getSection12FeatChoiceLimit(choice) {
-    if (choice?.chooseFormula === "proficiencyBonus") {
-      return Math.max(
-        1,
-        getCharacterProficiencyBonus(creatorState.draft)
-      );
-    }
-
-    return Math.max(
-      1,
-      Math.round(safeNumber(choice?.choose, 1))
+    return getFeatSpellChoiceLimit(
+      choice,
+      getCharacterProficiencyBonus(
+        creatorState.draft
+      )
     );
   }
 
@@ -26554,37 +26547,18 @@ export function createCharacterCreator(options = {}) {
     }
 
     if (type === "spell") {
-      const selectedClass = cleanString(
-        state?.featChoices?.[choice?.classChoiceId]?.[0] || choice?.classId
-      ).toLowerCase();
-      const levels = Array.isArray(choice?.levels)
-        ? choice.levels.map((level) => safeNumber(level, -1))
-        : [];
-      const schools = uniqueCleanArray(choice?.schools)
-        .map((school) => school.toLowerCase());
+      const restrictionContext = {
+        selections: state?.featChoices || {},
+        alignment: creatorState.draft?.identity?.alignment || ""
+      };
 
       return filterRepeatedFeatChoiceOptions(
         DEFAULT_SPELLS
         .filter((spell) => {
-          const spellLevel = safeNumber(spell?.level, 0);
-          const spellClasses = uniqueCleanArray(spell?.classes)
-            .map((classId) => classId.toLowerCase());
-
-          return (
-            (!levels.length || levels.includes(spellLevel)) &&
-            (!schools.length || schools.includes(cleanString(spell?.school).toLowerCase())) &&
-            (!selectedClass || spellClasses.includes(selectedClass)) &&
-            (choice?.ritualOnly !== true || spell?.ritual === true) &&
-            (
-              choice?.attackRollOnly !==
-                true ||
-              ["melee", "ranged"]
-                .includes(
-                  cleanString(
-                    spell?.attackType
-                  ).toLowerCase()
-                )
-            )
+          return isSpellEligibleForFeatChoice(
+            spell,
+            choice,
+            restrictionContext
           );
         })
         .map((spell) => ({
@@ -27236,8 +27210,13 @@ export function createCharacterCreator(options = {}) {
               ),
               spellLevel,
               origin,
+              fixed: origin !== "choice",
               choiceId:
                 cleanString(choiceId),
+              known: descriptor.known !== false,
+              prepared: descriptor.prepared === true,
+              alwaysPrepared: descriptor.alwaysPrepared === true,
+              innate: descriptor.innate === true,
               spellcastingAbility:
                 abilityResult
                   .ability?.id || "",
@@ -27266,6 +27245,7 @@ export function createCharacterCreator(options = {}) {
                 atWill
                   ? null
                   : currentUses,
+              freeCastUses: atWill ? 0 : maximumUses ?? 0,
               recharge:
                 atWill
                   ? ""
@@ -27279,6 +27259,7 @@ export function createCharacterCreator(options = {}) {
                 descriptor
                   .canUseSpellSlots ===
                 true,
+              resourceId: maximumUses === null || atWill ? "" : spellResourceId,
               restrictions: {
                 levels:
                   Array.isArray(
@@ -28619,7 +28600,7 @@ export function createCharacterCreator(options = {}) {
               origin: "choice",
               choiceId:
                 featChoice.id,
-              ids: selectedValues
+              ids: selectedValues.filter((spellId) => isSpellEligibleForFeatChoice(getSection16SpellById(spellId, draft), featChoice, { selections: choices, alignment: draft.identity?.alignment || "" }))
             });
           }
         });
@@ -28634,21 +28615,21 @@ export function createCharacterCreator(options = {}) {
           );
         });
 
-      if (spellRecords.length) {
-        const sourceAbilityIds =
-          uniqueCleanArray(
-            spellRecords.map((record) => {
-              return record.spellcastingAbility;
-            })
-          );
-
-        draft.magic.featSources[instance.id] = {
-          featId: feat.id,
-          featName: feat.name,
-          sourceType: "feat",
+      const featSpellSource =
+        createFeatSpellSourceMetadata({
+          feat,
           sourceId: instance.id,
-          spellcastingAbility:
-            sourceAbilityIds[0] || "",
+          selections: choices,
+          spellRecords,
+          spellGrants,
+          alignment: draft.identity?.alignment || "",
+          proficiencyBonus: getCharacterProficiencyBonus(draft)
+        });
+
+      if (spellRecords.length || featSpellSource.choiceCount > 0) {
+        draft.magic.featSources[instance.id] = {
+          ...featSpellSource,
+          featName: feat.name,
           spellIds: uniqueCleanArray(spellIds),
           grants: spellGrants,
           spellRecords
@@ -31179,6 +31160,13 @@ export function createCharacterCreator(options = {}) {
           );
           const limit = getSection12FeatChoiceLimit(featChoice);
           const multiple = limit > 1;
+          const choiceType = cleanString(featChoice?.type).toLowerCase();
+          const restrictionText = choiceType === "spell"
+            ? describeFeatSpellChoiceRestrictions(featChoice, {
+                selections: state.featChoices,
+                alignment: creatorState.draft?.identity?.alignment || ""
+              })
+            : "";
 
           return `
             <div class="hg-character-field">
@@ -31209,7 +31197,16 @@ export function createCharacterCreator(options = {}) {
                     }).join("")}
                   </select>
                 `
-                : `
+                : choiceType === "spell"
+                  ? `
+                    <select
+                      id="ccFeatChoice-${escapeHtml(feature.id)}-${escapeHtml(featChoice.id)}"
+                      disabled
+                    >
+                      <option>No eligible spells until the listed requirement is resolved.</option>
+                    </select>
+                  `
+                  : `
                   <input
                     id="ccFeatChoice-${escapeHtml(feature.id)}-${escapeHtml(featChoice.id)}"
                     type="text"
@@ -31220,6 +31217,9 @@ export function createCharacterCreator(options = {}) {
                     data-choice-id="${escapeHtml(featChoice.id)}"
                   >
                 `}
+              ${restrictionText
+                ? `<p class="small">${escapeHtml(`${options.length} eligible catalog option${options.length === 1 ? "" : "s"}. ${restrictionText}`)}</p>`
+                : ""}
             </div>
           `;
         }).join("")}

@@ -11,7 +11,8 @@ import {
 } from "../defaultClasses.js";
 import {
   DEFAULT_FEATS,
-  validateDefaultFeatCollection
+  validateDefaultFeatCollection,
+  validateFeatSpellDefinitions
 } from "../defaultFeats.js";
 import {
   DEFAULT_SPELLS,
@@ -169,6 +170,13 @@ addValidation(
   "Feats",
   validateDefaultFeatCollection(
     DEFAULT_FEATS
+  )
+);
+addValidation(
+  "Feat spells",
+  validateFeatSpellDefinitions(
+    DEFAULT_FEATS,
+    DEFAULT_SPELLS
   )
 );
 addValidation(

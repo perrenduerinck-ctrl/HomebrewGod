@@ -17,6 +17,21 @@ import {
 import {
   collectCharacterSpells
 } from "../characterSheet.js";
+import {
+  DEFAULT_FEATS,
+  validateFeatSpellDefinitions
+} from "../defaultFeats.js";
+import {
+  DEFAULT_SPELLS
+} from "../defaultSpells.js";
+import {
+  createFeatSpellSourceMetadata,
+  describeFeatSpellChoiceRestrictions,
+  getFeatSpellChoiceLimit,
+  getFeatSpellIneligibilityReasons,
+  isSpellEligibleForFeatChoice,
+  resolveFeatSpellChoiceRestrictions
+} from "../characterCreator/featMechanics.js";
 
 test(
   "canonical spell sources expose every required type and selection mode",
@@ -559,6 +574,308 @@ test(
     assert.deepEqual(
       collectCharacterSpells(character),
       []
+    );
+  }
+);
+
+test(
+  "every catalog feat spell definition passes the generic audit",
+  () => {
+    const result =
+      validateFeatSpellDefinitions(
+        DEFAULT_FEATS,
+        DEFAULT_SPELLS
+      );
+
+    assert.equal(result.valid, true);
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.warnings.length, 5);
+    assert.equal(result.auditedFeatCount, 21);
+  }
+);
+
+test(
+  "special feat spell lists apply their data-driven restrictions",
+  () => {
+    const spell = (id) => {
+      return DEFAULT_SPELLS.find((entry) => {
+        return entry.id === id;
+      });
+    };
+    const featChoice = (featId, choiceId) => {
+      return DEFAULT_FEATS.find((feat) => {
+        return feat.id === featId;
+      }).choices.find((choice) => {
+        return choice.id === choiceId;
+      });
+    };
+    const runeChoice = featChoice(
+      "rune-shaper",
+      "rune-spells"
+    );
+    const moonChoice = featChoice(
+      "initiate-of-high-sorcery",
+      "moon-spells"
+    );
+    const alignmentChoice = featChoice(
+      "divinely-favored",
+      "alignment-spell"
+    );
+
+    assert.equal(
+      getFeatSpellChoiceLimit(
+        runeChoice,
+        6
+      ),
+      3
+    );
+    assert.equal(
+      isSpellEligibleForFeatChoice(
+        spell("fog-cloud"),
+        runeChoice
+      ),
+      true
+    );
+    assert.match(
+      getFeatSpellIneligibilityReasons(
+        spell("magic-missile"),
+        runeChoice
+      ).join(" "),
+      /allowed spell list/i
+    );
+    assert.equal(
+      isSpellEligibleForFeatChoice(
+        spell("false-life"),
+        moonChoice,
+        {
+          selections: {
+            moon: ["Nuitari"]
+          }
+        }
+      ),
+      true
+    );
+    assert.equal(
+      isSpellEligibleForFeatChoice(
+        spell("shield"),
+        moonChoice,
+        {
+          selections: {
+            moon: ["Nuitari"]
+          }
+        }
+      ),
+      false
+    );
+    assert.equal(
+      isSpellEligibleForFeatChoice(
+        spell("false-life"),
+        moonChoice
+      ),
+      false
+    );
+    assert.deepEqual(
+      resolveFeatSpellChoiceRestrictions(
+        alignmentChoice,
+        { alignment: "Chaotic Evil" }
+      ).allowedClassLists,
+      ["warlock"]
+    );
+    assert.equal(
+      isSpellEligibleForFeatChoice(
+        spell("hellish-rebuke"),
+        alignmentChoice,
+        { alignment: "Chaotic Evil" }
+      ),
+      true
+    );
+    assert.match(
+      describeFeatSpellChoiceRestrictions(
+        moonChoice,
+        {
+          selections: {
+            moon: ["Solinari"]
+          }
+        }
+      ),
+      /Other spells are hidden/i
+    );
+  }
+);
+
+test(
+  "feat source metadata separates fixed grants from selected spells",
+  () => {
+    const feat = DEFAULT_FEATS.find((entry) => {
+      return entry.id === "fey-touched";
+    });
+    const source =
+      createFeatSpellSourceMetadata({
+        feat,
+        sourceId: "wizard-4-asi",
+        selections: {
+          ability: ["Wisdom"],
+          "level-one-spell": ["charm-person"]
+        },
+        spellGrants: [
+          {
+            spellId: "misty-step"
+          }
+        ],
+        spellRecords: [
+          {
+            spellId: "misty-step",
+            origin: "grant",
+            fixed: true,
+            spellcastingAbility: "wis",
+            freeCastUses: 1,
+            maximumUses: 1,
+            recharge: "longRest",
+            canUseSpellSlots: true,
+            resourceId:
+              "wizard-4-asi:spell:misty-step"
+          },
+          {
+            spellId: "charm-person",
+            origin: "choice",
+            fixed: false,
+            spellcastingAbility: "wis",
+            freeCastUses: 1,
+            maximumUses: 1,
+            recharge: "longRest",
+            canUseSpellSlots: true,
+            resourceId:
+              "wizard-4-asi:spell:charm-person"
+          }
+        ],
+        proficiencyBonus: 2
+      });
+
+    assert.equal(source.sourceId, "wizard-4-asi");
+    assert.equal(source.choiceCount, 1);
+    assert.deepEqual(
+      source.fixedSpellIds,
+      ["misty-step"]
+    );
+    assert.deepEqual(
+      source.selectedSpellIds,
+      ["charm-person"]
+    );
+    assert.deepEqual(
+      source.allowedSchools,
+      ["divination", "enchantment"]
+    );
+    assert.equal(
+      source.spellcastingAbility,
+      "wis"
+    );
+    assert.equal(source.freeCastUses, 1);
+    assert.equal(source.canUseSpellSlots, true);
+  }
+);
+
+test(
+  "multi-spell fixed feat grants and per-spell casting resources survive compatibility sync",
+  () => {
+    const character = {
+      magic: {
+        featSources: {
+          "feat:wood-elf-magic": {
+            sourceId:
+              "feat:wood-elf-magic",
+            sourceType: "feat",
+            featId: "wood-elf-magic",
+            featName: "Wood Elf Magic",
+            choiceCount: 1,
+            selectedSpellIds: [
+              "shillelagh"
+            ],
+            fixedSpellIds: [
+              "longstrider",
+              "pass-without-trace"
+            ],
+            spellIds: [
+              "shillelagh",
+              "longstrider",
+              "pass-without-trace"
+            ],
+            grants: [
+              {
+                spellIds: [
+                  "longstrider",
+                  "pass-without-trace"
+                ]
+              }
+            ],
+            spellRecords: [
+              {
+                spellId: "shillelagh",
+                origin: "choice",
+                fixed: false,
+                spellcastingAbility: "wis",
+                atWill: true
+              },
+              {
+                spellId: "longstrider",
+                origin: "grant",
+                fixed: true,
+                spellcastingAbility: "wis",
+                freeCastUses: 1,
+                maximumUses: 1,
+                currentUses: 0,
+                recharge: "longRest"
+              },
+              {
+                spellId:
+                  "pass-without-trace",
+                origin: "grant",
+                fixed: true,
+                spellcastingAbility: "wis",
+                freeCastUses: 1,
+                maximumUses: 1,
+                currentUses: 1,
+                recharge: "longRest"
+              }
+            ]
+          }
+        }
+      },
+      featMechanics: {}
+    };
+    const sources =
+      collectLegacySpellSources(character);
+    const source = sources.find((entry) => {
+      return entry.sourceId ===
+        "feat:wood-elf-magic";
+    });
+
+    assert.deepEqual(
+      source.fixedSpellIds,
+      ["longstrider", "pass-without-trace"]
+    );
+    assert.deepEqual(
+      source.selectedSpellIds,
+      ["shillelagh"]
+    );
+
+    populateSpellSourceCompatibility(
+      character,
+      sources
+    );
+
+    const longstrider =
+      character.featMechanics
+        .spellcasting.find((record) => {
+          return record.spellId ===
+            "longstrider";
+        });
+
+    assert.equal(longstrider.fixed, true);
+    assert.equal(longstrider.freeCastUses, 1);
+    assert.equal(longstrider.currentUses, 0);
+    assert.equal(
+      longstrider.recharge,
+      "longRest"
     );
   }
 );

@@ -33,6 +33,51 @@ const GIANT_STRIKES = Object.freeze([
   "Storm Strike"
 ]);
 
+const DIVINELY_FAVORED_CLASS_BY_ALIGNMENT =
+  Object.freeze({
+    evil: "warlock",
+    good: "cleric",
+    neutral: "druid"
+  });
+
+const HIGH_SORCERY_SPELLS_BY_MOON =
+  Object.freeze({
+    Nuitari: [
+      "dissonant-whispers",
+      "false-life",
+      "hex",
+      "ray-of-sickness"
+    ],
+    Lunitari: [
+      "color-spray",
+      "disguise-self",
+      "feather-fall",
+      "longstrider"
+    ],
+    Solinari: [
+      "comprehend-languages",
+      "detect-evil-and-good",
+      "protection-from-evil-and-good",
+      "shield"
+    ]
+  });
+
+const RUNE_SHAPER_SPELL_IDS = Object.freeze([
+  "fog-cloud",
+  "inflict-wounds",
+  "chromatic-orb",
+  "disguise-self",
+  "burning-hands",
+  "speak-with-animals",
+  "armor-of-agathys",
+  "goodberry",
+  "longstrider",
+  "command",
+  "entangle",
+  "sanctuary",
+  "thunderwave"
+]);
+
 const normalizeId = (value) => String(value || "")
   .trim()
   .toLowerCase()
@@ -360,7 +405,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     {
       prerequisites: [{ type: "level", minimum: 4 }, { type: "setting", setting: "Dragonlance" }],
       effects: [{ type: "spellGrant", spellId: "augury", uses: 1, recharge: "longRest", abilityChoiceId: "spellcasting-ability", canUseSpellSlots: true }, { type: "spellChoice", cantrips: 1, levelOneSpells: 1 }],
-      choices: [choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cleric-cantrip", "Cleric cantrip", "spell", [], { classId: "cleric", levels: [0], abilityChoiceId: "spellcasting-ability", atWill: true }), choice("alignment-spell", "Alignment spell", "spell", [], { levels: [1], alignmentFiltered: true, abilityChoiceId: "spellcasting-ability", uses: 1, recharge: "longRest", canUseSpellSlots: true })],
+      choices: [choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cleric-cantrip", "Cleric cantrip", "spell", [], { classId: "cleric", levels: [0], abilityChoiceId: "spellcasting-ability", atWill: true }), choice("alignment-spell", "Alignment spell", "spell", [], { levels: [1], classIdByAlignment: DIVINELY_FAVORED_CLASS_BY_ALIGNMENT, abilityChoiceId: "spellcasting-ability", uses: 1, recharge: "longRest", canUseSpellSlots: true })],
       tags: ["spellcasting", "dragonlance"]
     }
   ),
@@ -682,7 +727,7 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     {
       prerequisites: [{ type: "classOrBackground", classIds: ["sorcerer", "wizard"], backgroundIds: ["mage-of-high-sorcery"] }, { type: "setting", setting: "Dragonlance" }],
       effects: [{ type: "spellChoice", classId: "wizard", cantrips: 1, levelOneSpells: 2 }],
-      choices: [choice("moon", "Moon of magic", "option", ["Solinari", "Lunitari", "Nuitari"]), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cantrip", "Wizard cantrip", "spell", [], { classId: "wizard", levels: [0], abilityChoiceId: "spellcasting-ability", atWill: true }), choice("moon-spells", "Moon-aligned 1st-level spells", "spell", [], { levels: [1], choose: 2, moonChoiceId: "moon", abilityChoiceId: "spellcasting-ability", usesEach: 1, recharge: "longRest", canUseSpellSlots: true })],
+      choices: [choice("moon", "Moon of magic", "option", ["Solinari", "Lunitari", "Nuitari"]), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES), choice("cantrip", "Wizard cantrip", "spell", [], { classId: "wizard", levels: [0], abilityChoiceId: "spellcasting-ability", atWill: true }), choice("moon-spells", "Moon-aligned 1st-level spells", "spell", [], { levels: [1], choose: 2, moonChoiceId: "moon", allowedSpellIdsByChoice: HIGH_SORCERY_SPELLS_BY_MOON, abilityChoiceId: "spellcasting-ability", usesEach: 1, recharge: "longRest", canUseSpellSlots: true })],
       tags: ["spellcasting", "dragonlance"]
     }
   ),
@@ -1010,8 +1055,8 @@ export const DEFAULT_FEAT_RULES = Object.freeze([
     "Cast comprehend languages without a slot and choose a proficiency-scaled number of 1st-level rune spells, each cast once per long rest or with slots.",
     {
       prerequisites: [{ type: "spellcastingOrRuneCarver" }],
-      effects: [{ type: "spellGrant", spellId: "comprehend-languages", atWill: true, abilityChoiceId: "spellcasting-ability" }, { type: "spellChoice", list: "rune-spells", count: "proficiencyBonus", levels: [1] }],
-      choices: [choice("rune-spells", "Rune spells", "spell", [], { chooseFormula: "proficiencyBonus", levels: [1], list: "rune-spells", abilityChoiceId: "spellcasting-ability", usesEach: 1, recharge: "longRest", canUseSpellSlots: true }), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES)],
+      effects: [{ type: "spellGrant", spellId: "comprehend-languages", atWill: true, abilityChoiceId: "spellcasting-ability" }, { type: "spellChoice", list: "rune-spells", count: "halfProficiencyBonus", levels: [1] }],
+      choices: [choice("rune-spells", "Rune spells", "spell", [], { chooseFormula: "halfProficiencyBonus", levels: [1], list: "rune-spells", allowedSpellIds: RUNE_SHAPER_SPELL_IDS, abilityChoiceId: "spellcasting-ability", usesEach: 1, recharge: "longRest", canUseSpellSlots: true }), choice("spellcasting-ability", "Spellcasting ability", "ability", MENTAL_ABILITIES)],
       tags: ["spellcasting", "giant", "runes"]
     }
   ),

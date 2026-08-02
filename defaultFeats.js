@@ -600,6 +600,212 @@ export function validateDefaultFeatCollection(feats) {
   };
 }
 
+export function validateFeatSpellDefinitions(
+  feats,
+  spells
+) {
+  const featEntries = Array.isArray(feats)
+    ? feats
+    : [];
+  const spellEntries = Array.isArray(spells)
+    ? spells
+    : [];
+  const spellIds = new Set(
+    spellEntries.map((spell) => {
+      return normalizeFeatId(
+        spell?.id || spell?.name
+      );
+    }).filter(Boolean)
+  );
+  const spellClasses = new Set(
+    spellEntries.flatMap((spell) => {
+      return Array.isArray(spell?.classes)
+        ? spell.classes
+        : [];
+    }).map(normalizeFeatId).filter(Boolean)
+  );
+  const errors = [];
+  const warnings = [];
+
+  const validateSpellIds = (
+    featId,
+    label,
+    values,
+    { required = false } = {}
+  ) => {
+    const references = [
+      ...new Set(
+        (Array.isArray(values)
+          ? values
+          : values
+            ? [values]
+            : []
+        ).map(normalizeFeatId)
+          .filter(Boolean)
+      )
+    ];
+
+    references.forEach((spellId) => {
+      if (!spellIds.has(spellId)) {
+        (required ? errors : warnings).push(
+          `Feat ${featId} ${label} references unknown spell ${spellId}.`
+        );
+      }
+    });
+
+    return references;
+  };
+
+  featEntries.forEach((feat, featIndex) => {
+    const featId = normalizeFeatId(
+      feat?.id || feat?.name ||
+      `feat-${featIndex + 1}`
+    );
+    const choices = Array.isArray(feat?.choices)
+      ? feat.choices
+      : [];
+    const choiceIds = new Set(
+      choices.map((choice) => {
+        return String(choice?.id || "").trim();
+      }).filter(Boolean)
+    );
+
+    (Array.isArray(feat?.effects)
+      ? feat.effects
+      : []
+    ).filter((effect) => {
+      return effect?.type === "spellGrant";
+    }).forEach((effect, effectIndex) => {
+      const references = validateSpellIds(
+        featId,
+        `fixed spell grant ${effectIndex + 1}`,
+        effect?.spellIds || effect?.spellId,
+        { required: true }
+      );
+
+      if (!references.length) {
+        errors.push(
+          `Feat ${featId} fixed spell grant ${effectIndex + 1} has no spell IDs.`
+        );
+      }
+    });
+
+    choices.filter((choice) => {
+      return String(choice?.type || "")
+        .toLowerCase() === "spell";
+    }).forEach((choice, choiceIndex) => {
+      const label = `spell choice ${choice?.id || choiceIndex + 1}`;
+      const levels = Array.isArray(choice?.levels)
+        ? choice.levels
+        : [];
+      const directIds = validateSpellIds(
+        featId,
+        label,
+        choice?.allowedSpellIds
+      );
+      const mappedIds = Object.values(
+        choice?.allowedSpellIdsByChoice || {}
+      ).flat();
+      validateSpellIds(
+        featId,
+        label,
+        mappedIds
+      );
+
+      levels.forEach((level) => {
+        if (
+          !Number.isInteger(Number(level)) ||
+          Number(level) < 0 ||
+          Number(level) > 9
+        ) {
+          errors.push(
+            `Feat ${featId} ${label} has invalid spell level ${level}.`
+          );
+        }
+      });
+
+      [
+        choice?.classChoiceId,
+        choice?.optionChoiceId,
+        choice?.moonChoiceId
+      ].filter(Boolean).forEach((choiceId) => {
+        if (!choiceIds.has(String(choiceId))) {
+          errors.push(
+            `Feat ${featId} ${label} references unknown choice ${choiceId}.`
+          );
+        }
+      });
+
+      [
+        choice?.classId,
+        ...Object.values(
+          choice?.classIdByAlignment || {}
+        )
+      ].map(normalizeFeatId)
+        .filter(Boolean)
+        .forEach((classId) => {
+          if (!spellClasses.has(classId)) {
+            errors.push(
+              `Feat ${featId} ${label} references unknown spell list ${classId}.`
+            );
+          }
+        });
+
+      const optionMap =
+        choice?.allowedSpellIdsByChoice;
+      if (
+        optionMap &&
+        (
+          typeof optionMap !== "object" ||
+          Array.isArray(optionMap) ||
+          !Object.keys(optionMap).length
+        )
+      ) {
+        errors.push(
+          `Feat ${featId} ${label} has an invalid option-based spell map.`
+        );
+      }
+
+      if (
+        choice?.list &&
+        !directIds.length
+      ) {
+        errors.push(
+          `Feat ${featId} ${label} names list ${choice.list} without allowed spell IDs.`
+        );
+      }
+    });
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    auditedFeatCount: featEntries.filter(
+      (feat) => {
+        return (
+          (Array.isArray(feat?.effects)
+            ? feat.effects
+            : []
+          ).some((effect) => {
+            return [
+              "spellGrant",
+              "spellChoice"
+            ].includes(effect?.type);
+          }) ||
+          (Array.isArray(feat?.choices)
+            ? feat.choices
+            : []
+          ).some((choice) => {
+            return String(choice?.type || "")
+              .toLowerCase() === "spell";
+          })
+        );
+      }
+    ).length
+  };
+}
+
 const normalizedDefaultFeats = mergeDefaultFeatRecords().map(
   normalizeFeatRecord
 );
