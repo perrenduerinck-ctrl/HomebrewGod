@@ -21021,9 +21021,11670 @@ export function createCharacterCreator(options = {}) {
       </div>
 
       <p
-        id="cha
-... 297672 bytes omitted ...
-ption provided."
+        id="characterCreatorStatus"
+        class="status hg-character-status-line"
+      >
+        ${escapeHtml(
+          creatorState.statusMessage ||
+          ""
+        )}
+      </p>
+    `;
+
+    refreshWizardElements();
+  }
+
+  function openCharacterFromLibrary(
+    characterId
+  ) {
+    if (
+      blockCharacterBusyAction(
+        "edit-character"
+      )
+    ) {
+      return false;
+    }
+
+    const character =
+      findCachedCharacter(
+        characterId
+      );
+
+    if (!character) {
+      setStatus(
+        "That character could not be found in the library."
+      );
+
+      renderCharacterLibraryView();
+
+      return false;
+    }
+
+    if (
+      !confirmDiscardUnsavedDraft(
+        "opening another character"
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      !beginCharacterBusyAction(
+        "edit-character"
+      )
+    ) {
+      return false;
+    }
+
+    try {
+    const requestedStep =
+      getStepById(
+        character?.builder?.currentStep ||
+        "basics"
+      ).id;
+
+    replaceDraft(
+      character,
+      {
+        characterId: character.id,
+        dirty: false,
+        stepId: requestedStep
+      }
+    );
+
+    creatorState.draft =
+      sanitizeDraftStrings(
+        creatorState.draft
+      );
+
+    persistDraftToSession();
+
+    setStatus(
+      `Editing ${getCharacterLibraryDisplayName(
+        character
+      )}.`
+    );
+
+    navigateToStep(
+      requestedStep
+    );
+
+    return true;
+    } finally {
+      endCharacterBusyAction(
+        "edit-character"
+      );
+    }
+  }
+
+  function exportCharacterFromLibrary(
+    characterId
+  ) {
+    const character =
+      findCachedCharacter(
+        characterId
+      );
+
+    if (!character) {
+      setStatus(
+        "That character could not be found in the library."
+      );
+      renderCharacterLibraryView();
+      return false;
+    }
+
+    const json =
+      createCharacterSheetJson(
+        character
+      );
+    const blob = new Blob(
+      [json],
+      {
+        type:
+          "application/json;charset=utf-8"
+      }
+    );
+    const url =
+      URL.createObjectURL(blob);
+    const link =
+      document.createElement("a");
+
+    link.href = url;
+    link.download =
+      `${makeSafeFileName(
+        getCharacterLibraryDisplayName(
+          character
+        )
+      )}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+
+    setStatus(
+      `${getCharacterLibraryDisplayName(
+        character
+      )} was exported.`
+    );
+
+    return true;
+  }
+
+  function openCharacterSheetFromLibrary(
+    characterId
+  ) {
+    if (
+      blockCharacterBusyAction(
+        "edit-character"
+      )
+    ) {
+      return false;
+    }
+
+    const character =
+      findCachedCharacter(
+        characterId
+      );
+
+    if (!character) {
+      setStatus(
+        "That character could not be found in the library."
+      );
+      renderCharacterLibraryView();
+      return false;
+    }
+
+    if (
+      !confirmDiscardUnsavedDraft(
+        "opening another character sheet"
+      )
+    ) {
+      return false;
+    }
+
+    replaceDraft(
+      character,
+      {
+        characterId:
+          character.id,
+        dirty: false,
+        stepId:
+          getStepById(
+            character?.builder?.currentStep ||
+            "review"
+          ).id
+      }
+    );
+
+    creatorState.draft =
+      sanitizeDraftStrings(
+        creatorState.draft
+      );
+    creatorState.viewMode =
+      "library";
+    persistDraftToSession();
+
+    setStatus(
+      `Opened ${getCharacterLibraryDisplayName(
+        character
+      )}.`
+    );
+
+    getSection17CharacterSheetView()
+      .open(
+        getCharacterSnapshot()
+      );
+
+    return true;
+  }
+
+  function duplicateCharacterFromLibrary(
+    characterId
+  ) {
+    if (
+      blockCharacterBusyAction(
+        "duplicate-character"
+      )
+    ) {
+      return false;
+    }
+
+    const character =
+      findCachedCharacter(
+        characterId
+      );
+
+    if (!character) {
+      setStatus(
+        "That character could not be found in the library."
+      );
+
+      renderCharacterLibraryView();
+
+      return false;
+    }
+
+    if (
+      !confirmDiscardUnsavedDraft(
+        "duplicating another character"
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      !beginCharacterBusyAction(
+        "duplicate-character"
+      )
+    ) {
+      return false;
+    }
+
+    try {
+    duplicateIntoDraft(
+      character
+    );
+
+    creatorState.draft =
+      sanitizeDraftStrings(
+        creatorState.draft
+      );
+
+    creatorState.currentCharacterId =
+      null;
+
+    creatorState.dirty =
+      true;
+
+    persistDraftToSession();
+
+    setStatus(
+      "Duplicate draft created. Saving it will create a separate character."
+    );
+
+    navigateToStep(
+      "basics"
+    );
+
+    return true;
+    } finally {
+      endCharacterBusyAction(
+        "duplicate-character"
+      );
+    }
+  }
+
+  registerCharacterLibraryRenderer(
+    renderCharacterLibraryView
+  );
+
+  registerCharacterCreatorAction(
+    "edit-character",
+
+    ({ button }) => {
+      openCharacterFromLibrary(
+        button.dataset.characterId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "open-character-sheet-from-library",
+
+    ({ button }) => {
+      openCharacterSheetFromLibrary(
+        button.dataset.characterId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "duplicate-character",
+
+    ({ button }) => {
+      duplicateCharacterFromLibrary(
+        button.dataset.characterId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "export-library-character",
+
+    ({ button }) => {
+      exportCharacterFromLibrary(
+        button.dataset.characterId
+      );
+    }
+  );
+
+
+// =====================================================
+// CHARACTER CREATOR SECTION 11 — BASICS / SPECIES
+// =====================================================
+
+  const SECTION11_DRAGONBORN_ANCESTRIES = Object.freeze([
+    {
+      id: "black",
+      name: "Black",
+      damageType: "Acid"
+    },
+    {
+      id: "blue",
+      name: "Blue",
+      damageType: "Lightning"
+    },
+    {
+      id: "brass",
+      name: "Brass",
+      damageType: "Fire"
+    },
+    {
+      id: "bronze",
+      name: "Bronze",
+      damageType: "Lightning"
+    },
+    {
+      id: "copper",
+      name: "Copper",
+      damageType: "Acid"
+    },
+    {
+      id: "gold",
+      name: "Gold",
+      damageType: "Fire"
+    },
+    {
+      id: "green",
+      name: "Green",
+      damageType: "Poison"
+    },
+    {
+      id: "red",
+      name: "Red",
+      damageType: "Fire"
+    },
+    {
+      id: "silver",
+      name: "Silver",
+      damageType: "Cold"
+    },
+    {
+      id: "white",
+      name: "White",
+      damageType: "Cold"
+    }
+  ]);
+
+  const SECTION11_EMBEDDED_PORTRAIT_MAX_BYTES =
+    512 * 1024;
+
+  const SECTION11_UPLOADED_PORTRAIT_MAX_BYTES =
+    8 * 1024 * 1024;
+
+  function getSection11Portrait(
+    character = creatorState.draft
+  ) {
+    return normalizeCharacterImageValue(
+      character?.identity?.image,
+      character?.identity || {}
+    );
+  }
+
+  function hasSection11PortraitUploadHook() {
+    return (
+      typeof deps.uploadCharacterPortrait ===
+      "function"
+    );
+  }
+
+  function isSection11PortraitUrlAllowed(url) {
+    const cleanUrl =
+      cleanString(url);
+
+    if (!cleanUrl) {
+      return false;
+    }
+
+    if (/^data:image\//i.test(cleanUrl)) {
+      return true;
+    }
+
+    try {
+      const parsedUrl =
+        new URL(
+          cleanUrl,
+          typeof window !== "undefined"
+            ? window.location.href
+            : "https://example.invalid/"
+        );
+
+      return (
+        parsedUrl.protocol === "http:" ||
+        parsedUrl.protocol === "https:"
+      );
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function formatSection11PortraitBytes(bytes) {
+    const size =
+      safeNumber(bytes, 0);
+
+    if (size >= 1024 * 1024) {
+      return `${Math.round(size / 1024 / 1024)} MB`;
+    }
+
+    return `${Math.max(1, Math.round(size / 1024))} KB`;
+  }
+
+  function isSection11PortraitFile(file) {
+    if (!file) {
+      return false;
+    }
+
+    const type =
+      cleanString(file.type)
+        .toLowerCase();
+
+    if (type.startsWith("image/")) {
+      return true;
+    }
+
+    return /\.(avif|gif|jpe?g|png|webp)$/i.test(
+      cleanString(file.name)
+    );
+  }
+
+  function readSection11PortraitFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      if (typeof FileReader === "undefined") {
+        reject(
+          new Error(
+            "Portrait file reading is not available in this browser."
+          )
+        );
+
+        return;
+      }
+
+      const reader =
+        new FileReader();
+
+      reader.addEventListener(
+        "load",
+        () => {
+          resolve(
+            cleanString(reader.result)
+          );
+        }
+      );
+
+      reader.addEventListener(
+        "error",
+        () => {
+          reject(
+            reader.error ||
+            new Error(
+              "The selected portrait could not be read."
+            )
+          );
+        }
+      );
+
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function setSection11Portrait(
+    imageData,
+    options = {}
+  ) {
+    const image =
+      normalizeCharacterImageValue(
+        imageData
+      );
+
+    if (!image.url) {
+      setStatus(
+        "Choose a portrait image first."
+      );
+
+      return false;
+    }
+
+    if (
+      !isSection11PortraitUrlAllowed(
+        image.url
+      )
+    ) {
+      setStatus(
+        "Portrait must be an image URL."
+      );
+
+      return false;
+    }
+
+    if (
+      !creatorState.draft.identity ||
+      typeof creatorState.draft.identity !==
+        "object"
+    ) {
+      creatorState.draft.identity = {
+        ...createEmptyCharacter().identity
+      };
+    }
+
+    creatorState.draft.identity.image = {
+      url: image.url,
+      publicId: image.publicId
+    };
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    if (options.status !== false) {
+      setStatus(
+        options.status ||
+        "Portrait updated."
+      );
+    }
+
+    if (options.render !== false) {
+      renderCreatorView();
+    }
+
+    return true;
+  }
+
+  function clearSection11Portrait(
+    options = {}
+  ) {
+    const current =
+      getSection11Portrait();
+
+    if (!current.url && !current.publicId) {
+      if (options.status !== false) {
+        setStatus(
+          "No portrait is selected."
+        );
+      }
+
+      return false;
+    }
+
+    creatorState.draft.identity =
+      creatorState.draft.identity ||
+      {
+        ...createEmptyCharacter().identity
+      };
+
+    creatorState.draft.identity.image = {
+      url: "",
+      publicId: ""
+    };
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    if (options.status !== false) {
+      setStatus(
+        options.status ||
+        "Portrait removed."
+      );
+    }
+
+    if (options.render !== false) {
+      renderCreatorView();
+    }
+
+    return true;
+  }
+
+  async function cleanupSection11PreviousPortrait(
+    previousImage,
+    nextImage = {}
+  ) {
+    const previousPublicId =
+      cleanString(previousImage?.publicId);
+
+    if (
+      !previousPublicId ||
+      previousPublicId ===
+        cleanString(nextImage?.publicId) ||
+      typeof deps.deleteCharacterPortrait !==
+        "function"
+    ) {
+      return true;
+    }
+
+    try {
+      await deps.deleteCharacterPortrait(
+        previousPublicId,
+        {
+          roomCode: getRoomCode(),
+          characterId:
+            creatorState.currentCharacterId,
+          previousImage,
+          nextImage
+        }
+      );
+
+      return true;
+    } catch (error) {
+      console.warn(
+        "Could not remove previous character portrait:",
+        error
+      );
+
+      return false;
+    }
+  }
+
+  async function replaceSection11Portrait(
+    imageData,
+    statusMessage
+  ) {
+    const previousImage =
+      getSection11Portrait();
+
+    const nextImage =
+      normalizeCharacterImageValue(
+        imageData
+      );
+
+    const updated =
+      setSection11Portrait(
+        nextImage,
+        {
+          render: false,
+          status:
+            statusMessage ||
+            "Portrait updated."
+        }
+      );
+
+    if (!updated) {
+      return false;
+    }
+
+    const cleanedUp =
+      await cleanupSection11PreviousPortrait(
+        previousImage,
+        nextImage
+      );
+
+    if (!cleanedUp) {
+      setStatus(
+        "Portrait updated. Previous hosted image could not be removed."
+      );
+    }
+
+    renderCreatorView();
+
+    return true;
+  }
+
+  async function removeSection11Portrait() {
+    const previousImage =
+      getSection11Portrait();
+
+    const removed =
+      clearSection11Portrait({
+        render: false,
+        status: "Portrait removed."
+      });
+
+    if (!removed) {
+      renderCreatorView();
+      return false;
+    }
+
+    const cleanedUp =
+      await cleanupSection11PreviousPortrait(
+        previousImage,
+        {}
+      );
+
+    if (!cleanedUp) {
+      setStatus(
+        "Portrait removed. Previous hosted image could not be removed."
+      );
+    }
+
+    renderCreatorView();
+
+    return true;
+  }
+
+  async function createSection11PortraitFromFile(
+    file
+  ) {
+    if (!file) {
+      throw new Error(
+        "Choose a portrait image first."
+      );
+    }
+
+    if (!isSection11PortraitFile(file)) {
+      throw new Error(
+        "Portrait file must be an image."
+      );
+    }
+
+    const hasUploadHook =
+      hasSection11PortraitUploadHook();
+
+    const maxBytes =
+      hasUploadHook
+        ? SECTION11_UPLOADED_PORTRAIT_MAX_BYTES
+        : SECTION11_EMBEDDED_PORTRAIT_MAX_BYTES;
+
+    if (
+      safeNumber(file.size, 0) > maxBytes
+    ) {
+      throw new Error(
+        hasUploadHook
+          ? `Portrait image must be ${formatSection11PortraitBytes(maxBytes)} or smaller.`
+          : `Portrait image must be ${formatSection11PortraitBytes(maxBytes)} or smaller without hosted uploads.`
+      );
+    }
+
+    if (hasUploadHook) {
+      const uploadResult =
+        await deps.uploadCharacterPortrait(
+          file,
+          {
+            roomCode: getRoomCode(),
+            characterId:
+              creatorState.currentCharacterId,
+            character: creatorState.draft,
+            previousImage:
+              getSection11Portrait()
+          }
+        );
+
+      const uploadedImage =
+        normalizeCharacterImageValue(
+          uploadResult
+        );
+
+      if (!uploadedImage.url) {
+        throw new Error(
+          "Portrait upload did not return an image URL."
+        );
+      }
+
+      return uploadedImage;
+    }
+
+    const dataUrl =
+      await readSection11PortraitFileAsDataUrl(
+        file
+      );
+
+    return {
+      url: dataUrl,
+      publicId: ""
+    };
+  }
+
+  async function uploadSection11PortraitFile(
+    file
+  ) {
+    if (!file) {
+      return false;
+    }
+
+    if (
+      !beginCharacterBusyAction(
+        "upload-portrait"
+      )
+    ) {
+      return false;
+    }
+
+    try {
+      const image =
+        await createSection11PortraitFromFile(
+          file
+        );
+
+      await replaceSection11Portrait(
+        image,
+        "Portrait updated."
+      );
+
+      return true;
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "Portrait could not be uploaded."
+      );
+
+      if (typeof document !== "undefined") {
+        renderCreatorView();
+      }
+
+      return false;
+    } finally {
+      endCharacterBusyAction(
+        "upload-portrait"
+      );
+    }
+  }
+
+  function renderSection11PortraitPanel() {
+    const portrait =
+      getSection11Portrait();
+
+    const imageUrl =
+      cleanString(portrait.url);
+
+    const publicId =
+      cleanString(portrait.publicId);
+
+    const isBusy =
+      isCharacterCreatorBusy();
+
+    const isUploading =
+      creatorState.busyAction ===
+      "upload-portrait";
+
+    return `
+      <article class="hg-character-portrait-panel">
+        <div class="hg-character-portrait-frame">
+          ${
+            imageUrl
+              ? `
+                <img
+                  src="${escapeHtml(imageUrl)}"
+                  alt="${escapeHtml(
+                    getSafeCharacterName() ||
+                    "Character portrait"
+                  )}"
+                >
+              `
+              : `
+                <div class="hg-character-portrait-placeholder">
+                  No portrait selected
+                </div>
+              `
+          }
+        </div>
+
+        <div class="hg-character-portrait-controls">
+          ${wizardField(
+            "Portrait Image URL",
+            "ccPortraitUrl",
+            imageUrl,
+            {
+              placeholder:
+                "https://example.com/portrait.png",
+              extra:
+                isBusy
+                  ? "disabled"
+                  : ""
+            }
+          )}
+
+          <div class="hg-character-portrait-actions">
+            <button
+              type="button"
+              data-cc-action="set-portrait-url"
+              ${isBusy ? "disabled" : ""}
+            >
+              Use URL
+            </button>
+
+            <label class="fileButtonLabel">
+              ${
+                isUploading
+                  ? "Uploading..."
+                  : "Choose Image"
+              }
+
+              <input
+                id="characterImageUploadInput"
+                type="file"
+                accept="image/*,.avif,.gif,.jpg,.jpeg,.png,.webp"
+                data-cc-portrait-upload="true"
+                ${isBusy ? "disabled" : ""}
+              >
+            </label>
+
+            <button
+              type="button"
+              data-cc-action="remove-portrait"
+              ${
+                !imageUrl || isBusy
+                  ? "disabled"
+                  : ""
+              }
+            >
+              Remove Portrait
+            </button>
+          </div>
+
+          ${
+            publicId
+              ? `
+                <div class="hg-character-portrait-meta">
+                  Stored ID:
+                  ${escapeHtml(publicId)}
+                </div>
+              `
+              : ""
+          }
+        </div>
+      </article>
+    `;
+  }
+
+  async function handleSection11SetPortraitUrl() {
+    const input =
+      typeof document !== "undefined"
+        ? document.getElementById(
+            "ccPortraitUrl"
+          )
+        : null;
+
+    await replaceSection11Portrait(
+      {
+        url: input?.value || "",
+        publicId: ""
+      },
+      "Portrait URL updated."
+    );
+  }
+
+  async function handleSection11RemovePortrait() {
+    await removeSection11Portrait();
+  }
+
+  async function handleSection11PortraitChange({
+    target
+  }) {
+    if (
+      target?.dataset
+        ?.ccPortraitUpload !==
+      "true"
+    ) {
+      return false;
+    }
+
+    const file =
+      target.files?.[0] ||
+      null;
+
+    await uploadSection11PortraitFile(
+      file
+    );
+
+    target.value = "";
+
+    return true;
+  }
+
+  function renderBasicsStep() {
+    const identity =
+      creatorState.draft.identity;
+
+    const sizes = [
+      "tiny",
+      "small",
+      "medium",
+      "large",
+      "huge",
+      "gargantuan"
+    ].map((size) => {
+      return {
+        value: size,
+
+        label:
+          size.charAt(0).toUpperCase() +
+          size.slice(1)
+      };
+    });
+
+    return `
+      ${beginnerNote(
+        "Character Identity",
+        "Start with who your character is. Name, age, pronouns, deity, and appearance are mostly story details. Size can matter for some rules, but most player characters are Small or Medium."
+      )}
+
+      <div class="hg-character-field-grid">
+        ${renderSection11PortraitPanel()}
+
+        ${wizardField(
+          "Character Name",
+          "ccCharacterName",
+          getSafeCharacterName(),
+          {
+            path: "identity.name",
+            placeholder: "Character name"
+          }
+        )}
+
+        ${wizardField(
+          "Pronouns",
+          "ccPronouns",
+          safeDisplayString(
+            identity.pronouns
+          ),
+          {
+            path: "identity.pronouns",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardField(
+          "Alignment / Outlook",
+          "ccAlignment",
+          safeDisplayString(
+            identity.alignment
+          ),
+          {
+            path: "identity.alignment",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardField(
+          "Deity / Belief",
+          "ccDeity",
+          safeDisplayString(
+            identity.deity
+          ),
+          {
+            path: "identity.deity",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardField(
+          "Age",
+          "ccAge",
+          safeDisplayString(
+            identity.age
+          ),
+          {
+            path: "identity.age",
+            placeholder: "Optional"
+          }
+        )}
+
+        ${wizardSelect(
+          "Size",
+          "ccIdentitySize",
+          identity.size,
+          sizes,
+          {
+            path: "identity.size"
+          }
+        )}
+
+        ${wizardField(
+          "Appearance / Identity Notes",
+          "ccAppearance",
+          safeDisplayString(
+            identity.appearance
+          ),
+          {
+            type: "textarea",
+            path: "identity.appearance",
+
+            placeholder:
+              "Appearance, personality, identity notes...",
+
+            wide: true
+          }
+        )}
+
+        ${wizardField(
+          "General Notes",
+          "ccGeneralNotes",
+          safeDisplayString(
+            creatorState.draft.notes
+          ),
+          {
+            type: "textarea",
+            path: "notes",
+
+            placeholder:
+              "Anything that does not fit elsewhere...",
+
+            wide: true
+          }
+        )}
+      </div>
+    `;
+  }
+
+  function getAllSpeciesTemplates() {
+    const speciesMap =
+      new Map();
+
+    DEFAULT_SPECIES_TEMPLATES
+      .forEach((species) => {
+        const speciesId =
+          makeSafeId(
+            species.id ||
+            species.name,
+            "species"
+          );
+
+        speciesMap.set(
+          speciesId,
+          {
+            ...cloneData(species),
+            ...getLegacy2014Metadata(
+              "species",
+              speciesId,
+              species
+            ),
+            id: speciesId,
+            source:
+              species.source ||
+              "template"
+          }
+        );
+      });
+
+    (
+      creatorState.roomSpeciesCache ||
+      []
+    ).forEach((species) => {
+      if (!isActiveRulesetEntry(species)) {
+        return;
+      }
+
+      const speciesId =
+        makeSafeId(
+          species.id ||
+          species.docId ||
+          species.name,
+          "custom-species"
+        );
+
+        speciesMap.set(
+          speciesId,
+          {
+            ...cloneData(species),
+            ...getLegacy2014Metadata(
+              "species",
+              speciesId,
+              species
+            ),
+            id: speciesId,
+          source:
+            species.source ||
+            "homebrew"
+        }
+      );
+    });
+
+    const selectedSpecies =
+      creatorState.draft
+        .species
+        .templateSnapshot;
+
+    if (
+      selectedSpecies &&
+      isActiveRulesetEntry(selectedSpecies) &&
+      creatorState.draft
+        .species
+        .source !== "custom"
+    ) {
+      const speciesId =
+        makeSafeId(
+          selectedSpecies.id ||
+          selectedSpecies.name,
+          "character-species"
+        );
+
+      speciesMap.set(
+        speciesId,
+        {
+          ...cloneData(
+            selectedSpecies
+          ),
+          ...getLegacy2014Metadata(
+            "species",
+            speciesId,
+            selectedSpecies
+          ),
+
+          id: speciesId,
+
+          source:
+            selectedSpecies.source ||
+            "character"
+        }
+      );
+    }
+
+    return Array.from(
+      speciesMap.values()
+    ).sort((a, b) => {
+      return String(a.name || "")
+        .localeCompare(
+          String(b.name || "")
+        );
+      });
+  }
+
+  function getSection11SelectedSpeciesTemplate() {
+    const species =
+      creatorState.draft.species || {};
+
+    return (
+      species.templateSnapshot ||
+      getAllSpeciesTemplates()
+        .find((template) => {
+          return template.id === species.id;
+        }) ||
+      null
+    );
+  }
+
+  function getSection11SelectedSubrace(
+    species = getSection11SelectedSpeciesTemplate()
+  ) {
+    const subraceId =
+      cleanString(
+        creatorState.draft
+          .species
+          .choices
+          ?.subraceId
+      );
+
+    if (!subraceId) {
+      return null;
+    }
+
+    return (
+      (
+        Array.isArray(species?.subraces)
+          ? species.subraces
+          : []
+      ).find((subrace) => {
+        return subrace.id === subraceId;
+      }) ||
+      null
+    );
+  }
+
+  function clearSection11SpeciesMechanics() {
+    removeAbilityBonusSourcesByPrefix([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+
+    removeSkillProficiencySourcesByPrefix([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+
+    removeListProficiencySourcesByPrefix([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+
+    removeInnateSpellsBySourcePrefixes([
+      "species:",
+      "subrace:",
+      "species-choice:"
+    ]);
+  }
+
+  function addSection11SkillProficiencies(
+    skillNames,
+    sourceName
+  ) {
+    cleanArray(skillNames)
+      .forEach((skillName) => {
+        const skill =
+          SKILL_DEFINITIONS.find((item) => {
+            return (
+              item.id ===
+                makeSafeId(
+                  skillName,
+                  "skill"
+                ) ||
+              item.name.toLowerCase() ===
+                skillName.toLowerCase()
+            );
+          });
+
+        if (!skill) {
+          return;
+        }
+
+        const current =
+          getSection14SkillEntry(skill);
+
+        setSection14SkillEntry(
+          skill,
+          {
+            proficient: true,
+            expertise:
+              current.expertise === true,
+            source: [
+              ...new Set([
+                ...cleanArray(
+                  current.source
+                ),
+                sourceName
+              ])
+            ]
+          }
+        );
+      });
+  }
+
+  function applySection11MechanicBlock(
+    block,
+    sourceName
+  ) {
+    if (!block || !sourceName) {
+      return;
+    }
+
+    setAbilityBonusSource(
+      sourceName,
+      block.abilityBonuses || {}
+    );
+
+    setSourceProficiencyList(
+      "languages",
+      block.languages || [],
+      sourceName
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      block.toolProficiencies || [],
+      sourceName
+    );
+
+    setSourceProficiencyList(
+      "weapons",
+      block.weaponProficiencies || [],
+      sourceName
+    );
+
+    setSourceProficiencyList(
+      "armor",
+      block.armorProficiencies || [],
+      sourceName
+    );
+
+    addSection11SkillProficiencies(
+      block.skillProficiencies || [],
+      sourceName
+    );
+  }
+
+  function getSection11DragonbornAncestry() {
+    const ancestryId =
+      cleanString(
+        creatorState.draft
+          .species
+          .choices
+          ?.draconicAncestry
+      );
+
+    return (
+      SECTION11_DRAGONBORN_ANCESTRIES
+        .find((ancestry) => {
+          return ancestry.id === ancestryId;
+        }) ||
+      null
+    );
+  }
+
+  function getSection11ChoiceSource(
+    choiceId
+  ) {
+    return choiceId
+      ? `species-choice:${choiceId}`
+      : "";
+  }
+
+  function getSection11LanguageChoices({
+    exclude = []
+  } = {}) {
+    const excluded =
+      cleanArray(exclude)
+        .map((language) => {
+          return language.toLowerCase();
+        });
+
+    return [
+      {
+        value: "",
+        label: "Choose language"
+      },
+      ...STANDARD_LANGUAGE_OPTIONS
+        .filter((language) => {
+          return !excluded.includes(
+            language.toLowerCase()
+          );
+        })
+        .map((language) => {
+          return {
+            value: language,
+            label: language
+          };
+        })
+    ];
+  }
+
+  function getSection11SkillChoices() {
+    return [
+      {
+        value: "",
+        label: "Choose skill"
+      },
+      ...SKILL_DEFINITIONS.map((skill) => {
+        return {
+          value: skill.id,
+          label: skill.name
+        };
+      })
+    ];
+  }
+
+  function isSection11AbilityChoiceValid(
+    abilityId,
+    {
+      allowCharisma = true
+    } = {}
+  ) {
+    const cleanAbilityId =
+      cleanString(abilityId);
+
+    if (!cleanAbilityId) {
+      return false;
+    }
+
+    if (
+      !allowCharisma &&
+      cleanAbilityId === "cha"
+    ) {
+      return false;
+    }
+
+    return ABILITY_DEFINITIONS
+      .some((ability) => {
+        return ability.id === cleanAbilityId;
+      });
+  }
+
+  function isSection11SkillChoiceValid(
+    skillId
+  ) {
+    const cleanSkillId =
+      cleanString(skillId);
+
+    if (!cleanSkillId) {
+      return false;
+    }
+
+    return SKILL_DEFINITIONS
+      .some((skill) => {
+        return skill.id === cleanSkillId;
+      });
+  }
+
+  function isSection11LanguageChoiceValid(
+    language,
+    {
+      exclude = []
+    } = {}
+  ) {
+    const cleanLanguage =
+      cleanString(language);
+
+    if (!cleanLanguage) {
+      return false;
+    }
+
+    const excluded =
+      cleanArray(exclude)
+        .map((item) => {
+          return item.toLowerCase();
+        });
+
+    if (
+      excluded.includes(
+        cleanLanguage.toLowerCase()
+      )
+    ) {
+      return false;
+    }
+
+    return STANDARD_LANGUAGE_OPTIONS
+      .some((option) => {
+        return (
+          option.toLowerCase() ===
+          cleanLanguage.toLowerCase()
+        );
+      });
+  }
+
+  function removeInnateSpellsBySourcePrefixes(
+    prefixes
+  ) {
+    const cleanPrefixes =
+      cleanArray(prefixes);
+
+    if (!cleanPrefixes.length) {
+      return;
+    }
+
+    const magic =
+      creatorState.draft.magic;
+
+    magic.innateSpells =
+      (Array.isArray(magic.innateSpells)
+        ? magic.innateSpells
+        : []
+      ).filter((spell) => {
+        const source =
+          cleanString(
+            spell.source ||
+            spell.innateSource
+          );
+
+        return !cleanPrefixes.some(
+          (prefix) => {
+            return source.startsWith(prefix);
+          }
+        );
+      });
+  }
+
+  function setInnateSpellsForSource(
+    sourceName,
+    spells
+  ) {
+    const cleanSource =
+      cleanString(sourceName);
+
+    if (!cleanSource) {
+      return;
+    }
+
+    const magic =
+      creatorState.draft.magic;
+
+    magic.innateSpells =
+      (Array.isArray(magic.innateSpells)
+        ? magic.innateSpells
+        : []
+      ).filter((spell) => {
+        return !sourceMatches(
+          spell.source ||
+          spell.innateSource,
+          cleanSource
+        );
+      });
+
+    (Array.isArray(spells) ? spells : [])
+      .forEach((spell) => {
+        magic.innateSpells.push(
+          normalizeSection16Spell(
+            {
+              ...spell,
+              id:
+                spell.id ||
+                makeSafeId(
+                  `${cleanSource}-${spell.name}`,
+                  "innate-spell"
+                ),
+              source: cleanSource,
+              innateSource: cleanSource,
+              innate: true,
+              manualOverride: true,
+              spellcastingAbility:
+                spell.spellcastingAbility || ""
+            },
+            cleanSource
+          )
+        );
+      });
+  }
+
+  function getSection11HalfElfAbilityChoices() {
+    const choices =
+      creatorState.draft
+        .species
+        .choices || {};
+
+    return [
+      cleanString(
+        choices.halfElfAbilityOne
+      ),
+      cleanString(
+        choices.halfElfAbilityTwo
+      )
+    ].filter((abilityId) => {
+      return isSection11AbilityChoiceValid(
+        abilityId
+      );
+    });
+  }
+
+  function applySection11SpeciesChoiceMechanics(
+    traits
+  ) {
+    const speciesId =
+      cleanString(
+        creatorState.draft
+          .species
+          .id
+      );
+
+    if (speciesId === "half-elf") {
+      const abilityChoices =
+        getSection11HalfElfAbilityChoices();
+
+      const uniqueChoices = [
+        ...new Set(
+          abilityChoices.filter((abilityId) => {
+            return abilityId !== "cha";
+          })
+        )
+      ];
+
+      const bonusMap =
+        createAbilityMap(0);
+
+      if (uniqueChoices.length === 2) {
+        uniqueChoices.forEach((abilityId) => {
+          bonusMap[abilityId] += 1;
+        });
+      }
+
+      setAbilityBonusSource(
+        getSection11ChoiceSource(
+          "half-elf"
+        ),
+        bonusMap
+      );
+
+      const choiceSource =
+        getSection11ChoiceSource(
+          "half-elf"
+        );
+
+      const choices =
+        creatorState.draft
+          .species
+          .choices || {};
+
+      const selectedSkills = [
+        cleanString(
+          choices.halfElfSkillOne
+        ),
+        cleanString(
+          choices.halfElfSkillTwo
+        )
+      ]
+        .filter(Boolean)
+        .filter((skillId) => {
+          return isSection11SkillChoiceValid(
+            skillId
+          );
+        })
+        .map((skillId) => {
+          return SKILL_DEFINITIONS
+            .find((skill) => {
+              return skill.id === skillId;
+            })?.name || "";
+        })
+        .filter(Boolean);
+
+      if (
+        new Set(selectedSkills).size === 2
+      ) {
+        addSection11SkillProficiencies(
+          selectedSkills,
+          choiceSource
+        );
+      }
+
+      const language =
+        cleanString(
+          choices.halfElfLanguage
+        );
+
+      if (
+        isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        setSourceProficiencyList(
+          "languages",
+          [language],
+          choiceSource
+        );
+      }
+    }
+
+    if (speciesId === "dwarf") {
+      const tool =
+        cleanString(
+          creatorState.draft
+            .species
+            .choices
+            ?.dwarfTool
+        );
+
+      if (
+        DWARF_TOOL_CHOICES
+          .includes(tool)
+      ) {
+        setSourceProficiencyList(
+          "tools",
+          [tool],
+          getSection11ChoiceSource(
+            "dwarf"
+          )
+        );
+      }
+    }
+
+    if (speciesId === "human") {
+      const language =
+        cleanString(
+          creatorState.draft
+            .species
+            .choices
+            ?.humanLanguage
+        );
+
+      if (
+        isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: ["Common"]
+          }
+        )
+      ) {
+        setSourceProficiencyList(
+          "languages",
+          [language],
+          getSection11ChoiceSource(
+            "human"
+          )
+        );
+      }
+    }
+
+    const selectedSubrace =
+      getSection11SelectedSubrace();
+
+    if (
+      speciesId === "elf" &&
+      selectedSubrace?.id === "high-elf"
+    ) {
+      const choices =
+        creatorState.draft
+          .species
+          .choices || {};
+
+      const choiceSource =
+        getSection11ChoiceSource(
+          "high-elf"
+        );
+
+      const language =
+        cleanString(
+          choices.highElfLanguage
+        );
+
+      if (
+        isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        setSourceProficiencyList(
+          "languages",
+          [language],
+          choiceSource
+        );
+      }
+
+      const cantrip =
+        cleanString(
+          choices.highElfCantrip
+        );
+
+      if (
+        WIZARD_CANTRIP_CHOICES_2014
+          .includes(cantrip)
+      ) {
+        setInnateSpellsForSource(
+          choiceSource,
+          [
+            {
+              id:
+                `high-elf-${makeSafeId(
+                  cantrip,
+                  "cantrip"
+                )}`,
+              name: cantrip,
+              level: 0,
+              school: "Wizard cantrip",
+              spellcastingAbility: "int",
+              castingTime: "1 action",
+              range: "See spell",
+              duration: "See spell",
+              components: "",
+              summary:
+                "High Elf wizard cantrip."
+            }
+          ]
+        );
+      }
+    }
+
+    if (
+      speciesId === "elf" &&
+      selectedSubrace?.id === "dark-elf"
+    ) {
+      const level =
+        clampLevel(
+          creatorState.draft
+            .classProgression
+            .totalLevel || 1
+        );
+
+      setInnateSpellsForSource(
+        "subrace:dark-elf",
+        DARK_ELF_INNATE_SPELLS_2014
+          .filter((spell) => {
+            return level >=
+              safeNumber(
+                spell.minimumLevel,
+                1
+              );
+          })
+          .map((spell) => {
+            return {
+              ...spell,
+              spellcastingAbility: "cha"
+            };
+          })
+      );
+    }
+
+    if (
+      speciesId === "gnome" &&
+      selectedSubrace?.id === "forest-gnome"
+    ) {
+      setInnateSpellsForSource(
+        "subrace:forest-gnome",
+        FOREST_GNOME_INNATE_SPELLS_2014
+          .map((spell) => {
+            return {
+              ...spell,
+              spellcastingAbility: "int"
+            };
+          })
+      );
+    }
+
+    if (speciesId === "tiefling") {
+      const level =
+        clampLevel(
+          creatorState.draft
+            .classProgression
+            .totalLevel || 1
+        );
+
+      setInnateSpellsForSource(
+        "species:tiefling",
+        TIEFLING_INNATE_SPELLS_2014
+          .filter((spell) => {
+            return level >=
+              safeNumber(
+                spell.minimumLevel,
+                1
+              );
+          })
+          .map((spell) => {
+            return {
+              ...spell,
+              spellcastingAbility: "cha"
+            };
+          })
+      );
+    }
+
+    if (speciesId === "dragonborn") {
+      const ancestry =
+        getSection11DragonbornAncestry();
+
+      if (ancestry) {
+        traits.push({
+          id:
+            `dragonborn-${ancestry.id}-ancestry`,
+          name:
+            `${ancestry.name} Dragon Ancestry`,
+          summary:
+            `Your breath weapon and damage resistance use ${ancestry.damageType.toLowerCase()} damage.`,
+          source:
+            "species:dragonborn"
+        });
+
+        creatorState.draft
+          .species
+          .damageResistances =
+            [ancestry.damageType];
+      } else {
+        creatorState.draft
+          .species
+          .damageResistances = [];
+      }
+    }
+  }
+
+  function applySection11SpeciesMechanics() {
+    const species =
+      getSection11SelectedSpeciesTemplate();
+
+    if (!species) {
+      return;
+    }
+
+    const subrace =
+      getSection11SelectedSubrace(
+        species
+      );
+
+    const speciesSource =
+      getSpeciesSourceLabel(
+        species
+      );
+
+    const subraceSource =
+      getSubraceSourceLabel(
+        subrace
+      );
+
+    applySection11MechanicBlock(
+      species,
+      speciesSource
+    );
+
+    applySection11MechanicBlock(
+      subrace,
+      subraceSource
+    );
+
+    creatorState.draft.identity.size =
+      subrace?.size ||
+      species.size ||
+      "medium";
+
+    creatorState.draft
+      .combat
+      .baseSpeed
+      .walk =
+        normalizeMovementSpeed(
+          subrace?.speed ??
+          species.speed,
+          30
+        );
+
+    const traits = [
+      ...(
+        Array.isArray(species.traits)
+          ? species.traits
+          : []
+      ),
+      ...(
+        Array.isArray(subrace?.traits)
+          ? subrace.traits
+          : []
+      )
+    ];
+
+    applySection11SpeciesChoiceMechanics(
+      traits
+    );
+
+    creatorState.draft
+      .species
+      .traits =
+        cloneData(traits);
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(traits);
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+  }
+
+  function chooseSpeciesFromTemplate(
+    speciesId
+  ) {
+    const species =
+      getAllSpeciesTemplates()
+        .find((item) => {
+          return item.id === speciesId;
+        });
+
+    if (!species) {
+      return false;
+    }
+
+    clearSection11SpeciesMechanics();
+
+    creatorState.draft.species = {
+      id: species.id,
+
+      name:
+        safeDisplayString(
+          species.name,
+          "Unnamed Species"
+        ),
+
+      source:
+        species.source ||
+        "template",
+
+      templateSnapshot:
+        cloneData(species),
+
+      choices: {
+        subraceId: ""
+      },
+
+      traits:
+        cloneData(
+          species.traits ||
+          []
+        )
+    };
+
+    applySection11SpeciesMechanics();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function chooseSection11Subrace(
+    subraceId
+  ) {
+    const species =
+      getSection11SelectedSpeciesTemplate();
+
+    const subrace =
+      (
+        Array.isArray(species?.subraces)
+          ? species.subraces
+          : []
+      ).find((candidate) => {
+        return candidate.id === subraceId;
+      });
+
+    if (!species || !subrace) {
+      return false;
+    }
+
+    clearSection11SpeciesMechanics();
+
+    creatorState.draft
+      .species
+      .choices =
+        creatorState.draft
+          .species
+          .choices || {};
+
+    creatorState.draft
+      .species
+      .choices
+      .subraceId =
+        subrace.id;
+
+    creatorState.draft
+      .species
+      .choices
+      .subraceName =
+        subrace.name;
+
+    applySection11SpeciesMechanics();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applySection11SpeciesChoices() {
+    const speciesId =
+      cleanString(
+        creatorState.draft
+          .species
+          .id
+      );
+
+    creatorState.draft
+      .species
+      .choices =
+        creatorState.draft
+          .species
+          .choices || {};
+
+    if (speciesId === "dragonborn") {
+      const ancestryId =
+        cleanString(
+          $("ccDragonbornAncestry")
+            ?.value
+        );
+
+      if (!ancestryId) {
+        alert(
+          "Choose a dragon ancestry."
+        );
+
+        return false;
+      }
+
+      const ancestry =
+        SECTION11_DRAGONBORN_ANCESTRIES
+          .find((candidate) => {
+            return candidate.id === ancestryId;
+          });
+
+      if (!ancestry) {
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .draconicAncestry =
+          ancestry.id;
+
+      creatorState.draft
+        .species
+        .choices
+        .draconicAncestryName =
+          ancestry.name;
+    }
+
+    if (speciesId === "half-elf") {
+      const firstAbility =
+        cleanString(
+          $("ccHalfElfAbilityOne")
+            ?.value
+        );
+
+      const secondAbility =
+        cleanString(
+          $("ccHalfElfAbilityTwo")
+            ?.value
+        );
+
+      if (
+        !isSection11AbilityChoiceValid(
+          firstAbility,
+          {
+            allowCharisma: false
+          }
+        ) ||
+        !isSection11AbilityChoiceValid(
+          secondAbility,
+          {
+            allowCharisma: false
+          }
+        ) ||
+        firstAbility === secondAbility ||
+        firstAbility === "cha" ||
+        secondAbility === "cha"
+      ) {
+        alert(
+          "Choose two different Half-Elf ability bonuses other than Charisma."
+        );
+
+        return false;
+      }
+
+      const firstSkill =
+        cleanString(
+          $("ccHalfElfSkillOne")
+            ?.value
+        );
+
+      const secondSkill =
+        cleanString(
+          $("ccHalfElfSkillTwo")
+            ?.value
+        );
+
+      if (
+        !isSection11SkillChoiceValid(
+          firstSkill
+        ) ||
+        !isSection11SkillChoiceValid(
+          secondSkill
+        ) ||
+        firstSkill === secondSkill
+      ) {
+        alert(
+          "Choose two different Half-Elf skill proficiencies."
+        );
+
+        return false;
+      }
+
+      const language =
+        cleanString(
+          $("ccHalfElfLanguage")
+            ?.value
+        );
+
+      if (
+        !isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        alert(
+          "Choose a Half-Elf additional language."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfAbilityOne =
+          firstAbility;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfAbilityTwo =
+          secondAbility;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfSkillOne =
+          firstSkill;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfSkillTwo =
+          secondSkill;
+
+      creatorState.draft
+        .species
+        .choices
+        .halfElfLanguage =
+          language;
+    }
+
+    if (speciesId === "dwarf") {
+      const tool =
+        cleanString(
+          $("ccDwarfToolChoice")
+            ?.value
+        );
+
+      if (
+        !DWARF_TOOL_CHOICES
+          .includes(tool)
+      ) {
+        alert(
+          "Choose a Dwarf tool proficiency."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .dwarfTool =
+          tool;
+    }
+
+    if (speciesId === "human") {
+      const language =
+        cleanString(
+          $("ccHumanLanguage")
+            ?.value
+        );
+
+      if (
+        !isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: ["Common"]
+          }
+        )
+      ) {
+        alert(
+          "Choose a Human additional language."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .humanLanguage =
+          language;
+    }
+
+    if (
+      speciesId === "elf" &&
+      getSection11SelectedSubrace()?.id ===
+        "high-elf"
+    ) {
+      const language =
+        cleanString(
+          $("ccHighElfLanguage")
+            ?.value
+        );
+
+      const cantrip =
+        cleanString(
+          $("ccHighElfCantrip")
+            ?.value
+        );
+
+      if (
+        !isSection11LanguageChoiceValid(
+          language,
+          {
+            exclude: [
+              "Common",
+              "Elvish"
+            ]
+          }
+        )
+      ) {
+        alert(
+          "Choose a High Elf additional language."
+        );
+
+        return false;
+      }
+
+      if (
+        !WIZARD_CANTRIP_CHOICES_2014
+          .includes(cantrip)
+      ) {
+        alert(
+          "Choose a High Elf wizard cantrip."
+        );
+
+        return false;
+      }
+
+      creatorState.draft
+        .species
+        .choices
+        .highElfLanguage =
+          language;
+
+      creatorState.draft
+        .species
+        .choices
+        .highElfCantrip =
+          cantrip;
+    }
+
+    clearSection11SpeciesMechanics();
+    applySection11SpeciesMechanics();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applyCustomSpecies() {
+    const name =
+      safeDisplayString(
+        $("ccCustomSpeciesName")
+          ?.value
+      );
+
+    if (!name) {
+      alert(
+        "Enter a custom species name."
+      );
+
+      return false;
+    }
+
+    const currentTraits =
+      Array.isArray(
+        creatorState.draft
+          .species
+          .traits
+      )
+        ? cloneData(
+            creatorState.draft
+              .species
+              .traits
+          )
+        : [];
+
+    clearSection11SpeciesMechanics();
+
+    creatorState.draft.species = {
+      id: makeSafeId(
+        name,
+        "custom-species"
+      ),
+
+      name,
+      source: "custom",
+      templateSnapshot: null,
+      choices: {},
+      traits: currentTraits
+    };
+
+    creatorState.draft.identity.size =
+      $("ccCustomSpeciesSize")
+        ?.value ||
+      "medium";
+
+    creatorState.draft
+      .combat
+      .baseSpeed
+      .walk =
+        normalizeMovementSpeed(
+          $("ccCustomSpeciesSpeed")
+            ?.value,
+          30
+        );
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(currentTraits);
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function addSpeciesTrait() {
+    const name =
+      safeDisplayString(
+        $("ccNewSpeciesTraitName")
+          ?.value
+      );
+
+    const summary =
+      safeDisplayString(
+        $("ccNewSpeciesTraitSummary")
+          ?.value
+      );
+
+    if (!name) {
+      alert(
+        "Enter a trait name."
+      );
+
+      return false;
+    }
+
+    if (
+      !Array.isArray(
+        creatorState.draft
+          .species
+          .traits
+      )
+    ) {
+      creatorState.draft
+        .species
+        .traits = [];
+    }
+
+    creatorState.draft
+      .species
+      .traits
+      .push({
+        id: makeSafeId(
+          name +
+          "-" +
+          Date.now(),
+          "species-trait"
+        ),
+
+        name,
+        summary
+      });
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(
+          creatorState.draft
+            .species
+            .traits
+        );
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function removeSpeciesTrait(index) {
+    const traits =
+      creatorState.draft
+        .species
+        .traits;
+
+    if (
+      !Array.isArray(traits) ||
+      index < 0 ||
+      index >= traits.length
+    ) {
+      return false;
+    }
+
+    traits.splice(index, 1);
+
+    creatorState.draft
+      .features
+      .speciesTraits =
+        cloneData(traits);
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderSpeciesStep() {
+    const currentSpecies =
+      getSafeSpeciesName();
+
+    const selectedSpeciesId =
+      creatorState.draft
+        .species
+        .id;
+
+    const speciesCards =
+      getAllSpeciesTemplates()
+        .map((species) => {
+          const selected =
+            selectedSpeciesId ===
+              species.id ||
+            (
+              !selectedSpeciesId &&
+              currentSpecies ===
+                species.name
+            );
+
+          const body = `
+            <p>
+              ${escapeHtml(
+                species.summary ||
+                "No description provided."
+              )}
+            </p>
+
+            <p>
+              ${renderRulesetMetadata(species, "species")}
+            </p>
+
+            ${renderFullCatalogDescription(
+              species,
+              "Full species description"
+            )}
+
+            <p>
+              <b>Size:</b>
+
+              ${escapeHtml(
+                species.size ||
+                "medium"
+              )}
+            </p>
+
+            <p>
+              <b>Walking Speed:</b>
+
+              ${Math.max(
+                0,
+                safeNumber(
+                  species.speed,
+                  30
+                )
+                )} ft.
+            </p>
+
+            <p>
+              <b>Languages:</b>
+
+              ${escapeHtml(
+                formatSection12List(
+                  species.languages
+                ) || "None listed"
+              )}
+
+              <br>
+
+              <b>Traits:</b>
+
+              ${escapeHtml(
+                formatSection12List(
+                  (Array.isArray(species.traits)
+                    ? species.traits
+                    : [])
+                    .map((trait) => {
+                      return trait?.name || trait;
+                    })
+                ) || "None listed"
+              )}
+            </p>
+
+            ${renderCatalogEntryDetails(
+              species.traits,
+              {
+                label: "Species trait descriptions",
+                kind: "species-trait",
+                parentId: species.id
+              }
+            )}
+          `;
+
+          return wizardChoiceCard(
+            species.name ||
+              "Unnamed Species",
+
+            body,
+
+            selected
+              ? "Selected"
+              : "Choose Species",
+
+            "choose-species",
+
+            {
+              "species-id":
+                species.id
+            },
+
+            selected
+          );
+        })
+        .join("");
+
+    const selectedSpeciesTemplate =
+      getSection11SelectedSpeciesTemplate();
+
+    const selectedSubrace =
+      getSection11SelectedSubrace(
+        selectedSpeciesTemplate
+      );
+
+    const subraceCards =
+      (
+        Array.isArray(
+          selectedSpeciesTemplate?.subraces
+        )
+          ? selectedSpeciesTemplate.subraces
+          : []
+      )
+        .map((subrace) => {
+          const selected =
+            selectedSubrace?.id ===
+            subrace.id;
+
+          const abilityText =
+            Object.entries(
+              subrace.abilityBonuses || {}
+            )
+              .filter(([, value]) => {
+                return safeNumber(value, 0) !== 0;
+              })
+              .map(([abilityId, value]) => {
+                return `${abilityId.toUpperCase()} ${formatSignedNumber(value)}`;
+              })
+              .join(", ");
+
+          return wizardChoiceCard(
+            subrace.name ||
+              "Unnamed Subrace",
+
+            `
+              <p>
+                ${renderRulesetMetadata(
+                  subrace,
+                  "subrace",
+                  selectedSpeciesTemplate?.id
+                )}
+              </p>
+
+              ${renderFullCatalogDescription(
+                subrace,
+                "Full subrace description"
+              )}
+
+              <p>
+                ${
+                  abilityText
+                    ? `<b>Ability:</b> ${escapeHtml(abilityText)}`
+                    : "No ability bonus listed."
+                }
+              </p>
+
+              <p>
+                <b>Languages:</b>
+
+                ${escapeHtml(
+                  formatSection12List(
+                    subrace.languages
+                  ) || "No additional languages"
+                )}
+
+                <br>
+
+                <b>Traits:</b>
+
+                ${escapeHtml(
+                  formatSection12List(
+                    (Array.isArray(subrace.traits)
+                      ? subrace.traits
+                      : [])
+                      .map((trait) => {
+                        return trait?.name || trait;
+                      })
+                  ) || "No additional traits"
+                )}
+              </p>
+
+              ${renderCatalogEntryDetails(
+                subrace.traits,
+                {
+                  label: "Subrace trait descriptions",
+                  kind: "subrace-trait",
+                  parentId: subrace.id
+                }
+              )}
+            `,
+
+            selected
+              ? "Selected"
+              : "Choose Subrace",
+
+            "choose-subrace",
+
+            {
+              "subrace-id":
+                subrace.id
+            },
+
+            selected
+          );
+        })
+        .join("");
+
+    const abilityChoices =
+      ABILITY_DEFINITIONS.map((ability) => {
+        return {
+          value: ability.id,
+          label: ability.name
+        };
+      });
+
+    const halfElfAbilityChoices =
+      abilityChoices.filter((ability) => {
+        return ability.value !== "cha";
+      });
+
+    const dragonbornChoiceHtml =
+      selectedSpeciesId === "dragonborn"
+        ? `
+          <hr>
+
+          <h3>Draconic Ancestry</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Ancestry",
+              "ccDragonbornAncestry",
+              creatorState.draft
+                .species
+                .choices
+                ?.draconicAncestry ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose ancestry"
+                },
+                ...SECTION11_DRAGONBORN_ANCESTRIES
+                  .map((ancestry) => {
+                    return {
+                      value: ancestry.id,
+                      label:
+                        `${ancestry.name} (${ancestry.damageType})`
+                    };
+                  })
+              ]
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Ancestry
+            </button>
+          </div>
+        `
+        : "";
+
+    const halfElfChoiceHtml =
+      selectedSpeciesId === "half-elf"
+        ? `
+          <hr>
+
+          <h3>Half-Elf Ability Choices</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "First +1",
+              "ccHalfElfAbilityOne",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfAbilityOne ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose ability"
+                },
+                ...halfElfAbilityChoices
+              ]
+            )}
+
+            ${wizardSelect(
+              "Second +1",
+              "ccHalfElfAbilityTwo",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfAbilityTwo ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose ability"
+                },
+                ...halfElfAbilityChoices
+              ]
+            )}
+
+            ${wizardSelect(
+              "First Skill",
+              "ccHalfElfSkillOne",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfSkillOne ||
+                "",
+              getSection11SkillChoices()
+            )}
+
+            ${wizardSelect(
+              "Second Skill",
+              "ccHalfElfSkillTwo",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfSkillTwo ||
+                "",
+              getSection11SkillChoices()
+            )}
+
+            ${wizardSelect(
+              "Additional Language",
+              "ccHalfElfLanguage",
+              creatorState.draft
+                .species
+                .choices
+                ?.halfElfLanguage ||
+                "",
+              getSection11LanguageChoices({
+                exclude: [
+                  "Common",
+                  "Elvish"
+                ]
+              })
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Half-Elf Choices
+            </button>
+          </div>
+        `
+        : "";
+
+    const dwarfChoiceHtml =
+      selectedSpeciesId === "dwarf"
+        ? `
+          <hr>
+
+          <h3>Dwarf Tool Choice</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Tool Proficiency",
+              "ccDwarfToolChoice",
+              creatorState.draft
+                .species
+                .choices
+                ?.dwarfTool ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose tool"
+                },
+                ...DWARF_TOOL_CHOICES.map((tool) => {
+                  return {
+                    value: tool,
+                    label: tool
+                  };
+                })
+              ]
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Dwarf Tool
+            </button>
+          </div>
+        `
+        : "";
+
+    const humanChoiceHtml =
+      selectedSpeciesId === "human"
+        ? `
+          <hr>
+
+          <h3>Human Language Choice</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Additional Language",
+              "ccHumanLanguage",
+              creatorState.draft
+                .species
+                .choices
+                ?.humanLanguage ||
+                "",
+              getSection11LanguageChoices({
+                exclude: ["Common"]
+              })
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply Human Language
+            </button>
+          </div>
+        `
+        : "";
+
+    const highElfChoiceHtml =
+      selectedSpeciesId === "elf" &&
+      selectedSubrace?.id === "high-elf"
+        ? `
+          <hr>
+
+          <h3>High Elf Choices</h3>
+
+          <div class="hg-character-field-grid three">
+            ${wizardSelect(
+              "Additional Language",
+              "ccHighElfLanguage",
+              creatorState.draft
+                .species
+                .choices
+                ?.highElfLanguage ||
+                "",
+              getSection11LanguageChoices({
+                exclude: [
+                  "Common",
+                  "Elvish"
+                ]
+              })
+            )}
+
+            ${wizardSelect(
+              "Wizard Cantrip",
+              "ccHighElfCantrip",
+              creatorState.draft
+                .species
+                .choices
+                ?.highElfCantrip ||
+                "",
+              [
+                {
+                  value: "",
+                  label: "Choose cantrip"
+                },
+                ...WIZARD_CANTRIP_CHOICES_2014
+                  .map((cantrip) => {
+                    return {
+                      value: cantrip,
+                      label: cantrip
+                    };
+                  })
+              ]
+            )}
+          </div>
+
+          <div class="hg-character-inline-actions">
+            <button
+              type="button"
+              data-cc-action="apply-species-choices"
+            >
+              Apply High Elf Choices
+            </button>
+          </div>
+        `
+        : "";
+
+    const traits =
+      Array.isArray(
+        creatorState.draft
+          .species
+          .traits
+      )
+        ? creatorState.draft
+            .species
+            .traits
+        : [];
+
+    const traitCards =
+      traits
+        .map((trait, index) => {
+          return wizardChoiceCard(
+            trait.name ||
+              "Unnamed Trait",
+
+            `
+              <p>
+                ${escapeHtml(
+                  trait.summary ||
+                  "No description provided."
+                )}
+              </p>
+
+              ${
+                trait.description &&
+                trait.description !==
+                  trait.summary
+                  ? `<p>${escapeHtml(
+                      trait.description
+                    )}</p>`
+                  : ""
+              }
+
+              <p>
+                ${renderRulesetMetadata(
+                  trait,
+                  "species-trait",
+                  selectedSpeciesTemplate?.id
+                )}
+              </p>
+            `,
+
+            "Remove Trait",
+
+            "remove-species-trait",
+
+            {
+              index
+            },
+
+            false
+          );
+        })
+        .join("");
+
+    const sizes = [
+      "tiny",
+      "small",
+      "medium",
+      "large",
+      "huge",
+      "gargantuan"
+    ].map((size) => {
+      return {
+        value: size,
+
+        label:
+          size.charAt(0).toUpperCase() +
+          size.slice(1)
+      };
+    });
+
+    return `
+      ${beginnerNote(
+        "Species / Race",
+        "Species / Race gives natural traits like size, speed, senses, special abilities, and sometimes ability score bonuses."
+      )}
+
+      <div class="hg-character-current-choice">
+        <b>Current species:</b>
+
+        ${escapeHtml(
+          currentSpecies ||
+          "None selected"
+        )}
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${speciesCards}
+      </div>
+
+      ${
+        subraceCards
+          ? `
+            <hr>
+
+            <h3>Subrace</h3>
+
+            <div class="hg-character-choice-grid">
+              ${subraceCards}
+            </div>
+          `
+          : ""
+      }
+
+      ${dragonbornChoiceHtml}
+
+      ${dwarfChoiceHtml}
+
+      ${humanChoiceHtml}
+
+      ${highElfChoiceHtml}
+
+      ${halfElfChoiceHtml}
+
+      <hr>
+
+      <h3>Custom Species</h3>
+
+      <p>
+        Use this when your species is completely
+        homebrewed or is not in the available templates.
+      </p>
+
+      <div class="hg-character-field-grid three">
+        ${wizardField(
+          "Name",
+          "ccCustomSpeciesName",
+
+          creatorState.draft
+            .species
+            .source ===
+            "custom"
+              ? currentSpecies
+              : "",
+
+          {
+            placeholder:
+              "Half Celestial Owlbear"
+          }
+        )}
+
+        ${wizardSelect(
+          "Size",
+          "ccCustomSpeciesSize",
+
+          creatorState.draft
+            .identity
+            .size,
+
+          sizes
+        )}
+
+        ${wizardField(
+          "Walking Speed",
+          "ccCustomSpeciesSpeed",
+
+          creatorState.draft
+            .combat
+            .baseSpeed
+            .walk,
+
+          {
+            type: "number",
+            valueType: "number",
+            extra:
+              'min="0" max="100" step="1"'
+          }
+        )}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="use-custom-species"
+        >
+          Use Custom Species
+        </button>
+      </div>
+
+      <hr>
+
+      <h3>Species Traits</h3>
+
+      <div class="hg-character-choice-grid">
+        ${
+          traitCards ||
+          `
+            <div class="hg-character-placeholder">
+              No species traits have been added yet.
+            </div>
+          `
+        }
+      </div>
+
+      <div
+        class="hg-character-field-grid"
+        style="margin-top: 12px;"
+      >
+        ${wizardField(
+          "Trait Name",
+          "ccNewSpeciesTraitName",
+          "",
+          {
+            placeholder:
+              "Darkvision"
+          }
+        )}
+
+        ${wizardField(
+          "Trait Description",
+          "ccNewSpeciesTraitSummary",
+          "",
+          {
+            placeholder:
+              "Short original description"
+          }
+        )}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="add-species-trait"
+        >
+          Add Species Trait
+        </button>
+      </div>
+    `;
+  }
+
+  function findSection11ActionElement(
+    ...values
+  ) {
+    for (const value of values) {
+      const candidates = [
+        value,
+        value?.target,
+        value?.currentTarget,
+        value?.element,
+        value?.button,
+        value?.control,
+        value?.actionElement
+      ];
+
+      for (const candidate of candidates) {
+        if (
+          typeof Element !==
+            "undefined" &&
+          candidate instanceof Element
+        ) {
+          return (
+            candidate.closest(
+              "[data-cc-action]"
+            ) ||
+            candidate
+          );
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function handleChooseSpeciesAction(
+    ...values
+  ) {
+    const button =
+      findSection11ActionElement(
+        ...values
+      );
+
+    const speciesId =
+      button?.dataset
+        ?.speciesId ||
+      "";
+
+    if (
+      chooseSpeciesFromTemplate(
+        speciesId
+      )
+    ) {
+      setStatus(
+        "Species selected: " +
+        getSafeSpeciesName() +
+        "."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleChooseSubraceAction(
+    ...values
+  ) {
+    const button =
+      findSection11ActionElement(
+        ...values
+      );
+
+    const subraceId =
+      button?.dataset
+        ?.subraceId ||
+      "";
+
+    if (
+      chooseSection11Subrace(
+        subraceId
+      )
+    ) {
+      setStatus(
+        "Subrace selected: " +
+        (
+          getSection11SelectedSubrace()
+            ?.name ||
+          "Subrace"
+        ) +
+        "."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleApplySpeciesChoicesAction() {
+    if (applySection11SpeciesChoices()) {
+      setStatus(
+        "Species choices applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleUseCustomSpeciesAction() {
+    if (applyCustomSpecies()) {
+      setStatus(
+        "Custom species applied."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleAddSpeciesTraitAction() {
+    if (addSpeciesTrait()) {
+      setStatus(
+        "Species trait added."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  function handleRemoveSpeciesTraitAction(
+    ...values
+  ) {
+    const button =
+      findSection11ActionElement(
+        ...values
+      );
+
+    const index =
+      Math.round(
+        safeNumber(
+          button?.dataset?.index,
+          -1
+        )
+      );
+
+    if (removeSpeciesTrait(index)) {
+      setStatus(
+        "Species trait removed."
+      );
+
+      renderCreatorView();
+    }
+  }
+
+  registerCharacterStepRenderer(
+    "basics",
+    renderBasicsStep
+  );
+
+  registerCharacterStepRenderer(
+    "species",
+    renderSpeciesStep
+  );
+
+  registerCharacterCreatorAction(
+    "set-portrait-url",
+    handleSection11SetPortraitUrl
+  );
+
+  registerCharacterCreatorAction(
+    "remove-portrait",
+    handleSection11RemovePortrait
+  );
+
+  registerCharacterCreatorAction(
+    "choose-species",
+    handleChooseSpeciesAction
+  );
+
+  registerCharacterCreatorAction(
+    "choose-subrace",
+    handleChooseSubraceAction
+  );
+
+  registerCharacterCreatorAction(
+    "apply-species-choices",
+    handleApplySpeciesChoicesAction
+  );
+
+  registerCharacterCreatorAction(
+    "use-custom-species",
+    handleUseCustomSpeciesAction
+  );
+
+  registerCharacterCreatorAction(
+    "add-species-trait",
+    handleAddSpeciesTraitAction
+  );
+
+  registerCharacterCreatorAction(
+    "remove-species-trait",
+    handleRemoveSpeciesTraitAction
+  );
+
+  registerCharacterCreatorChangeHandler(
+    handleSection11PortraitChange
+  );
+
+// =====================================================
+// CHARACTER CREATOR SECTION 12 — CLASS / SUBCLASS
+// =====================================================
+
+  function parseSection12List(value) {
+    return String(value || "")
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function formatSection12List(value) {
+    return Array.isArray(value)
+      ? value.join(", ")
+      : "";
+  }
+
+  function getSection12SkillPickerChoices() {
+    return [
+      {
+        value: "",
+        label: "Choose a skill"
+      },
+
+      ...SKILL_DEFINITIONS.map((skill) => {
+        return {
+          value: skill.name,
+          label: `${skill.name} (${skill.ability.toUpperCase()})`
+        };
+      })
+    ];
+  }
+
+  function getSection12CustomClassSkillNames() {
+    return parseSection12List(
+      $("ccCustomClassSkills")?.value
+    );
+  }
+
+  function setSection12CustomClassSkillNames(
+    skillNames
+  ) {
+    const field =
+      $("ccCustomClassSkills");
+
+    if (!field) {
+      return false;
+    }
+
+    const normalizedNames = [];
+    const seen = new Set();
+
+    cleanArray(skillNames)
+      .forEach((skillName) => {
+        const match =
+          SKILL_DEFINITIONS.find((skill) => {
+            return (
+              skill.name.toLowerCase() ===
+              skillName.toLowerCase()
+            );
+          });
+
+        const displayName =
+          match?.name ||
+          safeDisplayString(skillName);
+
+        const key =
+          displayName.toLowerCase();
+
+        if (displayName && !seen.has(key)) {
+          seen.add(key);
+          normalizedNames.push(displayName);
+        }
+      });
+
+    field.value =
+      formatSection12List(normalizedNames);
+
+    return true;
+  }
+
+  function updateSection12CustomClassSkillPicker(
+    mode
+  ) {
+    const picker =
+      $("ccCustomClassSkillPicker");
+
+    const selectedSkill =
+      safeDisplayString(
+        picker?.value
+      );
+
+    let skillNames =
+      getSection12CustomClassSkillNames();
+
+    if (mode === "add") {
+      if (!selectedSkill) {
+        alert(
+          "Choose a skill to add."
+        );
+
+        return false;
+      }
+
+      skillNames = [
+        ...skillNames,
+        selectedSkill
+      ];
+    }
+
+    if (mode === "remove") {
+      if (!selectedSkill) {
+        alert(
+          "Choose a skill to remove."
+        );
+
+        return false;
+      }
+
+      skillNames =
+        skillNames.filter((skillName) => {
+          return (
+            skillName.toLowerCase() !==
+            selectedSkill.toLowerCase()
+          );
+        });
+    }
+
+    if (mode === "add-all") {
+      skillNames = [
+        ...skillNames,
+        ...SKILL_DEFINITIONS.map((skill) => {
+          return skill.name;
+        })
+      ];
+    }
+
+    if (mode === "clear") {
+      skillNames = [];
+    }
+
+    if (
+      !setSection12CustomClassSkillNames(
+        skillNames
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function getSection12PrimaryClass() {
+    return getPrimaryClassEntry(
+      creatorState.draft
+    );
+  }
+
+  function getSection12LevelData(
+    template,
+    level
+  ) {
+    const levels =
+      template?.levels &&
+      typeof template.levels === "object"
+        ? template.levels
+        : {};
+
+    return (
+      levels[level] ||
+      levels[String(level)] ||
+      null
+    );
+  }
+
+  function collectSection12Features(
+    source,
+    totalLevel,
+    sourceLabel
+  ) {
+    const featureMap = new Map();
+
+    const addFeature = (
+      feature,
+      unlockedLevel = 1
+    ) => {
+      if (!feature) {
+        return;
+      }
+
+      const name =
+        safeDisplayString(
+          feature.name,
+          "Unnamed Feature"
+        );
+
+      const id = makeSafeId(
+        feature.id ||
+        `${sourceLabel}-${unlockedLevel}-${name}`,
+        "class-feature"
+      );
+
+      featureMap.set(id, {
+        ...cloneData(feature),
+        id,
+        name,
+
+        summary:
+          safeDisplayString(
+            feature.summary ||
+            feature.description,
+            "No description provided."
+          ),
+
+        level: Math.max(
+          1,
+          Math.round(
+            safeNumber(
+              feature.level,
+              unlockedLevel
+            )
+          )
+        ),
+
+        source: sourceLabel
+      });
+    };
+
+    (
+      Array.isArray(source?.features)
+        ? source.features
+        : []
+    ).forEach((feature) => {
+      addFeature(
+        feature,
+        safeNumber(
+          feature?.level,
+          1
+        )
+      );
+    });
+
+    const levels =
+      source?.levels &&
+      typeof source.levels === "object"
+        ? source.levels
+        : {};
+
+    Object.entries(levels)
+      .sort((a, b) => {
+        return (
+          safeNumber(a[0], 0) -
+          safeNumber(b[0], 0)
+        );
+      })
+      .forEach(
+        ([levelKey, levelData]) => {
+          const unlockedLevel =
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  levelKey,
+                  1
+                )
+              )
+            );
+
+          if (
+            unlockedLevel >
+            totalLevel
+          ) {
+            return;
+          }
+
+          (
+            Array.isArray(
+              levelData?.features
+            )
+              ? levelData.features
+              : []
+          ).forEach((feature) => {
+            addFeature(
+              feature,
+              unlockedLevel
+            );
+          });
+        }
+      );
+
+    return Array.from(
+      featureMap.values()
+    ).filter((feature) => {
+      return (
+        feature.level <=
+        totalLevel
+      );
+    });
+  }
+
+  function normalizeSection12Subclass(
+    rawSubclass,
+    fallbackSource = "template"
+  ) {
+    const raw = rawSubclass || {};
+
+    const name =
+      safeDisplayString(
+        raw.name,
+        "Custom Subclass"
+      );
+    const subclassId = makeSafeId(
+      raw.id || name,
+      "custom-subclass"
+    );
+
+    const rawLevels =
+      mergeSubclassFeatureLevels(
+        raw,
+        cloneData
+      );
+
+    return {
+      ...cloneData(raw),
+      ...getLegacy2014Metadata(
+        "subclass",
+        subclassId,
+        raw,
+        raw.classId || getSelectedClassTemplate()?.id
+      ),
+
+      id: subclassId,
+
+      name,
+
+      source:
+        cleanImportSourceLabel(
+          raw.source,
+          fallbackSource
+        ),
+
+      summary:
+        safeDisplayString(
+          raw.summary ||
+          raw.description,
+          "No description provided."
+        ),
+
+      features:
+        Array.isArray(raw.features)
+          ? cloneData(raw.features)
+          : [],
+
+      levels: rawLevels
+    };
+  }
+
+  function getSection12SubclassTemplates(
+    classEntry =
+      getSection12PrimaryClass()
+  ) {
+    const selectedClass =
+      resolveClassTemplateForEntry(
+        classEntry
+      );
+
+    const subclassMap =
+      new Map();
+
+    (
+      Array.isArray(
+        selectedClass?.subclasses
+      )
+        ? selectedClass.subclasses
+        : []
+    ).forEach((subclass) => {
+      if (!isActiveRulesetEntry(subclass)) {
+        return;
+      }
+
+      const normalized =
+        normalizeSection12Subclass(
+          {
+            ...cloneData(subclass),
+            classId:
+              subclass?.classId ||
+              selectedClass?.id ||
+              ""
+          },
+
+          subclass?.source ||
+          selectedClass?.source ||
+          "template"
+        );
+
+      subclassMap.set(
+        normalized.id,
+        normalized
+      );
+    });
+
+    const savedSubclass =
+      getClassEntrySubclassTemplate(
+        classEntry
+      );
+
+    if (
+      savedSubclass &&
+      isActiveRulesetEntry(savedSubclass) &&
+      !subclassMap.has(savedSubclass.id)
+    ) {
+      const normalized =
+        normalizeSection12Subclass(
+          {
+            ...cloneData(savedSubclass),
+            classId:
+              savedSubclass.classId ||
+              selectedClass?.id ||
+              ""
+          },
+          "character"
+        );
+
+      subclassMap.set(
+        normalized.id,
+        normalized
+      );
+    }
+
+    return Array.from(
+      subclassMap.values()
+    ).sort((a, b) => {
+      return a.name.localeCompare(
+        b.name
+      );
+    });
+  }
+
+  function getSelectedSection12Subclass() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    if (!primaryClass) {
+      return null;
+    }
+
+    return getClassEntrySubclassTemplate(
+      primaryClass
+    );
+  }
+
+  function refreshSelectedClassFeatures() {
+    if (
+      isMulticlassDraft(
+        creatorState.draft
+      )
+    ) {
+      creatorState.draft
+        .features
+        .classFeatures =
+          getClassProgressionEntries(
+            creatorState.draft
+          ).flatMap(
+            (classEntry, index) => {
+              return collectSection12FeaturesForClassEntry(
+                classEntry,
+                index
+              );
+            }
+          );
+
+      syncSection12AsiChoicesForLevel();
+      syncSection12ArtificerInfusionsForLevel();
+      applySelectedClassFeatureMechanics();
+
+      return creatorState.draft
+        .features
+        .classFeatures;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const selectedSubclass =
+      getSelectedSection12Subclass();
+
+    const totalLevel =
+      clampLevel(
+        creatorState.draft
+          .classProgression
+          .totalLevel
+      );
+
+    const classFeatures =
+      collectSection12Features(
+        selectedClass,
+        totalLevel,
+        "class"
+      );
+
+    const subclassFeatures =
+      collectSection12Features(
+        selectedSubclass,
+        totalLevel,
+        "subclass"
+      );
+
+    creatorState.draft
+      .features
+      .classFeatures = [
+        ...classFeatures,
+        ...subclassFeatures
+      ];
+
+    syncSection12AsiChoicesForLevel();
+    syncSection12ArtificerInfusionsForLevel();
+    applySelectedClassFeatureMechanics();
+
+    return creatorState.draft
+      .features
+      .classFeatures;
+  }
+
+  function applySection12ClassDefaults(
+    classTemplate
+  ) {
+    if (!classTemplate) {
+      return;
+    }
+
+    const totalLevel =
+      clampLevel(
+        creatorState.draft
+          .classProgression
+          .totalLevel
+      );
+
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const classSource =
+      getClassSourceLabel(
+        primaryClass ||
+        classTemplate
+      );
+
+    setSourceProficiencyList(
+      "savingThrows",
+      classTemplate.savingThrows || [],
+      classSource
+    );
+
+    setSourceProficiencyList(
+      "armor",
+      classTemplate.armorProficiencies || [],
+      classSource
+    );
+
+    setSourceProficiencyList(
+      "weapons",
+      classTemplate.weaponProficiencies || [],
+      classSource
+    );
+
+    setSourceProficiencyList(
+      "tools",
+      classTemplate.toolProficiencies || [],
+      classSource
+    );
+
+    creatorState.draft
+      .combat
+      .proficiencyBonus =
+        safeNumber(
+          getSection12LevelData(
+            classTemplate,
+            totalLevel
+          )?.proficiencyBonus,
+
+          getGenericProficiencyBonus(
+            totalLevel
+          )
+        );
+
+    const levelData =
+      getSection12LevelData(
+        classTemplate,
+        totalLevel
+      ) || {};
+
+    creatorState.draft
+      .combat
+      .hitDice = [
+        {
+          classId:
+            classTemplate.id,
+
+          className:
+            classTemplate.name,
+
+          die:
+            classTemplate.hitDie ||
+            "d8",
+
+          count: totalLevel
+        }
+      ];
+
+    const progressionType =
+      classTemplate.spellcastingProgression ||
+      classTemplate.progressionType ||
+      "none";
+
+    creatorState.draft
+      .magic
+      .spellcastingProgression =
+        progressionType;
+
+    creatorState.draft
+      .magic
+      .spellPreparation =
+        classTemplate.spellPreparation ||
+        "none";
+
+    if (classTemplate.spellcastingAbility) {
+      creatorState.draft
+        .magic
+        .spellcastingAbility =
+          classTemplate.spellcastingAbility;
+    } else if (progressionType === "none") {
+      creatorState.draft
+        .magic
+        .spellcastingAbility = "";
+    }
+
+    creatorState.draft
+      .magic
+      .slots =
+        cloneData(levelData.spellSlots || {});
+
+    creatorState.draft
+      .magic
+      .pactMagic =
+        cloneData(
+          levelData.pactMagic || {
+            slots: 0,
+            slotLevel: 0
+          }
+        );
+
+    calculateSection16SpellcastingValues({
+      markDraft: false
+    });
+
+    const suggestedHp =
+      calculateSection13SuggestedHp();
+
+    if (
+      suggestedHp !== null &&
+      safeNumber(
+        creatorState.draft
+          .combat
+          .maxHp,
+        1
+      ) <= 1
+    ) {
+      creatorState.draft
+        .combat
+        .maxHp = suggestedHp;
+
+      creatorState.draft
+        .combat
+        .currentHp = suggestedHp;
+    }
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+  }
+
+  function chooseSection12Class(
+    classId
+  ) {
+    if (
+      !selectClassTemplate(
+        classId
+      )
+    ) {
+      return false;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    applySection12ClassDefaults(
+      selectedClass
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applySection12CustomClass() {
+    if (isMulticlassDraft()) {
+      return blockMulticlassEdit(
+        "Creating a custom primary class"
+      );
+    }
+
+    const name =
+      safeDisplayString(
+        $("ccCustomClassName")
+          ?.value
+      );
+
+    if (!name) {
+      alert(
+        "Enter a custom class name."
+      );
+
+      return false;
+    }
+
+    const totalLevel =
+      clampLevel(
+        creatorState.draft
+          .classProgression
+          .totalLevel
+      );
+    const movementEffects =
+      readCustomClassMovementEffects($);
+
+    const customClass =
+      normalizeClassTemplate(
+        {
+          id: makeSafeId(
+            name,
+            "custom-class"
+          ),
+
+          name,
+          source: "custom",
+
+          summary:
+            safeDisplayString(
+              $("ccCustomClassSummary")
+                ?.value,
+              "Custom class."
+            ),
+
+          hitDie:
+            $("ccCustomClassHitDie")
+              ?.value ||
+            "d8",
+
+          primaryAbilities:
+            parseSection12List(
+              $("ccCustomClassPrimaryAbilities")
+                ?.value
+            ),
+
+          savingThrows:
+            parseSection12List(
+              $("ccCustomClassSavingThrows")
+                ?.value
+            ),
+
+          armorProficiencies:
+            parseSection12List(
+              $("ccCustomClassArmor")
+                ?.value
+            ),
+
+          weaponProficiencies:
+            parseSection12List(
+              $("ccCustomClassWeapons")
+                ?.value
+            ),
+
+          toolProficiencies:
+            parseSection12List(
+              $("ccCustomClassTools")
+                ?.value
+            ),
+
+          effects:
+            movementEffects,
+
+          skillChoices: {
+            choose: Math.max(
+              0,
+              Math.round(
+                safeNumber(
+                  $("ccCustomClassSkillCount")
+                    ?.value,
+                  0
+                )
+              )
+            ),
+
+            from:
+              parseSection12List(
+                $("ccCustomClassSkills")
+                  ?.value
+              )
+          },
+
+          subclassLevel:
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  $("ccCustomClassSubclassLevel")
+                    ?.value,
+                  3
+                )
+              )
+            ),
+
+          levels: {
+            1: {
+              proficiencyBonus: 2,
+              features: []
+            }
+          },
+
+          subclasses: []
+        },
+
+        "custom"
+      );
+
+    const oldPrimaryClass =
+      getPrimaryClassEntry(
+        creatorState.draft
+      );
+
+    const oldClassSource =
+      getClassSourceLabel(
+        oldPrimaryClass
+      );
+
+    if (oldClassSource) {
+      removeSkillProficiencySource(
+        oldClassSource
+      );
+
+      removeListProficiencySource(
+        oldClassSource
+      );
+    }
+
+    creatorState.draft
+      .classProgression
+      .classes = [
+        {
+          entryId: createClassEntryId(
+            customClass.id ||
+              customClass.name,
+            0,
+            new Set(),
+            getPrimaryClassEntry(
+              creatorState.draft
+            )?.entryId
+          ),
+          classId:
+            customClass.id,
+
+          className:
+            customClass.name,
+
+          source: "custom",
+          level: totalLevel,
+          subclassId: "",
+          subclassName: "",
+
+          hitDie: normalizeClassEntryHitDie(
+            customClass.hitDie,
+            8
+          ),
+
+          templateSnapshot:
+            cloneData(
+              customClass
+            ),
+
+          choices: {}
+        }
+      ];
+
+    recalculateClassTotalLevel(
+      creatorState.draft
+    );
+
+    applySection12ClassDefaults(
+      customClass
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function chooseSection12Subclass(
+    subclassId
+  ) {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const subclass =
+      getSection12SubclassTemplates()
+        .find((item) => {
+          return (
+            item.id ===
+            subclassId
+          );
+        });
+
+    if (
+      !primaryClass ||
+      !subclass
+    ) {
+      return false;
+    }
+
+    primaryClass.subclassId =
+      subclass.id;
+
+    primaryClass.subclassName =
+      subclass.name;
+
+    primaryClass.choices = {
+      ...(primaryClass.choices || {}),
+
+      subclassSnapshot:
+        cloneData(subclass)
+    };
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applySection12CustomSubclass() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const name =
+      safeDisplayString(
+        $("ccCustomSubclassName")
+          ?.value
+      );
+
+    if (!primaryClass) {
+      alert(
+        "Choose a class before creating a subclass."
+      );
+
+      return false;
+    }
+
+    if (!name) {
+      alert(
+        "Enter a custom subclass name."
+      );
+
+      return false;
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const unlockLevel =
+      Math.max(
+        1,
+        Math.round(
+          safeNumber(
+            $("ccCustomSubclassLevel")
+              ?.value,
+
+            selectedClass
+              ?.subclassLevel ||
+            3
+          )
+        )
+      );
+
+    const customSubclass =
+      normalizeSection12Subclass(
+        {
+          id: makeSafeId(
+            name,
+            "custom-subclass"
+          ),
+
+          name,
+          classId:
+            primaryClass.classId ||
+            selectedClass?.id ||
+            "",
+          source: "custom",
+
+          summary:
+            safeDisplayString(
+              $("ccCustomSubclassSummary")
+                ?.value,
+              "Custom subclass."
+            ),
+
+          features: [],
+          levels: {},
+          unlockLevel
+        },
+
+        "custom"
+      );
+
+    primaryClass.subclassId =
+      customSubclass.id;
+
+    primaryClass.subclassName =
+      customSubclass.name;
+
+    primaryClass.choices = {
+      ...(primaryClass.choices || {}),
+
+      subclassSnapshot:
+        cloneData(
+          customSubclass
+        )
+    };
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function clearSection12Subclass() {
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    if (!primaryClass) {
+      return false;
+    }
+
+    primaryClass.subclassId = "";
+    primaryClass.subclassName = "";
+
+    primaryClass.choices = {
+      ...(primaryClass.choices || {})
+    };
+
+    delete primaryClass
+      .choices
+      .subclassSnapshot;
+
+    refreshSelectedClassFeatures();
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+
+    markDraftChanged();
+
+    return true;
+  }
+
+  function getSection12ClassFeaturesThroughLevel() {
+    if (
+      isMulticlassDraft(
+        creatorState.draft
+      )
+    ) {
+      return getClassProgressionEntries(
+        creatorState.draft
+      )
+        .flatMap(
+          (classEntry, index) => {
+            return collectSection12FeaturesForClassEntry(
+              classEntry,
+              index
+            );
+          }
+        )
+        .sort((a, b) => {
+          return (
+            safeNumber(a.classIndex, 0) -
+              safeNumber(b.classIndex, 0) ||
+            safeNumber(a.level, 1) -
+              safeNumber(b.level, 1) ||
+            String(a.name).localeCompare(
+              String(b.name)
+            )
+          );
+        });
+    }
+
+    const primaryClass = getSection12PrimaryClass();
+    const defaultClass = findDefaultClassDefinition(
+      primaryClass?.classId,
+      primaryClass?.className
+    );
+    const classLevel = Math.max(
+      1,
+      getClassEntryLevel(
+        primaryClass,
+        creatorState.draft.classProgression.totalLevel
+      )
+    );
+
+    const classFeatures = defaultClass
+      ? getDefaultClassFeaturesThroughLevel(
+        defaultClass,
+        classLevel
+      )
+      : collectSection12Features(
+          getSelectedClassTemplate(),
+          classLevel,
+          "class"
+        );
+
+    const subclassFeatures =
+      collectSection12Features(
+      getSelectedSection12Subclass(),
+      classLevel,
+      "subclass"
+    );
+
+    const classEntryId = getClassProgressionEntryKey(
+      primaryClass,
+      0
+    );
+
+    return [
+      ...classFeatures,
+      ...subclassFeatures
+    ].map((feature) => ({
+      ...feature,
+      classIndex: 0,
+      classEntryId,
+      choiceKey: `${classEntryId}:${feature.id}`,
+      classId:
+        primaryClass?.classId ||
+        defaultClass?.id ||
+        "",
+      className:
+        primaryClass?.className ||
+        defaultClass?.name ||
+        "Class",
+      classLevel
+    })).sort((a, b) => {
+      return (
+        safeNumber(a.level, 1) -
+          safeNumber(b.level, 1) ||
+        String(a.name).localeCompare(
+          String(b.name)
+        )
+      );
+    });
+  }
+
+  function getSection12FutureClassFeatures() {
+    if (
+      isMulticlassDraft(
+        creatorState.draft
+      )
+    ) {
+      return getClassProgressionEntries(
+        creatorState.draft
+      )
+        .flatMap((classEntry, classIndex) => {
+          const template =
+            resolveClassTemplateForEntry(
+              classEntry
+            );
+
+          if (!template) {
+            return [];
+          }
+
+          const classLevel =
+            getClassEntryLevel(
+              classEntry,
+              1
+            );
+
+          const defaultClass =
+            findDefaultClassDefinition(
+              classEntry?.classId,
+              classEntry?.className
+            );
+
+          const classFeatures =
+            defaultClass
+              ? getDefaultClassFeaturesThroughLevel(
+                  defaultClass,
+                  20
+                )
+              : collectSection12Features(
+                  template,
+                  20,
+                  "class"
+                );
+
+          const subclassFeatures =
+            collectSection12Features(
+              getClassEntrySubclassTemplate(
+                classEntry
+              ),
+              20,
+              "subclass"
+            );
+
+          const classEntryId =
+            getClassProgressionEntryKey(
+              classEntry,
+              classIndex
+            );
+
+          return [
+            ...classFeatures,
+            ...subclassFeatures
+          ]
+            .filter((feature) => {
+              return feature.level > classLevel;
+            })
+            .map((feature) => ({
+              ...feature,
+              classIndex,
+              classEntryId,
+              className:
+                classEntry?.className ||
+                template.name ||
+                `Class ${classIndex + 1}`
+            }));
+        })
+        .sort((a, b) => {
+          return (
+            safeNumber(a.classIndex, 0) -
+              safeNumber(b.classIndex, 0) ||
+            safeNumber(a.level, 1) -
+              safeNumber(b.level, 1) ||
+            String(a.name).localeCompare(
+              String(b.name)
+            )
+          );
+        });
+    }
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    if (!selectedClass) {
+      return [];
+    }
+
+    const currentLevel = clampLevel(
+      creatorState.draft
+        .classProgression
+        .totalLevel
+    );
+
+    const classFeatures = collectSection12Features(
+      selectedClass,
+      20,
+      "class"
+    );
+
+    const subclassFeatures =
+      collectSection12Features(
+        getSelectedSection12Subclass(),
+        20,
+        "subclass"
+      );
+
+    return [
+      ...classFeatures,
+      ...subclassFeatures
+    ]
+      .filter((feature) => {
+        return feature.level > currentLevel;
+      })
+      .sort((a, b) => {
+        return (
+          safeNumber(a.level, 1) -
+            safeNumber(b.level, 1) ||
+          String(a.name).localeCompare(
+            String(b.name)
+          )
+        );
+      });
+  }
+
+  function getSection12FeatureChoiceKey(feature) {
+    if (!feature) {
+      return "";
+    }
+
+    return cleanString(
+      feature.choiceKey ||
+      (
+        feature.classEntryId && feature.id
+          ? `${feature.classEntryId}:${feature.id}`
+          : feature.id
+      )
+    );
+  }
+
+  function getSection12FeatureChooseCount(feature) {
+    return Math.max(
+      1,
+      Math.round(
+        safeNumber(
+          getProgressionValueByLevel(
+            feature?.chooseByLevel,
+            feature?.classLevel || feature?.level || 1,
+            feature?.choose || 1
+          ),
+          feature?.choose || 1
+        )
+      )
+    );
+  }
+
+  function getSection12FeatureStoredChoices(feature) {
+    const choiceKey = getSection12FeatureChoiceKey(feature);
+    const classEntry = getClassEntryAtIndex(
+      safeNumber(feature?.classIndex, 0)
+    );
+    const entryChoices = normalizeClassChoiceMap(
+      classEntry?.choices?.classFeatures
+    );
+    const legacyChoices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+    const legacyDirectChoices =
+      feature?.name ===
+        "Fighting Style" &&
+      cleanString(
+        classEntry?.choices
+          ?.fightingStyle
+      )
+        ? [
+            cleanString(
+              classEntry.choices
+                .fightingStyle
+            )
+          ]
+        : [];
+
+    const storedChoices =
+      entryChoices[choiceKey] ||
+      entryChoices[feature?.id] ||
+      legacyChoices[choiceKey] ||
+      (
+        safeNumber(feature?.classIndex, 0) === 0
+          ? legacyChoices[feature?.id]
+          : null
+      );
+
+    return uniqueCleanArray(
+      cleanArray(storedChoices).length
+        ? storedChoices
+        : legacyDirectChoices
+    );
+  }
+
+  function setSection12FeatureStoredChoices(
+    feature,
+    values = []
+  ) {
+    const choiceKey = getSection12FeatureChoiceKey(feature);
+
+    if (!choiceKey) {
+      return false;
+    }
+
+    const cleanValues = uniqueCleanArray(values);
+    const classIndex = Math.max(
+      0,
+      Math.round(safeNumber(feature?.classIndex, 0))
+    );
+    const classEntry = getClassEntryAtIndex(classIndex);
+
+    if (!classEntry) {
+      return false;
+    }
+
+    classEntry.choices = {
+      ...(classEntry.choices || {})
+    };
+
+    const entryChoices = normalizeClassChoiceMap(
+      classEntry.choices.classFeatures
+    );
+
+    if (cleanValues.length) {
+      entryChoices[choiceKey] = cleanValues;
+    } else {
+      delete entryChoices[choiceKey];
+    }
+
+    if (feature.id !== choiceKey) {
+      delete entryChoices[feature.id];
+    }
+
+    classEntry.choices.classFeatures = entryChoices;
+
+    const compatibilityChoices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+
+    if (classIndex === 0) {
+      if (cleanValues.length) {
+        compatibilityChoices[feature.id] = cleanValues;
+        compatibilityChoices[choiceKey] = cleanValues;
+      } else {
+        delete compatibilityChoices[feature.id];
+        delete compatibilityChoices[choiceKey];
+      }
+    } else {
+      delete compatibilityChoices[feature.id];
+      delete compatibilityChoices[choiceKey];
+    }
+
+    creatorState.draft.classChoices = compatibilityChoices;
+    return true;
+  }
+
+  function getSection12FeatureChoiceOptionRecords(feature) {
+    const classLevel = Math.max(
+      1,
+      safeNumber(feature?.classLevel, feature?.level || 1)
+    );
+    const optionSource = cleanString(feature?.optionSource);
+    let values = uniqueCleanArray(feature?.options);
+
+    if (!values.length && optionSource === "subclasses") {
+      const classEntry =
+        getClassEntryAtIndex(
+          Math.max(
+            0,
+            Math.round(
+              safeNumber(
+                feature?.classIndex,
+                0
+              )
+            )
+          )
+        );
+
+      values = getSection12SubclassTemplates(
+        classEntry
+      ).map(
+        (subclass) => subclass.name
+      );
+    }
+
+    if (
+      !values.length &&
+      (
+        optionSource === "proficientSkills" ||
+        optionSource === "proficientSkillsOrThievesTools"
+      )
+    ) {
+      values = Object.entries(
+        creatorState.draft.proficiencies.skills || {}
+      )
+        .filter(([, entry]) => entry?.proficient === true)
+        .map(([skillName]) => skillName);
+
+      if (
+        optionSource === "proficientSkillsOrThievesTools" &&
+        !values.includes("Thieves' Tools")
+      ) {
+        values.push("Thieves' Tools");
+      }
+    }
+
+    if (!values.length && optionSource === "artisanTools") {
+      values = [...ARTISAN_TOOL_OPTIONS];
+    }
+
+    if (!values.length && optionSource === "castableSpellsAllClasses") {
+      const spellcastingClass = getSpellcastingSummary(
+        creatorState.draft
+      ).classes.find((entry) => {
+        return (
+          cleanString(entry.classEntryId) ===
+            cleanString(feature?.classEntryId) ||
+          (
+            cleanString(entry.classId) === cleanString(feature?.classId) &&
+            safeNumber(entry.level, 0) === classLevel
+          )
+        );
+      });
+      const maximumLevel = Math.max(
+        0,
+        safeNumber(spellcastingClass?.maxSpellLevel, 0)
+      );
+
+      return DEFAULT_SPELLS
+        .filter((spell) => {
+          return safeNumber(spell.level, 0) <= maximumLevel;
+        })
+        .map((spell) => ({
+          value: spell.id,
+          label: `${spell.name} (${safeNumber(spell.level, 0) === 0 ? "Cantrip" : `Level ${spell.level}`})`,
+          summary: spell.summary || spell.description || ""
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    const minimumLevels =
+      feature?.minimumLevelByOption &&
+      typeof feature.minimumLevelByOption === "object"
+        ? feature.minimumLevelByOption
+        : {};
+    const optionDetails =
+      feature?.optionDetails &&
+      typeof feature.optionDetails === "object"
+        ? feature.optionDetails
+        : {};
+
+    return uniqueCleanArray(values)
+      .filter((value) => {
+        return classLevel >= safeNumber(minimumLevels[value], 0);
+      })
+      .map((value) => ({
+        value,
+        label: value,
+        summary: cleanString(optionDetails[value]?.summary),
+        cost: optionDetails[value]?.cost
+      }));
+  }
+
+  function getSection12FeatureChoiceOptions(feature) {
+    return getSection12FeatureChoiceOptionRecords(feature)
+      .map((entry) => entry.value);
+  }
+
+  function toggleSection12ClassFeatureChoice(
+    featureKey,
+    option
+  ) {
+    const feature = getSection12ClassFeaturesThroughLevel()
+      .find((entry) => {
+        return (
+          getSection12FeatureChoiceKey(entry) === featureKey ||
+          entry.id === featureKey
+        );
+      });
+    const options = getSection12FeatureChoiceOptions(feature);
+
+    if (
+      feature?.type !== "choice" ||
+      !options.includes(option)
+    ) {
+      return false;
+    }
+
+    const chooseCount = getSection12FeatureChooseCount(feature);
+    let selected = getSection12FeatureStoredChoices(feature);
+
+    if (
+      !selected.includes(option) &&
+      feature.repeatableChoice === false
+    ) {
+      const duplicate = getSection12ClassFeaturesThroughLevel()
+        .some((otherFeature) => {
+          return (
+            getSection12FeatureChoiceKey(otherFeature) !==
+              getSection12FeatureChoiceKey(feature) &&
+            otherFeature.repeatableChoice === false &&
+            getSection12FeatureStoredChoices(otherFeature)
+              .includes(option)
+          );
+        });
+
+      if (duplicate) {
+        setStatus(
+          `${option} is already selected by another Fighting Style feature.`
+        );
+        return false;
+      }
+    }
+
+    if (selected.includes(option)) {
+      selected = selected.filter(
+        (value) => value !== option
+      );
+    } else if (chooseCount === 1) {
+      selected = [option];
+    } else if (selected.length < chooseCount) {
+      selected = [...selected, option];
+    } else {
+      selected = [
+        ...selected.slice(1),
+        option
+      ];
+    }
+
+    setSection12FeatureStoredChoices(feature, selected);
+    applySelectedClassFeatureMechanics();
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function getSection12AsiChoiceState(featureId) {
+    const slot =
+      getSection12UnlockedAsiSlot(featureId);
+    const draftChoices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+    const classEntry = slot
+      ? getClassEntryAtIndex(slot.classIndex)
+      : null;
+    const entryChoices = normalizeClassChoiceMap(
+      classEntry?.choices?.classFeatures
+    );
+    const values =
+      (
+        slot
+          ? (
+              entryChoices[slot.id] ||
+              entryChoices[slot.legacyId] ||
+              entryChoices[slot.featureId] ||
+              draftChoices[slot.id] ||
+              draftChoices[slot.legacyId]
+            )
+          : null
+      ) ||
+      draftChoices[featureId] ||
+      (
+        slot?.selectedMode
+          ? [
+              `mode:${slot.selectedMode}`,
+              ...(
+                slot.selectedMode === "feat" &&
+                slot.selectedFeatId
+                  ? [`feat:${slot.selectedFeatId}`]
+                  : []
+              )
+            ]
+          : []
+      ) ||
+      [];
+
+    return {
+      featureId:
+        cleanString(
+          slot?.id ||
+          featureId
+        ),
+      mode: values.includes("mode:feat")
+        ? "feat"
+        : values.includes("mode:asi")
+          ? "asi"
+          : "",
+      abilities: values
+        .filter((value) => value.startsWith("ability:"))
+        .map((value) => value.split(":")[1])
+        .filter(Boolean),
+      featId: cleanString(
+        values.find((value) => value.startsWith("feat:"))
+      ).slice("feat:".length),
+      featChoices: {
+        ...normalizeFeatChoiceSelections(
+          slot?.featChoices
+        ),
+        ...parseFeatChoiceSelections(values)
+      }
+    };
+  }
+
+  const FEAT_WEAPON_OPTIONS = Object.freeze([
+    "Club", "Dagger", "Greatclub", "Handaxe", "Javelin", "Light Hammer",
+    "Mace", "Quarterstaff", "Sickle", "Spear", "Light Crossbow", "Dart",
+    "Shortbow", "Sling", "Battleaxe", "Flail", "Glaive", "Greataxe",
+    "Greatsword", "Halberd", "Lance", "Longsword", "Maul", "Morningstar",
+    "Pike", "Rapier", "Scimitar", "Shortsword", "Trident", "War Pick",
+    "Warhammer", "Whip", "Blowgun", "Hand Crossbow", "Heavy Crossbow",
+    "Longbow", "Net"
+  ]);
+
+  const FEAT_TOOL_OPTIONS = Object.freeze([
+    ...ARTISAN_TOOL_OPTIONS,
+    "Disguise kit", "Forgery kit", "Herbalism kit", "Navigator's tools",
+    "Poisoner's kit", "Thieves' tools", "Dice set", "Dragonchess set",
+    "Playing card set", "Three-Dragon Ante set", "Bagpipes", "Drum",
+    "Dulcimer", "Flute", "Horn", "Lute", "Lyre", "Pan flute", "Shawm",
+    "Viol"
+  ]);
+
+  const FEAT_FEATURE_OPTIONS = Object.freeze({
+    "eldritch-invocations": [
+      "Armor of Shadows", "Beast Speech", "Beguiling Influence",
+      "Devil's Sight", "Eldritch Mind", "Eldritch Sight", "Eyes of the Rune Keeper",
+      "Fiendish Vigor", "Gaze of Two Minds", "Mask of Many Faces",
+      "Misty Visions", "Thief of Five Fates"
+    ],
+    "battle-master-maneuvers": [
+      "Ambush", "Bait and Switch", "Brace", "Commander's Strike",
+      "Commanding Presence", "Disarming Attack", "Distracting Strike",
+      "Evasive Footwork", "Feinting Attack", "Goading Attack", "Grappling Strike",
+      "Lunging Attack", "Maneuvering Attack", "Menacing Attack", "Parry",
+      "Precision Attack", "Pushing Attack", "Quick Toss", "Rally", "Riposte",
+      "Sweeping Attack", "Tactical Assessment", "Trip Attack"
+    ],
+    "metamagic-options": [
+      "Careful Spell", "Distant Spell", "Empowered Spell", "Extended Spell",
+      "Heightened Spell", "Quickened Spell", "Seeking Spell", "Subtle Spell",
+      "Transmuted Spell", "Twinned Spell"
+    ]
+  });
+
+  function getSection12FeatChoiceLimit(choice) {
+    if (choice?.chooseFormula === "proficiencyBonus") {
+      return Math.max(
+        1,
+        getCharacterProficiencyBonus(creatorState.draft)
+      );
+    }
+
+    return Math.max(
+      1,
+      Math.round(safeNumber(choice?.choose, 1))
+    );
+  }
+
+  function filterRepeatedFeatChoiceOptions(
+    options,
+    choice,
+    state = {}
+  ) {
+    const feat = DEFAULT_FEATS.find(
+      (entry) => {
+        return entry.id ===
+          state.featId;
+      }
+    );
+
+    if (
+      !feat ||
+      feat.repeatable !== true ||
+      feat.repeatByChoice !== true
+    ) {
+      return options;
+    }
+
+    const currentSlot =
+      getSection12UnlockedAsiSlot(
+        state.featureId
+      );
+    const currentSlotIds =
+      new Set(
+        [
+          state.featureId,
+          currentSlot?.id,
+          currentSlot?.legacyId,
+          currentSlot?.featureId
+        ]
+          .map((value) => {
+            return cleanString(value);
+          })
+          .filter(Boolean)
+      );
+    const usedValues =
+      new Set(
+        getSelectedDefaultFeatInstances()
+          .filter((instance) => {
+            return (
+              instance.featId ===
+                feat.id &&
+              !currentSlotIds.has(
+                cleanString(
+                  instance.slotId
+                )
+              )
+            );
+          })
+          .flatMap((instance) => {
+            return uniqueCleanArray(
+              instance
+                .featChoices?.[
+                  choice?.id
+                ]
+            );
+          })
+          .map((value) => {
+            return makeSafeId(
+              value,
+              ""
+            );
+          })
+          .filter(Boolean)
+      );
+
+    return options.filter((option) => {
+      return !usedValues.has(
+        makeSafeId(
+          option?.value,
+          ""
+        )
+      );
+    });
+  }
+
+  function getSection12FeatChoiceOptions(choice, state = {}) {
+    const directOptions = uniqueCleanArray(choice?.options);
+
+    if (directOptions.length) {
+      return filterRepeatedFeatChoiceOptions(
+        directOptions.map((value) => ({
+          value,
+          label: value
+        })),
+        choice,
+        state
+      );
+    }
+
+    const type = cleanString(choice?.type).toLowerCase();
+
+    if (type === "ability" || type === "abilitypoints") {
+      return filterRepeatedFeatChoiceOptions(
+        ABILITY_DEFINITIONS.map((ability) => ({
+          value: ability.name,
+          label: ability.name
+        })),
+        choice,
+        state
+      );
+    }
+
+    if (type === "skill") {
+      return filterRepeatedFeatChoiceOptions(
+        SKILL_DEFINITIONS
+        .filter((skill) => {
+          if (choice?.proficientOnly !== true) {
+            return true;
+          }
+
+          return getSection14SkillEntry(skill).proficient === true;
+        })
+        .map((skill) => ({
+          value: skill.id,
+          label: skill.name
+        })),
+        choice,
+        state
+      );
+    }
+
+    if (type === "language") {
+      return filterRepeatedFeatChoiceOptions(
+        STANDARD_LANGUAGE_OPTIONS.map(
+          (value) => ({
+            value,
+            label: value
+          })
+        ),
+        choice,
+        state
+      );
+    }
+
+    if (type === "tool") {
+      const options = choice?.category === "artisan"
+        ? ARTISAN_TOOL_OPTIONS
+        : FEAT_TOOL_OPTIONS;
+
+      return filterRepeatedFeatChoiceOptions(
+        options.map((value) => ({
+          value,
+          label: value
+        })),
+        choice,
+        state
+      );
+    }
+
+    if (type === "weapon") {
+      return filterRepeatedFeatChoiceOptions(
+        FEAT_WEAPON_OPTIONS.map(
+          (value) => ({
+            value,
+            label: value
+          })
+        ),
+        choice,
+        state
+      );
+    }
+
+    if (type === "skillortool") {
+      return filterRepeatedFeatChoiceOptions([
+        ...SKILL_DEFINITIONS.map((skill) => ({
+          value: `skill:${skill.id}`,
+          label: `Skill: ${skill.name}`
+        })),
+        ...FEAT_TOOL_OPTIONS.map((tool) => ({
+          value: `tool:${tool}`,
+          label: `Tool: ${tool}`
+        }))
+      ], choice, state);
+    }
+
+    if (type === "feature") {
+      return filterRepeatedFeatChoiceOptions(
+        uniqueCleanArray(
+          FEAT_FEATURE_OPTIONS[
+            choice?.source
+          ] || []
+        ).map((value) => ({
+          value,
+          label: value
+        })),
+        choice,
+        state
+      );
+    }
+
+    if (type === "spell") {
+      const selectedClass = cleanString(
+        state?.featChoices?.[choice?.classChoiceId]?.[0] || choice?.classId
+      ).toLowerCase();
+      const levels = Array.isArray(choice?.levels)
+        ? choice.levels.map((level) => safeNumber(level, -1))
+        : [];
+      const schools = uniqueCleanArray(choice?.schools)
+        .map((school) => school.toLowerCase());
+
+      return filterRepeatedFeatChoiceOptions(
+        DEFAULT_SPELLS
+        .filter((spell) => {
+          const spellLevel = safeNumber(spell?.level, 0);
+          const spellClasses = uniqueCleanArray(spell?.classes)
+            .map((classId) => classId.toLowerCase());
+
+          return (
+            (!levels.length || levels.includes(spellLevel)) &&
+            (!schools.length || schools.includes(cleanString(spell?.school).toLowerCase())) &&
+            (!selectedClass || spellClasses.includes(selectedClass)) &&
+            (choice?.ritualOnly !== true || spell?.ritual === true) &&
+            (
+              choice?.attackRollOnly !==
+                true ||
+              ["melee", "ranged"]
+                .includes(
+                  cleanString(
+                    spell?.attackType
+                  ).toLowerCase()
+                )
+            )
+          );
+        })
+        .map((spell) => ({
+          value: spell.id,
+          label: `${spell.name} (${safeNumber(spell.level, 0) ? `Level ${spell.level}` : "Cantrip"})`
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+        choice,
+        state
+      );
+    }
+
+    return [];
+  }
+
+  function getSelectedDefaultFeatInstances(
+    character = creatorState.draft
+  ) {
+    const slots = getUnlockedFeatChoiceSlots(character)
+      .filter((slot) => {
+        return slot.selectedMode === "feat" && slot.selectedFeatId;
+      });
+    const instances = slots
+      .map((slot) => {
+        const feat = DEFAULT_FEATS.find((entry) => {
+          return entry.id === slot.selectedFeatId;
+        });
+
+        return feat
+          ? {
+              id: slot.id,
+              slotId: slot.id,
+              feat,
+              featId: feat.id,
+              featChoices: normalizeFeatChoiceSelections(slot.featChoices)
+            }
+          : null;
+      })
+      .filter(Boolean);
+    const slottedFeatIds = new Set(
+      instances.map((instance) => instance.featId)
+    );
+
+    normalizeFeatIds(character?.feats)
+      .filter((featId) => !slottedFeatIds.has(featId))
+      .forEach((featId) => {
+        const feat = DEFAULT_FEATS.find((entry) => entry.id === featId);
+
+        if (feat) {
+          instances.push({
+            id: `legacy-${featId}`,
+            slotId: "",
+            feat,
+            featId,
+            featChoices: {}
+          });
+        }
+      });
+
+    return instances;
+  }
+
+  function calculateSelectedFeatNumericEffect(
+    character,
+    effectType
+  ) {
+    const level = clampLevel(
+      character?.classProgression?.totalLevel || character?.level || 1
+    );
+
+    return getSelectedDefaultFeatInstances(character)
+      .flatMap((instance) => {
+        return Array.isArray(instance.feat?.effects)
+          ? instance.feat.effects
+          : [];
+      })
+      .filter((effect) => effect?.type === effectType)
+      .reduce((total, effect) => {
+        return (
+          total +
+          safeNumber(effect.value, 0) +
+          safeNumber(effect.perLevel, 0) * level
+        );
+      }, 0);
+  }
+
+  function setSection12FeatChoiceValues(
+    featureId,
+    choiceId,
+    selectedValues = []
+  ) {
+    const state = getSection12AsiChoiceState(featureId);
+    const feat = DEFAULT_FEATS.find((entry) => entry.id === state.featId);
+    const featChoice = feat?.choices?.find((entry) => entry.id === choiceId);
+
+    if (!feat || !featChoice) {
+      return false;
+    }
+
+    const limit = getSection12FeatChoiceLimit(featChoice);
+    const availableOptions = getSection12FeatChoiceOptions(featChoice, state);
+    const allowedValues = new Set(
+      availableOptions.map((option) => option.value)
+    );
+    const requestedValues =
+      uniqueCleanArray(
+        selectedValues
+      );
+    const cleanValues = requestedValues
+      .filter((value) => !allowedValues.size || allowedValues.has(value))
+      .slice(0, limit);
+    const featChoices = {
+      ...normalizeFeatChoiceSelections(state.featChoices)
+    };
+
+    if (
+      requestedValues.length &&
+      cleanValues.length !==
+        Math.min(
+          requestedValues.length,
+          limit
+        )
+    ) {
+      return false;
+    }
+
+    if (cleanValues.length) {
+      featChoices[choiceId] = cleanValues;
+    } else {
+      delete featChoices[choiceId];
+    }
+
+    (Array.isArray(feat.choices) ? feat.choices : [])
+      .filter((entry) => entry.classChoiceId === choiceId)
+      .forEach((entry) => {
+        delete featChoices[entry.id];
+      });
+
+    if (
+      feat.repeatByChoice === true &&
+      cleanValues.some((value) => {
+        const valueId =
+          makeSafeId(
+            value,
+            ""
+          );
+
+        return getSelectedDefaultFeatInstances()
+          .some((instance) => {
+            return (
+              instance.featId === feat.id &&
+              ![
+                featureId,
+                getSection12UnlockedAsiSlot(featureId)?.id
+              ].includes(instance.slotId) &&
+              uniqueCleanArray(
+                instance
+                  .featChoices?.[
+                    choiceId
+                  ]
+              ).some(
+                (selectedValue) => {
+                  return (
+                    makeSafeId(
+                      selectedValue,
+                      ""
+                    ) ===
+                    valueId
+                  );
+                }
+              )
+            );
+          });
+      })
+    ) {
+      return false;
+    }
+
+    const encodedChoices = Object.entries(featChoices)
+      .flatMap(([entryChoiceId, values]) => {
+        return values.map((value) => {
+          return encodeFeatChoiceValue(entryChoiceId, value);
+        });
+      })
+      .filter(Boolean);
+
+    setSection12AsiChoiceValues(
+      featureId,
+      ["mode:feat", `feat:${feat.id}`, ...encodedChoices]
+    );
+    syncSection12AdvancementChoice(featureId);
+    applySelectedFeatMechanics();
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function applySelectedFeatMechanics() {
+    const draft = creatorState.draft;
+
+    if (!draft?.abilities || !draft?.proficiencies || !draft?.magic) {
+      return;
+    }
+
+    const previousResources = Object.fromEntries(
+      (Array.isArray(draft.featMechanics?.resources)
+        ? draft.featMechanics.resources
+        : []
+      ).map((entry) => [entry.id, entry])
+    );
+    const previousSpellcasting = Object.fromEntries(
+      (Array.isArray(draft.featMechanics?.spellcasting)
+        ? draft.featMechanics.spellcasting
+        : []
+      ).map((entry) => [entry.id, entry])
+    );
+    const previousRestChoices =
+      Object.fromEntries(
+        (
+          Array.isArray(
+            draft.featMechanics
+              ?.restChoices
+          )
+            ? draft.featMechanics
+                .restChoices
+            : []
+        ).map((entry) => {
+          return [entry.id, entry];
+        })
+      );
+    const previousFeatSources =
+      draft.magic.featSources &&
+      typeof draft.magic.featSources === "object" &&
+      !Array.isArray(draft.magic.featSources)
+        ? draft.magic.featSources
+        : {};
+    const existingSpellcastingAbility = cleanString(
+      getSpellcastingClassOptions(draft)
+        .find((entry) => {
+          return cleanString(entry?.spellcastingAbility);
+        })
+        ?.spellcastingAbility ||
+      draft.magic.spellcastingAbility ||
+      Object.values(previousFeatSources)
+        .find((source) => {
+          return cleanString(source?.spellcastingAbility);
+        })
+        ?.spellcastingAbility
+    );
+    const instances = getSelectedDefaultFeatInstances(draft);
+    const mechanics = {
+      schemaVersion: 4,
+      hpBonus: 0,
+      initiativeBonus: 0,
+      speedBonus: 0,
+      resistances: [],
+      resistanceSources: [],
+      naturalWeapons: [],
+      armorClassModifiers: [],
+      attackModifiers: [],
+      selectedFeatures: [],
+      elementalAdepts: [],
+      damageReductions: [],
+      senses: [],
+      restChoices: [],
+      ritualBooks: [],
+      actions: [],
+      combatProfiles: [],
+      telepathy: [],
+      healingBonuses: [],
+      resources: [],
+      spellcasting: [],
+      situationalEffects: [],
+      passiveEffects: [],
+      instances: []
+    };
+
+    removeAbilityBonusSourcesByPrefix(["feat:"]);
+    removeSkillProficiencySourcesByPrefix(["feat:"]);
+    removeListProficiencySourcesByPrefix(["feat:"]);
+    draft.magic.featSources = {};
+    const normalAbilityScores =
+      createNormalAbilityCapScoreMap(
+        draft
+      );
+
+    const getAbility = (value) => {
+      const normalized = makeSafeId(value, "");
+
+      return ABILITY_DEFINITIONS.find((ability) => {
+        return (
+          ability.id === normalized ||
+          makeSafeId(ability.name, "") === normalized
+        );
+      }) || null;
+    };
+
+    const getSkill = (value) => {
+      const normalized = makeSafeId(value, "");
+
+      return SKILL_DEFINITIONS.find((skill) => {
+        return (
+          skill.id === normalized ||
+          makeSafeId(skill.name, "") === normalized
+        );
+      }) || null;
+    };
+
+    const spellcastingAbilityByClass =
+      Object.freeze({
+        artificer: "int",
+        bard: "cha",
+        cleric: "wis",
+        druid: "wis",
+        sorcerer: "cha",
+        warlock: "cha",
+        wizard: "int"
+      });
+    const planarScionBenefits =
+      Object.freeze({
+        "chaotic-outer-plane": {
+          damageType: "poison",
+          spellId: "minor-illusion"
+        },
+        "evil-outer-plane": {
+          damageType: "necrotic",
+          spellId: "chill-touch"
+        },
+        "good-outer-plane": {
+          damageType: "radiant",
+          spellId: "sacred-flame"
+        },
+        "lawful-outer-plane": {
+          damageType: "force",
+          spellId: "guidance"
+        },
+        "the-outlands": {
+          damageType: "psychic",
+          spellId: "mage-hand"
+        }
+      });
+    const giantStrikeDetails =
+      Object.freeze({
+        "cloud-strike": {
+          damage: "1d4 thunder",
+          summary:
+            "Once per turn on a melee or thrown-weapon hit, deal 1d4 thunder damage; a failed Wisdom save teleports the target up to 30 feet."
+        },
+        "fire-strike": {
+          damage: "1d10 fire",
+          summary:
+            "Once per turn on a melee or thrown-weapon hit, deal 1d10 fire damage."
+        },
+        "frost-strike": {
+          damage: "1d6 cold",
+          summary:
+            "Once per turn on a melee or thrown-weapon hit, deal 1d6 cold damage; a failed Constitution save reduces the target's speed to 0 until your next turn."
+        },
+        "hill-strike": {
+          damage: "1d6 weapon",
+          summary:
+            "Once per turn on a melee or thrown-weapon hit, deal an extra 1d6 weapon damage; a failed Strength save knocks the target prone."
+        },
+        "stone-strike": {
+          damage: "1d6 force",
+          summary:
+            "Once per turn on a melee or thrown-weapon hit, deal 1d6 force damage; a failed Strength save pushes the target 10 feet away."
+        },
+        "storm-strike": {
+          damage: "1d6 lightning",
+          summary:
+            "Once per turn on a melee or thrown-weapon hit, deal 1d6 lightning damage; a failed Constitution save hinders the target's attacks until your next turn."
+        }
+      });
+    const fightingStyleSummaries =
+      Object.freeze({
+        "blind-fighting":
+          "Gain blindsight out to 10 feet.",
+        interception:
+          "Use a reaction while wielding a weapon or shield to reduce damage to a nearby creature.",
+        "superior-technique":
+          "Learn one Battle Master maneuver and gain one d6 superiority die.",
+        "thrown-weapon-fighting":
+          "Draw a thrown weapon as part of the attack and gain +2 damage with thrown weapons.",
+        "unarmed-fighting":
+          "Unarmed strikes deal 1d6 plus Strength, or 1d8 while both hands are free."
+      });
+    const invocationSummaries =
+      Object.freeze({
+        "beast-speech":
+          "Cast speak with animals at will.",
+        "eldritch-mind":
+          "Gain advantage on Constitution saves made to maintain concentration.",
+        "gaze-of-two-minds":
+          "Perceive through a willing humanoid's senses until the connection ends.",
+        "misty-visions":
+          "Cast silent image at will.",
+        "thief-of-five-fates":
+          "Cast bane once using a warlock spell slot, recovering the use after a long rest."
+      });
+
+    const getBaseDarkvisionRange = () => {
+      const traitSources = [
+        ...(
+          Array.isArray(
+            draft.species?.traits
+          )
+            ? draft.species.traits
+            : []
+        ),
+        ...(
+          Array.isArray(
+            draft.species
+              ?.templateSnapshot
+              ?.traits
+          )
+            ? draft.species
+                .templateSnapshot
+                .traits
+            : []
+        ),
+        ...(
+          Array.isArray(
+            draft.species
+              ?.choices
+              ?.subraceSnapshot
+              ?.traits
+          )
+            ? draft.species
+                .choices
+                .subraceSnapshot
+                .traits
+            : []
+        )
+      ];
+
+      return traitSources.reduce(
+        (maximum, trait) => {
+          if (
+            !makeSafeId(
+              trait?.id ||
+              trait?.name,
+              ""
+            ).includes(
+              "darkvision"
+            )
+          ) {
+            return maximum;
+          }
+
+          const match =
+            cleanString(
+              trait?.summary ||
+              trait?.description
+            ).match(
+              /(\d+)\s*(?:feet|foot|ft\.?)/i
+            );
+
+          return Math.max(
+            maximum,
+            match
+              ? safeNumber(
+                  match[1],
+                  0
+                )
+              : 60
+          );
+        },
+        0
+      );
+    };
+
+    const addSkillSource = (skillValue, sourceName, expertise = false) => {
+      const skill = getSkill(skillValue);
+
+      if (!skill) {
+        return;
+      }
+
+      const current = getSection14SkillEntry(skill);
+
+      setSection14SkillEntry(skill, {
+        proficient: true,
+        expertise: expertise || current.expertise === true,
+        source: uniqueCleanArray([
+          ...cleanArray(current.source),
+          sourceName
+        ])
+      });
+    };
+
+    instances.forEach((instance, index) => {
+      const feat = instance.feat;
+      const sourceName = `feat:${instance.slotId || `${feat.id}-${index + 1}`}`;
+      const choices = normalizeFeatChoiceSelections(instance.featChoices);
+      const bonusMap = createAbilityMap(0);
+      const proficiencyValues = {
+        savingThrows: [],
+        armor: [],
+        weapons: [],
+        tools: [],
+        languages: []
+      };
+      const spellIds = [];
+      const spellGrants = [];
+      const spellRecords = [];
+      const spellChoiceEffect =
+        (Array.isArray(feat.effects)
+          ? feat.effects
+          : []
+        ).find((effect) => {
+          return effect?.type === "spellChoice";
+        }) || {};
+
+      const resolveSpellAbility = (
+        descriptor = {}
+      ) => {
+        const abilityChoiceId = cleanString(
+          descriptor.abilityChoiceId
+        );
+        const selectedClassId = makeSafeId(
+          choices[
+            descriptor.classChoiceId
+          ]?.[0] ||
+          descriptor.classId,
+          ""
+        );
+        const ability =
+          getAbility(descriptor.ability) ||
+          getAbility(
+            choices[abilityChoiceId]?.[0]
+          ) ||
+          getAbility(
+            choices[
+              "spellcasting-ability"
+            ]?.[0] ||
+            choices.ability?.[0]
+          ) ||
+          getAbility(
+            spellcastingAbilityByClass[
+              selectedClassId
+            ]
+          ) ||
+          (
+            feat.usesExistingSpellcastingAbility ===
+              true
+              ? getAbility(
+                  existingSpellcastingAbility
+                )
+              : null
+          );
+
+        return {
+          ability,
+          abilityChoiceId,
+          selectedClassId
+        };
+      };
+
+      const addFeatSpellRecords = ({
+        descriptor = {},
+        origin = "choice",
+        choiceId = "",
+        ids = []
+      }) => {
+        uniqueCleanArray(ids)
+          .forEach((spellId) => {
+            const spell =
+              getSection16SpellById(
+                spellId,
+                draft
+              );
+            const spellLevel = Math.max(
+              0,
+              safeNumber(spell?.level, 0)
+            );
+            const abilityResult =
+              resolveSpellAbility(
+                descriptor
+              );
+            const rawUses =
+              descriptor.usesEach ??
+              descriptor.uses;
+            const maximumUses =
+              rawUses ===
+                "proficiencyBonus"
+                ? getCharacterProficiencyBonus(
+                    draft
+                  )
+                : (
+                    rawUses === null ||
+                    rawUses === undefined
+                      ? null
+                      : Math.max(
+                          0,
+                          safeNumber(
+                            rawUses,
+                            0
+                          )
+                        )
+                  );
+            const atWill =
+              descriptor.atWill === true ||
+              (
+                spellLevel === 0 &&
+                maximumUses === null
+              );
+            const spellResourceId =
+              `${instance.id}:spell:${spellId}`;
+            const previous =
+              previousSpellcasting[
+                spellResourceId
+              ] ||
+              previousResources[
+                spellResourceId
+              ];
+            const currentUses =
+              maximumUses === null ||
+              atWill
+                ? null
+                : Math.min(
+                    maximumUses,
+                    Math.max(
+                      0,
+                      safeNumber(
+                        previous?.currentUses,
+                        maximumUses
+                      )
+                    )
+                  );
+            const sourceClassId =
+              abilityResult
+                .selectedClassId ||
+              makeSafeId(
+                descriptor.classId,
+                ""
+              );
+            const record = {
+              id: spellResourceId,
+              sourceType: "feat",
+              sourceId: instance.id,
+              featId: feat.id,
+              featName: feat.name,
+              spellId,
+              spellName: cleanString(
+                spell?.name,
+                spellId
+              ),
+              spellLevel,
+              origin,
+              choiceId:
+                cleanString(choiceId),
+              spellcastingAbility:
+                abilityResult
+                  .ability?.id || "",
+              abilitySource:
+                cleanString(
+                  descriptor.ability ||
+                  abilityResult
+                    .abilityChoiceId ||
+                  descriptor
+                    .classChoiceId ||
+                  descriptor.classId ||
+                  (
+                    feat
+                      .usesExistingSpellcastingAbility
+                      ? "existing-spellcasting"
+                      : ""
+                  )
+                ),
+              sourceClassId,
+              atWill,
+              maximumUses:
+                atWill
+                  ? null
+                  : maximumUses,
+              currentUses:
+                atWill
+                  ? null
+                  : currentUses,
+              recharge:
+                atWill
+                  ? ""
+                  : cleanString(
+                      descriptor.recharge,
+                      maximumUses === null
+                        ? ""
+                        : "longRest"
+                    ),
+              canUseSpellSlots:
+                descriptor
+                  .canUseSpellSlots ===
+                true,
+              restrictions: {
+                levels:
+                  Array.isArray(
+                    descriptor.levels
+                  )
+                    ? cloneData(
+                        descriptor.levels
+                      )
+                    : [],
+                schools:
+                  uniqueCleanArray(
+                    descriptor.schools
+                  ),
+                ritualOnly:
+                  descriptor
+                    .ritualOnly === true,
+                attackRollOnly:
+                  descriptor
+                    .attackRollOnly ===
+                  true,
+                list: cleanString(
+                  descriptor.list
+                )
+              }
+            };
+
+            spellIds.push(spellId);
+            spellRecords.push(record);
+            mechanics.spellcasting.push(
+              record
+            );
+
+            if (
+              record.maximumUses !==
+                null &&
+              record.atWill !== true
+            ) {
+              mechanics.resources.push({
+                ...record,
+                resourceId:
+                  `spell:${spellId}`,
+                name:
+                  record.spellName,
+                kind: "featSpell"
+              });
+            }
+          });
+      };
+
+      const addResistanceSource = ({
+        damageType,
+        id,
+        kind = "feat",
+        mutableAfterRest = false
+      }) => {
+        const normalizedDamageType =
+          cleanString(
+            damageType
+          ).toLowerCase();
+
+        if (!normalizedDamageType) {
+          return;
+        }
+
+        mechanics.resistanceSources.push({
+          id,
+          featId: feat.id,
+          featName: feat.name,
+          sourceId: instance.id,
+          kind,
+          damageType:
+            normalizedDamageType,
+          mutableAfterRest
+        });
+        mechanics.resistances.push(
+          normalizedDamageType
+        );
+      };
+
+      const addSelectedFeature = ({
+        choiceId,
+        featureType,
+        name,
+        summary = "",
+        details = {}
+      }) => {
+        mechanics.selectedFeatures.push({
+          id:
+            `${instance.id}:${choiceId}:${makeSafeId(name, "feature")}`,
+          featId: feat.id,
+          featName: feat.name,
+          sourceId: instance.id,
+          choiceId,
+          featureType,
+          name,
+          summary,
+          ...cloneData(details)
+        });
+      };
+
+      (Array.isArray(feat.effects) ? feat.effects : [])
+        .forEach((effect) => {
+          const type = cleanString(effect?.type);
+
+          if (type === "abilityIncrease") {
+            const ability = getAbility(effect.ability);
+
+            if (ability) {
+              addCappedNormalAbilityIncrease({
+                bonusMap,
+                scoreMap:
+                  normalAbilityScores,
+                abilityId: ability.id,
+                amount:
+                  safeNumber(
+                    effect.value,
+                    1
+                  ),
+                maximum:
+                  getFeatAbilityEffectMaximum(
+                    effect
+                  )
+              });
+            }
+          }
+
+          if (type === "abilityChoice") {
+            const choiceId = cleanString(effect.id, "ability");
+            const selectedAbility = getAbility(choices[choiceId]?.[0]);
+
+            if (selectedAbility) {
+              addCappedNormalAbilityIncrease({
+                bonusMap,
+                scoreMap:
+                  normalAbilityScores,
+                abilityId:
+                  selectedAbility.id,
+                amount:
+                  safeNumber(
+                    effect.increase,
+                    1
+                  ),
+                maximum:
+                  getFeatAbilityEffectMaximum(
+                    effect
+                  )
+              });
+            }
+          }
+
+          if (type === "abilityScoreImprovement") {
+            const maximum =
+              getFeatAbilityEffectMaximum(
+                effect
+              );
+
+            uniqueCleanArray(effect.choiceIds)
+              .flatMap((choiceId) => uniqueCleanArray(choices[choiceId]))
+              .slice(0, Math.max(1, safeNumber(effect.points, 2)))
+              .forEach((value) => {
+                const ability = getAbility(value);
+
+                if (ability) {
+                  addCappedNormalAbilityIncrease({
+                    bonusMap,
+                    scoreMap:
+                      normalAbilityScores,
+                    abilityId:
+                      ability.id,
+                    amount: 1,
+                    maximum
+                  });
+                }
+              });
+          }
+
+          if (type === "savingThrowProficiencyFromAbilityChoice") {
+            const ability = getAbility(
+              choices[effect.choiceId || "ability"]?.[0]
+            );
+
+            if (ability) {
+              proficiencyValues.savingThrows.push(ability.name);
+            }
+          }
+
+          if (type === "armorProficiency") {
+            proficiencyValues.armor.push(...uniqueCleanArray(effect.values));
+          }
+
+          if (type === "weaponProficiency") {
+            proficiencyValues.weapons.push(...uniqueCleanArray(effect.values));
+          }
+
+          if (type === "languageProficiency" && effect.language) {
+            proficiencyValues.languages.push(effect.language);
+          }
+
+          if (type === "proficiency") {
+            const category = cleanString(effect.category);
+
+            if (Object.hasOwn(proficiencyValues, category) && effect.value) {
+              proficiencyValues[category].push(effect.value);
+            }
+          }
+
+          if (type === "hpBonus") {
+            mechanics.hpBonus +=
+              safeNumber(effect.value, 0) +
+              safeNumber(effect.perLevel, 0) * clampLevel(
+                draft.classProgression?.totalLevel || draft.level || 1
+              );
+          }
+
+          if (type === "initiativeBonus") {
+            mechanics.initiativeBonus += safeNumber(effect.value, 0);
+          }
+
+          if (type === "speedBonus") {
+            mechanics.speedBonus += safeNumber(effect.value, 0);
+          }
+
+          if (type === "damageResistance") {
+            uniqueCleanArray(
+              effect.damageTypes ||
+              [effect.damageType]
+            ).forEach((damageType) => {
+              addResistanceSource({
+                damageType,
+                id:
+                  `${instance.id}:resistance:${makeSafeId(damageType, "damage")}`
+              });
+            });
+          }
+
+          if (type === "naturalWeapon") {
+            mechanics.naturalWeapons.push({
+              id:
+                `${instance.id}:${cleanString(effect.id, "natural-weapon")}`,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              name:
+                cleanString(
+                  effect.name,
+                  effect.id ===
+                    "dragon-claws"
+                    ? "Dragon Claws"
+                    : "Natural Weapon"
+                ),
+              attackAbility:
+                cleanString(
+                  effect.attackAbility,
+                  "str"
+                ),
+              proficient: true,
+              damageDice:
+                cleanString(
+                  effect.damageDice ||
+                  effect.damage
+                ),
+              damageType:
+                cleanString(
+                  effect.damageType
+                ).toLowerCase(),
+              weaponType:
+                "Natural melee weapon",
+              notes:
+                `Granted by ${feat.name}`
+            });
+          }
+
+          if (
+            type ===
+              "armorClassBonus"
+          ) {
+            mechanics
+              .armorClassModifiers
+              .push({
+                id:
+                  `${instance.id}:${cleanString(effect.id, "armor-class-bonus")}`,
+                featId: feat.id,
+                featName:
+                  feat.name,
+                sourceId:
+                  instance.id,
+                value:
+                  safeNumber(
+                    effect.value,
+                    0
+                  ),
+                condition:
+                  cleanString(
+                    effect.condition
+                  ),
+                requires:
+                  cloneData(
+                    effect.requires ||
+                    {}
+                  )
+              });
+          }
+
+          if (
+            type ===
+              "elementalAdept"
+          ) {
+            uniqueCleanArray(
+              choices[
+                effect.choiceId ||
+                "damage-type"
+              ]
+            ).forEach((damageType) => {
+              mechanics.elementalAdepts.push({
+                id:
+                  `${instance.id}:elemental-adept:${makeSafeId(damageType, "damage")}`,
+                featId:
+                  feat.id,
+                featName:
+                  feat.name,
+                sourceId:
+                  instance.id,
+                damageType:
+                  cleanString(
+                    damageType
+                  ).toLowerCase(),
+                ignoreResistance:
+                  effect
+                    .ignoreResistance ===
+                  true,
+                minimumDamageDie:
+                  Math.max(
+                    1,
+                    safeNumber(
+                      effect
+                        .minimumDamageDie,
+                      1
+                    )
+                  )
+              });
+            });
+          }
+
+          if (
+            type ===
+              "damageReduction"
+          ) {
+            mechanics.damageReductions.push({
+              id:
+                `${instance.id}:damage-reduction`,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              value:
+                Math.max(
+                  0,
+                  safeNumber(
+                    effect.value,
+                    0
+                  )
+                ),
+              damageTypes:
+                uniqueCleanArray(
+                  effect.damageTypes
+                ).map((value) => {
+                  return value.toLowerCase();
+                }),
+              condition:
+                cleanString(
+                  effect.condition
+                )
+            });
+          }
+
+          if (
+            type ===
+              "darkvisionBonus"
+          ) {
+            const bonus =
+              Math.max(
+                0,
+                safeNumber(
+                  effect.value,
+                  0
+                )
+              );
+            const baseRange =
+              getBaseDarkvisionRange();
+
+            mechanics.senses.push({
+              id:
+                `${instance.id}:darkvision`,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              sense:
+                "darkvision",
+              baseRange,
+              bonus,
+              range:
+                baseRange +
+                bonus
+            });
+          }
+
+          if (
+            type ===
+              "restChoiceResistance"
+          ) {
+            const restChoiceId =
+              `${instance.id}:resistance`;
+            const options =
+              uniqueCleanArray(
+                effect.damageTypes
+              ).map((value) => {
+                return value
+                  .toLowerCase();
+              });
+            const choiceId =
+              cleanString(
+                effect.choiceId,
+                "default-resistance"
+              );
+            const selected =
+              options.includes(
+                cleanString(
+                  previousRestChoices[
+                    restChoiceId
+                  ]?.selected
+                ).toLowerCase()
+              )
+                ? cleanString(
+                    previousRestChoices[
+                      restChoiceId
+                    ].selected
+                  ).toLowerCase()
+                : cleanString(
+                    choices[
+                      choiceId
+                    ]?.[0] ||
+                    options[0]
+                  ).toLowerCase();
+
+            mechanics.restChoices.push({
+              id:
+                restChoiceId,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              choiceId,
+              kind:
+                "damageResistance",
+              selected,
+              options,
+              rest:
+                cleanString(
+                  effect.rest,
+                  "longRest"
+                )
+            });
+            addResistanceSource({
+              damageType:
+                selected,
+              id:
+                `${restChoiceId}:source`,
+              kind:
+                "restChoice",
+              mutableAfterRest:
+                true
+            });
+          }
+
+          if (type === "ritualBook") {
+            const maximumSpellLevel =
+              Math.max(
+                0,
+                Math.floor(
+                  clampLevel(
+                    draft
+                      .classProgression
+                      ?.totalLevel ||
+                    draft.level ||
+                    1
+                  ) / 2
+                )
+              );
+            const ritualClassId =
+              makeSafeId(
+                choices[
+                  "ritual-class"
+                ]?.[0],
+                ""
+              );
+            const selectedRitualIds =
+              uniqueCleanArray(
+                choices[
+                  "ritual-spells"
+                ]
+              );
+            const spellIds =
+              selectedRitualIds
+                .filter((spellId) => {
+                  const spell =
+                    getSection16SpellById(
+                      spellId,
+                      draft
+                    );
+
+                  return Boolean(
+                    spell &&
+                    spell.ritual ===
+                      true &&
+                    safeNumber(
+                      spell.level,
+                      0
+                    ) <=
+                      maximumSpellLevel &&
+                    (
+                      !ritualClassId ||
+                      uniqueCleanArray(
+                        spell.classes
+                      ).some((classId) => {
+                        return (
+                          makeSafeId(
+                            classId,
+                            ""
+                          ) ===
+                          ritualClassId
+                        );
+                      })
+                    )
+                  );
+                })
+                .slice(
+                  0,
+                  Math.max(
+                    0,
+                    safeNumber(
+                      effect
+                        .initialSpells,
+                      2
+                    )
+                  )
+                );
+
+            mechanics.ritualBooks.push({
+              id:
+                `${instance.id}:ritual-book`,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              ritualClassId,
+              ritualClassName:
+                cleanString(
+                  choices[
+                    "ritual-class"
+                  ]?.[0]
+                ),
+              maximumSpellLevel,
+              spellIds,
+              spells:
+                spellIds.map((spellId) => {
+                  const spell =
+                    getSection16SpellById(
+                      spellId,
+                      draft
+                    );
+
+                  return {
+                    id: spellId,
+                    name:
+                      cleanString(
+                        spell?.name,
+                        spellId
+                      ),
+                    level:
+                      safeNumber(
+                        spell?.level,
+                        0
+                      )
+                  };
+                }),
+              rejectedSpellIds:
+                selectedRitualIds
+                  .filter((spellId) => {
+                    return !spellIds
+                      .includes(
+                        spellId
+                      );
+                  })
+            });
+          }
+
+          if (type === "planarScion") {
+            const selectedPlane =
+              cleanString(
+                choices[
+                  effect.choiceId ||
+                  "outer-plane"
+                ]?.[0]
+              );
+            const benefit =
+              planarScionBenefits[
+                makeSafeId(
+                  selectedPlane,
+                  ""
+                )
+              ];
+
+            if (benefit) {
+              addResistanceSource({
+                damageType:
+                  benefit
+                    .damageType,
+                id:
+                  `${instance.id}:planar-resistance`,
+                kind:
+                  "planarScion"
+              });
+              addFeatSpellRecords({
+                descriptor: {
+                  atWill: true,
+                  abilityChoiceId:
+                    cleanString(
+                      effect
+                        .abilityChoiceId,
+                      "spellcasting-ability"
+                    ),
+                  noMaterialComponents:
+                    true
+                },
+                origin:
+                  "planar-scion",
+                choiceId:
+                  cleanString(
+                    effect.choiceId,
+                    "outer-plane"
+                  ),
+                ids: [
+                  benefit
+                    .spellId
+                ]
+              });
+            }
+          }
+
+          if (type === "giantStrike") {
+            const selectedStrike =
+              cleanString(
+                choices[
+                  effect.choiceId ||
+                  "giant-strike"
+                ]?.[0]
+              );
+            const details =
+              giantStrikeDetails[
+                makeSafeId(
+                  selectedStrike,
+                  ""
+                )
+              ];
+
+            if (
+              selectedStrike &&
+              details
+            ) {
+              mechanics.actions.push({
+                id:
+                  `${instance.id}:giant-strike`,
+                featId: feat.id,
+                featName: feat.name,
+                sourceId: instance.id,
+                name:
+                  selectedStrike,
+                activation:
+                  "Once per turn on a melee or thrown-weapon hit",
+                resourceId:
+                  `${instance.id}:giant-strike`,
+                damage:
+                  details.damage,
+                summary:
+                  details.summary
+              });
+            }
+          }
+
+          if (type === "unarmedDamage") {
+            mechanics.combatProfiles.push({
+              id:
+                `${instance.id}:unarmed-damage`,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              type:
+                "unarmedDamage",
+              die:
+                cleanString(
+                  effect.die,
+                  "d4"
+                )
+            });
+          }
+
+          if (type === "telepathy") {
+            mechanics.telepathy.push({
+              id:
+                `${instance.id}:telepathy`,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              range:
+                Math.max(
+                  0,
+                  safeNumber(
+                    effect.range,
+                    0
+                  )
+                ),
+              responseRequiredSharedLanguage:
+                effect
+                  .responseRequiredSharedLanguage ===
+                true,
+              oneWay:
+                true
+            });
+          }
+
+          if (type === "healingBonus") {
+            const value =
+              effect.value ===
+                "proficiencyBonus"
+                ? getCharacterProficiencyBonus(
+                    draft
+                  )
+                : Math.max(
+                    0,
+                    safeNumber(
+                      effect.value,
+                      0
+                    )
+                  );
+
+            mechanics.healingBonuses.push({
+              id:
+                `${instance.id}:healing-bonus`,
+              featId: feat.id,
+              featName: feat.name,
+              sourceId: instance.id,
+              value,
+              formula:
+                cleanString(
+                  effect.value
+                ),
+              sources:
+                uniqueCleanArray(
+                  effect.sources
+                )
+            });
+          }
+
+          if (type === "resource") {
+            const maximumUses = effect.uses === "proficiencyBonus"
+              ? getCharacterProficiencyBonus(draft)
+              : Math.max(0, safeNumber(effect.uses, 0));
+            const resourceId = `${instance.id}:${effect.id}`;
+            const previous = previousResources[resourceId];
+
+            mechanics.resources.push({
+              id: resourceId,
+              featId: feat.id,
+              featName: feat.name,
+              resourceId: effect.id,
+              name: effect.label || effect.id,
+              maximumUses,
+              currentUses: Math.min(
+                maximumUses,
+                Math.max(0, safeNumber(previous?.currentUses, maximumUses))
+              ),
+              recharge: effect.recharge || "longRest",
+              die: effect.die || ""
+            });
+          }
+
+          if (type === "spellGrant") {
+            const ids = uniqueCleanArray(effect.spellIds || [effect.spellId]);
+            spellGrants.push({ ...effect, spellIds: ids });
+            addFeatSpellRecords({
+              descriptor: effect,
+              origin: "grant",
+              ids
+            });
+          }
+
+          if (type === "custom" && effect.summary) {
+            const situationalId =
+              `${instance.id}:${effect.id}`;
+            const handling =
+              ["automatic", "tracked", "manual"]
+                .includes(effect.handling)
+                ? effect.handling
+                : "";
+
+            if (handling) {
+              const actionEconomy =
+                ["action", "bonusAction", "reaction", "passive"]
+                  .includes(effect.actionEconomy)
+                  ? effect.actionEconomy
+                  : "passive";
+              const section =
+                ["attack", "defense", "utility"]
+                  .includes(effect.section)
+                  ? effect.section
+                  : "utility";
+              const usage =
+                effect.usage &&
+                typeof effect.usage === "object" &&
+                !Array.isArray(effect.usage)
+                  ? cloneData(effect.usage)
+                  : null;
+              const maximumUses =
+                usage &&
+                usage.scope === "self"
+                  ? Math.max(
+                      0,
+                      safeNumber(
+                        usage.maximumUses,
+                        0
+                      )
+                    )
+                  : 0;
+
+              mechanics.situationalEffects.push({
+                id: situationalId,
+                featId: feat.id,
+                featName: feat.name,
+                sourceId: instance.id,
+                effectId: effect.id,
+                handling,
+                actionEconomy,
+                activationTime:
+                  cleanString(
+                    effect.activationTime
+                  ),
+                recharge:
+                  cleanString(
+                    effect.recharge,
+                    "none"
+                  ),
+                section,
+                condition:
+                  cleanString(
+                    effect.condition
+                  ),
+                summary:
+                  cleanString(
+                    effect.summary
+                  ),
+                instructions:
+                  cleanString(
+                    effect.instructions,
+                    effect.summary
+                  ),
+                usage,
+                resourceId:
+                  handling === "tracked" &&
+                  maximumUses > 0
+                    ? situationalId
+                    : ""
+              });
+
+              if (
+                handling === "tracked" &&
+                maximumUses > 0
+              ) {
+                const previous =
+                  previousResources[
+                    situationalId
+                  ];
+
+                mechanics.resources.push({
+                  id: situationalId,
+                  featId: feat.id,
+                  featName: feat.name,
+                  resourceId:
+                    effect.id,
+                  name:
+                    cleanString(
+                      usage.label,
+                      feat.name
+                    ),
+                  maximumUses,
+                  currentUses:
+                    Math.min(
+                      maximumUses,
+                      Math.max(
+                        0,
+                        safeNumber(
+                          previous?.currentUses,
+                          maximumUses
+                        )
+                      )
+                    ),
+                  recharge:
+                    cleanString(
+                      effect.recharge,
+                      "none"
+                    ),
+                  die: ""
+                });
+              }
+            } else {
+              mechanics.passiveEffects.push({
+                id: situationalId,
+                featId: feat.id,
+                featName: feat.name,
+                summary: effect.summary
+              });
+            }
+          }
+        });
+
+      (Array.isArray(feat.choices) ? feat.choices : [])
+        .forEach((featChoice) => {
+          const selectedValues = uniqueCleanArray(choices[featChoice.id]);
+          const type = cleanString(featChoice.type).toLowerCase();
+
+          if (type === "skill") {
+            const expertise = featChoice.id === "expertise";
+            selectedValues.forEach((value) => {
+              addSkillSource(value, sourceName, expertise);
+            });
+          }
+
+          if (type === "skillortool") {
+            selectedValues.forEach((value) => {
+              if (value.startsWith("skill:")) {
+                addSkillSource(value.slice("skill:".length), sourceName);
+              } else if (value.startsWith("tool:")) {
+                proficiencyValues.tools.push(value.slice("tool:".length));
+              }
+            });
+          }
+
+          if (type === "tool") {
+            proficiencyValues.tools.push(...selectedValues);
+          }
+
+          if (type === "language") {
+            proficiencyValues.languages.push(...selectedValues);
+          }
+
+          if (type === "weapon") {
+            proficiencyValues.weapons.push(...selectedValues);
+          }
+
+          if (type === "feature") {
+            const choiceId =
+              cleanString(
+                featChoice.id
+              );
+            const source =
+              cleanString(
+                featChoice.source
+              );
+
+            selectedValues.forEach((value) => {
+              if (
+                source ===
+                  "eldritch-invocations" ||
+                choiceId ===
+                  "invocation"
+              ) {
+                const details =
+                  DEFAULT_INVOCATION_DETAILS[
+                    value
+                  ] || {};
+                const summary =
+                  cleanString(
+                    details.summary,
+                    invocationSummaries[
+                      makeSafeId(
+                        value,
+                        ""
+                      )
+                    ] ||
+                    "Selected Eldritch Invocation."
+                  );
+
+                addSelectedFeature({
+                  choiceId,
+                  featureType:
+                    "eldritchInvocation",
+                  name: value,
+                  summary,
+                  details: {
+                    effects:
+                      cloneData(
+                        details.effects ||
+                        []
+                      )
+                  }
+                });
+
+                (
+                  Array.isArray(
+                    details.effects
+                  )
+                    ? details.effects
+                    : []
+                ).forEach(
+                  (
+                    invocationEffect
+                  ) => {
+                    if (
+                      invocationEffect
+                        .type ===
+                        "skillProficiency"
+                    ) {
+                      uniqueCleanArray(
+                        invocationEffect
+                          .skills
+                      ).forEach(
+                        (skill) => {
+                          addSkillSource(
+                            skill,
+                            sourceName
+                          );
+                        }
+                      );
+                    } else if (
+                      invocationEffect
+                        .type ===
+                        "sense"
+                    ) {
+                      mechanics.senses.push({
+                        id:
+                          `${instance.id}:invocation-sense:${makeSafeId(value, "sense")}`,
+                        featId:
+                          feat.id,
+                        featName:
+                          feat.name,
+                        sourceId:
+                          instance.id,
+                        sense:
+                          cleanString(
+                            invocationEffect
+                              .sense,
+                            "special sense"
+                          ),
+                        range:
+                          Math.max(
+                            0,
+                            safeNumber(
+                              invocationEffect
+                                .range,
+                              0
+                            )
+                          ),
+                        magicalDarkness:
+                          invocationEffect
+                            .magicalDarkness ===
+                          true
+                      });
+                    } else if (
+                      invocationEffect
+                        .type ===
+                        "atWillSpell"
+                    ) {
+                      addFeatSpellRecords({
+                        descriptor: {
+                          atWill: true,
+                          ability:
+                            existingSpellcastingAbility ||
+                            "Charisma",
+                          selfOnly:
+                            invocationEffect
+                              .selfOnly ===
+                            true
+                        },
+                        origin:
+                          "eldritch-invocation",
+                        choiceId,
+                        ids: [
+                          invocationEffect
+                            .spellId
+                        ]
+                      });
+                    } else {
+                      mechanics.passiveEffects.push({
+                        id:
+                          `${instance.id}:invocation:${makeSafeId(value, "feature")}:${makeSafeId(invocationEffect.type, "effect")}`,
+                        featId:
+                          feat.id,
+                        featName:
+                          feat.name,
+                        summary
+                      });
+                    }
+                  }
+                );
+
+                return;
+              }
+
+              if (
+                choiceId ===
+                  "fighting-style"
+              ) {
+                const styleEffect =
+                  DEFAULT_FIGHTING_STYLE_EFFECTS[
+                    value
+                  ] || {};
+                const summary =
+                  cleanString(
+                    styleEffect.summary,
+                    fightingStyleSummaries[
+                      makeSafeId(
+                        value,
+                        ""
+                      )
+                    ] ||
+                    "Selected Fighting Style."
+                  );
+
+                addSelectedFeature({
+                  choiceId,
+                  featureType:
+                    "fightingStyle",
+                  name: value,
+                  summary,
+                  details: {
+                    effects:
+                      Object.keys(
+                        styleEffect
+                      ).length
+                        ? [
+                            cloneData(
+                              styleEffect
+                            )
+                          ]
+                        : []
+                  }
+                });
+
+                if (
+                  styleEffect.type ===
+                    "armorClassBonus"
+                ) {
+                  mechanics
+                    .armorClassModifiers
+                    .push({
+                      id:
+                        `${instance.id}:fighting-style:${makeSafeId(value, "style")}`,
+                      featId:
+                        feat.id,
+                      featName:
+                        feat.name,
+                      sourceId:
+                        instance.id,
+                      value:
+                        safeNumber(
+                          styleEffect
+                            .value,
+                          0
+                        ),
+                      condition:
+                        styleEffect
+                          .requires
+                          ?.wearingArmor ===
+                        true
+                          ? "wearing-armor"
+                          : "",
+                      requires:
+                        cloneData(
+                          styleEffect
+                            .requires ||
+                          {}
+                        )
+                    });
+                } else if (
+                  [
+                    "weaponAttackBonus",
+                    "weaponDamageBonus",
+                    "weaponMagicBonus",
+                    "damageDieReroll",
+                    "offhandAbilityDamage",
+                    "reactionDefense"
+                  ].includes(
+                    styleEffect.type
+                  )
+                ) {
+                  mechanics.attackModifiers.push({
+                    ...cloneData(
+                      styleEffect
+                    ),
+                    id:
+                      `${instance.id}:fighting-style:${makeSafeId(value, "style")}`,
+                    featId:
+                      feat.id,
+                    featName:
+                      feat.name,
+                    sourceId:
+                      instance.id
+                  });
+                }
+
+                if (
+                  value ===
+                    "Blind Fighting"
+                ) {
+                  mechanics.senses.push({
+                    id:
+                      `${instance.id}:blind-fighting`,
+                    featId:
+                      feat.id,
+                    featName:
+                      feat.name,
+                    sourceId:
+                      instance.id,
+                    sense:
+                      "blindsight",
+                    range: 10
+                  });
+                }
+
+                if (
+                  value ===
+                    "Unarmed Fighting"
+                ) {
+                  mechanics.combatProfiles.push({
+                    id:
+                      `${instance.id}:unarmed-fighting`,
+                    featId:
+                      feat.id,
+                    featName:
+                      feat.name,
+                    sourceId:
+                      instance.id,
+                    type:
+                      "unarmedDamage",
+                    die: "d6",
+                    twoFreeHandsDie:
+                      "d8"
+                  });
+                }
+
+                return;
+              }
+
+              if (
+                source ===
+                  "battle-master-maneuvers" ||
+                choiceId ===
+                  "maneuvers"
+              ) {
+                const ability =
+                  getAbility(
+                    choices[
+                      "maneuver-ability"
+                    ]?.[0]
+                  ) ||
+                  getAbility(
+                    "Strength"
+                  );
+                const saveDc =
+                  8 +
+                  getCharacterProficiencyBonus(
+                    draft
+                  ) +
+                  calculateAbilityModifier(
+                    getAbilityScore(
+                      draft,
+                      ability.id
+                    )
+                  );
+
+                addSelectedFeature({
+                  choiceId,
+                  featureType:
+                    "battleMasterManeuver",
+                  name: value,
+                  summary:
+                    cleanString(
+                      DEFAULT_MANEUVER_DETAILS[
+                        value
+                      ],
+                      "Selected Battle Master maneuver."
+                    ),
+                  details: {
+                    saveAbility:
+                      ability.id,
+                    saveDc,
+                    superiorityDie:
+                      "d6"
+                  }
+                });
+
+                return;
+              }
+
+              if (
+                source ===
+                  "metamagic-options" ||
+                choiceId ===
+                  "metamagic-options"
+              ) {
+                const details =
+                  DEFAULT_METAMAGIC_DETAILS[
+                    value
+                  ] || {};
+
+                addSelectedFeature({
+                  choiceId,
+                  featureType:
+                    "metamagic",
+                  name: value,
+                  summary:
+                    cleanString(
+                      details.summary,
+                      "Selected Metamagic option."
+                    ),
+                  details: {
+                    cost:
+                      details.cost ??
+                      null
+                  }
+                });
+              }
+            });
+          }
+
+          if (type === "spell") {
+            addFeatSpellRecords({
+              descriptor: {
+                ...spellChoiceEffect,
+                ...featChoice
+              },
+              origin: "choice",
+              choiceId:
+                featChoice.id,
+              ids: selectedValues
+            });
+          }
+        });
+
+      setAbilityBonusSource(sourceName, bonusMap);
+      Object.entries(proficiencyValues)
+        .forEach(([category, values]) => {
+          setSourceProficiencyList(
+            category,
+            uniqueCleanArray(values),
+            sourceName
+          );
+        });
+
+      if (spellRecords.length) {
+        const sourceAbilityIds =
+          uniqueCleanArray(
+            spellRecords.map((record) => {
+              return record.spellcastingAbility;
+            })
+          );
+
+        draft.magic.featSources[instance.id] = {
+          featId: feat.id,
+          featName: feat.name,
+          sourceType: "feat",
+          sourceId: instance.id,
+          spellcastingAbility:
+            sourceAbilityIds[0] || "",
+          spellIds: uniqueCleanArray(spellIds),
+          grants: spellGrants,
+          spellRecords
+        };
+      }
+
+      mechanics.instances.push({
+        id: instance.id,
+        featId: feat.id,
+        featName: feat.name,
+        featSummary:
+          cleanString(
+            feat.summary
+          ),
+        featDescription:
+          cleanString(
+            feat.description,
+            feat.summary
+          ),
+        sourceLabel:
+          cleanString(
+            feat.sourceLabel,
+            feat.source
+          ),
+        rulesEdition:
+          cleanString(
+            feat.rulesEdition,
+            ACTIVE_RULESET.edition
+          ),
+        choices,
+        effects: cloneData(feat.effects)
+      });
+    });
+
+    mechanics.resistances =
+      uniqueCleanArray(
+        mechanics.resistances
+      ).map((value) => {
+        return value.toLowerCase();
+      });
+    draft.featMechanics = mechanics;
+  }
+
+  function setFeatRestChoice(
+    restChoiceId,
+    selectedValue
+  ) {
+    const mechanics =
+      creatorState.draft
+        ?.featMechanics;
+    const restChoice =
+      (
+        Array.isArray(
+          mechanics?.restChoices
+        )
+          ? mechanics.restChoices
+          : []
+      ).find((entry) => {
+        return (
+          entry.id ===
+          restChoiceId
+        );
+      });
+    const selected =
+      cleanString(
+        selectedValue
+      ).toLowerCase();
+
+    if (
+      !restChoice ||
+      !uniqueCleanArray(
+        restChoice.options
+      ).includes(selected)
+    ) {
+      return false;
+    }
+
+    restChoice.selected =
+      selected;
+
+    if (
+      restChoice.kind ===
+        "damageResistance"
+    ) {
+      const source =
+        (
+          Array.isArray(
+            mechanics
+              .resistanceSources
+          )
+            ? mechanics
+                .resistanceSources
+            : []
+        ).find((entry) => {
+          return (
+            entry.id ===
+            `${restChoice.id}:source`
+          );
+        });
+
+      if (source) {
+        source.damageType =
+          selected;
+      }
+
+      mechanics.resistances =
+        uniqueCleanArray(
+          mechanics
+            .resistanceSources
+            .map((entry) => {
+              return entry
+                .damageType;
+            })
+        ).map((value) => {
+          return value
+            .toLowerCase();
+        });
+    }
+
+    applyCompatibilityAliases(
+      creatorState.draft
+    );
+    markDraftChanged();
+
+    return true;
+  }
+
+  function evaluateSection12ClassResourceMaximum(
+    resource,
+    classLevel
+  ) {
+    const value =
+      resource?.uses ??
+      getProgressionValueByLevel(
+        resource?.usesByLevel,
+        classLevel,
+        null
+      );
+    const normalizedValue =
+      cleanString(value)
+        .toLowerCase()
+        .replace(/[\s_-]+/g, "");
+
+    if (normalizedValue === "unlimited") {
+      return null;
+    }
+
+    if (
+      normalizedValue ===
+      "proficiencybonus"
+    ) {
+      return getCharacterProficiencyBonus(
+        creatorState.draft
+      );
+    }
+
+    if (
+      normalizedValue ===
+      "twiceproficiencybonus"
+    ) {
+      return (
+        getCharacterProficiencyBonus(
+          creatorState.draft
+        ) * 2
+      );
+    }
+
+    if (
+      normalizedValue ===
+      "classlevel"
+    ) {
+      return classLevel;
+    }
+
+    if (value !== null && value !== undefined && value !== "") {
+      return Math.max(0, safeNumber(value, 0));
+    }
+
+    if (resource?.usesAbility) {
+      const abilityId = String(resource.usesAbility)
+        .slice(0, 3)
+        .toLowerCase();
+
+      return Math.max(
+        safeNumber(resource.minimum, 1),
+        calculateAbilityModifier(
+          getAbilityScore(
+            creatorState.draft,
+            abilityId
+          )
+        )
+      );
+    }
+
+    if (resource?.pool?.formula) {
+      return Math.max(
+        0,
+        safeNumber(
+          evaluateSection12ClassLevelFormula(
+            resource.pool.formula,
+            classLevel
+          ),
+          0
+        )
+      );
+    }
+
+    if (resource?.perLevel) {
+      return Math.max(
+        0,
+        classLevel * safeNumber(resource.perLevel, 1)
+      );
+    }
+
+    if (
+      cleanString(resource?.scalesWith).toLowerCase() ===
+      "level"
+    ) {
+      return classLevel;
+    }
+
+    return 0;
+  }
+
+  function getSection12CanonicalResourceId(
+    feature,
+    resource
+  ) {
+    const explicitId = cleanString(resource?.id);
+
+    if (explicitId) {
+      return makeSafeId(explicitId, "resource");
+    }
+
+    const inferredName = cleanString(
+      resource?.name || feature?.name || feature?.id,
+      "resource"
+    )
+      .replace(/\s+improvement.*$/i, "")
+      .replace(/\s+mastery.*$/i, "")
+      .replace(/\s*\([^)]*\)\s*$/g, "");
+
+    if (
+      /^channel divinity(?:\s*:|$)/i.test(
+        inferredName
+      )
+    ) {
+      return "channel-divinity";
+    }
+
+    return makeSafeId(inferredName, "resource");
+  }
+
+  const SECTION12_CLASS_FEATURE_SAVE_ABILITIES =
+    Object.freeze({
+      artificer: "int",
+      barbarian: "con",
+      bard: "cha",
+      cleric: "wis",
+      druid: "wis",
+      fighter: "str",
+      monk: "wis",
+      paladin: "cha",
+      ranger: "wis",
+      rogue: "dex",
+      sorcerer: "cha",
+      warlock: "cha",
+      wizard: "int"
+    });
+
+  function getSection12ClassFeatureSaveDc(
+    character,
+    classEntryId,
+    effect = {}
+  ) {
+    const classEntries =
+      getCharacterClassEntries(character);
+    const classEntry =
+      classEntries.find((entry, index) => {
+        return (
+          getClassProgressionEntryKey(
+            entry,
+            index
+          ) === cleanString(classEntryId)
+        );
+      }) || null;
+    const classId = cleanString(
+      classEntry?.classId ||
+      effect?.classId
+    );
+    const template =
+      classEntry
+        ? resolveClassTemplateForEntry(
+            classEntry
+          )
+        : null;
+    let abilityId = cleanString(
+      effect?.saveDcAbility ||
+      effect?.classSaveAbility ||
+      effect?.usesAbility
+    )
+      .slice(0, 3)
+      .toLowerCase();
+
+    if (
+      cleanString(effect?.type) ===
+      "maneuverSaveDc"
+    ) {
+      abilityId =
+        getAbilityScore(character, "dex") >
+        getAbilityScore(character, "str")
+          ? "dex"
+          : "str";
+    }
+
+    if (
+      !ABILITY_DEFINITIONS.some(
+        (ability) => {
+          return ability.id === abilityId;
+        }
+      )
+    ) {
+      abilityId = cleanString(
+        template?.spellcastingAbility ||
+        SECTION12_CLASS_FEATURE_SAVE_ABILITIES[
+          classId
+        ]
+      )
+        .slice(0, 3)
+        .toLowerCase();
+    }
+
+    if (
+      !ABILITY_DEFINITIONS.some(
+        (ability) => {
+          return ability.id === abilityId;
+        }
+      )
+    ) {
+      return {
+        classEntryId:
+          cleanString(classEntryId),
+        classId,
+        abilityId: "",
+        abilityModifier: null,
+        saveDc: null
+      };
+    }
+
+    const abilityModifier =
+      calculateAbilityModifier(
+        getAbilityScore(
+          character,
+          abilityId
+        )
+      );
+
+    return {
+      classEntryId:
+        cleanString(classEntryId),
+      classId,
+      abilityId,
+      abilityModifier,
+      saveDc:
+        calculateRuleSpellSaveDc({
+          proficiencyBonus:
+            getCharacterProficiencyBonus(
+              character
+            ),
+          abilityModifier
+        })
+    };
+  }
+
+  function applySelectedClassFeatureMechanics() {
+    const draft = creatorState.draft;
+
+    if (!draft?.proficiencies || !draft?.classProgression) {
+      return;
+    }
+
+    const previousResourceEntries = Array.isArray(
+      draft.classMechanics?.resources
+    )
+      ? draft.classMechanics.resources
+      : [];
+    const previousResources = Object.fromEntries(
+      previousResourceEntries.map((entry) => [entry.id, entry])
+    );
+    const mechanics = {
+      schemaVersion: 1,
+      resources: [],
+      armorClassFormulas: [],
+      armorClassModifiers: [],
+      attackModifiers: [],
+      spellModifiers: [],
+      combatProfiles: [],
+      classSaveDcs: [],
+      attackAction: {
+        attacks: 1,
+        sourceIds: [],
+        sourceNames: []
+      },
+      spellcastingBlocked: false,
+      spellcastingBlockReasons: [],
+      passiveEffects: [],
+      restrictions: [],
+      infusions: []
+    };
+    const resourceById = new Map();
+    const classSourceStore =
+      getSection16ClassSourceStore(draft);
+    const firstUnarmoredDefenseSource =
+      syncFirstUnarmoredDefenseSource(
+        draft
+      );
+    const firstUnarmoredDefenseFeatureIds =
+      new Set(
+        Object.values(
+          UNARMORED_DEFENSE_CLASS_RULES
+        ).map((rule) => {
+          return rule.featureId;
+        })
+      );
+
+    Object.values(classSourceStore)
+      .forEach((source) => {
+        const previousSecretIds = cleanArray(
+          source.magicalSecretSpellIds
+        );
+
+        source.knownSpellIds = cleanArray(
+          source.knownSpellIds
+        ).filter((spellId) => {
+          return !previousSecretIds.includes(spellId);
+        });
+        source.magicalSecretSpellIds = [];
+      });
+
+    removeSkillProficiencySourcesByPrefix([
+      "class-feature:"
+    ]);
+    removeListProficiencySourcesByPrefix([
+      "class-feature:"
+    ]);
+
+    const getSkill = (value) => {
+      const normalized = makeSafeId(value, "");
+
+      return SKILL_DEFINITIONS.find((skill) => {
+        return (
+          skill.id === normalized ||
+          makeSafeId(skill.name, "") === normalized
+        );
+      }) || null;
+    };
+
+    const addSkill = (
+      skillValue,
+      sourceName,
+      expertise = false
+    ) => {
+      const skill = getSkill(skillValue);
+
+      if (!skill) {
+        return;
+      }
+
+      const current = getSection14SkillEntry(skill);
+      const expertiseSources = expertise
+        ? uniqueCleanArray([
+            ...current.expertiseSources,
+            sourceName
+          ])
+        : current.expertiseSources;
+
+      setSection14SkillEntry(skill, {
+        proficient: true,
+        expertise:
+          current.expertise === true || expertise,
+        expertiseSources,
+        source: uniqueCleanArray([
+          ...current.source,
+          sourceName
+        ])
+      });
+    };
+
+    const addResource = (
+      feature,
+      classEntry,
+      classLevel,
+      resource
+    ) => {
+      if (!resource || typeof resource !== "object") {
+        return;
+      }
+
+      const classEntryId = cleanString(
+        feature.classEntryId || classEntry?.entryId,
+        "class"
+      );
+      const canonicalId =
+        getSection12CanonicalResourceId(
+          feature,
+          resource
+        );
+      const sourceId =
+        `${classEntryId}:${canonicalId}`;
+      const featureSourceId =
+        `${classEntryId}:${
+          cleanString(
+            feature.id,
+            canonicalId
+          )
+        }`;
+      const shared =
+        canonicalId === "channel-divinity";
+      const resourceId = shared
+        ? "shared:channel-divinity"
+        : sourceId;
+      const maximumUses =
+        evaluateSection12ClassResourceMaximum(
+          resource,
+          classLevel
+        );
+      const existingResource =
+        resourceById.get(resourceId);
+      const previousCandidates = shared
+        ? previousResourceEntries.filter((entry) => {
+            return (
+              entry.id === resourceId ||
+              entry.canonicalId === canonicalId ||
+              cleanString(entry.id).endsWith(
+                `:${canonicalId}`
+              )
+            );
+          })
+        : [previousResources[resourceId]].filter(Boolean);
+      const previousCurrentUses = previousCandidates
+        .map((entry) => entry?.currentUses)
+        .filter((value) => {
+          return value !== null && value !== undefined;
+        })
+        .map((value) => safeNumber(value, 0));
+      const combinedMaximum = existingResource
+        ? (
+            existingResource.maximumUses === null ||
+            maximumUses === null
+              ? null
+              : Math.max(
+                  safeNumber(existingResource.maximumUses, 0),
+                  safeNumber(maximumUses, 0)
+                )
+          )
+        : maximumUses;
+      const sourceNames = uniqueCleanArray([
+        ...(existingResource?.sourceNames || []),
+        feature.className ||
+          classEntry?.className ||
+          "Class"
+      ]);
+      const sourceIds = uniqueCleanArray([
+        ...(existingResource?.sourceIds || []),
+        sourceId
+      ]);
+      const featureSourceIds =
+        uniqueCleanArray([
+          ...(
+            existingResource
+              ?.featureSourceIds || []
+          ),
+          featureSourceId
+        ]);
+      const sourceMaximums = {
+        ...(
+          existingResource
+            ?.sourceMaximums || {}
+        ),
+        [featureSourceId]:
+          maximumUses
+      };
+      const preservedCurrentUses = existingResource
+        ?.currentUses ??
+        (
+          previousCurrentUses.length
+            ? Math.min(...previousCurrentUses)
+            : combinedMaximum
+        );
+      const incomingIsAuthoritative =
+        !existingResource ||
+        existingResource.maximumUses === null ||
+        maximumUses === null ||
+        safeNumber(maximumUses, 0) >=
+          safeNumber(existingResource.maximumUses, 0);
+      const inferredChannelOption =
+        shared &&
+        /^channel divinity\s*:/i.test(
+          cleanString(feature.name)
+        )
+          ? [
+              {
+                id: makeSafeId(
+                  cleanString(feature.name)
+                    .replace(
+                      /^channel divinity\s*:\s*/i,
+                      ""
+                    ),
+                  "channel-divinity-option"
+                ),
+                name: cleanString(feature.name)
+                  .replace(
+                    /^channel divinity\s*:\s*/i,
+                    ""
+                  ),
+                cost: 1
+              }
+            ]
+          : [];
+      const incomingSpendOptions = [
+        ...(
+          Array.isArray(
+            feature.spendOptions
+          )
+            ? feature.spendOptions
+            : []
+        ),
+        ...(
+          Array.isArray(
+            resource.spendOptions
+          )
+            ? resource.spendOptions
+            : []
+        ),
+        ...inferredChannelOption
+      ].map((option) => {
+        const normalizedOption =
+          typeof option === "string"
+            ? {
+                id: makeSafeId(
+                  option,
+                  "resource-option"
+                ),
+                name: option
+              }
+            : cloneData(option);
+        const saveContext =
+          getSection12ClassFeatureSaveDc(
+            draft,
+            classEntryId,
+            {
+              ...normalizedOption,
+              classId:
+                feature.classId ||
+                classEntry?.classId
+            }
+          );
+
+        return {
+          ...normalizedOption,
+          id: makeSafeId(
+            normalizedOption.id ||
+            normalizedOption.name,
+            "resource-option"
+          ),
+          name: cleanString(
+            normalizedOption.name,
+            feature.name
+          ),
+          cost: Math.max(
+            1,
+            safeNumber(
+              normalizedOption.cost,
+              1
+            )
+          ),
+          classEntryId,
+          classId:
+            feature.classId ||
+            classEntry?.classId ||
+            "",
+          className:
+            feature.className ||
+            classEntry?.className ||
+            "Class",
+          featureId:
+            cleanString(feature.id),
+          featureName:
+            cleanString(feature.name),
+          saveAbility:
+            normalizedOption
+              .usesSave === false
+                ? ""
+                : saveContext.abilityId,
+          saveDc:
+            normalizedOption
+              .usesSave === false
+                ? null
+                : saveContext.saveDc
+        };
+      });
+      const combinedSpendOptions = [
+        ...(
+          existingResource
+            ?.spendOptions || []
+        ),
+        ...incomingSpendOptions
+      ].filter((option, index, values) => {
+        return (
+          values.findIndex((candidate) => {
+            return (
+              cleanString(
+                candidate.classEntryId
+              ) ===
+                cleanString(
+                  option.classEntryId
+                ) &&
+              cleanString(candidate.id) ===
+                cleanString(option.id)
+            );
+          }) === index
+        );
+      });
+      const next = {
+        id: resourceId,
+        canonicalId,
+        sourceId,
+        sourceIds,
+        featureSourceIds,
+        sourceMaximums,
+        sourceNames,
+        shared,
+        classEntryId: shared
+          ? "shared:channel-divinity"
+          : classEntryId,
+        classId: shared
+          ? "shared"
+          : feature.classId || classEntry?.classId || "",
+        className: sourceNames.join(" / "),
+        featureId: incomingIsAuthoritative
+          ? feature.id
+          : existingResource.featureId,
+        featureName: incomingIsAuthoritative
+          ? feature.name
+          : existingResource.featureName,
+        name: resource.name || feature.name,
+        maximumUses: combinedMaximum,
+        currentUses:
+          combinedMaximum === null
+            ? null
+            : Math.min(
+                combinedMaximum,
+                Math.max(
+                  0,
+                  safeNumber(
+                    preservedCurrentUses,
+                    combinedMaximum
+                  )
+                )
+              ),
+        recharge: incomingIsAuthoritative
+          ? resource.recharge ||
+            getProgressionValueByLevel(
+              resource.rechargeByLevel,
+              classLevel,
+              ""
+            )
+          : existingResource.recharge,
+        die: incomingIsAuthoritative
+          ? resource.die ||
+            getProgressionValueByLevel(
+              resource.dieByLevel,
+              classLevel,
+              ""
+            )
+          : existingResource.die,
+        spendOptions:
+          cloneData(
+            combinedSpendOptions
+          )
+      };
+
+      resourceById.set(resourceId, next);
+    };
+
+    const applyEffect = (
+      effect,
+      context
+    ) => {
+      if (!effect || typeof effect !== "object") {
+        return;
+      }
+
+      const type = cleanString(effect.type);
+      const record = {
+        ...cloneData(effect),
+        id: `${context.choiceKey}:${makeSafeId(type || context.option || "effect", "effect")}`,
+        classEntryId: context.classEntryId,
+        classId: context.feature.classId,
+        className: context.feature.className,
+        classLevel: context.classLevel,
+        featureId: context.feature.id,
+        featureName: context.feature.name,
+        option: context.option || ""
+      };
+      const needsClassSaveDc =
+        type === "maneuverSaveDc" ||
+        effect.classSaveDc === true ||
+        Boolean(
+          cleanString(
+            effect.saveDcAbility ||
+            effect.classSaveAbility
+          )
+        );
+
+      if (needsClassSaveDc) {
+        const saveContext =
+          getSection12ClassFeatureSaveDc(
+            draft,
+            context.classEntryId,
+            {
+              ...effect,
+              classId:
+                context.feature.classId
+            }
+          );
+
+        record.saveAbility =
+          saveContext.abilityId;
+        record.saveDc =
+          saveContext.saveDc;
+      }
+
+      if (type === "armorClassFormula") {
+        const isFirstReceivedRule =
+          firstUnarmoredDefenseFeatureIds
+            .has(record.featureId);
+
+        if (
+          !isFirstReceivedRule ||
+          (
+            firstUnarmoredDefenseSource &&
+            record.classEntryId ===
+              firstUnarmoredDefenseSource
+                .classEntryId &&
+            record.featureId ===
+              firstUnarmoredDefenseSource
+                .featureId
+          )
+        ) {
+          mechanics
+            .armorClassFormulas
+            .push(record);
+        }
+      } else if (type === "extraAttack") {
+        const attacks = Math.max(
+          1,
+          Math.round(
+            safeNumber(effect.attacks, 2)
+          )
+        );
+        const sourceId = `${record.classEntryId}:${record.featureId}`;
+        const sourceFeatureName =
+          cleanString(
+            record.option,
+            record.featureName
+          );
+        const currentAttacks = safeNumber(
+          mechanics.attackAction.attacks,
+          1
+        );
+
+        if (attacks > currentAttacks) {
+          mechanics.attackAction = {
+            attacks,
+            classEntryId: record.classEntryId,
+            classId: record.classId,
+            className: record.className,
+            featureId: record.featureId,
+            featureName:
+              sourceFeatureName,
+            sourceIds: [sourceId],
+            sourceNames: [
+              `${record.className}: ${sourceFeatureName}`
+            ]
+          };
+        } else if (attacks === currentAttacks) {
+          mechanics.attackAction.sourceIds =
+            uniqueCleanArray([
+              ...mechanics.attackAction.sourceIds,
+              sourceId
+            ]);
+          mechanics.attackAction.sourceNames =
+            uniqueCleanArray([
+              ...mechanics.attackAction.sourceNames,
+              `${record.className}: ${sourceFeatureName}`
+            ]);
+        }
+      } else if (type === "armorClassBonus") {
+        mechanics.armorClassModifiers.push(record);
+      } else if (
+        [
+          "weaponAttackBonus",
+          "weaponDamageBonus",
+          "weaponMagicBonus",
+          "damageDieReroll",
+          "offhandAbilityDamage",
+          "reactionDefense"
+        ].includes(type)
+      ) {
+        mechanics.attackModifiers.push(record);
+      } else if (
+        [
+          "spellAttackBonus",
+          "spellDamageAbilityBonus",
+          "spellHitPush",
+          "atWillSpell",
+          "oncePerRestSpell"
+        ].includes(type)
+      ) {
+        mechanics.spellModifiers.push(record);
+      } else if (type === "skillProficiency") {
+        uniqueCleanArray(effect.skills)
+          .forEach((skill) => {
+            addSkill(skill, context.sourceName);
+          });
+      } else if (
+        [
+          "martialArts",
+          "sneakAttack",
+          "rage",
+          "divineSmite",
+          "wildShape",
+          "maneuverSaveDc",
+          "metamagic",
+          "eldritchInvocations"
+        ].includes(type)
+      ) {
+        mechanics.combatProfiles.push(record);
+      } else if (type !== "resourcePool") {
+        mechanics.passiveEffects.push(record);
+      }
+
+      uniqueCleanArray(effect.restrictions)
+        .forEach((restriction) => {
+          mechanics.restrictions.push({
+            id: `${record.id}:${makeSafeId(restriction, "restriction")}`,
+            source: context.feature.name,
+            stateId:
+              type === "rage"
+                ? "rage"
+                : "",
+            restriction
+          });
+        });
+    };
+
+    getClassProgressionEntries(draft)
+      .forEach((classEntry, classIndex) => {
+        const template = resolveClassTemplateForEntry(classEntry);
+        const features = collectSection12FeaturesForClassEntry(
+          classEntry,
+          classIndex
+        );
+        const classEntryId =
+          getClassProgressionEntryKey(
+            classEntry,
+            classIndex
+          );
+        const saveContext =
+          getSection12ClassFeatureSaveDc(
+            draft,
+            classEntryId,
+            {
+              classId:
+                classEntry.classId
+            }
+          );
+
+        mechanics.classSaveDcs.push({
+          ...saveContext,
+          className:
+            cleanString(
+              classEntry.className,
+              template?.name ||
+              classEntry.classId
+            ),
+          classLevel:
+            getClassEntryLevel(
+              classEntry,
+              1
+            )
+        });
+
+        (Array.isArray(template?.effects)
+          ? template.effects.filter((effect) =>
+              ["speedBonus", "speedBonusByLevel"].includes(cleanString(effect?.type)))
+          : []
+        ).forEach((effect, effectIndex) => {
+          const classLevel = getClassEntryLevel(
+            classEntry,
+            1
+          );
+          const classFeature = {
+            id: "class-template-effects",
+            name: `${cleanString(
+              classEntry.className,
+              template?.name || "Class"
+            )} movement`,
+            classId: cleanString(
+              classEntry.classId,
+              template?.id
+            ),
+            className: cleanString(
+              classEntry.className,
+              template?.name
+            )
+          };
+
+          applyEffect(effect, {
+            feature: classFeature,
+            classEntry,
+            classEntryId,
+            classLevel,
+            choiceKey: `${classEntryId}:template-effect-${effectIndex + 1}`,
+            sourceName: `class-template:${classEntryId}`,
+            option: ""
+          });
+        });
+
+        features.forEach((feature) => {
+          const classLevel = Math.max(
+            1,
+            safeNumber(
+              feature.classLevel,
+              classEntry.level || 1
+            )
+          );
+          const classEntryId = cleanString(
+            feature.classEntryId,
+            getClassProgressionEntryKey(
+              classEntry,
+              classIndex
+            )
+          );
+          const choiceKey = getSection12FeatureChoiceKey(feature);
+          const sourceName = `class-feature:${choiceKey}`;
+          const selections =
+            getSection12FeatureStoredChoices(feature);
+          const context = {
+            feature,
+            classEntry,
+            classEntryId,
+            classLevel,
+            choiceKey,
+            sourceName,
+            option: ""
+          };
+
+          addResource(
+            feature,
+            classEntry,
+            classLevel,
+            feature.resource
+          );
+
+          (Array.isArray(feature.effects)
+            ? feature.effects
+            : []
+          ).forEach((effect) => {
+            applyEffect(effect, context);
+          });
+
+          if (
+            (Array.isArray(feature.effects)
+              ? feature.effects
+              : []
+            ).some((effect) => effect.type === "expertise")
+          ) {
+            selections.forEach((selection) => {
+              if (selection === "Thieves' Tools") {
+                mechanics.passiveEffects.push({
+                  id: `${choiceKey}:thieves-tools-expertise`,
+                  classEntryId,
+                  featureName: feature.name,
+                  type: "toolExpertise",
+                  tool: selection,
+                  summary: "Double proficiency for checks using Thieves' Tools."
+                });
+              } else {
+                addSkill(selection, sourceName, true);
+              }
+            });
+          }
+
+          if (feature.optionSource === "artisanTools") {
+            setSourceProficiencyList(
+              "tools",
+              selections,
+              sourceName
+            );
+          }
+
+          if (
+            (Array.isArray(feature.effects)
+              ? feature.effects
+              : []
+            ).some((effect) => effect.type === "magicalSecrets")
+          ) {
+            const sourceEntry = getSpellcastingClassOptions(draft)
+              .find((entry) => {
+                return getSection16SourceKey(entry) === classEntryId;
+              });
+            const source = sourceEntry
+              ? getSection16SourceState(
+                  sourceEntry,
+                  { character: draft }
+                )
+              : classSourceStore[classEntryId];
+
+            if (source) {
+              source.magicalSecretSpellIds = uniqueCleanArray([
+                ...cleanArray(source.magicalSecretSpellIds),
+                ...selections
+              ]);
+              source.knownSpellIds = uniqueCleanArray([
+                ...cleanArray(source.knownSpellIds),
+                ...selections
+              ]);
+            }
+          }
+
+          selections.forEach((selection) => {
+            const optionEffect = feature.optionEffects?.[selection];
+            const optionDetails = feature.optionDetails?.[selection];
+
+            (Array.isArray(optionEffect)
+              ? optionEffect
+              : optionEffect
+                ? [optionEffect]
+                : []
+            ).forEach((effect) => {
+              applyEffect(effect, {
+                ...context,
+                option: selection
+              });
+            });
+
+            (Array.isArray(optionDetails?.effects)
+              ? optionDetails.effects
+              : []
+            ).forEach((effect) => {
+              applyEffect(effect, {
+                ...context,
+                option: selection
+              });
+            });
+
+            if (optionDetails?.summary) {
+              mechanics.passiveEffects.push({
+                id: `${choiceKey}:${makeSafeId(selection, "choice")}`,
+                classEntryId,
+                classId: feature.classId,
+                className: feature.className,
+                featureId: feature.id,
+                featureName: feature.name,
+                type: "selectedOption",
+                option: selection,
+                cost: optionDetails.cost,
+                summary: optionDetails.summary
+              });
+            }
+          });
+
+          if (feature.customType === "artificerInfusions") {
+            const activeIds = selections
+              .filter((value) => value.startsWith("active:"))
+              .map((value) => value.slice("active:".length));
+            const targets = Object.fromEntries(
+              selections
+                .filter((value) => value.startsWith("target:"))
+                .map((value) => {
+                  const [, infusionId, ...itemParts] = value.split(":");
+                  return [infusionId, itemParts.join(":")];
+                })
+            );
+
+            activeIds.forEach((infusionId) => {
+              const infusion = (template?.infusions || [])
+                .find((entry) => entry.id === infusionId);
+
+              if (!infusion) {
+                return;
+              }
+
+              const infusionRecord = {
+                id: `${classEntryId}:${infusion.id}`,
+                classEntryId,
+                classId: feature.classId,
+                classLevel,
+                infusionId: infusion.id,
+                name: infusion.name,
+                targetItemId: cleanString(targets[infusion.id]),
+                requiresItemTarget: infusion.requiresItemTarget === true,
+                summary: infusion.summary,
+                effects: cloneData(infusion.effects || [])
+              };
+              mechanics.infusions.push(infusionRecord);
+
+              (infusion.effects || []).forEach((effect) => {
+                const value = effect.value ??
+                  getProgressionValueByLevel(
+                    effect.valueByLevel,
+                    classLevel,
+                    0
+                  );
+
+                applyEffect({
+                  ...effect,
+                  value,
+                  infusionId: infusion.id,
+                  targetItemId: infusionRecord.targetItemId,
+                  requiresItemTarget: infusionRecord.requiresItemTarget
+                }, {
+                  ...context,
+                  option: infusion.name
+                });
+              });
+            });
+          }
+        });
+      });
+
+    mechanics.resources = Array.from(resourceById.values());
+    mechanics.restrictions = mechanics.restrictions.filter(
+      (entry, index, values) => {
+        return values.findIndex((candidate) => {
+          return candidate.id === entry.id;
+        }) === index;
+      }
+    );
+    draft.combat.classFeatureStates = {
+      ...(draft.combat.classFeatureStates || {}),
+      rageActive:
+        draft.combat.classFeatureStates?.rageActive === true
+    };
+    const hasRage = mechanics.combatProfiles.some((profile) => {
+      return profile.type === "rage";
+    });
+
+    if (!hasRage) {
+      draft.combat.classFeatureStates.rageActive = false;
+    }
+
+    const rageActive = Boolean(
+      hasRage &&
+      draft.combat.classFeatureStates.rageActive === true
+    );
+    mechanics.restrictions = mechanics.restrictions.map((entry) => {
+      return {
+        ...entry,
+        active:
+          entry.stateId === "rage"
+            ? rageActive
+            : false
+      };
+    });
+    mechanics.spellcastingBlocked = Boolean(
+      rageActive &&
+      mechanics.restrictions.some((entry) => {
+        return (
+          entry.active === true &&
+          entry.restriction === "cannotCastSpells"
+        );
+      })
+    );
+    mechanics.spellcastingBlockReasons =
+      mechanics.spellcastingBlocked
+        ? ["Rage is active"]
+        : [];
+    draft.combat.attacksPerAction = Math.max(
+      1,
+      safeNumber(
+        mechanics.attackAction?.attacks,
+        1
+      )
+    );
+    draft.magic.castingBlocked =
+      mechanics.spellcastingBlocked;
+    draft.magic.castingBlockReasons = cloneData(
+      mechanics.spellcastingBlockReasons
+    );
+    draft.classMechanics = mechanics;
+  }
+
+  function setSection12AsiChoiceValues(
+    featureId,
+    values = []
+  ) {
+    const cleanFeatureId =
+      cleanString(featureId);
+
+    if (!cleanFeatureId) {
+      return false;
+    }
+
+    const cleanValues =
+      uniqueCleanArray(values);
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+
+    if (cleanValues.length) {
+      choices[cleanFeatureId] = cleanValues;
+    } else {
+      delete choices[cleanFeatureId];
+    }
+
+    const slot =
+      getSection12UnlockedAsiSlot(cleanFeatureId);
+
+    if (slot) {
+      if (cleanValues.length) {
+        choices[slot.id] = cleanValues;
+      } else {
+        delete choices[slot.id];
+      }
+
+      if (slot.legacyId !== slot.id) {
+        delete choices[slot.legacyId];
+      }
+
+      const classEntry =
+        getClassEntryAtIndex(slot.classIndex);
+
+      if (classEntry) {
+        classEntry.choices = {
+          ...(classEntry.choices || {})
+        };
+
+        const entryChoices =
+          normalizeClassChoiceMap(
+            classEntry.choices.classFeatures
+          );
+
+        if (cleanValues.length) {
+          entryChoices[slot.id] = cleanValues;
+        } else {
+          delete entryChoices[slot.id];
+        }
+
+        if (slot.featureId !== slot.id) {
+          delete entryChoices[slot.featureId];
+        }
+
+        if (slot.legacyId !== slot.id) {
+          delete entryChoices[slot.legacyId];
+        }
+
+        classEntry.choices.classFeatures =
+          entryChoices;
+      }
+    }
+
+    creatorState.draft.classChoices = choices;
+
+    return true;
+  }
+
+  function formatSection12ClassChoiceValues(values) {
+    const cleanValues = Array.isArray(values) ? values : [];
+
+    if (
+      cleanValues.some((value) => {
+        return value.startsWith("known:") || value.startsWith("active:");
+      })
+    ) {
+      const infusionMap = new Map(
+        getAllClassTemplates()
+          .flatMap((classTemplate) => {
+            return classTemplate.infusions || [];
+          })
+          .map((infusion) => {
+            return [infusion.id, infusion.name];
+          })
+      );
+      const namesForPrefix = (prefix) => cleanValues
+        .filter((value) => value.startsWith(prefix))
+        .map((value) => {
+          const id = value.slice(prefix.length);
+          return infusionMap.get(id) || id;
+        });
+      const known = namesForPrefix("known:");
+      const active = namesForPrefix("active:");
+
+      return [
+        `Known: ${known.length ? known.join(", ") : "None"}`,
+        `Infused: ${active.length ? active.join(", ") : "None"}`
+      ].join("; ");
+    }
+
+    if (cleanValues.includes("mode:feat")) {
+      const featId = cleanString(
+        cleanValues.find((value) => value.startsWith("feat:"))
+      ).slice("feat:".length);
+      const feat = DEFAULT_FEATS.find((entry) => entry.id === featId);
+
+      return feat ? `Feat: ${feat.name}` : "Feat not selected";
+    }
+
+    if (cleanValues.includes("mode:asi")) {
+      const abilityCounts = {};
+
+      cleanValues
+        .filter((value) => value.startsWith("ability:"))
+        .forEach((value) => {
+          const abilityId = value.split(":")[1];
+          abilityCounts[abilityId] = (abilityCounts[abilityId] || 0) + 1;
+        });
+
+      const summary = Object.entries(abilityCounts)
+        .map(([abilityId, amount]) => {
+          const name = ABILITY_DEFINITIONS.find(
+            (ability) => ability.id === abilityId
+          )?.name || abilityId.toUpperCase();
+
+          return `${name} +${amount}`;
+        });
+
+      return summary.length
+        ? `Ability Scores: ${summary.join(", ")}`
+        : "Ability scores not selected";
+    }
+
+    return cleanValues.map((value) => {
+      return DEFAULT_SPELLS.find((spell) => {
+        return spell.id === value;
+      })?.name || value;
+    }).join(", ");
+  }
+
+  function getSection12AsiFeature(featureId) {
+    const multiclassSlot =
+      getSection12UnlockedAsiSlot(featureId);
+
+    if (multiclassSlot) {
+      return {
+        id: multiclassSlot.id,
+        level: multiclassSlot.classLevel,
+        optionSource: "asiOrFeat",
+        classId: multiclassSlot.classId,
+        className: multiclassSlot.className
+      };
+    }
+
+    return getSection12ClassFeaturesThroughLevel()
+      .find((feature) => {
+        return (
+          feature.id === featureId &&
+          feature.optionSource === "asiOrFeat"
+        );
+      }) || null;
+  }
+
+  function syncSection12AdvancementChoice(featureId) {
+    const feature = getSection12AsiFeature(featureId);
+    const multiclassSlot =
+      getSection12UnlockedAsiSlot(featureId);
+    const primaryClass = getSection12PrimaryClass();
+
+    if (!feature || (!primaryClass && !multiclassSlot)) {
+      return false;
+    }
+
+    const classId = makeSafeId(
+      multiclassSlot?.classId ||
+        primaryClass?.classId ||
+        primaryClass?.className,
+      "class"
+    );
+    const classLevel = Math.max(
+      1,
+      Math.round(
+        safeNumber(
+          multiclassSlot?.classLevel ??
+            feature.level,
+          1
+        )
+      )
+    );
+    const id =
+      multiclassSlot?.id ||
+      `${classId}-level-${classLevel}-asi`;
+    const state = getSection12AsiChoiceState(featureId);
+    const feat = DEFAULT_FEATS.find((entry) => {
+      return entry.id === state.featId;
+    });
+    const choices = normalizeAdvancementChoices(
+      creatorState.draft.advancementChoices
+    ).filter((choice) => {
+      return !(
+        choice.id === id ||
+        choice.id === multiclassSlot?.legacyId ||
+        (
+          multiclassSlot &&
+          cleanString(
+            choice.classEntryId ||
+              choice.entryId
+          ) === multiclassSlot.classEntryId &&
+          safeNumber(choice.classLevel, 0) ===
+            classLevel
+        ) ||
+        (
+          multiclassSlot &&
+          makeSafeId(choice.classId, "") === classId &&
+          safeNumber(choice.classLevel, 0) ===
+            classLevel
+        )
+      );
+    });
+
+    if (state.mode) {
+      choices.push({
+        id,
+        type: "asi-or-feat",
+        classEntryId:
+          multiclassSlot?.classEntryId || "",
+        classId,
+        classLevel,
+        mode: state.mode,
+        featId: state.mode === "feat" ? state.featId : "",
+        featName:
+          state.mode === "feat"
+            ? feat?.name || ""
+            : "",
+        featChoices:
+          state.mode === "feat"
+            ? normalizeFeatChoiceSelections(state.featChoices)
+            : {}
+      });
+    }
+
+    creatorState.draft.advancementChoices = choices;
+
+    return true;
+  }
+
+  function setSection12AsiBonusSource(
+    featureId,
+    abilities = []
+  ) {
+    const sourceName =
+      `class-asi:${featureId}`;
+    const sources =
+      ensureAbilityBonusSources(
+        creatorState.draft
+      );
+
+    delete sources[sourceName];
+
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
+    const bonusMap = createAbilityMap(0);
+    const normalAbilityScores =
+      createNormalAbilityCapScoreMap(
+        creatorState.draft
+      );
+
+    abilities.forEach((abilityId) => {
+      if (Object.hasOwn(bonusMap, abilityId)) {
+        addCappedNormalAbilityIncrease({
+          bonusMap,
+          scoreMap:
+            normalAbilityScores,
+          abilityId,
+          amount: 1,
+          maximum:
+            DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM
+        });
+      }
+    });
+
+    setAbilityBonusSource(
+      sourceName,
+      bonusMap
+    );
+  }
+
+  function removeSection12AsiFeatIfUnused(featId) {
+    const cleanFeatId = cleanString(featId);
+
+    if (!cleanFeatId) {
+      return;
+    }
+
+    const stillUsed = Object.values(
+      normalizeClassChoiceMap(
+        creatorState.draft.classChoices
+      )
+    ).some((values) => {
+      return values.includes(`feat:${cleanFeatId}`);
+    }) ||
+      getClassProgressionEntries(
+        creatorState.draft
+      ).some((classEntry) => {
+        return Object.values(
+          normalizeClassChoiceMap(
+            classEntry?.choices
+              ?.classFeatures
+          )
+        ).some((values) => {
+          return values.includes(
+            `feat:${cleanFeatId}`
+          );
+        });
+      });
+
+    if (!stillUsed) {
+      creatorState.draft.feats = normalizeFeatIds(
+        creatorState.draft.feats
+      ).filter((id) => id !== cleanFeatId);
+
+      creatorState.draft.selectedFeats =
+        normalizeFeatIds(
+          creatorState.draft
+            .selectedFeats
+        ).filter((id) => {
+          return id !== cleanFeatId;
+        });
+    }
+  }
+
+  function setSection12AsiMode(featureId, mode) {
+    if (
+      !getSection12AsiFeature(featureId) ||
+      !["asi", "feat"].includes(mode)
+    ) {
+      return false;
+    }
+
+    const previous = getSection12AsiChoiceState(featureId);
+
+    if (previous.mode === mode) {
+      return false;
+    }
+
+    setSection12AsiChoiceValues(
+      featureId,
+      [`mode:${mode}`]
+    );
+
+    setSection12AsiBonusSource(featureId, []);
+    removeSection12AsiFeatIfUnused(previous.featId);
+    syncSection12AdvancementChoice(featureId);
+    applySelectedFeatMechanics();
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function adjustSection12AsiAbility(
+    featureId,
+    abilityId,
+    delta
+  ) {
+    if (
+      !getSection12AsiFeature(featureId) ||
+      !ABILITY_DEFINITIONS.some((ability) => ability.id === abilityId)
+    ) {
+      return false;
+    }
+
+    const state = getSection12AsiChoiceState(featureId);
+    const abilities = [...state.abilities];
+    const amount = Math.sign(safeNumber(delta, 0));
+
+    if (amount > 0) {
+      const currentCount = abilities.filter(
+        (id) => id === abilityId
+      ).length;
+      const scoreWithoutThisAsi =
+        getNormalAbilityScoreForCap(
+          creatorState.draft,
+          abilityId,
+          {
+            excludedSource:
+              `class-asi:${featureId}`
+          }
+        );
+
+      if (
+        abilities.length >= 2 ||
+        scoreWithoutThisAsi + currentCount >= 20
+      ) {
+        return false;
+      }
+
+      abilities.push(abilityId);
+    } else if (amount < 0) {
+      const index = abilities.lastIndexOf(abilityId);
+
+      if (index < 0) {
+        return false;
+      }
+
+      abilities.splice(index, 1);
+    } else {
+      return false;
+    }
+
+    setSection12AsiChoiceValues(
+      featureId,
+      [
+        "mode:asi",
+        ...abilities.map((id, index) => {
+          return `ability:${id}:${index + 1}`;
+        })
+      ]
+    );
+
+    setSection12AsiBonusSource(featureId, abilities);
+    syncSection12AdvancementChoice(featureId);
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function getFeatPrerequisiteResult(
+    feat,
+    character = creatorState.draft,
+    options = {}
+  ) {
+    const requirements = Array.isArray(feat?.prerequisites)
+      ? feat.prerequisites
+      : [];
+    const reasons = [];
+    const advisories = [];
+    const settingRequirements = [];
+    const currentSlot = getSection12UnlockedAsiSlot(
+      options.featureId,
+      character
+    );
+    const selectedFeatInstances = getSelectedDefaultFeatInstances(character);
+    const selectedElsewhere = selectedFeatInstances.some((instance) => {
+      return (
+        instance.featId === feat?.id &&
+        ![
+          cleanString(options.featureId),
+          cleanString(currentSlot?.id),
+          cleanString(currentSlot?.legacyId),
+          cleanString(currentSlot?.featureId)
+        ].filter(Boolean).includes(instance.slotId)
+      );
+    });
+    const normalizedProficiencies = (category) => {
+      return uniqueCleanArray(character?.proficiencies?.[category])
+        .map((value) => makeSafeId(value, ""));
+    };
+    const hasSpellcasting = () => {
+      const classSpellcasting =
+        getCharacterSpellcastingInfo(
+          character
+        )
+        .some((entry) => {
+          return (
+            safeNumber(
+              entry.cantripsKnown,
+              0
+            ) > 0 ||
+            safeNumber(
+              entry.spellsKnown,
+              0
+            ) > 0 ||
+            Object.values(
+              entry.spellSlots ||
+              {}
+            ).some((slots) => {
+              return safeNumber(
+                slots,
+                0
+              ) > 0;
+            }) ||
+            safeNumber(
+              entry.pactMagic?.slots,
+              0
+            ) > 0
+          );
+        });
+      const magic =
+        character?.magic || {};
+      const directSpellIds = [
+        ...uniqueCleanArray(
+          magic.knownSpellIds
+        ),
+        ...uniqueCleanArray(
+          magic.preparedSpellIds
+        ),
+        ...uniqueCleanArray(
+          magic.innateSpellIds
+        ),
+        ...uniqueCleanArray(
+          magic.customSpellIds
+        )
+      ];
+      const spellRecords = [
+        ...(
+          Array.isArray(
+            magic.innateSpells
+          )
+            ? magic.innateSpells
+            : []
+        ),
+        ...(
+          Array.isArray(
+            magic.customSpells
+          )
+            ? magic.customSpells
+            : []
+        ),
+        ...(
+          Array.isArray(
+            character
+              ?.featMechanics
+              ?.spellcasting
+          )
+            ? character
+                .featMechanics
+                .spellcasting
+            : []
+        )
+      ];
+      const sourceHasSpells = (
+        source
+      ) => {
+        return (
+          uniqueCleanArray(
+            source?.spellIds
+          ).length > 0 ||
+          (
+            Array.isArray(
+              source?.spellRecords
+            ) &&
+            source.spellRecords
+              .length > 0
+          )
+        );
+      };
+      const storedSources = [
+        ...Object.values(
+          magic.classSources ||
+          {}
+        ),
+        ...Object.values(
+          magic.featSources ||
+          {}
+        )
+      ];
+
+      return (
+        classSpellcasting ||
+        directSpellIds.length > 0 ||
+        spellRecords.length > 0 ||
+        storedSources.some(
+          sourceHasSpells
+        )
+      );
+    };
+
+    if (selectedElsewhere && feat?.repeatable !== true) {
+      reasons.push("Already selected in another advancement slot");
+    }
+
+    requirements.forEach((requirement) => {
+      const type = cleanString(requirement?.type);
+
+      if (type === "spellcasting") {
+        if (!hasSpellcasting()) {
+          reasons.push("Requires spellcasting");
+        }
+        return;
+      }
+
+      if (type === "spellcastingOrPactMagic") {
+        if (!hasSpellcasting()) {
+          reasons.push("Requires Spellcasting or Pact Magic");
+        }
+        return;
+      }
+
+      if (type === "spellcastingOrRuneCarver") {
+        const backgroundId = makeSafeId(
+          character?.background?.id || character?.background?.name,
+          ""
+        );
+
+        if (!hasSpellcasting() && backgroundId !== "rune-carver") {
+          reasons.push("Requires spellcasting or the Rune Carver background");
+        }
+        return;
+      }
+
+      if (type === "level" || type === "minimumLevel") {
+        const minimum = Math.max(
+          1,
+          safeNumber(
+            requirement.minimum ?? requirement.value ?? requirement.level,
+            1
+          )
+        );
+        const level = clampLevel(
+          character?.classProgression?.totalLevel || character?.level || 1
+        );
+
+        if (level < minimum) {
+          reasons.push(`Requires level ${minimum}`);
+        }
+        return;
+      }
+
+      if (type === "abilityMinimum" || type === "ability") {
+        const abilityId = cleanString(requirement.ability).toLowerCase();
+        const minimum = safeNumber(
+          requirement.minimum ?? requirement.value,
+          13
+        );
+        const score =
+          getAbilityScore(
+            character,
+            abilityId
+          );
+
+        if (!abilityId || score < minimum) {
+          reasons.push(
+            `Requires ${abilityId ? abilityId.toUpperCase() : "an ability"} ${minimum}`
+          );
+        }
+        return;
+      }
+
+      if (type === "abilityAnyMinimum") {
+        const minimum = safeNumber(
+          requirement.minimum ?? requirement.value,
+          13
+        );
+        const abilityIds = uniqueCleanArray(requirement.abilities)
+          .map((ability) => cleanString(ability).toLowerCase());
+        const met = abilityIds.some((abilityId) => {
+          return (
+            getAbilityScore(
+              character,
+              abilityId
+            ) >= minimum
+          );
+        });
+
+        if (!met) {
+          reasons.push(
+            `Requires ${abilityIds.map((id) => id.toUpperCase()).join(" or ")} ${minimum}`
+          );
+        }
+        return;
+      }
+
+      if (type === "class") {
+        const allowedIds = uniqueCleanArray(
+          requirement.classIds || requirement.from || []
+        ).map((id) => makeSafeId(id, ""));
+        const hasClass = getCharacterClassEntries(character)
+          .some((entry) => allowedIds.includes(makeSafeId(entry.classId, "")));
+
+        if (!hasClass) {
+          reasons.push(
+            `Requires class: ${allowedIds.join(", ") || "specified class"}`
+          );
+        }
+        return;
+      }
+
+      if (type === "classOrBackground") {
+        const classIds = uniqueCleanArray(requirement.classIds)
+          .map((id) => makeSafeId(id, ""));
+        const backgroundIds = uniqueCleanArray(requirement.backgroundIds)
+          .map((id) => makeSafeId(id, ""));
+        const hasClass = getCharacterClassEntries(character)
+          .some((entry) => classIds.includes(makeSafeId(entry.classId, "")));
+        const backgroundId = makeSafeId(
+          character?.background?.id || character?.background?.name,
+          ""
+        );
+
+        if (!hasClass && !backgroundIds.includes(backgroundId)) {
+          reasons.push("Requires the listed class or background");
+        }
+        return;
+      }
+
+      if (type === "species") {
+        const speciesId = makeSafeId(
+          character?.species?.id || character?.species?.name,
+          ""
+        );
+        const allowedSpecies = uniqueCleanArray(requirement.speciesIds)
+          .map((id) => makeSafeId(id, ""));
+        const selectedSubraceId = makeSafeId(
+          character?.species
+            ?.choices
+            ?.subraceId ||
+          character?.species
+            ?.choices
+            ?.subraceSnapshot
+            ?.id ||
+          character?.species
+            ?.subraceId ||
+          character?.species
+            ?.subrace
+            ?.id ||
+          character?.species
+            ?.subrace
+            ?.name,
+          ""
+        );
+        const allowedSubraces = uniqueCleanArray(requirement.subraceIds)
+          .map((id) => makeSafeId(id, ""));
+        const speciesMet = allowedSpecies.includes(speciesId);
+        const subraceMet = !allowedSubraces.length ||
+          allowedSubraces.includes(selectedSubraceId);
+
+        if (!speciesMet || !subraceMet) {
+          reasons.push(
+            `Requires species: ${allowedSpecies.join(", ") || "specified species"}`
+          );
+        }
+        return;
+      }
+
+      if (type === "speciesSize") {
+        const allowedSizes = uniqueCleanArray(requirement.sizes)
+          .map((size) => size.toLowerCase());
+        const size = cleanString(character?.identity?.size).toLowerCase();
+
+        if (!allowedSizes.includes(size)) {
+          reasons.push(`Requires size: ${allowedSizes.join(" or ")}`);
+        }
+        return;
+      }
+
+      if (type === "speciesSizeOrSpecies") {
+        const allowedSizes = uniqueCleanArray(requirement.sizes)
+          .map((size) => size.toLowerCase());
+        const allowedSpecies = uniqueCleanArray(requirement.speciesIds)
+          .map((id) => makeSafeId(id, ""));
+        const size = cleanString(character?.identity?.size).toLowerCase();
+        const speciesId = makeSafeId(
+          character?.species?.id || character?.species?.name,
+          ""
+        );
+
+        if (!allowedSizes.includes(size) && !allowedSpecies.includes(speciesId)) {
+          reasons.push("Requires a Small species or dwarf");
+        }
+        return;
+      }
+
+      if (type === "armorProficiency") {
+        const category = makeSafeId(requirement.category, "");
+        const met = normalizedProficiencies("armor")
+          .some((value) => value.includes(category));
+
+        if (!met) {
+          reasons.push(`Requires ${requirement.category} armor proficiency`);
+        }
+        return;
+      }
+
+      if (type === "weaponProficiency") {
+        const categories = uniqueCleanArray(
+          requirement.categories || [requirement.category]
+        ).map((value) => makeSafeId(value, ""));
+        const proficiencies = normalizedProficiencies("weapons");
+        const met = categories.some((category) => {
+          return proficiencies.some((value) => value.includes(category));
+        });
+
+        if (!met) {
+          reasons.push("Requires proficiency with a simple or martial weapon");
+        }
+        return;
+      }
+
+      if (type === "feat") {
+        const featIds = uniqueCleanArray(
+          requirement.featIds || [requirement.featId]
+        ).map((id) => makeSafeId(id, ""));
+        const met = selectedFeatInstances.some((instance) => {
+          return featIds.includes(instance.featId);
+        });
+
+        if (!met) {
+          reasons.push(`Requires feat: ${featIds.join(", ")}`);
+        }
+        return;
+      }
+
+      if (type === "featChoice") {
+        const requiredFeatId = makeSafeId(requirement.featId, "");
+        const requiredValues =
+          uniqueCleanArray(
+            requirement.values
+          ).map((value) => {
+            return makeSafeId(
+              value,
+              ""
+            );
+          });
+        const met = selectedFeatInstances.some((instance) => {
+          return (
+            instance.featId === requiredFeatId &&
+            uniqueCleanArray(
+              instance.featChoices?.[requirement.choiceId]
+            ).some((value) => {
+              return requiredValues
+                .includes(
+                  makeSafeId(
+                    value,
+                    ""
+                  )
+                );
+            })
+          );
+        });
+
+        if (!met) {
+          reasons.push(`Requires the matching ${requiredFeatId} choice`);
+        }
+        return;
+      }
+
+      if (type === "setting") {
+        const setting =
+          cleanString(
+            requirement.setting ||
+            requirement.name
+          );
+
+        if (setting) {
+          settingRequirements.push(
+            setting
+          );
+          advisories.push(
+            `Setting requirement: ${setting} (advisory; not enforced)`
+          );
+        }
+        return;
+      }
+
+      if (type) {
+        reasons.push(`Unsupported prerequisite: ${type}`);
+      }
+    });
+
+    return {
+      met: reasons.length === 0,
+      reasons,
+      advisories:
+        uniqueCleanArray(
+          advisories
+        ),
+      settingRequirements:
+        uniqueCleanArray(
+          settingRequirements
+        ),
+      settingPolicy:
+        ACTIVE_RULESET
+          .featSettingPrerequisites ||
+        "advisory"
+    };
+  }
+
+  function getFeatPrerequisiteLabel(feat, options = {}) {
+    const result = getFeatPrerequisiteResult(
+      feat,
+      creatorState.draft,
+      options
+    );
+
+    if (!result.met) {
+      return [
+        ...result.reasons,
+        ...result.advisories
+      ].join("; ");
+    }
+
+    if (!Array.isArray(feat?.prerequisites) || !feat.prerequisites.length) {
+      return "No prerequisite";
+    }
+
+    return result.advisories.length
+      ? result.advisories.join("; ")
+      : "Prerequisites met";
+  }
+
+  function setSection12AsiFeat(featureId, featId) {
+    if (!getSection12AsiFeature(featureId)) {
+      return false;
+    }
+
+    const cleanFeatId = cleanString(featId);
+
+    const selectedFeat = DEFAULT_FEATS.find((feat) => {
+      return feat.id === cleanFeatId;
+    });
+
+    if (
+      cleanFeatId &&
+      (
+        !selectedFeat ||
+        cleanFeatId ===
+          "ability-score-improvement"
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      selectedFeat &&
+      !getFeatPrerequisiteResult(
+        selectedFeat,
+        creatorState.draft,
+        { featureId }
+      ).met
+    ) {
+      return false;
+    }
+
+    const previous = getSection12AsiChoiceState(featureId);
+
+    setSection12AsiChoiceValues(
+      featureId,
+      [
+        "mode:feat",
+        ...(cleanFeatId ? [`feat:${cleanFeatId}`] : [])
+      ]
+    );
+
+    setSection12AsiBonusSource(featureId, []);
+    removeSection12AsiFeatIfUnused(previous.featId);
+
+    if (cleanFeatId) {
+      creatorState.draft.feats = [
+        ...new Set([
+          ...normalizeFeatIds(creatorState.draft.feats),
+          cleanFeatId
+        ])
+      ];
+    }
+
+    syncSection12AdvancementChoice(featureId);
+    applySelectedFeatMechanics();
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function syncSection12AsiChoicesForLevel() {
+    if (
+      isMulticlassDraft(
+        creatorState.draft
+      )
+    ) {
+      const unlockedSlots =
+        getUnlockedFeatChoiceSlots(
+          creatorState.draft
+        );
+      const availableSlotIds =
+        new Set(
+          unlockedSlots.map((slot) => slot.id)
+        );
+
+      removeAbilityBonusSourcesByPrefix([
+        "class-asi:"
+      ]);
+
+      unlockedSlots.forEach((slot) => {
+        const state =
+          getSection12AsiChoiceState(slot.id);
+
+        setSection12AsiBonusSource(
+          slot.id,
+          state.mode === "asi"
+            ? state.abilities
+            : []
+        );
+
+        if (state.mode) {
+          syncSection12AdvancementChoice(slot.id);
+        }
+      });
+
+      creatorState.draft.advancementChoices =
+        normalizeAdvancementChoices(
+          creatorState.draft.advancementChoices
+        );
+
+      const removedFeatIds =
+        creatorState.draft
+          .advancementChoices
+          .filter((choice) => {
+            return (
+              choice.type === "asi-or-feat" &&
+              !availableSlotIds.has(
+                choice.id
+              )
+            );
+          })
+          .map((choice) => {
+            return cleanString(
+              choice.featId
+            );
+          })
+          .filter(Boolean);
+
+      creatorState.draft
+        .advancementChoices =
+          creatorState.draft
+            .advancementChoices
+            .filter((choice) => {
+          return (
+            choice.type !== "asi-or-feat" ||
+            availableSlotIds.has(choice.id)
+          );
+        });
+
+      removedFeatIds.forEach(
+        removeSection12AsiFeatIfUnused
+      );
+
+      return;
+    }
+
+    const availableFeatures = getSection12ClassFeaturesThroughLevel()
+      .filter((feature) => feature.optionSource === "asiOrFeat");
+    const availableIds = new Set(
+      availableFeatures.map((feature) => feature.id)
+    );
+    const unlockedSlots = getUnlockedFeatChoiceSlots(
+      creatorState.draft
+    );
+    const availableChoiceIds = new Set([
+      ...availableIds,
+      ...unlockedSlots.map((slot) => slot.id),
+      ...unlockedSlots.map((slot) => slot.legacyId)
+    ]);
+    const choices = normalizeClassChoiceMap(
+      creatorState.draft.classChoices
+    );
+    const removedFeatIds = [];
+
+    removeAbilityBonusSourcesByPrefix([
+      "class-asi:"
+    ]);
+
+    Object.keys(choices).forEach((featureId) => {
+      const values = choices[featureId];
+      const isAsiChoice = values.some((value) => {
+        return (
+          value.startsWith("mode:") ||
+          value.startsWith("ability:") ||
+          value.startsWith("feat:")
+        );
+      });
+
+      if (!isAsiChoice) {
+        return;
+      }
+
+      if (!availableChoiceIds.has(featureId)) {
+        values.forEach((value) => {
+          if (value.startsWith("feat:")) {
+            removedFeatIds.push(value.slice("feat:".length));
+          }
+        });
+        delete choices[featureId];
+        setSection12AsiBonusSource(featureId, []);
+        return;
+      }
+
+      const stateAbilities = values
+        .filter((value) => value.startsWith("ability:"))
+        .map((value) => value.split(":")[1])
+        .filter(Boolean);
+
+      setSection12AsiBonusSource(featureId, stateAbilities);
+    });
+
+    creatorState.draft.classChoices = choices;
+    removedFeatIds.forEach(removeSection12AsiFeatIfUnused);
+
+    const primaryClass = getSection12PrimaryClass();
+    const classId = makeSafeId(
+      primaryClass?.classId || primaryClass?.className,
+      ""
+    );
+    const classEntryId = cleanString(
+      primaryClass?.entryId
+    );
+    const availableSlotIds = new Set(
+      unlockedSlots.map((slot) => slot.id)
+    );
+
+    unlockedSlots.forEach((slot) => {
+      if (getSection12AsiChoiceState(slot.id).mode) {
+        syncSection12AdvancementChoice(slot.id);
+      }
+    });
+
+    availableIds.forEach((featureId) => {
+      if (choices[featureId]) {
+        syncSection12AdvancementChoice(featureId);
+      }
+    });
+
+    creatorState.draft.advancementChoices =
+      normalizeAdvancementChoices(
+        creatorState.draft.advancementChoices
+      ).filter((choice) => {
+        const belongsToPrimary =
+          cleanString(choice.classEntryId) ===
+            classEntryId ||
+          (
+            !cleanString(choice.classEntryId) &&
+            choice.classId === classId
+          );
+
+        return (
+          choice.type !== "asi-or-feat" ||
+          !belongsToPrimary ||
+          availableSlotIds.has(choice.id)
+        );
+      });
+  }
+
+  function formatSection12FeatEffect(effect) {
+    if (effect?.summary) {
+      return effect.summary;
+    }
+
+    const type = cleanString(effect?.type);
+
+    if (type === "abilityIncrease") {
+      return `${effect.ability} +${safeNumber(effect.value, 1)} (maximum ${getFeatAbilityEffectMaximum(effect)})`;
+    }
+
+    if (type === "abilityChoice") {
+      return `Chosen ability +${safeNumber(effect.increase, 1)} (maximum ${getFeatAbilityEffectMaximum(effect)})`;
+    }
+
+    if (type === "abilityScoreImprovement") {
+      return `${safeNumber(effect.points, 2)} ability-score increases (maximum ${getFeatAbilityEffectMaximum(effect)})`;
+    }
+
+    if (type === "hpBonus") {
+      return `${safeNumber(effect.perLevel, 0)} maximum hit points per level`;
+    }
+
+    if (type === "initiativeBonus") {
+      return `Initiative +${safeNumber(effect.value, 0)}`;
+    }
+
+    if (type === "speedBonus") {
+      return `Walking speed +${safeNumber(effect.value, 0)} feet`;
+    }
+
+    if (type === "resource") {
+      return `${effect.label || effect.id}: ${effect.uses} use(s), recharges on ${effect.recharge || "long rest"}`;
+    }
+
+    if (type === "damageResistance") {
+      return `Resistance: ${uniqueCleanArray(effect.damageTypes || [effect.damageType]).join(", ")}`;
+    }
+
+    if (type === "armorProficiency") {
+      return `Armor proficiency: ${uniqueCleanArray(effect.values).join(", ")}`;
+    }
+
+    if (type === "weaponProficiency") {
+      return `Weapon proficiency: ${uniqueCleanArray(effect.values).join(", ")}`;
+    }
+
+    if (type === "spellGrant") {
+      return `Granted spell: ${uniqueCleanArray(effect.spellIds || [effect.spellId]).join(", ")}`;
+    }
+
+    if (type === "spellChoice") {
+      return "Choose the listed feat spell(s).";
+    }
+
+    if (type === "proficiencyChoice") {
+      return `Choose ${safeNumber(effect.choose, 1)} proficiency option(s).`;
+    }
+
+    if (type === "savingThrowProficiencyFromAbilityChoice") {
+      return "Gain the chosen ability's saving throw proficiency.";
+    }
+
+    return cleanString(type)
+      .replace(/([a-z])([A-Z])/g, "$1 $2") ||
+      "Structured feat effect";
+  }
+
+  function renderSection12FeatChoices(feature, state, feat) {
+    const featChoices = Array.isArray(feat?.choices) ? feat.choices : [];
+
+    if (!featChoices.length) {
+      return "";
+    }
+
+    return `
+      <div class="hg-character-field-grid">
+        ${featChoices.map((featChoice) => {
+          const options = getSection12FeatChoiceOptions(featChoice, state);
+          const selectedValues = uniqueCleanArray(
+            state.featChoices?.[featChoice.id]
+          );
+          const limit = getSection12FeatChoiceLimit(featChoice);
+          const multiple = limit > 1;
+
+          return `
+            <div class="hg-character-field">
+              <label for="ccFeatChoice-${escapeHtml(feature.id)}-${escapeHtml(featChoice.id)}">
+                ${escapeHtml(featChoice.label || featChoice.id)}
+                ${multiple ? `(choose ${limit})` : ""}
+              </label>
+
+              ${options.length
+                ? `
+                  <select
+                    id="ccFeatChoice-${escapeHtml(feature.id)}-${escapeHtml(featChoice.id)}"
+                    data-cc-action-change="set-asi-feat-choice"
+                    data-feature-id="${escapeHtml(feature.id)}"
+                    data-choice-id="${escapeHtml(featChoice.id)}"
+                    ${multiple ? `multiple size="${Math.min(8, Math.max(3, limit + 1))}"` : ""}
+                  >
+                    ${multiple ? "" : '<option value="">Choose...</option>'}
+                    ${options.map((option) => {
+                      const selected = selectedValues.includes(option.value);
+
+                      return `
+                        <option
+                          value="${escapeHtml(option.value)}"
+                          ${selected ? "selected" : ""}
+                        >${escapeHtml(option.label)}</option>
+                      `;
+                    }).join("")}
+                  </select>
+                `
+                : `
+                  <input
+                    id="ccFeatChoice-${escapeHtml(feature.id)}-${escapeHtml(featChoice.id)}"
+                    type="text"
+                    value="${escapeHtml(selectedValues.join(", "))}"
+                    placeholder="Enter ${escapeHtml(featChoice.label || "choice")}"
+                    data-cc-action-change="set-asi-feat-choice"
+                    data-feature-id="${escapeHtml(feature.id)}"
+                    data-choice-id="${escapeHtml(featChoice.id)}"
+                  >
+                `}
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderSection12CompactAsiChoice(feature) {
+    const state = getSection12AsiChoiceState(feature.id);
+    const pointsUsed = state.abilities.length;
+    const selectedFeat = state.featId
+      ? DEFAULT_FEATS.find((feat) => {
+          return feat.id === state.featId;
+        })
+      : null;
+
+    return `
+      <p>
+        <b>
+          Advancement Choice — Level ${safeNumber(feature.level, 1)}
+        </b>
+      </p>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          class="${state.mode === "asi" ? "selected" : ""}"
+          data-cc-action="set-asi-mode"
+          data-feature-id="${escapeHtml(feature.id)}"
+          data-mode="asi"
+        >
+          Ability Score Improvement
+        </button>
+
+        <button
+          type="button"
+          class="${state.mode === "feat" ? "selected" : ""}"
+          data-cc-action="set-asi-mode"
+          data-feature-id="${escapeHtml(feature.id)}"
+          data-mode="feat"
+        >
+          Feat
+        </button>
+      </div>
+
+      ${state.mode === "asi"
+        ? `
+          <p class="small">
+            <b>Ability Score Improvement selected.</b>
+          </p>
+
+          <p class="small"><b>${2 - pointsUsed}</b> increase(s) remaining</p>
+
+          <div class="hg-character-field-grid three">
+            ${ABILITY_DEFINITIONS.map((ability) => {
+              const count = state.abilities.filter(
+                (id) => id === ability.id
+              ).length;
+              const scoreForCap =
+                getNormalAbilityScoreForCap(
+                  creatorState.draft,
+                  ability.id,
+                  {
+                    excludedSource:
+                      `class-asi:${feature.id}`
+                  }
+                ) + count;
+
+              return `
+                <div class="hg-character-field">
+                  <label>${escapeHtml(ability.name)} +${count}</label>
+                  <div class="hg-character-inline-actions">
+                    <button
+                      type="button"
+                      data-cc-action="adjust-asi-ability"
+                      data-feature-id="${escapeHtml(feature.id)}"
+                      data-ability-id="${escapeHtml(ability.id)}"
+                      data-delta="-1"
+                      ${count ? "" : "disabled"}
+                      aria-label="Decrease ${escapeHtml(ability.name)}"
+                    >-</button>
+                    <button
+                      type="button"
+                      data-cc-action="adjust-asi-ability"
+                      data-feature-id="${escapeHtml(feature.id)}"
+                      data-ability-id="${escapeHtml(ability.id)}"
+                      data-delta="1"
+                      ${pointsUsed >= 2 || scoreForCap >= DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM ? "disabled" : ""}
+                      aria-label="Increase ${escapeHtml(ability.name)}"
+                    >+</button>
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `
+        : state.mode === "feat"
+          ? `
+            <div class="hg-character-field">
+              ${selectedFeat
+                ? `
+                  <div class="hg-character-current-choice">
+                    <b>Current Choice:</b>
+                    Feat: ${escapeHtml(selectedFeat.name)}
+                    <br>${escapeHtml(selectedFeat.summary || "")}
+                    <br><span class="small">${escapeHtml(selectedFeat.description || "")}</span>
+                    <ul class="small">
+                      ${(Array.isArray(selectedFeat.effects) ? selectedFeat.effects : [])
+                        .map((effect) => {
+                          return `<li>${escapeHtml(formatSection12FeatEffect(effect))}</li>`;
+                        })
+                        .join("")}
+                    </ul>
+                    ${renderSection12FeatChoices(feature, state, selectedFeat)}
+                  </div>
+                `
+                : `
+                  <div class="hg-character-current-choice">
+                    <b>Current Choice:</b> Pending feat choice.
+                  </div>
+                `}
+
+              <details
+                class="hg-feat-picker-panel"
+                data-cc-asi-feat-picker="true"
+                data-feature-id="${escapeHtml(feature.id)}"
+                ${selectedFeat ? "" : "open"}
+              >
+                <summary>
+                  ${selectedFeat ? "Change Feat" : "Choose Feat"}
+                </summary>
+
+                <div class="hg-feat-picker-toolbar">
+                  <label for="ccFeatSearch-${escapeHtml(feature.id)}">
+                    Search Feats
+                  </label>
+
+                  <input
+                    id="ccFeatSearch-${escapeHtml(feature.id)}"
+                    type="search"
+                    placeholder="Search by feat name or description..."
+                    data-cc-action-input="filter-asi-feats"
+                    data-feature-id="${escapeHtml(feature.id)}"
+                    autocomplete="off"
+                  >
+                </div>
+
+                <div class="hg-feat-picker-scroll">
+                  <div class="hg-character-choice-grid">
+                    ${DEFAULT_FEATS
+                      .filter((feat) => {
+                        return feat.id !==
+                          "ability-score-improvement";
+                      })
+                      .map((feat) => {
+                  const prerequisite = getFeatPrerequisiteResult(
+                    feat,
+                    creatorState.draft,
+                    { featureId: feature.id }
+                  );
+                  const selected = state.featId === feat.id;
+                  const alreadySelected =
+                    !selected &&
+                    prerequisite.reasons.includes(
+                      "Already selected in another advancement slot"
+                    );
+                  const prerequisiteFailed =
+                    !selected &&
+                    !alreadySelected &&
+                    !prerequisite.met;
+                  const buttonLabel =
+                    selected
+                      ? "Selected"
+                      : alreadySelected
+                        ? "Already selected"
+                        : prerequisiteFailed
+                          ? "Prerequisite not met"
+                          : "Choose Feat";
+                  const searchText = [
+                    feat.name,
+                    feat.summary,
+                    feat.description,
+                    ...(Array.isArray(feat.tags) ? feat.tags : [])
+                  ].join(" ").toLowerCase();
+
+                  return `
+                    <article
+                      class="hg-character-choice-card ${selected ? "selected" : ""} ${alreadySelected || prerequisiteFailed ? "unavailable" : ""}"
+                      data-cc-feat-option="true"
+                      data-feat-search-text="${escapeHtml(searchText)}"
+                    >
+                      <h3>${escapeHtml(feat.name)}</h3>
+
+                      <p>
+                        ${escapeHtml(feat.summary || "No summary provided.")}
+                      </p>
+
+                      <p class="small">
+                        ${escapeHtml(feat.description || "No description provided.")}
+                        <br><b>Prerequisite:</b>
+                        ${escapeHtml(getFeatPrerequisiteLabel(feat, { featureId: feature.id }))}
+                        ${prerequisite.settingRequirements.length
+                          ? `<br><b>Setting:</b> ${escapeHtml(
+                              `${prerequisite.settingRequirements.join(", ")} (advisory; not enforced)`
+                            )}`
+                          : ""}
+                        ${feat.repeatable === true ? "<br><b>Repeatable:</b> Yes" : ""}
+                      </p>
+
+                      ${
+                        alreadySelected ||
+                        prerequisiteFailed
+                          ? `
+                            <p class="small hg-feat-option-status">
+                              ${escapeHtml(buttonLabel)}
+                            </p>
+                          `
+                          : ""
+                      }
+
+                      <div class="hg-character-card-actions">
+                        <button
+                          type="button"
+                          data-cc-action="choose-asi-feat"
+                          data-feature-id="${escapeHtml(feature.id)}"
+                          data-feat-id="${escapeHtml(feat.id)}"
+                          ${selected || alreadySelected || prerequisiteFailed ? "disabled" : ""}
+                        >
+                          ${buttonLabel}
+                        </button>
+                      </div>
+                    </article>
+                  `;
+                    }).join("")}
+                  </div>
+                </div>
+
+                <div
+                  class="hg-character-placeholder"
+                  data-cc-feat-no-results="true"
+                  hidden
+                >
+                  No feats match that search.
+                </div>
+              </details>
+            </div>
+          `
+          : ""}
+    `;
+  }
+
+  function renderSection12AsiChoice(feature) {
+    return renderSection12CompactAsiChoice(
+      feature
+    );
+  }
+
+  function getSection12ArtificerInfusionState(
+    feature
+  ) {
+    const values = getSection12FeatureStoredChoices(feature);
+    const targets = Object.fromEntries(
+      values
+        .filter((value) => value.startsWith("target:"))
+        .map((value) => {
+          const [, infusionId, ...itemParts] = value.split(":");
+          return [infusionId, itemParts.join(":")];
+        })
+    );
+
+    return {
+      knownIds: values
+        .filter((value) => value.startsWith("known:"))
+        .map((value) => value.slice("known:".length)),
+      activeIds: values
+        .filter((value) => value.startsWith("active:"))
+        .map((value) => value.slice("active:".length)),
+      targets
+    };
+  }
+
+  function getSection12ArtificerInfusionContext(feature) {
+    const classEntry = getClassEntryAtIndex(
+      safeNumber(feature?.classIndex, 0)
+    );
+    const selectedClass = resolveClassTemplateForEntry(
+      classEntry
+    );
+    const level = Math.max(
+      1,
+      safeNumber(
+        feature?.classLevel,
+        classEntry?.level || 1
+      )
+    );
+
+    if (selectedClass?.id !== "artificer") {
+      return null;
+    }
+
+    return {
+      selectedClass,
+      classEntry,
+      feature,
+      level,
+      knownLimit: getProgressionValueByLevel(
+        selectedClass.infusionsKnownByLevel,
+        level,
+        0
+      ),
+      activeLimit: getProgressionValueByLevel(
+        selectedClass.infusedItemsByLevel,
+        level,
+        0
+      ),
+      available: (selectedClass.infusions || []).filter((infusion) => {
+        return safeNumber(infusion.minimumLevel, 2) <= level;
+      })
+    };
+  }
+
+  function saveSection12ArtificerInfusionState(
+    state,
+    feature
+  ) {
+    const values = [
+      ...state.knownIds.map((id) => `known:${id}`),
+      ...state.activeIds.map((id) => `active:${id}`),
+      ...Object.entries(state.targets || {})
+        .filter(([infusionId, itemId]) => {
+          return (
+            state.activeIds.includes(infusionId) &&
+            cleanString(itemId)
+          );
+        })
+        .map(([infusionId, itemId]) => {
+          return `target:${infusionId}:${itemId}`;
+        })
+    ];
+
+    setSection12FeatureStoredChoices(feature, values);
+  }
+
+  function syncSection12ArtificerInfusionsForLevel() {
+    getSection12ClassFeaturesThroughLevel()
+      .filter((feature) => {
+        return feature.customType === "artificerInfusions";
+      })
+      .forEach((feature) => {
+        const context =
+          getSection12ArtificerInfusionContext(feature);
+
+        if (!context) {
+          return;
+        }
+
+        const state =
+          getSection12ArtificerInfusionState(feature);
+        const availableIds = new Set(
+          context.available.map((infusion) => infusion.id)
+        );
+        const knownIds = state.knownIds
+          .filter((id) => availableIds.has(id))
+          .slice(0, context.knownLimit);
+        const knownSet = new Set(knownIds);
+        const activeIds = state.activeIds
+          .filter((id) => knownSet.has(id))
+          .slice(0, context.activeLimit);
+        const targets = Object.fromEntries(
+          Object.entries(state.targets || {})
+            .filter(([infusionId]) => {
+              return activeIds.includes(infusionId);
+            })
+        );
+
+        saveSection12ArtificerInfusionState({
+          knownIds,
+          activeIds,
+          targets
+        }, feature);
+      });
+  }
+
+  function getSection12InfusionTargetOptions(infusion) {
+    const effects = Array.isArray(infusion?.effects)
+      ? infusion.effects
+      : [];
+    const targetTypes = uniqueCleanArray(
+      effects.map((effect) => effect.target)
+    );
+    const inventory = Array.isArray(
+      creatorState.draft.equipment?.items
+    )
+      ? creatorState.draft.equipment.items
+      : [];
+
+    return inventory.filter((item) => {
+      if (
+        item.isContainer === true ||
+        cleanString(item.containerId)
+      ) {
+        return false;
+      }
+
+      if (!targetTypes.length) {
+        return true;
+      }
+
+      return targetTypes.some((target) => {
+        if (target === "armorOrShield") {
+          return Boolean(item.baseArmorClass || item.isShield);
+        }
+
+        if (target === "armor") {
+          return Boolean(item.baseArmorClass && !item.isShield);
+        }
+
+        if (target === "shield") {
+          return item.isShield === true;
+        }
+
+        if (
+          ["weapon", "ammunitionWeapon", "thrownWeapon"]
+            .includes(target)
+        ) {
+          if (
+            !(
+              item.category === "weapon" ||
+              item.weaponType ||
+              item.damageDice
+            )
+          ) {
+            return false;
+          }
+
+          if (target === "ammunitionWeapon") {
+            return item.ranged === true;
+          }
+
+          if (target === "thrownWeapon") {
+            return item.thrown === true;
+          }
+
+          return true;
+        }
+
+        if (target === "spellcastingFocus") {
+          return (
+            cleanString(item.category).toLowerCase().includes("focus") ||
+            cleanString(item.name).toLowerCase().includes("focus")
+          );
+        }
+
+        if (target === "helmet") {
+          return /helm|helmet/i.test(item.name || "");
+        }
+
+        return true;
+      });
+    });
+  }
+
+  function toggleSection12ArtificerInfusion(
+    featureKey,
+    infusionId,
+    mode
+  ) {
+    const feature = getSection12ClassFeaturesThroughLevel()
+      .find((entry) => {
+        return (
+          getSection12FeatureChoiceKey(entry) === featureKey ||
+          entry.id === featureKey
+        );
+      });
+    const context =
+      getSection12ArtificerInfusionContext(feature);
+
+    if (
+      !context ||
+      !context.available.some((infusion) => infusion.id === infusionId)
+    ) {
+      return false;
+    }
+
+    const state = getSection12ArtificerInfusionState(feature);
+
+    if (mode === "known") {
+      if (state.knownIds.includes(infusionId)) {
+        state.knownIds = state.knownIds.filter((id) => id !== infusionId);
+        state.activeIds = state.activeIds.filter((id) => id !== infusionId);
+        delete state.targets[infusionId];
+      } else if (state.knownIds.length < context.knownLimit) {
+        state.knownIds.push(infusionId);
+      } else {
+        return false;
+      }
+    } else if (mode === "active") {
+      if (!state.knownIds.includes(infusionId)) {
+        return false;
+      }
+
+      if (state.activeIds.includes(infusionId)) {
+        state.activeIds = state.activeIds.filter((id) => id !== infusionId);
+        delete state.targets[infusionId];
+      } else if (state.activeIds.length < context.activeLimit) {
+        state.activeIds.push(infusionId);
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+
+    saveSection12ArtificerInfusionState(state, feature);
+    applySelectedClassFeatureMechanics();
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function setSection12ArtificerInfusionTarget(
+    featureKey,
+    infusionId,
+    itemId
+  ) {
+    const feature = getSection12ClassFeaturesThroughLevel()
+      .find((entry) => {
+        return getSection12FeatureChoiceKey(entry) === featureKey;
+      });
+    const context =
+      getSection12ArtificerInfusionContext(feature);
+    const infusion = context?.available.find((entry) => {
+      return entry.id === infusionId;
+    });
+
+    if (!feature || !infusion) {
+      return false;
+    }
+
+    const state = getSection12ArtificerInfusionState(feature);
+
+    if (!state.activeIds.includes(infusionId)) {
+      return false;
+    }
+
+    const eligibleIds = new Set(
+      getSection12InfusionTargetOptions(infusion)
+        .map((item) => item.id)
+    );
+    const cleanItemId = cleanString(itemId);
+
+    if (cleanItemId && !eligibleIds.has(cleanItemId)) {
+      return false;
+    }
+
+    if (cleanItemId) {
+      state.targets[infusionId] = cleanItemId;
+    } else {
+      delete state.targets[infusionId];
+    }
+
+    saveSection12ArtificerInfusionState(state, feature);
+    applySelectedClassFeatureMechanics();
+    applyCompatibilityAliases(creatorState.draft);
+    markDraftChanged();
+
+    return true;
+  }
+
+  function renderSection12ArtificerInfusions(feature) {
+    const context =
+      getSection12ArtificerInfusionContext(feature);
+
+    if (!context) {
+      return "";
+    }
+
+    const state = getSection12ArtificerInfusionState(feature);
+    const featureKey = getSection12FeatureChoiceKey(feature);
+
+    return `
+      <div class="hg-character-current-choice">
+        <b>Infusions Known:</b> ${state.knownIds.length} / ${context.knownLimit}
+        <br><b>Infused Items:</b> ${state.activeIds.length} / ${context.activeLimit}
+      </div>
+
+      <div class="hg-character-field-grid">
+        ${context.available.map((infusion) => {
+          const known = state.knownIds.includes(infusion.id);
+          const active = state.activeIds.includes(infusion.id);
+          const targetOptions =
+            getSection12InfusionTargetOptions(infusion);
+          const targetItemId = state.targets[infusion.id] || "";
+
+          return `
+            <div class="hg-character-field">
+              <h3>${escapeHtml(infusion.name)}</h3>
+              <p class="small">
+                Level ${safeNumber(infusion.minimumLevel, 2)}+
+                <br>${escapeHtml(infusion.summary || "")}
+              </p>
+              <div class="hg-character-card-actions">
+                <button
+                  type="button"
+                  data-cc-action="toggle-artificer-infusion-known"
+                  data-feature-key="${escapeHtml(featureKey)}"
+                  data-infusion-id="${escapeHtml(infusion.id)}"
+                >${known ? "Forget" : "Learn"}</button>
+
+                ${known
+                  ? `
+                    <button
+                      type="button"
+                      data-cc-action="toggle-artificer-infusion-active"
+                      data-feature-key="${escapeHtml(featureKey)}"
+                      data-infusion-id="${escapeHtml(infusion.id)}"
+                    >${active ? "Remove Infusion" : "Infuse Item"}</button>
+                  `
+                  : ""}
+              </div>
+              ${active && infusion.requiresItemTarget
+                ? `
+                  <label class="hg-character-field">
+                    <span>Infused item</span>
+                    <select
+                      data-cc-infusion-target="true"
+                      data-feature-key="${escapeHtml(featureKey)}"
+                      data-infusion-id="${escapeHtml(infusion.id)}"
+                    >
+                      <option value="">Choose an eligible item</option>
+                      ${targetOptions.map((item) => {
+                        return `
+                          <option
+                            value="${escapeHtml(item.id)}"
+                            ${targetItemId === item.id ? "selected" : ""}
+                          >${escapeHtml(item.name)}</option>
+                        `;
+                      }).join("")}
+                    </select>
+                  </label>
+                `
+                : ""}
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function formatSection12Recharge(value) {
+    const cleanValue = cleanString(value);
+
+    const labels = {
+      longRest: "Long rest",
+      shortRest: "Short rest",
+      shortOrLongRest: "Short or long rest",
+      turn: "Start of turn"
+    };
+
+    return labels[cleanValue] || cleanValue;
+  }
+
+  function evaluateSection12ClassLevelFormula(
+    formula,
+    classLevel
+  ) {
+    const cleanFormula = cleanString(formula);
+
+    const multiplierMatch = cleanFormula.match(
+      /^classLevel\s*\*\s*(\d+)$/i
+    );
+
+    if (multiplierMatch) {
+      return (
+        classLevel *
+        safeNumber(multiplierMatch[1], 1)
+      );
+    }
+
+    if (cleanFormula === "classLevel") {
+      return classLevel;
+    }
+
+    return cleanFormula;
+  }
+
+  function getSection12FeatureMechanicLines(feature) {
+    const classLevel = Math.max(
+      1,
+      safeNumber(
+        feature?.classLevel,
+        feature?.level || 1
+      )
+    );
+    const lines = [];
+    const resourceData =
+      feature?.resource &&
+      typeof feature.resource === "object"
+        ? feature.resource
+        : {};
+    const uses = resourceData.uses ??
+      getProgressionValueByLevel(
+        resourceData.usesByLevel,
+        classLevel,
+        null
+      );
+    const recharge = resourceData.recharge ||
+      getProgressionValueByLevel(
+        resourceData.rechargeByLevel,
+        classLevel,
+        ""
+      );
+    const die = resourceData.die ||
+      getProgressionValueByLevel(
+        resourceData.dieByLevel,
+        classLevel,
+        ""
+      );
+
+    if (uses !== null && uses !== undefined && uses !== "") {
+      lines.push(`Uses: ${uses}`);
+    }
+
+    if (recharge) {
+      lines.push(
+        `Recharge: ${formatSection12Recharge(
+          recharge
+        )}`
+      );
+    }
+
+    if (die) {
+      lines.push(`Die: ${die}`);
+    }
+
+    if (resourceData.usesAbility) {
+      const abilityId = String(
+        resourceData.usesAbility
+      ).slice(0, 3).toLowerCase();
+
+      const abilityModifier =
+        calculateAbilityModifier(
+          getAbilityScore(
+            creatorState.draft,
+            abilityId
+          )
+        );
+
+      const abilityUses = Math.max(
+        safeNumber(
+          resourceData.minimum,
+          1
+        ),
+        abilityModifier
+      );
+
+      lines.push(
+        `Uses: ${abilityUses} (${abilityId.toUpperCase()} modifier)`
+      );
+    }
+
+    if (resourceData.pool?.formula) {
+      const poolValue =
+        evaluateSection12ClassLevelFormula(
+          resourceData.pool.formula,
+          classLevel
+        );
+
+      lines.push(`Pool: ${poolValue}`);
+    } else if (resourceData.perLevel) {
+      lines.push(
+        `Pool: ${classLevel * safeNumber(
+          resourceData.perLevel,
+          1
+        )}`
+      );
+    } else if (
+      cleanString(resourceData.scalesWith)
+        .toLowerCase() === "level"
+    ) {
+      lines.push(`Pool: ${classLevel}`);
+    }
+
+    (Array.isArray(feature?.effects) ? feature.effects : [])
+      .forEach((effect) => {
+        if (effect.type === "spellcasting") {
+          lines.push(
+            `Spellcasting: ${String(effect.ability || "").toUpperCase()} (${effect.progression || "none"})`
+          );
+        }
+
+        if (effect.type === "armorClassFormula") {
+          const abilities = (effect.abilities || [])
+            .map((ability) => String(ability).toUpperCase())
+            .join(" + ");
+          lines.push(`AC: ${safeNumber(effect.base, 10)} + ${abilities}`);
+        }
+
+        if (effect.type === "speedBonus") {
+          lines.push(`${effect.movement || "walk"} speed: +${safeNumber(effect.value, 0)} ft.`);
+        }
+
+        if (effect.type === "speedBonusByLevel") {
+          const value = getProgressionValueByLevel(
+            effect.values,
+            classLevel,
+            0
+          );
+          lines.push(`${effect.movement || "walk"} speed: +${safeNumber(value, 0)} ft.`);
+        }
+
+        if (effect.type === "extraAttack") {
+          lines.push(`Attacks per Attack action: ${safeNumber(effect.attacks, 1)}`);
+        }
+
+        if (effect.type === "sneakAttack") {
+          lines.push(
+            `Sneak Attack: ${getProgressionValueByLevel(effect.diceByLevel, classLevel, "1d6")}`
+          );
+        }
+
+        if (effect.type === "rage") {
+          lines.push(
+            `Rage damage: +${getProgressionValueByLevel(effect.damageBonusByLevel, classLevel, 2)}`
+          );
+        }
+
+        if (effect.type === "martialArts") {
+          lines.push(
+            `Martial Arts die: ${getProgressionValueByLevel(effect.dieByLevel, classLevel, "d4")}`
+          );
+        }
+
+        if (effect.type === "wildShape") {
+          const limitations = getProgressionValueByLevel(
+            effect.limitationsByLevel,
+            classLevel,
+            []
+          );
+          lines.push(
+            `Wild Shape: CR ${getProgressionValueByLevel(effect.maxCrByLevel, classLevel, "1/4")} or lower`
+          );
+          lines.push(
+            `Duration: ${Math.max(1, Math.floor(classLevel / 2))} hour(s)${limitations.length ? `; ${limitations.join(", ")}` : ""}`
+          );
+        }
+
+        if (effect.type === "divineSmite") {
+          lines.push(
+            "Divine Smite: spend a spell slot after a melee weapon hit"
+          );
+        }
+
+        if (effect.type === "maneuverSaveDc") {
+          const abilityModifier = Math.max(
+            calculateAbilityModifier(
+              getAbilityScore(creatorState.draft, "str")
+            ),
+            calculateAbilityModifier(
+              getAbilityScore(creatorState.draft, "dex")
+            )
+          );
+          lines.push(
+            `Maneuver save DC: ${8 + getCharacterProficiencyBonus(creatorState.draft) + abilityModifier}`
+          );
+        }
+
+        if (effect.type === "resourcePool" && effect.formula) {
+          const value =
+            evaluateSection12ClassLevelFormula(
+              effect.formula,
+              classLevel
+            );
+          lines.push(`${effect.name || "Resource"}: ${value}`);
+        }
+
+        if (effect.type === "infusions") {
+          lines.push(
+            `Infusions known: ${getProgressionValueByLevel(effect.knownByLevel, classLevel, 0)}`
+          );
+          lines.push(
+            `Infused items: ${getProgressionValueByLevel(effect.activeByLevel, classLevel, 0)}`
+          );
+        }
+      });
+
+    return [...new Set(lines)];
+  }
+
+  function renderSection12FeatureMechanics(feature) {
+    const lines = getSection12FeatureMechanicLines(feature);
+
+    if (!lines.length) {
+      return "";
+    }
+
+    return `
+      <p class="small">
+        <b>Mechanics:</b><br>
+        ${lines.map((line) => escapeHtml(line)).join("<br>")}
+      </p>
+    `;
+  }
+
+  function renderSection12FutureFeatures() {
+    const futureFeatures =
+      getSection12FutureClassFeatures();
+
+    if (!futureFeatures.length) {
+      return "";
+    }
+
+    const featureGroups = new Map();
+
+    futureFeatures.forEach((feature) => {
+      const level = Math.max(
+        1,
+        Math.round(
+          safeNumber(feature.level, 1)
+        )
+      );
+
+      const groupKey =
+        feature.classEntryId
+          ? `${feature.classEntryId}:${level}`
+          : `single:${level}`;
+
+      if (!featureGroups.has(groupKey)) {
+        featureGroups.set(groupKey, {
+          level,
+          className:
+            feature.classEntryId
+              ? feature.className
+              : "",
+          features: []
+        });
+      }
+
+      featureGroups
+        .get(groupKey)
+        .features
+        .push(feature);
+    });
+
+    const levelCards = Array.from(
+      featureGroups.values()
+    )
+      .map(({ level, className, features }) => {
+        return `
+          <article class="hg-character-choice-card">
+            <h3>${
+              className
+                ? `${escapeHtml(className)} `
+                : ""
+            }Level ${level}</h3>
+
+            <p>
+              ${features
+                .map((feature) => {
+                  return escapeHtml(feature.name);
+                })
+                .join("<br>")}
+            </p>
+          </article>
+        `;
+      })
+      .join("");
+
+    return `
+      <details class="hg-character-future-features">
+        <summary>
+          Future Features (${futureFeatures.length})
+        </summary>
+
+        <p class="small">
+          These features unlock after your current class level.
+        </p>
+
+        <div class="hg-character-choice-grid">
+          ${levelCards}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderSection12SelectedClassDetails() {
+    const selectedClass = getSelectedClassTemplate();
+
+    if (!selectedClass) {
+      return "";
+    }
+
+    const features = getSection12ClassFeaturesThroughLevel();
+    const classEntries =
+      getClassProgressionEntries(
+        creatorState.draft
+      );
+    const multiclass =
+      classEntries.length > 1;
+    const latestAsiSlotId = cleanString(
+      getLatestLevelUpContext(
+        creatorState.draft
+      )?.asiSlot?.id
+    );
+
+    const renderFeatureCard = (feature) => {
+      const choiceOptionRecords =
+        feature.type === "choice"
+          ? getSection12FeatureChoiceOptionRecords(feature)
+          : [];
+      const featureSelections =
+        getSection12FeatureStoredChoices(feature);
+      const chooseCount =
+        getSection12FeatureChooseCount(feature);
+      const choiceKey =
+        getSection12FeatureChoiceKey(feature);
+      const featureAsiSlot =
+        feature.optionSource === "asiOrFeat"
+          ? getSection12UnlockedAsiSlot(
+              feature.id
+            )
+          : null;
+      const isLatestAsiSlot = Boolean(
+        latestAsiSlotId &&
+        cleanString(featureAsiSlot?.id) ===
+          latestAsiSlotId
+      );
+
+      return `
+        <article
+          class="hg-character-choice-card"
+          data-class-entry-id="${escapeHtml(feature.classEntryId || "")}"
+          data-feature-card-class-id="${escapeHtml(feature.classId || "")}"
+          data-feature-card-id="${escapeHtml(feature.id || "")}"
+        >
+          <h3>${escapeHtml(feature.name)}</h3>
+
+          <p class="small">
+            ${feature.className ? `${escapeHtml(feature.className)} ` : ""}Level ${safeNumber(feature.level, 1)}
+            ${feature.summary
+              ? `<br>${escapeHtml(feature.summary)}`
+              : ""}
+          </p>
+
+          ${
+            feature.description
+              ? `
+                <p
+                  class="small"
+                  data-feature-full-description="true"
+                >
+                  ${escapeHtml(
+                    feature.description
+                  )}
+                </p>
+              `
+              : ""
+          }
+
+          ${renderClassFeatureMetadata(
+            feature
+          )}
+
+          ${renderSection12FeatureMechanics(feature)}
+
+          ${feature.customType === "artificerInfusions"
+            ? renderSection12ArtificerInfusions(feature)
+            : feature.optionSource === "asiOrFeat"
+            ? isLatestAsiSlot
+              ? `
+                <p class="small">
+                  Manage this choice in Latest Level Unlock above.
+                </p>
+              `
+              : renderSection12AsiChoice(feature)
+            : feature.type === "choice"
+            ? `
+              <p><b>Choose ${chooseCount}:</b></p>
+
+              ${choiceOptionRecords.length
+                ? `
+                  ${feature.optionSource === "castableSpellsAllClasses"
+                    ? `
+                      <label class="hg-character-field">
+                        <span>Choose ${chooseCount} spell${chooseCount === 1 ? "" : "s"}</span>
+                        <select
+                          multiple
+                          size="8"
+                          data-cc-class-feature-select="true"
+                          data-feature-key="${escapeHtml(choiceKey)}"
+                          data-choice-limit="${chooseCount}"
+                        >
+                          ${choiceOptionRecords.map((optionRecord) => {
+                            return `
+                              <option
+                                value="${escapeHtml(optionRecord.value)}"
+                                ${featureSelections.includes(optionRecord.value) ? "selected" : ""}
+                              >${escapeHtml(optionRecord.label)}</option>
+                            `;
+                          }).join("")}
+                        </select>
+                      </label>
+                    `
+                    : `
+                  <div class="hg-character-inline-actions">
+                    ${choiceOptionRecords.map((optionRecord) => {
+                      const selected = featureSelections.includes(optionRecord.value);
+
+                      return `
+                        <button
+                          type="button"
+                          class="${selected ? "selected" : ""}"
+                          data-cc-action="toggle-class-feature-choice"
+                          data-feature-id="${escapeHtml(feature.id)}"
+                          data-feature-key="${escapeHtml(choiceKey)}"
+                          data-option="${escapeHtml(optionRecord.value)}"
+                          ${optionRecord.summary ? `title="${escapeHtml(optionRecord.summary)}"` : ""}
+                        >
+                          ${selected ? "Remove" : "Choose"}
+                          ${escapeHtml(optionRecord.label)}
+                          ${optionRecord.cost !== undefined ? ` (${escapeHtml(String(optionRecord.cost))} point${safeNumber(optionRecord.cost, 1) === 1 ? "" : "s"})` : ""}
+                        </button>
+                      `;
+                    }).join("")}
+                  </div>
+                    `}
+                `
+                : `
+                  <p class="small">
+                    Options become available after the related subclass or proficiency choices are made.
+                  </p>
+                `}
+            `
+            : ""}
+        </article>
+      `;
+    };
+
+    const featureCards = features
+      .map(renderFeatureCard)
+      .join("");
+
+    const classProfileCards =
+      classEntries
+        .map((classEntry, classIndex) => {
+          const classTemplate =
+            resolveClassTemplateForEntry(
+              classEntry
+            );
+
+          if (!classTemplate) {
+            return "";
+          }
+
+          const isStartingClass =
+            isStartingClassEntry(
+              classEntry,
+              creatorState.draft,
+              classIndex
+            );
+          const classEntryId =
+            getClassProgressionEntryKey(
+              classEntry,
+              classIndex
+            );
+          const classId = makeSafeId(
+            classEntry?.classId ||
+            classTemplate.id,
+            ""
+          );
+          const className =
+            safeDisplayString(
+              classEntry?.className,
+              classTemplate.name ||
+              `Class ${classIndex + 1}`
+            );
+          const classLevel =
+            getClassEntryLevel(
+              classEntry,
+              1
+            );
+          const proficiencyRule =
+            isStartingClass
+              ? {
+                  armor:
+                    classTemplate
+                      .armorProficiencies ||
+                    [],
+                  weapons:
+                    classTemplate
+                      .weaponProficiencies ||
+                    [],
+                  tools:
+                    classTemplate
+                      .toolProficiencies ||
+                    [],
+                  skillChoices:
+                    classTemplate
+                      .skillChoices ||
+                    {}
+                }
+              : getMulticlassProficiencyRule(
+                  classEntry
+                );
+          const skillChoices =
+            proficiencyRule
+              .skillChoices ||
+            {};
+          const selectedSubclass =
+            getClassEntrySubclassTemplate(
+              classEntry
+            );
+          const subclassLevel =
+            Math.max(
+              1,
+              Math.round(
+                safeNumber(
+                  classTemplate
+                    .subclassLevel,
+                  3
+                )
+              )
+            );
+
+          return `
+            <article
+              class="hg-character-choice-card selected"
+              data-class-profile-entry-id="${escapeHtml(classEntryId)}"
+              data-class-profile-id="${escapeHtml(classId)}"
+            >
+              <h3>
+                ${escapeHtml(className)}
+                Level ${classLevel}
+                Proficiencies
+              </h3>
+
+              <p>
+                <b>Class Role:</b>
+                ${isStartingClass ? "Starting class" : "Multiclass addition"}
+                <br><b>Hit Die:</b> ${escapeHtml(classTemplate.hitDie || "d8")}
+                <br><b>Primary Ability:</b> ${escapeHtml(formatSection12List(classTemplate.primaryAbilities) || "None specified")}
+                <br><b>Saving Throws:</b> ${escapeHtml(isStartingClass ? formatSection12List(classTemplate.savingThrows) || "None" : "None gained from multiclassing")}
+                <br><b>Armor:</b> ${escapeHtml(formatSection12List(proficiencyRule.armor) || "None")}
+                <br><b>Weapons:</b> ${escapeHtml(formatSection12List(proficiencyRule.weapons) || "None")}
+                <br><b>Tools:</b> ${escapeHtml(formatSection12List(proficiencyRule.tools) || "None")}
+                <br><b>Skill Choices:</b> Choose ${safeNumber(skillChoices.choose, 0)} from ${escapeHtml(formatSection12List(skillChoices.from) || "none")}
+                <br><b>Subclass:</b> ${escapeHtml(selectedSubclass?.name || (classLevel >= subclassLevel ? "Pending selection" : `Unlocks at class level ${subclassLevel}`))}
+              </p>
+            </article>
+          `;
+        })
+        .join("");
+
+    const multiclassFeatureGroups =
+      multiclass
+        ? classEntries
+            .map((classEntry, classIndex) => {
+              const classEntryId =
+                getClassProgressionEntryKey(
+                  classEntry,
+                  classIndex
+                );
+              const classTemplate =
+                resolveClassTemplateForEntry(
+                  classEntry
+                );
+              const classId = makeSafeId(
+                classEntry?.classId ||
+                classTemplate?.id,
+                ""
+              );
+              const className =
+                safeDisplayString(
+                  classEntry?.className,
+                  classTemplate?.name ||
+                  `Class ${classIndex + 1}`
+                );
+              const classLevel =
+                getClassEntryLevel(
+                  classEntry,
+                  1
+                );
+              const ownedFeatures =
+                features.filter((feature) => {
+                  return (
+                    cleanString(
+                      feature.classEntryId
+                    ) === classEntryId &&
+                    makeSafeId(
+                      feature.classId,
+                      ""
+                    ) === classId
+                  );
+                });
+
+              return `
+                <section
+                  class="hg-character-class-feature-group"
+                  data-class-feature-group-entry-id="${escapeHtml(classEntryId)}"
+                  data-class-feature-group-id="${escapeHtml(classId)}"
+                >
+                  <h4>
+                    ${escapeHtml(className)}
+                    Level ${classLevel} Features
+                  </h4>
+
+                  <p class="small">
+                    Only ${escapeHtml(className)} class and subclass features are shown in this group.
+                  </p>
+
+                  <div class="hg-character-choice-grid">
+                    ${ownedFeatures.length
+                      ? ownedFeatures
+                          .map(
+                            renderFeatureCard
+                          )
+                          .join("")
+                      : `
+                        <div class="hg-character-placeholder">
+                          No ${escapeHtml(className)} features are defined through class level ${classLevel}.
+                        </div>
+                      `}
+                  </div>
+                </section>
+              `;
+            })
+            .join("")
+        : "";
+
+    return `
+      <hr>
+
+      <h3>${multiclass ? "Multiclass Feature Details" : `${escapeHtml(selectedClass.name)} Details`}</h3>
+
+      <div class="hg-character-choice-grid">
+        ${classProfileCards}
+      </div>
+
+      <h3>
+        ${multiclass
+          ? "Class Features by Class Level"
+          : `Class Features Through Level ${clampLevel(creatorState.draft.classProgression.totalLevel)}`}
+      </h3>
+
+      ${multiclass
+        ? multiclassFeatureGroups
+        : `
+          <div class="hg-character-choice-grid">
+            ${featureCards || `
+              <div class="hg-character-placeholder">
+                No class features are defined through this level.
+              </div>
+            `}
+          </div>
+        `}
+
+      ${renderSelectedClassMechanicsSummary()}
+
+      ${renderSection12FutureFeatures()}
+    `;
+  }
+
+  function renderClassStep() {
+    if (isMulticlassDraft()) {
+      return `
+        ${beginnerNote(
+          "Choosing a Class",
+          "Class is your biggest rules choice. It decides your hit die, armor and weapon training, saving throws, class features, and sometimes spellcasting. Your level belongs here because each level unlocks new class features."
+        )}
+
+        ${renderMulticlassProgressionEditor()}
+
+        ${renderMulticlassLevelBreakdown()}
+
+        ${renderSection12SelectedClassDetails()}
+      `;
+    }
+
+    const primaryClass =
+      getSection12PrimaryClass();
+
+    const selectedClass =
+      getSelectedClassTemplate();
+
+    const selectedClassLevel = clampLevel(
+      creatorState.draft.classProgression.totalLevel
+    );
+
+    const subclassUnlockLevel = Math.max(
+      1,
+      Math.round(
+        safeNumber(
+          selectedClass?.subclassLevel,
+          3
+        )
+      )
+    );
+
+    const subclassUnlocked = Boolean(
+      selectedClass &&
+      selectedClassLevel >= subclassUnlockLevel
+    );
+
+    const subclassLabel =
+      selectedClass?.subclassLabel ||
+      (
+        Array.isArray(selectedClass?.subclasses)
+          ? selectedClass.subclasses
+              .find((subclass) => {
+                return cleanString(
+                  subclass?.subclassLabel
+                );
+              })
+              ?.subclassLabel
+          : ""
+      ) ||
+      "Subclass";
+
+    const selectedClassId =
+      primaryClass?.classId || "";
+
+    const classCards =
+      getAllClassTemplates()
+        .map((classData) => {
+          const selected =
+            selectedClassId ===
+            classData.id;
+
+          const primaryAbilities =
+            formatSection12List(
+              classData
+                .primaryAbilities
+            ) ||
+            "Not specified";
+
+          const savingThrows =
+            formatSection12List(
+              classData
+                .savingThrows
+            ) ||
+            "Not specified";
+          const isRoomTemplate = Boolean(
+            classData.docId &&
+            creatorState.roomClassCache.some(
+              (cachedClass) => {
+                return cleanString(cachedClass?.docId) ===
+                  cleanString(classData.docId);
+              }
+            )
+          );
+          const canDeleteSelectedTemplate =
+            selected &&
+            isRoomTemplate &&
+            deps.getCurrentIsDM?.() === true;
+
+          return wizardChoiceCard(
+            classData.name ||
+            "Unnamed Class",
+
+            `
+              <p>
+                ${escapeHtml(
+                  classData.summary ||
+                  "No description provided."
                 )}
               </p>
 
