@@ -145,6 +145,12 @@ export function createCharacterCatalogs(context) {
       duration: "Concentration, up to 1 minute",
       components: "V, S, M",
       source: "subrace:dark-elf",
+      sourceType: "species",
+      sourceFeatureId: "dark-elf-magic",
+      sourceFeatureName: "Drow Magic",
+      atWill: true,
+      recharge: "none",
+      canUseSpellSlots: false,
       summary:
         "Drow Magic cantrip. Charisma is your spellcasting ability."
     },
@@ -158,6 +164,14 @@ export function createCharacterCatalogs(context) {
       duration: "Concentration, up to 1 minute",
       components: "V",
       source: "subrace:dark-elf",
+      sourceType: "species",
+      sourceFeatureId: "dark-elf-magic",
+      sourceFeatureName: "Drow Magic",
+      freeCastUses: 1,
+      maximumUses: 1,
+      currentUses: 1,
+      recharge: "longRest",
+      canUseSpellSlots: false,
       summary:
         "Drow Magic spell, cast once per long rest. Charisma is your spellcasting ability."
     },
@@ -171,6 +185,14 @@ export function createCharacterCatalogs(context) {
       duration: "Concentration, up to 10 minutes",
       components: "V, M",
       source: "subrace:dark-elf",
+      sourceType: "species",
+      sourceFeatureId: "dark-elf-magic",
+      sourceFeatureName: "Drow Magic",
+      freeCastUses: 1,
+      maximumUses: 1,
+      currentUses: 1,
+      recharge: "longRest",
+      canUseSpellSlots: false,
       summary:
         "Drow Magic spell, cast once per long rest. Charisma is your spellcasting ability."
     }
@@ -187,6 +209,14 @@ export function createCharacterCatalogs(context) {
       duration: "1 minute",
       components: "S, M",
       source: "subrace:forest-gnome",
+      sourceType: "species",
+      sourceFeatureId:
+        "forest-gnome-illusion",
+      sourceFeatureName:
+        "Natural Illusionist",
+      atWill: true,
+      recharge: "none",
+      canUseSpellSlots: false,
       summary:
         "Natural Illusionist cantrip. Intelligence is your spellcasting ability."
     }
@@ -203,6 +233,13 @@ export function createCharacterCatalogs(context) {
       duration: "Up to 1 minute",
       components: "V",
       source: "species:tiefling",
+      sourceType: "species",
+      sourceFeatureId:
+        "tiefling-infernal-legacy",
+      sourceFeatureName: "Infernal Legacy",
+      atWill: true,
+      recharge: "none",
+      canUseSpellSlots: false,
       summary:
         "Infernal Legacy cantrip."
     },
@@ -216,6 +253,15 @@ export function createCharacterCatalogs(context) {
       duration: "Instantaneous",
       components: "V, S",
       source: "species:tiefling",
+      sourceType: "species",
+      sourceFeatureId:
+        "tiefling-infernal-legacy",
+      sourceFeatureName: "Infernal Legacy",
+      freeCastUses: 1,
+      maximumUses: 1,
+      currentUses: 1,
+      recharge: "longRest",
+      canUseSpellSlots: false,
       summary:
         "Infernal Legacy spell, cast once per long rest at 2nd level."
     },
@@ -229,6 +275,15 @@ export function createCharacterCatalogs(context) {
       duration: "Concentration, up to 10 minutes",
       components: "V, M",
       source: "species:tiefling",
+      sourceType: "species",
+      sourceFeatureId:
+        "tiefling-infernal-legacy",
+      sourceFeatureName: "Infernal Legacy",
+      freeCastUses: 1,
+      maximumUses: 1,
+      currentUses: 1,
+      recharge: "longRest",
+      canUseSpellSlots: false,
       summary:
         "Infernal Legacy spell, cast once per long rest."
     }

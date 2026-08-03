@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  adjustCanonicalSpellResource,
   buildSpellLibraryFromSources,
   clearMagicalSecretsCompatibilitySources,
   collectLegacySpellSources,
@@ -11,6 +12,7 @@ import {
   normalizeSpellSources,
   populateSpellSourceCompatibility,
   removeCanonicalSpellSource,
+  restoreCanonicalSpellResources,
   SPELL_SELECTION_MODES,
   SPELL_SOURCE_MODEL_VERSION,
   SPELL_SOURCE_TYPES,
@@ -21,8 +23,13 @@ import {
   renderMagicalSecretsPanels
 } from "../characterCreator/magicalSecrets.js";
 import {
-  collectCharacterSpells
+  collectCharacterSpells,
+  createCharacterSheetView
 } from "../characterSheet.js";
+import {
+  getInnateSpellUsageDetails,
+  renderInnateSpellCards
+} from "../characterCreator/innateSpellPresentation.js";
 import {
   DEFAULT_FEATS,
   validateFeatSpellDefinitions
@@ -1112,5 +1119,336 @@ test(
         return source.sourceType === "class";
       }).selectedSpellIds.includes("fireball")
     );
+  }
+);
+
+test(
+  "subclass, species, background, innate, and Mystic Arcanum sources stay separate",
+  () => {
+    const character = {
+      magic: {
+        classSources: {
+          "cleric-main": {
+            classEntryId: "cleric-main",
+            classId: "cleric",
+            className: "Cleric",
+            subclassId: "life",
+            subclassName: "Life Domain",
+            spellcastingAbility: "wis",
+            alwaysPreparedSpellIds: [
+              "bless"
+            ]
+          },
+          "warlock-main": {
+            classEntryId: "warlock-main",
+            classId: "warlock",
+            className: "Warlock",
+            spellcastingAbility: "cha",
+            mysticArcanumSpellIds: {
+              6: "arcane-gate"
+            }
+          }
+        },
+        innateSpells: [
+          {
+            id: "minor-illusion",
+            source: "subrace:forest-gnome",
+            sourceFeatureName:
+              "Natural Illusionist",
+            spellcastingAbility: "int",
+            atWill: true,
+            recharge: "none",
+            canUseSpellSlots: false
+          },
+          {
+            id: "darkness",
+            source: "species:tiefling",
+            sourceFeatureName:
+              "Infernal Legacy",
+            spellcastingAbility: "cha",
+            freeCastUses: 1,
+            maximumUses: 1,
+            currentUses: 0,
+            recharge: "longRest",
+            canUseSpellSlots: false
+          },
+          {
+            id: "guidance",
+            source: "background:blessed",
+            sourceLabel:
+              "Blessed Background",
+            backgroundId: "blessed",
+            spellcastingAbility: "wis",
+            atWill: true,
+            recharge: "none",
+            canUseSpellSlots: false
+          }
+        ]
+      }
+    };
+    const sources =
+      collectLegacySpellSources(character);
+    const subclass = sources.find((source) => {
+      return source.sourceType === "subclass";
+    });
+    const species = sources.filter((source) => {
+      return source.sourceType === "species";
+    });
+    const background = sources.find((source) => {
+      return source.sourceType === "background";
+    });
+    const arcanum = sources.find((source) => {
+      return source.sourceType ===
+        "mystic-arcanum";
+    });
+
+    assert.deepEqual(
+      subclass.fixedSpellIds,
+      ["bless"]
+    );
+    assert.equal(subclass.alwaysPrepared, true);
+    assert.equal(subclass.canUseSpellSlots, true);
+    assert.equal(
+      subclass.sourceName,
+      "Cleric — Life Domain"
+    );
+    assert.equal(species.length, 2);
+    assert.equal(background.backgroundId, "blessed");
+    assert.equal(
+      background.sourceName,
+      "Blessed Background"
+    );
+    assert.equal(arcanum.freeCastUses, 1);
+    assert.equal(arcanum.recharge, "longRest");
+    assert.equal(arcanum.canUseSpellSlots, false);
+    assert.equal(
+      arcanum.spellRecords[0].level,
+      6
+    );
+
+    const library =
+      buildSpellLibraryFromSources(sources);
+    const darkness = library.find((spell) => {
+      return spell.spellId === "darkness";
+    }).sources[0];
+
+    assert.equal(darkness.currentUses, 0);
+    assert.equal(darkness.maximumUses, 1);
+    assert.equal(darkness.recharge, "longRest");
+    assert.equal(darkness.canUseSpellSlots, false);
+
+    populateSpellSourceCompatibility(
+      character,
+      sources
+    );
+    const savedDarkness =
+      character.magic.innateSpells.find(
+        (spell) => spell.id === "darkness"
+      );
+
+    assert.equal(savedDarkness.currentUses, 0);
+    assert.equal(savedDarkness.freeCastUses, 1);
+    assert.equal(savedDarkness.recharge, "longRest");
+    assert.equal(
+      savedDarkness.canUseSpellSlots,
+      false
+    );
+  }
+);
+
+test(
+  "innate spell cards show ability, free uses, recharge, and slot permission",
+  () => {
+    const usage = getInnateSpellUsageDetails({
+      freeCastUses: 1,
+      maximumUses: 1,
+      currentUses: 0,
+      recharge: "longRest",
+      canUseSpellSlots: false
+    });
+    const html = renderInnateSpellCards([
+      {
+        id: "darkness",
+        name: "Darkness",
+        level: 2,
+        source: "species:tiefling",
+        spellcastingAbility: "cha",
+        freeCastUses: 1,
+        maximumUses: 1,
+        currentUses: 0,
+        recharge: "longRest",
+        canUseSpellSlots: false
+      }
+    ]);
+
+    assert.equal(
+      usage.usageLabel,
+      "0 / 1 free cast remaining"
+    );
+    assert.match(html, /species:tiefling/);
+    assert.match(html, /CHA/);
+    assert.match(html, /0 \/ 1 free cast remaining/);
+    assert.match(html, /Long rest/);
+    assert.match(
+      html,
+      /Does not use normal spell slots/
+    );
+  }
+);
+
+test(
+  "the final sheet shows Mystic Arcanum as a long-rest resource outside Pact Magic",
+  () => {
+    const character = {
+      name: "Arcanum Tester",
+      classProgression: {
+        classes: [
+          {
+            entryId: "warlock-main",
+            classEntryId: "warlock-main",
+            classId: "warlock",
+            className: "Warlock",
+            level: 11
+          }
+        ],
+        totalLevel: 11
+      },
+      magic: {
+        classSources: {
+          "warlock-main": {
+            classEntryId: "warlock-main",
+            classId: "warlock",
+            className: "Warlock",
+            spellcastingAbility: "cha",
+            mysticArcanumSpellIds: {
+              6: "arcane-gate"
+            }
+          }
+        },
+        pactMagic: {
+          slots: 3,
+          slotLevel: 5
+        }
+      }
+    };
+
+    synchronizeCanonicalSpellSources(
+      character,
+      { fromCompatibility: true }
+    );
+    const view = createCharacterSheetView();
+    const html = view.renderCharacterSheetHtml(
+      character,
+      { activeTab: "spells" }
+    );
+
+    assert.match(
+      html,
+      /Innate &amp; Mystic Arcanum/
+    );
+    assert.match(html, /Arcane Gate/);
+    assert.match(html, /1 \/ 1 free cast remaining/);
+    assert.match(html, /Recharge: long rest/i);
+    assert.match(
+      html,
+      /Separate from normal spell slots/
+    );
+    assert.match(html, /3 \/ 3 level 5/);
+  }
+);
+
+test(
+  "innate and Mystic Arcanum uses spend, persist, and recharge without touching slots",
+  () => {
+    const character = {
+      magic: {
+        classSources: {
+          "warlock-main": {
+            classEntryId: "warlock-main",
+            classId: "warlock",
+            className: "Warlock",
+            spellcastingAbility: "cha",
+            mysticArcanumSpellIds: {
+              6: "arcane-gate"
+            }
+          }
+        },
+        pactMagic: {
+          slots: 3,
+          slotLevel: 5
+        },
+        slotUsage: {
+          pact: 2
+        }
+      }
+    };
+
+    synchronizeCanonicalSpellSources(
+      character,
+      { fromCompatibility: true }
+    );
+    const source = getCanonicalSpellSources(
+      character
+    ).find((entry) => {
+      return entry.sourceType ===
+        "mystic-arcanum";
+    });
+
+    assert.equal(
+      adjustCanonicalSpellResource(
+        character,
+        source.sourceId,
+        "arcane-gate",
+        -1
+      ),
+      true
+    );
+    let arcanum = getCanonicalSpellSources(
+      character
+    ).find((entry) => {
+      return entry.sourceId === source.sourceId;
+    });
+    assert.equal(
+      arcanum.spellRecords[0].currentUses,
+      0
+    );
+    synchronizeCanonicalSpellSources(
+      character,
+      { fromCompatibility: true }
+    );
+    arcanum = getCanonicalSpellSources(
+      character
+    ).find((entry) => {
+      return entry.sourceId === source.sourceId;
+    });
+    assert.equal(
+      arcanum.spellRecords[0].currentUses,
+      0
+    );
+    assert.equal(character.magic.slotUsage.pact, 2);
+    assert.equal(
+      restoreCanonicalSpellResources(
+        character,
+        "shortRest"
+      ),
+      false
+    );
+    assert.equal(
+      restoreCanonicalSpellResources(
+        character,
+        "longRest"
+      ),
+      true
+    );
+    arcanum = getCanonicalSpellSources(
+      character
+    ).find((entry) => {
+      return entry.sourceId === source.sourceId;
+    });
+    assert.equal(
+      arcanum.spellRecords[0].currentUses,
+      1
+    );
+    assert.equal(character.magic.slotUsage.pact, 2);
   }
 );

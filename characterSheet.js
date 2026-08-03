@@ -5967,6 +5967,142 @@ function renderFeatSpellResources(character) {
   `;
 }
 
+function getInnateAndArcanumResources(character) {
+  return buildSpellLibraryFromSources(
+    getCanonicalSpellSources(character)
+  ).flatMap((spell) => {
+    return spell.sources
+      .filter((source) => {
+        return [
+          "species",
+          "background",
+          "innate",
+          "mystic-arcanum"
+        ].includes(source.sourceType);
+      })
+      .map((source) => {
+        const record = isRecord(spell.spell)
+          ? spell.spell
+          : {};
+        const maximumUses = Math.max(
+          0,
+          optionalNumber(
+            source.maximumUses
+          ) ??
+            optionalNumber(
+              source.freeCastUses
+            ) ??
+            0
+        );
+        const currentUses = Math.min(
+          maximumUses,
+          Math.max(
+            0,
+            optionalNumber(
+              source.currentUses
+            ) ?? maximumUses
+          )
+        );
+
+        return {
+          ...source,
+          spellId: spell.spellId,
+          spellName: firstText(
+            record.name,
+            getDefaultSpellById(
+              spell.spellId
+            )?.name,
+            titleFromId(
+              spell.spellId,
+              "Innate spell"
+            )
+          ),
+          maximumUses,
+          currentUses
+        };
+      });
+  });
+}
+
+function renderInnateAndArcanumResources(
+  character
+) {
+  const resources =
+    getInnateAndArcanumResources(character);
+
+  if (!resources.length) {
+    return `<p class="hg-sheet-muted">No innate or Mystic Arcanum spells recorded.</p>`;
+  }
+
+  return `
+    <ul class="hg-sheet-list">
+      ${resources.map((resource) => {
+        const atWill =
+          resource.atWill === true;
+        const usage = atWill
+          ? "At will"
+          : resource.maximumUses > 0
+            ? `${resource.currentUses} / ${resource.maximumUses} free cast${resource.maximumUses === 1 ? "" : "s"} remaining`
+            : "No separate free cast recorded";
+        const recharge = atWill
+          ? "No recharge needed"
+          : formatFeatSpellRecharge(
+              resource.recharge
+            );
+        const details = [
+          titleFromId(
+            resource.spellcastingAbility,
+            "Ability not recorded"
+          ),
+          usage,
+          recharge
+            ? `Recharge: ${recharge}`
+            : "Recharge not recorded",
+          resource.canUseSpellSlots === true
+            ? "May also use normal spell slots"
+            : "Separate from normal spell slots"
+        ];
+
+        return `
+          <li data-innate-spell-resource="${escapeHtml(
+            `${resource.sourceId}:${resource.spellId}`
+          )}">
+            <strong>${escapeHtml(
+              resource.spellName
+            )}</strong>
+            <span>${escapeHtml(
+              details.join(" Â· ")
+            )}</span>
+            <small>${escapeHtml(
+              resource.sourceName
+            )}</small>
+            ${resource.maximumUses > 0 ? `
+              <span class="hg-sheet-inline-actions hg-sheet-no-print">
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-innate-spell-resource"
+                  data-source-id="${escapeHtml(resource.sourceId)}"
+                  data-spell-id="${escapeHtml(resource.spellId)}"
+                  data-delta="-1"
+                  ${resource.currentUses <= 0 ? "disabled" : ""}
+                >Spend</button>
+                <button
+                  type="button"
+                  data-character-sheet-action="adjust-innate-spell-resource"
+                  data-source-id="${escapeHtml(resource.sourceId)}"
+                  data-spell-id="${escapeHtml(resource.spellId)}"
+                  data-delta="1"
+                  ${resource.currentUses >= resource.maximumUses ? "disabled" : ""}
+                >Restore</button>
+              </span>
+            ` : ""}
+          </li>
+        `;
+      }).join("")}
+    </ul>
+  `;
+}
+
 function renderSpellStatusBadges(spell) {
   return `
     <div class="hg-sheet-spell-badges" aria-label="Spell status">
@@ -6485,6 +6621,13 @@ function renderSpellPanel(
         <article class="hg-sheet-card">
           <h2>Feat Spells</h2>
           ${renderFeatSpellResources(character)}
+        </article>
+
+        <article class="hg-sheet-card">
+          <h2>Innate &amp; Mystic Arcanum</h2>
+          ${renderInnateAndArcanumResources(
+            character
+          )}
         </article>
 
         ${cleanText(magic.notes) ? `
@@ -8817,6 +8960,10 @@ export function createCharacterSheetView(options = {}) {
       typeof options.onAdjustFeatResource === "function"
         ? options.onAdjustFeatResource
         : () => false,
+    onAdjustInnateSpellResource:
+      typeof options.onAdjustInnateSpellResource === "function"
+        ? options.onAdjustInnateSpellResource
+        : () => false,
     onAdjustHitDie:
       typeof options.onAdjustHitDie === "function"
         ? options.onAdjustHitDie
@@ -9926,6 +10073,21 @@ export function createCharacterSheetView(options = {}) {
           finiteNumber(button.dataset.delta, 0)
         ),
         "Feat resource updated from the character sheet."
+      );
+      return;
+    }
+
+    if (
+      action ===
+      "adjust-innate-spell-resource"
+    ) {
+      runTrackedAction(
+        () => deps.onAdjustInnateSpellResource(
+          cleanText(button.dataset.sourceId),
+          cleanText(button.dataset.spellId),
+          finiteNumber(button.dataset.delta, 0)
+        ),
+        "Innate spell resource updated from the character sheet."
       );
       return;
     }

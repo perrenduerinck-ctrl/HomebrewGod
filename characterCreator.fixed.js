@@ -88,6 +88,7 @@ import {
 import {
   normalizeCharacterEnvelope
 } from "./characterCreator/normalization.js";
+import { renderInnateSpellCards } from "./characterCreator/innateSpellPresentation.js";
 import { renderMagicalSecretsPanels } from "./characterCreator/magicalSecrets.js";
 import { escapeHtml } from "./characterCreator/rendering.js";
 import {
@@ -108,7 +109,7 @@ import {
   SRD_2014_FULL_CASTER_SLOTS,
   SRD_2014_PACT_MAGIC
 } from "./characterCreator/spellcasting.js";
-import { clearMagicalSecretsCompatibilitySources, normalizeSpellSources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
+import { adjustCanonicalSpellResource, clearMagicalSecretsCompatibilitySources, normalizeSpellSources, restoreCanonicalSpellResources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
 import {
   mergeSubclassFeatureLevels
 } from "./characterCreator/subclassMechanics.js";
@@ -12277,6 +12278,12 @@ export function createCharacterCreator(options = {}) {
       );
     });
 
+    changed =
+      restoreCanonicalSpellResources(
+        draft,
+        type
+      ) || changed;
+
     const slotUsage =
       getSection12SpellSlotUsageState(
         draft
@@ -22913,6 +22920,14 @@ export function createCharacterCreator(options = {}) {
               range: "See spell",
               duration: "See spell",
               components: "",
+              sourceType: "species",
+              sourceFeatureId:
+                "high-elf-cantrip",
+              sourceFeatureName:
+                "Wizard Cantrip",
+              atWill: true,
+              recharge: "none",
+              canUseSpellSlots: false,
               summary:
                 "High Elf wizard cantrip."
             }
@@ -47636,83 +47651,13 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderSection16InnateSpells() {
-    const spells =
-      getSection16InnateSpells();
-
-    if (!spells.length) {
-      return `
-        <div class="hg-character-placeholder">
-          No innate species spells are currently recorded.
-        </div>
-      `;
-    }
-
-    return spells
-      .map((spell) => {
-        const spellLevel =
-          safeNumber(
-            spell.level,
-            0
-          ) === 0
-            ? "Cantrip"
-            : `Level ${safeNumber(
-                spell.level,
-                1
-              )}`;
-
-        return `
-          <article class="hg-character-choice-card selected">
-            <h3>
-              ${escapeHtml(
-                spell.name ||
-                "Unnamed Spell"
-              )}
-            </h3>
-
-            <p>
-              <b>${escapeHtml(
-                spellLevel
-              )}</b>
-
-              <br>
-
-              <b>Source:</b>
-
-              ${escapeHtml(
-                spell.source ||
-                spell.innateSource ||
-                "species"
-              )}
-
-              <br>
-
-              <b>Spellcasting Ability:</b>
-
-              ${escapeHtml(
-                cleanString(
-                  spell.spellcastingAbility
-                ).toUpperCase() ||
-                "None"
-              )}
-            </p>
-
-            ${
-              spell.summary ||
-              spell.description
-                ? `
-                  <p class="small">
-                    ${escapeHtml(
-                      spell.summary ||
-                      spell.description
-                    )}
-                  </p>
-                `
-                : ""
-            }
-          </article>
-        `;
-      })
-      .join("");
+    return renderInnateSpellCards(
+      getSection16InnateSpells(),
+      {
+        emptyMessage:
+          "No innate species or background spells are currently recorded."
+      }
+    );
   }
 
   function renderSection16FeatureCards(
@@ -51456,67 +51401,15 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderSection17InnateSpells() {
-    const spells =
+    return renderInnateSpellCards(
       getSection16InnateSpells(
         creatorState.draft
-      );
-
-    if (!spells.length) {
-      return `
-        <div class="hg-character-placeholder">
-          No innate species spells are currently listed.
-        </div>
-      `;
-    }
-
-    return spells
-      .map((spell) => {
-        const spellLevel =
-          safeNumber(
-            spell.level,
-            0
-          );
-
-        return `
-          <article class="hg-character-choice-card">
-            <h3>
-              ${escapeHtml(
-                spell.name ||
-                "Innate Spell"
-              )}
-            </h3>
-
-            <p>
-              <b>Level:</b>
-              ${
-                spellLevel === 0
-                  ? "Cantrip"
-                  : spellLevel
-              }
-
-              <br>
-
-              <b>Source:</b>
-              ${escapeHtml(
-                spell.source ||
-                spell.innateSource ||
-                "species"
-              )}
-
-              <br>
-
-              <b>Spellcasting Ability:</b>
-              ${escapeHtml(
-                cleanString(
-                  spell.spellcastingAbility
-                ).toUpperCase() ||
-                "None"
-              )}
-            </p>
-          </article>
-        `;
-      })
-      .join("");
+      ),
+      {
+        emptyMessage:
+          "No innate species or background spells are currently listed."
+      }
+    );
   }
 
   function renderSection17Inventory() {
@@ -53928,6 +53821,20 @@ export function createCharacterCreator(options = {}) {
                 );
               },
               "Feat resource updated and saved."
+            );
+          },
+        onAdjustInnateSpellResource:
+          (sourceId, spellId, delta) => {
+            return persistSection17SheetMutation(
+              () => {
+                return adjustCanonicalSpellResource(
+                  creatorState.draft,
+                  sourceId,
+                  spellId,
+                  delta
+                );
+              },
+              "Innate spell resource updated and saved."
             );
           },
         onAdjustHitDie:

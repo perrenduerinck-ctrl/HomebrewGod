@@ -369,6 +369,7 @@ export function normalizeSpellSource(
     classEntryId: cleanText(raw.classEntryId),
     featId: cleanText(raw.featId),
     speciesId: cleanText(raw.speciesId),
+    backgroundId: cleanText(raw.backgroundId),
     subclassId: cleanText(raw.subclassId),
     selectionMode: normalizeSelectionMode(
       raw.selectionMode,
@@ -672,7 +673,7 @@ function getInnateSourceType(spell) {
     return cleanText(value);
   }).join(" ").toLowerCase();
 
-  if (/species|ancestry|race/.test(sourceText)) {
+  if (/species|subrace|ancestry|race/.test(sourceText)) {
     return "species";
   }
   if (/background/.test(sourceText)) {
@@ -1035,9 +1036,16 @@ export function collectLegacySpellSources(character) {
     });
 
     if (arcanumEntries.length) {
+      const sourceId =
+        `mystic-arcanum:${classEntryId}`;
+      const previousRecords =
+        Array.isArray(
+          source.mysticArcanumSpellRecords
+        )
+          ? source.mysticArcanumSpellRecords
+          : [];
       addSource(sourceMap, {
-        sourceId:
-          `mystic-arcanum:${classEntryId}`,
+        sourceId,
         sourceType: "mystic-arcanum",
         sourceName: "Mystic Arcanum",
         sourceFeatureName: "Mystic Arcanum",
@@ -1055,10 +1063,43 @@ export function collectLegacySpellSources(character) {
           source.spellcastingAbility
         ),
         grantsKnown: true,
+        freeCastUses: 1,
+        maximumUses: 1,
+        currentUses: 1,
+        recharge: "longRest",
         canUseSpellSlots: false,
+        resourceId: sourceId,
         rulesSource: cleanText(
           source.rulesSource || source.source
         ),
+        spellRecords:
+          arcanumEntries.map(([level, spellId]) => {
+            const previous =
+              previousRecords.find((record) => {
+                return spellReferenceId(record) ===
+                  cleanText(spellId);
+              }) || {};
+
+            return {
+              ...previous,
+              id: cleanText(spellId),
+              spellId: cleanText(spellId),
+              level: wholeNumber(level, 0),
+              freeCastUses:
+                previous.freeCastUses ?? 1,
+              maximumUses:
+                previous.maximumUses ?? 1,
+              currentUses:
+                previous.currentUses ?? 1,
+              recharge: cleanText(
+                previous.recharge,
+                "longRest"
+              ),
+              canUseSpellSlots: false,
+              resourceId:
+                `${sourceId}:${level}`
+            };
+          }),
         spellStates: classSpellStates(source)
       });
     }
@@ -1309,6 +1350,9 @@ export function collectLegacySpellSources(character) {
         spell?.sourceFeatureName
       ),
       speciesId: cleanText(spell?.speciesId),
+      backgroundId: cleanText(
+        spell?.backgroundId
+      ),
       subclassId: cleanText(spell?.subclassId),
       selectionMode: "fixed",
       fixedSpellIds: [],
@@ -1608,7 +1652,8 @@ export function populateSpellSourceCompatibility(
                 alwaysPreparedSpellIds: [],
                 magicalSecretSpellIds: [],
                 subclassSpellIds: [],
-                mysticArcanumSpellIds: {}
+                mysticArcanumSpellIds: {},
+                mysticArcanumSpellRecords: []
               }
             ];
           })
@@ -1634,7 +1679,15 @@ export function populateSpellSourceCompatibility(
       spellcastingAbility:
         source.spellcastingAbility ||
         classSources[classEntryId]
-          ?.spellcastingAbility || ""
+          ?.spellcastingAbility || "",
+      mysticArcanumSpellRecords:
+        Array.isArray(
+          classSources[classEntryId]
+            ?.mysticArcanumSpellRecords
+        )
+          ? classSources[classEntryId]
+              .mysticArcanumSpellRecords
+          : []
     };
 
     return classSources[classEntryId];
@@ -1694,6 +1747,17 @@ export function populateSpellSourceCompatibility(
               .mysticArcanumSpellIds[
                 String(level)
               ] = spellId;
+            compatibilitySource
+              .mysticArcanumSpellRecords
+              .push({
+                ...getSourceSpellRecord(
+                  source,
+                  spellId
+                ),
+                id: spellId,
+                spellId,
+                level
+              });
           }
           return;
         }
@@ -1862,11 +1926,14 @@ export function populateSpellSourceCompatibility(
   const recordForSource = (source) => {
     return getSourceSpellIds(source)
       .map((spellId) => {
-        return {
-          ...getSourceSpellRecord(
+        const sourceRecord =
+          getSourceSpellRecord(
             source,
             spellId
-          ),
+          );
+
+        return {
+          ...sourceRecord,
           id: spellId,
           spellId,
           sourceId: source.sourceId,
@@ -1874,12 +1941,28 @@ export function populateSpellSourceCompatibility(
           sourceName: source.sourceName,
           sourceLabel: source.sourceName,
           spellcastingAbility:
-            source.spellcastingAbility,
-          freeCastUses: source.freeCastUses,
-          recharge: source.recharge,
+            cleanText(
+              sourceRecord?.spellcastingAbility,
+              source.spellcastingAbility
+            ),
+          freeCastUses:
+            sourceRecord?.freeCastUses ??
+            source.freeCastUses,
+          recharge: cleanText(
+            sourceRecord?.recharge,
+            source.recharge
+          ),
           canUseSpellSlots:
-            source.canUseSpellSlots,
-          resourceId: source.resourceId
+            typeof sourceRecord
+              ?.canUseSpellSlots ===
+              "boolean"
+              ? sourceRecord
+                  .canUseSpellSlots
+              : source.canUseSpellSlots,
+          resourceId: cleanText(
+            sourceRecord?.resourceId,
+            source.resourceId
+          )
         };
       });
   };
@@ -1906,6 +1989,208 @@ export function populateSpellSourceCompatibility(
   );
 
   return character;
+}
+
+function spellResourceRechargeMatches(
+  recharge,
+  restType
+) {
+  const value = cleanText(recharge)
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+
+  return value === "shortorlongrest" ||
+    value === "shortrest" ||
+    (
+      restType === "longRest" &&
+      value === "longrest"
+    );
+}
+
+function updateCanonicalSpellResources(
+  character,
+  updateRecord
+) {
+  if (!isRecord(character) ||
+      typeof updateRecord !== "function") {
+    return false;
+  }
+
+  const sources = getCanonicalSpellSources(
+    character
+  );
+  let changed = false;
+
+  sources.forEach((source) => {
+    const recordsById = new Map(
+      source.spellRecords.map((record) => {
+        return [
+          spellReferenceId(record),
+          record
+        ];
+      })
+    );
+
+    getSourceSpellIds(source)
+      .forEach((spellId) => {
+        const record = recordsById.get(
+          spellId
+        ) || {
+          id: spellId,
+          spellId
+        };
+
+        if (updateRecord(
+          record,
+          source,
+          spellId
+        )) {
+          recordsById.set(spellId, record);
+          changed = true;
+        }
+      });
+
+    source.spellRecords = [
+      ...recordsById.values()
+    ];
+  });
+
+  if (!changed) {
+    return false;
+  }
+
+  character.magic = isRecord(character.magic)
+    ? character.magic
+    : {};
+  character.magic.spellSources =
+    normalizeSpellSources(sources);
+  character.magic.spellSourceModelVersion =
+    SPELL_SOURCE_MODEL_VERSION;
+  populateSpellSourceCompatibility(
+    character,
+    character.magic.spellSources
+  );
+  return true;
+}
+
+export function adjustCanonicalSpellResource(
+  character,
+  sourceId,
+  spellId,
+  delta
+) {
+  const cleanSourceId = cleanText(sourceId);
+  const cleanSpellId = cleanText(spellId);
+  const adjustment = Number(delta);
+
+  if (
+    !cleanSourceId ||
+    !cleanSpellId ||
+    !Number.isFinite(adjustment) ||
+    adjustment === 0
+  ) {
+    return false;
+  }
+
+  return updateCanonicalSpellResources(
+    character,
+    (record, source, recordSpellId) => {
+      if (
+        source.sourceId !== cleanSourceId ||
+        recordSpellId !== cleanSpellId ||
+        record.atWill === true ||
+        source.atWill === true
+      ) {
+        return false;
+      }
+
+      const maximumUses = wholeNumber(
+        record.maximumUses ??
+        record.freeCastUses ??
+        source.maximumUses ??
+        source.freeCastUses,
+        0
+      );
+
+      if (maximumUses < 1) {
+        return false;
+      }
+
+      const currentUses = Math.min(
+        maximumUses,
+        wholeNumber(
+          record.currentUses ??
+          source.currentUses,
+          maximumUses
+        )
+      );
+      const nextUses = Math.max(
+        0,
+        Math.min(
+          maximumUses,
+          currentUses + Math.round(adjustment)
+        )
+      );
+
+      if (nextUses === currentUses) {
+        return false;
+      }
+
+      record.maximumUses = maximumUses;
+      record.currentUses = nextUses;
+      return true;
+    }
+  );
+}
+
+export function restoreCanonicalSpellResources(
+  character,
+  restType
+) {
+  const normalizedRest =
+    restType === "longRest"
+      ? "longRest"
+      : "shortRest";
+
+  return updateCanonicalSpellResources(
+    character,
+    (record, source) => {
+      if (
+        record.atWill === true ||
+        source.atWill === true ||
+        !spellResourceRechargeMatches(
+          record.recharge || source.recharge,
+          normalizedRest
+        )
+      ) {
+        return false;
+      }
+
+      const maximumUses = wholeNumber(
+        record.maximumUses ??
+        record.freeCastUses ??
+        source.maximumUses ??
+        source.freeCastUses,
+        0
+      );
+      const currentUses = wholeNumber(
+        record.currentUses ??
+        source.currentUses,
+        maximumUses
+      );
+
+      if (
+        maximumUses < 1 ||
+        currentUses === maximumUses
+      ) {
+        return false;
+      }
+
+      record.maximumUses = maximumUses;
+      record.currentUses = maximumUses;
+      return true;
+    }
+  );
 }
 
 export function synchronizeCanonicalSpellSources(
@@ -1959,9 +2244,11 @@ export function buildSpellLibraryFromSources(sources) {
         ...source.selectedSpellIds,
         ...source.fixedSpellIds
       ]).forEach((spellId) => {
+        const sourceRecord =
+          spellRecords.get(spellId);
         const existing = records.get(spellId) || {
           spellId,
-          spell: spellRecords.get(spellId) || null,
+          spell: sourceRecord || null,
           sourceIds: [],
           sourceNames: [],
           sourceTypes: [],
@@ -2000,18 +2287,44 @@ export function buildSpellLibraryFromSources(sources) {
             spellState:
               source.spellStates[spellId] || {},
             spellcastingAbility:
-              source.spellcastingAbility,
+              cleanText(
+                sourceRecord
+                  ?.spellcastingAbility,
+                source.spellcastingAbility
+              ),
             grantsKnown: source.grantsKnown,
             grantsPrepared:
               source.grantsPrepared,
             alwaysPrepared:
               source.alwaysPrepared,
             ritualOnly: source.ritualOnly,
-            freeCastUses: source.freeCastUses,
-            recharge: source.recharge,
+            atWill:
+              sourceRecord?.atWill === true ||
+              source.atWill === true,
+            freeCastUses:
+              sourceRecord?.freeCastUses ??
+              source.freeCastUses,
+            maximumUses:
+              sourceRecord?.maximumUses ??
+              source.maximumUses,
+            currentUses:
+              sourceRecord?.currentUses ??
+              source.currentUses,
+            recharge: cleanText(
+              sourceRecord?.recharge,
+              source.recharge
+            ),
             canUseSpellSlots:
-              source.canUseSpellSlots,
-            resourceId: source.resourceId
+              typeof sourceRecord
+                ?.canUseSpellSlots ===
+                "boolean"
+                ? sourceRecord
+                    .canUseSpellSlots
+                : source.canUseSpellSlots,
+            resourceId: cleanText(
+              sourceRecord?.resourceId,
+              source.resourceId
+            )
           });
         }
 
