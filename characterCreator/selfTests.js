@@ -12578,11 +12578,37 @@ export function runCharacterCreatorSelfTests(context) {
     ];
 
     record(
-      "Spellcaster needs required spell choices",
+      "Spellcaster may leave optional spell choices unused",
       isSection17SpellsComplete(
         wizardCharacter
       ),
-      false
+      true
+    );
+
+    creatorState.draft = wizardCharacter;
+    const optionalSpellValidation =
+      getSection17FinalizationValidation();
+
+    record(
+      "Unused spell choices are review reminders instead of blockers",
+      {
+        reminder:
+          optionalSpellValidation.optionalWarnings
+            .some((warning) => {
+              return /can still learn|may prepare/i
+                .test(warning);
+            }),
+        notBlocking:
+          optionalSpellValidation.blockingErrors
+            .every((warning) => {
+              return !/can still learn|may prepare/i
+                .test(warning);
+            })
+      },
+      {
+        reminder: true,
+        notBlocking: true
+      }
     );
 
     creatorState.draft =

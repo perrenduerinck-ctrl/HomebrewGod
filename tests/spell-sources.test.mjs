@@ -26,6 +26,9 @@ import {
   renderMagicalSecretsPanels
 } from "../characterCreator/magicalSecrets.js";
 import {
+  evaluateSpellChoices
+} from "../characterCreator/spellChoices.js";
+import {
   collectCharacterSpells,
   createCharacterSheetView
 } from "../characterSheet.js";
@@ -471,6 +474,146 @@ test(
         .spellcasting[0].sourceId,
       "feat:fey-touched-1"
     );
+  }
+);
+
+test(
+  "unused class, feat, Magical Secrets, Mystic Arcanum, and custom choices are reminders",
+  () => {
+    const spells = new Map([
+      ["counterspell", { id: "counterspell", name: "Counterspell", level: 3, classes: ["wizard", "sorcerer", "warlock"] }]
+    ]);
+    const result = evaluateSpellChoices({
+      classSelections: [
+        {
+          classEntryId: "wizard-main",
+          classId: "wizard",
+          className: "Wizard",
+          spellListClassId: "wizard",
+          spellcastingAbility: "int",
+          requiresSpellcastingAbility: true,
+          preparationMode: "spellbook-prepared",
+          maxSpellLevel: 3,
+          cantripsKnownLimit: 3,
+          spellsKnownLimit: 0,
+          preparedLimit: 4,
+          cantripIds: [],
+          knownSpellIds: [],
+          preparedSpellIds: [],
+          spellbookSpellIds: []
+        },
+        {
+          classEntryId: "warlock-main",
+          classId: "warlock",
+          className: "Warlock",
+          spellListClassId: "warlock",
+          spellcastingAbility: "cha",
+          requiresSpellcastingAbility: true,
+          maxSpellLevel: 5,
+          cantripsKnownLimit: 0,
+          spellsKnownLimit: 0,
+          preparedLimit: null,
+          mysticArcanumLevels: [6],
+          mysticArcanumSpellIds: {}
+        }
+      ],
+      spellSources: [
+        {
+          sourceId: "magical-secrets:bard-main:10",
+          sourceType: "magical-secrets",
+          sourceName: "Magical Secrets",
+          selectionMode: "choose-from-catalog",
+          choiceCount: 2,
+          selectedSpellIds: ["counterspell"],
+          maximumSpellLevel: 5,
+          fixedSpellIds: [],
+          selectionGroups: []
+        },
+        {
+          sourceId: "feat:magic-initiate",
+          sourceType: "feat",
+          sourceName: "Magic Initiate",
+          selectionMode: "class-list",
+          choiceCount: 1,
+          selectedSpellIds: [],
+          allowedClassLists: ["wizard"],
+          fixedSpellIds: [],
+          selectionGroups: []
+        },
+        {
+          sourceId: "custom-feature:moon-magic",
+          sourceType: "custom-feature",
+          sourceName: "Moon Magic",
+          selectionMode: "choose-from-catalog",
+          choiceCount: 1,
+          selectedSpellIds: [],
+          fixedSpellIds: [],
+          selectionGroups: []
+        }
+      ],
+      resolveSpell: (spellId) => spells.get(spellId) || null
+    });
+
+    assert.deepEqual(result.blockingErrors, []);
+    assert.ok(result.reminders.some((warning) => /3 cantrips/i.test(warning)));
+    assert.ok(result.reminders.some((warning) => /prepare 4 more Wizard spells/i.test(warning)));
+    assert.ok(result.reminders.some((warning) => /1 Magical Secrets choice/i.test(warning)));
+    assert.ok(result.reminders.some((warning) => /Magic Initiate still has 1 spell choice/i.test(warning)));
+    assert.ok(result.reminders.some((warning) => /1 Mystic Arcanum choice/i.test(warning)));
+    assert.ok(result.reminders.some((warning) => /Moon Magic still has 1 spell choice/i.test(warning)));
+  }
+);
+
+test(
+  "over-selection, invalid restrictions, missing ability, duplicates, and broken fixed references still block",
+  () => {
+    const spells = new Map([
+      ["light", { id: "light", name: "Light", level: 0, classes: ["cleric", "wizard"] }],
+      ["mage-hand", { id: "mage-hand", name: "Mage Hand", level: 0, classes: ["wizard"] }],
+      ["burning-hands", { id: "burning-hands", name: "Burning Hands", level: 1, classes: ["cleric"] }],
+      ["fireball", { id: "fireball", name: "Fireball", level: 3, classes: ["wizard"] }]
+    ]);
+    const source = {
+      sourceId: "feat:broken-magic",
+      sourceType: "feat",
+      sourceName: "Broken Magic",
+      selectionMode: "class-list",
+      choiceCount: 1,
+      selectedSpellIds: ["light", "fireball", "burning-hands"],
+      fixedSpellIds: ["missing-fixed-spell"],
+      allowedClassLists: ["cleric"],
+      maximumSpellLevel: 0,
+      selectionGroups: []
+    };
+    const result = evaluateSpellChoices({
+      classSelections: [
+        {
+          classEntryId: "wizard-main",
+          classId: "wizard",
+          className: "Wizard",
+          spellListClassId: "wizard",
+          spellcastingAbility: "",
+          requiresSpellcastingAbility: true,
+          maxSpellLevel: 0,
+          cantripsKnownLimit: 1,
+          spellsKnownLimit: 0,
+          preparedLimit: null,
+          cantripIds: ["light", "mage-hand", "mage-hand"]
+        }
+      ],
+      spellSources: [source],
+      rawSpellSources: [source],
+      resolveSpell: (spellId) => spells.get(spellId) || null
+    });
+    const errors = result.blockingErrors.join("\n");
+
+    assert.match(errors, /duplicate cantrip selection/i);
+    assert.match(errors, /cantrips exceed/i);
+    assert.match(errors, /needs a spellcasting ability/i);
+    assert.match(errors, /more spells selected than allowed/i);
+    assert.match(errors, /outside Broken Magic's permitted class list/i);
+    assert.match(errors, /above Broken Magic's permitted spell level/i);
+    assert.match(errors, /invalid fixed spell reference/i);
   }
 );
 

@@ -92,6 +92,7 @@ import { renderInnateSpellCards } from "./characterCreator/innateSpellPresentati
 import { renderMagicalSecretsPanels } from "./characterCreator/magicalSecrets.js";
 import { escapeHtml } from "./characterCreator/rendering.js";
 import { createCreatorSpellPickerState, CREATOR_SPELL_BATCH_SIZE, CREATOR_SPELL_SEARCH_DEBOUNCE_MS, getCreatorSpellSearchText, renderCreatorSpellPickerResults } from "./characterCreator/spellPicker.js";
+import { evaluateSpellChoices } from "./characterCreator/spellChoices.js?v=optional-spell-choices-20260803";
 import {
   calculateCharacterCarryingCapacity,
   calculateRuleCarryingCapacity,
@@ -110,7 +111,7 @@ import {
   SRD_2014_FULL_CASTER_SLOTS,
   SRD_2014_PACT_MAGIC
 } from "./characterCreator/spellcasting.js";
-import { adjustCanonicalSpellResource, clearMagicalSecretsCompatibilitySources, normalizeSpellSources, restoreCanonicalSpellResources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
+import { adjustCanonicalSpellResource, clearMagicalSecretsCompatibilitySources, getCanonicalSpellSources, normalizeSpellSources, restoreCanonicalSpellResources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
 import {
   mergeSubclassFeatureLevels
 } from "./characterCreator/subclassMechanics.js";
@@ -9699,6 +9700,22 @@ export function createCharacterCreator(options = {}) {
             entry.className,
             entry.classId
           ),
+        spellListClassId: cleanString(
+          entry.spellListClassId || entry.classId
+        ),
+        spellcastingAbility: cleanString(
+          entry.spellcastingAbility
+        ),
+        requiresSpellcastingAbility: true,
+        preparationMode:
+          getSection16PreparationMode(entry),
+        maxSpellLevel: Math.max(
+          0,
+          safeNumber(entry.maxSpellLevel, 0)
+        ),
+        expandedSpellIds:
+          getSection16ExpandedSpellGrants(entry)
+            .map((grant) => grant.spellId),
         cantripIds:
           cleanArray(source.cantripIds),
         knownSpellIds: cleanArray(source.knownSpellIds).filter(
@@ -9715,6 +9732,10 @@ export function createCharacterCreator(options = {}) {
           cleanArray(
             source.alwaysPreparedSpellIds
           ),
+        mysticArcanumSpellIds:
+          source.mysticArcanumSpellIds || {},
+        mysticArcanumLevels:
+          getSection16MysticArcanumLevels(entry),
         cantripsKnownLimit:
           Math.max(
             0,
@@ -9734,6 +9755,30 @@ export function createCharacterCreator(options = {}) {
         preparedLimit:
           entry.preparedLimit
       };
+    });
+  }
+
+  function getSection17SpellChoiceValidation(
+    character = creatorState.draft
+  ) {
+    return evaluateSpellChoices({
+      classSelections:
+        getPerClassSpellSelectionSummary(character),
+      spellSources:
+        getCanonicalSpellSources(character),
+      rawSpellSources:
+        safeNumber(
+          character?.magic?.spellSourceModelVersion,
+          0
+        ) >= SPELL_SOURCE_MODEL_VERSION
+          ? character?.magic?.spellSources ?? {}
+          : null,
+      resolveSpell: (spellId) => {
+        return getSection16SpellById(
+          spellId,
+          character
+        );
+      }
     });
   }
 
@@ -49400,7 +49445,10 @@ export function createCharacterCreator(options = {}) {
     return uniqueCleanArray(warnings);
   }
 
-  function getSection17Warnings() {
+  function getSection17Warnings(
+    spellChoiceValidation =
+      getSection17SpellChoiceValidation()
+  ) {
     const warnings = [
       ...getValidationWarnings(
         creatorState.draft
@@ -50028,113 +50076,9 @@ export function createCharacterCreator(options = {}) {
       warnings.push(warning);
     });
 
-    const spellLimits =
-      getSpellSelectionLimits(draft);
-
-    if (
-      spellLimits.cantripsKnownLimit !== null &&
-      spellLimits.knownCantripCount >
-        spellLimits.cantripsKnownLimit
-    ) {
-      warnings.push(
-        "Known cantrips exceed the calculated limit."
-      );
-    }
-
-    if (
-      spellLimits.cantripsKnownLimit !== null &&
-      spellLimits.knownCantripCount <
-        spellLimits.cantripsKnownLimit
-    ) {
-      warnings.push(
-        `Choose ${spellLimits.cantripsKnownLimit} known cantrip${spellLimits.cantripsKnownLimit === 1 ? "" : "s"}; ${spellLimits.knownCantripCount} selected.`
-      );
-    }
-
-    if (
-      spellLimits.spellsKnownLimit !== null &&
-      spellLimits.knownLeveledCount >
-        spellLimits.spellsKnownLimit
-    ) {
-      warnings.push(
-        "Known leveled spells exceed the calculated limit."
-      );
-    }
-
-    if (
-      spellLimits.spellsKnownLimit !== null &&
-      spellLimits.knownLeveledCount <
-        spellLimits.spellsKnownLimit
-    ) {
-      warnings.push(
-        `Choose ${spellLimits.spellsKnownLimit} known leveled spell${spellLimits.spellsKnownLimit === 1 ? "" : "s"}; ${spellLimits.knownLeveledCount} selected.`
-      );
-    }
-
-    if (
-      spellLimits.preparedLimit !== null &&
-      spellLimits.preparedCount >
-        spellLimits.preparedLimit
-    ) {
-      warnings.push(
-        "Prepared spells exceed the calculated limit."
-      );
-    }
-
-    if (
-      spellLimits.preparedLimit !== null &&
-      spellLimits.preparedCount <
-        spellLimits.preparedLimit
-    ) {
-      warnings.push(
-        `Prepare ${spellLimits.preparedLimit} spell${spellLimits.preparedLimit === 1 ? "" : "s"}; ${spellLimits.preparedCount} selected.`
-      );
-    }
-
-    const spellById =
-      new Map(
-        (
-          Array.isArray(
-            draft.magic.customSpells
-          )
-            ? draft.magic.customSpells
-            : []
-        ).map((spell) => {
-          return [spell.id, spell];
-        })
-      );
-
-    [...knownIds, ...preparedIds]
-      .forEach((spellId) => {
-        const spell =
-          spellById.get(spellId);
-
-        if (!spell) {
-          return;
-        }
-
-        const sourceWarning =
-          getSpellSourceWarning(
-            draft,
-            spell
-          );
-
-        if (sourceWarning) {
-          warnings.push(sourceWarning);
-          return;
-        }
-
-        if (
-          spellLimits.maxSpellLevel !== null &&
-          safeNumber(spell.level, 0) >
-            spellLimits.maxSpellLevel &&
-          spell.manualOverride !== true
-        ) {
-          warnings.push(
-            `${spell.name || "A selected spell"} is above the calculated maximum spell level.`
-          );
-        }
-      });
+    warnings.push(
+      ...spellChoiceValidation.blockingErrors
+    );
 
     getSelectedDefaultFeatInstances(
       draft
@@ -50172,7 +50116,11 @@ export function createCharacterCreator(options = {}) {
   }
 
   function getSection17FinalizationValidation() {
-    const ruleIssues = getSection17Warnings();
+    const spellChoiceValidation =
+      getSection17SpellChoiceValidation();
+    const ruleIssues = getSection17Warnings(
+      spellChoiceValidation
+    );
 
     const optionalRuleWarnings =
       ruleIssues.filter((warning) => {
@@ -50191,6 +50139,7 @@ export function createCharacterCreator(options = {}) {
     const optionalWarnings = [
       ...new Set([
         ...optionalRuleWarnings,
+        ...spellChoiceValidation.reminders,
         ...getSection17MigrationWarnings()
       ].filter(Boolean))
     ];
@@ -53441,133 +53390,9 @@ export function createCharacterCreator(options = {}) {
   function isSection17SpellsComplete(
     character
   ) {
-    if (
-      isCharacterNonSpellcaster(
-        character
-      )
-    ) {
-      return true;
-    }
-
-    const magic =
-      character?.magic || {};
-
-    const spellLimits =
-      getSpellSelectionLimits(
-        character
-      );
-
-    if (
-      spellLimits.cantripsKnownLimit !== null &&
-      spellLimits.knownCantripCount <
-        spellLimits.cantripsKnownLimit
-    ) {
-      return false;
-    }
-
-    if (
-      spellLimits.spellsKnownLimit !== null &&
-      spellLimits.knownLeveledCount <
-        spellLimits.spellsKnownLimit
-    ) {
-      return false;
-    }
-
-    if (
-      spellLimits.preparedLimit !== null &&
-      spellLimits.preparedCount <
-        spellLimits.preparedLimit
-    ) {
-      return false;
-    }
-
-    const spellById =
-      new Map(
-        (
-          Array.isArray(
-            magic.customSpells
-          )
-            ? magic.customSpells
-            : []
-        ).map((spell) => {
-          return [spell.id, spell];
-        })
-      );
-
-    const selectedSpellIds = [
-      ...new Set([
-        ...cleanArray(
-          magic.knownSpellIds
-        ),
-        ...cleanArray(
-          magic.preparedSpellIds
-        )
-      ])
-    ];
-
-    if (
-      selectedSpellIds.some((spellId) => {
-        const spell =
-          spellById.get(spellId);
-
-        return (
-          spell &&
-          Boolean(
-            getSpellSourceWarning(
-              character,
-              spell
-            )
-          )
-        );
-      })
-    ) {
-      return false;
-    }
-
-    return Boolean(
-      safeDisplayString(
-        magic.spellcastingAbility
-      ) ||
-      safeDisplayString(
-        magic.notes
-      ) ||
-      Object.keys(
-        magic.slots || {}
-      ).length > 0 ||
-      (
-        Array.isArray(
-          magic.knownSpellIds
-        ) &&
-        magic.knownSpellIds.length > 0
-      ) ||
-      (
-        Array.isArray(
-          magic.preparedSpellIds
-        ) &&
-        magic.preparedSpellIds.length > 0
-      ) ||
-      (
-        Array.isArray(
-          magic.customSpells
-        ) &&
-        magic.customSpells.length > 0
-      ) ||
-      safeDisplayString(
-        character
-          ?.features
-          ?.notes
-      ) ||
-      (
-        Array.isArray(
-          character
-            ?.features
-            ?.customFeatures
-        ) &&
-        character.features
-          .customFeatures
-          .length > 0
-      )
-    );
+    return getSection17SpellChoiceValidation(
+      character
+    ).blockingErrors.length === 0;
   }
 
   function isSection17ReviewComplete() {
