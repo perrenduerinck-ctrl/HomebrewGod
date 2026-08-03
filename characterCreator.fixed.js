@@ -49003,6 +49003,7 @@ export function createCharacterCreator(options = {}) {
     if (action === "toggle-spell-level") {
       if (control.closest("details")?.open) section16SpellPickerState.openLevels.delete(level);
       else section16SpellPickerState.openLevels.add(level);
+      refreshSection16SpellPicker();
       return;
     }
     if (action === "show-more-default-spells") {

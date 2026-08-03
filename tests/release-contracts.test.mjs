@@ -68,6 +68,7 @@ test("creator spell selection uses bounded, incremental rendering", async () => 
   assert.match(creator, /CREATOR_SPELL_SEARCH_DEBOUNCE_MS/);
   assert.match(actionSource, /refreshSection16SpellPicker/);
   assert.doesNotMatch(actionSource, /renderCreatorView\(\)/);
+  assert.match(creator, /toggle-spell-level[\s\S]{0,400}refreshSection16SpellPicker\(\)/);
   assert.match(picker, /CREATOR_SPELL_BATCH_SIZE = 25/);
   assert.match(picker, /visibleSpells/);
   assert.match(picker, /show-more-default-spells/);
