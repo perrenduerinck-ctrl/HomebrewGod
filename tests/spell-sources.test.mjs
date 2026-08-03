@@ -14,6 +14,9 @@ import {
   removeCanonicalSpellSource,
   restoreCanonicalSpellResources,
   SPELL_SELECTION_MODES,
+  SPELL_REFERENCE_LIMIT,
+  SPELL_SELECTION_GROUP_LIMIT,
+  SPELL_SOURCE_LIMIT,
   SPELL_SOURCE_MODEL_VERSION,
   SPELL_SOURCE_TYPES,
   storeMagicalSecretsCompatibilitySource,
@@ -470,6 +473,25 @@ test(
     );
   }
 );
+
+test("malformed spell-source collections are bounded before persistence", () => {
+  const references = Array.from({ length: SPELL_REFERENCE_LIMIT + 50 }, (_, index) => `spell-${index}`);
+  const spellStates = Object.fromEntries(references.map((spellId) => [spellId, { known: true }]));
+  const selectionGroups = Array.from({ length: SPELL_SELECTION_GROUP_LIMIT + 20 }, (_, index) => ({
+    sourceFeatureId: `choice-${index}`,
+    allowedSpellIds: references
+  }));
+  const sources = Array.from({ length: SPELL_SOURCE_LIMIT + 20 }, (_, index) => index === 0
+    ? { sourceId: "oversized", selectedSpellIds: references, spellRecords: references, spellStates, selectionGroups }
+    : { sourceId: `source-${index}` });
+  const normalized = normalizeSpellSources(sources);
+
+  assert.equal(normalized.length, SPELL_SOURCE_LIMIT);
+  assert.equal(normalized[0].selectedSpellIds.length, SPELL_REFERENCE_LIMIT);
+  assert.equal(normalized[0].spellRecords.length, SPELL_REFERENCE_LIMIT);
+  assert.equal(Object.keys(normalized[0].spellStates).length, SPELL_REFERENCE_LIMIT);
+  assert.equal(normalized[0].selectionGroups.length, SPELL_SELECTION_GROUP_LIMIT);
+});
 
 test(
   "regenerating a species source keeps newly unlocked innate spells",

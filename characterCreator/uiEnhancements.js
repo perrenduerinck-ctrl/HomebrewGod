@@ -243,6 +243,10 @@ function compactCard(card) {
 }
 
 function filterSpellViewer(viewer) {
+  if (viewer.dataset.ccSpellPickerManaged === "true") {
+    return;
+  }
+
   const query =
     clean(
       viewer.querySelector(
@@ -328,6 +332,10 @@ function filterSpellViewer(viewer) {
 }
 
 function enhanceSpellViewer(viewer) {
+  if (viewer.dataset.ccSpellPickerManaged === "true") {
+    return;
+  }
+
   if (
     viewer.dataset
       .hgSpellEnhanced !==

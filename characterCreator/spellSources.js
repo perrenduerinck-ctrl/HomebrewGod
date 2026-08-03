@@ -4,6 +4,9 @@
 // =====================================================
 
 export const SPELL_SOURCE_MODEL_VERSION = 3;
+export const SPELL_SOURCE_LIMIT = 256;
+export const SPELL_REFERENCE_LIMIT = 2048;
+export const SPELL_SELECTION_GROUP_LIMIT = 128;
 
 export const SPELL_SOURCE_TYPES = Object.freeze([
   "class",
@@ -83,7 +86,7 @@ function uniqueText(values) {
         })
         .filter(Boolean)
     )
-  ];
+  ].slice(0, SPELL_REFERENCE_LIMIT);
 }
 
 function optionalWholeNumber(value) {
@@ -119,7 +122,7 @@ function spellReferenceId(reference) {
 function normalizeSpellRecords(records) {
   const byId = new Map();
 
-  (Array.isArray(records) ? records : [])
+  (Array.isArray(records) ? records.slice(0, SPELL_REFERENCE_LIMIT) : [])
     .forEach((record) => {
       const id = spellReferenceId(record);
 
@@ -145,6 +148,7 @@ function normalizeSpellStates(value) {
 
   return Object.fromEntries(
     Object.entries(value)
+      .slice(0, SPELL_REFERENCE_LIMIT)
       .map(([spellId, state]) => {
         const cleanId = cleanText(spellId);
 
@@ -178,6 +182,7 @@ function normalizeSpellStates(value) {
 
 function normalizeSelectionGroups(value) {
   return (Array.isArray(value) ? value : [])
+    .slice(0, SPELL_SELECTION_GROUP_LIMIT)
     .filter(isRecord)
     .map((group, index) => {
       const selectedSpellIds = uniqueText(
@@ -431,11 +436,11 @@ export function normalizeSpellSource(
 
 export function normalizeSpellSources(sources) {
   const entries = Array.isArray(sources)
-    ? sources.map((source, index) => {
+    ? sources.slice(0, SPELL_SOURCE_LIMIT).map((source, index) => {
         return [String(index), source];
       })
     : isRecord(sources)
-      ? Object.entries(sources)
+      ? Object.keys(sources).slice(0, SPELL_SOURCE_LIMIT).map((key) => [key, sources[key]])
       : [];
   const usedIds = new Set();
 

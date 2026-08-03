@@ -91,6 +91,7 @@ import {
 import { renderInnateSpellCards } from "./characterCreator/innateSpellPresentation.js";
 import { renderMagicalSecretsPanels } from "./characterCreator/magicalSecrets.js";
 import { escapeHtml } from "./characterCreator/rendering.js";
+import { createCreatorSpellPickerState, CREATOR_SPELL_BATCH_SIZE, CREATOR_SPELL_SEARCH_DEBOUNCE_MS, getCreatorSpellSearchText, renderCreatorSpellPickerResults } from "./characterCreator/spellPicker.js";
 import {
   calculateCharacterCarryingCapacity,
   calculateRuleCarryingCapacity,
@@ -44461,6 +44462,8 @@ export function createCharacterCreator(options = {}) {
 
   const section16SelectedSpellSourceIds =
     new Map();
+  const section16SpellPickerState =
+    createCreatorSpellPickerState();
 
   function normalizeSection16Spell(
     rawSpell,
@@ -46650,6 +46653,20 @@ export function createCharacterCreator(options = {}) {
       getSelections: getSection12FeatureStoredChoices, getOptions: getSection12FeatureChoiceOptionRecords, getSourceKey: getSection16SourceKey, getSpellById: getSection16SpellById
     });
   }
+
+  function getSection16SelectedDefaultSpellIds() {
+    const selectedIds = new Set();
+    getSpellcastingClassOptions(creatorState.draft).forEach((entry) => {
+      const source = getSection16SourceState(entry, { create: false });
+      ["cantripIds", "knownSpellIds", "preparedSpellIds", "spellbookSpellIds", "alwaysPreparedSpellIds", "magicalSecretSpellIds"].forEach((key) => {
+        cleanArray(source?.[key]).forEach((spellId) => selectedIds.add(spellId));
+      });
+      Object.values(source?.mysticArcanumSpellIds || {}).forEach((spellId) => {
+        if (spellId) selectedIds.add(spellId);
+      });
+    });
+    return selectedIds;
+  }
   function renderSection16DefaultSpellViewer() {
     migrateSection16LegacySpellSelections();
 
@@ -46679,10 +46696,13 @@ export function createCharacterCreator(options = {}) {
       `;
     }
 
+    const selectedSpellIds = getSection16SelectedDefaultSpellIds();
+
     return `
       <div
         class="hg-character-field"
         data-cc-default-spell-viewer="true"
+        data-cc-spell-picker-managed="true"
       >
         <label for="ccDefaultSpellSearch">
           Search Default Spells
@@ -46691,16 +46711,23 @@ export function createCharacterCreator(options = {}) {
         <input
           id="ccDefaultSpellSearch"
           type="search"
-          placeholder="Search by spell name, level, or description..."
+          value="${escapeHtml(section16SpellPickerState.query)}"
+          placeholder="Search name, level, school, class, casting time, damage, or source..."
           data-cc-action-input="filter-default-spells"
           autocomplete="off"
         >
 
-        <div
-          class="hg-character-choice-grid"
-          style="margin-top: 12px;"
-        >
-          ${spells.map((spell) => {
+        <label class="hg-ui-check">
+          <input type="checkbox" data-hg-selected-spells-only ${section16SpellPickerState.selectedOnly ? "checked" : ""}>
+          Show selected only
+        </label>
+
+        <div data-cc-default-spell-results="true">
+          ${renderCreatorSpellPickerResults({
+            spells,
+            state: section16SpellPickerState,
+            isSelected: (spell) => selectedSpellIds.has(spell.id),
+            renderCard: (spell) => {
             const levelLabel =
               formatDefaultSpellLevelLabel(
                 spell
@@ -46891,20 +46918,8 @@ export function createCharacterCreator(options = {}) {
                 spell
               );
 
-            const searchText = [
-              spell.name,
-              levelLabel,
-              spell.levelKey,
-              spell.school,
-              spell.summary,
-              spell.description,
-              ...(Array.isArray(spell.classes)
-                ? spell.classes
-                : []),
-              ...(Array.isArray(spell.tags)
-                ? spell.tags
-                : [])
-            ].join(" ").toLowerCase();
+            const searchText =
+              getCreatorSpellSearchText(spell);
 
             return `
               <article
@@ -46916,6 +46931,8 @@ export function createCharacterCreator(options = {}) {
                     : ""
                 }"
                 data-cc-default-spell-option="true"
+                data-spell-id="${escapeHtml(spell.id)}"
+                data-spell-level="${safeNumber(spell.level, 0)}"
                 data-spell-search-text="${escapeHtml(
                   searchText
                 )}"
@@ -46952,7 +46969,11 @@ export function createCharacterCreator(options = {}) {
                   ${renderRulesetMetadata(spell, "spell")}
                 </p>
 
-                <p class="small">
+                <button type="button" data-cc-action="toggle-default-spell-details" data-spell-id="${escapeHtml(spell.id)}">
+                  ${section16SpellPickerState.expandedSpellIds.has(spell.id) ? "Hide" : "Show"} Spell Details
+                </button>
+
+                ${section16SpellPickerState.expandedSpellIds.has(spell.id) ? `<p class="small">
                   <b>Casting Time:</b>
                   ${escapeHtml(
                     spell.castingTime ||
@@ -47045,7 +47066,7 @@ export function createCharacterCreator(options = {}) {
                     spell.source ||
                     "default"
                   )}
-                </p>
+                </p>` : ""}
 
                 ${
                   sourceCandidates.length > 0
@@ -47217,18 +47238,29 @@ export function createCharacterCreator(options = {}) {
                 }
               </article>
             `;
-          }).join("")}
-        </div>
-
-        <div
-          class="hg-character-placeholder"
-          data-cc-default-spell-no-results="true"
-          hidden
-        >
-          No default spells match that search.
+            }
+          })}
         </div>
       </div>
     `;
+  }
+
+  function refreshSection16SpellPicker() {
+    const current = C.grid?.querySelector("[data-cc-default-spell-results]");
+    if (!current) return;
+    const scrollY = typeof window === "undefined" ? 0 : window.scrollY;
+    try {
+      const template = document.createElement("template");
+      template.innerHTML = renderSection16DefaultSpellViewer();
+      const next = template.content.querySelector("[data-cc-default-spell-results]");
+      if (!next) throw new Error("Spell results could not be rendered.");
+      current.replaceWith(next);
+      const summary = C.grid.querySelector("[data-cc-spell-source-summary]");
+      if (summary) summary.innerHTML = renderSection17SpellcastingSummary();
+      if (typeof window !== "undefined") window.scrollTo(0, scrollY);
+    } catch (error) {
+      current.innerHTML = `<div class="hg-character-warning">${escapeHtml(error?.message || "The spell list could not be updated. Try reopening the Spells step.")}</div>`;
+    }
   }
 
   function renderSection16CustomSpells() {
@@ -48327,7 +48359,7 @@ export function createCharacterCreator(options = {}) {
         }
       </div>
 
-      <div class="hg-character-choice-grid">
+      <div class="hg-character-choice-grid" data-cc-spell-source-summary="true">
         ${renderSection17SpellcastingSummary()}
       </div>
 
@@ -48937,80 +48969,51 @@ export function createCharacterCreator(options = {}) {
         );
     }
 
-    if (
-      action === "remove"
-    ) {
-      changed =
-        removeSection16CustomSpell(
-          spellId
-        );
-    }
-
     if (changed) {
-      setStatus(
-        action === "remove"
-          ? "Custom spell removed."
-          : "Spell status updated."
-      );
-
-      renderCreatorView();
+      setStatus("Spell status updated.");
+      refreshSection16SpellPicker();
     }
   }
 
   function handleSection16DefaultSpellSearch(
-    { target }
+    { target, event }
   ) {
-    if (
-      target?.dataset?.ccActionInput !==
-      "filter-default-spells"
-    ) {
-      return false;
-    }
-
-    const viewer = target.closest(
-      "[data-cc-default-spell-viewer]"
-    );
-
-    if (!viewer) {
+    const isSearch = target?.dataset?.ccActionInput === "filter-default-spells";
+    const isSelectedOnly = target?.matches?.("[data-hg-selected-spells-only]");
+    if (!isSearch && !isSelectedOnly) return false;
+    if (isSelectedOnly && event?.type !== "change") return false;
+    if (isSelectedOnly) {
+      section16SpellPickerState.selectedOnly = target.checked;
+      refreshSection16SpellPicker();
       return true;
     }
-
-    const query = cleanString(
-      target.value
-    ).toLowerCase();
-
-    const spellOptions = [
-      ...viewer.querySelectorAll(
-        "[data-cc-default-spell-option]"
-      )
-    ];
-
-    let visibleCount = 0;
-
-    spellOptions.forEach((option) => {
-      const matches =
-        !query ||
-        cleanString(
-          option.dataset.spellSearchText
-        ).includes(query);
-
-      option.hidden = !matches;
-
-      if (matches) {
-        visibleCount += 1;
-      }
-    });
-
-    const noResults = viewer.querySelector(
-      "[data-cc-default-spell-no-results]"
+    section16SpellPickerState.query = cleanString(target.value).toLowerCase();
+    clearTimeout(section16SpellPickerState.searchTimerId);
+    section16SpellPickerState.searchTimerId = setTimeout(
+      refreshSection16SpellPicker,
+      CREATOR_SPELL_SEARCH_DEBOUNCE_MS
     );
-
-    if (noResults) {
-      noResults.hidden =
-        visibleCount > 0;
-    }
-
     return true;
+  }
+
+  function handleSection16SpellPickerAction(...values) {
+    const control = findSection16ActionElement(...values);
+    const action = control?.dataset?.ccAction;
+    const level = Math.max(0, Math.min(9, safeNumber(control?.dataset?.spellLevel, 0)));
+    if (action === "toggle-spell-level") {
+      if (control.closest("details")?.open) section16SpellPickerState.openLevels.delete(level);
+      else section16SpellPickerState.openLevels.add(level);
+      return;
+    }
+    if (action === "show-more-default-spells") {
+      const visible = section16SpellPickerState.visibleByLevel.get(level) || CREATOR_SPELL_BATCH_SIZE;
+      section16SpellPickerState.visibleByLevel.set(level, visible + CREATOR_SPELL_BATCH_SIZE);
+    } else if (action === "toggle-default-spell-details") {
+      const spellId = cleanString(control?.dataset?.spellId);
+      if (section16SpellPickerState.expandedSpellIds.has(spellId)) section16SpellPickerState.expandedSpellIds.delete(spellId);
+      else section16SpellPickerState.expandedSpellIds.add(spellId);
+    }
+    refreshSection16SpellPicker();
   }
 
   function handleSection16SpellSourceChange(
@@ -49030,7 +49033,7 @@ export function createCharacterCreator(options = {}) {
       cleanString(target.value)
     );
 
-    renderCreatorView();
+    refreshSection16SpellPicker();
 
     return true;
   }
@@ -49139,16 +49142,25 @@ export function createCharacterCreator(options = {}) {
   registerCharacterCreatorAction(
     "remove-custom-spell",
     (...values) => {
-      handleSection16SpellAction(
-        "remove",
-        ...values
-      );
+      const button = findSection16ActionElement(...values);
+      if (removeSection16CustomSpell(button?.dataset?.spellId || "")) {
+        setStatus("Custom spell removed.");
+        renderCreatorView();
+      }
     }
   );
 
   registerCharacterCreatorInputHandler(
     handleSection16DefaultSpellSearch
   );
+
+  registerCharacterCreatorChangeHandler(
+    handleSection16DefaultSpellSearch
+  );
+
+  ["toggle-spell-level", "show-more-default-spells", "toggle-default-spell-details"].forEach((action) => {
+    registerCharacterCreatorAction(action, handleSection16SpellPickerAction);
+  });
 
   registerCharacterCreatorChangeHandler(
     handleSection16SpellSourceChange

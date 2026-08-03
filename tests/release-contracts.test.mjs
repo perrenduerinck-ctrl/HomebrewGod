@@ -55,6 +55,24 @@ test(
   }
 );
 
+test("creator spell selection uses bounded, incremental rendering", async () => {
+  const creator = await read("characterCreator.fixed.js");
+  const picker = await read("characterCreator/spellPicker.js");
+  const actionStart = creator.indexOf("function handleSection16SpellAction");
+  const actionEnd = creator.indexOf("function handleSection16DefaultSpellSearch", actionStart);
+  const actionSource = creator.slice(actionStart, actionEnd);
+
+  assert.match(creator, /data-cc-spell-picker-managed/);
+  assert.match(creator, /data-cc-default-spell-results/);
+  assert.match(creator, /toggle-default-spell-details/);
+  assert.match(creator, /CREATOR_SPELL_SEARCH_DEBOUNCE_MS/);
+  assert.match(actionSource, /refreshSection16SpellPicker/);
+  assert.doesNotMatch(actionSource, /renderCreatorView\(\)/);
+  assert.match(picker, /CREATOR_SPELL_BATCH_SIZE = 25/);
+  assert.match(picker, /visibleSpells/);
+  assert.match(picker, /show-more-default-spells/);
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {
