@@ -59,7 +59,7 @@ const deployedSelfTests = [
     path:
       "ai-testing/character-creator-self-test.html?release=phase20-20260727",
     selector: "#result",
-    expected: "\"total\": 459"
+    expected: "\"total\": 460"
   },
   {
     name:
