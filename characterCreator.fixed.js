@@ -9677,8 +9677,10 @@ export function createCharacterCreator(options = {}) {
   function getPerClassSpellSelectionSummary(
     character
   ) {
-    const spellcasting =
-      getSpellcastingSummary(character);
+    const spellcasting = {
+      classes:
+        getSpellcastingClassOptions(character)
+    };
     const sourceStore =
       character?.magic?.classSources &&
       typeof character.magic.classSources === "object" &&
@@ -50079,6 +50081,21 @@ export function createCharacterCreator(options = {}) {
     warnings.push(
       ...spellChoiceValidation.blockingErrors
     );
+
+    const customSpellById = new Map(
+      (Array.isArray(draft.magic.customSpells)
+        ? draft.magic.customSpells
+        : []).map((spell) => [spell.id, spell])
+    );
+    [...knownIds, ...preparedIds].forEach((spellId) => {
+      const spell = customSpellById.get(spellId);
+      const warning = spell
+        ? getSpellSourceWarning(draft, spell)
+        : "";
+      if (warning) {
+        warnings.push(warning);
+      }
+    });
 
     getSelectedDefaultFeatInstances(
       draft
