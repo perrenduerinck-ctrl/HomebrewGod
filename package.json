@@ -9,7 +9,7 @@
     "check:syntax": "node scripts/check-syntax.mjs",
     "check:imports": "node scripts/check-imports.mjs",
     "validate:data": "node scripts/validate-data.mjs",
-    "test:unit": "node tests/domain.test.mjs && node tests/persistence.test.mjs && node tests/walking-speed.test.mjs && node tests/custom-class-tools.test.mjs && node tests/field-limits.test.mjs && node tests/spell-sources.test.mjs && node tests/spell-picker.test.mjs && node tests/release-contracts.test.mjs",
+    "test:unit": "node tests/domain.test.mjs && node tests/persistence.test.mjs && node tests/walking-speed.test.mjs && node tests/custom-class-tools.test.mjs && node tests/field-limits.test.mjs && node tests/spell-sources.test.mjs && node tests/spell-picker.test.mjs && node tests/equipment-step.test.mjs && node tests/release-contracts.test.mjs",
     "test:spell-picker": "node tests/spell-picker.test.mjs",
     "test:browser": "playwright test tests/browser.spec.mjs tests/walking-speed.spec.mjs tests/character-creator-ui.spec.mjs",
     "test:deployed": "playwright test tests/deployed.spec.mjs tests/walking-speed.spec.mjs tests/character-creator-ui.spec.mjs",

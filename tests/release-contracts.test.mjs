@@ -86,6 +86,27 @@ test("creator spell selection uses bounded, incremental rendering", async () => 
   assert.match(picker, /show-more-default-spells/);
 });
 
+test("creator equipment step owns its visible UI and handlers", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const equipmentStep = await read("characterCreator/steps/equipmentStep.js");
+
+  assert.match(creatorMain, /import \{ createEquipmentStep \}/);
+  assert.doesNotMatch(creatorMain, /function renderEquipmentStep\s*\(/);
+  assert.doesNotMatch(creatorMain, /function handleSection15\w*\s*\(/);
+  assert.match(creatorMain, /equipmentStep\.actions\.forEach/);
+  assert.match(equipmentStep, /function renderStep\s*\(/);
+  assert.match(equipmentStep, /function handleStepClick\s*\(/);
+  assert.match(equipmentStep, /function handleStepInput\s*\(/);
+  assert.match(equipmentStep, /function handleStepChange\s*\(/);
+  assert.match(equipmentStep, /function validateStep\s*\(/);
+  assert.match(equipmentStep, /function normalizeStepData\s*\(/);
+  assert.match(equipmentStep, /function getStepWarnings\s*\(/);
+  assert.match(equipmentStep, /function isStepComplete\s*\(/);
+  assert.match(equipmentStep, /data-cc-action="add-custom-item"/);
+  assert.match(equipmentStep, /data-cc-action="skip-equipment"/);
+  assert.match(equipmentStep, /"update-inventory-item"/);
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {
