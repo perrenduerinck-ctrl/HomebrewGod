@@ -56,12 +56,24 @@ test(
 );
 
 test("creator spell selection uses bounded, incremental rendering", async () => {
-  const creator = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.fixed.js");
+  const spellsStep = await read("characterCreator/steps/spellsStep.js");
+  const creator = `${creatorMain}\n${spellsStep}`;
   const picker = await read("characterCreator/spellPicker.js");
-  const actionStart = creator.indexOf("function handleSection16SpellAction");
-  const actionEnd = creator.indexOf("function handleSection16DefaultSpellSearch", actionStart);
-  const actionSource = creator.slice(actionStart, actionEnd);
+  const actionStart = spellsStep.indexOf("function handleSection16SpellAction");
+  const actionEnd = spellsStep.indexOf("function handleSection16DefaultSpellSearch", actionStart);
+  const actionSource = spellsStep.slice(actionStart, actionEnd);
 
+  assert.match(creatorMain, /import \{ createSpellsStep \}/);
+  assert.doesNotMatch(creatorMain, /function renderSpellsStep\s*\(/);
+  assert.match(spellsStep, /function renderStep\s*\(/);
+  assert.match(spellsStep, /function handleStepClick\s*\(/);
+  assert.match(spellsStep, /function handleStepInput\s*\(/);
+  assert.match(spellsStep, /function handleStepChange\s*\(/);
+  assert.match(spellsStep, /function validateStep\s*\(/);
+  assert.match(spellsStep, /function normalizeStepData\s*\(/);
+  assert.match(spellsStep, /function getStepWarnings\s*\(/);
+  assert.match(spellsStep, /function isStepComplete\s*\(/);
   assert.match(creator, /data-cc-spell-picker-managed/);
   assert.match(creator, /data-cc-default-spell-results/);
   assert.match(creator, /toggle-default-spell-details/);
