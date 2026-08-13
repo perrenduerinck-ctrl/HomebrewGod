@@ -107,6 +107,31 @@ test("creator equipment step owns its visible UI and handlers", async () => {
   assert.match(equipmentStep, /"update-inventory-item"/);
 });
 
+test("creator class step owns class UI while multiclass remains independently extractable", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const classStep = await read("characterCreator/steps/classStep.js");
+
+  assert.match(creatorMain, /import \{ createClassStep \}/);
+  assert.doesNotMatch(creatorMain, /function renderClassStep\s*\(/);
+  assert.doesNotMatch(creatorMain, /function renderSubclassStep\s*\(/);
+  assert.doesNotMatch(creatorMain, /function handleSection12CustomClass\s*\(/);
+  assert.doesNotMatch(creatorMain, /function handleSection12ChooseSubclass\s*\(/);
+  assert.match(creatorMain, /classStep\.actions\.forEach/);
+  assert.match(creatorMain, /function handleSection12AddMulticlassClass\s*\(/);
+  assert.match(creatorMain, /function handleSection12MulticlassChange\s*\(/);
+  assert.match(classStep, /function renderStep\s*\(/);
+  assert.match(classStep, /function handleStepClick\s*\(/);
+  assert.match(classStep, /function handleStepInput\s*\(/);
+  assert.match(classStep, /function handleStepChange\s*\(/);
+  assert.match(classStep, /function validateStep\s*\(/);
+  assert.match(classStep, /function normalizeStepData\s*\(/);
+  assert.match(classStep, /function getStepWarnings\s*\(/);
+  assert.match(classStep, /function isStepComplete\s*\(/);
+  assert.match(classStep, /"choose-class"/);
+  assert.match(classStep, /data-cc-action="use-custom-class"/);
+  assert.match(classStep, /"choose-subclass"/);
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {
