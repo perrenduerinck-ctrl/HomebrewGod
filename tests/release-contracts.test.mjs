@@ -185,6 +185,10 @@ test("creator multiclass module owns its embedded editor and handlers", async ()
     /function handleSection12MulticlassChange\s*\(/
   );
   assert.match(creatorMain, /multiclassStep\.actions\.forEach/);
+  assert.match(
+    normalizedCreatorMain,
+    /createMulticlassStep\(\{[\s\S]*?formatMulticlassPrerequisiteFailure,/
+  );
   assert.match(creatorMain, /function addMulticlassClass\s*\(/);
   assert.match(creatorMain, /function getMulticlassPrerequisiteResults\s*\(/);
   [
@@ -208,6 +212,7 @@ test("creator multiclass module owns its embedded editor and handlers", async ()
   assert.match(multiclassStep, /function normalizeStepData\s*\(/);
   assert.match(multiclassStep, /function getStepWarnings\s*\(/);
   assert.match(multiclassStep, /function isStepComplete\s*\(/);
+  assert.match(multiclassStep, /formatMulticlassPrerequisiteFailure,/);
   assert.match(multiclassStep, /data-cc-action="add-multiclass-class"/);
   assert.match(multiclassStep, /data-cc-action="remove-multiclass-class"/);
   assert.match(multiclassStep, /data-cc-action="move-character-level-order"/);

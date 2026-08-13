@@ -31476,6 +31476,7 @@ export function createCharacterCreator(options = {}) {
       return classStep.findActionElement(...values);
     },
     formatClassEntryProficiencySummary,
+    formatMulticlassPrerequisiteFailure,
     formatMulticlassStoredChoiceValue,
     getAllClassTemplates,
     getCharacterClassEntries,

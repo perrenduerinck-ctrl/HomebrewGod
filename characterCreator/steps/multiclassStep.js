@@ -24,6 +24,7 @@ export function createMulticlassStep(dependencies = {}) {
     escapeHtml,
     findSection12ActionElement,
     formatClassEntryProficiencySummary,
+    formatMulticlassPrerequisiteFailure,
     formatMulticlassStoredChoiceValue,
     getAllClassTemplates,
     getCharacterClassEntries,
