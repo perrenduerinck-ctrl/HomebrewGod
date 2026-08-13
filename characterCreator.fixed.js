@@ -33110,7 +33110,22 @@ export function createCharacterCreator(options = {}) {
   const {
     renderClassStep,
     renderSubclassStep,
-    findSection12ActionElement
+    findSection12ActionElement,
+    handleSection12ChooseClass,
+    handleSection12DeleteRoomClass,
+    handleSection12CustomClass,
+    handleSection12ClassFeatureChoice,
+    handleSection12ClassFeatureSelectChange,
+    handleSection12AsiAction,
+    handleSection12AsiChange,
+    handleSection12ChooseAsiFeat,
+    handleSection12FeatSearch,
+    handleSection12ArtificerInfusion,
+    handleSection12ArtificerInfusionTargetChange,
+    handleSection12CustomClassSkillPicker,
+    handleSection12ChooseSubclass,
+    handleSection12CustomSubclass,
+    handleSection12ClearSubclass
   } = classStep.compatibility;
 
   registerCharacterStepRenderer("class", classStep.renderStep);

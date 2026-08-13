@@ -110,6 +110,17 @@ test("creator equipment step owns its visible UI and handlers", async () => {
 test("creator class step owns class UI while multiclass remains independently extractable", async () => {
   const creatorMain = await read("characterCreator.fixed.js");
   const classStep = await read("characterCreator/steps/classStep.js");
+  const compatibilityStart = creatorMain.indexOf(
+    "const {\n    renderClassStep"
+  );
+  const compatibilityEnd = creatorMain.indexOf(
+    "} = classStep.compatibility;",
+    compatibilityStart
+  );
+  const compatibilitySource = creatorMain.slice(
+    compatibilityStart,
+    compatibilityEnd
+  );
 
   assert.match(creatorMain, /import \{ createClassStep \}/);
   assert.doesNotMatch(creatorMain, /function renderClassStep\s*\(/);
@@ -119,6 +130,21 @@ test("creator class step owns class UI while multiclass remains independently ex
   assert.match(creatorMain, /classStep\.actions\.forEach/);
   assert.match(creatorMain, /function handleSection12AddMulticlassClass\s*\(/);
   assert.match(creatorMain, /function handleSection12MulticlassChange\s*\(/);
+  [
+    "handleSection12ArtificerInfusion",
+    "handleSection12AsiAction",
+    "handleSection12ChooseClass",
+    "handleSection12ChooseSubclass",
+    "handleSection12ClassFeatureChoice",
+    "handleSection12CustomClass",
+    "handleSection12FeatSearch"
+  ].forEach((handlerName) => {
+    assert.match(
+      compatibilitySource,
+      new RegExp(`\\b${handlerName}\\b`),
+      handlerName
+    );
+  });
   assert.match(classStep, /function renderStep\s*\(/);
   assert.match(classStep, /function handleStepClick\s*\(/);
   assert.match(classStep, /function handleStepInput\s*\(/);
