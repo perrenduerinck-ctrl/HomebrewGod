@@ -31498,6 +31498,7 @@ export function createCharacterCreator(options = {}) {
     getMulticlassSummaryEntries,
     getPrimaryClassEntry,
     getSafeClassName,
+    getSkillDefinitionByIdOrName,
     getUnlockedFeatChoiceSlots,
     getValidClassEntrySkillIds,
     getValidClassEntryToolChoices,

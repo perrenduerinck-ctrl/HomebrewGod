@@ -46,6 +46,7 @@ export function createMulticlassStep(dependencies = {}) {
     getMulticlassSummaryEntries,
     getPrimaryClassEntry,
     getSafeClassName,
+    getSkillDefinitionByIdOrName,
     getUnlockedFeatChoiceSlots,
     getValidClassEntrySkillIds,
     getValidClassEntryToolChoices,
