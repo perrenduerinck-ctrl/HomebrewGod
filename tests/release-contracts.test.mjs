@@ -128,8 +128,6 @@ test("creator class step owns class UI while multiclass remains independently ex
   assert.doesNotMatch(creatorMain, /function handleSection12CustomClass\s*\(/);
   assert.doesNotMatch(creatorMain, /function handleSection12ChooseSubclass\s*\(/);
   assert.match(creatorMain, /classStep\.actions\.forEach/);
-  assert.match(creatorMain, /function handleSection12AddMulticlassClass\s*\(/);
-  assert.match(creatorMain, /function handleSection12MulticlassChange\s*\(/);
   [
     "handleSection12ArtificerInfusion",
     "handleSection12AsiAction",
@@ -156,6 +154,64 @@ test("creator class step owns class UI while multiclass remains independently ex
   assert.match(classStep, /"choose-class"/);
   assert.match(classStep, /data-cc-action="use-custom-class"/);
   assert.match(classStep, /"choose-subclass"/);
+});
+
+test("creator multiclass module owns its embedded editor and handlers", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const multiclassStep = await read(
+    "characterCreator/steps/multiclassStep.js"
+  );
+  const compatibilityStart = normalizedCreatorMain.indexOf(
+    "const {\n    renderMulticlassStoredChoices"
+  );
+  const compatibilityEnd = normalizedCreatorMain.indexOf(
+    "} = multiclassStep.compatibility;",
+    compatibilityStart
+  );
+  const compatibilitySource = normalizedCreatorMain.slice(
+    compatibilityStart,
+    compatibilityEnd
+  );
+
+  assert.match(creatorMain, /import \{ createMulticlassStep \}/);
+  assert.doesNotMatch(creatorMain, /function renderMulticlass\w*\s*\(/);
+  assert.doesNotMatch(
+    creatorMain,
+    /function handleSection12(?:Add|Adjust|Remove|Move|Toggle)Multiclass\w*\s*\(/
+  );
+  assert.doesNotMatch(
+    creatorMain,
+    /function handleSection12MulticlassChange\s*\(/
+  );
+  assert.match(creatorMain, /multiclassStep\.actions\.forEach/);
+  assert.match(creatorMain, /function addMulticlassClass\s*\(/);
+  assert.match(creatorMain, /function getMulticlassPrerequisiteResults\s*\(/);
+  [
+    "renderMulticlassProgressionEditor",
+    "renderMulticlassLevelBreakdown",
+    "handleSection12AddMulticlassClass",
+    "handleSection12RemoveMulticlassClass",
+    "handleSection12MulticlassChange"
+  ].forEach((name) => {
+    assert.match(
+      compatibilitySource,
+      new RegExp(`\\b${name}\\b`),
+      name
+    );
+  });
+  assert.match(multiclassStep, /function renderStep\s*\(/);
+  assert.match(multiclassStep, /function handleStepClick\s*\(/);
+  assert.match(multiclassStep, /function handleStepInput\s*\(/);
+  assert.match(multiclassStep, /function handleStepChange\s*\(/);
+  assert.match(multiclassStep, /function validateStep\s*\(/);
+  assert.match(multiclassStep, /function normalizeStepData\s*\(/);
+  assert.match(multiclassStep, /function getStepWarnings\s*\(/);
+  assert.match(multiclassStep, /function isStepComplete\s*\(/);
+  assert.match(multiclassStep, /data-cc-action="add-multiclass-class"/);
+  assert.match(multiclassStep, /data-cc-action="remove-multiclass-class"/);
+  assert.match(multiclassStep, /data-cc-action="move-character-level-order"/);
+  assert.match(multiclassStep, /data-cc-action="toggle-multiclass-skill"/);
 });
 
 test(
