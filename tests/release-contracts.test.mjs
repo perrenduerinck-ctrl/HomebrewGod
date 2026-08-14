@@ -284,6 +284,7 @@ test("creator feats module owns the embedded feat UI and handlers", async () => 
 test("creator species module owns species UI, mechanics, and validation", async () => {
   const creatorMain = await read("characterCreator.fixed.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const reviewStep = await read("characterCreator/steps/reviewStep.js");
   const speciesStep = await read("characterCreator/steps/speciesStep.js");
   const compatibilityStart = normalizedCreatorMain.indexOf(
     "const {\n    getAllSpeciesTemplates"
@@ -303,7 +304,7 @@ test("creator species module owns species UI, mechanics, and validation", async 
     /function (?:getAllSpeciesTemplates|renderSpeciesStep|applySection11SpeciesMechanics|handleChooseSpeciesAction|isSection17SpeciesComplete)\s*\(/
   );
   assert.match(creatorMain, /speciesStep\.actions\.forEach/);
-  assert.match(creatorMain, /speciesStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /speciesStep\.getStepWarnings\(draft\)/);
   assert.match(creatorMain, /speciesStep\.isStepComplete/);
   assert.match(creatorMain, /function normalizeCharacter\s*\(/);
   [
@@ -346,6 +347,7 @@ test("creator background module owns background UI, mechanics, and validation", 
   const creatorMain = await read("characterCreator.fixed.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const backgroundStep = await read("characterCreator/steps/backgroundStep.js");
+  const reviewStep = await read("characterCreator/steps/reviewStep.js");
   const compatibilityStart = normalizedCreatorMain.indexOf(
     "const {\n    normalizeSection14Background"
   );
@@ -364,7 +366,7 @@ test("creator background module owns background UI, mechanics, and validation", 
     /function (?:normalizeSection14Background|renderBackgroundStep|handleSection14ChooseBackground|isSection17BackgroundComplete)\s*\(/
   );
   assert.match(creatorMain, /backgroundStep\.actions\.forEach/);
-  assert.match(creatorMain, /backgroundStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /backgroundStep\.getStepWarnings\(draft\)/);
   assert.match(creatorMain, /backgroundStep\.isStepComplete/);
   assert.match(creatorMain, /const skillsStep = createSkillsStep\(/);
   assert.match(creatorMain, /skillsStep\.compatibility\.getSection14SkillEntry/);
@@ -407,6 +409,7 @@ test("creator abilities module owns score methods, derived UI, and validation", 
   const creatorMain = await read("characterCreator.fixed.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const abilitiesStep = await read("characterCreator/steps/abilitiesStep.js");
+  const reviewStep = await read("characterCreator/steps/reviewStep.js");
   const compatibilityStart = normalizedCreatorMain.indexOf(
     "const {\n    getSection13AbilityName"
   );
@@ -425,7 +428,7 @@ test("creator abilities module owns score methods, derived UI, and validation", 
     /function (?:getSection13AbilityName|applySection13StandardArray|renderAbilitiesStep|handleSection13Change|isSection17AbilitiesComplete)\s*\(/
   );
   assert.match(creatorMain, /abilitiesStep\.actions\.forEach/);
-  assert.match(creatorMain, /abilitiesStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /abilitiesStep\.getStepWarnings\(draft\)/);
   assert.match(creatorMain, /abilitiesStep\.isStepComplete/);
   assert.match(creatorMain, /abilitiesStep\.renderLevelStep/);
   assert.match(
@@ -472,6 +475,7 @@ test("creator abilities module owns score methods, derived UI, and validation", 
 test("creator Skills module owns proficiencies, expertise, and validation", async () => {
   const creatorMain = await read("characterCreator.fixed.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const reviewStep = await read("characterCreator/steps/reviewStep.js");
   const skillsStep = await read("characterCreator/steps/skillsStep.js");
   const compatibilityStart = normalizedCreatorMain.indexOf(
     "const {\n    getSection14SkillEntry"
@@ -491,7 +495,7 @@ test("creator Skills module owns proficiencies, expertise, and validation", asyn
     /function (?:getSection14SkillEntry|toggleSection14Skill|renderSkillsStep|handleSection14ToggleSkill|isSection17SkillsComplete)\s*\(/
   );
   assert.match(creatorMain, /skillsStep\.actions\.forEach/);
-  assert.match(creatorMain, /skillsStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /skillsStep\.getStepWarnings\(draft\)/);
   assert.match(creatorMain, /skillsStep\.isStepComplete/);
   assert.match(creatorMain, /skillsStep\.renderStep/);
   [
@@ -630,6 +634,60 @@ test("creator Basics module owns the Basics screen and composes Description fiel
   assert.match(basicsStep, /function normalizeStepData\s*\(/);
   assert.match(basicsStep, /function getStepWarnings\s*\(/);
   assert.match(basicsStep, /function isStepComplete\s*\(/);
+});
+
+test("creator Review module owns final validation, summaries, and review actions", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const reviewStep = await read("characterCreator/steps/reviewStep.js");
+
+  assert.match(creatorMain, /import \{ createReviewStep \}/);
+  assert.match(creatorMain, /const reviewStep = createReviewStep\(/);
+  assert.doesNotMatch(creatorMain, /function renderReviewStep\s*\(/);
+  assert.doesNotMatch(creatorMain, /function getSection17Warnings\s*\(/);
+  assert.doesNotMatch(creatorMain, /function getSection17FinalizationValidation\s*\(/);
+  assert.doesNotMatch(creatorMain, /function isSection17ReviewComplete\s*\(/);
+  assert.doesNotMatch(creatorMain, /function handleSection17RefreshReview\s*\(/);
+  assert.match(
+    creatorMain,
+    /registerCharacterStepRenderer\(\s*"review",\s*reviewStep\.renderStep\s*\)/
+  );
+  assert.match(
+    creatorMain,
+    /registerCharacterStepCompletion\(\s*"review",\s*reviewStep\.isStepComplete\s*\)/
+  );
+  assert.match(creatorMain, /reviewStep\.actions\.forEach/);
+
+  [
+    "Review Your Character",
+    "Character Identity",
+    "Combat Summary",
+    "Ability Scores",
+    "Saving Throws",
+    "Skills",
+    "Equipment",
+    "Spells and Features",
+    "Character Story",
+    'data-cc-action="save-character"',
+    'data-cc-action="finalize-character"',
+    'data-cc-action="open-character-sheet"',
+    'data-cc-action="refresh-review"',
+    'data-step-id="save"'
+  ].forEach((contract) => {
+    assert.match(reviewStep, new RegExp(contract));
+  });
+
+  assert.match(reviewStep, /function renderStep\s*\(/);
+  assert.match(reviewStep, /function handleStepClick\s*\(/);
+  assert.match(reviewStep, /function handleStepInput\s*\(/);
+  assert.match(reviewStep, /function handleStepChange\s*\(/);
+  assert.match(reviewStep, /function validateStep\s*\(/);
+  assert.match(reviewStep, /function normalizeStepData\s*\(/);
+  assert.match(reviewStep, /function getStepWarnings\s*\(/);
+  assert.match(reviewStep, /function isStepComplete\s*\(/);
+
+  assert.match(creatorMain, /function formatSection17Modifier\s*\(/);
+  assert.match(creatorMain, /function formatSection17ClassLevelSummary\s*\(/);
+  assert.match(creatorMain, /function renderSection17SpellcastingSummary\s*\(/);
 });
 
 test(
