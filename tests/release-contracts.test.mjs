@@ -342,6 +342,69 @@ test("creator species module owns species UI, mechanics, and validation", async 
   assert.match(speciesStep, /function addSpeciesTrait\s*\(/);
 });
 
+test("creator background module owns background UI, mechanics, and validation", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const backgroundStep = await read("characterCreator/steps/backgroundStep.js");
+  const compatibilityStart = normalizedCreatorMain.indexOf(
+    "const {\n    normalizeSection14Background"
+  );
+  const compatibilityEnd = normalizedCreatorMain.indexOf(
+    "} = backgroundStep.compatibility;",
+    compatibilityStart
+  );
+  const compatibilitySource = normalizedCreatorMain.slice(
+    compatibilityStart,
+    compatibilityEnd
+  );
+
+  assert.match(creatorMain, /import \{ createBackgroundStep \}/);
+  assert.doesNotMatch(
+    creatorMain,
+    /function (?:normalizeSection14Background|renderBackgroundStep|handleSection14ChooseBackground|isSection17BackgroundComplete)\s*\(/
+  );
+  assert.match(creatorMain, /backgroundStep\.actions\.forEach/);
+  assert.match(creatorMain, /backgroundStep\.getStepWarnings\(draft\)/);
+  assert.match(creatorMain, /backgroundStep\.isStepComplete/);
+  assert.match(creatorMain, /function getSection14SkillEntry\s*\(/);
+  assert.match(creatorMain, /function handleSection14ToggleSkill\s*\(/);
+  assert.match(creatorMain, /function handleSection14ToggleExpertise\s*\(/);
+  assert.match(creatorMain, /function isSection17SkillsComplete\s*\(/);
+  [
+    "normalizeSection14Background",
+    "getSelectedSection14Background",
+    "applySection14BackgroundChoices",
+    "applySection14BackgroundPackage",
+    "renderBackgroundStep",
+    "handleSection14ChooseBackground",
+    "isSection17BackgroundComplete"
+  ].forEach((name) => {
+    assert.match(
+      compatibilitySource,
+      new RegExp(`\\b${name}\\b`),
+      name
+    );
+  });
+  assert.match(backgroundStep, /function renderStep\s*\(/);
+  assert.match(backgroundStep, /function handleStepClick\s*\(/);
+  assert.match(backgroundStep, /function handleStepInput\s*\(/);
+  assert.match(backgroundStep, /function handleStepChange\s*\(/);
+  assert.match(backgroundStep, /function validateStep\s*\(/);
+  assert.match(backgroundStep, /function normalizeStepData\s*\(/);
+  assert.match(backgroundStep, /function getStepWarnings\s*\(/);
+  assert.match(backgroundStep, /function isStepComplete\s*\(/);
+  assert.match(
+    backgroundStep,
+    /"choose-background",\s*\{\s*"background-id":/
+  );
+  assert.match(backgroundStep, /data-cc-action="use-custom-background"/);
+  assert.match(backgroundStep, /data-cc-action="apply-background-choices"/);
+  assert.match(backgroundStep, /"apply-background-package"/);
+  assert.match(backgroundStep, /data-cc-action="add-background-feature"/);
+  assert.match(backgroundStep, /function addSection14BackgroundCurrency\s*\(/);
+  assert.match(backgroundStep, /function removeSection14BackgroundEquipment\s*\(/);
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {
