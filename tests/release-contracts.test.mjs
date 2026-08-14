@@ -539,6 +539,7 @@ test("creator Skills module owns proficiencies, expertise, and validation", asyn
 test("creator Description module owns identity, story, notes, and portrait behavior", async () => {
   const creatorMain = await read("characterCreator.fixed.js");
   const backgroundStep = await read("characterCreator/steps/backgroundStep.js");
+  const basicsStep = await read("characterCreator/steps/basicsStep.js");
   const descriptionStep = await read("characterCreator/steps/descriptionStep.js");
 
   assert.match(creatorMain, /import \{ createDescriptionStep \}/);
@@ -547,9 +548,9 @@ test("creator Description module owns identity, story, notes, and portrait behav
     creatorMain,
     /function (?:getSection11Portrait|setSection11Portrait|clearSection11Portrait|replaceSection11Portrait|removeSection11Portrait|renderSection11PortraitPanel|handleSection11PortraitChange)\s*\(/
   );
-  assert.match(creatorMain, /renderDescriptionNameField\(\)/);
-  assert.match(creatorMain, /renderDescriptionAppearanceField\(\)/);
-  assert.match(creatorMain, /renderDescriptionNotesField\(\)/);
+  assert.match(basicsStep, /renderDescriptionNameField\(\)/);
+  assert.match(basicsStep, /renderDescriptionAppearanceField\(\)/);
+  assert.match(basicsStep, /renderDescriptionNotesField\(\)/);
   assert.match(backgroundStep, /renderDescriptionStoryFields\(\)/);
   assert.doesNotMatch(backgroundStep, /ccBackground(?:Traits|Ideals|Bonds|Flaws|Backstory)/);
 
@@ -579,6 +580,56 @@ test("creator Description module owns identity, story, notes, and portrait behav
     creatorMain.indexOf("const BUILDER_STEP_INDEX")
   );
   assert.doesNotMatch(builderDefinition, /id:\s*"description"/);
+});
+
+test("creator Basics module owns the Basics screen and composes Description fields", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const basicsStep = await read("characterCreator/steps/basicsStep.js");
+
+  assert.match(creatorMain, /import \{ createBasicsStep \}/);
+  assert.match(creatorMain, /const basicsStep = createBasicsStep\(/);
+  assert.doesNotMatch(creatorMain, /function renderBasicsStep\s*\(/);
+  assert.doesNotMatch(creatorMain, /function isSection17BasicsComplete\s*\(/);
+  assert.match(
+    creatorMain,
+    /registerCharacterStepRenderer\(\s*"basics",\s*basicsStep\.renderStep\s*\)/
+  );
+  assert.match(
+    creatorMain,
+    /registerCharacterStepCompletion\(\s*"basics",\s*basicsStep\.isStepComplete\s*\)/
+  );
+
+  [
+    "ccPronouns",
+    "ccAlignment",
+    "ccDeity",
+    "ccAge",
+    "ccIdentitySize"
+  ].forEach((fieldId) => {
+    assert.match(basicsStep, new RegExp(fieldId));
+  });
+
+  [
+    "renderSection11PortraitPanel",
+    "renderDescriptionNameField",
+    "renderDescriptionAppearanceField",
+    "renderDescriptionNotesField"
+  ].forEach((renderHelper) => {
+    assert.match(basicsStep, new RegExp(`${renderHelper}\\(\\)`));
+  });
+
+  assert.doesNotMatch(basicsStep, /id="ccCharacterName"/);
+  assert.doesNotMatch(basicsStep, /id="ccAppearance"/);
+  assert.doesNotMatch(basicsStep, /id="ccGeneralNotes"/);
+  assert.doesNotMatch(basicsStep, /Portrait Image URL/);
+  assert.match(basicsStep, /function renderStep\s*\(/);
+  assert.match(basicsStep, /function handleStepClick\s*\(/);
+  assert.match(basicsStep, /function handleStepInput\s*\(/);
+  assert.match(basicsStep, /function handleStepChange\s*\(/);
+  assert.match(basicsStep, /function validateStep\s*\(/);
+  assert.match(basicsStep, /function normalizeStepData\s*\(/);
+  assert.match(basicsStep, /function getStepWarnings\s*\(/);
+  assert.match(basicsStep, /function isStepComplete\s*\(/);
 });
 
 test(

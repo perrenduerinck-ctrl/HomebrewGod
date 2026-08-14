@@ -100,6 +100,7 @@ import { createBackgroundStep } from "./characterCreator/steps/backgroundStep.js
 import { createAbilitiesStep } from "./characterCreator/steps/abilitiesStep.js?v=abilities-step-extraction-20260813";
 import { createSkillsStep } from "./characterCreator/steps/skillsStep.js?v=skills-step-extraction-20260813";
 import { createDescriptionStep } from "./characterCreator/steps/descriptionStep.js?v=description-step-extraction-20260813";
+import { createBasicsStep } from "./characterCreator/steps/basicsStep.js?v=basics-step-extraction-20260814";
 import { createEquipmentStep } from "./characterCreator/steps/equipmentStep.js?v=equipment-step-extraction-20260812";
 import { createSpellsStep } from "./characterCreator/steps/spellsStep.js?v=spells-step-extraction-20260803";
 import {
@@ -18423,7 +18424,7 @@ export function createCharacterCreator(options = {}) {
   }
 
   function runCharacterStepRegistrationAudit() {
-    if (characterStepRenderers.get("basics") !== renderBasicsStep) {
+    if (characterStepRenderers.get("basics") !== basicsStep.renderStep) {
       console.error(
         "Character Creator registration error: basics renderer was overwritten."
       );
@@ -20369,102 +20370,24 @@ export function createCharacterCreator(options = {}) {
     handleSection11PortraitChange
   } = descriptionStep.compatibility;
 
-  function renderBasicsStep() {
-    const identity =
-      creatorState.draft.identity;
+  const basicsStep = createBasicsStep({
+    beginnerNote,
+    createEmptyCharacter,
+    getCreatorState: () => creatorState,
+    getSafeCharacterName,
+    renderDescriptionAppearanceField,
+    renderDescriptionNameField,
+    renderDescriptionNotesField,
+    renderSection11PortraitPanel,
+    safeDisplayString,
+    wizardField,
+    wizardSelect
+  });
 
-    const sizes = [
-      "tiny",
-      "small",
-      "medium",
-      "large",
-      "huge",
-      "gargantuan"
-    ].map((size) => {
-      return {
-        value: size,
-
-        label:
-          size.charAt(0).toUpperCase() +
-          size.slice(1)
-      };
-    });
-
-    return `
-      ${beginnerNote(
-        "Character Identity",
-        "Start with who your character is. Name, age, pronouns, deity, and appearance are mostly story details. Size can matter for some rules, but most player characters are Small or Medium."
-      )}
-
-      <div class="hg-character-field-grid">
-        ${renderSection11PortraitPanel()}
-
-        ${renderDescriptionNameField()}
-
-        ${wizardField(
-          "Pronouns",
-          "ccPronouns",
-          safeDisplayString(
-            identity.pronouns
-          ),
-          {
-            path: "identity.pronouns",
-            placeholder: "Optional"
-          }
-        )}
-
-        ${wizardField(
-          "Alignment / Outlook",
-          "ccAlignment",
-          safeDisplayString(
-            identity.alignment
-          ),
-          {
-            path: "identity.alignment",
-            placeholder: "Optional"
-          }
-        )}
-
-        ${wizardField(
-          "Deity / Belief",
-          "ccDeity",
-          safeDisplayString(
-            identity.deity
-          ),
-          {
-            path: "identity.deity",
-            placeholder: "Optional"
-          }
-        )}
-
-        ${wizardField(
-          "Age",
-          "ccAge",
-          safeDisplayString(
-            identity.age
-          ),
-          {
-            path: "identity.age",
-            placeholder: "Optional"
-          }
-        )}
-
-        ${wizardSelect(
-          "Size",
-          "ccIdentitySize",
-          identity.size,
-          sizes,
-          {
-            path: "identity.size"
-          }
-        )}
-
-        ${renderDescriptionAppearanceField()}
-
-        ${renderDescriptionNotesField()}
-      </div>
-    `;
-  }
+  const {
+    renderBasicsStep,
+    isSection17BasicsComplete
+  } = basicsStep.compatibility;
 
   const speciesStep = createSpeciesStep({
     $,
@@ -20562,7 +20485,7 @@ export function createCharacterCreator(options = {}) {
 
   registerCharacterStepRenderer(
     "basics",
-    renderBasicsStep
+    basicsStep.renderStep
   );
 
   registerCharacterStepRenderer(
@@ -38498,16 +38421,6 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
-  function isSection17BasicsComplete(
-    character
-  ) {
-    return Boolean(
-      getSafeCharacterName(
-        character
-      )
-    );
-  }
-
   function isSection17ClassComplete(
     character
   ) {
@@ -39037,7 +38950,7 @@ export function createCharacterCreator(options = {}) {
 
   registerCharacterStepCompletion(
     "basics",
-    isSection17BasicsComplete
+    basicsStep.isStepComplete
   );
 
   registerCharacterStepCompletion(
