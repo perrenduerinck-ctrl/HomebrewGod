@@ -430,6 +430,10 @@ test("creator abilities module owns score methods, derived UI, and validation", 
   assert.match(creatorMain, /abilitiesStep\.getStepWarnings\(draft\)/);
   assert.match(creatorMain, /abilitiesStep\.isStepComplete/);
   assert.match(creatorMain, /abilitiesStep\.renderLevelStep/);
+  assert.match(
+    normalizedCreatorMain,
+    /createClassStep\(\{[\s\S]*?renderLevelStep:\s*\(\.\.\.args\)\s*=>\s*\{\s*return abilitiesStep\.renderLevelStep\(\.\.\.args\);/
+  );
   assert.match(creatorMain, /function getSection14SkillEntry\s*\(/);
   assert.match(creatorMain, /function isSection17SkillsComplete\s*\(/);
   [

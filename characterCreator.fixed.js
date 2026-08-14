@@ -28913,7 +28913,9 @@ export function createCharacterCreator(options = {}) {
     markDraftChanged,
     renderCreatorView,
     renderCustomClassMovementFields,
-    renderLevelStep,
+    renderLevelStep: (...args) => {
+      return abilitiesStep.renderLevelStep(...args);
+    },
     renderMulticlassLevelBreakdown,
     renderMulticlassProgressionEditor,
     renderRulesetMetadata,
