@@ -3,9 +3,6 @@ const CLASS_STEP_ACTIONS = Object.freeze([
   "delete-room-class",
   "use-custom-class",
   "toggle-class-feature-choice",
-  "set-asi-mode",
-  "adjust-asi-ability",
-  "choose-asi-feat",
   "toggle-artificer-infusion-known",
   "toggle-artificer-infusion-active",
   "add-custom-class-skill",
@@ -19,7 +16,6 @@ const CLASS_STEP_ACTIONS = Object.freeze([
 
 export function createClassStep(dependencies = {}) {
   const {
-    adjustSection12AsiAbility,
     applyCompatibilityAliases,
     applySection12CustomClass,
     applySection12CustomSubclass,
@@ -68,11 +64,7 @@ export function createClassStep(dependencies = {}) {
     renderSection14SourceSkillChoices,
     safeDisplayString,
     safeNumber,
-    setFeatRestChoice,
     setSection12ArtificerInfusionTarget,
-    setSection12AsiFeat,
-    setSection12AsiMode,
-    setSection12FeatChoiceValues,
     setSection12FeatureStoredChoices,
     setStatus,
     toggleSection12ArtificerInfusion,
@@ -1027,163 +1019,6 @@ export function createClassStep(dependencies = {}) {
     return true;
   }
 
-  function handleSection12AsiAction(
-    action,
-    ...values
-  ) {
-    const button = findSection12ActionElement(...values);
-    const featureId = button?.dataset?.featureId || "";
-    let changed = false;
-
-    if (action === "mode") {
-      changed = setSection12AsiMode(
-        featureId,
-        button?.dataset?.mode || ""
-      );
-    }
-
-    if (action === "ability") {
-      changed = adjustSection12AsiAbility(
-        featureId,
-        button?.dataset?.abilityId || "",
-        button?.dataset?.delta || 0
-      );
-    }
-
-    if (changed) {
-      setStatus("ASI / feat choice updated.");
-      renderCreatorView();
-    }
-  }
-
-  function handleSection12AsiChange({ target }) {
-    if (
-      target?.dataset
-        ?.ccActionChange ===
-        "set-feat-rest-choice"
-    ) {
-      if (
-        setFeatRestChoice(
-          target.dataset
-            .restChoiceId ||
-            "",
-          target.value
-        )
-      ) {
-        setStatus(
-          "Feat rest choice updated."
-        );
-        renderCreatorView();
-      }
-
-      return true;
-    }
-
-    if (
-      target?.dataset?.ccActionChange === "set-asi-feat-choice"
-    ) {
-      const selectedValues = target.multiple
-        ? [...target.selectedOptions].map((option) => option.value)
-        : target.tagName === "INPUT"
-          ? cleanString(target.value)
-              .split(",")
-              .map((value) => value.trim())
-              .filter(Boolean)
-          : [target.value].filter(Boolean);
-
-      if (
-        setSection12FeatChoiceValues(
-          target.dataset.featureId || "",
-          target.dataset.choiceId || "",
-          selectedValues
-        )
-      ) {
-        setStatus("Feat choice updated.");
-        renderCreatorView();
-      } else {
-        setStatus("That feat choice is unavailable or already used.");
-      }
-
-      return true;
-    }
-
-    if (
-      target?.dataset?.ccActionChange !== "choose-asi-feat"
-    ) {
-      return false;
-    }
-
-    if (
-      setSection12AsiFeat(
-        target.dataset.featureId || "",
-        target.value
-      )
-    ) {
-      setStatus("ASI feat choice updated.");
-      renderCreatorView();
-    }
-
-    return true;
-  }
-
-  function handleSection12ChooseAsiFeat(...values) {
-    const button = findSection12ActionElement(...values);
-
-    if (
-      setSection12AsiFeat(
-        button?.dataset?.featureId || "",
-        button?.dataset?.featId || ""
-      )
-    ) {
-      setStatus("ASI feat choice updated.");
-      renderCreatorView();
-    }
-  }
-
-  function handleSection12FeatSearch({ target }) {
-    if (
-      target?.dataset?.ccActionInput !== "filter-asi-feats"
-    ) {
-      return false;
-    }
-
-    const picker = target.closest(
-      "[data-cc-asi-feat-picker]"
-    );
-
-    if (!picker) {
-      return true;
-    }
-
-    const query = cleanString(target.value).toLowerCase();
-    const featOptions = [
-      ...picker.querySelectorAll("[data-cc-feat-option]")
-    ];
-    let visibleCount = 0;
-
-    featOptions.forEach((option) => {
-      const matches = !query || cleanString(
-        option.dataset.featSearchText
-      ).includes(query);
-
-      option.hidden = !matches;
-
-      if (matches) {
-        visibleCount += 1;
-      }
-    });
-
-    const noResults = picker.querySelector(
-      "[data-cc-feat-no-results]"
-    );
-
-    if (noResults) {
-      noResults.hidden = visibleCount > 0;
-    }
-
-    return true;
-  }
-
   function handleSection12ArtificerInfusion(
     mode,
     ...values
@@ -1307,15 +1142,6 @@ export function createClassStep(dependencies = {}) {
       case "toggle-class-feature-choice":
         handleSection12ClassFeatureChoice(context);
         return true;
-      case "set-asi-mode":
-        handleSection12AsiAction("mode", context);
-        return true;
-      case "adjust-asi-ability":
-        handleSection12AsiAction("ability", context);
-        return true;
-      case "choose-asi-feat":
-        handleSection12ChooseAsiFeat(context);
-        return true;
       case "toggle-artificer-infusion-known":
         handleSection12ArtificerInfusion("known", context);
         return true;
@@ -1361,12 +1187,11 @@ export function createClassStep(dependencies = {}) {
   }
 
   function handleStepInput(context) {
-    return handleSection12FeatSearch(context);
+    return false;
   }
 
   function handleStepChange(context) {
     return (
-      handleSection12AsiChange(context) ||
       handleSection12ClassFeatureSelectChange(context) ||
       handleSection12ArtificerInfusionTargetChange(context)
     );
@@ -1443,10 +1268,6 @@ export function createClassStep(dependencies = {}) {
       handleSection12CustomClass,
       handleSection12ClassFeatureChoice,
       handleSection12ClassFeatureSelectChange,
-      handleSection12AsiAction,
-      handleSection12AsiChange,
-      handleSection12ChooseAsiFeat,
-      handleSection12FeatSearch,
       handleSection12ArtificerInfusion,
       handleSection12ArtificerInfusionTargetChange,
       handleSection12CustomClassSkillPicker,

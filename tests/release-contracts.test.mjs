@@ -109,15 +109,16 @@ test("creator equipment step owns its visible UI and handlers", async () => {
 
 test("creator class step owns class UI while multiclass remains independently extractable", async () => {
   const creatorMain = await read("characterCreator.fixed.js");
+  const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const classStep = await read("characterCreator/steps/classStep.js");
-  const compatibilityStart = creatorMain.indexOf(
+  const compatibilityStart = normalizedCreatorMain.indexOf(
     "const {\n    renderClassStep"
   );
-  const compatibilityEnd = creatorMain.indexOf(
+  const compatibilityEnd = normalizedCreatorMain.indexOf(
     "} = classStep.compatibility;",
     compatibilityStart
   );
-  const compatibilitySource = creatorMain.slice(
+  const compatibilitySource = normalizedCreatorMain.slice(
     compatibilityStart,
     compatibilityEnd
   );
@@ -130,12 +131,10 @@ test("creator class step owns class UI while multiclass remains independently ex
   assert.match(creatorMain, /classStep\.actions\.forEach/);
   [
     "handleSection12ArtificerInfusion",
-    "handleSection12AsiAction",
     "handleSection12ChooseClass",
     "handleSection12ChooseSubclass",
     "handleSection12ClassFeatureChoice",
-    "handleSection12CustomClass",
-    "handleSection12FeatSearch"
+    "handleSection12CustomClass"
   ].forEach((handlerName) => {
     assert.match(
       compatibilitySource,
@@ -154,6 +153,8 @@ test("creator class step owns class UI while multiclass remains independently ex
   assert.match(classStep, /"choose-class"/);
   assert.match(classStep, /data-cc-action="use-custom-class"/);
   assert.match(classStep, /"choose-subclass"/);
+  assert.doesNotMatch(classStep, /"choose-asi-feat"/);
+  assert.doesNotMatch(classStep, /function handleSection12FeatSearch\s*\(/);
 });
 
 test("creator multiclass module owns its embedded editor and handlers", async () => {
@@ -222,6 +223,62 @@ test("creator multiclass module owns its embedded editor and handlers", async ()
   assert.match(multiclassStep, /data-cc-action="remove-multiclass-class"/);
   assert.match(multiclassStep, /data-cc-action="move-character-level-order"/);
   assert.match(multiclassStep, /data-cc-action="toggle-multiclass-skill"/);
+});
+
+test("creator feats module owns the embedded feat UI and handlers", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const classStep = await read("characterCreator/steps/classStep.js");
+  const featsStep = await read("characterCreator/steps/featsStep.js");
+  const compatibilityStart = normalizedCreatorMain.indexOf(
+    "const {\n    formatSection12FeatEffect"
+  );
+  const compatibilityEnd = normalizedCreatorMain.indexOf(
+    "} = featsStep.compatibility;",
+    compatibilityStart
+  );
+  const compatibilitySource = normalizedCreatorMain.slice(
+    compatibilityStart,
+    compatibilityEnd
+  );
+
+  assert.match(creatorMain, /import \{ createFeatsStep \}/);
+  assert.doesNotMatch(
+    creatorMain,
+    /function (?:formatSection12FeatEffect|renderSection12FeatChoices|renderSection12CompactAsiChoice|renderSection12AsiChoice)\s*\(/
+  );
+  assert.doesNotMatch(
+    creatorMain,
+    /function handleSection12(?:AsiAction|AsiChange|ChooseAsiFeat|FeatSearch)\s*\(/
+  );
+  assert.match(creatorMain, /featsStep\.actions\.forEach/);
+  assert.match(creatorMain, /function getFeatPrerequisiteResult\s*\(/);
+  assert.match(creatorMain, /function applySelectedFeatMechanics\s*\(/);
+  assert.doesNotMatch(classStep, /function handleSection12AsiAction\s*\(/);
+  [
+    "renderSection12FeatChoices",
+    "renderSection12AsiChoice",
+    "handleSection12AsiAction",
+    "handleSection12FeatSearch"
+  ].forEach((name) => {
+    assert.match(
+      compatibilitySource,
+      new RegExp(`\\b${name}\\b`),
+      name
+    );
+  });
+  assert.match(featsStep, /function renderStep\s*\(/);
+  assert.match(featsStep, /function handleStepClick\s*\(/);
+  assert.match(featsStep, /function handleStepInput\s*\(/);
+  assert.match(featsStep, /function handleStepChange\s*\(/);
+  assert.match(featsStep, /function validateStep\s*\(/);
+  assert.match(featsStep, /function normalizeStepData\s*\(/);
+  assert.match(featsStep, /function getStepWarnings\s*\(/);
+  assert.match(featsStep, /function isStepComplete\s*\(/);
+  assert.match(featsStep, /data-cc-action="choose-asi-feat"/);
+  assert.match(featsStep, /data-cc-action-input="filter-asi-feats"/);
+  assert.match(featsStep, /data-cc-action-change="set-asi-feat-choice"/);
+  assert.match(featsStep, /feat\.repeatable === true/);
 });
 
 test(
