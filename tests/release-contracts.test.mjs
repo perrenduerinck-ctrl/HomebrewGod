@@ -281,6 +281,67 @@ test("creator feats module owns the embedded feat UI and handlers", async () => 
   assert.match(featsStep, /feat\.repeatable === true/);
 });
 
+test("creator species module owns species UI, mechanics, and validation", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const speciesStep = await read("characterCreator/steps/speciesStep.js");
+  const compatibilityStart = normalizedCreatorMain.indexOf(
+    "const {\n    getAllSpeciesTemplates"
+  );
+  const compatibilityEnd = normalizedCreatorMain.indexOf(
+    "} = speciesStep.compatibility;",
+    compatibilityStart
+  );
+  const compatibilitySource = normalizedCreatorMain.slice(
+    compatibilityStart,
+    compatibilityEnd
+  );
+
+  assert.match(creatorMain, /import \{ createSpeciesStep \}/);
+  assert.doesNotMatch(
+    creatorMain,
+    /function (?:getAllSpeciesTemplates|renderSpeciesStep|applySection11SpeciesMechanics|handleChooseSpeciesAction|isSection17SpeciesComplete)\s*\(/
+  );
+  assert.match(creatorMain, /speciesStep\.actions\.forEach/);
+  assert.match(creatorMain, /speciesStep\.getStepWarnings\(draft\)/);
+  assert.match(creatorMain, /speciesStep\.isStepComplete/);
+  assert.match(creatorMain, /function normalizeCharacter\s*\(/);
+  [
+    "getAllSpeciesTemplates",
+    "applySection11SpeciesMechanics",
+    "chooseSpeciesFromTemplate",
+    "renderSpeciesStep",
+    "handleChooseSpeciesAction",
+    "isSection17SpeciesComplete"
+  ].forEach((name) => {
+    assert.match(
+      compatibilitySource,
+      new RegExp(`\\b${name}\\b`),
+      name
+    );
+  });
+  assert.match(speciesStep, /function renderStep\s*\(/);
+  assert.match(speciesStep, /function handleStepClick\s*\(/);
+  assert.match(speciesStep, /function handleStepInput\s*\(/);
+  assert.match(speciesStep, /function handleStepChange\s*\(/);
+  assert.match(speciesStep, /function validateStep\s*\(/);
+  assert.match(speciesStep, /function normalizeStepData\s*\(/);
+  assert.match(speciesStep, /function getStepWarnings\s*\(/);
+  assert.match(speciesStep, /function isStepComplete\s*\(/);
+  assert.match(
+    speciesStep,
+    /"choose-species",\s*\{\s*"species-id":/
+  );
+  assert.match(
+    speciesStep,
+    /"choose-subrace",\s*\{\s*"subrace-id":/
+  );
+  assert.match(speciesStep, /data-cc-action="apply-species-choices"/);
+  assert.match(speciesStep, /data-cc-action="use-custom-species"/);
+  assert.match(speciesStep, /function setInnateSpellsForSource\s*\(/);
+  assert.match(speciesStep, /function addSpeciesTrait\s*\(/);
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {
