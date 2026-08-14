@@ -366,10 +366,8 @@ test("creator background module owns background UI, mechanics, and validation", 
   assert.match(creatorMain, /backgroundStep\.actions\.forEach/);
   assert.match(creatorMain, /backgroundStep\.getStepWarnings\(draft\)/);
   assert.match(creatorMain, /backgroundStep\.isStepComplete/);
-  assert.match(creatorMain, /function getSection14SkillEntry\s*\(/);
-  assert.match(creatorMain, /function handleSection14ToggleSkill\s*\(/);
-  assert.match(creatorMain, /function handleSection14ToggleExpertise\s*\(/);
-  assert.match(creatorMain, /function isSection17SkillsComplete\s*\(/);
+  assert.match(creatorMain, /const skillsStep = createSkillsStep\(/);
+  assert.match(creatorMain, /skillsStep\.compatibility\.getSection14SkillEntry/);
   [
     "normalizeSection14Background",
     "getSelectedSection14Background",
@@ -434,8 +432,7 @@ test("creator abilities module owns score methods, derived UI, and validation", 
     normalizedCreatorMain,
     /createClassStep\(\{[\s\S]*?renderLevelStep:\s*\(\.\.\.args\)\s*=>\s*\{\s*return abilitiesStep\.renderLevelStep\(\.\.\.args\);/
   );
-  assert.match(creatorMain, /function getSection14SkillEntry\s*\(/);
-  assert.match(creatorMain, /function isSection17SkillsComplete\s*\(/);
+  assert.match(creatorMain, /const skillsStep = createSkillsStep\(/);
   [
     "SECTION13_POINT_BUY_COSTS",
     "getSection13AbilityName",
@@ -470,6 +467,73 @@ test("creator abilities module owns score methods, derived UI, and validation", 
   assert.match(abilitiesStep, /change-ability-method/);
   assert.match(abilitiesStep, /function renderSection13DerivedMechanics\s*\(/);
   assert.match(abilitiesStep, /function renderLevelStep\s*\(/);
+});
+
+test("creator Skills module owns proficiencies, expertise, and validation", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const skillsStep = await read("characterCreator/steps/skillsStep.js");
+  const compatibilityStart = normalizedCreatorMain.indexOf(
+    "const {\n    getSection14SkillEntry"
+  );
+  const compatibilityEnd = normalizedCreatorMain.indexOf(
+    "} = skillsStep.compatibility;",
+    compatibilityStart
+  );
+  const compatibilitySource = normalizedCreatorMain.slice(
+    compatibilityStart,
+    compatibilityEnd
+  );
+
+  assert.match(creatorMain, /import \{ createSkillsStep \}/);
+  assert.doesNotMatch(
+    creatorMain,
+    /function (?:getSection14SkillEntry|toggleSection14Skill|renderSkillsStep|handleSection14ToggleSkill|isSection17SkillsComplete)\s*\(/
+  );
+  assert.match(creatorMain, /skillsStep\.actions\.forEach/);
+  assert.match(creatorMain, /skillsStep\.getStepWarnings\(draft\)/);
+  assert.match(creatorMain, /skillsStep\.isStepComplete/);
+  assert.match(creatorMain, /skillsStep\.renderStep/);
+  [
+    "getSection14SkillEntry",
+    "setSection14SkillEntry",
+    "countSection14ValidSkillSource",
+    "toggleSection14Skill",
+    "toggleSection14Expertise",
+    "applySection14ProficiencyLists",
+    "renderSection14ProficiencyGuide",
+    "renderSection14SourceSkillChoices",
+    "renderSection14ExpertiseChoices",
+    "renderSkillsStep",
+    "isSection17SkillsComplete"
+  ].forEach((name) => {
+    assert.match(
+      compatibilitySource,
+      new RegExp(`\\b${name}\\b`),
+      name
+    );
+  });
+  assert.match(
+    normalizedCreatorMain,
+    /createSpeciesStep\(\{[\s\S]*?getSection14SkillEntry:\s*\(\.\.\.args\)\s*=>\s*\{\s*return skillsStep\.compatibility\.getSection14SkillEntry\(\.\.\.args\);/
+  );
+  assert.match(
+    normalizedCreatorMain,
+    /createBackgroundStep\(\{[\s\S]*?countSection14ValidSkillSource:\s*\(\.\.\.args\)\s*=>\s*\{\s*return skillsStep\.compatibility\.countSection14ValidSkillSource\(\.\.\.args\);/
+  );
+  assert.match(skillsStep, /function renderStep\s*\(/);
+  assert.match(skillsStep, /function handleStepClick\s*\(/);
+  assert.match(skillsStep, /function handleStepInput\s*\(/);
+  assert.match(skillsStep, /function handleStepChange\s*\(/);
+  assert.match(skillsStep, /function validateStep\s*\(/);
+  assert.match(skillsStep, /function normalizeStepData\s*\(/);
+  assert.match(skillsStep, /function getStepWarnings\s*\(/);
+  assert.match(skillsStep, /function isStepComplete\s*\(/);
+  assert.match(skillsStep, /data-cc-action="toggle-skill-proficiency"/);
+  assert.match(skillsStep, /data-cc-action="toggle-skill-expertise"/);
+  assert.match(skillsStep, /data-cc-action="apply-proficiency-lists"/);
+  assert.match(skillsStep, /ccToolProficiencies/);
+  assert.match(skillsStep, /ccLanguageProficiencies/);
 });
 
 test(
