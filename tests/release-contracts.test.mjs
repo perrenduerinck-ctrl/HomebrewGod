@@ -536,6 +536,51 @@ test("creator Skills module owns proficiencies, expertise, and validation", asyn
   assert.match(skillsStep, /ccLanguageProficiencies/);
 });
 
+test("creator Description module owns identity, story, notes, and portrait behavior", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const backgroundStep = await read("characterCreator/steps/backgroundStep.js");
+  const descriptionStep = await read("characterCreator/steps/descriptionStep.js");
+
+  assert.match(creatorMain, /import \{ createDescriptionStep \}/);
+  assert.match(creatorMain, /const descriptionStep = createDescriptionStep\(/);
+  assert.doesNotMatch(
+    creatorMain,
+    /function (?:getSection11Portrait|setSection11Portrait|clearSection11Portrait|replaceSection11Portrait|removeSection11Portrait|renderSection11PortraitPanel|handleSection11PortraitChange)\s*\(/
+  );
+  assert.match(creatorMain, /renderDescriptionNameField\(\)/);
+  assert.match(creatorMain, /renderDescriptionAppearanceField\(\)/);
+  assert.match(creatorMain, /renderDescriptionNotesField\(\)/);
+  assert.match(backgroundStep, /renderDescriptionStoryFields\(\)/);
+  assert.doesNotMatch(backgroundStep, /ccBackground(?:Traits|Ideals|Bonds|Flaws|Backstory)/);
+
+  [
+    "Character Name",
+    "Appearance / Identity Notes",
+    "Personality Traits",
+    "Ideals",
+    "Bonds",
+    "Flaws",
+    "Backstory",
+    "General Notes",
+    "Portrait Image URL"
+  ].forEach((label) => assert.match(descriptionStep, new RegExp(label)));
+
+  assert.match(descriptionStep, /function renderStep\s*\(/);
+  assert.match(descriptionStep, /function handleStepClick\s*\(/);
+  assert.match(descriptionStep, /function handleStepInput\s*\(/);
+  assert.match(descriptionStep, /function handleStepChange\s*\(/);
+  assert.match(descriptionStep, /function validateStep\s*\(/);
+  assert.match(descriptionStep, /function normalizeStepData\s*\(/);
+  assert.match(descriptionStep, /function getStepWarnings\s*\(/);
+  assert.match(descriptionStep, /function isStepComplete\s*\(/);
+
+  const builderDefinition = creatorMain.slice(
+    creatorMain.indexOf("const BUILDER_STEPS"),
+    creatorMain.indexOf("const BUILDER_STEP_INDEX")
+  );
+  assert.doesNotMatch(builderDefinition, /id:\s*"description"/);
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {

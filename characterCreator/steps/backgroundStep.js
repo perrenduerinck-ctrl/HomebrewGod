@@ -52,6 +52,7 @@ export function createBackgroundStep(dependencies = {}) {
     removeSkillProficiencySource,
     renderCatalogEntryDetails,
     renderCreatorView,
+    renderDescriptionStoryFields,
     renderFullCatalogDescription,
     renderRulesetMetadata,
     renderSection14ExpertiseChoices,
@@ -2194,117 +2195,7 @@ export function createBackgroundStep(dependencies = {}) {
         </button>
       </div>
 
-      <hr>
-
-      <h3>Personality and Story</h3>
-
-      <div class="hg-character-field-grid">
-        ${wizardField(
-          "Personality Traits",
-          "ccBackgroundTraits",
-
-          safeDisplayString(
-            creatorState.draft
-              .background
-              .traits
-          ),
-
-          {
-            type: "textarea",
-            path: "background.traits",
-
-            placeholder:
-              "Habits, personality, mannerisms...",
-
-            wide: true
-          }
-        )}
-
-        ${wizardField(
-          "Ideals",
-          "ccBackgroundIdeals",
-
-          safeDisplayString(
-            creatorState.draft
-              .background
-              .ideals
-          ),
-
-          {
-            type: "textarea",
-            path: "background.ideals",
-
-            placeholder:
-              "What principles guide this character?",
-
-            wide: true
-          }
-        )}
-
-        ${wizardField(
-          "Bonds",
-          "ccBackgroundBonds",
-
-          safeDisplayString(
-            creatorState.draft
-              .background
-              .bonds
-          ),
-
-          {
-            type: "textarea",
-            path: "background.bonds",
-
-            placeholder:
-              "People, places, promises, or treasures...",
-
-            wide: true
-          }
-        )}
-
-        ${wizardField(
-          "Flaws",
-          "ccBackgroundFlaws",
-
-          safeDisplayString(
-            creatorState.draft
-              .background
-              .flaws
-          ),
-
-          {
-            type: "textarea",
-            path: "background.flaws",
-
-            placeholder:
-              "Fears, weaknesses, or destructive habits...",
-
-            wide: true
-          }
-        )}
-
-        ${wizardField(
-          "Backstory",
-          "ccBackgroundBackstory",
-
-          safeDisplayString(
-            creatorState.draft
-              .background
-              .backstory
-          ),
-
-          {
-            type: "textarea",
-            path: "background.backstory",
-
-            placeholder:
-              "Write the character's history...",
-
-            wide: true
-          }
-        )}
-      </div>
-
+      ${renderDescriptionStoryFields()}
       <hr>
 
       <h3>Background Features</h3>
