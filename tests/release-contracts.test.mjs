@@ -405,6 +405,68 @@ test("creator background module owns background UI, mechanics, and validation", 
   assert.match(backgroundStep, /function removeSection14BackgroundEquipment\s*\(/);
 });
 
+test("creator abilities module owns score methods, derived UI, and validation", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
+  const abilitiesStep = await read("characterCreator/steps/abilitiesStep.js");
+  const compatibilityStart = normalizedCreatorMain.indexOf(
+    "const {\n    getSection13AbilityName"
+  );
+  const compatibilityEnd = normalizedCreatorMain.indexOf(
+    "} = abilitiesStep.compatibility;",
+    compatibilityStart
+  );
+  const compatibilitySource = normalizedCreatorMain.slice(
+    compatibilityStart,
+    compatibilityEnd
+  );
+
+  assert.match(creatorMain, /import \{ createAbilitiesStep \}/);
+  assert.doesNotMatch(
+    creatorMain,
+    /function (?:getSection13AbilityName|applySection13StandardArray|renderAbilitiesStep|handleSection13Change|isSection17AbilitiesComplete)\s*\(/
+  );
+  assert.match(creatorMain, /abilitiesStep\.actions\.forEach/);
+  assert.match(creatorMain, /abilitiesStep\.getStepWarnings\(draft\)/);
+  assert.match(creatorMain, /abilitiesStep\.isStepComplete/);
+  assert.match(creatorMain, /abilitiesStep\.renderLevelStep/);
+  assert.match(creatorMain, /function getSection14SkillEntry\s*\(/);
+  assert.match(creatorMain, /function isSection17SkillsComplete\s*\(/);
+  [
+    "getSection13AbilityName",
+    "applySection13StandardArray",
+    "applySection13PointBuyDefaults",
+    "applySection13RolledScores",
+    "renderLevelStep",
+    "renderAbilitiesStep",
+    "handleSection13Change",
+    "isSection17AbilitiesComplete"
+  ].forEach((name) => {
+    assert.match(
+      compatibilitySource,
+      new RegExp(`\\b${name}\\b`),
+      name
+    );
+  });
+  assert.match(abilitiesStep, /function renderStep\s*\(/);
+  assert.match(abilitiesStep, /function handleStepClick\s*\(/);
+  assert.match(abilitiesStep, /function handleStepInput\s*\(/);
+  assert.match(abilitiesStep, /function handleStepChange\s*\(/);
+  assert.match(abilitiesStep, /function validateStep\s*\(/);
+  assert.match(abilitiesStep, /function normalizeStepData\s*\(/);
+  assert.match(abilitiesStep, /function getStepWarnings\s*\(/);
+  assert.match(abilitiesStep, /function isStepComplete\s*\(/);
+  assert.match(abilitiesStep, /function applySection13StandardArray\s*\(/);
+  assert.match(abilitiesStep, /function applySection13PointBuyDefaults\s*\(/);
+  assert.match(abilitiesStep, /function rollSection13ScorePool\s*\(/);
+  assert.match(abilitiesStep, /function renderSection13ManualAbilities\s*\(/);
+  assert.match(abilitiesStep, /data-cc-action="point-buy-decrease"/);
+  assert.match(abilitiesStep, /data-cc-action="roll-ability-scores"/);
+  assert.match(abilitiesStep, /change-ability-method/);
+  assert.match(abilitiesStep, /function renderSection13DerivedMechanics\s*\(/);
+  assert.match(abilitiesStep, /function renderLevelStep\s*\(/);
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {
