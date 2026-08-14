@@ -690,6 +690,90 @@ test("creator Review module owns final validation, summaries, and review actions
   assert.match(creatorMain, /function renderSection17SpellcastingSummary\s*\(/);
 });
 
+test("creator Finish module owns the visible save screen and finish actions", async () => {
+  const creatorMain = await read("characterCreator.fixed.js");
+  const persistenceBase = await read("characterCreator/persistence.base.js");
+  const finishStep = await read("characterCreator/steps/finishStep.js");
+
+  assert.match(creatorMain, /import \{ createFinishStep \}/);
+  assert.match(creatorMain, /const finishStep = createFinishStep\(/);
+  assert.match(
+    creatorMain,
+    /registerCharacterStepRenderer\(\s*"save",\s*finishStep\.renderStep\s*\)/
+  );
+  assert.match(
+    creatorMain,
+    /registerCharacterStepCompletion\(\s*"save",\s*finishStep\.isStepComplete\s*\)/
+  );
+  assert.match(creatorMain, /finishStep\.actions\.forEach/);
+  assert.match(
+    creatorMain,
+    /registerCharacterCreatorChangeHandler\([\s\S]*finishStep\.handleStepChange/
+  );
+
+  assert.doesNotMatch(persistenceBase, /function renderSaveStep\s*\(/);
+  assert.doesNotMatch(persistenceBase, /function renderSection18Warnings\s*\(/);
+  assert.doesNotMatch(persistenceBase, /function renderSection18BackupNotice\s*\(/);
+  assert.doesNotMatch(persistenceBase, /function renderSection18LinkedTokenPanel\s*\(/);
+  assert.doesNotMatch(
+    persistenceBase,
+    /registerCharacterStepRenderer\(\s*"save"/
+  );
+
+  [
+    "Save Draft or Finalize",
+    "Character Summary",
+    "Character-Linked Token",
+    "Export Character",
+    "Import Character",
+    'data-cc-action="save-character"',
+    'data-cc-action="finalize-character"',
+    'data-cc-action="save-copy"',
+    'data-cc-action="library"',
+    'data-cc-action="open-character-sheet"',
+    'data-cc-action="copy-json"',
+    'data-cc-action="export-json"',
+    'data-cc-action="download-draft-backup"',
+    'data-cc-action="create-linked-token"',
+    'data-cc-action="import-json-text"',
+    'data-cc-import-file="true"'
+  ].forEach((contract) => {
+    assert.match(finishStep, new RegExp(contract));
+  });
+
+  assert.match(finishStep, /function renderStep\s*\(/);
+  assert.match(finishStep, /function handleStepClick\s*\(/);
+  assert.match(finishStep, /function handleStepInput\s*\(/);
+  assert.match(finishStep, /function handleStepChange\s*\(/);
+  assert.match(finishStep, /function validateStep\s*\(/);
+  assert.match(finishStep, /function normalizeStepData\s*\(/);
+  assert.match(finishStep, /function getStepWarnings\s*\(/);
+  assert.match(finishStep, /function isStepComplete\s*\(/);
+});
+
+test("every requested Character Creator step module now exists", async () => {
+  const stepFiles = [
+    "basicsStep.js",
+    "classStep.js",
+    "multiclassStep.js",
+    "backgroundStep.js",
+    "speciesStep.js",
+    "abilitiesStep.js",
+    "skillsStep.js",
+    "featsStep.js",
+    "equipmentStep.js",
+    "spellsStep.js",
+    "descriptionStep.js",
+    "reviewStep.js",
+    "finishStep.js"
+  ];
+
+  for (const file of stepFiles) {
+    const source = await read(`characterCreator/steps/${file}`);
+    assert.match(source, /export function create[A-Z][A-Za-z]+Step\s*\(/, file);
+  }
+});
+
 test(
   "GitHub Actions tests every push before deploying Pages",
   async () => {

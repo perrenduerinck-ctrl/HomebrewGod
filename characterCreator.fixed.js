@@ -102,6 +102,7 @@ import { createSkillsStep } from "./characterCreator/steps/skillsStep.js?v=skill
 import { createDescriptionStep } from "./characterCreator/steps/descriptionStep.js?v=description-step-extraction-20260813";
 import { createBasicsStep } from "./characterCreator/steps/basicsStep.js?v=basics-step-extraction-20260814";
 import { createReviewStep } from "./characterCreator/steps/reviewStep.js?v=review-step-extraction-20260814";
+import { createFinishStep } from "./characterCreator/steps/finishStep.js?v=finish-step-extraction-20260814";
 import { createEquipmentStep } from "./characterCreator/steps/equipmentStep.js?v=equipment-step-extraction-20260812";
 import { createSpellsStep } from "./characterCreator/steps/spellsStep.js?v=spells-step-extraction-20260803";
 import {
@@ -36224,8 +36225,8 @@ export function createCharacterCreator(options = {}) {
     getSection18RecordRoomCode, getSection18RecordType, getSection18TimestampMillis, getValidatedSection18CharacterDocument, handleSection18Change, handleSection18CopyJson,
     handleSection18CreateLinkedToken, handleSection18Delete, handleSection18DownloadDraftBackup, handleSection18ExportJson, handleSection18Finalize, handleSection18ImportFile,
     handleSection18ImportText, handleSection18Save, handleSection18SaveCopy, hasSection18FirestoreReadTool, importSection18File, importSection18JsonText,
-    isSection18CharacterRecordData, isSection18SaveComplete, parseSection18ImportedCharacter, prepareSection18Character, renderSaveStep, renderSection18BackupNotice,
-    renderSection18LinkedTokenPanel, renderSection18Warnings, saveSection18Character, section18SnapshotExists, syncSection18DerivedValues, useSection18ImportedCharacter,
+    isSection18CharacterRecordData, isSection18SaveComplete: isSection18PersistenceComplete, parseSection18ImportedCharacter, prepareSection18Character,
+    saveSection18Character, section18SnapshotExists, syncSection18DerivedValues, useSection18ImportedCharacter,
     validateSection18FirestoreRecord, validateSection18NoRemoteConflict
   } = createCharacterPersistence({
     $, ABILITY_DEFINITIONS, ABILITY_SCORE_METHODS, ACTIVE_RULESET, ADDITIONAL_CANTRIP_COUNT_2014, ADDITIONAL_CANTRIP_EXPECTATIONS_2014,
@@ -36379,6 +36380,97 @@ export function createCharacterCreator(options = {}) {
     validateDefaultSpellCatalog, validateDefaultSpellReferences, validateDefaultSubclassCollection, validateFeatPrerequisiteDefinitions, warnDraftStorageFailure, wizardChoiceCard,
     wizardField, wizardRuntime, wizardSelect, wouldCreateContainerCycle, writeRouteToUrl
   });
+
+  const finishStep = createFinishStep({
+    beginnerNote,
+    clampLevel,
+    cleanString,
+    escapeHtml,
+    formatSavedTime:
+      formatSection18SavedTime,
+    getCharacterBusyLabel,
+    getCharacterPortraitUrl:
+      getSection18CharacterPortraitUrl,
+    getCreatorState: () => creatorState,
+    getFinalizationValidation:
+      getSection17FinalizationValidation,
+    getRoomCode,
+    getSafeBackgroundName,
+    getSafeCharacterName,
+    getSafeClassName,
+    getSafeSpeciesName,
+    getSafeSubclassName,
+    handleCopyJson:
+      handleSection18CopyJson,
+    handleCreateLinkedToken:
+      handleSection18CreateLinkedToken,
+    handleDownloadDraftBackup:
+      handleSection18DownloadDraftBackup,
+    handleExportJson:
+      handleSection18ExportJson,
+    handleFinalize:
+      handleSection18Finalize,
+    handleImportFile:
+      handleSection18ImportFile,
+    handleImportText:
+      handleSection18ImportText,
+    handleSave:
+      handleSection18Save,
+    handleSaveCopy:
+      handleSection18SaveCopy,
+    handleStepFileChange:
+      handleSection18Change,
+    isCharacterCreatorBusy,
+    isSaveComplete:
+      isSection18PersistenceComplete,
+    navigateToLibrary,
+    openCharacterSheet:
+      handleSection17OpenCharacterSheet,
+    renderFinalizationWarnings:
+      renderSection17Warnings,
+    safeNumber,
+    tokenDependencies: deps,
+    wizardField
+  });
+
+  const {
+    isSection18SaveComplete,
+    renderSaveStep,
+    renderSection18BackupNotice,
+    renderSection18LinkedTokenPanel,
+    renderSection18Warnings
+  } = finishStep.compatibility;
+
+  registerCharacterStepRenderer(
+    "save",
+    finishStep.renderStep
+  );
+
+  registerCharacterStepCompletion(
+    "save",
+    finishStep.isStepComplete
+  );
+
+  finishStep.actions.forEach((action) => {
+    registerCharacterCreatorAction(
+      action,
+      (context) => {
+        return finishStep.handleStepClick(
+          context
+        );
+      }
+    );
+  });
+
+  registerCharacterCreatorChangeHandler(
+    (context) => {
+      return finishStep.handleStepChange(
+        context
+      );
+    }
+  );
+
+  runCharacterStepRegistrationAudit();
 
 // =====================================================
 // CHARACTER CREATOR SECTION 19 - PERMANENT FIRESTORE CONNECTIONS / CLEANUP
