@@ -437,6 +437,7 @@ test("creator abilities module owns score methods, derived UI, and validation", 
   assert.match(creatorMain, /function getSection14SkillEntry\s*\(/);
   assert.match(creatorMain, /function isSection17SkillsComplete\s*\(/);
   [
+    "SECTION13_POINT_BUY_COSTS",
     "getSection13AbilityName",
     "applySection13StandardArray",
     "applySection13PointBuyDefaults",

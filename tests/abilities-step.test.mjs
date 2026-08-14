@@ -102,6 +102,18 @@ test("standard array and point buy remain owned by the abilities module", () => 
   const { creatorState, getChangedCount, step } = createTestStep();
   const api = step.compatibility;
 
+  assert.deepEqual(api.SECTION13_POINT_BUY_COSTS, {
+    8: 0,
+    9: 1,
+    10: 2,
+    11: 3,
+    12: 4,
+    13: 5,
+    14: 7,
+    15: 9
+  });
+  assert.equal(Object.isFrozen(api.SECTION13_POINT_BUY_COSTS), true);
+
   api.applySection13StandardArray();
   assert.equal(creatorState.draft.abilities.method, "standard-array");
   assert.deepEqual(creatorState.draft.abilities.base, {

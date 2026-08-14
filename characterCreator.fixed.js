@@ -29049,6 +29049,7 @@ export function createCharacterCreator(options = {}) {
 
   const {
     getSection13AbilityName,
+    SECTION13_POINT_BUY_COSTS,
     getSection13AbilityScore,
     getSection13BaseAbilityScore,
     getSection13AbilityBonus,

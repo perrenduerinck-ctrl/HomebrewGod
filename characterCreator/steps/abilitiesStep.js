@@ -2734,6 +2734,7 @@ export function createAbilitiesStep(dependencies = {}) {
     getStepWarnings,
     isStepComplete,
     compatibility: Object.freeze({
+      SECTION13_POINT_BUY_COSTS,
       getSection13AbilityName,
       getSection13AbilityScore,
       getSection13BaseAbilityScore,
