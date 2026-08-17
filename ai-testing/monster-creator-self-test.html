@@ -630,8 +630,9 @@
       })
     ]);
     assert(
-      appSource.includes('import { createMonsterCreator } from "./monsterCreator.js";'),
-      "app.js imports the Monster Creator module."
+      !appSource.includes('import { createMonsterCreator } from "./monsterCreator.js";') &&
+        appSource.includes('import(\n      "./monsterCreator.js"\n    )'),
+      "app.js lazy-loads the Monster Creator module."
     );
     assert(
       appSource.includes('openToolTab("monsterCreator")'),
@@ -639,7 +640,7 @@
     );
     assert(
       appSource.includes('showAnyMainScreen("monsterCreator")') &&
-        appSource.includes("initMonsterCreatorSystem();"),
+        appSource.includes("await initMonsterCreatorSystem();"),
       "The monsterCreator startup URL opens and initializes the creator."
     );
     assert(

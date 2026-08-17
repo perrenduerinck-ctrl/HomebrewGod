@@ -37,8 +37,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 import { createTokenSystem } from "./tokens.js";
-import { createCharacterCreator } from "./characterCreator.fixed.js";
-import { createMonsterCreator } from "./monsterCreator.js";
 import {
   MAX_SECURE_IMAGE_BYTES,
   createPersistenceMonitor,
@@ -223,6 +221,8 @@ let stopListeningToPuzzleTiles = null;
 let tokenSystem = null;
 let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
+let characterCreatorModulePromise = null;
+let monsterCreatorModulePromise = null;
 
 let activeSessionId = makeActiveSessionId();
 let activeSessionRoomCode = null;
@@ -980,7 +980,7 @@ function openRoom(roomCode, screenToShow = "room") {
     if (latestMapsSnapshot) renderRoomMaps(latestMapsSnapshot);
     if (latestActivePlayersSnapshot) renderPlayers(latestActivePlayersSnapshot);
 
-    openStartupViewIfNeeded();
+    await openStartupViewIfNeeded();
   }, function (error) {
     alert("Room listener failed: " + error.message);
   });
@@ -4167,12 +4167,37 @@ function openToolTab(viewName) {
   window.open(toolUrl.toString(), "_blank");
 }
 
-function initCharacterCreatorSystem() {
+async function initCharacterCreatorSystem() {
   if (characterCreatorSystem) {
-    return;
+    return characterCreatorSystem;
   }
 
-  characterCreatorSystem = createCharacterCreator({
+  if (!characterCreatorModulePromise) {
+    characterCreatorModulePromise = import(
+      "./characterCreator.fixed.js"
+    );
+  }
+
+  let characterCreatorModule;
+
+  try {
+    characterCreatorModule =
+      await characterCreatorModulePromise;
+  } catch (error) {
+    characterCreatorModulePromise = null;
+    console.error(
+      "Character Creator module failed to load:",
+      error
+    );
+    throw error;
+  }
+
+  if (characterCreatorSystem) {
+    return characterCreatorSystem;
+  }
+
+  characterCreatorSystem =
+    characterCreatorModule.createCharacterCreator({
     db,
     doc,
     collection,
@@ -4256,16 +4281,44 @@ function initCharacterCreatorSystem() {
         character
       );
     }
-  });
+    });
+
+  return characterCreatorSystem;
 }
 
-function initMonsterCreatorSystem() {
+async function initMonsterCreatorSystem() {
   if (monsterCreatorSystem) {
     monsterCreatorSystem.refresh();
-    return;
+    return monsterCreatorSystem;
   }
 
-  monsterCreatorSystem = createMonsterCreator({
+  if (!monsterCreatorModulePromise) {
+    monsterCreatorModulePromise = import(
+      "./monsterCreator.js"
+    );
+  }
+
+  let monsterCreatorModule;
+
+  try {
+    monsterCreatorModule =
+      await monsterCreatorModulePromise;
+  } catch (error) {
+    monsterCreatorModulePromise = null;
+    console.error(
+      "Monster Creator module failed to load:",
+      error
+    );
+    throw error;
+  }
+
+  if (monsterCreatorSystem) {
+    monsterCreatorSystem.refresh();
+    return monsterCreatorSystem;
+  }
+
+  monsterCreatorSystem =
+    monsterCreatorModule.createMonsterCreator({
     db,
     doc,
     collection,
@@ -4320,7 +4373,9 @@ function initMonsterCreatorSystem() {
         tokenSystem.render(currentRoomData || {});
       }
     }
-  });
+    });
+
+  return monsterCreatorSystem;
 }
 
 
@@ -4415,7 +4470,7 @@ if (E.backFromCharacterCreatorButton) {
 // Section 14 will call this after the room loads.
 // =====================================================
 
-function openStartupViewIfNeeded() {
+async function openStartupViewIfNeeded() {
   if (alreadyUsedStartupLink) {
     return;
   }
@@ -4442,13 +4497,13 @@ function openStartupViewIfNeeded() {
 
   if (startupView === "characterCreator") {
     showAnyMainScreen("characterCreator");
-    initCharacterCreatorSystem();
+    await initCharacterCreatorSystem();
     return;
   }
 
   if (startupView === "monsterCreator") {
     showAnyMainScreen("monsterCreator");
-    initMonsterCreatorSystem();
+    await initMonsterCreatorSystem();
     return;
   }
 }
@@ -4509,7 +4564,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
   window.__HOMEBREW_GOD_RELEASE_TEST__ =
     Object.freeze({
       openScreen:
-        function (screenName) {
+        async function (screenName) {
           if (
             !releaseTestScreens.includes(
               screenName
@@ -4528,14 +4583,14 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             screenName ===
             "characterCreator"
           ) {
-            initCharacterCreatorSystem();
+            await initCharacterCreatorSystem();
           }
 
           if (
             screenName ===
             "monsterCreator"
           ) {
-            initMonsterCreatorSystem();
+            await initMonsterCreatorSystem();
           }
 
           return {

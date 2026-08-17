@@ -1698,6 +1698,114 @@ test(
 );
 
 test(
+  "lobby startup defers both creator module graphs until each creator opens",
+  async ({ page }) => {
+    const creatorRequests = [];
+
+    page.on(
+      "request",
+      (request) => {
+        const requestUrl =
+          new URL(request.url());
+        const pathname =
+          requestUrl.pathname;
+
+        if (
+          pathname.endsWith(
+            "/characterCreator.fixed.js"
+          ) ||
+          pathname.includes(
+            "/characterCreator/"
+          ) ||
+          pathname.endsWith(
+            "/monsterCreator.js"
+          )
+        ) {
+          creatorRequests.push(
+            pathname
+          );
+        }
+      }
+    );
+
+    await page.goto(
+      "?smokeTest=1&release=priority1-lazy-creators",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+    await expect(
+      page.locator(
+        "#homebrewGodSmokeResult"
+      )
+    ).toContainText(
+      "SMOKE TEST PASS",
+      {
+        timeout: 30000
+      }
+    );
+
+    expect(creatorRequests)
+      .toEqual([]);
+
+    await page.evaluate(() => {
+      return window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .openScreen("battle");
+    });
+
+    expect(creatorRequests)
+      .toEqual([]);
+
+    await page.evaluate(() => {
+      return window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .openScreen(
+          "characterCreator"
+        );
+    });
+
+    expect(
+      creatorRequests.some(
+        (pathname) => {
+          return pathname.endsWith(
+            "/characterCreator.fixed.js"
+          );
+        }
+      )
+    ).toBe(true);
+    expect(
+      creatorRequests.some(
+        (pathname) => {
+          return pathname.endsWith(
+            "/monsterCreator.js"
+          );
+        }
+      )
+    ).toBe(false);
+
+    await page.evaluate(() => {
+      return window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .openScreen(
+          "monsterCreator"
+        );
+    });
+
+    expect(
+      creatorRequests.some(
+        (pathname) => {
+          return pathname.endsWith(
+            "/monsterCreator.js"
+          );
+        }
+      )
+    ).toBe(true);
+  }
+);
+
+test(
   "app smoke mode exercises room, battle-map, character, and monster screens",
   async ({ page }) => {
     await page.goto(
