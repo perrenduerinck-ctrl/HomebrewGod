@@ -10997,7 +10997,7 @@ export function createCharacterCreator(options = {}) {
     );
 
     if (typeof document !== "undefined") {
-      renderCreatorView();
+      renderCurrentStep();
     }
 
     return true;
@@ -11024,7 +11024,7 @@ export function createCharacterCreator(options = {}) {
     );
 
     if (typeof document !== "undefined") {
-      renderCreatorView();
+      renderCurrentStep();
     }
 
     return true;
@@ -11051,7 +11051,7 @@ export function createCharacterCreator(options = {}) {
     }
 
     if (typeof document !== "undefined") {
-      renderCreatorView();
+      renderCurrentStep();
     }
   }
 
@@ -16339,6 +16339,85 @@ export function createCharacterCreator(options = {}) {
     return creatorState.draft;
   }
 
+  function syncDraftCompatibilityForPath(path) {
+    const draft = creatorState.draft;
+
+    if (!draft || typeof draft !== "object") {
+      return;
+    }
+
+    if (path === "identity.name") {
+      draft.name = cleanString(
+        draft.identity?.name
+      );
+      return;
+    }
+
+    if (path === "combat.maxHp") {
+      draft.maxHp = Math.max(
+        1,
+        safeNumber(draft.combat?.maxHp, 1)
+      );
+      return;
+    }
+
+    if (path === "combat.currentHp") {
+      draft.currentHp = safeNumber(
+        draft.combat?.currentHp,
+        draft.maxHp
+      );
+      return;
+    }
+
+    if (path === "equipment.notes") {
+      draft.equipmentText = cleanString(
+        draft.equipment?.notes
+      );
+      return;
+    }
+
+    if (path === "magic.notes") {
+      draft.spells = cleanString(
+        draft.magic?.notes
+      );
+      return;
+    }
+
+    if (path === "features.notes") {
+      draft.featuresText = cleanString(
+        draft.features?.notes
+      );
+      return;
+    }
+
+    if (
+      /^combat\.baseSpeed\.(?:walk|climb|swim|fly|burrow|special)$/
+        .test(path)
+    ) {
+      applyDerivedMovementSpeeds(draft, {
+        classEffects:
+          draft.classMechanics
+            ?.passiveEffects || [],
+        featWalkBonus: Math.max(
+          calculateSelectedFeatNumericEffect(
+            draft,
+            "speedBonus"
+          ),
+          safeNumber(
+            draft.featMechanics
+              ?.speedBonus,
+            0
+          )
+        )
+      });
+
+      draft.speed = `${safeNumber(
+        draft.combat?.speed?.walk,
+        30
+      )} ft.`;
+    }
+  }
+
   function setDraftValue(path, value) {
     const parts = String(path || "")
       .split(".")
@@ -16389,9 +16468,7 @@ export function createCharacterCreator(options = {}) {
       creatorState.draft
     );
 
-    applyCompatibilityAliases(
-      creatorState.draft
-    );
+    syncDraftCompatibilityForPath(path);
   }
 
   function getCharacterSnapshot() {
@@ -16420,7 +16497,12 @@ export function createCharacterCreator(options = {}) {
     shellBuilt: false,
     eventsConnected: false,
     popstateConnected: false,
-    draftPersistenceLifecycleConnected: false
+    draftPersistenceLifecycleConnected: false,
+    fullRenderCount: 0,
+    currentStepRenderCount: 0,
+    stepRailRebuildCount: 0,
+    stepRailStateUpdateCount: 0,
+    lightweightFieldUpdateCount: 0
   };
 
   function refreshWizardElements() {
@@ -17332,7 +17414,11 @@ export function createCharacterCreator(options = {}) {
 
     if (typeof document !== "undefined") {
       renderActionBar();
-      refreshBuilderChrome();
+      refreshBuilderChrome({
+        refreshStepIds: [
+          creatorState.currentStepId
+        ]
+      });
     }
   }
 
@@ -18056,7 +18142,13 @@ export function createCharacterCreator(options = {}) {
     setDraftValue(path, value);
     scheduleDraftPersistence();
     renderActionBar();
-    refreshBuilderChrome();
+    wizardRuntime.lightweightFieldUpdateCount += 1;
+
+    if (path === "identity.name") {
+      refreshBuilderChrome({
+        refreshStepIds: ["basics"]
+      });
+    }
   }
 
   function getValidationWarnings(
@@ -18947,6 +19039,8 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderStepRail() {
+    wizardRuntime.stepRailRebuildCount += 1;
+
     return BUILDER_STEPS
       .map((step, index) => {
         const active =
@@ -19005,7 +19099,63 @@ export function createCharacterCreator(options = {}) {
       .join("");
   }
 
-  function refreshBuilderChrome() {
+  function refreshStepRailState(stepId) {
+    if (!W.stepRail) {
+      return;
+    }
+
+    const step = getExactBuilderStepById(stepId);
+    const index = step
+      ? getStepIndex(step.id)
+      : -1;
+    const button = step
+      ? W.stepRail.querySelector(
+          `[data-step-id="${step.id}"]`
+        )
+      : null;
+
+    if (!step || index < 0 || !button) {
+      return;
+    }
+
+    const active =
+      step.id === creatorState.currentStepId;
+    const visited =
+      creatorState.draft.builder.visitedSteps
+        .includes(step.id);
+    const complete = isStepComplete(step.id);
+
+    button.classList.toggle("active", active);
+    button.classList.toggle("visited", visited);
+    button.classList.toggle("complete", complete);
+    button.setAttribute(
+      "aria-label",
+      `${step.label} step ${index + 1} of ${BUILDER_STEPS.length}${
+        complete ? ", complete" : ", incomplete"
+      }${active ? ", current step" : ""}`
+    );
+
+    const existingBadge = button.querySelector(
+      ".hg-character-step-complete-badge"
+    );
+
+    if (complete && !existingBadge) {
+      const badge = document.createElement("span");
+      badge.className =
+        "hg-character-step-complete-badge";
+      badge.setAttribute("aria-hidden", "true");
+      badge.textContent = "\u2713";
+      button.append(badge);
+    } else if (!complete && existingBadge) {
+      existingBadge.remove();
+    }
+
+    wizardRuntime.stepRailStateUpdateCount += 1;
+  }
+
+  function refreshBuilderChrome({
+    refreshStepIds = []
+  } = {}) {
     if (
       creatorState.viewMode !==
       "builder"
@@ -19041,10 +19191,8 @@ export function createCharacterCreator(options = {}) {
       }`;
     }
 
-    if (W.stepRail) {
-      W.stepRail.innerHTML =
-        renderStepRail();
-    }
+    uniqueCleanArray(refreshStepIds)
+      .forEach(refreshStepRailState);
   }
 
   function renderMissingStep(stepId) {
@@ -19264,6 +19412,8 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderCreatorView() {
+    wizardRuntime.fullRenderCount += 1;
+
     if (!ensureWizardShell()) {
       return;
     }
@@ -19295,6 +19445,78 @@ export function createCharacterCreator(options = {}) {
     refreshWizardElements();
     applyCharacterCreatorFieldLimits(
       W.root
+    );
+  }
+
+  function refreshBuilderFooter() {
+    if (creatorState.viewMode !== "builder") {
+      return;
+    }
+
+    refreshWizardElements();
+
+    const stepIndex = getStepIndex(
+      creatorState.currentStepId
+    );
+    const isBusy = isCharacterCreatorBusy();
+    const saveButton = W.root?.querySelector(
+      ".hg-character-step-footer [data-cc-action=\"save-character\"]"
+    );
+
+    if (W.previousButton) {
+      W.previousButton.disabled = stepIndex === 0;
+    }
+
+    if (W.nextButton) {
+      W.nextButton.disabled =
+        stepIndex === BUILDER_STEPS.length - 1;
+    }
+
+    if (saveButton) {
+      saveButton.disabled = isBusy;
+      saveButton.textContent = isBusy
+        ? `${getCharacterBusyLabel()}...`
+        : creatorState.currentCharacterId
+          ? "Update Draft"
+          : "Save Draft";
+    }
+  }
+
+  function renderCurrentStep() {
+    if (
+      creatorState.viewMode !== "builder" ||
+      !wizardRuntime.shellBuilt
+    ) {
+      renderCreatorView();
+      return;
+    }
+
+    refreshWizardElements();
+
+    if (!W.root || !W.stepBody) {
+      renderCreatorView();
+      return;
+    }
+
+    wizardRuntime.currentStepRenderCount += 1;
+    W.stepBody.innerHTML = renderStepContent(
+      creatorState.currentStepId
+    );
+
+    if (W.status) {
+      W.status.textContent =
+        creatorState.statusMessage || "";
+    }
+
+    renderActionBar();
+    refreshBuilderFooter();
+    refreshBuilderChrome({
+      refreshStepIds: [
+        creatorState.currentStepId
+      ]
+    });
+    applyCharacterCreatorFieldLimits(
+      W.stepBody
     );
   }
 
@@ -20339,7 +20561,7 @@ export function createCharacterCreator(options = {}) {
     isCharacterCreatorBusy,
     markDraftChanged,
     normalizeCharacterImageValue,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     safeDisplayString,
     safeNumber,
     setStatus,
@@ -20431,7 +20653,7 @@ export function createCharacterCreator(options = {}) {
     removeListProficiencySourcesByPrefix,
     removeSkillProficiencySourcesByPrefix,
     renderCatalogEntryDetails,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderFullCatalogDescription,
     renderRulesetMetadata,
     safeDisplayString,
@@ -28096,7 +28318,7 @@ export function createCharacterCreator(options = {}) {
     getSection12FeatChoiceLimit,
     getSection12FeatChoiceOptions,
     getUnlockedFeatChoiceSlots,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     safeNumber,
     setFeatRestChoice,
     setSection12AsiFeat,
@@ -28167,7 +28389,7 @@ export function createCharacterCreator(options = {}) {
     recalculateClassTotalLevel,
     removeLastCharacterLevel,
     removeMulticlassClass,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderLevelUpWorkflow,
     resolveClassTemplateForEntry,
     setMulticlassClassLevel,
@@ -28245,7 +28467,7 @@ export function createCharacterCreator(options = {}) {
     getSelectedSection12Subclass,
     isMulticlassDraft,
     markDraftChanged,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderCustomClassMovementFields,
     renderLevelStep: (...args) => {
       return abilitiesStep.renderLevelStep(...args);
@@ -28371,7 +28593,7 @@ export function createCharacterCreator(options = {}) {
     recalculateAbilityTotals,
     refreshClassProgressionDerivedValues,
     refreshSelectedClassFeatures,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderMulticlassLevelBreakdown,
     renderMulticlassProgressionEditor,
     safeDisplayString,
@@ -28524,7 +28746,7 @@ export function createCharacterCreator(options = {}) {
     removeListProficiencySource,
     removeSkillProficiencySource,
     renderCatalogEntryDetails,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderDescriptionStoryFields,
     renderFullCatalogDescription,
     renderRulesetMetadata,
@@ -28611,7 +28833,7 @@ export function createCharacterCreator(options = {}) {
     isSection17ClassComplete,
     markDraftChanged,
     parseSection14List,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     safeNumber,
     setManualProficiencyList,
     setStatus,
@@ -31265,7 +31487,7 @@ export function createCharacterCreator(options = {}) {
     markDraftChanged,
     moveSection15ItemToContainer,
     removeSection15Item,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderSection15Catalog,
     renderSection15Inventory,
     renderSection15OpenContainerPanel,
@@ -34945,7 +35167,7 @@ export function createCharacterCreator(options = {}) {
     refreshSection16SpellPicker,
     removeSection16CustomFeature,
     removeSection16CustomSpell,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderSection16BeginnerGuide,
     renderSection16CustomSpells,
     renderSection16DefaultSpellViewer,
@@ -35113,7 +35335,7 @@ export function createCharacterCreator(options = {}) {
     openCharacterSheet: handleSection17OpenCharacterSheet,
     persistDraftToSession,
     renderClassFeatureMetadata,
-    renderCreatorView,
+    renderCreatorView: renderCurrentStep,
     renderInnateSpellCards,
     renderMulticlassAdvancementChoiceSummary,
     renderMulticlassClassSummary,
@@ -35765,7 +35987,7 @@ export function createCharacterCreator(options = {}) {
       )
     ) {
       setStatus("Feat resource updated.");
-      renderCreatorView();
+      renderCurrentStep();
     }
   }
 
@@ -35779,7 +36001,7 @@ export function createCharacterCreator(options = {}) {
       )
     ) {
       setStatus("Class feature resource updated.");
-      renderCreatorView();
+      renderCurrentStep();
     }
   }
 
@@ -35800,7 +36022,7 @@ export function createCharacterCreator(options = {}) {
           ? "Rage started. Spellcasting and concentration are blocked until Rage ends."
           : "Rage ended. Spellcasting is available again."
       );
-      renderCreatorView();
+      renderCurrentStep();
     }
   }
 
@@ -35816,7 +36038,7 @@ export function createCharacterCreator(options = {}) {
       )
     ) {
       setStatus("Spell slot usage updated.");
-      renderCreatorView();
+      renderCurrentStep();
     }
   }
 
@@ -36725,6 +36947,38 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function refreshCreatorForSection19Cache(
+    cacheKey
+  ) {
+    if (!wizardRuntime.shellBuilt) {
+      return;
+    }
+
+    if (
+      creatorState.viewMode === "library"
+    ) {
+      if (cacheKey === "characterCache") {
+        renderCreatorView();
+      }
+
+      return;
+    }
+
+    const affectedSteps = {
+      roomClassCache: ["class", "subclass"],
+      roomSpeciesCache: ["species"],
+      roomBackgroundCache: ["background"]
+    }[cacheKey] || [];
+
+    if (
+      affectedSteps.includes(
+        creatorState.currentStepId
+      )
+    ) {
+      renderCurrentStep();
+    }
+  }
+
   function connectSection19Listener({
     label,
     collectionName,
@@ -36775,9 +37029,9 @@ export function createCharacterCreator(options = {}) {
                 snapshot
               ).map(normalizeRecord);
 
-            if (wizardRuntime.shellBuilt) {
-              renderCreatorView();
-            }
+            refreshCreatorForSection19Cache(
+              cacheKey
+            );
           },
 
           (error) => {
@@ -36817,9 +37071,9 @@ export function createCharacterCreator(options = {}) {
               );
             }
 
-            if (wizardRuntime.shellBuilt) {
-              renderCreatorView();
-            }
+            refreshCreatorForSection19Cache(
+              cacheKey
+            );
           }
         );
 
@@ -37149,6 +37403,21 @@ export function createCharacterCreator(options = {}) {
 
     getCharacter() {
       return getCharacterSnapshot();
+    },
+
+    getRenderMetrics() {
+      return {
+        fullRenderCount:
+          wizardRuntime.fullRenderCount,
+        currentStepRenderCount:
+          wizardRuntime.currentStepRenderCount,
+        stepRailRebuildCount:
+          wizardRuntime.stepRailRebuildCount,
+        stepRailStateUpdateCount:
+          wizardRuntime.stepRailStateUpdateCount,
+        lightweightFieldUpdateCount:
+          wizardRuntime.lightweightFieldUpdateCount
+      };
     },
 
     getClassAsiLevels,

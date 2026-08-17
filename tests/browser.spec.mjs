@@ -129,6 +129,139 @@ test(
 );
 
 test(
+  "ordinary Character Creator typing preserves the active DOM and avoids full rerenders",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/character-feat-removal-self-test.html?release=creator-rerender-priority2-20260816",
+      {
+        waitUntil:
+          "domcontentloaded"
+      }
+    );
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "ready"
+      );
+
+    await page.evaluate(() => {
+      window
+        .__FEAT_REMOVAL_TEST__
+        .navigateToStep("basics");
+
+      window.__CREATOR_RENDER_NODES__ = {
+        root:
+          document.getElementById(
+            "characterWizardRoot"
+          ),
+        rail:
+          document.getElementById(
+            "characterWizardStepRail"
+          ),
+        body:
+          document.getElementById(
+            "characterWizardStepBody"
+          )
+      };
+      window.__CREATOR_RENDER_METRICS_BEFORE__ =
+        window
+          .__FEAT_REMOVAL_TEST__
+          .getRenderMetrics();
+    });
+
+    const startedAt = Date.now();
+
+    await page.locator("#ccCharacterName")
+      .fill("");
+    await page.locator("#ccCharacterName")
+      .pressSequentially(
+        "Priority Two Hero",
+        { delay: 0 }
+      );
+    await page.locator("#ccAppearance")
+      .pressSequentially(
+        "A practical adventurer with a weathered cloak.",
+        { delay: 0 }
+      );
+
+    await expect(
+      page.locator("#ccCharacterName")
+    ).toHaveValue("Priority Two Hero");
+    await expect(
+      page.locator("#characterBuilderTitle")
+    ).toHaveText("Priority Two Hero");
+    await expect(
+      page.locator("#ccAppearance")
+    ).toHaveValue(
+      "A practical adventurer with a weathered cloak."
+    );
+    await expect(
+      page.locator("#ccDefaultSpellSearch")
+    ).toHaveCount(0);
+
+    const result = await page.evaluate(() => {
+      const nodes =
+        window.__CREATOR_RENDER_NODES__;
+      const before =
+        window.__CREATOR_RENDER_METRICS_BEFORE__;
+      const after = window
+        .__FEAT_REMOVAL_TEST__
+        .getRenderMetrics();
+
+      return {
+        after,
+        before,
+        sameRoot:
+          nodes.root === document.getElementById(
+            "characterWizardRoot"
+          ),
+        sameRail:
+          nodes.rail === document.getElementById(
+            "characterWizardStepRail"
+          ),
+        sameBody:
+          nodes.body === document.getElementById(
+            "characterWizardStepBody"
+          ),
+        name:
+          window
+            .__FEAT_REMOVAL_TEST__
+            .getDraft()
+            .identity.name,
+        appearance:
+          window
+            .__FEAT_REMOVAL_TEST__
+            .getDraft()
+            .identity.appearance
+      };
+    });
+
+    expect(result.sameRoot).toBe(true);
+    expect(result.sameRail).toBe(true);
+    expect(result.sameBody).toBe(true);
+    expect(result.name)
+      .toBe("Priority Two Hero");
+    expect(result.appearance)
+      .toBe(
+        "A practical adventurer with a weathered cloak."
+      );
+    expect(result.after.fullRenderCount)
+      .toBe(result.before.fullRenderCount);
+    expect(result.after.currentStepRenderCount)
+      .toBe(result.before.currentStepRenderCount);
+    expect(result.after.stepRailRebuildCount)
+      .toBe(result.before.stepRailRebuildCount);
+    expect(
+      result.after.lightweightFieldUpdateCount
+    ).toBeGreaterThan(
+      result.before.lightweightFieldUpdateCount
+    );
+    expect(Date.now() - startedAt)
+      .toBeLessThan(3000);
+  }
+);
+
+test(
   "playable character sheet prioritizes play controls, tracks combat, and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
