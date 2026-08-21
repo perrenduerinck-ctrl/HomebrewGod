@@ -1,3 +1,12 @@
+import {
+  createDerivedSignature,
+  createScopedDerivedCache
+} from "./derivedCache.js";
+
+const classProgressionCache = createScopedDerivedCache({
+  maximumEntriesPerScope: 128
+});
+
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number)
@@ -97,56 +106,81 @@ export const MAX_CHARACTER_LEVEL = 20;
 export function calculateClassProgressionLevel(
   classEntries = []
 ) {
-  return Math.min(
-    MAX_CHARACTER_LEVEL,
-    (Array.isArray(classEntries)
-      ? classEntries
-      : []
-    ).reduce((total, entry) => {
-      return (
-        total +
-        Math.max(
-          0,
-          Math.round(
-            safeNumber(
-              entry?.level,
-              0
+  const entries = Array.isArray(classEntries)
+    ? classEntries
+    : [];
+  const dependencyKey = createDerivedSignature(
+    entries.map((entry) => entry?.level)
+  );
+
+  return classProgressionCache.get(
+    "total-level",
+    dependencyKey,
+    () => Math.min(
+      MAX_CHARACTER_LEVEL,
+      entries.reduce((total, entry) => {
+        return (
+          total +
+          Math.max(
+            0,
+            Math.round(
+              safeNumber(
+                entry?.level,
+                0
+              )
             )
           )
-        )
-      );
-    }, 0)
+        );
+      }, 0)
+    )
   );
 }
 
 export function buildClassLevelOrder(
   classEntries = []
 ) {
-  return (Array.isArray(classEntries)
+  const entries = Array.isArray(classEntries)
     ? classEntries
-    : []
-  ).flatMap((entry, index) => {
-    const key =
-      cleanString(
+    : [];
+  const dependencyKey = createDerivedSignature(
+    entries.map((entry) => ({
+      entryId:
         entry?.entryId ||
         entry?.classEntryId ||
         entry?.classId,
-        `class-${index + 1}`
-      );
-    const level = Math.max(
-      0,
-      Math.round(
-        safeNumber(
-          entry?.level,
-          0
-        )
-      )
-    );
+      level: entry?.level
+    }))
+  );
 
-    return Array.from(
-      { length: level },
-      () => key
-    );
-  }).slice(0, MAX_CHARACTER_LEVEL);
+  return classProgressionCache.get(
+    "level-order",
+    dependencyKey,
+    () => entries.flatMap((entry, index) => {
+      const key =
+        cleanString(
+          entry?.entryId ||
+          entry?.classEntryId ||
+          entry?.classId,
+          `class-${index + 1}`
+        );
+      const level = Math.max(
+        0,
+        Math.round(
+          safeNumber(
+            entry?.level,
+            0
+          )
+        )
+      );
+
+      return Array.from(
+        { length: level },
+        () => key
+      );
+    }).slice(0, MAX_CHARACTER_LEVEL)
+  );
 }
 
+export function getClassProgressionCacheMetrics() {
+  return classProgressionCache.getMetrics();
+}

@@ -151,6 +151,11 @@ import {
   normalizeInventoryItemBase
 } from "./characterCreator/inventoryEquipment.js";
 import {
+  createDerivedSignature,
+  createScopedDerivedCache,
+  getDerivedObjectIdentity
+} from "./characterCreator/derivedCache.js";
+import {
   applyGameplayAction,
   ensureGameplayState
 } from "./characterSheet/gameplayState.js";
@@ -187,6 +192,10 @@ export function createCharacterCreator(options = {}) {
       options.deletePortrait ||
       options.deleteImage
   };
+
+  const derivedCache = createScopedDerivedCache({
+    maximumEntriesPerScope: 384
+  });
 
   const CHARACTER_SCHEMA_VERSION = 13;
   const CLASS_SCHEMA_VERSION =
@@ -2762,7 +2771,13 @@ export function createCharacterCreator(options = {}) {
   }
 
   function calculateAbilityModifier(score) {
-    return Math.floor((safeNumber(score, 10) - 10) / 2);
+    const cleanScore = safeNumber(score, 10);
+
+    return derivedCache.get(
+      "ability-modifier",
+      cleanScore,
+      () => Math.floor((cleanScore - 10) / 2)
+    );
   }
 
   function calculateAbilityModifiers(scores) {
@@ -2781,12 +2796,18 @@ export function createCharacterCreator(options = {}) {
   function getGenericProficiencyBonus(level) {
     const safeLevel = clampLevel(level);
 
-    if (safeLevel >= 17) return 6;
-    if (safeLevel >= 13) return 5;
-    if (safeLevel >= 9) return 4;
-    if (safeLevel >= 5) return 3;
+    return derivedCache.get(
+      "proficiency-bonus",
+      safeLevel,
+      () => {
+        if (safeLevel >= 17) return 6;
+        if (safeLevel >= 13) return 5;
+        if (safeLevel >= 9) return 4;
+        if (safeLevel >= 5) return 3;
 
-    return 2;
+        return 2;
+      }
+    );
   }
 
   function getStartingClassEntry(character) {
@@ -4849,7 +4870,7 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
-  function calculateCharacterSavingThrows(
+  function calculateCharacterSavingThrowsUncached(
     character
   ) {
     const proficiencyBonus =
@@ -4900,6 +4921,31 @@ export function createCharacterCreator(options = {}) {
     });
   }
 
+  function calculateCharacterSavingThrows(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      scores: character?.abilities?.scores,
+      totalLevel:
+        character?.classProgression
+          ?.totalLevel,
+      proficiencies:
+        character?.proficiencies
+          ?.savingThrows,
+      bonuses:
+        character?.combat
+          ?.savingThrowBonuses
+    });
+
+    return derivedCache.get(
+      "saving-throws",
+      dependencyKey,
+      () => calculateCharacterSavingThrowsUncached(
+        character
+      )
+    );
+  }
+
   function getCharacterSkillEntry(
     character,
     skill
@@ -4946,7 +4992,7 @@ export function createCharacterCreator(options = {}) {
     });
   }
 
-  function calculateCharacterPassiveScores(
+  function calculateCharacterPassiveScoresUncached(
     character
   ) {
     const wanted = [
@@ -5016,7 +5062,36 @@ export function createCharacterCreator(options = {}) {
     }, {});
   }
 
-  function calculateCharacterInitiative(
+  function calculateCharacterPassiveScores(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      scores: character?.abilities?.scores,
+      totalLevel:
+        character?.classProgression
+          ?.totalLevel,
+      skills:
+        character?.proficiencies?.skills,
+      passiveState:
+        character?.proficiencies
+          ?.passiveState,
+      classChoices:
+        character?.classChoices,
+      advancementChoices:
+        character?.advancementChoices,
+      feats: character?.feats
+    });
+
+    return derivedCache.get(
+      "passive-scores",
+      dependencyKey,
+      () => calculateCharacterPassiveScoresUncached(
+        character
+      )
+    );
+  }
+
+  function calculateCharacterInitiativeUncached(
     character
   ) {
     const dexterityModifier =
@@ -5057,6 +5132,39 @@ export function createCharacterCreator(options = {}) {
         bonus +
         featBonus
     };
+  }
+
+  function calculateCharacterInitiative(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      dexterity:
+        character?.abilities?.scores?.dex,
+      totalLevel:
+        character?.classProgression
+          ?.totalLevel,
+      initiativeProficient:
+        character?.combat
+          ?.initiativeProficient,
+      initiativeBonus:
+        character?.combat
+          ?.initiativeBonus,
+      initiative:
+        character?.combat?.initiative,
+      classChoices:
+        character?.classChoices,
+      advancementChoices:
+        character?.advancementChoices,
+      feats: character?.feats
+    });
+
+    return derivedCache.get(
+      "initiative",
+      dependencyKey,
+      () => calculateCharacterInitiativeUncached(
+        character
+      )
+    );
   }
 
   function normalizeHpCalculation(
@@ -6046,7 +6154,7 @@ export function createCharacterCreator(options = {}) {
     return [...levels].sort((a, b) => a - b);
   }
 
-  function getUnlockedFeatChoiceSlots(
+  function calculateUnlockedFeatChoiceSlots(
     character = creatorState.draft
   ) {
     const classEntries = getCharacterClassEntries(character);
@@ -6218,6 +6326,31 @@ export function createCharacterCreator(options = {}) {
           };
         });
     });
+  }
+
+  function getUnlockedFeatChoiceSlots(
+    character = creatorState.draft
+  ) {
+    const dependencyKey = createDerivedSignature({
+      classProgression:
+        character?.classProgression,
+      classChoices:
+        character?.classChoices,
+      advancementChoices:
+        character?.advancementChoices,
+      roomClasses:
+        getDerivedObjectIdentity(
+          creatorState.roomClassCache
+        )
+    });
+
+    return derivedCache.get(
+      "unlocked-feat-slots",
+      dependencyKey,
+      () => calculateUnlockedFeatChoiceSlots(
+        character
+      )
+    );
   }
 
   function getSection12UnlockedAsiSlot(
@@ -6901,7 +7034,7 @@ export function createCharacterCreator(options = {}) {
     ];
   }
 
-  function calculateCharacterHitDice(
+  function calculateCharacterHitDiceUncached(
     character
   ) {
     return getCharacterClassEntries(character)
@@ -6943,6 +7076,27 @@ export function createCharacterCreator(options = {}) {
       .filter((entry) => {
         return entry.count > 0;
       });
+  }
+
+  function calculateCharacterHitDice(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      classProgression:
+        character?.classProgression,
+      roomClasses:
+        getDerivedObjectIdentity(
+          creatorState.roomClassCache
+        )
+    });
+
+    return derivedCache.get(
+      "character-hit-dice",
+      dependencyKey,
+      () => calculateCharacterHitDiceUncached(
+        character
+      )
+    );
   }
 
   function getHitDieSize(hitDie) {
@@ -7447,7 +7601,7 @@ export function createCharacterCreator(options = {}) {
     return total;
   }
 
-  function calculateCharacterHp(
+  function calculateCharacterHpUncached(
     character
   ) {
     const classEntries =
@@ -7589,6 +7743,39 @@ export function createCharacterCreator(options = {}) {
     };
   }
 
+  function calculateCharacterHp(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      constitution:
+        character?.abilities?.scores?.con,
+      classProgression:
+        character?.classProgression,
+      hpCalculation:
+        character?.combat?.hpCalculation,
+      maximumHp:
+        character?.combat?.maxHp,
+      species: character?.species,
+      classChoices:
+        character?.classChoices,
+      advancementChoices:
+        character?.advancementChoices,
+      feats: character?.feats,
+      roomClasses:
+        getDerivedObjectIdentity(
+          creatorState.roomClassCache
+        )
+    });
+
+    return derivedCache.get(
+      "character-hp",
+      dependencyKey,
+      () => calculateCharacterHpUncached(
+        character
+      )
+    );
+  }
+
   function characterHasClass(
     character,
     classId
@@ -7613,7 +7800,7 @@ export function createCharacterCreator(options = {}) {
       });
   }
 
-  function calculateArmorClassOptions(
+  function calculateArmorClassOptionsUncached(
     character
   ) {
     const featEffects = getSelectedDefaultFeatInstances(character)
@@ -8132,6 +8319,40 @@ export function createCharacterCreator(options = {}) {
     };
   }
 
+  function calculateArmorClassOptions(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      scores: character?.abilities?.scores,
+      classProgression:
+        character?.classProgression,
+      classChoices:
+        character?.classChoices,
+      advancementChoices:
+        character?.advancementChoices,
+      feats: character?.feats,
+      equipment:
+        character?.equipment?.items,
+      armorClassOptions:
+        character?.combat
+          ?.armorClassOptions,
+      selectedArmorClassMethod:
+        character?.combat
+          ?.selectedArmorClassMethod,
+      armorClassModifiers:
+        character?.classMechanics
+          ?.armorClassModifiers
+    });
+
+    return derivedCache.get(
+      "armor-class-options",
+      dependencyKey,
+      () => calculateArmorClassOptionsUncached(
+        character
+      )
+    );
+  }
+
   function formatSignedNumber(value) {
     const number =
       safeNumber(value, 0);
@@ -8161,7 +8382,7 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
-  function calculateInventoryWeightSummary(
+  function calculateInventoryWeightSummaryUncached(
     items = []
   ) {
     return (Array.isArray(items) ? items : [])
@@ -8183,6 +8404,34 @@ export function createCharacterCreator(options = {}) {
           unknownCount: 0
         }
       );
+  }
+
+  function getInventoryWeightDependencyKey(items) {
+    return createDerivedSignature(
+      (Array.isArray(items) ? items : [])
+        .map((item) => ({
+          id: item?.id,
+          weight: item?.weight,
+          quantity: item?.quantity,
+          containerId: item?.containerId,
+          isContainer:
+            item?.isContainer,
+          capacityWeight:
+            item?.capacityWeight
+        }))
+    );
+  }
+
+  function calculateInventoryWeightSummary(
+    items = []
+  ) {
+    return derivedCache.get(
+      "inventory-weight",
+      getInventoryWeightDependencyKey(items),
+      () => calculateInventoryWeightSummaryUncached(
+        items
+      )
+    );
   }
 
   function getContainerContents(
@@ -8290,7 +8539,7 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
-  function getContainerSummaries(items = []) {
+  function calculateContainerSummaries(items = []) {
     const inventory =
       Array.isArray(items) ? items : [];
 
@@ -8340,6 +8589,14 @@ export function createCharacterCreator(options = {}) {
             weight.unknownCount > 0
         };
       });
+  }
+
+  function getContainerSummaries(items = []) {
+    return derivedCache.get(
+      "container-summaries",
+      getInventoryWeightDependencyKey(items),
+      () => calculateContainerSummaries(items)
+    );
   }
 
   function validateContainerState(items = []) {
@@ -9082,7 +9339,7 @@ export function createCharacterCreator(options = {}) {
     };
   }
 
-  function calculateEquippedWeaponAttacks(
+  function calculateEquippedWeaponAttacksUncached(
     character
   ) {
     return (
@@ -9111,7 +9368,57 @@ export function createCharacterCreator(options = {}) {
       });
   }
 
-  function getCharacterSpellcastingInfo(
+  function calculateEquippedWeaponAttacks(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      scores: character?.abilities?.scores,
+      totalLevel:
+        character?.classProgression
+          ?.totalLevel,
+      weaponProficiencies:
+        character?.proficiencies?.weapons,
+      equipment:
+        character?.equipment?.items,
+      combat: {
+        attacksPerAction:
+          character?.combat
+            ?.attacksPerAction,
+        classFeatureStates:
+          character?.combat
+            ?.classFeatureStates
+      },
+      classMechanics: {
+        attackAction:
+          character?.classMechanics
+            ?.attackAction,
+        attackModifiers:
+          character?.classMechanics
+            ?.attackModifiers,
+        combatProfiles:
+          character?.classMechanics
+            ?.combatProfiles
+      },
+      featMechanics: {
+        attackModifiers:
+          character?.featMechanics
+            ?.attackModifiers,
+        combatProfiles:
+          character?.featMechanics
+            ?.combatProfiles
+      }
+    });
+
+    return derivedCache.get(
+      "weapon-attacks",
+      dependencyKey,
+      () => calculateEquippedWeaponAttacksUncached(
+        character
+      )
+    );
+  }
+
+  function calculateCharacterSpellcastingInfo(
     character
   ) {
     return getCharacterClassEntries(character)
@@ -9298,6 +9605,36 @@ export function createCharacterCreator(options = {}) {
       });
   }
 
+  function getSpellcastingProgressionDependencyKey(
+    character
+  ) {
+    return createDerivedSignature({
+      classProgression:
+        character?.classProgression,
+      spellcastingAbility:
+        character?.magic
+          ?.spellcastingAbility,
+      roomClasses:
+        getDerivedObjectIdentity(
+          creatorState.roomClassCache
+        )
+    });
+  }
+
+  function getCharacterSpellcastingInfo(
+    character
+  ) {
+    return derivedCache.get(
+      "spellcasting-progression",
+      getSpellcastingProgressionDependencyKey(
+        character
+      ),
+      () => calculateCharacterSpellcastingInfo(
+        character
+      )
+    );
+  }
+
   function getPreparedSpellLimit(
     character,
     spellcastingInfo
@@ -9358,7 +9695,7 @@ export function createCharacterCreator(options = {}) {
     return null;
   }
 
-  function getSpellcastingSummary(
+  function calculateSpellcastingSummary(
     character
   ) {
     const info =
@@ -9469,6 +9806,46 @@ export function createCharacterCreator(options = {}) {
         }),
       multiclass
     };
+  }
+
+  function getSpellcastingSummary(
+    character
+  ) {
+    const dependencyKey = createDerivedSignature({
+      progression:
+        getSpellcastingProgressionDependencyKey(
+          character
+        ),
+      abilities:
+        character?.abilities?.scores,
+      classMechanics: {
+        spellcastingBlocked:
+          character?.classMechanics
+            ?.spellcastingBlocked,
+        spellcastingBlockReasons:
+          character?.classMechanics
+            ?.spellcastingBlockReasons,
+        spellModifiers:
+          character?.classMechanics
+            ?.spellModifiers
+      },
+      equippedItems:
+        (character?.equipment?.items || [])
+          .map((item) => ({
+            id: item?.id,
+            equipped: item?.equipped,
+            containerId:
+              item?.containerId
+          }))
+    });
+
+    return derivedCache.get(
+      "spellcasting-summary",
+      dependencyKey,
+      () => calculateSpellcastingSummary(
+        character
+      )
+    );
   }
 
   function getSpellSelectionLimits(
@@ -13928,7 +14305,7 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
-  function calculateClassProgressionTotalLevel(
+  function calculateClassProgressionTotalLevelUncached(
     character = creatorState.draft
   ) {
     const classes =
@@ -13962,6 +14339,23 @@ export function createCharacterCreator(options = {}) {
       );
 
     return clampLevel(total || 1);
+  }
+
+  function calculateClassProgressionTotalLevel(
+    character = creatorState.draft
+  ) {
+    const levels = (
+      character?.classProgression
+        ?.classes || []
+    ).map((entry) => entry?.level);
+
+    return derivedCache.get(
+      "class-progression-level",
+      createDerivedSignature(levels),
+      () => calculateClassProgressionTotalLevelUncached(
+        character
+      )
+    );
   }
 
   function recalculateClassTotalLevel(
@@ -22007,7 +22401,7 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
-  function getSection12ClassFeaturesThroughLevel() {
+  function calculateSection12ClassFeaturesThroughLevel() {
     if (
       isMulticlassDraft(
         creatorState.draft
@@ -22099,6 +22493,27 @@ export function createCharacterCreator(options = {}) {
         )
       );
     });
+  }
+
+  function getSection12ClassFeaturesThroughLevel() {
+    const dependencyKey = createDerivedSignature({
+      classProgression:
+        creatorState.draft
+          ?.classProgression,
+      classChoices:
+        creatorState.draft
+          ?.classChoices,
+      roomClasses:
+        getDerivedObjectIdentity(
+          creatorState.roomClassCache
+        )
+    });
+
+    return derivedCache.get(
+      "unlocked-class-features",
+      dependencyKey,
+      () => calculateSection12ClassFeaturesThroughLevel()
+    );
   }
 
   function getSection12FutureClassFeatures() {
@@ -22888,7 +23303,7 @@ export function createCharacterCreator(options = {}) {
     return [];
   }
 
-  function getSelectedDefaultFeatInstances(
+  function calculateSelectedDefaultFeatInstances(
     character = creatorState.draft
   ) {
     const slots = getUnlockedFeatChoiceSlots(character)
@@ -22933,6 +23348,26 @@ export function createCharacterCreator(options = {}) {
       });
 
     return instances;
+  }
+
+  function getSelectedDefaultFeatInstances(
+    character = creatorState.draft
+  ) {
+    const dependencyKey = createDerivedSignature({
+      unlockedSlots:
+        getUnlockedFeatChoiceSlots(
+          character
+        ),
+      legacyFeats: character?.feats
+    });
+
+    return derivedCache.get(
+      "selected-feat-instances",
+      dependencyKey,
+      () => calculateSelectedDefaultFeatInstances(
+        character
+      )
+    );
   }
 
   function calculateSelectedFeatNumericEffect(
@@ -26656,7 +27091,7 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
-  function getFeatPrerequisiteResult(
+  function calculateFeatPrerequisiteResult(
     feat,
     character = creatorState.draft,
     options = {}
@@ -27105,6 +27540,91 @@ export function createCharacterCreator(options = {}) {
           .featSettingPrerequisites ||
         "advisory"
     };
+  }
+
+  function getFeatPrerequisiteResult(
+    feat,
+    character = creatorState.draft,
+    options = {}
+  ) {
+    const magic = character?.magic || {};
+    const dependencyKey = createDerivedSignature({
+      feat: {
+        id: feat?.id,
+        repeatable: feat?.repeatable,
+        prerequisites:
+          feat?.prerequisites
+      },
+      featureId: options.featureId,
+      currentSlot:
+        getSection12UnlockedAsiSlot(
+          options.featureId,
+          character
+        ),
+      selectedFeats:
+        getSelectedDefaultFeatInstances(
+          character
+        ).map((instance) => ({
+          featId: instance.featId,
+          slotId: instance.slotId,
+          featChoices:
+            instance.featChoices
+        })),
+      classEntries:
+        getCharacterClassEntries(
+          character
+        ).map((entry) => ({
+          classId: entry?.classId,
+          level: entry?.level
+        })),
+      totalLevel:
+        character?.classProgression
+          ?.totalLevel ||
+        character?.level,
+      abilities:
+        character?.abilities?.scores,
+      proficiencies:
+        character?.proficiencies,
+      background:
+        character?.background,
+      species: character?.species,
+      size: character?.identity?.size,
+      spellcastingInfo:
+        getCharacterSpellcastingInfo(
+          character
+        ),
+      magic: {
+        knownSpellIds:
+          magic.knownSpellIds,
+        preparedSpellIds:
+          magic.preparedSpellIds,
+        innateSpellIds:
+          magic.innateSpellIds,
+        customSpellIds:
+          magic.customSpellIds,
+        innateSpells:
+          magic.innateSpells,
+        customSpells:
+          magic.customSpells,
+        classSources:
+          magic.classSources,
+        featSources:
+          magic.featSources
+      },
+      featMechanics:
+        character?.featMechanics
+          ?.spellcasting
+    });
+
+    return derivedCache.get(
+      "feat-prerequisite",
+      dependencyKey,
+      () => calculateFeatPrerequisiteResult(
+        feat,
+        character,
+        options
+      )
+    );
   }
 
   function getFeatPrerequisiteLabel(feat, options = {}) {
@@ -32406,7 +32926,7 @@ export function createCharacterCreator(options = {}) {
     return entries;
   }
 
-  function getSection16EligibleSpellcasters(
+  function calculateSection16EligibleSpellcasters(
     spell,
     options = {}
   ) {
@@ -32489,6 +33009,45 @@ export function createCharacterCreator(options = {}) {
 
       return true;
     });
+  }
+
+  function getSection16EligibleSpellcasters(
+    spell,
+    options = {}
+  ) {
+    const character =
+      options.character ||
+      creatorState.draft;
+    const spellcasters =
+      getSpellcastingClassOptions(
+        character
+      );
+    const dependencyKey = createDerivedSignature({
+      spell: {
+        id: spell?.id,
+        level: spell?.level,
+        classes: spell?.classes,
+        classEntryId:
+          spell?.classEntryId,
+        spellcastingSourceId:
+          spell?.spellcastingSourceId,
+        classId: spell?.classId,
+        manualOverride:
+          spell?.manualOverride
+      },
+      enforceLevel:
+        options.enforceLevel !== false,
+      spellcasters
+    });
+
+    return derivedCache.get(
+      "spell-eligibility",
+      dependencyKey,
+      () => calculateSection16EligibleSpellcasters(
+        spell,
+        options
+      )
+    );
   }
 
   function getSection16EntryForSource(
@@ -37683,8 +38242,14 @@ export function createCharacterCreator(options = {}) {
         draftStorageWriteCount:
           draftPersistenceRuntime.storageWriteCount,
         pendingDraftPersistence:
-          draftPersistenceRuntime.targets !== null
+          draftPersistenceRuntime.targets !== null,
+        derivedCache:
+          derivedCache.getMetrics()
       };
+    },
+
+    getDerivedCacheMetrics() {
+      return derivedCache.getMetrics();
     },
 
     getClassAsiLevels,

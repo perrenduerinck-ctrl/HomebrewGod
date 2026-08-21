@@ -3,6 +3,15 @@
 // One source-owned record for every way a character gains a spell.
 // =====================================================
 
+import {
+  createDerivedSignature,
+  createScopedDerivedCache
+} from "./derivedCache.js";
+
+const spellSourceCache = createScopedDerivedCache({
+  maximumEntriesPerScope: 96
+});
+
 export const SPELL_SOURCE_MODEL_VERSION = 3;
 export const SPELL_SOURCE_LIMIT = 256;
 export const SPELL_REFERENCE_LIMIT = 2048;
@@ -2232,10 +2241,16 @@ export function synchronizeCanonicalSpellSources(
 }
 
 export function buildSpellLibraryFromSources(sources) {
-  const records = new Map();
+  const dependencyKey = createDerivedSignature(sources);
 
-  normalizeSpellSources(sources)
-    .forEach((source) => {
+  return spellSourceCache.get(
+    "spell-library",
+    dependencyKey,
+    () => {
+      const records = new Map();
+
+      normalizeSpellSources(sources)
+        .forEach((source) => {
       const spellRecords = new Map(
         source.spellRecords.map((record) => {
           return [
@@ -2335,9 +2350,15 @@ export function buildSpellLibraryFromSources(sources) {
 
         records.set(spellId, existing);
       });
-    });
+        });
 
-  return [...records.values()];
+      return [...records.values()];
+    }
+  );
+}
+
+export function getSpellSourceCacheMetrics() {
+  return spellSourceCache.getMetrics();
 }
 
 export function removeCanonicalSpellSource(
