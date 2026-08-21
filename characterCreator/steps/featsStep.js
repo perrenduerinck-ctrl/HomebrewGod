@@ -4,6 +4,8 @@ const FEATS_STEP_ACTIONS = Object.freeze([
   "choose-asi-feat"
 ]);
 
+export const CREATOR_FEAT_SEARCH_DEBOUNCE_MS = 250;
+
 export function createFeatsStep(dependencies = {}) {
   const {
     ABILITY_DEFINITIONS,
@@ -35,6 +37,7 @@ export function createFeatsStep(dependencies = {}) {
   } = dependencies;
 
   const creatorState = getCreatorState();
+  let featSearchTimerId = null;
 
 function formatSection12FeatEffect(effect) {
   if (effect?.summary) {
@@ -551,22 +554,18 @@ function handleSection12ChooseAsiFeat(...values) {
   }
 }
 
-function handleSection12FeatSearch({ target }) {
+function applySection12FeatSearch(
+  picker,
+  rawQuery
+) {
   if (
-    target?.dataset?.ccActionInput !== "filter-asi-feats"
+    !picker ||
+    picker.isConnected === false
   ) {
-    return false;
+    return;
   }
 
-  const picker = target.closest(
-    "[data-cc-asi-feat-picker]"
-  );
-
-  if (!picker) {
-    return true;
-  }
-
-  const query = cleanString(target.value).toLowerCase();
+  const query = cleanString(rawQuery).toLowerCase();
   const featOptions = [
     ...picker.querySelectorAll("[data-cc-feat-option]")
   ];
@@ -591,6 +590,41 @@ function handleSection12FeatSearch({ target }) {
   if (noResults) {
     noResults.hidden = visibleCount > 0;
   }
+}
+
+function handleSection12FeatSearch({ target }) {
+  if (
+    target?.dataset?.ccActionInput !== "filter-asi-feats"
+  ) {
+    return false;
+  }
+
+  const picker = target.closest(
+    "[data-cc-asi-feat-picker]"
+  );
+
+  if (!picker) {
+    return true;
+  }
+
+  if (
+    featSearchTimerId &&
+    typeof clearTimeout === "function"
+  ) {
+    clearTimeout(featSearchTimerId);
+  }
+
+  const query = target.value;
+
+  if (typeof setTimeout !== "function") {
+    applySection12FeatSearch(picker, query);
+    return true;
+  }
+
+  featSearchTimerId = setTimeout(() => {
+    featSearchTimerId = null;
+    applySection12FeatSearch(picker, query);
+  }, CREATOR_FEAT_SEARCH_DEBOUNCE_MS);
 
   return true;
 }

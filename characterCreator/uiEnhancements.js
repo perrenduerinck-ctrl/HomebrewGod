@@ -16,6 +16,8 @@ const REQUIRED_STEPS =
     "save"
   ]);
 
+export const UI_FILTER_DEBOUNCE_MS = 250;
+
 const state = {
   spellQuery: "",
   selectedSpellsOnly: false,
@@ -1105,6 +1107,32 @@ export function installCharacterCreatorUiEnhancements(
     }
   );
 
+  let filterTimerId = null;
+  const pendingFilterTasks = new Map();
+  const runPendingFilters = () => {
+    filterTimerId = null;
+    const tasks = [
+      ...pendingFilterTasks.values()
+    ];
+    pendingFilterTasks.clear();
+    tasks.forEach((task) => task());
+  };
+  const scheduleFilter = (key, task) => {
+    pendingFilterTasks.set(key, task);
+
+    if (
+      filterTimerId &&
+      typeof clearTimeout === "function"
+    ) {
+      clearTimeout(filterTimerId);
+    }
+
+    filterTimerId = setTimeout(
+      runPendingFilters,
+      UI_FILTER_DEBOUNCE_MS
+    );
+  };
+
   const onInput = (event) => {
     const target =
       event.target;
@@ -1115,6 +1143,19 @@ export function installCharacterCreatorUiEnhancements(
     ) {
       state.spellQuery =
         target.value;
+      const viewer = target.closest(
+        "[data-cc-default-spell-viewer]"
+      );
+
+      scheduleFilter("spells", () => {
+        if (
+          viewer &&
+          viewer.isConnected !== false
+        ) {
+          filterSpellViewer(viewer);
+        }
+      });
+      return;
     }
 
     if (
@@ -1124,6 +1165,14 @@ export function installCharacterCreatorUiEnhancements(
     ) {
       state.selectedSpellsOnly =
         target.checked;
+      const viewer = target.closest(
+        "[data-cc-default-spell-viewer]"
+      );
+
+      if (viewer) {
+        filterSpellViewer(viewer);
+      }
+      return;
     }
 
     if (
@@ -1133,31 +1182,51 @@ export function installCharacterCreatorUiEnhancements(
     ) {
       state.classQuery =
         target.value;
+      const root = doc.querySelector(
+        "#characterWizardRoot"
+      );
+
+      scheduleFilter("classes", () => {
+        root?.querySelectorAll(
+          "[data-hg-class-grid]"
+        ).forEach(filterClassGrid);
+      });
+      return;
     }
 
-    queueMicrotask(() => {
-      const root =
-        doc.querySelector(
-          "#characterWizardRoot"
-        );
+    if (
+      target?.matches?.(
+        "[data-hg-feat-search]"
+      )
+    ) {
+      const panel = target.closest(
+        ".hg-character-step-panel"
+      );
 
-      root?.querySelectorAll(
-        "[data-cc-default-spell-viewer]"
-      ).forEach(filterSpellViewer);
-      root?.querySelectorAll(
-        "[data-hg-class-grid]"
-      ).forEach(filterClassGrid);
-      root?.querySelectorAll(
-        "[data-cc-asi-feat-picker]"
-      ).forEach(filterFeatPanel);
-      root?.querySelectorAll(
-        "[data-hg-default-feat-grid]"
-      ).forEach((grid) => {
-        filterFeatPanel(
-          grid.parentElement
-        );
+      scheduleFilter("feats", () => {
+        if (
+          panel &&
+          panel.isConnected !== false
+        ) {
+          filterFeatPanel(panel);
+        }
       });
-    });
+      return;
+    }
+
+    if (
+      target?.matches?.(
+        "[data-hg-feat-filter]"
+      )
+    ) {
+      const panel = target.closest(
+        ".hg-character-step-panel"
+      );
+
+      if (panel) {
+        filterFeatPanel(panel);
+      }
+    }
   };
 
   const onClick = (event) => {
@@ -1273,6 +1342,14 @@ export function installCharacterCreatorUiEnhancements(
     enhance: run,
     disconnect() {
       observer.disconnect();
+      if (
+        filterTimerId &&
+        typeof clearTimeout === "function"
+      ) {
+        clearTimeout(filterTimerId);
+      }
+      filterTimerId = null;
+      pendingFilterTasks.clear();
       doc.removeEventListener(
         "input",
         onInput,

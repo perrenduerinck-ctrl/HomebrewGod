@@ -10905,11 +10905,21 @@ export function createCharacterCreator(options = {}) {
 
   let characterSheetView = null;
 
-  const DRAFT_AUTOSAVE_DEBOUNCE_MS = 600;
+  const CREATOR_INPUT_DEBOUNCE_MS = 250;
+  const DRAFT_AUTOSAVE_DEBOUNCE_MS = 300;
+
+  const creatorInputDebounceRuntime = {
+    entries: new Map(),
+    scheduleCount: 0,
+    flushCount: 0
+  };
 
   const draftPersistenceRuntime = {
     timerId: null,
-    targets: null
+    targets: null,
+    scheduleCount: 0,
+    flushCount: 0,
+    storageWriteCount: 0
   };
 
   const CHARACTER_BUSY_ACTIONS = new Set([
@@ -17527,6 +17537,103 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function scheduleCreatorInputProcessing(
+    key,
+    callback,
+    options = {}
+  ) {
+    const cleanKey = String(key || "").trim();
+
+    if (
+      !cleanKey ||
+      typeof callback !== "function"
+    ) {
+      return false;
+    }
+
+    const existing =
+      creatorInputDebounceRuntime.entries
+        .get(cleanKey);
+
+    if (
+      existing?.timerId &&
+      typeof clearTimeout === "function"
+    ) {
+      clearTimeout(existing.timerId);
+    }
+
+    const delayMillis = Math.max(
+      0,
+      safeNumber(
+        options.delayMillis,
+        CREATOR_INPUT_DEBOUNCE_MS
+      )
+    );
+    const entry = {
+      callback,
+      timerId: null
+    };
+
+    creatorInputDebounceRuntime.entries
+      .set(cleanKey, entry);
+    creatorInputDebounceRuntime.scheduleCount += 1;
+
+    if (
+      delayMillis <= 0 ||
+      typeof setTimeout !== "function"
+    ) {
+      flushPendingCreatorInputProcessing(
+        cleanKey
+      );
+      return true;
+    }
+
+    entry.timerId = setTimeout(() => {
+      flushPendingCreatorInputProcessing(
+        cleanKey
+      );
+    }, delayMillis);
+
+    return true;
+  }
+
+  function flushPendingCreatorInputProcessing(
+    key = null
+  ) {
+    const keys = key === null
+      ? [
+          ...creatorInputDebounceRuntime
+            .entries.keys()
+        ]
+      : [String(key || "").trim()];
+    let flushed = false;
+
+    keys.forEach((entryKey) => {
+      const entry =
+        creatorInputDebounceRuntime.entries
+          .get(entryKey);
+
+      if (!entry) {
+        return;
+      }
+
+      if (
+        entry.timerId &&
+        typeof clearTimeout === "function"
+      ) {
+        clearTimeout(entry.timerId);
+      }
+
+      creatorInputDebounceRuntime.entries
+        .delete(entryKey);
+      creatorInputDebounceRuntime.flushCount += 1;
+      flushed = true;
+      entry.callback();
+    });
+
+    return flushed;
+  }
+
   function clearPendingDraftPersistence() {
     if (
       draftPersistenceRuntime.timerId &&
@@ -17546,8 +17653,11 @@ export function createCharacterCreator(options = {}) {
 
   function flushPendingDraftPersistence() {
     const targets =
-      draftPersistenceRuntime.targets ||
-      getDraftStorageTargets();
+      draftPersistenceRuntime.targets;
+
+    if (!targets) {
+      return false;
+    }
 
     if (
       draftPersistenceRuntime.timerId &&
@@ -17565,13 +17675,17 @@ export function createCharacterCreator(options = {}) {
       null;
 
     if (targets.length) {
+      draftPersistenceRuntime.flushCount += 1;
       persistDraftToSession(
         targets,
         {
-          fromScheduledFlush: true
+          fromScheduledFlush: true,
+          skipInputFlush: true
         }
       );
     }
+
+    return true;
   }
 
   function scheduleDraftPersistence(
@@ -17602,6 +17716,7 @@ export function createCharacterCreator(options = {}) {
 
     draftPersistenceRuntime.targets =
       targets;
+    draftPersistenceRuntime.scheduleCount += 1;
 
     if (
       delayMillis <= 0 ||
@@ -17618,6 +17733,7 @@ export function createCharacterCreator(options = {}) {
   }
 
   function handleDraftBeforeUnload(event) {
+    flushPendingCreatorInputProcessing();
     flushPendingDraftPersistence();
 
     if (creatorState.dirty !== true) {
@@ -17631,6 +17747,11 @@ export function createCharacterCreator(options = {}) {
     if (event) {
       event.returnValue = "";
     }
+  }
+
+  function handleDraftPageHide() {
+    flushPendingCreatorInputProcessing();
+    flushPendingDraftPersistence();
   }
 
   function connectDraftPersistenceLifecycle() {
@@ -17648,7 +17769,7 @@ export function createCharacterCreator(options = {}) {
 
     window.addEventListener(
       "pagehide",
-      flushPendingDraftPersistence
+      handleDraftPageHide
     );
 
     window.addEventListener(
@@ -17661,7 +17782,7 @@ export function createCharacterCreator(options = {}) {
     if (typeof window !== "undefined") {
       window.removeEventListener(
         "pagehide",
-        flushPendingDraftPersistence
+        handleDraftPageHide
       );
 
       window.removeEventListener(
@@ -17674,13 +17795,17 @@ export function createCharacterCreator(options = {}) {
       .draftPersistenceLifecycleConnected =
         false;
 
-    flushPendingDraftPersistence();
+    handleDraftPageHide();
   }
 
   function persistDraftToSession(
     targets = getDraftStorageTargets(),
     options = {}
   ) {
+    if (options.skipInputFlush !== true) {
+      flushPendingCreatorInputProcessing();
+    }
+
     if (options.fromScheduledFlush !== true) {
       clearPendingDraftPersistence();
     }
@@ -17713,6 +17838,8 @@ export function createCharacterCreator(options = {}) {
             target.key,
             text
           );
+          draftPersistenceRuntime
+            .storageWriteCount += 1;
         } catch (error) {
           warnDraftStorageFailure(
             target,
@@ -19559,6 +19686,8 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
+    flushPendingCreatorInputProcessing();
+
     const action =
       button.dataset.ccAction;
 
@@ -19666,9 +19795,18 @@ export function createCharacterCreator(options = {}) {
       event.target;
 
     if (target.dataset.abilityId) {
-      setAbilityScore(
-        target.dataset.abilityId,
-        target.value
+      const abilityId =
+        target.dataset.abilityId;
+      const value = target.value;
+
+      scheduleCreatorInputProcessing(
+        `ability:${abilityId}`,
+        () => {
+          setAbilityScore(
+            abilityId,
+            value
+          );
+        }
       );
 
       return;
@@ -19678,8 +19816,13 @@ export function createCharacterCreator(options = {}) {
       target.dataset.levelInput ===
       "true"
     ) {
-      setCharacterLevel(
-        target.value
+      const value = target.value;
+
+      scheduleCreatorInputProcessing(
+        "character-level",
+        () => {
+          setCharacterLevel(value);
+        }
       );
 
       return;
@@ -19708,6 +19851,39 @@ export function createCharacterCreator(options = {}) {
 
     const target =
       event.target;
+
+    if (target.dataset.abilityId) {
+      const abilityId =
+        target.dataset.abilityId;
+
+      if (
+        !flushPendingCreatorInputProcessing(
+          `ability:${abilityId}`
+        )
+      ) {
+        setAbilityScore(
+          abilityId,
+          target.value
+        );
+      }
+
+      return;
+    }
+
+    if (
+      target.dataset.levelInput ===
+      "true"
+    ) {
+      if (
+        !flushPendingCreatorInputProcessing(
+          "character-level"
+        )
+      ) {
+        setCharacterLevel(target.value);
+      }
+
+      return;
+    }
 
     if (target.dataset.draftPath) {
       setSimpleDraftField(
@@ -37416,7 +37592,21 @@ export function createCharacterCreator(options = {}) {
         stepRailStateUpdateCount:
           wizardRuntime.stepRailStateUpdateCount,
         lightweightFieldUpdateCount:
-          wizardRuntime.lightweightFieldUpdateCount
+          wizardRuntime.lightweightFieldUpdateCount,
+        inputScheduleCount:
+          creatorInputDebounceRuntime.scheduleCount,
+        inputFlushCount:
+          creatorInputDebounceRuntime.flushCount,
+        pendingInputCount:
+          creatorInputDebounceRuntime.entries.size,
+        draftScheduleCount:
+          draftPersistenceRuntime.scheduleCount,
+        draftFlushCount:
+          draftPersistenceRuntime.flushCount,
+        draftStorageWriteCount:
+          draftPersistenceRuntime.storageWriteCount,
+        pendingDraftPersistence:
+          draftPersistenceRuntime.targets !== null
       };
     },
 
