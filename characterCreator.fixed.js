@@ -11260,6 +11260,7 @@ export function createCharacterCreator(options = {}) {
     currentStepIndex: 0,
     currentCharacterId: null,
     draft: createEmptyCharacter(),
+    reviewRevision: 0,
     dirty: false,
     isSaving: false,
     busyAction: "",
@@ -16871,6 +16872,7 @@ export function createCharacterCreator(options = {}) {
 
     cursor[parts[parts.length - 1]] =
       normalizedValue;
+    creatorState.reviewRevision += 1;
     creatorState.dirty = true;
     markCharacterBuilderAsDraft(
       creatorState.draft
@@ -17813,6 +17815,7 @@ export function createCharacterCreator(options = {}) {
   }
 
   function markDraftChanged() {
+    creatorState.reviewRevision += 1;
     creatorState.dirty = true;
     markCharacterBuilderAsDraft(
       creatorState.draft
@@ -36102,6 +36105,11 @@ export function createCharacterCreator(options = {}) {
     getClassProgressionEntries,
     getContainerSummaries,
     getCreatorState: () => creatorState,
+    getReviewRevision: () => {
+      return `${creatorState.reviewRevision}:${getDerivedObjectIdentity(
+        creatorState.draft
+      )}`;
+    },
     getFeatPrerequisiteResult,
     getFeatSpellcastingValidationWarnings,
     getMulticlassPendingSkillChoiceWarnings,
