@@ -664,6 +664,14 @@ function enhanceFeatGrids(root) {
       return;
     }
 
+    if (
+      grid.matches(
+        "[data-cc-default-feat-results]"
+      )
+    ) {
+      return;
+    }
+
     card.dataset
       .hgDefaultFeatOption =
         "true";

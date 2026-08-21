@@ -1,7 +1,13 @@
+import {
+  createCatalogPage,
+  CREATOR_CATALOG_BATCH_SIZE
+} from "../catalogPagination.js";
+
 const FEATS_STEP_ACTIONS = Object.freeze([
   "set-asi-mode",
   "adjust-asi-ability",
-  "choose-asi-feat"
+  "choose-asi-feat",
+  "show-more-asi-feats"
 ]);
 
 export const CREATOR_FEAT_SEARCH_DEBOUNCE_MS = 250;
@@ -38,6 +44,7 @@ export function createFeatsStep(dependencies = {}) {
 
   const creatorState = getCreatorState();
   let featSearchTimerId = null;
+  const featPickerStates = new Map();
 
 function formatSection12FeatEffect(effect) {
   if (effect?.summary) {
@@ -190,6 +197,126 @@ function renderSection12FeatChoices(feature, state, feat) {
   `;
 }
 
+function getSection12FeatPickerState(featureId) {
+  const cleanFeatureId = cleanString(featureId);
+
+  if (!featPickerStates.has(cleanFeatureId)) {
+    featPickerStates.set(cleanFeatureId, {
+      query: "",
+      visibleLimit: CREATOR_CATALOG_BATCH_SIZE
+    });
+  }
+
+  return featPickerStates.get(cleanFeatureId);
+}
+
+function getSection12FeatPage(
+  feature,
+  state,
+  pickerState
+) {
+  return createCatalogPage(
+    DEFAULT_FEATS.filter((feat) => {
+      return feat.id !==
+        "ability-score-improvement";
+    }),
+    {
+      query: pickerState.query,
+      visibleLimit: pickerState.visibleLimit,
+      pinnedIds: state.featId
+        ? [state.featId]
+        : [],
+      getId: (feat) => feat.id,
+      getSearchText: (feat) => {
+        return [
+          feat.name,
+          feat.summary,
+          feat.description,
+          ...(Array.isArray(feat.tags)
+            ? feat.tags
+            : [])
+        ].join(" ");
+      }
+    }
+  );
+}
+
+function renderSection12FeatOption(
+  feature,
+  state,
+  feat
+) {
+  const prerequisite = getFeatPrerequisiteResult(
+    feat,
+    creatorState.draft,
+    { featureId: feature.id }
+  );
+  const selected = state.featId === feat.id;
+  const alreadySelected =
+    !selected &&
+    prerequisite.reasons.includes(
+      "Already selected in another advancement slot"
+    );
+  const prerequisiteFailed =
+    !selected &&
+    !alreadySelected &&
+    !prerequisite.met;
+  const buttonLabel = selected
+    ? "Selected"
+    : alreadySelected
+      ? "Already selected"
+      : prerequisiteFailed
+        ? "Prerequisite not met"
+        : "Choose Feat";
+
+  return `
+    <article
+      class="hg-character-choice-card ${selected ? "selected" : ""} ${alreadySelected || prerequisiteFailed ? "unavailable" : ""}"
+      data-cc-feat-option="true"
+    >
+      <h3>${escapeHtml(feat.name)}</h3>
+
+      <p>
+        ${escapeHtml(feat.summary || "No summary provided.")}
+      </p>
+
+      <p class="small">
+        ${escapeHtml(feat.description || "No description provided.")}
+        <br><b>Prerequisite:</b>
+        ${escapeHtml(getFeatPrerequisiteLabel(feat, { featureId: feature.id }))}
+        ${prerequisite.settingRequirements.length
+          ? `<br><b>Setting:</b> ${escapeHtml(
+              `${prerequisite.settingRequirements.join(", ")} (advisory; not enforced)`
+            )}`
+          : ""}
+        ${feat.repeatable === true ? "<br><b>Repeatable:</b> Yes" : ""}
+      </p>
+
+      ${
+        alreadySelected || prerequisiteFailed
+          ? `
+            <p class="small hg-feat-option-status">
+              ${escapeHtml(buttonLabel)}
+            </p>
+          `
+          : ""
+      }
+
+      <div class="hg-character-card-actions">
+        <button
+          type="button"
+          data-cc-action="choose-asi-feat"
+          data-feature-id="${escapeHtml(feature.id)}"
+          data-feat-id="${escapeHtml(feat.id)}"
+          ${selected || alreadySelected || prerequisiteFailed ? "disabled" : ""}
+        >
+          ${buttonLabel}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
 function renderSection12CompactAsiChoice(feature) {
   const state = getSection12AsiChoiceState(feature.id);
   const pointsUsed = state.abilities.length;
@@ -198,6 +325,13 @@ function renderSection12CompactAsiChoice(feature) {
         return feat.id === state.featId;
       })
     : null;
+  const pickerState =
+    getSection12FeatPickerState(feature.id);
+  const featPage = getSection12FeatPage(
+    feature,
+    state,
+    pickerState
+  );
 
   return `
     <p>
@@ -323,6 +457,7 @@ function renderSection12CompactAsiChoice(feature) {
                 <input
                   id="ccFeatSearch-${escapeHtml(feature.id)}"
                   type="search"
+                  value="${escapeHtml(pickerState.query)}"
                   placeholder="Search by feat name or description..."
                   data-cc-action-input="filter-asi-feats"
                   data-feature-id="${escapeHtml(feature.id)}"
@@ -331,101 +466,46 @@ function renderSection12CompactAsiChoice(feature) {
               </div>
 
               <div class="hg-feat-picker-scroll">
-                <div class="hg-character-choice-grid">
-                  ${DEFAULT_FEATS
-                    .filter((feat) => {
-                      return feat.id !==
-                        "ability-score-improvement";
-                    })
+                <div
+                  class="hg-character-choice-grid"
+                  data-cc-feat-results="true"
+                >
+                  ${featPage.entries
                     .map((feat) => {
-                const prerequisite = getFeatPrerequisiteResult(
-                  feat,
-                  creatorState.draft,
-                  { featureId: feature.id }
-                );
-                const selected = state.featId === feat.id;
-                const alreadySelected =
-                  !selected &&
-                  prerequisite.reasons.includes(
-                    "Already selected in another advancement slot"
-                  );
-                const prerequisiteFailed =
-                  !selected &&
-                  !alreadySelected &&
-                  !prerequisite.met;
-                const buttonLabel =
-                  selected
-                    ? "Selected"
-                    : alreadySelected
-                      ? "Already selected"
-                      : prerequisiteFailed
-                        ? "Prerequisite not met"
-                        : "Choose Feat";
-                const searchText = [
-                  feat.name,
-                  feat.summary,
-                  feat.description,
-                  ...(Array.isArray(feat.tags) ? feat.tags : [])
-                ].join(" ").toLowerCase();
-
-                return `
-                  <article
-                    class="hg-character-choice-card ${selected ? "selected" : ""} ${alreadySelected || prerequisiteFailed ? "unavailable" : ""}"
-                    data-cc-feat-option="true"
-                    data-feat-search-text="${escapeHtml(searchText)}"
-                  >
-                    <h3>${escapeHtml(feat.name)}</h3>
-
-                    <p>
-                      ${escapeHtml(feat.summary || "No summary provided.")}
-                    </p>
-
-                    <p class="small">
-                      ${escapeHtml(feat.description || "No description provided.")}
-                      <br><b>Prerequisite:</b>
-                      ${escapeHtml(getFeatPrerequisiteLabel(feat, { featureId: feature.id }))}
-                      ${prerequisite.settingRequirements.length
-                        ? `<br><b>Setting:</b> ${escapeHtml(
-                            `${prerequisite.settingRequirements.join(", ")} (advisory; not enforced)`
-                          )}`
-                        : ""}
-                      ${feat.repeatable === true ? "<br><b>Repeatable:</b> Yes" : ""}
-                    </p>
-
-                    ${
-                      alreadySelected ||
-                      prerequisiteFailed
-                        ? `
-                          <p class="small hg-feat-option-status">
-                            ${escapeHtml(buttonLabel)}
-                          </p>
-                        `
-                        : ""
-                    }
-
-                    <div class="hg-character-card-actions">
-                      <button
-                        type="button"
-                        data-cc-action="choose-asi-feat"
-                        data-feature-id="${escapeHtml(feature.id)}"
-                        data-feat-id="${escapeHtml(feat.id)}"
-                        ${selected || alreadySelected || prerequisiteFailed ? "disabled" : ""}
-                      >
-                        ${buttonLabel}
-                      </button>
-                    </div>
-                  </article>
-                `;
-                  }).join("")}
+                      return renderSection12FeatOption(
+                        feature,
+                        state,
+                        feat
+                      );
+                    })
+                    .join("")}
                 </div>
               </div>
 
               <div
                 class="hg-character-placeholder"
                 data-cc-feat-no-results="true"
-                hidden
+                ${featPage.total ? "hidden" : ""}
               >
                 No feats match that search.
+              </div>
+
+              <p
+                class="small"
+                data-cc-feat-status="true"
+              >
+                Showing ${featPage.visibleCount} of ${featPage.total} matching feats.
+              </p>
+
+              <div class="hg-character-inline-actions">
+                <button
+                  type="button"
+                  data-cc-action="show-more-asi-feats"
+                  data-feature-id="${escapeHtml(feature.id)}"
+                  ${featPage.hasMore ? "" : "hidden"}
+                >
+                  Load More Feats
+                </button>
               </div>
             </details>
           </div>
@@ -554,9 +634,15 @@ function handleSection12ChooseAsiFeat(...values) {
   }
 }
 
-function applySection12FeatSearch(
+function getSection12FeatFeature(featureId) {
+  return getUnlockedFeatChoiceSlots(
+    creatorState.draft
+  ).find((slot) => slot.id === featureId);
+}
+
+function refreshSection12FeatPicker(
   picker,
-  rawQuery
+  featureId
 ) {
   if (
     !picker ||
@@ -565,30 +651,58 @@ function applySection12FeatSearch(
     return;
   }
 
-  const query = cleanString(rawQuery).toLowerCase();
-  const featOptions = [
-    ...picker.querySelectorAll("[data-cc-feat-option]")
-  ];
-  let visibleCount = 0;
+  const feature = getSection12FeatFeature(featureId);
 
-  featOptions.forEach((option) => {
-    const matches = !query || cleanString(
-      option.dataset.featSearchText
-    ).includes(query);
+  if (!feature) {
+    return;
+  }
 
-    option.hidden = !matches;
+  const state = getSection12AsiChoiceState(feature.id);
+  const pickerState = getSection12FeatPickerState(feature.id);
+  const featPage = getSection12FeatPage(
+    feature,
+    state,
+    pickerState
+  );
+  const results = picker.querySelector(
+    "[data-cc-feat-results]"
+  );
 
-    if (matches) {
-      visibleCount += 1;
-    }
-  });
+  if (results) {
+    results.innerHTML = featPage.entries
+      .map((feat) => {
+        return renderSection12FeatOption(
+          feature,
+          state,
+          feat
+        );
+      })
+      .join("");
+  }
+
+  const status = picker.querySelector(
+    "[data-cc-feat-status]"
+  );
+
+  if (status) {
+    status.textContent =
+      `Showing ${featPage.visibleCount} of ${featPage.total} matching feats.`;
+  }
 
   const noResults = picker.querySelector(
     "[data-cc-feat-no-results]"
   );
 
   if (noResults) {
-    noResults.hidden = visibleCount > 0;
+    noResults.hidden = featPage.total > 0;
+  }
+
+  const loadMoreButton = picker.querySelector(
+    '[data-cc-action="show-more-asi-feats"]'
+  );
+
+  if (loadMoreButton) {
+    loadMoreButton.hidden = !featPage.hasMore;
   }
 }
 
@@ -607,6 +721,12 @@ function handleSection12FeatSearch({ target }) {
     return true;
   }
 
+  const featureId = target.dataset.featureId || "";
+  const pickerState = getSection12FeatPickerState(featureId);
+
+  pickerState.query = cleanString(target.value);
+  pickerState.visibleLimit = CREATOR_CATALOG_BATCH_SIZE;
+
   if (
     featSearchTimerId &&
     typeof clearTimeout === "function"
@@ -614,19 +734,30 @@ function handleSection12FeatSearch({ target }) {
     clearTimeout(featSearchTimerId);
   }
 
-  const query = target.value;
-
   if (typeof setTimeout !== "function") {
-    applySection12FeatSearch(picker, query);
+    refreshSection12FeatPicker(picker, featureId);
     return true;
   }
 
   featSearchTimerId = setTimeout(() => {
     featSearchTimerId = null;
-    applySection12FeatSearch(picker, query);
+    refreshSection12FeatPicker(picker, featureId);
   }, CREATOR_FEAT_SEARCH_DEBOUNCE_MS);
 
   return true;
+}
+
+function showMoreSection12Feats(...values) {
+  const button = findSection12ActionElement(...values);
+  const featureId = button?.dataset?.featureId || "";
+  const pickerState = getSection12FeatPickerState(featureId);
+
+  pickerState.visibleLimit += CREATOR_CATALOG_BATCH_SIZE;
+
+  refreshSection12FeatPicker(
+    button?.closest("[data-cc-asi-feat-picker]"),
+    featureId
+  );
 }
 
 
@@ -653,6 +784,9 @@ function handleSection12FeatSearch({ target }) {
         return true;
       case "choose-asi-feat":
         handleSection12ChooseAsiFeat(context);
+        return true;
+      case "show-more-asi-feats":
+        showMoreSection12Feats(context);
         return true;
       default:
         return false;

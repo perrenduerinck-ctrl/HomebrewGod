@@ -116,7 +116,8 @@ test("feat module exposes the consistent embedded-step interface", async () => {
   assert.deepEqual(step.actions, [
     "set-asi-mode",
     "adjust-asi-ability",
-    "choose-asi-feat"
+    "choose-asi-feat",
+    "show-more-asi-feats"
   ]);
   assert.equal(await step.handleStepClick({ action: "unknown" }), false);
   assert.equal(step.handleStepInput({ target: {} }), false);

@@ -387,6 +387,92 @@ test(
 );
 
 test(
+  "Character Creator large catalogs render bounded batches and filter before adding cards",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/character-feat-removal-self-test.html?release=creator-catalog-priority4-20260821",
+      {
+        waitUntil: "domcontentloaded"
+      }
+    );
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "ready"
+      );
+
+    const featCards = page.locator(
+      "[data-cc-default-feat-results] .hg-character-choice-card"
+    );
+
+    await expect(featCards).toHaveCount(25);
+    await expect(
+      page.locator("[data-hg-feat-search]")
+    ).toHaveCount(0);
+    await page.locator(
+      '[data-cc-action="show-more-default-feats"]'
+    ).click();
+    await expect(featCards).toHaveCount(50);
+
+    await page.locator("#ccDefaultFeatSearch")
+      .fill("Lucky");
+    await expect.poll(async () => {
+      return featCards.count();
+    }).toBeLessThan(25);
+    expect(await featCards.count())
+      .toBeGreaterThan(0);
+    await expect(featCards.first())
+      .toContainText("Lucky");
+
+    await page.evaluate(() => {
+      window
+        .__FEAT_REMOVAL_TEST__
+        .navigateToStep("equipment");
+    });
+
+    const equipmentCards = page.locator(
+      "[data-cc-equipment-catalog-results] .hg-character-choice-card"
+    );
+    const initialEquipmentCount =
+      await equipmentCards.count();
+    const firstEquipmentName =
+      await equipmentCards.first()
+        .locator("h3")
+        .textContent();
+
+    expect(initialEquipmentCount)
+      .toBeLessThanOrEqual(25);
+    expect(initialEquipmentCount)
+      .toBeGreaterThan(0);
+
+    const loadMoreEquipment = page.locator(
+      '[data-cc-action="show-more-equipment"]'
+    );
+
+    if (await loadMoreEquipment.isVisible()) {
+      await loadMoreEquipment.click();
+      expect(await equipmentCards.count())
+        .toBeLessThanOrEqual(50);
+      expect(await equipmentCards.count())
+        .toBeGreaterThan(initialEquipmentCount);
+    }
+
+    await page.locator("#ccEquipmentCatalogSearch")
+      .fill(firstEquipmentName || "");
+    await expect
+      .poll(() => equipmentCards.count())
+      .toBeLessThanOrEqual(25);
+    await expect(equipmentCards.first())
+      .toContainText(firstEquipmentName || "");
+    await expect(
+      page.locator(
+        "[data-cc-equipment-catalog-status]"
+      )
+    ).toContainText("matching items");
+  }
+);
+
+test(
   "playable character sheet prioritizes play controls, tracks combat, and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
