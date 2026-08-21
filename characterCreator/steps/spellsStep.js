@@ -90,6 +90,7 @@ export function createSpellsStep(
   const section16FeatPickerState = {
     query: "",
     visibleLimit: CREATOR_CATALOG_BATCH_SIZE,
+    pinnedFeatId: "",
     searchTimerId: null
   };
 
@@ -247,7 +248,14 @@ export function createSpellsStep(
       getSection16FeatPickerPage({
         query: section16FeatPickerState.query,
         visibleLimit:
-          section16FeatPickerState.visibleLimit
+          section16FeatPickerState.visibleLimit,
+        pinnedIds:
+          section16FeatPickerState.pinnedFeatId
+            ? [
+                section16FeatPickerState
+                  .pinnedFeatId
+              ]
+            : []
       });
 
     return `
@@ -1109,7 +1117,14 @@ export function createSpellsStep(
     const page = getSection16FeatPickerPage({
       query: section16FeatPickerState.query,
       visibleLimit:
-        section16FeatPickerState.visibleLimit
+        section16FeatPickerState.visibleLimit,
+      pinnedIds:
+        section16FeatPickerState.pinnedFeatId
+          ? [
+              section16FeatPickerState
+                .pinnedFeatId
+            ]
+          : []
     });
     const results = document.querySelector(
       "[data-cc-default-feat-results]"
@@ -1233,12 +1248,15 @@ export function createSpellsStep(
     ...values
   ) {
     const button = findSection16ActionElement(...values);
+    const featId = button?.dataset?.featId || "";
 
     if (
       toggleSection16Feat(
-        button?.dataset?.featId || ""
+        featId
       )
     ) {
+      section16FeatPickerState.pinnedFeatId =
+        featId;
       setStatus("Feat selection updated.");
       renderCreatorView();
     }

@@ -35233,7 +35233,12 @@ export function createCharacterCreator(options = {}) {
           options.visibleLimit ||
           CREATOR_CATALOG_BATCH_SIZE,
         pinnedIds: [
-          ...selectedIds
+          ...selectedIds,
+          ...(
+            Array.isArray(options.pinnedIds)
+              ? options.pinnedIds
+              : []
+          )
         ],
         getId: (feat) => feat.id,
         getSearchText: (feat) => {

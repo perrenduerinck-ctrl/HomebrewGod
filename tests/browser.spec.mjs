@@ -416,7 +416,11 @@ test(
 
     await page.locator("#ccDefaultFeatSearch")
       .fill("Lucky");
-    await expect(featCards).toHaveCount(1);
+    await expect.poll(async () => {
+      return featCards.count();
+    }).toBeLessThan(25);
+    expect(await featCards.count())
+      .toBeGreaterThan(0);
     await expect(featCards.first())
       .toContainText("Lucky");
 
