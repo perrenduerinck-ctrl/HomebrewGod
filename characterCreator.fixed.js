@@ -92,6 +92,10 @@ import { renderInnateSpellCards } from "./characterCreator/innateSpellPresentati
 import { renderMagicalSecretsPanels } from "./characterCreator/magicalSecrets.js";
 import { escapeHtml } from "./characterCreator/rendering.js";
 import { getCreatorSpellSearchText, renderCreatorSpellPickerResults } from "./characterCreator/spellPicker.js";
+import {
+  createCatalogPage,
+  CREATOR_CATALOG_BATCH_SIZE
+} from "./characterCreator/catalogPagination.js";
 import { createClassStep } from "./characterCreator/steps/classStep.js?v=class-step-extraction-20260812";
 import { createMulticlassStep } from "./characterCreator/steps/multiclassStep.js?v=multiclass-step-extraction-20260813";
 import { createFeatsStep } from "./characterCreator/steps/featsStep.js?v=feats-step-extraction-20260813";
@@ -29496,6 +29500,28 @@ export function createCharacterCreator(options = {}) {
     });
   }
 
+  function getSection15CatalogPage(
+    options = {}
+  ) {
+    return createCatalogPage(
+      getSection15Catalog(),
+      {
+        query: options.query,
+        visibleLimit:
+          options.visibleLimit ||
+          CREATOR_CATALOG_BATCH_SIZE,
+        getId: (item) => item.id,
+        getSearchText: (item) => {
+          return [
+            item.name,
+            item.category,
+            item.notes
+          ].join(" ");
+        }
+      }
+    );
+  }
+
   function addSection15CatalogItem(
     itemId
   ) {
@@ -30446,9 +30472,15 @@ export function createCharacterCreator(options = {}) {
       .length;
   }
 
-  function renderSection15Catalog() {
-    const catalog =
-      getSection15Catalog();
+  function renderSection15Catalog(
+    options = {}
+  ) {
+    const catalog = Array.isArray(
+      options.entries
+    )
+      ? options.entries
+      : getSection15CatalogPage(options)
+          .entries;
 
     if (!catalog.length) {
       return `
@@ -31653,11 +31685,13 @@ export function createCharacterCreator(options = {}) {
     calculateCharacterCarryingCapacity,
     changeSection15Quantity,
     cleanString,
+    escapeHtml,
     getCharacterAttunementLimit,
     getCreatorState: () => creatorState,
     getSection15AttunedItemCount,
     getSection15Inventory,
     getSection15InventoryCount,
+    getSection15CatalogPage,
     getSection15TotalWeight,
     getSection15UnknownWeightCount,
     markDraftChanged,
@@ -35179,7 +35213,9 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
-  function renderSection16FeatPicker() {
+  function getSection16FeatPickerPage(
+    options = {}
+  ) {
     const selectedIds = new Set(
       normalizeFeatIds(creatorState.draft.feats)
     );
@@ -35189,8 +35225,31 @@ export function createCharacterCreator(options = {}) {
         .map((slot) => slot.selectedFeatId)
         .filter(Boolean)
     );
+    const page = createCatalogPage(
+      DEFAULT_FEATS,
+      {
+        query: options.query,
+        visibleLimit:
+          options.visibleLimit ||
+          CREATOR_CATALOG_BATCH_SIZE,
+        pinnedIds: [
+          ...selectedIds
+        ],
+        getId: (feat) => feat.id,
+        getSearchText: (feat) => {
+          return [
+            feat.name,
+            feat.summary,
+            feat.description,
+            ...(Array.isArray(feat.tags)
+              ? feat.tags
+              : [])
+          ].join(" ");
+        }
+      }
+    );
 
-    return DEFAULT_FEATS.map((feat) => {
+    const html = page.entries.map((feat) => {
       const selected = selectedIds.has(feat.id);
       const prerequisite = getFeatPrerequisiteResult(feat);
       const selectedByAdvancement = advancementFeatIds.has(feat.id);
@@ -35230,6 +35289,19 @@ export function createCharacterCreator(options = {}) {
         </article>
       `;
     }).join("");
+
+    return Object.freeze({
+      ...page,
+      html
+    });
+  }
+
+  function renderSection16FeatPicker(
+    options = {}
+  ) {
+    return getSection16FeatPickerPage(
+      options
+    ).html;
   }
 
   function formatSection16ProgressionLabel(
@@ -35330,6 +35402,7 @@ export function createCharacterCreator(options = {}) {
     getCreatorState: () => creatorState,
     getSection13AbilityName,
     getSection16CustomFeatures,
+    getSection16FeatPickerPage,
     getSection16SelectedFeats,
     getCanonicalSpellSources,
     getPerClassSpellSelectionSummary,
@@ -35347,7 +35420,6 @@ export function createCharacterCreator(options = {}) {
     renderSection16BeginnerGuide,
     renderSection16CustomSpells,
     renderSection16DefaultSpellViewer,
-    renderSection16FeatPicker,
     renderSection16FeatureCards,
     renderSection16InnateSpells,
     renderSection16MagicalSecrets,

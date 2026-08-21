@@ -9,6 +9,11 @@ import {
 import {
   SPELL_SOURCE_MODEL_VERSION
 } from "../spellSources.js?v=canonical-spell-sources-20260802";
+import {
+  CREATOR_CATALOG_BATCH_SIZE
+} from "../catalogPagination.js";
+
+const FEAT_CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
 const SPELLS_STEP_ACTIONS = Object.freeze([
   "calculate-spellcasting-values",
@@ -22,6 +27,7 @@ const SPELLS_STEP_ACTIONS = Object.freeze([
   "toggle-default-spell-details",
   "add-custom-feature",
   "toggle-default-feat",
+  "show-more-default-feats",
   "remove-custom-feature"
 ]);
 
@@ -41,6 +47,7 @@ export function createSpellsStep(
     getCreatorState,
     getSection13AbilityName,
     getSection16CustomFeatures,
+    getSection16FeatPickerPage,
     getSection16SelectedFeats,
     getCanonicalSpellSources,
     getPerClassSpellSelectionSummary,
@@ -59,7 +66,6 @@ export function createSpellsStep(
     renderSection16BeginnerGuide,
     renderSection16CustomSpells,
     renderSection16DefaultSpellViewer,
-    renderSection16FeatPicker,
     renderSection16FeatureCards,
     renderSection16InnateSpells,
     renderSection16MagicalSecrets,
@@ -81,6 +87,11 @@ export function createSpellsStep(
     new Map();
   const section16SpellPickerState =
     createCreatorSpellPickerState();
+  const section16FeatPickerState = {
+    query: "",
+    visibleLimit: CREATOR_CATALOG_BATCH_SIZE,
+    searchTimerId: null
+  };
 
   function normalizeStepData(character) {
     migrateSection16LegacySpellSelections();
@@ -232,6 +243,12 @@ export function createSpellsStep(
     const displayedPactMagic =
       primarySpellcaster?.pactMagic ||
       magic.pactMagic;
+    const featPage =
+      getSection16FeatPickerPage({
+        query: section16FeatPickerState.query,
+        visibleLimit:
+          section16FeatPickerState.visibleLimit
+      });
 
     return `
       ${beginnerNote(
@@ -718,8 +735,45 @@ export function createSpellsStep(
           : "None"}
       </div>
 
-      <div class="hg-character-choice-grid">
-        ${renderSection16FeatPicker()}
+      <div class="hg-character-field">
+        <label for="ccDefaultFeatSearch">
+          Search Feats
+        </label>
+        <input
+          id="ccDefaultFeatSearch"
+          type="search"
+          value="${escapeHtml(
+            section16FeatPickerState.query
+          )}"
+          placeholder="Search feat name, description, or tag..."
+          data-cc-action-input="filter-default-feats"
+          autocomplete="off"
+        >
+      </div>
+
+      <p
+        class="small"
+        data-cc-default-feat-status="true"
+      >
+        Showing ${featPage.visibleCount} of
+        ${featPage.total} matching feats.
+      </p>
+
+      <div
+        class="hg-character-choice-grid"
+        data-cc-default-feat-results="true"
+      >
+        ${featPage.html}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="show-more-default-feats"
+          ${featPage.hasMore ? "" : "hidden"}
+        >
+          Load More Feats
+        </button>
       </div>
 
       <hr>
@@ -1047,6 +1101,79 @@ export function createSpellsStep(
     return true;
   }
 
+  function refreshSection16FeatPicker() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const page = getSection16FeatPickerPage({
+      query: section16FeatPickerState.query,
+      visibleLimit:
+        section16FeatPickerState.visibleLimit
+    });
+    const results = document.querySelector(
+      "[data-cc-default-feat-results]"
+    );
+    const status = document.querySelector(
+      "[data-cc-default-feat-status]"
+    );
+    const loadMore = document.querySelector(
+      '[data-cc-action="show-more-default-feats"]'
+    );
+
+    if (results) {
+      results.innerHTML = page.html;
+    }
+
+    if (status) {
+      status.textContent =
+        `Showing ${page.visibleCount} of ${page.total} matching feats.`;
+    }
+
+    if (loadMore) {
+      loadMore.hidden = !page.hasMore;
+    }
+  }
+
+  function handleSection16DefaultFeatSearch(
+    { target }
+  ) {
+    if (
+      target?.dataset?.ccActionInput !==
+      "filter-default-feats"
+    ) {
+      return false;
+    }
+
+    section16FeatPickerState.query =
+      cleanString(target.value);
+    section16FeatPickerState.visibleLimit =
+      CREATOR_CATALOG_BATCH_SIZE;
+
+    if (
+      section16FeatPickerState.searchTimerId &&
+      typeof clearTimeout === "function"
+    ) {
+      clearTimeout(
+        section16FeatPickerState.searchTimerId
+      );
+    }
+
+    if (typeof setTimeout !== "function") {
+      refreshSection16FeatPicker();
+      return true;
+    }
+
+    section16FeatPickerState.searchTimerId =
+      setTimeout(() => {
+        section16FeatPickerState.searchTimerId =
+          null;
+        refreshSection16FeatPicker();
+      }, FEAT_CATALOG_SEARCH_DEBOUNCE_MS);
+
+    return true;
+  }
+
   function handleSection16SpellPickerAction(...values) {
     const control = findSection16ActionElement(...values);
     const action = control?.dataset?.ccAction;
@@ -1216,6 +1343,11 @@ export function createSpellsStep(
           context
         );
         return true;
+      case "show-more-default-feats":
+        section16FeatPickerState.visibleLimit +=
+          CREATOR_CATALOG_BATCH_SIZE;
+        refreshSection16FeatPicker();
+        return true;
       case "remove-custom-feature":
         handleSection16RemoveFeature(
           context
@@ -1227,8 +1359,13 @@ export function createSpellsStep(
   }
 
   function handleStepInput(context) {
-    return handleSection16DefaultSpellSearch(
-      context
+    return (
+      handleSection16DefaultSpellSearch(
+        context
+      ) ||
+      handleSection16DefaultFeatSearch(
+        context
+      )
     );
   }
 

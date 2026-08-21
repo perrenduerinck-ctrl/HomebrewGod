@@ -1,5 +1,12 @@
+import {
+  CREATOR_CATALOG_BATCH_SIZE
+} from "../catalogPagination.js";
+
+const EQUIPMENT_CATALOG_SEARCH_DEBOUNCE_MS = 250;
+
 const EQUIPMENT_STEP_ACTIONS = Object.freeze([
   "add-catalog-item",
+  "show-more-equipment",
   "add-custom-item",
   "skip-equipment",
   "toggle-contained-items",
@@ -25,9 +32,11 @@ export function createEquipmentStep(
     calculateCharacterCarryingCapacity,
     changeSection15Quantity,
     cleanString,
+    escapeHtml,
     getCharacterAttunementLimit,
     getCreatorState,
     getSection15AttunedItemCount,
+    getSection15CatalogPage,
     getSection15Inventory,
     getSection15InventoryCount,
     getSection15TotalWeight,
@@ -49,6 +58,11 @@ export function createEquipmentStep(
   } = dependencies;
 
   const creatorState = getCreatorState();
+  const equipmentCatalogState = {
+    query: "",
+    visibleLimit: CREATOR_CATALOG_BATCH_SIZE,
+    searchTimerId: null
+  };
 
   function renderStep() {
     const currency =
@@ -76,6 +90,12 @@ export function createEquipmentStep(
       calculateCharacterCarryingCapacity(
         creatorState.draft
       );
+    const equipmentCatalogPage =
+      getSection15CatalogPage({
+        query: equipmentCatalogState.query,
+        visibleLimit:
+          equipmentCatalogState.visibleLimit
+      });
 
     const categories = [
       {
@@ -250,8 +270,51 @@ export function createEquipmentStep(
         copies it into this character's inventory.
       </p>
 
-      <div class="hg-character-choice-grid">
-        ${renderSection15Catalog()}
+      <div class="hg-character-field">
+        <label for="ccEquipmentCatalogSearch">
+          Search Equipment
+        </label>
+        <input
+          id="ccEquipmentCatalogSearch"
+          type="search"
+          value="${escapeHtml(
+            equipmentCatalogState.query
+          )}"
+          placeholder="Search by item name, category, or notes..."
+          data-cc-action-input="filter-equipment-catalog"
+          autocomplete="off"
+        >
+      </div>
+
+      <p
+        class="small"
+        data-cc-equipment-catalog-status="true"
+      >
+        Showing ${equipmentCatalogPage.visibleCount} of
+        ${equipmentCatalogPage.total} matching items.
+      </p>
+
+      <div
+        class="hg-character-choice-grid"
+        data-cc-equipment-catalog-results="true"
+      >
+        ${renderSection15Catalog({
+          entries: equipmentCatalogPage.entries
+        })}
+      </div>
+
+      <div class="hg-character-inline-actions">
+        <button
+          type="button"
+          data-cc-action="show-more-equipment"
+          ${
+            equipmentCatalogPage.hasMore
+              ? ""
+              : "hidden"
+          }
+        >
+          Load More Equipment
+        </button>
       </div>
 
       <hr>
@@ -1055,6 +1118,88 @@ export function createEquipmentStep(
     return true;
   }
 
+  function refreshEquipmentCatalogView() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const page = getSection15CatalogPage({
+      query: equipmentCatalogState.query,
+      visibleLimit:
+        equipmentCatalogState.visibleLimit
+    });
+    const results = document.querySelector(
+      "[data-cc-equipment-catalog-results]"
+    );
+    const status = document.querySelector(
+      "[data-cc-equipment-catalog-status]"
+    );
+    const loadMore = document.querySelector(
+      '[data-cc-action="show-more-equipment"]'
+    );
+
+    if (results) {
+      results.innerHTML =
+        renderSection15Catalog({
+          entries: page.entries
+        });
+    }
+
+    if (status) {
+      status.textContent =
+        `Showing ${page.visibleCount} of ${page.total} matching items.`;
+    }
+
+    if (loadMore) {
+      loadMore.hidden = !page.hasMore;
+    }
+  }
+
+  function handleEquipmentCatalogSearch(
+    { target }
+  ) {
+    if (
+      target?.dataset?.ccActionInput !==
+      "filter-equipment-catalog"
+    ) {
+      return false;
+    }
+
+    equipmentCatalogState.query =
+      cleanString(target.value);
+    equipmentCatalogState.visibleLimit =
+      CREATOR_CATALOG_BATCH_SIZE;
+
+    if (
+      equipmentCatalogState.searchTimerId &&
+      typeof clearTimeout === "function"
+    ) {
+      clearTimeout(
+        equipmentCatalogState.searchTimerId
+      );
+    }
+
+    if (typeof setTimeout !== "function") {
+      refreshEquipmentCatalogView();
+      return true;
+    }
+
+    equipmentCatalogState.searchTimerId =
+      setTimeout(() => {
+        equipmentCatalogState.searchTimerId =
+          null;
+        refreshEquipmentCatalogView();
+      }, EQUIPMENT_CATALOG_SEARCH_DEBOUNCE_MS);
+
+    return true;
+  }
+
+  function showMoreEquipmentCatalog() {
+    equipmentCatalogState.visibleLimit +=
+      CREATOR_CATALOG_BATCH_SIZE;
+    refreshEquipmentCatalogView();
+  }
+
   async function handleStepClick(context) {
     const action =
       cleanString(context?.action);
@@ -1062,6 +1207,9 @@ export function createEquipmentStep(
     switch (action) {
       case "add-catalog-item":
         handleSection15AddCatalogItem(context);
+        return true;
+      case "show-more-equipment":
+        showMoreEquipmentCatalog();
         return true;
       case "add-custom-item":
         handleSection15AddCustomItem();
@@ -1112,8 +1260,10 @@ export function createEquipmentStep(
     }
   }
 
-  function handleStepInput() {
-    return false;
+  function handleStepInput(context) {
+    return handleEquipmentCatalogSearch(
+      context || {}
+    );
   }
 
   function handleStepChange(context) {
