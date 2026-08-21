@@ -262,6 +262,131 @@ test(
 );
 
 test(
+  "Character Creator typing debounces draft writes and expensive score recalculation",
+  async ({ page }) => {
+    await page.goto(
+      "ai-testing/character-feat-removal-self-test.html?release=creator-debounce-priority3-20260820",
+      {
+        waitUntil: "domcontentloaded"
+      }
+    );
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-status",
+        "ready"
+      );
+
+    await page.evaluate(() => {
+      window
+        .__FEAT_REMOVAL_TEST__
+        .navigateToStep("basics");
+    });
+    await page.waitForTimeout(350);
+
+    const beforeTyping = await page.evaluate(() => {
+      return window
+        .__FEAT_REMOVAL_TEST__
+        .getRenderMetrics();
+    });
+
+    await page.locator("#ccCharacterName")
+      .fill("");
+    await page.locator("#ccCharacterName")
+      .pressSequentially(
+        "Debounced Hero",
+        { delay: 0 }
+      );
+
+    const whileTyping = await page.evaluate(() => {
+      return window
+        .__FEAT_REMOVAL_TEST__
+        .getRenderMetrics();
+    });
+
+    expect(whileTyping.draftStorageWriteCount)
+      .toBe(beforeTyping.draftStorageWriteCount);
+    expect(whileTyping.pendingDraftPersistence)
+      .toBe(true);
+
+    await page.waitForTimeout(350);
+
+    const afterTyping = await page.evaluate(() => {
+      return window
+        .__FEAT_REMOVAL_TEST__
+        .getRenderMetrics();
+    });
+
+    expect(afterTyping.draftFlushCount)
+      .toBe(beforeTyping.draftFlushCount + 1);
+    expect(afterTyping.draftStorageWriteCount)
+      .toBe(beforeTyping.draftStorageWriteCount + 2);
+    expect(afterTyping.pendingDraftPersistence)
+      .toBe(false);
+
+    await page.evaluate(() => {
+      window
+        .__FEAT_REMOVAL_TEST__
+        .navigateToStep("abilities");
+    });
+
+    const strengthInput = page.locator(
+      '[data-ability-id="str"]'
+    );
+    await expect(strengthInput).toBeVisible();
+
+    const beforeAbility = await page.evaluate(() => {
+      const creator =
+        window.__FEAT_REMOVAL_TEST__;
+
+      return {
+        metrics: creator.getRenderMetrics(),
+        score: creator.getDraft()
+          .abilities.base.str
+      };
+    });
+
+    await strengthInput.fill("18");
+
+    const pendingAbility = await page.evaluate(() => {
+      const creator =
+        window.__FEAT_REMOVAL_TEST__;
+
+      return {
+        metrics: creator.getRenderMetrics(),
+        score: creator.getDraft()
+          .abilities.base.str
+      };
+    });
+
+    expect(pendingAbility.score)
+      .toBe(beforeAbility.score);
+    expect(pendingAbility.metrics.pendingInputCount)
+      .toBe(1);
+
+    await page.waitForTimeout(300);
+
+    const afterAbility = await page.evaluate(() => {
+      const creator =
+        window.__FEAT_REMOVAL_TEST__;
+
+      return {
+        metrics: creator.getRenderMetrics(),
+        score: creator.getDraft()
+          .abilities.base.str
+      };
+    });
+
+    expect(afterAbility.score).toBe(18);
+    expect(afterAbility.metrics.inputFlushCount)
+      .toBe(
+        beforeAbility.metrics.inputFlushCount + 1
+      );
+    expect(afterAbility.metrics.pendingInputCount)
+      .toBe(0);
+  }
+);
+
+test(
   "playable character sheet prioritizes play controls, tracks combat, and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
