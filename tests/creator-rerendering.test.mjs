@@ -54,6 +54,29 @@ assert.doesNotMatch(
   /applyCompatibilityAliases/,
   "ordinary field updates must not run the full compatibility pipeline"
 );
+assert.match(
+  setDraftValueSource,
+  /reviewRevision \+= 1/,
+  "character edits should invalidate cached Review calculations"
+);
+
+const markDraftChangedSource =
+  getFunctionSource(
+    "markDraftChanged",
+    "getDraftStorageKey"
+  );
+
+assert.match(
+  markDraftChangedSource,
+  /reviewRevision \+= 1/,
+  "non-field character changes should invalidate cached Review calculations"
+);
+
+assert.match(
+  source,
+  /getReviewRevision:\s*\(\)\s*=>/,
+  "Review should receive the lightweight character revision instead of hashing the full draft during ordinary editing"
+);
 
 const chromeSource = getFunctionSource(
   "refreshBuilderChrome",

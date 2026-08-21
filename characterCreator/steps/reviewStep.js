@@ -1,3 +1,8 @@
+import {
+  createDerivedSignature,
+  createScopedDerivedCache
+} from "../derivedCache.js";
+
 const REVIEW_STEP_ACTIONS = Object.freeze([
   "refresh-review",
   "open-character-sheet"
@@ -46,6 +51,7 @@ export function createReviewStep(dependencies = {}) {
     getClassProgressionEntries,
     getContainerSummaries,
     getCreatorState,
+    getReviewRevision,
     getFeatPrerequisiteResult,
     getFeatSpellcastingValidationWarnings,
     getMulticlassPendingSkillChoiceWarnings,
@@ -110,6 +116,40 @@ export function createReviewStep(dependencies = {}) {
   } = dependencies;
 
   const creatorState = getCreatorState();
+
+  const reviewCache = createScopedDerivedCache({
+    maximumEntriesPerScope: 12
+  });
+
+  const reviewMetrics = {
+    cheapCompletionChecks: 0,
+    fullValidationRuns: 0,
+    reviewHtmlBuilds: 0
+  };
+
+  let lastFullValidation = null;
+
+  function getReviewDependencyKey() {
+    if (typeof getReviewRevision === "function") {
+      return String(getReviewRevision());
+    }
+
+    return createDerivedSignature(
+      creatorState.draft
+    );
+  }
+
+  function invalidateReviewCache() {
+    reviewCache.clear();
+    lastFullValidation = null;
+  }
+
+  function getReviewCacheMetrics() {
+    return {
+      ...reviewMetrics,
+      cache: reviewCache.getMetrics()
+    };
+  }
 
   function getSection17AbilityName(
     abilityId
@@ -752,7 +792,9 @@ export function createReviewStep(dependencies = {}) {
     ].includes(cleanString(warning));
   }
 
-  function getSection17FinalizationValidation() {
+  function calculateSection17FinalizationValidation() {
+    reviewMetrics.fullValidationRuns += 1;
+
     const spellChoiceValidation =
       getSection17SpellChoiceValidation();
     const ruleIssues = getSection17Warnings(
@@ -792,6 +834,24 @@ export function createReviewStep(dependencies = {}) {
         blockingErrors.length === 0,
       checkedAtMillis: Date.now()
     };
+  }
+
+  function getSection17FinalizationValidation() {
+    const dependencyKey =
+      getReviewDependencyKey();
+
+    const validation = reviewCache.get(
+      "full-validation",
+      dependencyKey,
+      calculateSection17FinalizationValidation
+    );
+
+    lastFullValidation = {
+      dependencyKey,
+      validation
+    };
+
+    return validation;
   }
 
   function getSection17CompletedStepIds() {
@@ -2234,7 +2294,9 @@ export function createReviewStep(dependencies = {}) {
     `;
   }
 
-  function renderReviewStep() {
+  function buildReviewStepHtml() {
+    reviewMetrics.reviewHtmlBuilds += 1;
+
     const draft =
       creatorState.draft;
 
@@ -3061,13 +3123,82 @@ export function createReviewStep(dependencies = {}) {
     `;
   }
 
+  function renderReviewStep() {
+    const dependencyKey =
+      getReviewDependencyKey();
+    const busyKey = isCharacterCreatorBusy()
+      ? `busy:${getCharacterBusyLabel()}`
+      : "ready";
+
+    return reviewCache.get(
+      "review-html",
+      `${dependencyKey}:${busyKey}`,
+      buildReviewStepHtml
+    );
+  }
+
 
   function isSection17ReviewComplete() {
     return getSection17FinalizationValidation()
       .canFinalize;
   }
 
+  function isSection17ReviewCheaplyComplete() {
+    reviewMetrics.cheapCompletionChecks += 1;
+
+    const draft = creatorState.draft;
+    const scores =
+      draft?.abilities?.scores || {};
+    const abilityScoresAreValid =
+      ABILITY_DEFINITIONS.every((ability) => {
+        const score = Number(scores[ability.id]);
+
+        return (
+          Number.isFinite(score) &&
+          Number.isInteger(score) &&
+          score >= 1 &&
+          score <= 30
+        );
+      });
+    const maximumHp = Number(
+      draft?.combat?.maxHp
+    );
+    const currentHp = Number(
+      draft?.combat?.currentHp
+    );
+
+    return Boolean(
+      getSafeCharacterName(draft) &&
+      getSafeClassName(draft) &&
+      getSafeSpeciesName(draft) &&
+      isSection17ClassComplete(draft) &&
+      abilityScoresAreValid &&
+      Number.isFinite(maximumHp) &&
+      maximumHp >= 1 &&
+      Number.isFinite(currentHp) &&
+      currentHp >= 0 &&
+      currentHp <= maximumHp
+    );
+  }
+
+  function getCachedOrCheapReviewCompletion() {
+    const dependencyKey =
+      getReviewDependencyKey();
+
+    if (
+      lastFullValidation?.dependencyKey ===
+      dependencyKey
+    ) {
+      return lastFullValidation.validation
+        .canFinalize;
+    }
+
+    return isSection17ReviewCheaplyComplete();
+  }
+
   function handleSection17RefreshReview() {
+    invalidateReviewCache();
+
     setStatus(
       "Character review refreshed."
     );
@@ -3123,8 +3254,7 @@ export function createReviewStep(dependencies = {}) {
   }
 
   function isStepComplete() {
-    return getSection17FinalizationValidation()
-      .canFinalize;
+    return getCachedOrCheapReviewCompletion();
   }
 
   return Object.freeze({
@@ -3152,6 +3282,10 @@ export function createReviewStep(dependencies = {}) {
       getSection17Warnings,
       isSection17OptionalFinalizationWarning,
       getSection17FinalizationValidation,
+      isSection17ReviewCheaplyComplete,
+      getCachedOrCheapReviewCompletion,
+      invalidateReviewCache,
+      getReviewCacheMetrics,
       getSection17CompletedStepIds,
       syncSection17CompletedSteps,
       renderSection17Abilities,

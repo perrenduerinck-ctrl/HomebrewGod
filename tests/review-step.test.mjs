@@ -5,6 +5,7 @@ import { createReviewStep } from "../characterCreator/steps/reviewStep.js";
 function createTestStep() {
   let opened = 0;
   let rendered = 0;
+  let fullWarningChecks = 0;
   const statuses = [];
   const draft = {
     identity: {
@@ -181,7 +182,10 @@ function createTestStep() {
     getSpellSourceId: () => "",
     getSpellSourceWarning: () => "",
     getUnlockedFeatChoiceSlots: () => [],
-    getValidationWarnings: () => [],
+    getValidationWarnings: () => {
+      fullWarningChecks += 1;
+      return [];
+    },
     hasCurrencyValue: () => false,
     isCharacterCreatorBusy: () => false,
     isMulticlassDraft: () => false,
@@ -212,6 +216,7 @@ function createTestStep() {
 
   return {
     draft,
+    getFullWarningChecks: () => fullWarningChecks,
     getOpened: () => opened,
     getRendered: () => rendered,
     statuses,
@@ -264,12 +269,70 @@ test("Review keeps blocking and optional finalization issues separate", () => {
   ]);
 });
 
+test("Review defers full validation while closed and caches opened Review work", () => {
+  const {
+    draft,
+    getFullWarningChecks,
+    step
+  } = createTestStep();
+
+  assert.equal(step.isStepComplete(), true);
+  assert.equal(
+    getFullWarningChecks(),
+    0,
+    "rail completion must use cheap validation while Review is closed"
+  );
+
+  const firstHtml = step.renderStep();
+  const firstValidation =
+    step.compatibility
+      .getSection17FinalizationValidation();
+  const secondHtml = step.renderStep();
+  const secondValidation =
+    step.compatibility
+      .getSection17FinalizationValidation();
+
+  assert.equal(firstHtml, secondHtml);
+  assert.equal(firstValidation, secondValidation);
+  assert.equal(getFullWarningChecks(), 1);
+  assert.equal(
+    step.compatibility.getReviewCacheMetrics()
+      .reviewHtmlBuilds,
+    1
+  );
+
+  draft.combat.maxHp = 12;
+  step.renderStep();
+
+  assert.equal(getFullWarningChecks(), 2);
+  assert.equal(
+    step.compatibility.getReviewCacheMetrics()
+      .reviewHtmlBuilds,
+    2
+  );
+});
+
 test("Review owns refresh and open-sheet actions through the standard interface", () => {
-  const { getOpened, getRendered, statuses, step } = createTestStep();
+  const {
+    getFullWarningChecks,
+    getOpened,
+    getRendered,
+    statuses,
+    step
+  } = createTestStep();
+
+  step.renderStep();
+  assert.equal(getFullWarningChecks(), 1);
 
   assert.equal(step.handleStepClick({ action: "refresh-review" }), true);
   assert.equal(getRendered(), 1);
   assert.deepEqual(statuses, ["Character review refreshed."]);
+  step.renderStep();
+  assert.equal(
+    getFullWarningChecks(),
+    2,
+    "manual refresh should force a fresh full validation"
+  );
 
   assert.equal(step.handleStepClick({ action: "open-character-sheet" }), true);
   assert.equal(getOpened(), 1);
