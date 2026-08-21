@@ -13413,6 +13413,8 @@ export function runCharacterCreatorSelfTests(context) {
       restrictions: []
     };
 
+    creatorState.reviewRevision += 1;
+
     const reviewDraftBeforeRender =
       JSON.stringify(creatorState.draft);
     const readOnlyReviewHtml =
