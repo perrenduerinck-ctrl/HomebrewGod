@@ -1,3 +1,12 @@
+import {
+  createDerivedSignature,
+  createScopedDerivedCache
+} from "./derivedCache.js";
+
+const classFeatureCache = createScopedDerivedCache({
+  maximumEntriesPerScope: 192
+});
+
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number)
@@ -39,36 +48,52 @@ export function getClassFeaturesThroughLevel(
     !Array.isArray(featuresByLevel)
       ? featuresByLevel
       : {};
+  const dependencyKey = createDerivedSignature({
+    progression,
+    totalLevel
+  });
+  const unlocked = classFeatureCache.get(
+    "unlocked-class-features",
+    dependencyKey,
+    () => Object.entries(progression)
+      .sort((a, b) => {
+        return (
+          safeNumber(a[0]) -
+          safeNumber(b[0])
+        );
+      })
+      .flatMap(([levelKey, features]) => {
+        const unlockedLevel = Math.max(
+          1,
+          Math.round(
+            safeNumber(levelKey, 1)
+          )
+        );
 
-  return Object.entries(progression)
-    .sort((a, b) => {
-      return (
-        safeNumber(a[0]) -
-        safeNumber(b[0])
-      );
-    })
-    .flatMap(([levelKey, features]) => {
-      const unlockedLevel = Math.max(
-        1,
-        Math.round(
-          safeNumber(levelKey, 1)
-        )
-      );
+        if (
+          unlockedLevel > totalLevel ||
+          !Array.isArray(features)
+        ) {
+          return [];
+        }
 
-      if (
-        unlockedLevel > totalLevel ||
-        !Array.isArray(features)
-      ) {
-        return [];
-      }
-
-      return features.map((feature) => {
-        return normalizeFeature(
+        return features.map((feature) => ({
           feature,
           unlockedLevel
-        );
-      });
-    });
+        }));
+      })
+  );
+
+  return unlocked.map(({ feature, unlockedLevel }) => {
+    return normalizeFeature(
+      feature,
+      unlockedLevel
+    );
+  });
+}
+
+export function getClassFeatureCacheMetrics() {
+  return classFeatureCache.getMetrics();
 }
 
 export function getClassResourceMaximum(

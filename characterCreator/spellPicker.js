@@ -1,7 +1,13 @@
 import { escapeHtml } from "./rendering.js";
+import {
+  createDerivedSignature
+} from "./derivedCache.js";
 
 export const CREATOR_SPELL_BATCH_SIZE = 25;
 export const CREATOR_SPELL_SEARCH_DEBOUNCE_MS = 200;
+
+const spellSearchTextCache = new WeakMap();
+const spellLevelIndexCache = new WeakMap();
 
 function cleanText(value) {
   return String(value == null ? "" : value)
@@ -58,6 +64,33 @@ export function createCreatorSpellPickerState() {
 }
 
 export function getCreatorSpellSearchText(spell) {
+  const cacheable = Boolean(
+    spell && typeof spell === "object"
+  );
+  const dependencyKey = createDerivedSignature({
+    name: spell?.name,
+    level: spell?.level,
+    levelKey: spell?.levelKey,
+    school: spell?.school,
+    classes: spell?.classes,
+    castingTime: spell?.castingTime,
+    source: spell?.source,
+    sourceLabel: spell?.sourceLabel,
+    rulesSource: spell?.rulesSource,
+    damageType: spell?.damageType,
+    damageTypes: spell?.damageTypes,
+    damage: spell?.damage,
+    effects: spell?.effects,
+    tags: spell?.tags
+  });
+  const cached = cacheable
+    ? spellSearchTextCache.get(spell)
+    : null;
+
+  if (cached?.dependencyKey === dependencyKey) {
+    return cached.text;
+  }
+
   const level = spellLevel(spell);
   const damageTypes = cleanList([
     spell?.damageType,
@@ -67,7 +100,7 @@ export function getCreatorSpellSearchText(spell) {
     spell?.tags
   ]);
 
-  return [
+  const text = [
     spell?.name,
     level === 0 ? "cantrip" : `level ${level}`,
     creatorSpellLevelLabel(level),
@@ -83,6 +116,50 @@ export function getCreatorSpellSearchText(spell) {
     .map(cleanText)
     .filter(Boolean)
     .join(" ");
+
+  if (cacheable) {
+    spellSearchTextCache.set(spell, {
+      dependencyKey,
+      text
+    });
+  }
+
+  return text;
+}
+
+function getSpellLevelIndex(records) {
+  const cacheable = Array.isArray(records);
+  const dependencyKey = createDerivedSignature(
+    records.map((spell) => ({
+      id: spell?.id,
+      level: spell?.level
+    }))
+  );
+  const cached = cacheable
+    ? spellLevelIndexCache.get(records)
+    : null;
+
+  if (cached?.dependencyKey === dependencyKey) {
+    return cached.levels;
+  }
+
+  const levels = Array.from(
+    { length: 10 },
+    () => []
+  );
+
+  records.forEach((spell) => {
+    levels[spellLevel(spell)].push(spell);
+  });
+
+  if (cacheable) {
+    spellLevelIndexCache.set(records, {
+      dependencyKey,
+      levels
+    });
+  }
+
+  return levels;
 }
 
 export function getCreatorSpellPickerGroups({
@@ -98,19 +175,22 @@ export function getCreatorSpellPickerGroups({
   const query = cleanText(pickerState.query);
   const selectedOnly =
     pickerState.selectedOnly === true;
+  const spellsByLevel = getSpellLevelIndex(records);
 
   return Array.from(
     { length: 10 },
     (_, level) => {
-      const levelSpells = records.filter((spell) => {
-        return spellLevel(spell) === level;
-      });
-      const selectedSpells = levelSpells.filter(
-        (spell) => isSelected(spell) === true
+      const levelSpells = spellsByLevel[level];
+      const selectionState = new Map(
+        levelSpells.map((spell) => {
+          return [spell, isSelected(spell) === true];
+        })
       );
+      const selectedSpells = levelSpells.filter((spell) => {
+        return selectionState.get(spell);
+      });
       const matches = levelSpells.filter((spell) => {
-        const selected =
-          isSelected(spell) === true;
+        const selected = selectionState.get(spell);
         const queryMatch = !query ||
           getCreatorSpellSearchText(spell)
             .includes(query);

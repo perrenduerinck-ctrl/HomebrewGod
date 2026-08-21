@@ -18,8 +18,14 @@ import {
   getCharacterAttunementLimit
 } from "./characterCreator/inventoryEquipment.js";
 import {
-  calculateCharacterCarryingCapacity
+  calculateAbilityModifier as calculateRuleAbilityModifier,
+  calculateCharacterCarryingCapacity,
+  calculateProficiencyBonus as calculateRuleProficiencyBonus
 } from "./characterCreator/rulesMath.js";
+import {
+  createDerivedSignature,
+  createScopedDerivedCache
+} from "./characterCreator/derivedCache.js";
 import {
   buildSpellLibraryFromSources,
   getCanonicalSpellSources,
@@ -76,6 +82,10 @@ const SPELL_SOURCE_SCAN_LIMIT = 32;
 const SPELL_FEAT_RECORD_LIMIT = 128;
 const SPELL_SIGNATURE_TEXT_LIMIT = 256;
 const SPELL_SUMMARY_TEXT_LIMIT = 280;
+
+const characterSheetDerivedCache = createScopedDerivedCache({
+  maximumEntriesPerScope: 192
+});
 
 function isRecord(value) {
   return Boolean(
@@ -291,7 +301,9 @@ function formatModifier(value) {
 }
 
 function abilityModifier(score) {
-  return Math.floor((finiteNumber(score, 10) - 10) / 2);
+  return calculateRuleAbilityModifier(
+    finiteNumber(score, 10)
+  );
 }
 
 function titleFromId(value, fallback = "Unknown") {
@@ -470,7 +482,9 @@ function getProficiencyBonus(character, totalLevel = getTotalLevel(character)) {
     return Math.max(0, Math.round(saved));
   }
 
-  return 2 + Math.floor((Math.max(1, totalLevel) - 1) / 4);
+  return calculateRuleProficiencyBonus(
+    totalLevel
+  );
 }
 
 function getSkillEntry(character, skill) {
@@ -4483,8 +4497,22 @@ function renderAbilitiesPanel(character, summary) {
 }
 
 function getInventoryWeight(character) {
-  return asArray(character?.equipment?.items)
-    .reduce((total, item) => {
+  const items = asArray(
+    character?.equipment?.items
+  );
+  const dependencyKey = createDerivedSignature(
+    items.map((item) => ({
+      id: item?.id,
+      quantity: item?.quantity,
+      weight: item?.weight,
+      containerId: item?.containerId
+    }))
+  );
+
+  return characterSheetDerivedCache.get(
+    "inventory-weight",
+    dependencyKey,
+    () => items.reduce((total, item) => {
       const weight =
         calculateInventoryLineWeight(
           item
@@ -4493,7 +4521,8 @@ function getInventoryWeight(character) {
       return weight === null
         ? total
         : total + weight;
-    }, 0);
+    }, 0)
+  );
 }
 
 function renderInventoryPanel(

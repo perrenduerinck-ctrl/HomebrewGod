@@ -1,3 +1,12 @@
+import {
+  createDerivedSignature,
+  createScopedDerivedCache
+} from "./derivedCache.js";
+
+const rulesMathCache = createScopedDerivedCache({
+  maximumEntriesPerScope: 128
+});
+
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number)
@@ -437,71 +446,106 @@ export function calculateRuleCarryingCapacity({
 export function calculateCharacterCarryingCapacity(
   character
 ) {
-  const adjustments =
-    collectCharacterCarryingAdjustments(
-      character
-    );
-  const result =
-    calculateRuleCarryingCapacity({
-      strength:
-        character?.abilities
-          ?.scores?.str,
-      size:
-        character?.identity?.size,
-      ...adjustments
-    });
-  const effectiveSize =
-    getLargerSize(
-      character?.identity?.size,
-      adjustments.effectiveSizeSteps
-    );
+  const dependencyKey = createDerivedSignature({
+    strength:
+      character?.abilities?.scores?.str,
+    size: character?.identity?.size,
+    carryingCapacity:
+      character?.carryingCapacity,
+    mechanics: character?.mechanics,
+    classMechanics:
+      character?.classMechanics,
+    featMechanics:
+      character?.featMechanics,
+    features: character?.features,
+    feats: character?.feats,
+    species: character?.species
+  });
 
-  return {
-    ...result,
-    baseCarryingCapacity:
-      Math.max(
-        0,
-        safeNumber(
-          character?.abilities
-            ?.scores?.str,
-          10
-        )
-      ) *
-      15 *
-      result.sizeMultiplier,
-    effectiveSize,
-    effectiveSizeSteps:
-      adjustments.effectiveSizeSteps,
-    capacityMultiplier:
-      adjustments.capacityMultiplier,
-    capacityBonus:
-      adjustments.capacityBonus,
-    powerfulBuild:
-      adjustments.powerfulBuild
-  };
+  return rulesMathCache.get(
+    "carrying-capacity",
+    dependencyKey,
+    () => {
+      const adjustments =
+        collectCharacterCarryingAdjustments(
+          character
+        );
+      const result =
+        calculateRuleCarryingCapacity({
+          strength:
+            character?.abilities
+              ?.scores?.str,
+          size:
+            character?.identity?.size,
+          ...adjustments
+        });
+      const effectiveSize =
+        getLargerSize(
+          character?.identity?.size,
+          adjustments.effectiveSizeSteps
+        );
+
+      return {
+        ...result,
+        baseCarryingCapacity:
+          Math.max(
+            0,
+            safeNumber(
+              character?.abilities
+                ?.scores?.str,
+              10
+            )
+          ) *
+          15 *
+          result.sizeMultiplier,
+        effectiveSize,
+        effectiveSizeSteps:
+          adjustments.effectiveSizeSteps,
+        capacityMultiplier:
+          adjustments.capacityMultiplier,
+        capacityBonus:
+          adjustments.capacityBonus,
+        powerfulBuild:
+          adjustments.powerfulBuild
+      };
+    }
+  );
 }
 
 export function calculateAbilityModifier(
   score
 ) {
-  return Math.floor(
-    (
-      safeNumber(score, 10) -
-      10
-    ) / 2
+  const cleanScore = safeNumber(
+    score,
+    10
+  );
+
+  return rulesMathCache.get(
+    "ability-modifier",
+    cleanScore,
+    () => Math.floor(
+      (cleanScore - 10) / 2
+    )
   );
 }
 
 export function calculateProficiencyBonus(
   level
 ) {
-  return (
-    2 +
-    Math.floor(
-      (
-        clampLevel(level) -
-        1
-      ) / 4
+  const cleanLevel = clampLevel(level);
+
+  return rulesMathCache.get(
+    "proficiency-bonus",
+    cleanLevel,
+    () => (
+      2 +
+      Math.floor(
+        (cleanLevel - 1) / 4
+      )
     )
   );
+}
+
+export function getRulesMathCacheMetrics() {
+  return rulesMathCache.getMetrics();
 }
