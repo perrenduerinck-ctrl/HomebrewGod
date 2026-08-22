@@ -4,6 +4,10 @@
 // Tokens live at rooms/{roomCode}/tokens/{tokenId}
 // =====================================================
 
+import {
+  createRealtimeListenerRegistry
+} from "./realtimeListeners.js";
+
 export function createTokenSystem(options) {
   const deps = {
     db: options.db,
@@ -31,6 +35,16 @@ export function createTokenSystem(options) {
     buildMapFromRoomFields: options.buildMapFromRoomFields
   };
 
+  const realtimeListeners =
+    createRealtimeListenerRegistry({
+      onStopError: (error) => {
+        console.warn(
+          "Could not stop token listener:",
+          error
+        );
+      }
+    });
+
   const SIZE_MULTIPLIERS = {
     tiny: 0.5,
     small: 1,
@@ -44,7 +58,6 @@ export function createTokenSystem(options) {
   let lastRenderedRoom = null;
   let scalePreviewHideTimer = null;
 
-  let tokenUnsubscribe = null;
   let tokenRoomCode = null;
   let tokenCache = [];
 
@@ -1059,11 +1072,7 @@ export function createTokenSystem(options) {
   }
 
   function stopTokenListener() {
-    if (typeof tokenUnsubscribe === "function") {
-      tokenUnsubscribe();
-    }
-
-    tokenUnsubscribe = null;
+    realtimeListeners.stop("tokens");
     tokenRoomCode = null;
     tokenCache = [];
   }
@@ -1074,7 +1083,12 @@ export function createTokenSystem(options) {
       return;
     }
 
-    if (tokenRoomCode === roomCode && tokenUnsubscribe) {
+    if (
+      realtimeListeners.has(
+        "tokens",
+        roomCode
+      )
+    ) {
       return;
     }
 
@@ -1084,16 +1098,50 @@ export function createTokenSystem(options) {
 
     const tokenCollectionRef = deps.collection(deps.db, "rooms", roomCode, "tokens");
 
-    tokenUnsubscribe = deps.onSnapshot(tokenCollectionRef, function (snapshot) {
-      tokenCache = snapshot.docs.map(function (tokenDoc) {
-        return normalizeToken({
-          ...tokenDoc.data(),
-          id: tokenDoc.id
-        });
-      });
+    realtimeListeners.connect(
+      "tokens",
+      roomCode,
+      ({ isCurrent }) => {
+        return deps.onSnapshot(
+          tokenCollectionRef,
+          function (snapshot) {
+            if (
+              !isCurrent() ||
+              tokenRoomCode !== roomCode ||
+              (
+                deps.getCurrentRoomCode &&
+                deps.getCurrentRoomCode() !== roomCode
+              )
+            ) {
+              return;
+            }
 
-      render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
-    });
+            tokenCache = snapshot.docs.map(function (tokenDoc) {
+              return normalizeToken({
+                ...tokenDoc.data(),
+                id: tokenDoc.id
+              });
+            });
+
+            render(
+              deps.getCurrentRoomData
+                ? deps.getCurrentRoomData()
+                : lastRenderedRoom || {}
+            );
+          },
+          function (error) {
+            if (!isCurrent()) {
+              return;
+            }
+
+            console.error(
+              "Could not load room tokens:",
+              error
+            );
+          }
+        );
+      }
+    );
   }
 
   function getCurrentTokenTarget(room) {
@@ -2080,7 +2128,10 @@ export function createTokenSystem(options) {
     deleteToken,
     saveTokenScale,
     startTokenListenerForRoom,
-    stopTokenListener
+    stopTokenListener,
+    getListenerSnapshot: function () {
+      return realtimeListeners.getSnapshot();
+    }
   };
 
   if (options.autoInit !== false) {

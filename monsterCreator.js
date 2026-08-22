@@ -4,6 +4,9 @@ import {
   friendlyServiceError,
   getRecordRevisionMillis
 } from "./securityPersistence.js";
+import {
+  createRealtimeListenerRegistry
+} from "./realtimeListeners.js";
 
 const MONSTER_SIZES = [
   "Tiny",
@@ -581,16 +584,32 @@ export function createMonsterCreator(config) {
     console.warn("Monster Creator screen was not found.");
     return {
       destroy: function () {},
-      refresh: function () {}
+      refresh: function () {},
+      cleanupListeners: function () {},
+      getListenerSnapshot: function () {
+        return {
+          activeCount: 0,
+          active: [],
+          metrics: {}
+        };
+      }
     };
   }
 
   let selectedMonsterId = null;
   let monsters = [];
-  let stopListening = null;
   let listeningRoomCode = null;
   let isBusy = false;
   const removeDomListeners = [];
+  const realtimeListeners =
+    createRealtimeListenerRegistry({
+      onStopError: (error) => {
+        console.warn(
+          "Could not stop monster creator listener:",
+          error
+        );
+      }
+    });
 
   function getRoomCode() {
     return normalizeText(
@@ -1564,10 +1583,18 @@ export function createMonsterCreator(config) {
   function subscribeToRoomMonsters() {
     const roomCode = getRoomCode();
 
-    if (stopListening) {
-      stopListening();
-      stopListening = null;
+    if (
+      roomCode &&
+      realtimeListeners.has(
+        "monsters",
+        roomCode
+      )
+    ) {
+      listeningRoomCode = roomCode;
+      return false;
     }
+
+    realtimeListeners.stop("monsters");
 
     listeningRoomCode = roomCode;
     monsters = [];
@@ -1582,16 +1609,22 @@ export function createMonsterCreator(config) {
     }
 
     setStatus("Loading saved monsters...");
-    stopListening =
-      config.onSnapshot(
-        config.collection(
-          config.db,
-          "rooms",
-          roomCode,
-          "monsters"
-        ),
+    realtimeListeners.connect(
+      "monsters",
+      roomCode,
+      ({ isCurrent }) => {
+        return config.onSnapshot(
+          config.collection(
+            config.db,
+            "rooms",
+            roomCode,
+            "monsters"
+          ),
         function (snapshot) {
-          if (getRoomCode() !== roomCode) {
+          if (
+            !isCurrent() ||
+            getRoomCode() !== roomCode
+          ) {
             return;
           }
 
@@ -1655,6 +1688,10 @@ export function createMonsterCreator(config) {
           );
         },
         function (error) {
+          if (!isCurrent()) {
+            return;
+          }
+
           console.error(
             "Could not load saved monsters:",
             error
@@ -1664,7 +1701,16 @@ export function createMonsterCreator(config) {
             error.message
           );
         }
-      );
+        );
+      }
+    );
+
+    return true;
+  }
+
+  function cleanupListeners() {
+    realtimeListeners.stop("monsters");
+    listeningRoomCode = null;
   }
 
   function backToBattleMap() {
@@ -1751,10 +1797,7 @@ export function createMonsterCreator(config) {
 
   return {
     destroy: function () {
-      if (stopListening) {
-        stopListening();
-      }
-      stopListening = null;
+      cleanupListeners();
       removeDomListeners.forEach(
         function (removeListener) {
           removeListener();
@@ -1764,7 +1807,11 @@ export function createMonsterCreator(config) {
     refresh: function () {
       if (
         listeningRoomCode !==
-        getRoomCode()
+          getRoomCode() ||
+        !realtimeListeners.has(
+          "monsters",
+          getRoomCode()
+        )
       ) {
         subscribeToRoomMonsters();
       } else {
@@ -1780,6 +1827,10 @@ export function createMonsterCreator(config) {
     copyMonsterJson,
     exportMonsterJson,
     importMonsterData,
+    cleanupListeners,
+    getListenerSnapshot: function () {
+      return realtimeListeners.getSnapshot();
+    },
     getExportData,
     loadMonsterIntoForm,
     readMonsterForm,
