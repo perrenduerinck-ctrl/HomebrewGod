@@ -7,31 +7,33 @@ const SKILLS_STEP_ACTIONS = Object.freeze([
 export function createSkillsStep(dependencies = {}) {
   const {
     $,
-    SKILL_DEFINITIONS,
     applyCompatibilityAliases,
-    calculateAbilityModifier,
     cleanArray,
     cleanString,
     escapeHtml,
+    getCreatorState,
+    markDraftChanged,
+    renderCreatorView,
+    safeNumber,
+    setStatus,
+    uniqueCleanArray,
+    wizardField
+  } = dependencies.sharedServices || dependencies;
+  const {
+    SKILL_DEFINITIONS,
+    calculateAbilityModifier,
     formatSection14List,
     getBackgroundSourceLabel,
     getCharacterProficiencyBonus,
     getClassSourceLabel,
-    getCreatorState,
     getManualProficiencyList,
     getPrimaryClassEntry,
     getSelectedClassTemplate,
     getSelectedSection14Background,
     isMulticlassDraft,
     isSection17ClassComplete,
-    markDraftChanged,
     parseSection14List,
-    renderCreatorView,
-    safeNumber,
     setManualProficiencyList,
-    setStatus,
-    uniqueCleanArray,
-    wizardField
   } = dependencies;
 
   const creatorState = getCreatorState();

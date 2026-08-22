@@ -10,15 +10,25 @@ const REVIEW_STEP_ACTIONS = Object.freeze([
 
 export function createReviewStep(dependencies = {}) {
   const {
+    applyCompatibilityAliases,
+    beginnerNote,
+    clampLevel,
+    cleanArray,
+    cleanString,
+    escapeHtml,
+    getCreatorState,
+    renderCreatorView,
+    safeDisplayString,
+    safeNumber,
+    setStatus,
+    uniqueCleanArray
+  } = dependencies.sharedServices || dependencies;
+  const {
     ABILITY_DEFINITIONS,
     BUILDER_STEPS,
     DEFAULT_FEATS,
     DEFAULT_SPELLS,
     SKILL_DEFINITIONS,
-    abilitiesStep,
-    applyCompatibilityAliases,
-    backgroundStep,
-    beginnerNote,
     calculateAbilityModifier,
     calculateArmorClassOptions,
     calculateCharacterCarryingCapacity,
@@ -30,12 +40,8 @@ export function createReviewStep(dependencies = {}) {
     calculateCharacterSkillModifier,
     calculateEquippedWeaponAttacks,
     calculateInventoryWeightSummary,
-    clampLevel,
-    cleanArray,
-    cleanString,
     countValidClassEntrySkillChoices,
     ensureEquipmentCurrencySources,
-    escapeHtml,
     formatMulticlassPrerequisiteFailure,
     formatSection12ClassChoiceValues,
     formatSection12List,
@@ -50,7 +56,7 @@ export function createReviewStep(dependencies = {}) {
     getClassEntrySkillChoiceConfig,
     getClassProgressionEntries,
     getContainerSummaries,
-    getCreatorState,
+    getDomainStepWarnings,
     getReviewRevision,
     getFeatPrerequisiteResult,
     getFeatSpellcastingValidationWarnings,
@@ -97,7 +103,6 @@ export function createReviewStep(dependencies = {}) {
     openCharacterSheet,
     persistDraftToSession,
     renderClassFeatureMetadata,
-    renderCreatorView,
     renderInnateSpellCards,
     renderMulticlassAdvancementChoiceSummary,
     renderMulticlassClassSummary,
@@ -105,15 +110,9 @@ export function createReviewStep(dependencies = {}) {
     renderSection17SpellcastingSummary,
     renderSelectedClassMechanicsSummary,
     renderSelectedFeatSummary,
-    safeDisplayString,
-    safeNumber,
-    setStatus,
-    skillsStep,
-    speciesStep,
     syncSection16ClassSourceMetadata,
-    uniqueCleanArray,
     validateContainerState
-  } = dependencies;
+  } = dependencies.reviewServices || dependencies;
 
   const creatorState = getCreatorState();
 
@@ -292,7 +291,12 @@ export function createReviewStep(dependencies = {}) {
           .totalLevel
       );
 
-    warnings.push(...abilitiesStep.getStepWarnings(draft));
+    warnings.push(
+      ...getDomainStepWarnings(
+        ["abilities"],
+        draft
+      )
+    );
 
     if (
       safeNumber(
@@ -610,7 +614,12 @@ export function createReviewStep(dependencies = {}) {
       )
     );
 
-    warnings.push(...speciesStep.getStepWarnings(draft));
+    warnings.push(
+      ...getDomainStepWarnings(
+        ["species"],
+        draft
+      )
+    );
 
     if (isMulticlassDraft(draft)) {
       getClassProgressionEntries(draft)
@@ -645,10 +654,11 @@ export function createReviewStep(dependencies = {}) {
     }
 
     warnings.push(
-      ...skillsStep.getStepWarnings(draft)
+      ...getDomainStepWarnings(
+        ["skills", "background"],
+        draft
+      )
     );
-
-    warnings.push(...backgroundStep.getStepWarnings(draft));
 
     if (
       draft.magic

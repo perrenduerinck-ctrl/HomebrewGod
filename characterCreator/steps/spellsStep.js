@@ -35,16 +35,24 @@ export function createSpellsStep(
   dependencies = {}
 ) {
   const {
+    beginnerNote,
+    cleanString,
+    escapeHtml,
+    getCreatorState,
+    renderCreatorView,
+    safeDisplayString,
+    safeNumber,
+    setStatus,
+    wizardField,
+    wizardSelect
+  } = dependencies.sharedServices || dependencies;
+  const {
     ABILITY_DEFINITIONS,
     C,
     addSection16CustomFeature,
     addSection16CustomSpell,
-    beginnerNote,
     calculateSection16SpellcastingValues,
-    cleanString,
-    escapeHtml,
     formatSection16ProgressionLabel,
-    getCreatorState,
     getSection13AbilityName,
     getSection16CustomFeatures,
     getSection16FeatPickerPage,
@@ -62,7 +70,6 @@ export function createSpellsStep(
       refreshSpellPickerView,
     removeSection16CustomFeature,
     removeSection16CustomSpell,
-    renderCreatorView,
     renderSection16BeginnerGuide,
     renderSection16CustomSpells,
     renderSection16DefaultSpellViewer,
@@ -71,16 +78,11 @@ export function createSpellsStep(
     renderSection16MagicalSecrets,
     renderSection16SpellSlots,
     renderSection17SpellcastingSummary,
-    safeDisplayString,
-    safeNumber,
-    setStatus,
     syncSection16ClassSourceMetadata,
     toggleSection16Feat,
     toggleSection16MysticArcanum,
     toggleSection16SpellKnown,
     toggleSection16SpellPrepared,
-    wizardField,
-    wizardSelect
   } = dependencies;
 
   const section16SelectedSpellSourceIds =

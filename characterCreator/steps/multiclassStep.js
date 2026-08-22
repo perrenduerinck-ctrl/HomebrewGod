@@ -12,16 +12,24 @@ const MULTICLASS_STEP_ACTIONS = Object.freeze([
 
 export function createMulticlassStep(dependencies = {}) {
   const {
-    DEFAULT_FEATS,
-    DEFAULT_SPELLS,
-    addCharacterLevelToClass,
-    adjustMulticlassClassLevel,
-    calculateClassProgressionTotalLevel,
     clampLevel,
     cleanArray,
     cleanString,
     cloneData,
     escapeHtml,
+    getCreatorState,
+    renderCreatorView,
+    setStatus,
+    uniqueCleanArray,
+    wizardField,
+    wizardSelect
+  } = dependencies.sharedServices || dependencies;
+  const {
+    DEFAULT_FEATS,
+    DEFAULT_SPELLS,
+    addCharacterLevelToClass,
+    adjustMulticlassClassLevel,
+    calculateClassProgressionTotalLevel,
     findSection12ActionElement,
     formatClassEntryProficiencySummary,
     formatMulticlassPrerequisiteFailure,
@@ -38,7 +46,6 @@ export function createMulticlassStep(dependencies = {}) {
     getClassProgressionEntries,
     getClassProgressionEntryKey,
     getClassProgressionPendingChoiceWarnings,
-    getCreatorState,
     getGenericProficiencyBonus,
     getMulticlassClassId,
     getMulticlassPrerequisiteResultForClass,
@@ -59,18 +66,13 @@ export function createMulticlassStep(dependencies = {}) {
     recalculateClassTotalLevel,
     removeLastCharacterLevel,
     removeMulticlassClass,
-    renderCreatorView,
     renderLevelUpWorkflow,
     resolveClassTemplateForEntry,
     setMulticlassClassLevel,
     setMulticlassSubclass,
-    setStatus,
     toggleMulticlassSkillChoice,
     toggleMulticlassToolChoice,
     tryAddMulticlassClass,
-    uniqueCleanArray,
-    wizardField,
-    wizardSelect
   } = dependencies;
 
   const creatorState = getCreatorState();

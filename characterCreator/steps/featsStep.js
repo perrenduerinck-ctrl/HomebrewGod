@@ -14,15 +14,21 @@ export const CREATOR_FEAT_SEARCH_DEBOUNCE_MS = 250;
 
 export function createFeatsStep(dependencies = {}) {
   const {
+    cleanString,
+    escapeHtml,
+    getCreatorState,
+    renderCreatorView,
+    safeNumber,
+    setStatus,
+    uniqueCleanArray
+  } = dependencies.sharedServices || dependencies;
+  const {
     ABILITY_DEFINITIONS,
     DEFAULT_FEATS,
     DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM,
     adjustSection12AsiAbility,
-    cleanString,
     describeFeatSpellChoiceRestrictions,
-    escapeHtml,
     findSection12ActionElement,
-    getCreatorState,
     getFeatAbilityEffectMaximum,
     getFeatPrerequisiteLabel,
     getFeatPrerequisiteResult,
@@ -32,14 +38,10 @@ export function createFeatsStep(dependencies = {}) {
     getSection12FeatChoiceLimit,
     getSection12FeatChoiceOptions,
     getUnlockedFeatChoiceSlots,
-    renderCreatorView,
-    safeNumber,
     setFeatRestChoice,
     setSection12AsiFeat,
     setSection12AsiMode,
     setSection12FeatChoiceValues,
-    setStatus,
-    uniqueCleanArray
   } = dependencies;
 
   const creatorState = getCreatorState();
