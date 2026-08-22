@@ -25,36 +25,38 @@ export function createEquipmentStep(
   dependencies = {}
 ) {
   const {
+    beginnerNote,
+    cleanString,
+    escapeHtml,
+    getCreatorState,
+    markDraftChanged,
+    renderCreatorView,
+    safeDisplayString,
+    safeNumber,
+    setStatus,
+    wizardField,
+    wizardSelect
+  } = dependencies.sharedServices || dependencies;
+  const {
     ABILITY_DEFINITIONS,
     addSection15CatalogItem,
     addSection15CustomItem,
-    beginnerNote,
     calculateCharacterCarryingCapacity,
     changeSection15Quantity,
-    cleanString,
-    escapeHtml,
     getCharacterAttunementLimit,
-    getCreatorState,
     getSection15AttunedItemCount,
     getSection15CatalogPage,
     getSection15Inventory,
     getSection15InventoryCount,
     getSection15TotalWeight,
     getSection15UnknownWeightCount,
-    markDraftChanged,
     moveSection15ItemToContainer,
     removeSection15Item,
-    renderCreatorView,
     renderSection15Catalog,
     renderSection15Inventory,
     renderSection15OpenContainerPanel,
-    safeDisplayString,
-    safeNumber,
-    setStatus,
     toggleSection15ItemState,
     updateSection15InventoryItem,
-    wizardField,
-    wizardSelect
   } = dependencies;
 
   const creatorState = getCreatorState();

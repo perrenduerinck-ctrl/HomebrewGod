@@ -85,9 +85,7 @@ function createTestStep() {
     DEFAULT_FEATS: [],
     DEFAULT_SPELLS: [],
     SKILL_DEFINITIONS: [],
-    abilitiesStep: { getStepWarnings: () => [] },
     applyCompatibilityAliases: () => {},
-    backgroundStep: { getStepWarnings: () => [] },
     beginnerNote: (title, body) => `<aside>${title}: ${body}</aside>`,
     calculateAbilityModifier: () => 0,
     calculateArmorClassOptions: () => ({
@@ -145,6 +143,7 @@ function createTestStep() {
     getClassProgressionEntries: () => [],
     getContainerSummaries: () => [],
     getCreatorState: () => ({ currentCharacterId: null, draft }),
+    getDomainStepWarnings: () => [],
     getFeatPrerequisiteResult: () => ({ met: true, reasons: [] }),
     getFeatSpellcastingValidationWarnings: () => [],
     getMulticlassPendingSkillChoiceWarnings: () => [],
@@ -207,8 +206,6 @@ function createTestStep() {
     safeDisplayString: (value, fallback = "") => String(value ?? fallback),
     safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
     setStatus: (message) => { statuses.push(message); },
-    skillsStep: { getStepWarnings: () => [] },
-    speciesStep: { getStepWarnings: () => [] },
     syncSection16ClassSourceMetadata: () => {},
     uniqueCleanArray: (value) => [...new Set(Array.isArray(value) ? value.filter(Boolean) : [])],
     validateContainerState: () => []

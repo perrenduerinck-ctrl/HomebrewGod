@@ -178,6 +178,11 @@ import {
   readRealtimeSnapshotRecords
 } from "./characterCreator/realtimePersistence.js";
 import {
+  createCharacterReviewServices,
+  createCreatorSharedServices,
+  createStepWarningCollector
+} from "./characterCreator/stepServices.js";
+import {
   applyGameplayAction,
   ensureGameplayState
 } from "./characterSheet/gameplayState.js";
@@ -20888,32 +20893,43 @@ export function createCharacterCreator(options = {}) {
   const SECTION11_UPLOADED_PORTRAIT_MAX_BYTES =
     8 * 1024 * 1024;
 
+  const sharedStepServices =
+    createCreatorSharedServices({
+      $,
+      applyCompatibilityAliases,
+      beginnerNote,
+      clampLevel,
+      cleanArray,
+      cleanString,
+      cloneData,
+      createEmptyCharacter,
+      escapeHtml,
+      getCreatorState: () => creatorState,
+      markDraftChanged,
+      renderCreatorView: renderCurrentStep,
+      safeDisplayString,
+      safeNumber,
+      setStatus,
+      uniqueCleanArray,
+      wizardChoiceCard,
+      wizardField,
+      wizardSelect
+    });
+
   const descriptionStep = createDescriptionStep({
-    $,
+    sharedServices: sharedStepServices,
     SECTION11_EMBEDDED_PORTRAIT_MAX_BYTES,
     SECTION11_UPLOADED_PORTRAIT_MAX_BYTES,
-    applyCompatibilityAliases,
     beginCharacterBusyAction,
-    beginnerNote,
-    cleanString,
-    createEmptyCharacter,
     deleteCharacterPortrait:
       deps.deleteCharacterPortrait,
     endCharacterBusyAction,
-    escapeHtml,
-    getCreatorState: () => creatorState,
     getRoomCode,
     getSafeCharacterName,
     isCharacterCreatorBusy,
-    markDraftChanged,
     normalizeCharacterImageValue,
-    renderCreatorView: renderCurrentStep,
-    safeDisplayString,
-    safeNumber,
-    setStatus,
     uploadCharacterPortrait:
-      deps.uploadCharacterPortrait,
-    wizardField
+      deps.uploadCharacterPortrait
   });
 
   const {
@@ -20941,17 +20957,12 @@ export function createCharacterCreator(options = {}) {
   } = descriptionStep.compatibility;
 
   const basicsStep = createBasicsStep({
-    beginnerNote,
-    createEmptyCharacter,
-    getCreatorState: () => creatorState,
+    sharedServices: sharedStepServices,
     getSafeCharacterName,
     renderDescriptionAppearanceField,
     renderDescriptionNameField,
     renderDescriptionNotesField,
-    renderSection11PortraitPanel,
-    safeDisplayString,
-    wizardField,
-    wizardSelect
+    renderSection11PortraitPanel
   });
 
   const {
@@ -20960,7 +20971,7 @@ export function createCharacterCreator(options = {}) {
   } = basicsStep.compatibility;
 
   const speciesStep = createSpeciesStep({
-    $,
+    sharedServices: sharedStepServices,
     ABILITY_DEFINITIONS,
     DARK_ELF_INNATE_SPELLS_2014,
     DEFAULT_SPECIES_TEMPLATES,
@@ -20971,17 +20982,9 @@ export function createCharacterCreator(options = {}) {
     STANDARD_LANGUAGE_OPTIONS,
     TIEFLING_INNATE_SPELLS_2014,
     WIZARD_CANTRIP_CHOICES_2014,
-    applyCompatibilityAliases,
-    beginnerNote,
-    clampLevel,
-    cleanArray,
-    cleanString,
-    cloneData,
     createAbilityMap,
-    escapeHtml,
     formatSection12List,
     formatSignedNumber,
-    getCreatorState: () => creatorState,
     getLegacy2014Metadata,
     getSafeSpeciesName,
     getSection14SkillEntry: (...args) => {
@@ -20991,7 +20994,6 @@ export function createCharacterCreator(options = {}) {
     getSubraceSourceLabel,
     isActiveRulesetEntry,
     makeSafeId,
-    markDraftChanged,
     normalizeMovementSpeed,
     normalizeSection16Spell,
     recalculateAbilityTotals,
@@ -20999,22 +21001,15 @@ export function createCharacterCreator(options = {}) {
     removeListProficiencySourcesByPrefix,
     removeSkillProficiencySourcesByPrefix,
     renderCatalogEntryDetails,
-    renderCreatorView: renderCurrentStep,
     renderFullCatalogDescription,
     renderRulesetMetadata,
-    safeDisplayString,
-    safeNumber,
     setAbilityBonusSource,
     setSection14SkillEntry: (...args) => {
       return skillsStep.compatibility.setSection14SkillEntry(...args);
     },
     setSourceProficiencyList,
-    setStatus,
     sourceMatches,
-    synchronizeCanonicalSpellSources,
-    wizardChoiceCard,
-    wizardField,
-    wizardSelect
+    synchronizeCanonicalSpellSources
   });
 
   const {
@@ -28770,17 +28765,15 @@ export function createCharacterCreator(options = {}) {
   }
 
   const featsStep = createFeatsStep({
+    sharedServices: sharedStepServices,
     ABILITY_DEFINITIONS,
     DEFAULT_FEATS,
     DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM,
     adjustSection12AsiAbility,
-    cleanString,
     describeFeatSpellChoiceRestrictions,
-    escapeHtml,
     findSection12ActionElement: (...values) => {
       return classStep.findActionElement(...values);
     },
-    getCreatorState: () => creatorState,
     getFeatAbilityEffectMaximum,
     getFeatPrerequisiteLabel,
     getFeatPrerequisiteResult,
@@ -28790,14 +28783,10 @@ export function createCharacterCreator(options = {}) {
     getSection12FeatChoiceLimit,
     getSection12FeatChoiceOptions,
     getUnlockedFeatChoiceSlots,
-    renderCreatorView: renderCurrentStep,
-    safeNumber,
     setFeatRestChoice,
     setSection12AsiFeat,
     setSection12AsiMode,
-    setSection12FeatChoiceValues,
-    setStatus,
-    uniqueCleanArray
+    setSection12FeatChoiceValues
   });
 
   const {
@@ -28812,16 +28801,12 @@ export function createCharacterCreator(options = {}) {
   } = featsStep.compatibility;
 
   const multiclassStep = createMulticlassStep({
+    sharedServices: sharedStepServices,
     DEFAULT_FEATS,
     DEFAULT_SPELLS,
     addCharacterLevelToClass,
     adjustMulticlassClassLevel,
     calculateClassProgressionTotalLevel,
-    clampLevel,
-    cleanArray,
-    cleanString,
-    cloneData,
-    escapeHtml,
     findSection12ActionElement: (...values) => {
       return classStep.findActionElement(...values);
     },
@@ -28840,7 +28825,6 @@ export function createCharacterCreator(options = {}) {
     getClassProgressionEntries,
     getClassProgressionEntryKey,
     getClassProgressionPendingChoiceWarnings,
-    getCreatorState: () => creatorState,
     getGenericProficiencyBonus,
     getMulticlassClassId,
     getMulticlassPrerequisiteResultForClass,
@@ -28861,18 +28845,13 @@ export function createCharacterCreator(options = {}) {
     recalculateClassTotalLevel,
     removeLastCharacterLevel,
     removeMulticlassClass,
-    renderCreatorView: renderCurrentStep,
     renderLevelUpWorkflow,
     resolveClassTemplateForEntry,
     setMulticlassClassLevel,
     setMulticlassSubclass,
-    setStatus,
     toggleMulticlassSkillChoice,
     toggleMulticlassToolChoice,
-    tryAddMulticlassClass,
-    uniqueCleanArray,
-    wizardField,
-    wizardSelect
+    tryAddMulticlassClass
   });
 
   const {
@@ -28901,27 +28880,22 @@ export function createCharacterCreator(options = {}) {
   } = multiclassStep.compatibility;
 
   const classStep = createClassStep({
+    sharedServices: sharedStepServices,
 
-    applyCompatibilityAliases,
     applySection12CustomClass,
     applySection12CustomSubclass,
     applySelectedClassFeatureMechanics,
-    beginnerNote,
     chooseSection12Class,
     chooseSection12Subclass,
-    clampLevel,
-    cleanString,
     clearSection12Subclass,
     creatorDependencies: deps,
     deleteSelectedRoomClass,
-    escapeHtml,
     formatSection12List,
     friendlyServiceError,
     getAllClassTemplates,
     getCharacterClassEntries,
     getClassEntryLevel,
     getClassProgressionPendingChoiceWarnings,
-    getCreatorState: () => creatorState,
     getMulticlassPrerequisiteResults,
     getPrimaryClassEntry,
     getRoomCode,
@@ -28938,8 +28912,6 @@ export function createCharacterCreator(options = {}) {
     getSelectedClassTemplate,
     getSelectedSection12Subclass,
     isMulticlassDraft,
-    markDraftChanged,
-    renderCreatorView: renderCurrentStep,
     renderCustomClassMovementFields,
     renderLevelStep: (...args) => {
       return abilitiesStep.renderLevelStep(...args);
@@ -28954,21 +28926,14 @@ export function createCharacterCreator(options = {}) {
     renderSection14SourceSkillChoices: (...args) => {
       return skillsStep.compatibility.renderSection14SourceSkillChoices(...args);
     },
-    safeDisplayString,
-    safeNumber,
-
     setSection12ArtificerInfusionTarget,
 
 
 
     setSection12FeatureStoredChoices,
-    setStatus,
     toggleSection12ArtificerInfusion,
     toggleSection12ClassFeatureChoice,
-    updateSection12CustomClassSkillPicker,
-    wizardChoiceCard,
-    wizardField,
-    wizardSelect
+    updateSection12CustomClassSkillPicker
   });
 
   const {
@@ -29026,12 +28991,11 @@ export function createCharacterCreator(options = {}) {
 // =====================================================
 
   const abilitiesStep = createAbilitiesStep({
+    sharedServices: sharedStepServices,
     ABILITY_DEFINITIONS,
     ABILITY_SCORE_METHODS,
-    applyCompatibilityAliases,
     applySection11SpeciesMechanics,
     applySection12ClassDefaults,
-    beginnerNote,
     calculateAbilityModifier,
     calculateArmorClassOptions,
     calculateCharacterHitDice,
@@ -29039,17 +29003,13 @@ export function createCharacterCreator(options = {}) {
     calculateCharacterInitiative,
     calculateCharacterPassiveScores,
     calculateSection16SpellcastingValues,
-    clampLevel,
-    cleanString,
     clearSection11SpeciesMechanics,
-    escapeHtml,
     findHpRollRawRecordForLevel,
     formatSection17Modifier,
     formatSignedNumber,
     getAbilityScore,
     getCharacterLevelHitDieRecords,
     getCharacterProficiencyBonus,
-    getCreatorState: () => creatorState,
     getGenericProficiencyBonus,
     getHitDieSize,
     getHpRollRawRecords,
@@ -29059,24 +29019,17 @@ export function createCharacterCreator(options = {}) {
     getSpellcastingSummary,
     hpRollRawMatchesLevel,
     isMulticlassDraft,
-    markDraftChanged,
     normalizeHpCalculation,
     normalizeHpRollRecordsForCharacter,
     recalculateAbilityTotals,
     refreshClassProgressionDerivedValues,
     refreshSelectedClassFeatures,
-    renderCreatorView: renderCurrentStep,
     renderMulticlassLevelBreakdown,
     renderMulticlassProgressionEditor,
-    safeDisplayString,
-    safeNumber,
     setCharacterLevel,
     setDraftValue,
     setSimpleDraftField,
-    setStatus,
-    syncClassLevelOrderToClassLevels,
-    wizardField,
-    wizardSelect
+    syncClassLevelOrderToClassLevels
   });
 
   const {
@@ -29173,7 +29126,7 @@ export function createCharacterCreator(options = {}) {
   }
 
   const backgroundStep = createBackgroundStep({
-    $,
+    sharedServices: sharedStepServices,
     ARTISAN_TOOL_OPTIONS,
     CURRENCY_DENOMINATIONS,
     DEFAULT_BACKGROUND_EQUIPMENT_PACKAGES,
@@ -29183,24 +29136,16 @@ export function createCharacterCreator(options = {}) {
     MUSICAL_INSTRUMENT_OPTIONS,
     STANDARD_LANGUAGE_OPTIONS,
     addCurrencyMaps,
-    applyCompatibilityAliases,
-    beginnerNote,
-    cleanArray,
-    cleanString,
-    cloneData,
     countSection14ValidSkillSource: (...args) => {
       return skillsStep.compatibility.countSection14ValidSkillSource(...args);
     },
-    createEmptyCharacter,
     ensureEquipmentCurrencySources,
     ensureProficiencySources,
-    escapeHtml,
     findSection14ActionElement: (...args) => {
       return skillsStep.compatibility.findSection14ActionElement(...args);
     },
     formatSection14List,
     getBackgroundSourceLabel,
-    getCreatorState: () => creatorState,
     getLegacy2014Metadata,
     getManualCurrencyBalance,
     getSafeBackgroundName,
@@ -29210,7 +29155,6 @@ export function createCharacterCreator(options = {}) {
     hasCurrencyValue,
     isActiveRulesetEntry,
     makeSafeId,
-    markDraftChanged,
     normalizeCurrencyMap,
     normalizeSection15Item,
     normalizeSpeciesBackgroundChoices,
@@ -29218,7 +29162,6 @@ export function createCharacterCreator(options = {}) {
     removeListProficiencySource,
     removeSkillProficiencySource,
     renderCatalogEntryDetails,
-    renderCreatorView: renderCurrentStep,
     renderDescriptionStoryFields,
     renderFullCatalogDescription,
     renderRulesetMetadata,
@@ -29231,15 +29174,8 @@ export function createCharacterCreator(options = {}) {
     renderSection14SourceSkillChoices: (...args) => {
       return skillsStep.compatibility.renderSection14SourceSkillChoices(...args);
     },
-    safeDisplayString,
-    safeNumber,
     setSourceProficiencyList,
-    setStatus,
-    syncEquipmentCurrencyFromSources,
-    uniqueCleanArray,
-    wizardChoiceCard,
-    wizardField,
-    wizardSelect
+    syncEquipmentCurrencyFromSources
   });
 
   const {
@@ -29285,32 +29221,21 @@ export function createCharacterCreator(options = {}) {
   } = backgroundStep.compatibility;
 
   const skillsStep = createSkillsStep({
-    $,
+    sharedServices: sharedStepServices,
     SKILL_DEFINITIONS,
-    applyCompatibilityAliases,
     calculateAbilityModifier,
-    cleanArray,
-    cleanString,
-    escapeHtml,
     formatSection14List,
     getBackgroundSourceLabel,
     getCharacterProficiencyBonus,
     getClassSourceLabel,
-    getCreatorState: () => creatorState,
     getManualProficiencyList,
     getPrimaryClassEntry,
     getSelectedClassTemplate,
     getSelectedSection14Background,
     isMulticlassDraft,
     isSection17ClassComplete,
-    markDraftChanged,
     parseSection14List,
-    renderCreatorView: renderCurrentStep,
-    safeNumber,
-    setManualProficiencyList,
-    setStatus,
-    uniqueCleanArray,
-    wizardField
+    setManualProficiencyList
   });
 
   const {
@@ -31970,36 +31895,26 @@ export function createCharacterCreator(options = {}) {
   }
 
   const equipmentStep = createEquipmentStep({
+    sharedServices: sharedStepServices,
     ABILITY_DEFINITIONS,
     addSection15CatalogItem,
     addSection15CustomItem,
-    beginnerNote,
     calculateCharacterCarryingCapacity,
     changeSection15Quantity,
-    cleanString,
-    escapeHtml,
     getCharacterAttunementLimit,
-    getCreatorState: () => creatorState,
     getSection15AttunedItemCount,
     getSection15Inventory,
     getSection15InventoryCount,
     getSection15CatalogPage,
     getSection15TotalWeight,
     getSection15UnknownWeightCount,
-    markDraftChanged,
     moveSection15ItemToContainer,
     removeSection15Item,
-    renderCreatorView: renderCurrentStep,
     renderSection15Catalog,
     renderSection15Inventory,
     renderSection15OpenContainerPanel,
-    safeDisplayString,
-    safeNumber,
-    setStatus,
     toggleSection15ItemState,
-    updateSection15InventoryItem,
-    wizardField,
-    wizardSelect
+    updateSection15InventoryItem
   });
 
   const {
@@ -35726,16 +35641,13 @@ export function createCharacterCreator(options = {}) {
   }
 
   const spellsStep = createSpellsStep({
+    sharedServices: sharedStepServices,
     ABILITY_DEFINITIONS,
     C,
     addSection16CustomFeature,
     addSection16CustomSpell,
-    beginnerNote,
     calculateSection16SpellcastingValues,
-    cleanString,
-    escapeHtml,
     formatSection16ProgressionLabel,
-    getCreatorState: () => creatorState,
     getSection13AbilityName,
     getSection16CustomFeatures,
     getSection16FeatPickerPage,
@@ -35752,7 +35664,6 @@ export function createCharacterCreator(options = {}) {
     refreshSection16SpellPicker,
     removeSection16CustomFeature,
     removeSection16CustomSpell,
-    renderCreatorView: renderCurrentStep,
     renderSection16BeginnerGuide,
     renderSection16CustomSpells,
     renderSection16DefaultSpellViewer,
@@ -35761,16 +35672,11 @@ export function createCharacterCreator(options = {}) {
     renderSection16MagicalSecrets,
     renderSection16SpellSlots,
     renderSection17SpellcastingSummary,
-    safeDisplayString,
-    safeNumber,
-    setStatus,
     syncSection16ClassSourceMetadata,
     toggleSection16Feat,
     toggleSection16MysticArcanum,
     toggleSection16SpellKnown,
-    toggleSection16SpellPrepared,
-    wizardField,
-    wizardSelect
+    toggleSection16SpellPrepared
   });
 
   const section16SelectedSpellSourceIds =
@@ -35832,15 +35738,22 @@ export function createCharacterCreator(options = {}) {
       : String(number);
   }
 
-  const reviewStep = createReviewStep({
+  const getReviewDomainStepWarnings =
+    createStepWarningCollector({
+      abilities: abilitiesStep.getStepWarnings,
+      background: backgroundStep.getStepWarnings,
+      skills: skillsStep.getStepWarnings,
+      species: speciesStep.getStepWarnings
+    });
+
+  const reviewServices =
+    createCharacterReviewServices({
     ABILITY_DEFINITIONS,
     BUILDER_STEPS,
     DEFAULT_FEATS,
     DEFAULT_SPELLS,
     SKILL_DEFINITIONS,
-    abilitiesStep,
     applyCompatibilityAliases,
-    backgroundStep,
     beginnerNote,
     calculateAbilityModifier,
     calculateArmorClassOptions,
@@ -35874,6 +35787,8 @@ export function createCharacterCreator(options = {}) {
     getClassProgressionEntries,
     getContainerSummaries,
     getCreatorState: () => creatorState,
+    getDomainStepWarnings:
+      getReviewDomainStepWarnings,
     getReviewRevision: () => {
       return `${creatorState.reviewRevision}:${getDerivedObjectIdentity(
         creatorState.draft
@@ -35924,7 +35839,6 @@ export function createCharacterCreator(options = {}) {
     openCharacterSheet: handleSection17OpenCharacterSheet,
     persistDraftToSession,
     renderClassFeatureMetadata,
-    renderCreatorView: renderCurrentStep,
     renderInnateSpellCards,
     renderMulticlassAdvancementChoiceSummary,
     renderMulticlassClassSummary,
@@ -35935,11 +35849,14 @@ export function createCharacterCreator(options = {}) {
     safeDisplayString,
     safeNumber,
     setStatus,
-    skillsStep,
-    speciesStep,
     syncSection16ClassSourceMetadata,
     uniqueCleanArray,
     validateContainerState
+  });
+
+  const reviewStep = createReviewStep({
+    sharedServices: sharedStepServices,
+    reviewServices
   });
 
   const {
@@ -37193,6 +37110,7 @@ export function createCharacterCreator(options = {}) {
   });
 
   const finishStep = createFinishStep({
+    sharedServices: sharedStepServices,
     beginnerNote,
     clampLevel,
     cleanString,

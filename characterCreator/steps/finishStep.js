@@ -18,10 +18,14 @@ export function createFinishStep(dependencies = {}) {
     clampLevel,
     cleanString,
     escapeHtml,
+    getCreatorState,
+    safeNumber,
+    wizardField
+  } = dependencies.sharedServices || dependencies;
+  const {
     formatSavedTime,
     getCharacterBusyLabel,
     getCharacterPortraitUrl,
-    getCreatorState,
     getFinalizationValidation,
     getRoomCode,
     getSafeBackgroundName,
@@ -44,9 +48,7 @@ export function createFinishStep(dependencies = {}) {
     navigateToLibrary,
     openCharacterSheet,
     renderFinalizationWarnings,
-    safeNumber,
     tokenDependencies = {},
-    wizardField
   } = dependencies;
 
   const creatorState = getCreatorState();

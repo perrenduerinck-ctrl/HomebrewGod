@@ -6,28 +6,30 @@ const DESCRIPTION_STEP_ACTIONS = Object.freeze([
 export function createDescriptionStep(dependencies = {}) {
   const {
     $,
-    SECTION11_EMBEDDED_PORTRAIT_MAX_BYTES,
-    SECTION11_UPLOADED_PORTRAIT_MAX_BYTES,
     applyCompatibilityAliases,
-    beginCharacterBusyAction,
     beginnerNote,
     cleanString,
     createEmptyCharacter,
-    deleteCharacterPortrait,
-    endCharacterBusyAction,
     escapeHtml,
     getCreatorState,
-    getRoomCode,
-    getSafeCharacterName,
-    isCharacterCreatorBusy,
     markDraftChanged,
-    normalizeCharacterImageValue,
     renderCreatorView,
     safeDisplayString,
     safeNumber,
     setStatus,
-    uploadCharacterPortrait,
     wizardField
+  } = dependencies.sharedServices || dependencies;
+  const {
+    SECTION11_EMBEDDED_PORTRAIT_MAX_BYTES,
+    SECTION11_UPLOADED_PORTRAIT_MAX_BYTES,
+    beginCharacterBusyAction,
+    deleteCharacterPortrait,
+    endCharacterBusyAction,
+    getRoomCode,
+    getSafeCharacterName,
+    isCharacterCreatorBusy,
+    normalizeCharacterImageValue,
+    uploadCharacterPortrait,
   } = dependencies;
 
   const creatorState = getCreatorState();

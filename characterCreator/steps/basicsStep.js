@@ -5,14 +5,16 @@ export function createBasicsStep(dependencies = {}) {
     beginnerNote,
     createEmptyCharacter,
     getCreatorState,
+    safeDisplayString,
+    wizardField,
+    wizardSelect
+  } = dependencies.sharedServices || dependencies;
+  const {
     getSafeCharacterName,
     renderDescriptionAppearanceField,
     renderDescriptionNameField,
     renderDescriptionNotesField,
-    renderSection11PortraitPanel,
-    safeDisplayString,
-    wizardField,
-    wizardSelect
+    renderSection11PortraitPanel
   } = dependencies;
 
   const creatorState = getCreatorState();

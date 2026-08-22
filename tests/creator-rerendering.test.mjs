@@ -94,15 +94,26 @@ assert.match(
   "chrome updates should refresh only requested step markers"
 );
 
-const activeStepBindings =
+const sharedActiveStepBinding =
   source.match(
     /renderCreatorView:\s*renderCurrentStep/g
   ) || [];
 
 assert.equal(
-  activeStepBindings.length,
-  11,
-  "all interactive creator step modules should request active-step-only renders"
+  sharedActiveStepBinding.length,
+  1,
+  "the shared step service should expose only the active-step renderer"
+);
+
+const sharedServiceBindings =
+  source.match(
+    /sharedServices:\s*sharedStepServices/g
+  ) || [];
+
+assert.equal(
+  sharedServiceBindings.length,
+  13,
+  "every creator step should receive the shared active-step service"
 );
 
 assert.match(

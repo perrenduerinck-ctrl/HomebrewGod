@@ -304,7 +304,8 @@ test("creator species module owns species UI, mechanics, and validation", async 
     /function (?:getAllSpeciesTemplates|renderSpeciesStep|applySection11SpeciesMechanics|handleChooseSpeciesAction|isSection17SpeciesComplete)\s*\(/
   );
   assert.match(creatorMain, /speciesStep\.actions\.forEach/);
-  assert.match(reviewStep, /speciesStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /getDomainStepWarnings\([\s\S]*?"species"/);
+  assert.doesNotMatch(reviewStep, /\bspeciesStep\b/);
   assert.match(creatorMain, /speciesStep\.isStepComplete/);
   assert.match(creatorMain, /function normalizeCharacter\s*\(/);
   [
@@ -366,7 +367,8 @@ test("creator background module owns background UI, mechanics, and validation", 
     /function (?:normalizeSection14Background|renderBackgroundStep|handleSection14ChooseBackground|isSection17BackgroundComplete)\s*\(/
   );
   assert.match(creatorMain, /backgroundStep\.actions\.forEach/);
-  assert.match(reviewStep, /backgroundStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /getDomainStepWarnings\([\s\S]*?"background"/);
+  assert.doesNotMatch(reviewStep, /\bbackgroundStep\b/);
   assert.match(creatorMain, /backgroundStep\.isStepComplete/);
   assert.match(creatorMain, /const skillsStep = createSkillsStep\(/);
   assert.match(creatorMain, /skillsStep\.compatibility\.getSection14SkillEntry/);
@@ -428,7 +430,8 @@ test("creator abilities module owns score methods, derived UI, and validation", 
     /function (?:getSection13AbilityName|applySection13StandardArray|renderAbilitiesStep|handleSection13Change|isSection17AbilitiesComplete)\s*\(/
   );
   assert.match(creatorMain, /abilitiesStep\.actions\.forEach/);
-  assert.match(reviewStep, /abilitiesStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /getDomainStepWarnings\([\s\S]*?"abilities"/);
+  assert.doesNotMatch(reviewStep, /\babilitiesStep\b/);
   assert.match(creatorMain, /abilitiesStep\.isStepComplete/);
   assert.match(creatorMain, /abilitiesStep\.renderLevelStep/);
   assert.match(
@@ -495,7 +498,8 @@ test("creator Skills module owns proficiencies, expertise, and validation", asyn
     /function (?:getSection14SkillEntry|toggleSection14Skill|renderSkillsStep|handleSection14ToggleSkill|isSection17SkillsComplete)\s*\(/
   );
   assert.match(creatorMain, /skillsStep\.actions\.forEach/);
-  assert.match(reviewStep, /skillsStep\.getStepWarnings\(draft\)/);
+  assert.match(reviewStep, /getDomainStepWarnings\([\s\S]*?"skills"/);
+  assert.doesNotMatch(reviewStep, /\bskillsStep\b/);
   assert.match(creatorMain, /skillsStep\.isStepComplete/);
   assert.match(creatorMain, /skillsStep\.renderStep/);
   [
