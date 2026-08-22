@@ -9,7 +9,14 @@ const sourceFiles = {
   ),
   characterCreator: await readFile(
     new URL(
-      "../characterCreator.fixed.js",
+      "../characterCreator.js",
+      import.meta.url
+    ),
+    "utf8"
+  ),
+  realtimePersistence: await readFile(
+    new URL(
+      "../characterCreator/realtimePersistence.js",
       import.meta.url
     ),
     "utf8"
@@ -34,8 +41,8 @@ test("every Firestore snapshot subscription uses the shared lifecycle registry",
       sourceFiles.app,
       /\bonSnapshot\s*\(/g
     ),
-    characterCreator: count(
-      sourceFiles.characterCreator,
+    realtimePersistence: count(
+      sourceFiles.realtimePersistence,
       /\bdeps\.onSnapshot\s*\(/g
     ),
     monsterCreator: count(
@@ -50,20 +57,22 @@ test("every Firestore snapshot subscription uses the shared lifecycle registry",
 
   assert.deepEqual(snapshotCallCounts, {
     app: 5,
-    characterCreator: 1,
+    realtimePersistence: 1,
     monsterCreator: 1,
     tokens: 1
   });
 
-  Object.entries(sourceFiles).forEach(
-    ([name, source]) => {
-      assert.match(
-        source,
-        /createRealtimeListenerRegistry/,
-        `${name} must use the listener registry`
-      );
-    }
-  );
+  [
+    sourceFiles.app,
+    sourceFiles.characterCreator,
+    sourceFiles.monsterCreator,
+    sourceFiles.tokens
+  ].forEach((source) => {
+    assert.match(
+      source,
+      /createRealtimeListenerRegistry/
+    );
+  });
 
   assert.doesNotMatch(
     sourceFiles.app,
@@ -100,19 +109,19 @@ test("screen changes stop listeners that the destination does not need", () => {
 
 test("character creator subscribes only for the active library or template step", () => {
   assert.match(
-    sourceFiles.characterCreator,
-    /viewMode === "library"[\s\S]*requiredListeners\.add\("characters"\)/
+    sourceFiles.realtimePersistence,
+    /viewMode === "library"[\s\S]*new Set\(\["characters"\]\)/
   );
   assert.match(
-    sourceFiles.characterCreator,
+    sourceFiles.realtimePersistence,
     /class: "classes"[\s\S]*species: "species"[\s\S]*background: "backgrounds"/
   );
   assert.match(
-    sourceFiles.characterCreator,
-    /\{ clearCache: false \}/
+    sourceFiles.realtimePersistence,
+    /clearCache: false/
   );
   assert.match(
-    sourceFiles.characterCreator,
+    sourceFiles.realtimePersistence,
     /!isCurrent\(\)/
   );
 });
@@ -120,7 +129,7 @@ test("character creator subscribes only for the active library or template step"
 test("room-scoped listeners reject late callbacks from an old room", () => {
   [
     sourceFiles.app,
-    sourceFiles.characterCreator,
+    sourceFiles.realtimePersistence,
     sourceFiles.monsterCreator,
     sourceFiles.tokens
   ].forEach((source) => {

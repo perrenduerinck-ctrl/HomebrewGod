@@ -31,8 +31,8 @@ export function runCharacterCreatorSelfTests(context) {
     chooseSpeciesFromTemplate, chooseStoredDraftRecord, clampLevel, clampStepIndex, cleanArray, cleanImportSourceLabel,
     cleanString, cleanupDuplicateNonRepeatableAdvancementFeats, cleanupSection11PreviousPortrait, cleanupSection19PermanentListeners, cleanupSection20CharacterCreator, clearPendingDraftPersistence,
     clearSection11Portrait, clearSection11SpeciesMechanics, clearSection12Subclass, clearStoredDraft, cloneData, collectMalformedSourceValues,
-    collectSection12Features, collectSection12FeaturesForClassEntry, confirmDiscardUnsavedDraft, connectDraftPersistenceLifecycle, connectPopstateRouting, connectSection19Backgrounds,
-    connectSection19Characters, connectSection19Classes, connectSection19Listener, connectSection19PermanentListeners, connectSection19Species, connectWizardEvents,
+    collectSection12Features, collectSection12FeaturesForClassEntry, confirmDiscardUnsavedDraft, connectDraftPersistenceLifecycle, connectPopstateRouting,
+    connectSection19PermanentListeners, connectWizardEvents,
     copySection18Json, countSection14BackgroundSourceList, countSection14SkillSource, countSection14ValidBackgroundToolChoices, countSection14ValidSkillSource, countValidClassEntrySkillChoices,
     createAbilityMap, createCharacterLibraryCard, createCharacterPayload, createCharacterSheetView, createClassEntryId, createClassProgressionEntry,
     createDefaultClassTemplate, createDraftStorageRecord, createEmptyCharacter, createNormalAbilityCapScoreMap, createSection11PortraitFromFile, createSection13HpRollRecord,
@@ -78,7 +78,7 @@ export function runCharacterCreatorSelfTests(context) {
     getSection17FeatureCount, getSection17FinalizationValidation, getSection17Initiative, getSection17InventoryWeight, getSection17MigrationWarnings, getSection17PassivePerception,
     getSection17ProficiencyBonus, getSection17SkillEntry, getSection17SkillModifier, getSection17SpellCount, getSection17Warnings, getSection18CharacterCollection,
     getSection18CharacterCollectionName, getSection18CharacterDocument, getSection18CharacterPortraitUrl, getSection18DocumentSnapshotData, getSection18JsonText, getSection18MutationIdentity,
-    getSection18RecordRevisionMillis, getSection18RecordRoomCode, getSection18RecordType, getSection18TimestampMillis, getSection19CollectionName, getSection19RoomCollection,
+    getSection18RecordRevisionMillis, getSection18RecordRoomCode, getSection18RecordType, getSection18TimestampMillis, getSection19CollectionName,
     getSelectedClassTemplate, getSelectedDefaultFeatInstances, getSelectedSection12Subclass, getSelectedSection14Background, getSkillDefinitionByIdOrName, getSpeciesHpBonus,
     getSpeciesSourceLabel, getSpellSelectionLimits, getSpellSlotCastingOptions, getSpellSourceContexts, getSpellSourceId, getSpellSourceWarning,
     getSpellcastingClassOptions, getSpellcastingEntryForSpell, getSpellcastingFocusClassIds, getSpellcastingFocusSummary, getSpellcastingSummary, getSrd2014PactMagic,
@@ -115,7 +115,7 @@ export function runCharacterCreatorSelfTests(context) {
     normalizeSection12Subclass, normalizeSection14Background, normalizeSection15Item, normalizeSection16Feature, normalizeSection16Spell, normalizeSection19BackgroundRecord,
     normalizeSection19CharacterRecord, normalizeSection19ClassRecord, normalizeSection19SpeciesRecord, openCharacterFromLibrary, parseFeatChoiceSelections, parseSection12List,
     parseSection13HpRolls, parseSection14List, parseSection15ItemEditValue, parseSection18ImportedCharacter, performSection16Rest, persistDraftToSession,
-    prepareSection18Character, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord, readSection11PortraitFileAsDataUrl, readSection19SnapshotRecords,
+    prepareSection18Character, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord, readRealtimeSnapshotRecords, readSection11PortraitFileAsDataUrl,
     recalculateAbilityTotals, recalculateClassTotalLevel, recordRawEquipmentMigrationWarnings, refreshBuilderChrome, refreshClassProgressionDerivedValues, refreshElements,
     refreshLoadedClassDerivedValues, refreshSection13AbilitySummary, refreshSection13LevelProgression, refreshSection20CharacterCreator, refreshSelectedClassFeatures, refreshWizardElements,
     registerCharacterCreatorAction, registerCharacterCreatorChangeHandler, registerCharacterCreatorInputHandler, registerCharacterLibraryRenderer, registerCharacterStepCompletion, registerCharacterStepRenderer,
@@ -148,7 +148,7 @@ export function runCharacterCreatorSelfTests(context) {
     setSection12AsiChoiceValues, setSection12AsiFeat, setSection12AsiMode, setSection12CustomClassSkillNames, setSection12FeatChoiceValues, setSection12FeatureStoredChoices,
     setSection12MulticlassAddStatus, setSection13AbilityMethod, setSection13HpRollValue, setSection14BackgroundChoiceList, setSection14SkillEntry, setSection14StoredSkillChoice,
     setSimpleDraftField, setSourceProficiencyList, setStatus, skipSection14Background, slotsArrayToObject, sourceMatches,
-    splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter, stopSection19Listener, subtractCurrencyMaps,
+    splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter, subtractCurrencyMaps,
     syncClassLevelOrderToClassLevels, syncEquipmentCurrencyFromSources, syncFirstUnarmoredDefenseSource, syncSection12AdvancementChoice, syncSection12ArtificerInfusionsForLevel, syncSection12AsiChoicesForLevel,
     syncSection14BackgroundFeatures, syncSection16ClassSourceMetadata, syncSection16LegacySpellAliases, syncSection17CompletedSteps, syncSection18DerivedValues, toggleMulticlassSkillChoice,
     toggleMulticlassToolChoice, toggleSection12ArtificerInfusion, toggleSection12ClassFeatureChoice, toggleSection12RageState, toggleSection14Expertise, toggleSection14Skill,
@@ -13462,7 +13462,7 @@ export function runCharacterCreatorSelfTests(context) {
     );
 
     const staleInternalSnapshotRecords =
-      readSection19SnapshotRecords({
+      readRealtimeSnapshotRecords({
         docs: [
           {
             id: "real-firestore-doc-id",

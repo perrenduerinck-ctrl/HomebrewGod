@@ -2056,7 +2056,7 @@ test(
 
         if (
           pathname.endsWith(
-            "/characterCreator.fixed.js"
+            "/characterCreator.js"
           ) ||
           pathname.includes(
             "/characterCreator/"
@@ -2114,7 +2114,7 @@ test(
       creatorRequests.some(
         (pathname) => {
           return pathname.endsWith(
-            "/characterCreator.fixed.js"
+            "/characterCreator.js"
           );
         }
       )

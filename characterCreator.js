@@ -110,13 +110,20 @@ import { createFinishStep } from "./characterCreator/steps/finishStep.js?v=finis
 import { createEquipmentStep } from "./characterCreator/steps/equipmentStep.js?v=equipment-step-extraction-20260812";
 import { createSpellsStep } from "./characterCreator/steps/spellsStep.js?v=spells-step-extraction-20260803";
 import {
+  calculateAbilityModifier,
+  calculateAbilityModifiers,
   calculateCharacterCarryingCapacity,
+  calculateProficiencyBonus as getGenericProficiencyBonus,
   calculateRuleCarryingCapacity,
   calculateRuleFixedAverageHp,
+  calculateRuleManualHp,
   calculateRulePassiveScore,
+  calculateRuleRolledHp,
+  calculateRuleSavingThrowModifier,
   calculateRuleSkillModifier,
   calculateRuleSpellAttackBonus,
   calculateRuleSpellSaveDc,
+  deriveAbilityBaseFromFinalScores,
   SRD_2014_SIZE_CARRY_MULTIPLIERS
 } from "./characterCreator/rulesMath.js";
 import {
@@ -158,6 +165,18 @@ import {
 import {
   createRealtimeListenerRegistry
 } from "./realtimeListeners.js";
+import {
+  BUILDER_STEPS,
+  BUILDER_STEP_INDEX,
+  clampStepIndex,
+  getExactBuilderStepById,
+  getStepById,
+  getStepIndex
+} from "./characterCreator/configuration.js";
+import {
+  createCharacterRealtimePersistence,
+  readRealtimeSnapshotRecords
+} from "./characterCreator/realtimePersistence.js";
 import {
   applyGameplayAction,
   ensureGameplayState
@@ -252,109 +271,6 @@ export function createCharacterCreator(options = {}) {
       roomDmUid:
         roomData.dmUid || ""
     };
-  }
-
-
-// =====================================================
-// CHARACTER CREATOR SECTION 2 — BUILDER STEP DEFINITIONS
-// =====================================================
-
-  const BUILDER_STEPS = Object.freeze([
-    {
-      id: "basics",
-      label: "Character Basics",
-      shortLabel: "Basics",
-      description: "Name, portrait, identity, appearance, and general character details.",
-      required: true
-    },
-    {
-      id: "class",
-      label: "Class",
-      shortLabel: "Class",
-      description: "Choose a class from default, room, or imported templates.",
-      required: true
-    },
-    {
-      id: "background",
-      label: "Background",
-      shortLabel: "Background",
-      description: "Choose or create a background and its narrative details.",
-      required: false
-    },
-    {
-      id: "species",
-      label: "Species / Race",
-      shortLabel: "Species",
-      description: "Choose an ancestry template and make any ancestry-based choices.",
-      required: true
-    },
-    {
-      id: "abilities",
-      label: "Ability Scores",
-      shortLabel: "Abilities",
-      description: "Use manual entry, standard array, point buy, or rolled scores.",
-      required: true
-    },
-    {
-      id: "equipment",
-      label: "Equipment",
-      shortLabel: "Equipment",
-      description: "Choose starting gear and manage inventory and currency.",
-      required: false
-    },
-    {
-      id: "spells",
-      label: "Spells / Features",
-      shortLabel: "Spells",
-      description: "Review class features, ancestry traits, spells, and custom abilities.",
-      required: false
-    },
-    {
-      id: "review",
-      label: "Review Sheet",
-      shortLabel: "Review",
-      description: "Review calculated values, warnings, and unfinished selections.",
-      required: true
-    },
-    {
-      id: "save",
-      label: "Save / Export / Token",
-      shortLabel: "Finish",
-      description: "Save, finalize, back up, and create a character-linked token.",
-      required: true
-    }
-  ]);
-
-  const BUILDER_STEP_INDEX = new Map(
-    BUILDER_STEPS.map((step, index) => [step.id, index])
-  );
-
-  function getStepById(stepId) {
-    return BUILDER_STEPS.find((step) => step.id === stepId) || BUILDER_STEPS[0];
-  }
-
-  function getExactBuilderStepById(stepId) {
-    const cleanStepId = String(stepId || "").trim();
-    return BUILDER_STEPS.find((step) => step.id === cleanStepId) || null;
-  }
-
-  function getStepIndex(stepId) {
-    return BUILDER_STEP_INDEX.has(stepId)
-      ? BUILDER_STEP_INDEX.get(stepId)
-      : 0;
-  }
-
-  function clampStepIndex(index) {
-    const number = Number(index);
-
-    if (!Number.isFinite(number)) {
-      return 0;
-    }
-
-    return Math.max(
-      0,
-      Math.min(BUILDER_STEPS.length - 1, Math.round(number))
-    );
   }
 
 
@@ -2737,91 +2653,6 @@ export function createCharacterCreator(options = {}) {
     return totals;
   }
 
-  function deriveAbilityBaseFromFinalScores(
-    finalScores,
-    bonusTotals,
-    fallbackValue = 10
-  ) {
-    const scores =
-      normalizeAbilityMap(
-        finalScores,
-        fallbackValue
-      );
-
-    const bonuses =
-      normalizeAbilityMap(
-        bonusTotals,
-        0
-      );
-
-    const base =
-      createAbilityMap(fallbackValue);
-
-    ABILITY_DEFINITIONS.forEach(
-      (ability) => {
-        base[ability.id] =
-          Math.max(
-            1,
-            Math.min(
-              30,
-              Math.round(
-                safeNumber(
-                  scores[ability.id],
-                  fallbackValue
-                ) -
-                safeNumber(
-                  bonuses[ability.id],
-                  0
-                )
-              )
-            )
-          );
-      }
-    );
-
-    return base;
-  }
-
-  function calculateAbilityModifier(score) {
-    const cleanScore = safeNumber(score, 10);
-
-    return derivedCache.get(
-      "ability-modifier",
-      cleanScore,
-      () => Math.floor((cleanScore - 10) / 2)
-    );
-  }
-
-  function calculateAbilityModifiers(scores) {
-    const cleanScores = normalizeAbilityMap(scores, 10);
-
-    return {
-      str: calculateAbilityModifier(cleanScores.str),
-      dex: calculateAbilityModifier(cleanScores.dex),
-      con: calculateAbilityModifier(cleanScores.con),
-      int: calculateAbilityModifier(cleanScores.int),
-      wis: calculateAbilityModifier(cleanScores.wis),
-      cha: calculateAbilityModifier(cleanScores.cha)
-    };
-  }
-
-  function getGenericProficiencyBonus(level) {
-    const safeLevel = clampLevel(level);
-
-    return derivedCache.get(
-      "proficiency-bonus",
-      safeLevel,
-      () => {
-        if (safeLevel >= 17) return 6;
-        if (safeLevel >= 13) return 5;
-        if (safeLevel >= 9) return 4;
-        if (safeLevel >= 5) return 3;
-
-        return 2;
-      }
-    );
-  }
-
   function getStartingClassEntry(character) {
     const classes = character?.classProgression?.classes;
 
@@ -4840,23 +4671,6 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
-  function calculateRuleSavingThrowModifier({
-    abilityModifier = 0,
-    proficiencyBonus = 0,
-    proficient = false,
-    bonus = 0
-  } = {}) {
-    return (
-      safeNumber(abilityModifier, 0) +
-      (
-        proficient
-          ? safeNumber(proficiencyBonus, 0)
-          : 0
-      ) +
-      safeNumber(bonus, 0)
-    );
-  }
-
   function isSavingThrowProficient(
     character,
     abilityId
@@ -5284,66 +5098,6 @@ export function createCharacterCreator(options = {}) {
           0
         )
     };
-  }
-
-  function calculateRuleRolledHp({
-    hitDie,
-    level,
-    constitutionModifier,
-    rolls = [],
-    levelOneValue = null
-  }) {
-    const dieSize =
-      Math.max(
-        1,
-        safeNumber(
-          String(hitDie || "d8").replace(/[^0-9]/g, ""),
-          8
-        )
-      );
-
-    const cleanLevel = clampLevel(level);
-    const conModifier =
-      safeNumber(constitutionModifier, 0);
-
-    let total =
-      Math.max(
-        1,
-        levelOneValue === null ||
-        levelOneValue === undefined
-          ? dieSize + conModifier
-          : safeNumber(
-              levelOneValue,
-              dieSize + conModifier
-            )
-      );
-
-    for (let index = 2; index <= cleanLevel; index += 1) {
-      const roll =
-        Math.max(
-          1,
-          Math.min(
-            dieSize,
-            safeNumber(
-              rolls[index - 2],
-              Math.floor(dieSize / 2) + 1
-            )
-          )
-        );
-
-      total += Math.max(1, roll + conModifier);
-    }
-
-    return total;
-  }
-
-  function calculateRuleManualHp({
-    manualOverride
-  }) {
-    return Math.max(
-      1,
-      safeNumber(manualOverride, 1)
-    );
   }
 
   function resolveClassTemplateForEntry(
@@ -11052,8 +10806,8 @@ export function createCharacterCreator(options = {}) {
       chooseSpeciesFromTemplate, chooseStoredDraftRecord, clampLevel, clampStepIndex, cleanArray, cleanImportSourceLabel,
       cleanString, cleanupDuplicateNonRepeatableAdvancementFeats, cleanupSection11PreviousPortrait, cleanupSection19PermanentListeners, cleanupSection20CharacterCreator, clearPendingDraftPersistence,
       clearSection11Portrait, clearSection11SpeciesMechanics, clearSection12Subclass, clearStoredDraft, cloneData, collectMalformedSourceValues,
-      collectSection12Features, collectSection12FeaturesForClassEntry, confirmDiscardUnsavedDraft, connectDraftPersistenceLifecycle, connectPopstateRouting, connectSection19Backgrounds,
-      connectSection19Characters, connectSection19Classes, connectSection19Listener, connectSection19PermanentListeners, connectSection19Species, connectWizardEvents,
+      collectSection12Features, collectSection12FeaturesForClassEntry, confirmDiscardUnsavedDraft, connectDraftPersistenceLifecycle, connectPopstateRouting,
+      connectSection19PermanentListeners, connectWizardEvents,
       copySection18Json, countSection14BackgroundSourceList, countSection14SkillSource, countSection14ValidBackgroundToolChoices, countSection14ValidSkillSource, countValidClassEntrySkillChoices,
       createAbilityMap, createCharacterLibraryCard, createCharacterPayload, createCharacterSheetView, createClassEntryId, createClassProgressionEntry,
       createDefaultClassTemplate, createDraftStorageRecord, createEmptyCharacter, createNormalAbilityCapScoreMap, createSection11PortraitFromFile, createSection13HpRollRecord,
@@ -11099,7 +10853,7 @@ export function createCharacterCreator(options = {}) {
       getSection17FeatureCount, getSection17FinalizationValidation, getSection17Initiative, getSection17InventoryWeight, getSection17MigrationWarnings, getSection17PassivePerception,
       getSection17ProficiencyBonus, getSection17SkillEntry, getSection17SkillModifier, getSection17SpellCount, getSection17Warnings, getSection18CharacterCollection,
       getSection18CharacterCollectionName, getSection18CharacterDocument, getSection18CharacterPortraitUrl, getSection18DocumentSnapshotData, getSection18JsonText, getSection18MutationIdentity,
-      getSection18RecordRevisionMillis, getSection18RecordRoomCode, getSection18RecordType, getSection18TimestampMillis, getSection19CollectionName, getSection19RoomCollection,
+      getSection18RecordRevisionMillis, getSection18RecordRoomCode, getSection18RecordType, getSection18TimestampMillis, getSection19CollectionName,
       getSelectedClassTemplate, getSelectedDefaultFeatInstances, getSelectedSection12Subclass, getSelectedSection14Background, getSkillDefinitionByIdOrName, getSpeciesHpBonus,
       getSpeciesSourceLabel, getSpellSelectionLimits, getSpellSlotCastingOptions, getSpellSourceContexts, getSpellSourceId, getSpellSourceWarning,
       getSpellcastingClassOptions, getSpellcastingEntryForSpell, getSpellcastingFocusClassIds, getSpellcastingFocusSummary, getSpellcastingSummary, getSrd2014PactMagic,
@@ -11136,7 +10890,7 @@ export function createCharacterCreator(options = {}) {
       normalizeSection12Subclass, normalizeSection14Background, normalizeSection15Item, normalizeSection16Feature, normalizeSection16Spell, normalizeSection19BackgroundRecord,
       normalizeSection19CharacterRecord, normalizeSection19ClassRecord, normalizeSection19SpeciesRecord, openCharacterFromLibrary, parseFeatChoiceSelections, parseSection12List,
       parseSection13HpRolls, parseSection14List, parseSection15ItemEditValue, parseSection18ImportedCharacter, performSection16Rest, persistDraftToSession,
-      prepareSection18Character, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord, readSection11PortraitFileAsDataUrl, readSection19SnapshotRecords,
+      prepareSection18Character, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord, readRealtimeSnapshotRecords, readSection11PortraitFileAsDataUrl,
       recalculateAbilityTotals, recalculateClassTotalLevel, recordRawEquipmentMigrationWarnings, refreshBuilderChrome, refreshClassProgressionDerivedValues, refreshElements,
       refreshLoadedClassDerivedValues, refreshSection13AbilitySummary, refreshSection13LevelProgression, refreshSection20CharacterCreator, refreshSelectedClassFeatures, refreshWizardElements,
       registerCharacterCreatorAction, registerCharacterCreatorChangeHandler, registerCharacterCreatorInputHandler, registerCharacterLibraryRenderer, registerCharacterStepCompletion, registerCharacterStepRenderer,
@@ -11169,7 +10923,7 @@ export function createCharacterCreator(options = {}) {
       setSection12AsiChoiceValues, setSection12AsiFeat, setSection12AsiMode, setSection12CustomClassSkillNames, setSection12FeatChoiceValues, setSection12FeatureStoredChoices,
       setSection12MulticlassAddStatus, setSection13AbilityMethod, setSection13HpRollValue, setSection14BackgroundChoiceList, setSection14SkillEntry, setSection14StoredSkillChoice,
       setSimpleDraftField, setSourceProficiencyList, setStatus, skipSection14Background, slotsArrayToObject, sourceMatches,
-      splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter, stopSection19Listener, subtractCurrencyMaps,
+      splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter, subtractCurrencyMaps,
       syncClassLevelOrderToClassLevels, syncEquipmentCurrencyFromSources, syncFirstUnarmoredDefenseSource, syncSection12AdvancementChoice, syncSection12ArtificerInfusionsForLevel, syncSection12AsiChoicesForLevel,
       syncSection14BackgroundFeatures, syncSection16ClassSourceMetadata, syncSection16LegacySpellAliases, syncSection17CompletedSteps, syncSection18DerivedValues, toggleMulticlassSkillChoice,
       toggleMulticlassToolChoice, toggleSection12ArtificerInfusion, toggleSection12ClassFeatureChoice, toggleSection12RageState, toggleSection14Expertise, toggleSection14Skill,
@@ -37317,8 +37071,8 @@ export function createCharacterCreator(options = {}) {
     chooseStoredDraftRecord, clampLevel, clampStepIndex, cleanArray, cleanImportSourceLabel, cleanString,
     cleanupDuplicateNonRepeatableAdvancementFeats, cleanupSection11PreviousPortrait, cleanupSection19PermanentListeners, cleanupSection20CharacterCreator, clearPendingDraftPersistence, clearSection11Portrait,
     clearSection11SpeciesMechanics, clearSection12Subclass, clearStoredDraft, cloneData, collectMalformedSourceValues, collectSection12Features,
-    collectSection12FeaturesForClassEntry, confirmDiscardUnsavedDraft, connectDraftPersistenceLifecycle, connectPopstateRouting, connectSection19Backgrounds, connectSection19Characters,
-    connectSection19Classes, connectSection19Listener, connectSection19PermanentListeners, connectSection19Species, connectWizardEvents, countSection14BackgroundSourceList,
+    collectSection12FeaturesForClassEntry, confirmDiscardUnsavedDraft, connectDraftPersistenceLifecycle, connectPopstateRouting,
+    connectSection19PermanentListeners, connectWizardEvents, countSection14BackgroundSourceList,
     countSection14SkillSource, countSection14ValidBackgroundToolChoices, countSection14ValidSkillSource, countValidClassEntrySkillChoices, createAbilityMap, createCharacterLibraryCard,
     createCharacterPayload, createCharacterSheetView, createClassEntryId, createClassProgressionEntry, createDefaultClassTemplate, createDraftStorageRecord,
     createEmptyCharacter, createNormalAbilityCapScoreMap, createSection11PortraitFromFile, createSection13HpRollRecord, createSrdClassTemplate, createSrdFeature,
@@ -37362,7 +37116,7 @@ export function createCharacterCreator(options = {}) {
     getSection16SpellById, getSection16SpellReferenceId, getSection17AbilityName, getSection17CarryingCapacity, getSection17CharacterSheetView, getSection17ClassProgressionEntries,
     getSection17CompletedStepIds, getSection17FeatureCount, getSection17FinalizationValidation, getSection17Initiative, getSection17InventoryWeight, getSection17MigrationWarnings,
     getSection17PassivePerception, getSection17ProficiencyBonus, getSection17SkillEntry, getSection17SkillModifier, getSection17SpellCount, getSection17Warnings,
-    getSection18MutationIdentity, getSection19CollectionName, getSection19RoomCollection, getSelectedClassTemplate, getSelectedDefaultFeatInstances, getSelectedSection12Subclass,
+    getSection18MutationIdentity, getSection19CollectionName, getSelectedClassTemplate, getSelectedDefaultFeatInstances, getSelectedSection12Subclass,
     getSelectedSection14Background, getSkillDefinitionByIdOrName, getSpeciesHpBonus, getSpeciesSourceLabel, getSpellSelectionLimits, getSpellSlotCastingOptions,
     getSpellSourceContexts, getSpellSourceId, getSpellSourceWarning, getSpellcastingClassOptions, getSpellcastingEntryForSpell, getSpellcastingFocusClassIds,
     getSpellcastingFocusSummary, getSpellcastingSummary, getSrd2014PactMagic, getSrd2014SpellSlots, getStartingClassEntry, getStepById,
@@ -37396,7 +37150,7 @@ export function createCharacterCreator(options = {}) {
     normalizeSection15Item, normalizeSection16Feature, normalizeSection16Spell, normalizeSection19BackgroundRecord, normalizeSection19CharacterRecord, normalizeSection19ClassRecord,
     normalizeSection19SpeciesRecord, openCharacterFromLibrary, parseFeatChoiceSelections, parseSection12List, parseSection13HpRolls, parseSection14List,
     parseSection15ItemEditValue, performSection16Rest, persistDraftToSession, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord,
-    readSection11PortraitFileAsDataUrl, readSection19SnapshotRecords, recalculateAbilityTotals, recalculateClassTotalLevel, recordRawEquipmentMigrationWarnings, refreshBuilderChrome,
+    readSection11PortraitFileAsDataUrl, recalculateAbilityTotals, recalculateClassTotalLevel, recordRawEquipmentMigrationWarnings, refreshBuilderChrome,
     refreshClassProgressionDerivedValues, refreshElements, refreshLoadedClassDerivedValues, refreshSection13AbilitySummary, refreshSection13LevelProgression, refreshSection20CharacterCreator,
     refreshSelectedClassFeatures, refreshWizardElements, registerCharacterCreatorAction, registerCharacterCreatorChangeHandler, registerCharacterCreatorInputHandler, registerCharacterLibraryRenderer,
     registerCharacterStepCompletion, registerCharacterStepRenderer, removeAbilityBonusSourcesByPrefix, removeContainerAndContents, removeContainerPreserveContents, removeInnateSpellsBySourcePrefixes,
@@ -37428,7 +37182,7 @@ export function createCharacterCreator(options = {}) {
     setSection12FeatChoiceValues, setSection12FeatureStoredChoices, setSection12MulticlassAddStatus, setSection13AbilityMethod, setSection13HpRollValue, setSection14BackgroundChoiceList,
     setSection14SkillEntry, setSection14StoredSkillChoice, setSimpleDraftField, setSourceProficiencyList, setStatus, skipSection14Background,
     slotsArrayToObject, sourceMatches, splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter,
-    stopSection19Listener, subtractCurrencyMaps, syncClassLevelOrderToClassLevels, syncEquipmentCurrencyFromSources, syncFirstUnarmoredDefenseSource, syncSection12AdvancementChoice,
+    subtractCurrencyMaps, syncClassLevelOrderToClassLevels, syncEquipmentCurrencyFromSources, syncFirstUnarmoredDefenseSource, syncSection12AdvancementChoice,
     syncSection12ArtificerInfusionsForLevel, syncSection12AsiChoicesForLevel, syncSection14BackgroundFeatures, syncSection16ClassSourceMetadata, syncSection16LegacySpellAliases, syncSection17CompletedSteps,
     toggleMulticlassSkillChoice, toggleMulticlassToolChoice, toggleSection12ArtificerInfusion, toggleSection12ClassFeatureChoice, toggleSection12RageState, toggleSection14Expertise,
     toggleSection14Skill, toggleSection15ItemState, toggleSection16Feat, toggleSection16MysticArcanum, toggleSection16SpellKnown, toggleSection16SpellPrepared,
@@ -37543,60 +37297,6 @@ export function createCharacterCreator(options = {}) {
       options?.[secondaryOption],
       fallback
     );
-  }
-
-  function getSection19RoomCollection(
-    collectionName
-  ) {
-    const roomCode = getRoomCode();
-
-    if (!roomCode) {
-      throw new Error(
-        "Open a room before loading character creator data."
-      );
-    }
-
-    if (!hasFirestoreTools()) {
-      throw new Error(
-        "The character creator is missing its Firestore tools."
-      );
-    }
-
-    return deps.collection(
-      deps.db,
-      "rooms",
-      roomCode,
-      collectionName
-    );
-  }
-
-  function readSection19SnapshotRecords(
-    snapshot
-  ) {
-    const docs = Array.isArray(snapshot?.docs)
-      ? snapshot.docs
-      : [];
-
-    return docs.map((documentSnapshot) => {
-      const data =
-        typeof documentSnapshot.data === "function"
-          ? documentSnapshot.data()
-          : {};
-
-      const docId =
-        String(
-          documentSnapshot.id ||
-          data?.docId ||
-          data?.id ||
-          ""
-        );
-
-      return {
-        ...(data || {}),
-        id: data?.id || docId,
-        docId
-      };
-    });
   }
 
   function normalizeSection19CharacterRecord(
@@ -37755,25 +37455,6 @@ export function createCharacterCreator(options = {}) {
     return normalized;
   }
 
-  function stopSection19Listener(
-    unsubscribeKey,
-    roomKey,
-    cacheKey,
-    { clearCache = true } = {}
-  ) {
-    section19Listeners.stop(
-      unsubscribeKey
-    );
-
-    if (clearCache) {
-      creatorState[roomKey] = null;
-    }
-
-    if (cacheKey && clearCache) {
-      creatorState[cacheKey] = [];
-    }
-  }
-
   function refreshCreatorForSection19Cache(
     cacheKey
   ) {
@@ -37806,334 +37487,97 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
-  function connectSection19Listener({
-    label,
-    collectionName,
-    roomKey,
-    unsubscribeKey,
-    cacheKey,
-    normalizeRecord,
-    optional = false
-  }) {
-    const roomCode = getRoomCode();
-
-    if (!roomCode || !hasFirestoreTools()) {
-      stopSection19Listener(
-        unsubscribeKey,
-        roomKey,
-        cacheKey
-      );
-
-      return false;
-    }
-
-    if (
-      creatorState[roomKey] === roomCode &&
-      section19Listeners.has(
-        unsubscribeKey,
-        roomCode
-      )
-    ) {
-      return true;
-    }
-
-    stopSection19Listener(
-      unsubscribeKey,
-      roomKey,
-      cacheKey
-    );
-
-    creatorState[roomKey] = roomCode;
-
-    try {
-      section19Listeners.connect(
-        unsubscribeKey,
-        roomCode,
-        ({ isCurrent }) => {
-          return deps.onSnapshot(
-          getSection19RoomCollection(
-            collectionName
-          ),
-
-          (snapshot) => {
-            if (
-              !isCurrent() ||
-              creatorState[roomKey] !==
-                roomCode
-            ) {
-              return;
-            }
-
-            creatorState[cacheKey] =
-              readSection19SnapshotRecords(
-                snapshot
-              ).map(normalizeRecord);
-
-            refreshCreatorForSection19Cache(
-              cacheKey
-            );
-          },
-
-          (error) => {
-            if (!isCurrent()) {
-              return;
-            }
-
-            const permissionDenied =
-              error?.code === "permission-denied";
-
-            creatorState[cacheKey] = [];
-
-            stopSection19Listener(
-              unsubscribeKey,
-              roomKey,
-              cacheKey
-            );
-
-            if (optional && permissionDenied) {
-              console.warn(
-                `Optional room ${label} unavailable due to permissions. Default character creator templates still work.`,
-                error
-              );
-            } else if (optional) {
-              console.warn(
-                `Optional room ${label} could not be loaded. Default character creator templates still work.`,
-                error
-              );
-
-              setStatus(
-                `Could not load optional room ${label}; using defaults.`
-              );
-            } else {
-              console.error(
-                `Could not load character creator ${label}:`,
-                error
-              );
-
-              setStatus(
-                `Could not load ${label}.`
-              );
-            }
-
-            refreshCreatorForSection19Cache(
-              cacheKey
-            );
-          }
-          );
-        }
-      );
-
-      return true;
-    } catch (error) {
-      const permissionDenied =
-        error?.code === "permission-denied";
-
-      if (optional && permissionDenied) {
-        console.warn(
-          `Optional room ${label} listener unavailable due to permissions. Default character creator templates still work.`,
-          error
-        );
-      } else if (optional) {
-        console.warn(
-          `Optional room ${label} listener could not start. Default character creator templates still work.`,
-          error
-        );
-
-        setStatus(
-          `Could not connect optional room ${label}; using defaults.`
-        );
-      } else {
-        console.error(
-          `Could not start character creator ${label} listener:`,
-          error
-        );
-
-        setStatus(
-          `Could not connect ${label}.`
-        );
-      }
-
-      stopSection19Listener(
-        unsubscribeKey,
-        roomKey,
-        cacheKey
-      );
-
-      return false;
-    }
-  }
-
-  function connectSection19Characters() {
-    return connectSection19Listener({
-      label: "characters",
-
-      collectionName:
-        getSection18CharacterCollectionName(),
-
-      roomKey: "characterRoomCode",
-      unsubscribeKey: "characterUnsubscribe",
-      cacheKey: "characterCache",
-      normalizeRecord:
-        normalizeSection19CharacterRecord
+  const section19Persistence =
+    createCharacterRealtimePersistence({
+      deps,
+      listeners: section19Listeners,
+      getRoomCode,
+      hasFirestoreTools,
+      getState: () => creatorState,
+      onCacheChanged:
+        refreshCreatorForSection19Cache,
+      setStatus
     });
-  }
 
-  function connectSection19Classes() {
-    return connectSection19Listener({
-      label: "class templates",
-
-      collectionName:
-        getSection19CollectionName(
-          "classCollectionName",
-          "classTemplatesCollectionName",
-          "classes"
-        ),
-
-      roomKey: "classRoomCode",
-      unsubscribeKey: "classUnsubscribe",
-      cacheKey: "roomClassCache",
-      normalizeRecord:
-        normalizeSection19ClassRecord,
-      optional: true
-    });
-  }
-
-  function connectSection19Species() {
-    return connectSection19Listener({
-      label: "species templates",
-
-      collectionName:
-        getSection19CollectionName(
-          "speciesCollectionName",
-          "speciesTemplatesCollectionName",
-          "species"
-        ),
-
-      roomKey: "speciesRoomCode",
-      unsubscribeKey: "speciesUnsubscribe",
-      cacheKey: "roomSpeciesCache",
-      normalizeRecord:
-        normalizeSection19SpeciesRecord,
-      optional: true
-    });
-  }
-
-  function connectSection19Backgrounds() {
-    return connectSection19Listener({
-      label: "background templates",
-
-      collectionName:
-        getSection19CollectionName(
-          "backgroundCollectionName",
-          "backgroundTemplatesCollectionName",
-          "backgrounds"
-        ),
-
-      roomKey: "backgroundRoomCode",
-      unsubscribeKey: "backgroundUnsubscribe",
-      cacheKey: "roomBackgroundCache",
-      normalizeRecord:
-        normalizeSection19BackgroundRecord,
-      optional: true
-    });
-  }
-
-  function connectSection19PermanentListeners() {
-    const requiredListeners = new Set();
-
-    if (creatorState.viewMode === "library") {
-      requiredListeners.add("characters");
-    } else if (
-      creatorState.viewMode === "builder"
-    ) {
-      const listenerByStep = {
-        class: "classes",
-        species: "species",
-        background: "backgrounds"
-      };
-      const required = listenerByStep[
-        creatorState.currentStepId
-      ];
-
-      if (required) {
-        requiredListeners.add(required);
-      }
-    }
-
-    const listeners = [
+  function getSection19ListenerDescriptors() {
+    return [
       {
         id: "characters",
-        connect: connectSection19Characters,
-        unsubscribeKey: "characterUnsubscribe",
+        label: "characters",
+        listenerName: "characters",
+        collectionName:
+          getSection18CharacterCollectionName(),
         roomKey: "characterRoomCode",
-        cacheKey: "characterCache"
+        cacheKey: "characterCache",
+        normalizeRecord:
+          normalizeSection19CharacterRecord
       },
       {
         id: "classes",
-        connect: connectSection19Classes,
-        unsubscribeKey: "classUnsubscribe",
+        label: "class templates",
+        listenerName: "classes",
+        collectionName:
+          getSection19CollectionName(
+            "classCollectionName",
+            "classTemplatesCollectionName",
+            "classes"
+          ),
         roomKey: "classRoomCode",
-        cacheKey: "roomClassCache"
+        cacheKey: "roomClassCache",
+        normalizeRecord:
+          normalizeSection19ClassRecord,
+        optional: true
       },
       {
         id: "species",
-        connect: connectSection19Species,
-        unsubscribeKey: "speciesUnsubscribe",
+        label: "species templates",
+        listenerName: "species",
+        collectionName:
+          getSection19CollectionName(
+            "speciesCollectionName",
+            "speciesTemplatesCollectionName",
+            "species"
+          ),
         roomKey: "speciesRoomCode",
-        cacheKey: "roomSpeciesCache"
+        cacheKey: "roomSpeciesCache",
+        normalizeRecord:
+          normalizeSection19SpeciesRecord,
+        optional: true
       },
       {
         id: "backgrounds",
-        connect: connectSection19Backgrounds,
-        unsubscribeKey: "backgroundUnsubscribe",
+        label: "background templates",
+        listenerName: "backgrounds",
+        collectionName:
+          getSection19CollectionName(
+            "backgroundCollectionName",
+            "backgroundTemplatesCollectionName",
+            "backgrounds"
+          ),
         roomKey: "backgroundRoomCode",
-        cacheKey: "roomBackgroundCache"
+        cacheKey: "roomBackgroundCache",
+        normalizeRecord:
+          normalizeSection19BackgroundRecord,
+        optional: true
       }
     ];
+  }
 
-    listeners.forEach((listener) => {
-      if (requiredListeners.has(listener.id)) {
-        listener.connect();
-        return;
+  function connectSection19PermanentListeners() {
+    return section19Persistence.sync(
+      getSection19ListenerDescriptors(),
+      {
+        viewMode: creatorState.viewMode,
+        currentStepId:
+          creatorState.currentStepId
       }
-
-      stopSection19Listener(
-        listener.unsubscribeKey,
-        listener.roomKey,
-        listener.cacheKey,
-        { clearCache: false }
-      );
-    });
-
-    return section19Listeners.getSnapshot();
+    );
   }
 
   function cleanupSection19PermanentListeners() {
-    stopSection19Listener(
-      "characterUnsubscribe",
-      "characterRoomCode",
-      "characterCache"
+    return section19Persistence.cleanup(
+      getSection19ListenerDescriptors()
     );
-
-    stopSection19Listener(
-      "classUnsubscribe",
-      "classRoomCode",
-      "roomClassCache"
-    );
-
-    stopSection19Listener(
-      "speciesUnsubscribe",
-      "speciesRoomCode",
-      "roomSpeciesCache"
-    );
-
-    stopSection19Listener(
-      "backgroundUnsubscribe",
-      "backgroundRoomCode",
-      "roomBackgroundCache"
-    );
-
-    return section19Listeners.getSnapshot();
   }
 
 

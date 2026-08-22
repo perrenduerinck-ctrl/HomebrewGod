@@ -91,7 +91,7 @@ test("Load More expands a catalog in bounded batches and keeps selected matches 
 
 test("every large Character Creator picker uses bounded catalog results", () => {
   const creatorSource = readSource(
-    "characterCreator.fixed.js"
+    "characterCreator.js"
   );
   const equipmentSource = readSource(
     "characterCreator/steps/equipmentStep.js"

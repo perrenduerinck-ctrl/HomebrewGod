@@ -308,7 +308,7 @@ const creatorSource =
   await readFile(
     path.join(
       root,
-      "characterCreator.fixed.js"
+      "characterCreator.js"
     ),
     "utf8"
   );
@@ -318,7 +318,7 @@ const creatorLineCount =
 
 if (creatorLineCount >= 55000) {
   errors.push(
-    `characterCreator.fixed.js has ${creatorLineCount} lines; the Phase 19 ceiling is 54,999.`
+    `characterCreator.js has ${creatorLineCount} lines; the Phase 19 ceiling is 54,999.`
   );
 }
 

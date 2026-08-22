@@ -230,7 +230,7 @@
         "sheetPresentation"
       ];
       const [creatorSource, ...moduleSources] = await Promise.all([
-        fetch("../characterCreator.fixed.js?v=custom-movement-speeds-20260731").then((response) => response.text()),
+        fetch("../characterCreator.js?v=priority8-20260821").then((response) => response.text()),
         ...moduleNames.map((name) => {
           return fetch(`../characterCreator/${name}.js?v=phase20-20260727`).then((response) => response.text());
         })
@@ -256,7 +256,7 @@
       window.__CHARACTER_MODULES_TEST__ = testState;
       document.body.dataset.testStatus = testState.passed ? "pass" : "fail";
       result.textContent = testState.passed
-        ? `PASS — ${assertions} Phase 19 character module assertions\ncharacterCreator.fixed.js: ${creatorLineCount} lines`
+        ? `PASS — ${assertions} Phase 19 character module assertions\ncharacterCreator.js: ${creatorLineCount} lines`
         : `FAIL — ${failures.length} of ${assertions} assertions failed\n${failures.join("\n")}`;
 
       if (!testState.passed) {

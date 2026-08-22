@@ -10,7 +10,7 @@ const source = fs.readFileSync(
   path.join(
     testDirectory,
     "..",
-    "characterCreator.fixed.js"
+    "characterCreator.js"
   ),
   "utf8"
 );

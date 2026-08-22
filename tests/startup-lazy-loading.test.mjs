@@ -12,7 +12,7 @@ test(
   () => {
     assert.doesNotMatch(
       appSource,
-      /import\s+\{\s*createCharacterCreator\s*\}\s+from\s+["']\.\/characterCreator\.fixed\.js["']/
+      /import\s+\{\s*createCharacterCreator\s*\}\s+from\s+["']\.\/characterCreator\.js["']/
     );
     assert.doesNotMatch(
       appSource,
@@ -20,7 +20,7 @@ test(
     );
     assert.match(
       appSource,
-      /characterCreatorModulePromise\s*=\s*import\(\s*["']\.\/characterCreator\.fixed\.js["']\s*\)/
+      /characterCreatorModulePromise\s*=\s*import\(\s*["']\.\/characterCreator\.js["']\s*\)/
     );
     assert.match(
       appSource,
@@ -83,7 +83,7 @@ test(
     );
     assert.doesNotMatch(
       monsterInitializer,
-      /characterCreator\.fixed\.js/
+      /characterCreator\.js/
     );
   }
 );
