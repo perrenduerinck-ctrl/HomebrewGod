@@ -174,7 +174,8 @@ import {
   getStepIndex
 } from "./characterCreator/configuration.js";
 import {
-  createCharacterRealtimePersistence
+  createCharacterRealtimePersistence,
+  readRealtimeSnapshotRecords
 } from "./characterCreator/realtimePersistence.js";
 import {
   applyGameplayAction,
@@ -10852,7 +10853,7 @@ export function createCharacterCreator(options = {}) {
       getSection17FeatureCount, getSection17FinalizationValidation, getSection17Initiative, getSection17InventoryWeight, getSection17MigrationWarnings, getSection17PassivePerception,
       getSection17ProficiencyBonus, getSection17SkillEntry, getSection17SkillModifier, getSection17SpellCount, getSection17Warnings, getSection18CharacterCollection,
       getSection18CharacterCollectionName, getSection18CharacterDocument, getSection18CharacterPortraitUrl, getSection18DocumentSnapshotData, getSection18JsonText, getSection18MutationIdentity,
-      getSection18RecordRevisionMillis, getSection18RecordRoomCode, getSection18RecordType, getSection18TimestampMillis, getSection19CollectionName, getSection19RoomCollection,
+      getSection18RecordRevisionMillis, getSection18RecordRoomCode, getSection18RecordType, getSection18TimestampMillis, getSection19CollectionName,
       getSelectedClassTemplate, getSelectedDefaultFeatInstances, getSelectedSection12Subclass, getSelectedSection14Background, getSkillDefinitionByIdOrName, getSpeciesHpBonus,
       getSpeciesSourceLabel, getSpellSelectionLimits, getSpellSlotCastingOptions, getSpellSourceContexts, getSpellSourceId, getSpellSourceWarning,
       getSpellcastingClassOptions, getSpellcastingEntryForSpell, getSpellcastingFocusClassIds, getSpellcastingFocusSummary, getSpellcastingSummary, getSrd2014PactMagic,
@@ -10889,7 +10890,7 @@ export function createCharacterCreator(options = {}) {
       normalizeSection12Subclass, normalizeSection14Background, normalizeSection15Item, normalizeSection16Feature, normalizeSection16Spell, normalizeSection19BackgroundRecord,
       normalizeSection19CharacterRecord, normalizeSection19ClassRecord, normalizeSection19SpeciesRecord, openCharacterFromLibrary, parseFeatChoiceSelections, parseSection12List,
       parseSection13HpRolls, parseSection14List, parseSection15ItemEditValue, parseSection18ImportedCharacter, performSection16Rest, persistDraftToSession,
-      prepareSection18Character, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord, readSection11PortraitFileAsDataUrl, readSection19SnapshotRecords,
+      prepareSection18Character, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord, readRealtimeSnapshotRecords, readSection11PortraitFileAsDataUrl,
       recalculateAbilityTotals, recalculateClassTotalLevel, recordRawEquipmentMigrationWarnings, refreshBuilderChrome, refreshClassProgressionDerivedValues, refreshElements,
       refreshLoadedClassDerivedValues, refreshSection13AbilitySummary, refreshSection13LevelProgression, refreshSection20CharacterCreator, refreshSelectedClassFeatures, refreshWizardElements,
       registerCharacterCreatorAction, registerCharacterCreatorChangeHandler, registerCharacterCreatorInputHandler, registerCharacterLibraryRenderer, registerCharacterStepCompletion, registerCharacterStepRenderer,
@@ -10922,7 +10923,7 @@ export function createCharacterCreator(options = {}) {
       setSection12AsiChoiceValues, setSection12AsiFeat, setSection12AsiMode, setSection12CustomClassSkillNames, setSection12FeatChoiceValues, setSection12FeatureStoredChoices,
       setSection12MulticlassAddStatus, setSection13AbilityMethod, setSection13HpRollValue, setSection14BackgroundChoiceList, setSection14SkillEntry, setSection14StoredSkillChoice,
       setSimpleDraftField, setSourceProficiencyList, setStatus, skipSection14Background, slotsArrayToObject, sourceMatches,
-      splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter, stopSection19Listener, subtractCurrencyMaps,
+      splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter, subtractCurrencyMaps,
       syncClassLevelOrderToClassLevels, syncEquipmentCurrencyFromSources, syncFirstUnarmoredDefenseSource, syncSection12AdvancementChoice, syncSection12ArtificerInfusionsForLevel, syncSection12AsiChoicesForLevel,
       syncSection14BackgroundFeatures, syncSection16ClassSourceMetadata, syncSection16LegacySpellAliases, syncSection17CompletedSteps, syncSection18DerivedValues, toggleMulticlassSkillChoice,
       toggleMulticlassToolChoice, toggleSection12ArtificerInfusion, toggleSection12ClassFeatureChoice, toggleSection12RageState, toggleSection14Expertise, toggleSection14Skill,
@@ -37115,7 +37116,7 @@ export function createCharacterCreator(options = {}) {
     getSection16SpellById, getSection16SpellReferenceId, getSection17AbilityName, getSection17CarryingCapacity, getSection17CharacterSheetView, getSection17ClassProgressionEntries,
     getSection17CompletedStepIds, getSection17FeatureCount, getSection17FinalizationValidation, getSection17Initiative, getSection17InventoryWeight, getSection17MigrationWarnings,
     getSection17PassivePerception, getSection17ProficiencyBonus, getSection17SkillEntry, getSection17SkillModifier, getSection17SpellCount, getSection17Warnings,
-    getSection18MutationIdentity, getSection19CollectionName, getSection19RoomCollection, getSelectedClassTemplate, getSelectedDefaultFeatInstances, getSelectedSection12Subclass,
+    getSection18MutationIdentity, getSection19CollectionName, getSelectedClassTemplate, getSelectedDefaultFeatInstances, getSelectedSection12Subclass,
     getSelectedSection14Background, getSkillDefinitionByIdOrName, getSpeciesHpBonus, getSpeciesSourceLabel, getSpellSelectionLimits, getSpellSlotCastingOptions,
     getSpellSourceContexts, getSpellSourceId, getSpellSourceWarning, getSpellcastingClassOptions, getSpellcastingEntryForSpell, getSpellcastingFocusClassIds,
     getSpellcastingFocusSummary, getSpellcastingSummary, getSrd2014PactMagic, getSrd2014SpellSlots, getStartingClassEntry, getStepById,
@@ -37149,7 +37150,7 @@ export function createCharacterCreator(options = {}) {
     normalizeSection15Item, normalizeSection16Feature, normalizeSection16Spell, normalizeSection19BackgroundRecord, normalizeSection19CharacterRecord, normalizeSection19ClassRecord,
     normalizeSection19SpeciesRecord, openCharacterFromLibrary, parseFeatChoiceSelections, parseSection12List, parseSection13HpRolls, parseSection14List,
     parseSection15ItemEditValue, performSection16Rest, persistDraftToSession, pruneAbandonedClassFeatureChoices, pruneRemovedClassSpellSources, readDraftStorageRecord,
-    readSection11PortraitFileAsDataUrl, readSection19SnapshotRecords, recalculateAbilityTotals, recalculateClassTotalLevel, recordRawEquipmentMigrationWarnings, refreshBuilderChrome,
+    readSection11PortraitFileAsDataUrl, recalculateAbilityTotals, recalculateClassTotalLevel, recordRawEquipmentMigrationWarnings, refreshBuilderChrome,
     refreshClassProgressionDerivedValues, refreshElements, refreshLoadedClassDerivedValues, refreshSection13AbilitySummary, refreshSection13LevelProgression, refreshSection20CharacterCreator,
     refreshSelectedClassFeatures, refreshWizardElements, registerCharacterCreatorAction, registerCharacterCreatorChangeHandler, registerCharacterCreatorInputHandler, registerCharacterLibraryRenderer,
     registerCharacterStepCompletion, registerCharacterStepRenderer, removeAbilityBonusSourcesByPrefix, removeContainerAndContents, removeContainerPreserveContents, removeInnateSpellsBySourcePrefixes,
@@ -37181,7 +37182,7 @@ export function createCharacterCreator(options = {}) {
     setSection12FeatChoiceValues, setSection12FeatureStoredChoices, setSection12MulticlassAddStatus, setSection13AbilityMethod, setSection13HpRollValue, setSection14BackgroundChoiceList,
     setSection14SkillEntry, setSection14StoredSkillChoice, setSimpleDraftField, setSourceProficiencyList, setStatus, skipSection14Background,
     slotsArrayToObject, sourceMatches, splitInventoryStack, startNewDraft, startSection20CharacterCreator, startSection20NewCharacter,
-    stopSection19Listener, subtractCurrencyMaps, syncClassLevelOrderToClassLevels, syncEquipmentCurrencyFromSources, syncFirstUnarmoredDefenseSource, syncSection12AdvancementChoice,
+    subtractCurrencyMaps, syncClassLevelOrderToClassLevels, syncEquipmentCurrencyFromSources, syncFirstUnarmoredDefenseSource, syncSection12AdvancementChoice,
     syncSection12ArtificerInfusionsForLevel, syncSection12AsiChoicesForLevel, syncSection14BackgroundFeatures, syncSection16ClassSourceMetadata, syncSection16LegacySpellAliases, syncSection17CompletedSteps,
     toggleMulticlassSkillChoice, toggleMulticlassToolChoice, toggleSection12ArtificerInfusion, toggleSection12ClassFeatureChoice, toggleSection12RageState, toggleSection14Expertise,
     toggleSection14Skill, toggleSection15ItemState, toggleSection16Feat, toggleSection16MysticArcanum, toggleSection16SpellKnown, toggleSection16SpellPrepared,

@@ -174,7 +174,10 @@ test("characterCreator.js remains the browser-facing coordinator", () => {
     "connectSection19Characters",
     "connectSection19Classes",
     "connectSection19Listener",
-    "connectSection19Species"
+    "connectSection19Species",
+    "getSection19RoomCollection",
+    "readSection19SnapshotRecords",
+    "stopSection19Listener"
   ].forEach((removedHelper) => {
     assert.doesNotMatch(
       creator,
