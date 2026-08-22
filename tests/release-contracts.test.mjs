@@ -56,7 +56,7 @@ test(
 );
 
 test("creator spell selection uses bounded, incremental rendering", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const spellsStep = await read("characterCreator/steps/spellsStep.js");
   const creator = `${creatorMain}\n${spellsStep}`;
   const picker = await read("characterCreator/spellPicker.js");
@@ -87,7 +87,7 @@ test("creator spell selection uses bounded, incremental rendering", async () => 
 });
 
 test("creator equipment step owns its visible UI and handlers", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const equipmentStep = await read("characterCreator/steps/equipmentStep.js");
 
   assert.match(creatorMain, /import \{ createEquipmentStep \}/);
@@ -108,7 +108,7 @@ test("creator equipment step owns its visible UI and handlers", async () => {
 });
 
 test("creator class step owns class UI while multiclass remains independently extractable", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const classStep = await read("characterCreator/steps/classStep.js");
   const compatibilityStart = normalizedCreatorMain.indexOf(
@@ -158,7 +158,7 @@ test("creator class step owns class UI while multiclass remains independently ex
 });
 
 test("creator multiclass module owns its embedded editor and handlers", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const multiclassStep = await read(
     "characterCreator/steps/multiclassStep.js"
@@ -226,7 +226,7 @@ test("creator multiclass module owns its embedded editor and handlers", async ()
 });
 
 test("creator feats module owns the embedded feat UI and handlers", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const classStep = await read("characterCreator/steps/classStep.js");
   const featsStep = await read("characterCreator/steps/featsStep.js");
@@ -282,7 +282,7 @@ test("creator feats module owns the embedded feat UI and handlers", async () => 
 });
 
 test("creator species module owns species UI, mechanics, and validation", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const reviewStep = await read("characterCreator/steps/reviewStep.js");
   const speciesStep = await read("characterCreator/steps/speciesStep.js");
@@ -344,7 +344,7 @@ test("creator species module owns species UI, mechanics, and validation", async 
 });
 
 test("creator background module owns background UI, mechanics, and validation", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const backgroundStep = await read("characterCreator/steps/backgroundStep.js");
   const reviewStep = await read("characterCreator/steps/reviewStep.js");
@@ -406,7 +406,7 @@ test("creator background module owns background UI, mechanics, and validation", 
 });
 
 test("creator abilities module owns score methods, derived UI, and validation", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const abilitiesStep = await read("characterCreator/steps/abilitiesStep.js");
   const reviewStep = await read("characterCreator/steps/reviewStep.js");
@@ -473,7 +473,7 @@ test("creator abilities module owns score methods, derived UI, and validation", 
 });
 
 test("creator Skills module owns proficiencies, expertise, and validation", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const normalizedCreatorMain = creatorMain.replace(/\r/g, "");
   const reviewStep = await read("characterCreator/steps/reviewStep.js");
   const skillsStep = await read("characterCreator/steps/skillsStep.js");
@@ -541,7 +541,7 @@ test("creator Skills module owns proficiencies, expertise, and validation", asyn
 });
 
 test("creator Description module owns identity, story, notes, and portrait behavior", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const backgroundStep = await read("characterCreator/steps/backgroundStep.js");
   const basicsStep = await read("characterCreator/steps/basicsStep.js");
   const descriptionStep = await read("characterCreator/steps/descriptionStep.js");
@@ -587,7 +587,7 @@ test("creator Description module owns identity, story, notes, and portrait behav
 });
 
 test("creator Basics module owns the Basics screen and composes Description fields", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const basicsStep = await read("characterCreator/steps/basicsStep.js");
 
   assert.match(creatorMain, /import \{ createBasicsStep \}/);
@@ -637,7 +637,7 @@ test("creator Basics module owns the Basics screen and composes Description fiel
 });
 
 test("creator Review module owns final validation, summaries, and review actions", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const reviewStep = await read("characterCreator/steps/reviewStep.js");
 
   assert.match(creatorMain, /import \{ createReviewStep \}/);
@@ -691,7 +691,7 @@ test("creator Review module owns final validation, summaries, and review actions
 });
 
 test("creator Finish module owns the visible save screen and finish actions", async () => {
-  const creatorMain = await read("characterCreator.fixed.js");
+  const creatorMain = await read("characterCreator.js");
   const persistenceBase = await read("characterCreator/persistence.base.js");
   const finishStep = await read("characterCreator/steps/finishStep.js");
 
@@ -858,7 +858,7 @@ test(
   async () => {
     const creator =
       await read(
-        "characterCreator.fixed.js"
+        "characterCreator.js"
       );
 
     assert.match(
@@ -877,7 +877,7 @@ test(
   async () => {
     const creator =
       await read(
-        "characterCreator.fixed.js"
+        "characterCreator.js"
       );
 
     assert.match(

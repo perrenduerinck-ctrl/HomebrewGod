@@ -7,6 +7,15 @@ const rulesMathCache = createScopedDerivedCache({
   maximumEntriesPerScope: 128
 });
 
+const ABILITY_IDS = Object.freeze([
+  "str",
+  "dex",
+  "con",
+  "int",
+  "wis",
+  "cha"
+]);
+
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number)
@@ -313,6 +322,23 @@ export function calculateRuleSkillModifier({
     );
   }
 
+export function calculateRuleSavingThrowModifier({
+  abilityModifier = 0,
+  proficiencyBonus = 0,
+  proficient = false,
+  bonus = 0
+} = {}) {
+  return (
+    safeNumber(abilityModifier, 0) +
+    (
+      proficient
+        ? safeNumber(proficiencyBonus, 0)
+        : 0
+    ) +
+    safeNumber(bonus, 0)
+  );
+}
+
 export function calculateRulePassiveScore(
     skillModifier,
     state = {}
@@ -368,6 +394,71 @@ export function calculateRuleFixedAverageHp({
         laterLevelHp
     );
   }
+
+export function calculateRuleRolledHp({
+  hitDie,
+  level,
+  constitutionModifier,
+  rolls = [],
+  levelOneValue = null
+}) {
+  const dieSize = Math.max(
+    1,
+    safeNumber(
+      String(hitDie || "d8")
+        .replace(/[^0-9]/g, ""),
+      8
+    )
+  );
+  const cleanLevel = clampLevel(level);
+  const conModifier = safeNumber(
+    constitutionModifier,
+    0
+  );
+  let total = Math.max(
+    1,
+    levelOneValue === null ||
+    levelOneValue === undefined
+      ? dieSize + conModifier
+      : safeNumber(
+          levelOneValue,
+          dieSize + conModifier
+        )
+  );
+
+  for (
+    let index = 2;
+    index <= cleanLevel;
+    index += 1
+  ) {
+    const roll = Math.max(
+      1,
+      Math.min(
+        dieSize,
+        safeNumber(
+          rolls[index - 2],
+          Math.floor(dieSize / 2) + 1
+        )
+      )
+    );
+
+    total += Math.max(
+      1,
+      roll + conModifier
+    );
+  }
+
+  return total;
+}
+
+export function calculateRuleManualHp({
+  manualOverride
+}) {
+  return Math.max(
+    1,
+    safeNumber(manualOverride, 1)
+  );
+}
 
 export function calculateRuleSpellSaveDc({
     proficiencyBonus,
@@ -526,6 +617,57 @@ export function calculateAbilityModifier(
     () => Math.floor(
       (cleanScore - 10) / 2
     )
+  );
+}
+
+export function calculateAbilityModifiers(
+  scores
+) {
+  const raw = scores || {};
+
+  return ABILITY_IDS.reduce(
+    (modifiers, abilityId) => {
+      modifiers[abilityId] =
+        calculateAbilityModifier(
+          raw[abilityId]
+        );
+
+      return modifiers;
+    },
+    {}
+  );
+}
+
+export function deriveAbilityBaseFromFinalScores(
+  finalScores,
+  bonusTotals,
+  fallbackValue = 10
+) {
+  const scores = finalScores || {};
+  const bonuses = bonusTotals || {};
+
+  return ABILITY_IDS.reduce(
+    (base, abilityId) => {
+      base[abilityId] = Math.max(
+        1,
+        Math.min(
+          30,
+          Math.round(
+            safeNumber(
+              scores[abilityId],
+              fallbackValue
+            ) -
+            safeNumber(
+              bonuses[abilityId],
+              0
+            )
+          )
+        )
+      );
+
+      return base;
+    },
+    {}
   );
 }
 

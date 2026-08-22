@@ -198,13 +198,20 @@ const creatorSource = fs.readFileSync(
   path.join(
     testDirectory,
     "..",
-    "characterCreator.fixed.js"
+    "characterCreator.js"
+  ),
+  "utf8"
+);
+const rulesMathSource = fs.readFileSync(
+  path.join(
+    testDirectory,
+    "..",
+    "characterCreator",
+    "rulesMath.js"
   ),
   "utf8"
 );
 [
-  "ability-modifier",
-  "proficiency-bonus",
   "class-progression-level",
   "unlocked-class-features",
   "selected-feat-instances",
@@ -226,6 +233,19 @@ const creatorSource = fs.readFileSync(
     creatorSource,
     new RegExp(`derivedCache\\.get\\(\\s*"${scope}"`),
     `${scope} should be cached in the Character Creator`
+  );
+});
+
+[
+  "ability-modifier",
+  "proficiency-bonus"
+].forEach((scope) => {
+  assert.match(
+    rulesMathSource,
+    new RegExp(
+      `rulesMathCache\\.get\\(\\s*"${scope}"`
+    ),
+    `${scope} should be cached in the shared rules module`
   );
 });
 

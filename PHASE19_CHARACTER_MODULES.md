@@ -22,14 +22,14 @@ Phase 19 splits the character creator into domain modules while preserving the e
 | Static character catalogs | `characterCreator/catalogs.js` |
 | Character regression suite | `characterCreator/selfTests.js` |
 
-The main `characterCreator.fixed.js` file remains the browser-facing orchestrator. It owns mutable UI state and delegates reusable work to these modules.
+The main `characterCreator.js` file remains the browser-facing orchestrator. It owns mutable UI state and delegates reusable work to these modules.
 
 ## Testability contract
 
 The domain modules for rules, normalization, progression, multiclassing, feats, class/subclass mechanics, spellcasting, species/backgrounds, inventory, rendering, and sheet presentation do not access `window` or `document`. They can be imported and tested without constructing the application UI.
 
-`ai-testing/character-modules-self-test.html` verifies every boundary, checks representative 2014 rules, verifies that the main creator integrates the modules, and enforces a 55,000-line ceiling on `characterCreator.fixed.js`. The pre-existing character creator regression suite remains the end-to-end compatibility check.
+`ai-testing/character-modules-self-test.html` verifies every boundary, checks representative 2014 rules, verifies that the main creator integrates the modules, and enforces a 55,000-line ceiling on `characterCreator.js`. The pre-existing character creator regression suite remains the end-to-end compatibility check.
 
 ## Size result
 
-Before Phase 19, `characterCreator.fixed.js` was approximately 77,500 lines. After extraction it is below 54,000 lines, safely below the task's 60,000-line warning threshold.
+Before Phase 19, the creator coordinator was approximately 77,500 lines. After extraction, `characterCreator.js` is below 54,000 lines, safely below the task's 60,000-line warning threshold.

@@ -4393,7 +4393,7 @@ async function initCharacterCreatorSystem() {
 
   if (!characterCreatorModulePromise) {
     characterCreatorModulePromise = import(
-      "./characterCreator.fixed.js"
+      "./characterCreator.js"
     );
   }
 
