@@ -96,19 +96,19 @@ import {
   createCatalogPage,
   CREATOR_CATALOG_BATCH_SIZE
 } from "./characterCreator/catalogPagination.js";
-import { createClassStep } from "./characterCreator/steps/classStep.js?v=class-step-extraction-20260812";
-import { createMulticlassStep } from "./characterCreator/steps/multiclassStep.js?v=multiclass-step-extraction-20260813";
-import { createFeatsStep } from "./characterCreator/steps/featsStep.js?v=feats-step-extraction-20260813";
-import { createSpeciesStep } from "./characterCreator/steps/speciesStep.js?v=species-step-extraction-20260813";
-import { createBackgroundStep } from "./characterCreator/steps/backgroundStep.js?v=background-step-extraction-20260813";
-import { createAbilitiesStep } from "./characterCreator/steps/abilitiesStep.js?v=abilities-step-extraction-20260813";
-import { createSkillsStep } from "./characterCreator/steps/skillsStep.js?v=skills-step-extraction-20260813";
-import { createDescriptionStep } from "./characterCreator/steps/descriptionStep.js?v=description-step-extraction-20260813";
-import { createBasicsStep } from "./characterCreator/steps/basicsStep.js?v=basics-step-extraction-20260814";
-import { createReviewStep } from "./characterCreator/steps/reviewStep.js?v=review-step-extraction-20260814";
-import { createFinishStep } from "./characterCreator/steps/finishStep.js?v=finish-step-extraction-20260814";
-import { createEquipmentStep } from "./characterCreator/steps/equipmentStep.js?v=equipment-step-extraction-20260812";
-import { createSpellsStep } from "./characterCreator/steps/spellsStep.js?v=spells-step-extraction-20260803";
+import { createClassStep } from "./characterCreator/steps/classStep.js?v=priority9-20260822";
+import { createMulticlassStep } from "./characterCreator/steps/multiclassStep.js?v=priority9-20260822";
+import { createFeatsStep } from "./characterCreator/steps/featsStep.js?v=priority9-20260822";
+import { createSpeciesStep } from "./characterCreator/steps/speciesStep.js?v=priority9-20260822";
+import { createBackgroundStep } from "./characterCreator/steps/backgroundStep.js?v=priority9-20260822";
+import { createAbilitiesStep } from "./characterCreator/steps/abilitiesStep.js?v=priority9-20260822";
+import { createSkillsStep } from "./characterCreator/steps/skillsStep.js?v=priority9-20260822";
+import { createDescriptionStep } from "./characterCreator/steps/descriptionStep.js?v=priority9-20260822";
+import { createBasicsStep } from "./characterCreator/steps/basicsStep.js?v=priority9-20260822";
+import { createReviewStep } from "./characterCreator/steps/reviewStep.js?v=priority9-20260822";
+import { createFinishStep } from "./characterCreator/steps/finishStep.js?v=priority9-20260822";
+import { createEquipmentStep } from "./characterCreator/steps/equipmentStep.js?v=priority9-20260822";
+import { createSpellsStep } from "./characterCreator/steps/spellsStep.js?v=priority9-20260822";
 import {
   calculateAbilityModifier,
   calculateAbilityModifiers,

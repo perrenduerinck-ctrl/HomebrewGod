@@ -119,6 +119,16 @@ test("every creator step uses shared services and never imports another step", (
   ) || [];
 
   assert.equal(sharedServiceUses.length, stepFiles.length);
+
+  const priorityNineStepUrls = creator.match(
+    /characterCreator\/steps\/[A-Za-z]+Step\.js\?v=priority9-20260822/g
+  ) || [];
+
+  assert.equal(
+    priorityNineStepUrls.length,
+    stepFiles.length,
+    "every changed step module must use the Priority 9 cache key"
+  );
 });
 
 test("character creator modules have no circular relative imports", () => {
