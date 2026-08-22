@@ -169,6 +169,18 @@ test("characterCreator.js remains the browser-facing coordinator", () => {
     creator,
     /deps\.onSnapshot\s*\(/
   );
+  [
+    "connectSection19Backgrounds",
+    "connectSection19Characters",
+    "connectSection19Classes",
+    "connectSection19Listener",
+    "connectSection19Species"
+  ].forEach((removedHelper) => {
+    assert.doesNotMatch(
+      creator,
+      new RegExp(`\\b${removedHelper}\\b`)
+    );
+  });
   assert.doesNotMatch(
     creator,
     /function calculateRule(?:ManualHp|RolledHp|SavingThrowModifier)/
