@@ -156,6 +156,9 @@ import {
   getDerivedObjectIdentity
 } from "./characterCreator/derivedCache.js";
 import {
+  createRealtimeListenerRegistry
+} from "./realtimeListeners.js";
+import {
   applyGameplayAction,
   ensureGameplayState
 } from "./characterSheet/gameplayState.js";
@@ -196,6 +199,15 @@ export function createCharacterCreator(options = {}) {
   const derivedCache = createScopedDerivedCache({
     maximumEntriesPerScope: 384
   });
+  const section19Listeners =
+    createRealtimeListenerRegistry({
+      onStopError: (error) => {
+        console.warn(
+          "Could not stop character creator listener:",
+          error
+        );
+      }
+    });
 
   const CHARACTER_SCHEMA_VERSION = 13;
   const CLASS_SCHEMA_VERSION =
@@ -11275,14 +11287,15 @@ export function createCharacterCreator(options = {}) {
 
     characterCache: [],
     characterRoomCode: null,
-    characterUnsubscribe: null,
 
     roomClassCache: [],
     classRoomCode: null,
-    classUnsubscribe: null,
 
     roomSpeciesCache: [],
-    roomBackgroundCache: []
+    speciesRoomCode: null,
+
+    roomBackgroundCache: [],
+    backgroundRoomCode: null
   };
 
   let characterSheetView = null;
@@ -18833,6 +18846,7 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
+    connectSection19PermanentListeners();
     renderCreatorView();
   }
 
@@ -18859,6 +18873,7 @@ export function createCharacterCreator(options = {}) {
       );
     }
 
+    connectSection19PermanentListeners();
     renderCreatorView();
   }
 
@@ -18902,13 +18917,6 @@ export function createCharacterCreator(options = {}) {
       return;
     }
 
-    if (
-      typeof connectSection19PermanentListeners ===
-      "function"
-    ) {
-      connectSection19PermanentListeners();
-    }
-
     creatorState.viewMode =
       route.viewMode;
 
@@ -18918,6 +18926,13 @@ export function createCharacterCreator(options = {}) {
       setCurrentStep(
         route.stepId
       );
+    }
+
+    if (
+      typeof connectSection19PermanentListeners ===
+        "function"
+    ) {
+      connectSection19PermanentListeners();
     }
 
     renderCreatorView();
@@ -37743,26 +37758,18 @@ export function createCharacterCreator(options = {}) {
   function stopSection19Listener(
     unsubscribeKey,
     roomKey,
-    cacheKey
+    cacheKey,
+    { clearCache = true } = {}
   ) {
-    const unsubscribe =
-      creatorState[unsubscribeKey];
+    section19Listeners.stop(
+      unsubscribeKey
+    );
 
-    if (typeof unsubscribe === "function") {
-      try {
-        unsubscribe();
-      } catch (error) {
-        console.warn(
-          "Could not stop character creator listener:",
-          error
-        );
-      }
+    if (clearCache) {
+      creatorState[roomKey] = null;
     }
 
-    creatorState[unsubscribeKey] = null;
-    creatorState[roomKey] = null;
-
-    if (cacheKey) {
+    if (cacheKey && clearCache) {
       creatorState[cacheKey] = [];
     }
   }
@@ -37822,8 +37829,10 @@ export function createCharacterCreator(options = {}) {
 
     if (
       creatorState[roomKey] === roomCode &&
-      typeof creatorState[unsubscribeKey] ===
-        "function"
+      section19Listeners.has(
+        unsubscribeKey,
+        roomCode
+      )
     ) {
       return true;
     }
@@ -37837,13 +37846,24 @@ export function createCharacterCreator(options = {}) {
     creatorState[roomKey] = roomCode;
 
     try {
-      creatorState[unsubscribeKey] =
-        deps.onSnapshot(
+      section19Listeners.connect(
+        unsubscribeKey,
+        roomCode,
+        ({ isCurrent }) => {
+          return deps.onSnapshot(
           getSection19RoomCollection(
             collectionName
           ),
 
           (snapshot) => {
+            if (
+              !isCurrent() ||
+              creatorState[roomKey] !==
+                roomCode
+            ) {
+              return;
+            }
+
             creatorState[cacheKey] =
               readSection19SnapshotRecords(
                 snapshot
@@ -37855,6 +37875,10 @@ export function createCharacterCreator(options = {}) {
           },
 
           (error) => {
+            if (!isCurrent()) {
+              return;
+            }
+
             const permissionDenied =
               error?.code === "permission-denied";
 
@@ -37895,7 +37919,9 @@ export function createCharacterCreator(options = {}) {
               cacheKey
             );
           }
-        );
+          );
+        }
+      );
 
       return true;
     } catch (error) {
@@ -38013,10 +38039,73 @@ export function createCharacterCreator(options = {}) {
   }
 
   function connectSection19PermanentListeners() {
-    connectSection19Characters();
-    connectSection19Classes();
-    connectSection19Species();
-    connectSection19Backgrounds();
+    const requiredListeners = new Set();
+
+    if (creatorState.viewMode === "library") {
+      requiredListeners.add("characters");
+    } else if (
+      creatorState.viewMode === "builder"
+    ) {
+      const listenerByStep = {
+        class: "classes",
+        species: "species",
+        background: "backgrounds"
+      };
+      const required = listenerByStep[
+        creatorState.currentStepId
+      ];
+
+      if (required) {
+        requiredListeners.add(required);
+      }
+    }
+
+    const listeners = [
+      {
+        id: "characters",
+        connect: connectSection19Characters,
+        unsubscribeKey: "characterUnsubscribe",
+        roomKey: "characterRoomCode",
+        cacheKey: "characterCache"
+      },
+      {
+        id: "classes",
+        connect: connectSection19Classes,
+        unsubscribeKey: "classUnsubscribe",
+        roomKey: "classRoomCode",
+        cacheKey: "roomClassCache"
+      },
+      {
+        id: "species",
+        connect: connectSection19Species,
+        unsubscribeKey: "speciesUnsubscribe",
+        roomKey: "speciesRoomCode",
+        cacheKey: "roomSpeciesCache"
+      },
+      {
+        id: "backgrounds",
+        connect: connectSection19Backgrounds,
+        unsubscribeKey: "backgroundUnsubscribe",
+        roomKey: "backgroundRoomCode",
+        cacheKey: "roomBackgroundCache"
+      }
+    ];
+
+    listeners.forEach((listener) => {
+      if (requiredListeners.has(listener.id)) {
+        listener.connect();
+        return;
+      }
+
+      stopSection19Listener(
+        listener.unsubscribeKey,
+        listener.roomKey,
+        listener.cacheKey,
+        { clearCache: false }
+      );
+    });
+
+    return section19Listeners.getSnapshot();
   }
 
   function cleanupSection19PermanentListeners() {
@@ -38043,6 +38132,8 @@ export function createCharacterCreator(options = {}) {
       "backgroundRoomCode",
       "roomBackgroundCache"
     );
+
+    return section19Listeners.getSnapshot();
   }
 
 
@@ -38091,8 +38182,6 @@ export function createCharacterCreator(options = {}) {
     });
     connectDraftPersistenceLifecycle();
     connectPopstateRouting();
-    connectSection19PermanentListeners();
-
     if (
       !wizardRuntime
         .initialRouteApplied
@@ -38102,6 +38191,8 @@ export function createCharacterCreator(options = {}) {
       wizardRuntime.initialRouteApplied =
         true;
     }
+
+    connectSection19PermanentListeners();
 
     renderCreatorView();
 
@@ -38284,6 +38375,9 @@ export function createCharacterCreator(options = {}) {
       connectSection19PermanentListeners,
     cleanupListeners:
       cleanupSection19PermanentListeners,
+    getListenerSnapshot() {
+      return section19Listeners.getSnapshot();
+    },
 
     runRulesSelfTests:
       runSrd2014RulesSelfTests

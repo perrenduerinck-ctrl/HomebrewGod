@@ -38,6 +38,9 @@ import {
 
 import { createTokenSystem } from "./tokens.js";
 import {
+  createRealtimeListenerRegistry
+} from "./realtimeListeners.js";
+import {
   MAX_SECURE_IMAGE_BYTES,
   createPersistenceMonitor,
   friendlyServiceError,
@@ -212,11 +215,16 @@ let hasMigratedLegacyPuzzleTiles = false;
 
 let battleZoom = 1;
 
-let stopListeningToMyRooms = null;
-let stopListeningToRoom = null;
-let stopListeningToPlayers = null;
-let stopListeningToMaps = null;
-let stopListeningToPuzzleTiles = null;
+const appRealtimeListeners =
+  createRealtimeListenerRegistry({
+    onStopError: (error, context) => {
+      console.warn(
+        `Could not stop ${context.name} listener:`,
+        error
+      );
+    }
+  });
+let activeMainScreenName = "";
 
 let tokenSystem = null;
 let characterCreatorSystem = null;
@@ -279,6 +287,8 @@ function showScreen(screenName) {
   if (screenName === "battle") E.battleMapScreen.classList.remove("hidden");
   if (screenName === "monsterCreator") E.monsterCreatorScreen.classList.remove("hidden");
   if (screenName === "characterCreator") E.characterCreatorScreen.classList.remove("hidden");
+
+  syncRealtimeListenersForScreen(screenName);
 }
 
 function text(el, value) {
@@ -332,15 +342,25 @@ function makeRoomCode() {
 }
 
 function clearRoomListeners() {
-  if (stopListeningToRoom) stopListeningToRoom();
-  if (stopListeningToPlayers) stopListeningToPlayers();
-  if (stopListeningToMaps) stopListeningToMaps();
-  if (stopListeningToPuzzleTiles) stopListeningToPuzzleTiles();
+  appRealtimeListeners.stop("room");
+  stopRoomViewListeners();
 
-  stopListeningToRoom = null;
-  stopListeningToPlayers = null;
-  stopListeningToMaps = null;
-  stopListeningToPuzzleTiles = null;
+  if (
+    characterCreatorSystem &&
+    typeof characterCreatorSystem.cleanupListeners ===
+      "function"
+  ) {
+    characterCreatorSystem.cleanupListeners();
+  }
+
+  if (
+    monsterCreatorSystem &&
+    typeof monsterCreatorSystem.cleanupListeners ===
+      "function"
+  ) {
+    monsterCreatorSystem.cleanupListeners();
+  }
+
   latestActivePlayersSnapshot = null;
   latestPuzzleTiles = null;
   roomMapsLastDoc = null;
@@ -349,6 +369,87 @@ function clearRoomListeners() {
   roomMapsPaginationRoomCode = null;
   hasMigratedLegacyPuzzleTiles = false;
   staleActivePlayerCleanupAttempts.clear();
+}
+
+function stopSavedRoomsListener() {
+  appRealtimeListeners.stop("my-rooms");
+}
+
+function stopRoomViewListeners() {
+  appRealtimeListeners.stop("players");
+  appRealtimeListeners.stop("maps");
+  appRealtimeListeners.stop("puzzle-tiles");
+
+  if (
+    tokenSystem &&
+    typeof tokenSystem.stopTokenListener ===
+      "function"
+  ) {
+    tokenSystem.stopTokenListener();
+  }
+}
+
+function syncRealtimeListenersForScreen(
+  screenName
+) {
+  activeMainScreenName = screenName;
+
+  if (screenName === "lobby") {
+    listenToMyRooms();
+  } else {
+    stopSavedRoomsListener();
+  }
+
+  const usesRoomViewListeners =
+    screenName === "room" ||
+    screenName === "battle";
+
+  if (
+    usesRoomViewListeners &&
+    currentRoomCode
+  ) {
+    listenToPlayers(currentRoomCode);
+    listenToRoomMaps(currentRoomCode);
+    listenToPuzzleTiles(currentRoomCode);
+  } else {
+    stopRoomViewListeners();
+  }
+
+  if (
+    screenName === "battle" &&
+    currentRoomCode &&
+    tokenSystem &&
+    typeof tokenSystem.startTokenListenerForRoom ===
+      "function"
+  ) {
+    tokenSystem.startTokenListenerForRoom(
+      currentRoomCode
+    );
+  } else if (
+    tokenSystem &&
+    typeof tokenSystem.stopTokenListener ===
+      "function"
+  ) {
+    tokenSystem.stopTokenListener();
+  }
+
+  if (
+    screenName !== "characterCreator" &&
+    characterCreatorSystem &&
+    typeof characterCreatorSystem.cleanupListeners ===
+      "function"
+  ) {
+    characterCreatorSystem.cleanupListeners();
+  }
+
+  if (
+    screenName !== "monsterCreator" &&
+    monsterCreatorSystem &&
+    typeof monsterCreatorSystem.cleanupListeners ===
+      "function"
+  ) {
+    monsterCreatorSystem.cleanupListeners();
+  }
 }
 
 function getSafeMapName(fileName) {
@@ -462,10 +563,7 @@ async function saveUserDoc(user) {
 async function showLoggedOut() {
   showScreen("auth");
 
-  if (stopListeningToMyRooms) {
-    stopListeningToMyRooms();
-    stopListeningToMyRooms = null;
-  }
+  stopSavedRoomsListener();
 
   await removeActivePlayerSession();
   clearRoomListeners();
@@ -560,8 +658,18 @@ async function saveRoomToMyRooms(roomCode, roomName, role) {
 }
 
 function listenToMyRooms() {
-  if (!currentUser) return;
-  if (stopListeningToMyRooms) stopListeningToMyRooms();
+  if (!currentUser) return false;
+
+  const userId = currentUser.uid;
+
+  if (
+    appRealtimeListeners.has(
+      "my-rooms",
+      userId
+    )
+  ) {
+    return false;
+  }
 
   savedRoomDocs = [];
   savedRoomsLastDoc = null;
@@ -569,14 +677,25 @@ function listenToMyRooms() {
   savedRoomsLoadingMore = false;
 
   const roomsQuery = query(
-    collection(db, "users", currentUser.uid, "rooms"),
+    collection(db, "users", userId, "rooms"),
     orderBy("updatedAt", "desc"),
     limit(COLLECTION_PAGE_SIZE)
   );
 
-  stopListeningToMyRooms = onSnapshot(roomsQuery, {
-    includeMetadataChanges: true
-  }, function (snap) {
+  return appRealtimeListeners.connect(
+    "my-rooms",
+    userId,
+    ({ isCurrent }) => onSnapshot(roomsQuery, {
+      includeMetadataChanges: true
+    }, function (snap) {
+    if (
+      !isCurrent() ||
+      currentUser?.uid !== userId ||
+      activeMainScreenName !== "lobby"
+    ) {
+      return;
+    }
+
     persistenceMonitor.noteSnapshot(
       snap.metadata
     );
@@ -636,8 +755,13 @@ function listenToMyRooms() {
 
     appendSavedRoomsPaginationButton();
   }, function (error) {
+    if (!isCurrent()) {
+      return;
+    }
+
     text(E.myRoomsList, "Could not load saved rooms: " + error.message);
-  });
+    })
+  );
 }
 
 function appendSavedRoomsPaginationButton() {
@@ -924,9 +1048,19 @@ function openRoom(roomCode, screenToShow = "room") {
 
   clearRoomListeners();
 
-  stopListeningToRoom = onSnapshot(doc(db, "rooms", cleanCode), {
-    includeMetadataChanges: true
-  }, async function (roomSnap) {
+  appRealtimeListeners.connect(
+    "room",
+    cleanCode,
+    ({ isCurrent }) => onSnapshot(doc(db, "rooms", cleanCode), {
+      includeMetadataChanges: true
+    }, async function (roomSnap) {
+    if (
+      !isCurrent() ||
+      currentRoomCode !== cleanCode
+    ) {
+      return;
+    }
+
     persistenceMonitor.noteSnapshot(
       roomSnap.metadata
     );
@@ -973,21 +1107,28 @@ function openRoom(roomCode, screenToShow = "room") {
       await touchActivePlayerSession();
     }
 
-    showSharedMap(buildMapFromRoomFields(currentRoomData));
-    renderPuzzleBoard(currentRoomData);
-    maybeMigrateLegacyPuzzleTilesToSubcollection();
+    const roomViewIsVisible =
+      activeMainScreenName === "room" ||
+      activeMainScreenName === "battle";
 
-    if (latestMapsSnapshot) renderRoomMaps(latestMapsSnapshot);
-    if (latestActivePlayersSnapshot) renderPlayers(latestActivePlayersSnapshot);
+    if (roomViewIsVisible) {
+      showSharedMap(buildMapFromRoomFields(currentRoomData));
+      renderPuzzleBoard(currentRoomData);
+      maybeMigrateLegacyPuzzleTilesToSubcollection();
+
+      if (latestMapsSnapshot) renderRoomMaps(latestMapsSnapshot);
+      if (latestActivePlayersSnapshot) renderPlayers(latestActivePlayersSnapshot);
+    }
 
     await openStartupViewIfNeeded();
   }, function (error) {
-    alert("Room listener failed: " + error.message);
-  });
+    if (!isCurrent()) {
+      return;
+    }
 
-  listenToPlayers(cleanCode);
-  listenToRoomMaps(cleanCode);
-  listenToPuzzleTiles(cleanCode);
+    alert("Room listener failed: " + error.message);
+    })
+  );
 
   if (screenToShow === "battle") {
     showScreen("battle");
@@ -1413,15 +1554,43 @@ async function removeActivePlayerSession() {
 }
 
 function listenToPlayers(roomCode) {
-  stopListeningToPlayers = onSnapshot(
-    collection(db, "rooms", roomCode, "activePlayers"),
-    function (playersSnap) {
+  if (
+    appRealtimeListeners.has(
+      "players",
+      roomCode
+    )
+  ) {
+    return false;
+  }
+
+  return appRealtimeListeners.connect(
+    "players",
+    roomCode,
+    ({ isCurrent }) => onSnapshot(
+      collection(db, "rooms", roomCode, "activePlayers"),
+      function (playersSnap) {
+      if (
+        !isCurrent() ||
+        currentRoomCode !== roomCode ||
+        (
+          activeMainScreenName !== "room" &&
+          activeMainScreenName !== "battle"
+        )
+      ) {
+        return;
+      }
+
       latestActivePlayersSnapshot = playersSnap;
       renderPlayers(playersSnap);
     },
     function (error) {
+      if (!isCurrent()) {
+        return;
+      }
+
       E.playersList.textContent = "Could not load players: " + error.message;
-    }
+      }
+    )
   );
 }
 
@@ -1879,8 +2048,13 @@ async function deleteCloudinaryAssetIfUnreferenced(asset, options = {}) {
 // =====================================================
 
 function listenToRoomMaps(roomCode) {
-  if (stopListeningToMaps) {
-    stopListeningToMaps();
+  if (
+    appRealtimeListeners.has(
+      "maps",
+      roomCode
+    )
+  ) {
+    return false;
   }
 
   latestMapsSnapshot = [];
@@ -1895,10 +2069,23 @@ function listenToRoomMaps(roomCode) {
     limit(COLLECTION_PAGE_SIZE)
   );
 
-  stopListeningToMaps = onSnapshot(
-    mapsQuery,
-    { includeMetadataChanges: true },
-    function (mapsSnap) {
+  return appRealtimeListeners.connect(
+    "maps",
+    roomCode,
+    ({ isCurrent }) => onSnapshot(
+      mapsQuery,
+      { includeMetadataChanges: true },
+      function (mapsSnap) {
+      if (
+        !isCurrent() ||
+        (
+          activeMainScreenName !== "room" &&
+          activeMainScreenName !== "battle"
+        )
+      ) {
+        return;
+      }
+
       persistenceMonitor.noteSnapshot(
         mapsSnap.metadata
       );
@@ -1918,8 +2105,13 @@ function listenToRoomMaps(roomCode) {
       renderRoomMaps(latestMapsSnapshot);
     },
     function (error) {
+      if (!isCurrent()) {
+        return;
+      }
+
       text(E.roomMapsList, "Could not load saved maps: " + error.message);
-    }
+      }
+    )
   );
 }
 
@@ -2878,14 +3070,33 @@ function getPuzzleTileDocument(roomCode, tileKey) {
 }
 
 function listenToPuzzleTiles(roomCode) {
-  if (stopListeningToPuzzleTiles) {
-    stopListeningToPuzzleTiles();
+  if (
+    appRealtimeListeners.has(
+      "puzzle-tiles",
+      roomCode
+    )
+  ) {
+    return false;
   }
 
-  stopListeningToPuzzleTiles = onSnapshot(
-    getPuzzleTileCollection(roomCode),
-    { includeMetadataChanges: true },
-    function (tilesSnap) {
+  return appRealtimeListeners.connect(
+    "puzzle-tiles",
+    roomCode,
+    ({ isCurrent }) => onSnapshot(
+      getPuzzleTileCollection(roomCode),
+      { includeMetadataChanges: true },
+      function (tilesSnap) {
+      if (
+        !isCurrent() ||
+        currentRoomCode !== roomCode ||
+        (
+          activeMainScreenName !== "room" &&
+          activeMainScreenName !== "battle"
+        )
+      ) {
+        return;
+      }
+
       persistenceMonitor.noteSnapshot(
         tilesSnap.metadata
       );
@@ -2913,8 +3124,13 @@ function listenToPuzzleTiles(roomCode) {
       maybeMigrateLegacyPuzzleTilesToSubcollection();
     },
     function (error) {
+      if (!isCurrent()) {
+        return;
+      }
+
       text(E.puzzleMapStatus, "Could not load puzzle tiles: " + error.message);
-    }
+      }
+    )
   );
 }
 
@@ -4136,6 +4352,8 @@ function showAnyMainScreen(screenName) {
   if (screenMap[screenName]) {
     screenMap[screenName].classList.remove("hidden");
   }
+
+  syncRealtimeListenersForScreen(screenName);
 }
 
 function applyBattleZoom() {
@@ -4169,6 +4387,7 @@ function openToolTab(viewName) {
 
 async function initCharacterCreatorSystem() {
   if (characterCreatorSystem) {
+    characterCreatorSystem.connectListeners();
     return characterCreatorSystem;
   }
 
@@ -4193,6 +4412,7 @@ async function initCharacterCreatorSystem() {
   }
 
   if (characterCreatorSystem) {
+    characterCreatorSystem.connectListeners();
     return characterCreatorSystem;
   }
 
@@ -4528,6 +4748,10 @@ window.addEventListener("pageshow", function () {
 });
 
 window.addEventListener("pagehide", function () {
+  appRealtimeListeners.stopAll();
+  characterCreatorSystem?.cleanupListeners?.();
+  monsterCreatorSystem?.cleanupListeners?.();
+  tokenSystem?.stopTokenListener?.();
   removeActivePlayerSession();
 });
 
@@ -4633,6 +4857,25 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             ) ||
             ""
           );
+        },
+
+      getListenerState:
+        function () {
+          return {
+            screenName:
+              activeMainScreenName,
+            app:
+              appRealtimeListeners.getSnapshot(),
+            tokens:
+              tokenSystem?.getListenerSnapshot?.() ||
+              null,
+            characterCreator:
+              characterCreatorSystem?.getListenerSnapshot?.() ||
+              null,
+            monsterCreator:
+              monsterCreatorSystem?.getListenerSnapshot?.() ||
+              null
+          };
         }
     });
 }
@@ -4667,8 +4910,6 @@ onAuthStateChanged(auth, async function (user) {
       error
     );
   }
-
-  listenToMyRooms();
 
   if (!alreadyUsedStartupLink && startupRoomCode) {
     const startupScreen =
