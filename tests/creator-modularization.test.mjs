@@ -114,9 +114,9 @@ test("standalone character calculations live in the rules module", () => {
   );
 });
 
-test("characterCreator.js remains the browser-facing coordinator", () => {
+test("characterCreator/index.js remains the browser-facing coordinator", () => {
   const creator = readSource(
-    "characterCreator.js"
+    "characterCreator/index.js"
   );
   const app = readSource("app.js");
   const index = readSource("index.html");
@@ -129,19 +129,19 @@ test("characterCreator.js remains the browser-facing coordinator", () => {
   );
   assert.match(
     creator,
-    /from "\.\/characterCreator\/configuration\.js"/
+    /from "\.\/configuration\.js"/
   );
   assert.match(
     creator,
-    /from "\.\/characterCreator\/realtimePersistence\.js"/
+    /from "\.\/realtimePersistence\.js"/
   );
   assert.match(
     creator,
-    /from "\.\/characterCreator\/catalogs\.js"/
+    /from "\.\/catalogs\.js"/
   );
   assert.match(
     creator,
-    /from "\.\/characterCreator\/rendering\.js"/
+    /from "\.\/rendering\.js"/
   );
   [
     "basics",
@@ -157,7 +157,7 @@ test("characterCreator.js remains the browser-facing coordinator", () => {
     assert.match(
       creator,
       new RegExp(
-        `characterCreator/steps/${stepName}Step\\.js`
+        `\\./steps/${stepName}Step\\.js`
       )
     );
   });
@@ -194,10 +194,10 @@ test("characterCreator.js remains the browser-facing coordinator", () => {
   );
   assert.match(
     app,
-    /import\(\s*"\.\/characterCreator\.js"\s*\)/
+    /import\(\s*"\.\/characterCreator\/index\.js"\s*\)/
   );
   assert.match(
     index,
-    /"\.\/characterCreator\.js": "\.\/characterCreator\.js\?v=priority9-20260822"/
+    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=priority10-20260822"/
   );
 });

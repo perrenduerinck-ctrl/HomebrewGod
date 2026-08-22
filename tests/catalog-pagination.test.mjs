@@ -9,10 +9,10 @@ import {
 } from "../characterCreator/catalogPagination.js";
 import {
   DEFAULT_CLASSES
-} from "../defaultClasses.js";
+} from "../data/defaultClasses.js";
 import {
   DEFAULT_SUBCLASSES
-} from "../defaultSubclasses.js";
+} from "../data/defaultSubclasses.js";
 
 const testDirectory = path.dirname(
   fileURLToPath(import.meta.url)
@@ -91,7 +91,7 @@ test("Load More expands a catalog in bounded batches and keeps selected matches 
 
 test("every large Character Creator picker uses bounded catalog results", () => {
   const creatorSource = readSource(
-    "characterCreator.js"
+    "characterCreator/index.js"
   );
   const equipmentSource = readSource(
     "characterCreator/steps/equipmentStep.js"

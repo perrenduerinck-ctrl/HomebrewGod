@@ -101,9 +101,14 @@ await cp(
 for (
   const directory of
   [
-    "ai-testing",
+    "tests/browser-pages",
+    "assets",
     "characterCreator",
-    "characterSheet"
+    "characterSheet",
+    "data",
+    "monsters",
+    "shared",
+    "tokens"
   ]
 ) {
   await cp(

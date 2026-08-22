@@ -6,7 +6,7 @@
 
 import {
   createRealtimeListenerRegistry
-} from "./realtimeListeners.js";
+} from "../shared/realtimeListeners.js";
 
 export function createTokenSystem(options) {
   const deps = {

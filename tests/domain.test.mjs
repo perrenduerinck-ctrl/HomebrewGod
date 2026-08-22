@@ -2,13 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_CLASSES
-} from "../defaultClasses.js";
+} from "../data/defaultClasses.js";
 import {
   DEFAULT_FEATS
-} from "../defaultFeats.js";
+} from "../data/defaultFeats.js";
 import {
   DEFAULT_SUBCLASSES
-} from "../defaultSubclasses.js";
+} from "../data/defaultSubclasses.js";
 import {
   getClassFeaturesThroughLevel
 } from "../characterCreator/classMechanics.js";
@@ -50,7 +50,7 @@ import {
   createCharacterSpellCache,
   filterCharacterSpells,
   createCharacterSheetView
-} from "../characterSheet.js";
+} from "../characterSheet/index.js";
 import {
   calculateSrd2014MulticlassSpellcasting
 } from "../characterCreator/spellcasting.js";

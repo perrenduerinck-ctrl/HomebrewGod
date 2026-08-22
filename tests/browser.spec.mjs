@@ -42,7 +42,7 @@ test(
     const result =
       await readJsonResult(
         page,
-        "ai-testing/character-creator-self-test.html?release=phase20-20260727"
+        "tests/browser-pages/character-creator-self-test.html?release=phase20-20260727"
       );
 
     expect(result.failed)
@@ -82,7 +82,7 @@ test(
   "Spells-step Remove Feat clears the feat instead of re-adding its compatibility alias",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-feat-removal-self-test.html?release=feat-remove-20260730",
+      "tests/browser-pages/character-feat-removal-self-test.html?release=feat-remove-20260730",
       {
         waitUntil:
           "domcontentloaded"
@@ -132,7 +132,7 @@ test(
   "ordinary Character Creator typing preserves the active DOM and avoids full rerenders",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-feat-removal-self-test.html?release=creator-rerender-priority2-20260816",
+      "tests/browser-pages/character-feat-removal-self-test.html?release=creator-rerender-priority2-20260816",
       {
         waitUntil:
           "domcontentloaded"
@@ -265,7 +265,7 @@ test(
   "Character Creator typing debounces draft writes and expensive score recalculation",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-feat-removal-self-test.html?release=creator-debounce-priority3-20260820",
+      "tests/browser-pages/character-feat-removal-self-test.html?release=creator-debounce-priority3-20260820",
       {
         waitUntil: "domcontentloaded"
       }
@@ -390,7 +390,7 @@ test(
   "Character Creator large catalogs render bounded batches and filter before adding cards",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-feat-removal-self-test.html?release=creator-catalog-priority4-20260821",
+      "tests/browser-pages/character-feat-removal-self-test.html?release=creator-catalog-priority4-20260821",
       {
         waitUntil: "domcontentloaded"
       }
@@ -476,7 +476,7 @@ test(
   "playable character sheet prioritizes play controls, tracks combat, and remains usable at phone width",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?release=playable-priority8-20260728",
+      "tests/browser-pages/playable-character-sheet.html?release=playable-priority8-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -1474,7 +1474,7 @@ test(
       height: 844
     });
     await page.goto(
-      "ai-testing/playable-character-sheet.html?fixture=mobile-stress&release=playable-priority8-20260728",
+      "tests/browser-pages/playable-character-sheet.html?fixture=mobile-stress&release=playable-priority8-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -1815,7 +1815,7 @@ test(
   "playable sheet uses feature-adjusted attunement limits for display and validation",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?fixture=attunement-master&release=playable-attunement-20260728",
+      "tests/browser-pages/playable-character-sheet.html?fixture=attunement-master&release=playable-attunement-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -1908,7 +1908,7 @@ test(
   "playable sheet hides the Spells tab for a non-spellcaster",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet.html?fixture=non-spellcaster&release=playable-inventory-20260728",
+      "tests/browser-pages/playable-character-sheet.html?fixture=non-spellcaster&release=playable-inventory-20260728",
       {
         waitUntil:
           "domcontentloaded"
@@ -1943,7 +1943,7 @@ test(
   "Phase 19 module contracts remain green under the Phase 20 runner",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-modules-self-test.html?release=phase20-20260727",
+      "tests/browser-pages/character-modules-self-test.html?release=phase20-20260727",
       {
         waitUntil: "commit"
       }
@@ -1971,7 +1971,7 @@ test(
     const result =
       await readJsonResult(
         page,
-        "ai-testing/ruleset-policy-test.html?release=phase20-20260727",
+        "tests/browser-pages/ruleset-policy-test.html?release=phase20-20260727",
         "#result",
         60000
       );
@@ -1991,7 +1991,7 @@ test(
   "monster creator end-to-end operations remain green",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/monster-creator-self-test.html?release=phase20-20260727",
+      "tests/browser-pages/monster-creator-self-test.html?release=phase20-20260727",
       {
         waitUntil: "commit"
       }
@@ -2017,7 +2017,7 @@ test(
   "security and persistence regression suite is automated",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/security-persistence-self-test.html?release=phase20-20260727",
+      "tests/browser-pages/security-persistence-self-test.html?release=phase20-20260727",
       {
         waitUntil: "commit"
       }
@@ -2056,13 +2056,13 @@ test(
 
         if (
           pathname.endsWith(
-            "/characterCreator.js"
+            "/characterCreator/index.js"
           ) ||
           pathname.includes(
             "/characterCreator/"
           ) ||
           pathname.endsWith(
-            "/monsterCreator.js"
+            "/monsters/creator.js"
           )
         ) {
           creatorRequests.push(
@@ -2114,7 +2114,7 @@ test(
       creatorRequests.some(
         (pathname) => {
           return pathname.endsWith(
-            "/characterCreator.js"
+            "/characterCreator/index.js"
           );
         }
       )
@@ -2123,7 +2123,7 @@ test(
       creatorRequests.some(
         (pathname) => {
           return pathname.endsWith(
-            "/monsterCreator.js"
+            "/monsters/creator.js"
           );
         }
       )
@@ -2141,7 +2141,7 @@ test(
       creatorRequests.some(
         (pathname) => {
           return pathname.endsWith(
-            "/monsterCreator.js"
+            "/monsters/creator.js"
           );
         }
       )
@@ -2297,7 +2297,7 @@ test(
   "spell stress fixture keeps all 340 catalog spells and stale sources responsive",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/playable-character-sheet-spell-stress.html?release=spell-performance-final-20260730",
+      "tests/browser-pages/playable-character-sheet-spell-stress.html?release=spell-performance-final-20260730",
       {
         waitUntil:
           "domcontentloaded"

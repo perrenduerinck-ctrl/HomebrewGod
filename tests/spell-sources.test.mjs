@@ -31,7 +31,7 @@ import {
 import {
   collectCharacterSpells,
   createCharacterSheetView
-} from "../characterSheet.js";
+} from "../characterSheet/index.js";
 import {
   getInnateSpellUsageDetails,
   renderInnateSpellCards
@@ -39,13 +39,13 @@ import {
 import {
   DEFAULT_FEATS,
   validateFeatSpellDefinitions
-} from "../defaultFeats.js";
+} from "../data/defaultFeats.js";
 import {
   DEFAULT_SPELLS
-} from "../defaultSpells.js";
+} from "../data/defaultSpells.js";
 import {
   DEFAULT_CLASSES
-} from "../defaultClasses.js";
+} from "../data/defaultClasses.js";
 import {
   createFeatSpellSourceMetadata,
   describeFeatSpellChoiceRestrictions,

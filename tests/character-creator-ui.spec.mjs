@@ -7,7 +7,7 @@ test(
   "character text fields and custom class movement inputs enforce central limits",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-field-limits-self-test.html?release=custom-movement-speeds-20260731",
+      "tests/browser-pages/character-field-limits-self-test.html?release=custom-movement-speeds-20260731",
       {
         waitUntil:
           "domcontentloaded"
@@ -134,7 +134,7 @@ test(
 
 test.beforeEach(async ({ page }) => {
   await page.goto(
-    "ai-testing/character-creator-ui-self-test.html?release=creator-ui-20260729",
+    "tests/browser-pages/character-creator-ui-self-test.html?release=creator-ui-20260729",
     {
       waitUntil:
         "domcontentloaded"

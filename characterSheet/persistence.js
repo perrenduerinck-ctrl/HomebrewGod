@@ -1,7 +1,7 @@
 import {
   assertCharacterMutationAccess,
   assertNoStaleRevision
-} from "../securityPersistence.js";
+} from "../shared/securityPersistence.js";
 
 function cleanText(value) {
   return String(

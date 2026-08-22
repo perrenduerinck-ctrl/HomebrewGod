@@ -35,7 +35,7 @@ test(
   "deployed GitHub Pages build passes the module contract suite",
   async ({ page }) => {
     await page.goto(
-      "ai-testing/character-modules-self-test.html?release=phase20-20260727",
+      "tests/browser-pages/character-modules-self-test.html?release=phase20-20260727",
       {
         waitUntil: "commit"
       }
@@ -57,7 +57,7 @@ const deployedSelfTests = [
     name:
       "character creator",
     path:
-      "ai-testing/character-creator-self-test.html?release=phase20-20260727",
+      "tests/browser-pages/character-creator-self-test.html?release=phase20-20260727",
     selector: "#result",
     expected: "\"total\": 460"
   },
@@ -65,7 +65,7 @@ const deployedSelfTests = [
     name:
       "ruleset policy",
     path:
-      "ai-testing/ruleset-policy-test.html?release=phase20-20260727",
+      "tests/browser-pages/ruleset-policy-test.html?release=phase20-20260727",
     selector: "#result",
     expected: "\"passed\": true"
   },
@@ -73,7 +73,7 @@ const deployedSelfTests = [
     name:
       "monster creator",
     path:
-      "ai-testing/monster-creator-self-test.html?release=phase20-20260727",
+      "tests/browser-pages/monster-creator-self-test.html?release=phase20-20260727",
     selector: "#testResult",
     expected: "97 Phase 20"
   },
@@ -81,7 +81,7 @@ const deployedSelfTests = [
     name:
       "security and persistence",
     path:
-      "ai-testing/security-persistence-self-test.html?release=phase20-20260727",
+      "tests/browser-pages/security-persistence-self-test.html?release=phase20-20260727",
     selector: "#testResult",
     expected: "60 Phase 18"
   }
