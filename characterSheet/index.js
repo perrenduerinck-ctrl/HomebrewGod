@@ -5,32 +5,32 @@
 
 import {
   buildCharacterSheetPresentation
-} from "./characterCreator/sheetPresentation.js";
+} from "../characterCreator/sheetPresentation.js";
 import {
   STANDARD_CONDITIONS
-} from "./characterSheet/gameplayState.js";
+} from "./gameplayState.js";
 import {
   getDefaultSpellById
-} from "./defaultSpells.js";
+} from "../data/defaultSpells.js";
 import {
   calculateInventoryLineWeight,
   countCharacterAttunedItems,
   getCharacterAttunementLimit
-} from "./characterCreator/inventoryEquipment.js";
+} from "../characterCreator/inventoryEquipment.js";
 import {
   calculateAbilityModifier as calculateRuleAbilityModifier,
   calculateCharacterCarryingCapacity,
   calculateProficiencyBonus as calculateRuleProficiencyBonus
-} from "./characterCreator/rulesMath.js";
+} from "../characterCreator/rulesMath.js";
 import {
   createDerivedSignature,
   createScopedDerivedCache
-} from "./characterCreator/derivedCache.js";
+} from "../characterCreator/derivedCache.js";
 import {
   buildSpellLibraryFromSources,
   getCanonicalSpellSources,
   SPELL_SOURCE_MODEL_VERSION
-} from "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
+} from "../characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
 
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },

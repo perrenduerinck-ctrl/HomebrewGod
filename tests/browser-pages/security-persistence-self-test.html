@@ -63,7 +63,7 @@
       getRecordRevisionMillis,
       getTimestampMillis,
       validateSecureImageDescriptor
-    } from "../securityPersistence.js?v=phase20-20260727";
+    } from "../../shared/securityPersistence.js?v=priority10-20260822";
 
     const result = document.getElementById("testResult");
     const failures = [];
@@ -179,10 +179,10 @@
     }
 
     const [rules, app, functionsSource, firebaseConfig] = await Promise.all([
-      fetchRequiredText("../firestore.rules?v=phase20-20260727"),
-      fetchRequiredText("../app.js?v=phase20-20260727"),
-      fetchRequiredText("../functions/index.js?v=phase20-20260727"),
-      fetchRequiredText("../firebase.json?v=phase20-20260727")
+      fetchRequiredText("../../firestore.rules?v=phase20-20260727"),
+      fetchRequiredText("../../app.js?v=phase20-20260727"),
+      fetchRequiredText("../../functions/index.js?v=phase20-20260727"),
+      fetchRequiredText("../../firebase.json?v=phase20-20260727")
     ]);
 
     assert(rules.includes("allow read:") && rules.includes("if isRoomMember(roomCode)"), "Room reads require membership.");

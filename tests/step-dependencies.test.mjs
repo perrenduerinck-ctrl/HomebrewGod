@@ -63,7 +63,7 @@ test("step warning collection routes validation without sharing step objects", (
 });
 
 test("Review receives facades instead of creator subsystem objects", () => {
-  const creator = read("characterCreator.js");
+  const creator = read("characterCreator/index.js");
   const review = read(
     "characterCreator/steps/reviewStep.js"
   );
@@ -95,7 +95,7 @@ test("Review receives facades instead of creator subsystem objects", () => {
 test("every creator step uses shared services and never imports another step", () => {
   const stepFiles = fs.readdirSync(stepsDirectory)
     .filter((fileName) => fileName.endsWith("Step.js"));
-  const creator = read("characterCreator.js");
+  const creator = read("characterCreator/index.js");
 
   stepFiles.forEach((fileName) => {
     const source = read(
@@ -120,14 +120,14 @@ test("every creator step uses shared services and never imports another step", (
 
   assert.equal(sharedServiceUses.length, stepFiles.length);
 
-  const priorityNineStepUrls = creator.match(
-    /characterCreator\/steps\/[A-Za-z]+Step\.js\?v=priority9-20260822/g
+  const priorityTenStepUrls = creator.match(
+    /\.\/steps\/[A-Za-z]+Step\.js\?v=priority10-20260822/g
   ) || [];
 
   assert.equal(
-    priorityNineStepUrls.length,
+    priorityTenStepUrls.length,
     stepFiles.length,
-    "every changed step module must use the Priority 9 cache key"
+    "every moved step module must use the Priority 10 cache key"
   );
 });
 

@@ -12,33 +12,33 @@
   <script type="importmap">
     {
       "imports": {
-        "../defaultClasses.js": "../defaultClasses.js?v=phase20-20260727",
-        "../defaultClassFeatureCatalog.js": "../defaultClassFeatureCatalog.js?v=phase20-20260727",
-        "../defaultClassFeatureRules.js": "../defaultClassFeatureRules.js?v=phase20-20260727",
-        "../defaultSubclassCatalog.js": "../defaultSubclassCatalog.js?v=phase20-20260727",
-        "../defaultSubclassNames.js": "../defaultSubclassNames.js?v=phase20-20260727",
-        "../defaultSubclasses.js": "../defaultSubclasses.js?v=phase20-20260727",
-        "../defaultFeats.js": "../defaultFeats.js?v=phase20-20260727",
-        "../defaultSpells.js": "../defaultSpells.js?v=phase20-20260727",
-        "../ruleset2014.js": "../ruleset2014.js?v=phase20-20260727"
+        "../../data/defaultClasses.js": "../../data/defaultClasses.js?v=priority10-20260822",
+        "../../data/defaultClassFeatureCatalog.js": "../../data/defaultClassFeatureCatalog.js?v=priority10-20260822",
+        "../../data/defaultClassFeatureRules.js": "../../data/defaultClassFeatureRules.js?v=priority10-20260822",
+        "../../data/defaultSubclassCatalog.js": "../../data/defaultSubclassCatalog.js?v=priority10-20260822",
+        "../../data/defaultSubclassNames.js": "../../data/defaultSubclassNames.js?v=priority10-20260822",
+        "../../data/defaultSubclasses.js": "../../data/defaultSubclasses.js?v=priority10-20260822",
+        "../../data/defaultFeats.js": "../../data/defaultFeats.js?v=priority10-20260822",
+        "../../data/defaultSpells.js": "../../data/defaultSpells.js?v=priority10-20260822",
+        "../../data/ruleset2014.js": "../../data/ruleset2014.js?v=priority10-20260822"
       }
     }
   </script>
   <script type="module">
-    import { DEFAULT_CLASSES } from "../defaultClasses.js";
-    import { DEFAULT_SUBCLASSES } from "../defaultSubclasses.js";
+    import { DEFAULT_CLASSES } from "../../data/defaultClasses.js";
+    import { DEFAULT_SUBCLASSES } from "../../data/defaultSubclasses.js";
     import {
       DEFAULT_FEATS,
       validateFeatPrerequisiteDefinitions
-    } from "../defaultFeats.js";
+    } from "../../data/defaultFeats.js";
     import {
       DEFAULT_SPELLS,
       validateDefaultSpellCatalog
-    } from "../defaultSpells.js";
+    } from "../../data/defaultSpells.js";
     import {
       ACTIVE_RULESET,
       isActiveRulesetEntry
-    } from "../ruleset2014.js";
+    } from "../../data/ruleset2014.js";
 
     const groups = {
       classes: Object.values(DEFAULT_CLASSES),

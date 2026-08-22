@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createRealtimeListenerRegistry
-} from "../realtimeListeners.js";
+} from "../shared/realtimeListeners.js";
 import {
   createCharacterRealtimePersistence
 } from "../characterCreator/realtimePersistence.js";

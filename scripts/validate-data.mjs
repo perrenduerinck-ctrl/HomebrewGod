@@ -8,20 +8,20 @@ import {
 import {
   DEFAULT_CLASSES,
   validateDefaultClassCollection
-} from "../defaultClasses.js";
+} from "../data/defaultClasses.js";
 import {
   DEFAULT_FEATS,
   validateDefaultFeatCollection,
   validateFeatSpellDefinitions
-} from "../defaultFeats.js";
+} from "../data/defaultFeats.js";
 import {
   DEFAULT_SPELLS,
   validateDefaultSpellCatalog
-} from "../defaultSpells.js";
+} from "../data/defaultSpells.js";
 import {
   DEFAULT_SUBCLASSES,
   validateDefaultSubclassCollection
-} from "../defaultSubclasses.js";
+} from "../data/defaultSubclasses.js";
 
 const root = path.resolve(
   path.dirname(
@@ -308,7 +308,8 @@ const creatorSource =
   await readFile(
     path.join(
       root,
-      "characterCreator.js"
+      "characterCreator",
+      "index.js"
     ),
     "utf8"
   );
@@ -318,7 +319,7 @@ const creatorLineCount =
 
 if (creatorLineCount >= 55000) {
   errors.push(
-    `characterCreator.js has ${creatorLineCount} lines; the Phase 19 ceiling is 54,999.`
+    `characterCreator/index.js has ${creatorLineCount} lines; the Phase 19 ceiling is 54,999.`
   );
 }
 

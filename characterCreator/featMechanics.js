@@ -1,6 +1,6 @@
 import {
   DEFAULT_FEAT_ABILITY_SCORE_MAXIMUM
-} from "../defaultFeats.js";
+} from "../data/defaultFeats.js";
 
 function cleanString(value, fallback = "") {
   const text = String(

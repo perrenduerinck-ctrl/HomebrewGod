@@ -9,7 +9,7 @@ const sourceFiles = {
   ),
   characterCreator: await readFile(
     new URL(
-      "../characterCreator.js",
+      "../characterCreator/index.js",
       import.meta.url
     ),
     "utf8"
@@ -22,11 +22,11 @@ const sourceFiles = {
     "utf8"
   ),
   monsterCreator: await readFile(
-    new URL("../monsterCreator.js", import.meta.url),
+    new URL("../monsters/creator.js", import.meta.url),
     "utf8"
   ),
   tokens: await readFile(
-    new URL("../tokens.js", import.meta.url),
+    new URL("../tokens/index.js", import.meta.url),
     "utf8"
   )
 };

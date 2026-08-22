@@ -36,16 +36,16 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens.js";
+import { createTokenSystem } from "./tokens/index.js";
 import {
   createRealtimeListenerRegistry
-} from "./realtimeListeners.js";
+} from "./shared/realtimeListeners.js";
 import {
   MAX_SECURE_IMAGE_BYTES,
   createPersistenceMonitor,
   friendlyServiceError,
   validateSecureImageDescriptor
-} from "./securityPersistence.js";
+} from "./shared/securityPersistence.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -4393,7 +4393,7 @@ async function initCharacterCreatorSystem() {
 
   if (!characterCreatorModulePromise) {
     characterCreatorModulePromise = import(
-      "./characterCreator.js"
+      "./characterCreator/index.js"
     );
   }
 
@@ -4514,7 +4514,7 @@ async function initMonsterCreatorSystem() {
 
   if (!monsterCreatorModulePromise) {
     monsterCreatorModulePromise = import(
-      "./monsterCreator.js"
+      "./monsters/creator.js"
     );
   }
 

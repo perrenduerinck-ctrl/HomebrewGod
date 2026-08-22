@@ -18,17 +18,17 @@ const phaseEvidence = [
     1,
     [
       "app.js",
-      "characterSheet.js",
-      "ai-testing/app-smoke-test.html",
-      "ai-testing/character-creator-self-test.html"
+      "characterSheet/index.js",
+      "tests/browser-pages/app-smoke-test.html",
+      "tests/browser-pages/character-creator-self-test.html"
     ]
   ],
   [
     2,
     [
-      "RULESET_POLICY.md",
-      "ruleset2014.js",
-      "ai-testing/ruleset-policy-test.html"
+      "docs/rules/RULESET_POLICY.md",
+      "data/ruleset2014.js",
+      "tests/browser-pages/ruleset-policy-test.html"
     ]
   ],
   ...Array.from(
@@ -58,7 +58,7 @@ const phaseEvidence = [
       return [
         phase,
         [
-          fileNames[phase],
+          `docs/development-history/${fileNames[phase]}`,
           "characterCreator/selfTests.js"
         ]
       ];
@@ -67,36 +67,36 @@ const phaseEvidence = [
   [
     17,
     [
-      "PHASE17_MONSTER_CREATOR.md",
-      "monsterCreator.js",
-      "ai-testing/monster-creator-self-test.html"
+      "docs/development-history/PHASE17_MONSTER_CREATOR.md",
+      "monsters/creator.js",
+      "tests/browser-pages/monster-creator-self-test.html"
     ]
   ],
   [
     18,
     [
-      "PHASE18_SECURITY_PERSISTENCE.md",
+      "docs/development-history/PHASE18_SECURITY_PERSISTENCE.md",
       "firestore.rules",
-      "securityPersistence.js",
+      "shared/securityPersistence.js",
       "functions/index.js",
-      "ai-testing/security-persistence-self-test.html"
+      "tests/browser-pages/security-persistence-self-test.html"
     ]
   ],
   [
     19,
     [
-      "PHASE19_CHARACTER_MODULES.md",
+      "docs/development-history/PHASE19_CHARACTER_MODULES.md",
       "characterCreator/rulesMath.js",
       "characterCreator/persistence.js",
       "characterCreator/sheetPresentation.js",
-      "ai-testing/character-modules-self-test.html"
+      "tests/browser-pages/character-modules-self-test.html"
     ]
   ],
   [
     20,
     [
-      "PHASE20_RELEASE_READINESS.md",
-      "PHASE_AUDIT.md",
+      "docs/development-history/PHASE20_RELEASE_READINESS.md",
+      "docs/development-history/PHASE_AUDIT.md",
       "package.json",
       "playwright.config.mjs",
       ".github/workflows/release-readiness.yml",

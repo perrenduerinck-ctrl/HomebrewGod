@@ -46,7 +46,7 @@ function getFunctionSource(
 }
 
 const creatorSource = readSource(
-  "characterCreator.js"
+  "characterCreator/index.js"
 );
 const uiSource = readSource(
   "characterCreator/uiEnhancements.js"

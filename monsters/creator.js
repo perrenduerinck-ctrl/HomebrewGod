@@ -3,10 +3,10 @@ import {
   assertNoStaleRevision,
   friendlyServiceError,
   getRecordRevisionMillis
-} from "./securityPersistence.js";
+} from "../shared/securityPersistence.js";
 import {
   createRealtimeListenerRegistry
-} from "./realtimeListeners.js";
+} from "../shared/realtimeListeners.js";
 
 const MONSTER_SIZES = [
   "Tiny",

@@ -150,10 +150,10 @@
       createMonsterCreator,
       normalizeMonsterRecord,
       parseMonsterNamedEntries
-    } from "../monsterCreator.js?v=phase20-20260727";
+    } from "../../monsters/creator.js?v=priority10-20260822";
     import {
       createTokenSystem
-    } from "../tokens.js?v=phase20-20260727";
+    } from "../../tokens/index.js?v=priority10-20260822";
 
     const result = document.getElementById("testResult");
     const failures = [];
@@ -622,16 +622,16 @@
     assert(tokenDocuments.length === 1, "Denied token creation does not write a document.");
 
     const [appSource, indexSource] = await Promise.all([
-      fetch("../app.js?v=phase20-20260727").then(function (response) {
+      fetch("../../app.js?v=phase20-20260727").then(function (response) {
         return response.text();
       }),
-      fetch("../index.html?v=phase20-20260727").then(function (response) {
+      fetch("../../index.html?v=phase20-20260727").then(function (response) {
         return response.text();
       })
     ]);
     assert(
-      !appSource.includes('import { createMonsterCreator } from "./monsterCreator.js";') &&
-        appSource.includes('import(\n      "./monsterCreator.js"\n    )'),
+      !appSource.includes('import { createMonsterCreator } from "./monsters/creator.js";') &&
+        appSource.includes('import(\n      "./monsters/creator.js"\n    )'),
       "app.js lazy-loads the Monster Creator module."
     );
     assert(
