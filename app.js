@@ -38,6 +38,11 @@ import {
 
 import { createTokenSystem } from "./tokens/index.js";
 import {
+  createMapRuler,
+  formatMapSquares,
+  normalizeFeetPerSquare
+} from "./battleMap/measurement.js?v=stage2-20260824";
+import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
 import {
@@ -154,6 +159,10 @@ const E = {
   battleMapImage: $("battleMapImage"),
   noBattleMapText: $("noBattleMapText"),
   battleMapViewer: $("battleMapViewer"),
+  rulerToggleButton: $("rulerToggleButton"),
+  mapFeetPerSquareInput:
+    $("mapFeetPerSquareInput"),
+  rulerStatus: $("rulerStatus"),
 
   // Old quick battle map controls, kept safe if missing
   battleDmMapControls: $("battleDmMapControls"),
@@ -214,6 +223,7 @@ let legacyPuzzleTileMigrationPromise = null;
 let hasMigratedLegacyPuzzleTiles = false;
 
 let battleZoom = 1;
+let battleMapRuler = null;
 
 const appRealtimeListeners =
   createRealtimeListenerRegistry({
@@ -2739,6 +2749,157 @@ let activePuzzleDrag = null;
 ensureBattleManagerPolishStyles();
 syncBattleManagerVisibility();
 ensurePuzzleDragListeners();
+initializeBattleMapRuler();
+
+
+// =====================================================
+// APP SECTION 12A.1 — GENERAL-PURPOSE MAP RULER
+// Independent from spells, attacks, and persisted room data.
+// =====================================================
+
+function getBattleMapGridPixelSize() {
+  const scaleInput = $("tokenMediumSizeInput");
+  const inputValue = Number(
+    scaleInput?.value
+  );
+  const directValue = Number(
+    currentRoomData?.tokenMediumSize
+  );
+  const nestedValue = Number(
+    currentRoomData?.tokenScale
+      ?.mediumSize
+  );
+  const basePixels = [
+    inputValue,
+    directValue,
+    nestedValue,
+    64
+  ].find((value) => (
+    Number.isFinite(value) &&
+    value > 0
+  ));
+
+  return basePixels * battleZoom;
+}
+
+function getActiveRulerTarget() {
+  if (
+    E.puzzleMapBoard &&
+    !E.puzzleMapBoard.classList
+      .contains("hidden")
+  ) {
+    return E.puzzleMapBoard;
+  }
+
+  if (
+    E.battleMapImage &&
+    E.battleMapImage.style.display !==
+      "none" &&
+    E.battleMapImage.getAttribute("src")
+  ) {
+    return E.battleMapImage;
+  }
+
+  return E.battleMapViewer ||
+    E.battleMapSurface;
+}
+
+function getRulerFeetPerSquare() {
+  return normalizeFeetPerSquare(
+    E.mapFeetPerSquareInput?.value
+  );
+}
+
+function updateBattleMapRulerUi(state) {
+  if (E.rulerToggleButton) {
+    E.rulerToggleButton.textContent =
+      state.enabled
+        ? "Ruler: On"
+        : "Ruler: Off";
+    E.rulerToggleButton.setAttribute(
+      "aria-pressed",
+      String(state.enabled)
+    );
+  }
+
+  if (!E.rulerStatus) return;
+
+  if (!state.enabled) {
+    text(
+      E.rulerStatus,
+      "Turn on the ruler, then drag across the map."
+    );
+    return;
+  }
+
+  if (!state.measurement) {
+    text(
+      E.rulerStatus,
+      "Ruler ready — drag from one map location to another."
+    );
+    return;
+  }
+
+  text(
+    E.rulerStatus,
+    `${state.label} · ${
+      formatMapSquares(
+        state.measurement.squares
+      )
+    }`
+  );
+}
+
+function initializeBattleMapRuler() {
+  if (
+    battleMapRuler ||
+    !E.battleMapSurface
+  ) {
+    return battleMapRuler;
+  }
+
+  battleMapRuler = createMapRuler({
+    surface: E.battleMapSurface,
+    getTargetElement:
+      getActiveRulerTarget,
+    getPixelsPerSquare:
+      getBattleMapGridPixelSize,
+    getFeetPerSquare:
+      getRulerFeetPerSquare,
+    onStateChange:
+      updateBattleMapRulerUi
+  });
+  battleMapRuler.connect();
+
+  E.rulerToggleButton?.addEventListener(
+    "click",
+    function () {
+      battleMapRuler.toggle();
+    }
+  );
+
+  E.mapFeetPerSquareInput
+    ?.addEventListener(
+      "input",
+      function () {
+        battleMapRuler.refresh();
+      }
+    );
+
+  E.mapFeetPerSquareInput
+    ?.addEventListener(
+      "change",
+      function () {
+        const feetPerSquare =
+          getRulerFeetPerSquare();
+        E.mapFeetPerSquareInput.value =
+          String(feetPerSquare);
+        battleMapRuler.refresh();
+      }
+    );
+
+  return battleMapRuler;
+}
 
 
 // =====================================================
@@ -3469,6 +3630,8 @@ function showPuzzleBoardView() {
   if (E.battleMapViewer) {
     E.battleMapViewer.classList.add("hidden");
   }
+
+  battleMapRuler?.refresh();
 }
 
 function showSingleBattleMapView() {
@@ -3479,6 +3642,8 @@ function showSingleBattleMapView() {
   if (E.battleMapViewer) {
     E.battleMapViewer.classList.remove("hidden");
   }
+
+  battleMapRuler?.refresh();
 }
 
 function keepTokenLayerReadyForExternalFile() {
@@ -4353,6 +4518,10 @@ function showAnyMainScreen(screenName) {
     screenMap[screenName].classList.remove("hidden");
   }
 
+  if (screenName === "battle") {
+    battleMapRuler?.refresh();
+  }
+
   syncRealtimeListenersForScreen(screenName);
 }
 
@@ -4369,6 +4538,7 @@ function applyBattleZoom() {
   }
 
   text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
+  battleMapRuler?.refresh();
 }
 
 function openToolTab(viewName) {
@@ -4924,3 +5094,4 @@ onAuthStateChanged(auth, async function (user) {
     );
   }
 });
+

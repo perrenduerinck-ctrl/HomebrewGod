@@ -2242,6 +2242,76 @@ test(
 );
 
 test(
+  "battle-map ruler measures horizontal and diagonal grid distance",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=map-ruler-stage2-20260824",
+      {
+        waitUntil: "domcontentloaded"
+      }
+    );
+    await page.waitForFunction(() => {
+      return Boolean(
+        window.__HOMEBREW_GOD_RELEASE_TEST__
+      );
+    });
+    await page.evaluate(() => {
+      return window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .openScreen("battle");
+    });
+
+    const toggle = page.locator(
+      "#rulerToggleButton"
+    );
+    const overlay = page.locator(
+      ".hg-map-ruler-layer"
+    );
+    const status = page.locator(
+      "#rulerStatus"
+    );
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await overlay.scrollIntoViewIfNeeded();
+
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+
+    const startX = box.x + 90;
+    const startY = box.y + 90;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(
+      startX + 384,
+      startY
+    );
+    await page.mouse.up();
+
+    await expect(status).toContainText("30 ft");
+    await expect(status).toContainText("6 squares");
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(
+      startX + 192,
+      startY + 256
+    );
+    await page.mouse.up();
+
+    await expect(status).toContainText("25 ft");
+    await expect(status).toContainText("5 squares");
+    await expect(
+      page.locator(".hg-map-ruler-label")
+    ).toHaveText("25 ft");
+  }
+);
+
+test(
   "mobile layout does not overflow at a phone viewport",
   async ({ page }) => {
     await page.setViewportSize({
@@ -2495,3 +2565,4 @@ test(
     expect(hasOverflow).toBe(false);
   }
 );
+

@@ -50,6 +50,7 @@ test("the root contains entry points and configuration, not feature modules or h
 test("runtime areas, data, assets, tests, and documentation have explicit homes", () => {
   [
     "assets/styles/app.css",
+    "battleMap/measurement.js",
     "characterCreator/index.js",
     "characterSheet/index.js",
     "data/defaultClasses.js",
@@ -88,7 +89,7 @@ test("the application and import map use the organized runtime paths", () => {
   });
   assert.match(
     index,
-    /\.\/assets\/styles\/app\.css\?v=priority10-20260822/
+    /\.\/assets\/styles\/app\.css\?v=map-ruler-stage2-20260824/
   );
   assert.doesNotMatch(
     `${app}\n${index}`,
@@ -102,6 +103,7 @@ test("the Pages build includes runtime folders but excludes development folders"
   [
     "tests/browser-pages",
     "assets",
+    "battleMap",
     "characterCreator",
     "characterSheet",
     "data",
@@ -113,3 +115,4 @@ test("the Pages build includes runtime folders but excludes development folders"
   });
   assert.doesNotMatch(build, /"(?:docs|node_modules|tests)"/);
 });
+

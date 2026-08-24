@@ -103,6 +103,7 @@ for (
   [
     "tests/browser-pages",
     "assets",
+    "battleMap",
     "characterCreator",
     "characterSheet",
     "data",
@@ -123,3 +124,4 @@ for (
 console.log(
   `GitHub Pages artifact created at ${output}.`
 );
+
