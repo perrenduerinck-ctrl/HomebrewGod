@@ -171,4 +171,3 @@ test("targeting validation rejects unsafe or incomplete geometry", () => {
     /finite non-negative number/
   );
 });
-
