@@ -1266,4 +1266,3 @@ export function getDefaultSpellsByLevel(levelKey) {
   const normalizedLevelKey = normalizeSpellLevelKey(levelKey);
   return DEFAULT_SPELLS.filter((spell) => spell.levelKey === normalizedLevelKey);
 }
-
