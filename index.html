@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=priority10-20260822">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=map-ruler-stage2-20260824">
 </head>
 
 <body>
@@ -135,6 +135,25 @@
       <button id="zoomOutButton">Zoom Out</button>
       <button id="zoomResetButton">Reset Zoom</button>
       <button id="zoomInButton">Zoom In</button>
+      <button
+        id="rulerToggleButton"
+        type="button"
+        aria-pressed="false"
+      >Ruler: Off</button>
+
+      <label class="battleScaleControl" for="mapFeetPerSquareInput">
+        <span>Scale</span>
+        <input
+          id="mapFeetPerSquareInput"
+          type="number"
+          min="1"
+          max="1000"
+          step="1"
+          value="5"
+          inputmode="numeric"
+        >
+        <span>ft / square</span>
+      </label>
     </div>
 
     <p id="battleInfoLine">
@@ -145,6 +164,10 @@
       <b>Map:</b> <span id="battleMapNameText">None</span>
       |
       <b>Zoom:</b> <span id="battleZoomText">100%</span>
+    </p>
+
+    <p id="rulerStatus" class="battleRulerStatus" aria-live="polite">
+      Turn on the ruler, then drag across the map.
     </p>
 
     <!-- =====================================================
@@ -628,8 +651,9 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=priority10-20260822"
+    src="./app.js?v=map-ruler-stage2-20260824"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>
 </html>
+
