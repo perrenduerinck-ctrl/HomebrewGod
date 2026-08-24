@@ -1,11 +1,15 @@
 import { SPELL_NAME_LIST } from "./defaultSpellNames.js";
 import { SRD_SPELL_DETAILS } from "./defaultSpellDetails.js";
 import {
+  createSpellTargetingData,
+  validateSpellTargetingData
+} from "./spellTargeting.js";
+import {
   ACTIVE_RULESET,
   getLegacy2014Metadata
 } from "./ruleset2014.js?v=phase15-20260726";
 
-export const DEFAULT_SPELL_SCHEMA_VERSION = 1;
+export const DEFAULT_SPELL_SCHEMA_VERSION = 2;
 export const SRD_SPELL_COUNT_2014 = 319;
 export const ADDITIONAL_CANTRIP_COUNT_2014 = 21;
 
@@ -700,6 +704,8 @@ const normalizeDetailedSpell = (rawSpell) => {
     Object.keys(healingBySlotLevel).length ? "healing" : ""
   ].map(normalizeSpellId).filter(Boolean);
 
+  const targeting = createSpellTargetingData(raw);
+
   return Object.freeze({
     ...metadata,
     schemaVersion: DEFAULT_SPELL_SCHEMA_VERSION,
@@ -743,7 +749,8 @@ const normalizeDetailedSpell = (rawSpell) => {
     tags: Object.freeze([...new Set(tags)]),
     areaOfEffect: raw.areaOfEffect && typeof raw.areaOfEffect === "object"
       ? Object.freeze({ ...raw.areaOfEffect })
-      : null
+      : null,
+    targeting
   });
 };
 
@@ -863,6 +870,42 @@ export function validateDefaultSpellCollection(spells) {
     }
     if (!Array.isArray(spell.effects)) errors.push(`${label} effects must be an array.`);
     if (!Array.isArray(spell.tags)) errors.push(`${label} tags must be an array.`);
+    const targetingValidation =
+      validateSpellTargetingData(
+        spell.targeting,
+        `${label} targeting`
+      );
+    errors.push(...targetingValidation.errors);
+    if (
+      spell.targeting?.range?.text !==
+      spell.range
+    ) {
+      errors.push(`${label} targeting range does not match its catalog range.`);
+    }
+    if (
+      spell.targeting?.duration?.text !==
+      spell.duration
+    ) {
+      errors.push(`${label} targeting duration does not match its catalog duration.`);
+    }
+    if (
+      spell.targeting?.duration?.concentration !==
+      spell.concentration
+    ) {
+      errors.push(`${label} targeting concentration does not match its catalog flag.`);
+    }
+    if (
+      (spell.targeting?.save?.ability || "") !==
+      spell.saveAbility
+    ) {
+      errors.push(`${label} targeting save does not match its catalog save.`);
+    }
+    if (
+      (spell.targeting?.attack?.type || "") !==
+      spell.attackType
+    ) {
+      errors.push(`${label} targeting attack does not match its catalog attack.`);
+    }
     if (
       ["melee", "ranged"].includes(spell.attackType) &&
       !spell.tags?.includes("spell-attack")
@@ -1223,3 +1266,4 @@ export function getDefaultSpellsByLevel(levelKey) {
   const normalizedLevelKey = normalizeSpellLevelKey(levelKey);
   return DEFAULT_SPELLS.filter((spell) => spell.levelKey === normalizedLevelKey);
 }
+
