@@ -405,4 +405,3 @@ export function createTemplateGeometry({
     bounds: boundsFromPoints(points)
   });
 }
-

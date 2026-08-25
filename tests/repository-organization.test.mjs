@@ -120,4 +120,3 @@ test("the Pages build includes runtime folders but excludes development folders"
   assert.doesNotMatch(build, /"(?:docs|node_modules|tests)"/);
 });
 
-

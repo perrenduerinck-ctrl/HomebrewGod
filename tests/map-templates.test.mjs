@@ -137,4 +137,3 @@ test("template inputs remain finite and bounded", () => {
     Math.PI
   );
 });
-
