@@ -36,20 +36,23 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js";
+import { createTokenSystem } from "./tokens/index.js?v=stage4-20260825";
 import {
   createMapRuler,
   formatMapSquares,
   normalizeFeetPerSquare
-} from "./battleMap/measurement.js?v=stage3-20260825";
+} from "./battleMap/measurement.js?v=stage4-20260825";
 import {
   getDefaultTemplateOptions,
   normalizeTemplateDistance,
   normalizeTemplateShape
-} from "./battleMap/templateGeometry.js?v=stage3-20260825";
+} from "./battleMap/templateGeometry.js?v=stage4-20260825";
 import {
   createMapTemplateEngine
-} from "./battleMap/templateRenderer.js?v=stage3-20260825";
+} from "./battleMap/templateRenderer.js?v=stage4-20260825";
+import {
+  findAffectedTokens
+} from "./battleMap/tokenCollision.js?v=stage4-20260825";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -3002,7 +3005,111 @@ function syncBattleMapTemplateControls(
   }
 }
 
+function collectBattleMapTokenFootprints() {
+  const overlay =
+    battleMapTemplates?.getOverlayElement();
+  const overlayRect =
+    overlay?.getBoundingClientRect();
+  const tokenElements = Array.from(
+    E.tokenLayer?.querySelectorAll(
+      ".hg-token[data-token-id]"
+    ) || []
+  );
+
+  if (
+    !overlayRect ||
+    overlayRect.width <= 0 ||
+    overlayRect.height <= 0
+  ) {
+    return [];
+  }
+
+  return tokenElements.map((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      element,
+      footprint: {
+        id: element.dataset.tokenId,
+        name:
+          element.dataset.tokenName ||
+          element.title ||
+          "Token",
+        type:
+          element.dataset.tokenType ||
+          "token",
+        left: rect.left - overlayRect.left,
+        top: rect.top - overlayRect.top,
+        width: rect.width,
+        height: rect.height
+      }
+    };
+  });
+}
+
+function updateAffectedTokenHighlights(geometry) {
+  const tokenEntries =
+    collectBattleMapTokenFootprints();
+  const affectedTokens = geometry
+    ? findAffectedTokens(
+        geometry,
+        tokenEntries.map((entry) => (
+          entry.footprint
+        ))
+      )
+    : [];
+  const affectedIds = new Set(
+    affectedTokens.map((token) => token.id)
+  );
+
+  tokenEntries.forEach(({ element, footprint }) => {
+    const affected = affectedIds.has(
+      footprint.id
+    );
+    element.classList.toggle(
+      "hg-token-template-affected",
+      affected
+    );
+    if (affected) {
+      element.dataset.templateAffected = "true";
+    } else {
+      delete element.dataset.templateAffected;
+    }
+  });
+
+  return affectedTokens;
+}
+
+function formatAffectedTokenStatus(affectedTokens) {
+  if (!affectedTokens.length) {
+    return "Affected tokens: none.";
+  }
+
+  const visibleNames = affectedTokens
+    .slice(0, 4)
+    .map((token) => token.name);
+  const remaining =
+    affectedTokens.length - visibleNames.length;
+  return `Affected tokens (${affectedTokens.length}): ${
+    visibleNames.join(", ")
+  }${
+    remaining > 0
+      ? `, +${remaining} more`
+      : ""
+  }.`;
+}
+
 function updateBattleMapTemplateUi(state) {
+  const affectedTokens =
+    updateAffectedTokenHighlights(
+      state.enabled
+        ? state.geometry
+        : null
+    );
+  const affectedStatus =
+    formatAffectedTokenStatus(
+      affectedTokens
+    );
+
   if (E.templateToggleButton) {
     E.templateToggleButton.textContent =
       state.enabled
@@ -3042,7 +3149,7 @@ function updateBattleMapTemplateUi(state) {
   if (state.phase === "aiming") {
     text(
       E.templateStatus,
-      `${state.label} — move to aim, then click again to lock it.`
+      `${state.label} — move to aim, then click again to lock it. ${affectedStatus}`
     );
     return;
   }
@@ -3050,14 +3157,14 @@ function updateBattleMapTemplateUi(state) {
   if (state.phase === "confirmed") {
     text(
       E.templateStatus,
-      `${state.label} locked. Use Clear Template to place another.`
+      `${state.label} locked. Use Clear Template to place another. ${affectedStatus}`
     );
     return;
   }
 
   text(
     E.templateStatus,
-    `${state.label} — click to lock it.`
+    `${state.label} — click to lock it. ${affectedStatus}`
   );
 }
 
@@ -3085,6 +3192,14 @@ function initializeBattleMapTemplates() {
   battleMapTemplates.connect();
   battleMapTemplates.setOptions(
     getBattleMapTemplateOptions()
+  );
+  document.addEventListener(
+    "homebrewgod:tokens-rendered",
+    function () {
+      updateBattleMapTemplateUi(
+        battleMapTemplates.getState()
+      );
+    }
   );
 
   E.templateToggleButton?.addEventListener(

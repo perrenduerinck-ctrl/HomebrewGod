@@ -2428,6 +2428,164 @@ test(
 );
 
 test(
+  "battle-map templates highlight every intersecting token footprint",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=token-detection-stage4-20260825",
+      {
+        waitUntil: "domcontentloaded"
+      }
+    );
+    await page.waitForFunction(() => {
+      return Boolean(
+        window.__HOMEBREW_GOD_RELEASE_TEST__
+      );
+    });
+    await page.evaluate(() => {
+      return window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .openScreen("battle");
+    });
+
+    await page.locator(
+      "#templateShapeSelect"
+    ).selectOption("circle");
+    await page.locator(
+      "#templateSizeInput"
+    ).fill("5");
+    await page.locator(
+      "#templateToggleButton"
+    ).click();
+
+    const overlay = page.locator(
+      ".hg-map-template-layer"
+    );
+    await overlay.scrollIntoViewIfNeeded();
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    const localCenter = {
+      x: Math.min(300, box.width / 2),
+      y: Math.min(240, box.height / 2)
+    };
+
+    await page.evaluate((center) => {
+      const layer = document.getElementById(
+        "tokenLayer"
+      );
+      const templateLayer = document.querySelector(
+        ".hg-map-template-layer"
+      );
+      const layerRect = layer.getBoundingClientRect();
+      const templateRect =
+        templateLayer.getBoundingClientRect();
+      const offsetX =
+        templateRect.left - layerRect.left;
+      const offsetY =
+        templateRect.top - layerRect.top;
+
+      layer.innerHTML = "";
+      function addToken({
+        id,
+        name,
+        left,
+        top,
+        size,
+        type
+      }) {
+        const token = document.createElement("div");
+        token.className =
+          `hg-token hg-token-${type}`;
+        token.dataset.tokenId = id;
+        token.dataset.tokenName = name;
+        token.dataset.tokenType = type;
+        token.title = name;
+        token.style.left = `${offsetX + left}px`;
+        token.style.top = `${offsetY + top}px`;
+        token.style.width = `${size}px`;
+        token.style.height = `${size}px`;
+        const face = document.createElement("div");
+        face.className = "hg-token-fallback";
+        face.textContent = name.charAt(0);
+        token.appendChild(face);
+        layer.appendChild(token);
+      }
+
+      addToken({
+        id: "large-ogre",
+        name: "Large Ogre",
+        type: "enemy",
+        left: center.x + 55,
+        top: center.y - 64,
+        size: 128
+      });
+      addToken({
+        id: "distant-wizard",
+        name: "Distant Wizard",
+        type: "player",
+        left: center.x + 160,
+        top: center.y - 16,
+        size: 32
+      });
+      document.dispatchEvent(
+        new CustomEvent(
+          "homebrewgod:tokens-rendered",
+          { detail: { count: 2 } }
+        )
+      );
+    }, localCenter);
+
+    await page.mouse.move(
+      box.x + localCenter.x,
+      box.y + localCenter.y
+    );
+
+    const ogre = page.locator(
+      '[data-token-id="large-ogre"]'
+    );
+    const wizard = page.locator(
+      '[data-token-id="distant-wizard"]'
+    );
+    await expect(ogre).toHaveClass(
+      /hg-token-template-affected/
+    );
+    await expect(ogre).toHaveAttribute(
+      "data-template-affected",
+      "true"
+    );
+    await expect(wizard).not.toHaveClass(
+      /hg-token-template-affected/
+    );
+    await expect(
+      page.locator("#templateStatus")
+    ).toContainText(
+      "Affected tokens (1): Large Ogre"
+    );
+
+    await page.mouse.click(
+      box.x + localCenter.x,
+      box.y + localCenter.y
+    );
+    await page.mouse.move(
+      box.x + localCenter.x - 180,
+      box.y + localCenter.y
+    );
+    await expect(ogre).toHaveClass(
+      /hg-token-template-affected/
+    );
+
+    await page.locator(
+      "#templateClearButton"
+    ).click();
+    await expect(ogre).not.toHaveClass(
+      /hg-token-template-affected/
+    );
+    await expect(ogre).not.toHaveAttribute(
+      "data-template-affected"
+    );
+  }
+);
+
+test(
   "mobile layout does not overflow at a phone viewport",
   async ({ page }) => {
     await page.setViewportSize({
