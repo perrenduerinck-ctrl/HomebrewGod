@@ -79,9 +79,97 @@ export function createClassStep(dependencies = {}) {
 
   const creatorState = getCreatorState();
 
+  function renderLevelFirstPanel() {
+    const character = creatorState.draft;
+    const totalLevel = clampLevel(
+      character
+        ?.classProgression
+        ?.totalLevel
+    );
+    const classEntries =
+      getCharacterClassEntries(
+        character
+      );
+    const multiclass =
+      isMulticlassDraft(character);
+    const classSplit = classEntries
+      .map((classEntry) => {
+        return `${
+          cleanString(
+            classEntry?.className
+          ) || "Class"
+        } ${getClassEntryLevel(
+          classEntry,
+          1
+        )}`;
+      })
+      .join(" / ");
+
+    return `
+      <section class="hg-character-level-first" data-level-first-panel="true">
+        <div class="hg-character-level-first-heading">
+          <span class="hg-character-level-first-number">1</span>
+
+          <div>
+            <h3>Choose Total Character Level</h3>
+            <p class="small">
+              Set the character's overall level before choosing classes.
+              Multiclass characters split this total between two or more classes.
+            </p>
+          </div>
+        </div>
+
+        <div class="hg-character-field-grid three">
+          ${wizardField(
+            "Total Character Level",
+            "ccCharacterLevel",
+            totalLevel,
+            {
+              type: "number",
+              valueType: "integer",
+              extra:
+                `min="1" max="20" step="1" data-level-input="true"${
+                  multiclass
+                    ? ' disabled data-multiclass-total="true"'
+                    : ""
+                }`
+            }
+          )}
+        </div>
+
+        <div class="hg-character-current-choice">
+          <b>Total level:</b>
+          ${totalLevel}
+
+          <br>
+
+          <b>Class split:</b>
+          ${escapeHtml(
+            classSplit ||
+            "Choose a starting class next"
+          )}
+
+          <br>
+
+          <span class="small">
+            ${
+              multiclass
+                ? "The total is calculated from the class split. Use the Level Up Workflow below to add levels."
+                : totalLevel >= 2
+                  ? "Multiclassing is available after you choose a starting class."
+                  : "Set this to level 2 or higher if you want to multiclass."
+            }
+          </span>
+        </div>
+      </section>
+    `;
+  }
+
   function renderStep() {
     if (isMulticlassDraft()) {
       return `
+        ${renderLevelFirstPanel()}
+
         ${beginnerNote(
           "Choosing a Class",
           "Class is your biggest rules choice. It decides your hit die, armor and weapon training, saving throws, class features, and sometimes spellcasting. Your level belongs here because each level unlocks new class features."
@@ -284,10 +372,16 @@ export function createClassStep(dependencies = {}) {
       getSection12SkillPickerChoices();
 
     return `
+      ${renderLevelFirstPanel()}
+
       ${beginnerNote(
         "Choosing a Class",
         "Class is your biggest rules choice. It decides your hit die, armor and weapon training, saving throws, class features, and sometimes spellcasting. Your level belongs here because each level unlocks new class features."
       )}
+
+      <hr>
+
+      <h3>2. Choose Starting Class</h3>
 
       <div class="hg-character-current-choice">
         <b>Current class:</b>
@@ -320,13 +414,19 @@ export function createClassStep(dependencies = {}) {
         ? `
           <hr>
 
-          <h3>Class Level and Advancement</h3>
-
-          ${renderLevelStep()}
-
-          <hr>
+          <h3>3. Class Progression and Multiclass</h3>
 
           ${renderMulticlassProgressionEditor()}
+
+          <details class="hg-character-advanced-level-settings">
+            <summary>Advanced HP, AC, movement, and hit-dice settings</summary>
+
+            <div class="hg-character-advanced-level-content">
+              ${renderLevelStep({
+                hideLevelInput: true
+              })}
+            </div>
+          </details>
         `
         : `
           <div class="hg-character-placeholder">
@@ -1219,20 +1319,31 @@ export function createClassStep(dependencies = {}) {
     return (
       totalLevel >= 1 &&
       totalLevel <= 20 &&
-      getMulticlassPrerequisiteResults(character)
-        .every((result) => result.met) &&
       getClassProgressionPendingChoiceWarnings(character).length === 0
     );
   }
 
   function validateStep(character = creatorState.draft) {
     const complete = isStepComplete(character);
+    const prerequisiteReminders =
+      isMulticlassDraft(character)
+        ? getMulticlassPrerequisiteResults(
+            character
+          )
+            .filter((result) => {
+              return !result.met;
+            })
+            .map((result) => {
+              return `Set ability scores later to meet ${result.className || "class"}: ${result.label}.`;
+            })
+        : [];
+
     return {
       valid: complete,
       blockingErrors: complete
         ? []
         : ["Choose a class and complete its required progression choices."],
-      reminders: []
+      reminders: prerequisiteReminders
     };
   }
 

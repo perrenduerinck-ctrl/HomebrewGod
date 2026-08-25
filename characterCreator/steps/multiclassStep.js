@@ -653,6 +653,18 @@ export function createMulticlassStep(dependencies = {}) {
         totalLevel
       );
 
+    const canSplitAnotherClass =
+      !classes.length ||
+      (
+        totalLevel >= 2 &&
+        classes.some((classEntry) => {
+          return getClassEntryLevel(
+            classEntry,
+            1
+          ) > 1;
+        })
+      );
+
     const existingClassIds =
       new Set(
         classes
@@ -684,8 +696,10 @@ export function createMulticlassStep(dependencies = {}) {
       {
         value: "",
         label:
-          totalLevel >= 20
-            ? "Total level is already 20"
+          !canSplitAnotherClass
+            ? totalLevel < 2
+              ? "Set total level to 2 or higher first"
+              : "Add another character level first"
             : "Choose a class to add"
       },
 
@@ -696,9 +710,16 @@ export function createMulticlassStep(dependencies = {}) {
           );
         })
         .map((classData) => {
+          const prerequisite =
+            getMulticlassPrerequisiteResultForClass(
+              classData.id,
+              character
+            );
+
           return {
             value: classData.id,
-            label: classData.name
+            label:
+              `${classData.name} — ${prerequisite.label}`
           };
         })
     ];
@@ -1034,25 +1055,38 @@ export function createMulticlassStep(dependencies = {}) {
         failedPrerequisites.length
           ? `
             <div class="hg-character-warning">
-              <b>Multiclass prerequisites not met:</b>
+              <b>Ability requirements to finish:</b>
               ${escapeHtml(
                 failedPrerequisites
                   .map(formatMulticlassPrerequisiteFailure)
                   .join("; ")
               )}.
+
+              <div class="hg-character-inline-actions">
+                <button
+                  type="button"
+                  data-cc-action="go-step"
+                  data-step-id="abilities"
+                >
+                  Set Ability Scores
+                </button>
+              </div>
             </div>
           `
           : ""
       }
 
-      ${renderLevelUpWorkflow(character)}
-
       <hr>
 
-      <div class="hg-character-beginner-note">
-        <strong>Add Multiclass</strong>
+      <div class="hg-character-beginner-note hg-character-multiclass-guide">
+        <strong>Add a Multiclass</strong>
         <p>
-          Add Selected Class adds a new class at level 1. After that, use Level Up Workflow to add more levels to that class.
+          Choose a second class to move one of the character's existing levels into that class.
+          The total character level will not increase. For example, Fighter 2 becomes Fighter 1 / Wizard 1.
+        </p>
+
+        <p class="small">
+          Ability requirements are shown in the list. You can choose the classes now and finish those scores on the Abilities step.
         </p>
       </div>
 
@@ -1065,7 +1099,7 @@ export function createMulticlassStep(dependencies = {}) {
           {
             wide: true,
             extra:
-              totalLevel >= 20
+              !canSplitAnotherClass
                 ? "disabled"
                 : ""
           }
@@ -1079,14 +1113,24 @@ export function createMulticlassStep(dependencies = {}) {
           <button
             type="button"
             data-cc-action="add-multiclass-class"
-            ${totalLevel >= 20 ? "disabled" : ""}
+            ${!canSplitAnotherClass ? "disabled" : ""}
           >
-            Add Selected Class
+            Split 1 Level Into Selected Class
           </button>
         </div>
       </div>
 
       ${renderSection12MulticlassAddStatus()}
+
+      ${
+        entries.length > 1
+          ? `
+            <hr>
+
+            ${renderLevelUpWorkflow(character)}
+          `
+          : ""
+      }
 
       <div class="hg-character-choice-grid">
         ${classCards ||
@@ -1416,9 +1460,15 @@ export function createMulticlassStep(dependencies = {}) {
 
     select.value = "";
 
+    const resultTone =
+      addResult.failedPrerequisites
+        ?.length
+        ? "warning"
+        : "success";
+
     setSection12MulticlassAddStatus(
       addResult.message,
-      "success",
+      resultTone,
       localRoot
     );
 
@@ -1426,7 +1476,7 @@ export function createMulticlassStep(dependencies = {}) {
 
     setSection12MulticlassAddStatus(
       addResult.message,
-      "success"
+      resultTone
     );
 
     return true;
@@ -1730,20 +1780,67 @@ export function createMulticlassStep(dependencies = {}) {
     return (
       totalLevel >= 1 &&
       totalLevel <= 20 &&
-      getMulticlassPrerequisiteResults(character)
-        .every((result) => result.met) &&
       getClassProgressionPendingChoiceWarnings(character).length === 0
     );
   }
 
   function validateStep(character = creatorState.draft) {
     const complete = isStepComplete(character);
+    const pendingChoices =
+      getClassProgressionPendingChoiceWarnings(
+        character
+      );
+    const totalLevel =
+      getCharacterClassEntries(character)
+        .reduce((sum, classEntry) => {
+          return sum + getClassEntryLevel(
+            classEntry,
+            0
+          );
+        }, 0);
+    const blockingErrors = [];
+
+    if (
+      !getPrimaryClassEntry(character) ||
+      !getSafeClassName(character)
+    ) {
+      blockingErrors.push(
+        "Choose a starting class."
+      );
+    } else if (
+      isMulticlassDraft(character) &&
+      (
+        totalLevel < 1 ||
+        totalLevel > 20
+      )
+    ) {
+      blockingErrors.push(
+        "Multiclass total level must be between 1 and 20."
+      );
+    }
+
+    blockingErrors.push(
+      ...pendingChoices
+    );
+
+    const reminders =
+      isMulticlassDraft(character)
+        ? getMulticlassPrerequisiteResults(
+            character
+          )
+            .filter((result) => {
+              return !result.met;
+            })
+            .map((result) => {
+              return result.label ||
+                `${result.className || "Class"} multiclass prerequisite must be set on the Abilities step.`;
+            })
+        : [];
+
     return {
       valid: complete,
-      blockingErrors: complete
-        ? []
-        : getStepWarnings(character),
-      reminders: []
+      blockingErrors,
+      reminders
     };
   }
 
@@ -1752,38 +1849,15 @@ export function createMulticlassStep(dependencies = {}) {
   }
 
   function getStepWarnings(character = creatorState.draft) {
-    if (!getPrimaryClassEntry(character) || !getSafeClassName(character)) {
-      return ["Choose a starting class."];
-    }
+    const validation =
+      validateStep(character);
 
-    if (!isMulticlassDraft(character)) {
-      return [];
-    }
-
-    const totalLevel = getCharacterClassEntries(character)
-      .reduce((sum, classEntry) => {
-        return sum + getClassEntryLevel(classEntry, 0);
-      }, 0);
-    const warnings = [];
-
-    if (totalLevel < 1 || totalLevel > 20) {
-      warnings.push("Multiclass total level must be between 1 and 20.");
-    }
-
-    getMulticlassPrerequisiteResults(character)
-      .filter((result) => !result.met)
-      .forEach((result) => {
-        warnings.push(
-          result.label ||
-          `${result.className || "Class"} multiclass prerequisite is not met.`
-        );
-      });
-
-    warnings.push(
-      ...getClassProgressionPendingChoiceWarnings(character)
-    );
-
-    return [...new Set(warnings)];
+    return [
+      ...new Set([
+        ...validation.blockingErrors,
+        ...validation.reminders
+      ])
+    ];
   }
 
   return Object.freeze({

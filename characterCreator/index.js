@@ -83,8 +83,9 @@ import {
 } from "./featMechanics.js";
 import {
   MULTICLASS_PREREQUISITES,
-  MULTICLASS_PROFICIENCY_GRANTS
-} from "./multiclassing.js";
+  MULTICLASS_PROFICIENCY_GRANTS,
+  planMulticlassLevelSplit
+} from "./multiclassing.js?v=multiclass-flow-20260825";
 import {
   normalizeCharacterEnvelope
 } from "./normalization.js";
@@ -96,19 +97,19 @@ import {
   createCatalogPage,
   CREATOR_CATALOG_BATCH_SIZE
 } from "./catalogPagination.js";
-import { createClassStep } from "./steps/classStep.js?v=priority10-20260822";
-import { createMulticlassStep } from "./steps/multiclassStep.js?v=priority10-20260822";
-import { createFeatsStep } from "./steps/featsStep.js?v=priority10-20260822";
-import { createSpeciesStep } from "./steps/speciesStep.js?v=priority10-20260822";
-import { createBackgroundStep } from "./steps/backgroundStep.js?v=priority10-20260822";
-import { createAbilitiesStep } from "./steps/abilitiesStep.js?v=priority10-20260822";
-import { createSkillsStep } from "./steps/skillsStep.js?v=priority10-20260822";
-import { createDescriptionStep } from "./steps/descriptionStep.js?v=priority10-20260822";
-import { createBasicsStep } from "./steps/basicsStep.js?v=priority10-20260822";
-import { createReviewStep } from "./steps/reviewStep.js?v=priority10-20260822";
-import { createFinishStep } from "./steps/finishStep.js?v=priority10-20260822";
-import { createEquipmentStep } from "./steps/equipmentStep.js?v=priority10-20260822";
-import { createSpellsStep } from "./steps/spellsStep.js?v=priority10-20260822";
+import { createClassStep } from "./steps/classStep.js?v=multiclass-flow-20260825";
+import { createMulticlassStep } from "./steps/multiclassStep.js?v=multiclass-flow-20260825";
+import { createFeatsStep } from "./steps/featsStep.js?v=multiclass-flow-20260825";
+import { createSpeciesStep } from "./steps/speciesStep.js?v=multiclass-flow-20260825";
+import { createBackgroundStep } from "./steps/backgroundStep.js?v=multiclass-flow-20260825";
+import { createAbilitiesStep } from "./steps/abilitiesStep.js?v=multiclass-flow-20260825";
+import { createSkillsStep } from "./steps/skillsStep.js?v=multiclass-flow-20260825";
+import { createDescriptionStep } from "./steps/descriptionStep.js?v=multiclass-flow-20260825";
+import { createBasicsStep } from "./steps/basicsStep.js?v=multiclass-flow-20260825";
+import { createReviewStep } from "./steps/reviewStep.js?v=multiclass-flow-20260825";
+import { createFinishStep } from "./steps/finishStep.js?v=multiclass-flow-20260825";
+import { createEquipmentStep } from "./steps/equipmentStep.js?v=multiclass-flow-20260825";
+import { createSpellsStep } from "./steps/spellsStep.js?v=multiclass-flow-20260825";
 import {
   calculateAbilityModifier,
   calculateAbilityModifiers,
@@ -15642,6 +15643,80 @@ export function createCharacterCreator(options = {}) {
     return totalLevel;
   }
 
+  function pruneReassignedClassLevelHpRoll(
+    classEntry,
+    classLevel
+  ) {
+    const draft = creatorState.draft;
+    const entryKey =
+      getClassProgressionEntryKey(
+        classEntry,
+        getClassProgressionEntries()
+          .indexOf(classEntry)
+      );
+    const reassignedLevel =
+      getCharacterLevelHitDieRecords(
+        draft
+      ).find((levelRecord) => {
+        return (
+          levelRecord.classEntryId ===
+            entryKey &&
+          levelRecord.classLevel ===
+            classLevel
+        );
+      });
+
+    if (!reassignedLevel) {
+      return;
+    }
+
+    const hpCalculation =
+      normalizeHpCalculation(
+        draft.combat.hpCalculation,
+        draft.combat.maxHp
+      );
+    const rawRecords = getHpRollRawRecords(
+      hpCalculation.laterLevelValues
+    );
+    const retainedRolls = rawRecords
+      .filter((rawRecord) => {
+        if (
+          rawRecord.characterLevel !==
+          reassignedLevel.characterLevel
+        ) {
+          return true;
+        }
+
+        return !(
+          hpRollRawMatchesLevel(
+            rawRecord,
+            reassignedLevel
+          ) ||
+          !hpRollRawHasAssociation(
+            rawRecord
+          )
+        );
+      })
+      .map((rawRecord) => {
+        return hpCalculation
+          .laterLevelValues[
+            rawRecord.rawIndex
+          ];
+      });
+
+    if (
+      retainedRolls.length ===
+      hpCalculation.laterLevelValues.length
+    ) {
+      return;
+    }
+
+    draft.combat.hpCalculation = {
+      ...hpCalculation,
+      laterLevelValues: retainedRolls
+    };
+  }
+
   function tryAddMulticlassClass(
     classId
   ) {
@@ -15705,54 +15780,42 @@ export function createCharacterCreator(options = {}) {
       };
     }
 
-    const currentTotal =
-      recalculateClassTotalLevel(
-        creatorState.draft
+    const levelSplit =
+      planMulticlassLevelSplit(
+        classes.map((classEntry) => {
+          return getClassEntryLevel(
+            classEntry,
+            1
+          );
+        })
       );
 
-    if (currentTotal >= 20) {
+    if (!levelSplit.allowed) {
+      const minimumLevelMissing =
+        levelSplit.reason ===
+        "minimum-total-level";
+
       return {
         ok: false,
-        reason: "maximum-level",
+        reason: levelSplit.reason,
         classId: selectedClass.id,
         className: selectedClass.name,
-        message:
-          "Character is already level 20.",
+        message: minimumLevelMissing
+          ? "Set Total Character Level to 2 or higher before adding a multiclass."
+          : "Every selected class is already level 1. Add another character level before adding a new class.",
         failedPrerequisites: []
       };
     }
 
-    if (classes.length) {
-      const failedPrerequisites =
-        getMulticlassPrerequisiteResults(
-          creatorState.draft,
-          selectedClass.id
-        ).filter((result) => {
-          return !result.met;
-        });
-
-      if (failedPrerequisites.length) {
-        const failureSummary =
-          failedPrerequisites
-            .map(
-              formatMulticlassPrerequisiteFailure
-            )
-            .join("; ");
-
-        return {
-          ok: false,
-          reason: "prerequisites-not-met",
-          classId: selectedClass.id,
-          className: selectedClass.name,
-          message:
-            `Multiclass prerequisites are not met: ${failureSummary}.`,
-          failedPrerequisites:
-            cloneData(
-              failedPrerequisites
-            )
-        };
-      }
-    }
+    const failedPrerequisites =
+      classes.length
+        ? getMulticlassPrerequisiteResults(
+            creatorState.draft,
+            selectedClass.id
+          ).filter((result) => {
+            return !result.met;
+          })
+        : [];
 
     if (!classes.length) {
       creatorState.draft
@@ -15764,6 +15827,23 @@ export function createCharacterCreator(options = {}) {
           )
         ];
     } else {
+      if (levelSplit.donorIndex >= 0) {
+        pruneReassignedClassLevelHpRoll(
+          classes[levelSplit.donorIndex],
+          getClassEntryLevel(
+            classes[levelSplit.donorIndex],
+            1
+          )
+        );
+
+        classes[
+          levelSplit.donorIndex
+        ].level =
+          levelSplit.nextLevels[
+            levelSplit.donorIndex
+          ];
+      }
+
       classes.push(
         createClassProgressionEntry(
           selectedClass,
@@ -15784,8 +15864,15 @@ export function createCharacterCreator(options = {}) {
       className: selectedClass.name,
       totalLevel,
       message:
-        `${selectedClass.name} added. Use Level Up Workflow to add ${selectedClass.name} levels. Total level is now ${totalLevel}.`,
-      failedPrerequisites: []
+        `${selectedClass.name} added at class level 1. Total character level stays ${totalLevel}.${
+          failedPrerequisites.length
+            ? ` Set the required ability scores on the Abilities step: ${failedPrerequisites.map(formatMulticlassPrerequisiteFailure).join("; ")}.`
+            : ""
+        }`,
+      failedPrerequisites:
+        cloneData(
+          failedPrerequisites
+        )
     };
   }
 
@@ -15874,21 +15961,6 @@ export function createCharacterCreator(options = {}) {
       nextLevel > currentLevel &&
       classes.length > 1
     ) {
-      const failedPrerequisites =
-        getMulticlassPrerequisiteResults(
-          creatorState.draft
-        ).filter((result) => {
-          return !result.met;
-        });
-
-      if (failedPrerequisites.length) {
-        setStatus(
-          `Class level was not changed. Multiclass prerequisites are not met: ${failedPrerequisites.map(formatMulticlassPrerequisiteFailure).join("; ")}.`
-        );
-
-        return false;
-      }
-
       const pendingChoices =
         getClassProgressionPendingChoiceWarnings(
           creatorState.draft
@@ -17114,6 +17186,71 @@ export function createCharacterCreator(options = {}) {
         border: 1px solid rgba(116, 138, 255, 0.22);
         border-radius: 12px;
         background: rgba(8, 12, 25, 0.58);
+      }
+
+      .hg-character-level-first {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 18px;
+        padding: 16px;
+        border: 1px solid rgba(88, 166, 255, 0.48);
+        border-radius: 14px;
+        background:
+          linear-gradient(
+            135deg,
+            rgba(30, 72, 145, 0.28),
+            rgba(45, 35, 105, 0.2)
+          );
+      }
+
+      .hg-character-level-first-heading {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .hg-character-level-first-heading h3,
+      .hg-character-level-first-heading p {
+        margin: 0;
+      }
+
+      .hg-character-level-first-heading p {
+        margin-top: 5px;
+      }
+
+      .hg-character-level-first-number {
+        display: inline-grid;
+        place-items: center;
+        flex: 0 0 32px;
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+        border: 1px solid rgba(113, 184, 255, 0.7);
+        background: rgba(46, 103, 190, 0.35);
+        color: #eef6ff;
+        font-weight: 800;
+      }
+
+      .hg-character-advanced-level-settings {
+        margin-top: 16px;
+        padding: 12px;
+        border: 1px solid rgba(116, 138, 255, 0.22);
+        border-radius: 12px;
+        background: rgba(8, 12, 25, 0.58);
+      }
+
+      .hg-character-advanced-level-settings > summary {
+        cursor: pointer;
+        color: #dfe6ff;
+        font-weight: bold;
+      }
+
+      .hg-character-advanced-level-content {
+        margin-top: 14px;
+      }
+
+      .hg-character-multiclass-guide {
+        border-color: rgba(88, 166, 255, 0.42);
       }
 
       .hg-character-level-order-details > summary {

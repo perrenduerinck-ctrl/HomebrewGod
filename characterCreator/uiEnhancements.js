@@ -779,7 +779,7 @@ function enhanceMulticlass(root) {
   header.className =
     "hg-multiclass-dialog-header";
   header.innerHTML = `
-    <h3>Add Another Class</h3>
+    <h3>Split a Level Into Another Class</h3>
     <button
       type="button"
       data-hg-ui-action="close-multiclass"
@@ -818,7 +818,7 @@ function enhanceMulticlass(root) {
   openButton.dataset.hgUiAction =
     "open-multiclass";
   openButton.textContent =
-    "Add Another Class";
+    "Add a Multiclass";
   openButton.disabled =
     select.disabled;
 

@@ -1107,10 +1107,19 @@ export function runCharacterCreatorSelfTests(context) {
 
     chooseSection12Class("fighter");
 
+    setCharacterLevel(2);
+
     const prerequisiteMulticlassResult =
       tryAddMulticlassClass(
         "wizard"
       );
+
+    creatorState.draft =
+      createEmptyCharacter();
+
+    chooseSection12Class("fighter");
+
+    setCharacterLevel(2);
 
     creatorState.draft.abilities.base = {
       ...creatorState.draft.abilities.base,
@@ -1144,7 +1153,7 @@ export function runCharacterCreatorSelfTests(context) {
 
     setMulticlassClassLevel(0, 20);
 
-    const maximumLevelMulticlassResult =
+    const levelTwentyMulticlassResult =
       tryAddMulticlassClass(
         "wizard"
       );
@@ -1182,13 +1191,15 @@ export function runCharacterCreatorSelfTests(context) {
           message:
             successfulMulticlassResult.message
         },
-        maximum: {
+        levelTwenty: {
           ok:
-            maximumLevelMulticlassResult.ok,
+            levelTwentyMulticlassResult.ok,
           reason:
-            maximumLevelMulticlassResult.reason,
+            levelTwentyMulticlassResult.reason,
+          totalLevel:
+            levelTwentyMulticlassResult.totalLevel,
           message:
-            maximumLevelMulticlassResult.message
+            levelTwentyMulticlassResult.message
         }
       },
       {
@@ -1221,11 +1232,10 @@ export function runCharacterCreatorSelfTests(context) {
           failedPrerequisites: []
         },
         prerequisites: {
-          ok: false,
-          reason:
-            "prerequisites-not-met",
+          ok: true,
+          reason: "added",
           message:
-            "Multiclass prerequisites are not met: Fighter requires Strength 13 or Dexterity 13; Wizard requires Intelligence 13.",
+            "Wizard added at class level 1. Total character level stays 2. Set the required ability scores on the Abilities step: Fighter requires Strength 13 or Dexterity 13; Wizard requires Intelligence 13.",
           failures: [
             "fighter",
             "wizard"
@@ -1236,13 +1246,14 @@ export function runCharacterCreatorSelfTests(context) {
           classId: "wizard",
           totalLevel: 2,
           message:
-            "Wizard added. Use Level Up Workflow to add Wizard levels. Total level is now 2."
+            "Wizard added at class level 1. Total character level stays 2."
         },
-        maximum: {
-          ok: false,
-          reason: "maximum-level",
+        levelTwenty: {
+          ok: true,
+          reason: "added",
+          totalLevel: 20,
           message:
-            "Character is already level 20."
+            "Wizard added at class level 1. Total character level stays 20."
         }
       }
     );
@@ -13641,7 +13652,7 @@ export function runCharacterCreatorSelfTests(context) {
           ),
         addClass:
           multiclassClassHtml.includes(
-            "Add Selected Class"
+            "Split 1 Level Into Selected Class"
           ),
         addClassLabel:
           multiclassClassHtml.includes(
@@ -13649,7 +13660,17 @@ export function runCharacterCreatorSelfTests(context) {
           ),
         addClassHelper:
           multiclassClassHtml.includes(
-            "Add Selected Class adds a new class at level 1. After that, use Level Up Workflow to add more levels to that class."
+            "The total character level will not increase. For example, Fighter 2 becomes Fighter 1 / Wizard 1."
+          ),
+        levelFirst:
+          multiclassClassHtml.includes(
+            'data-level-first-panel="true"'
+          ) &&
+          multiclassClassHtml.includes(
+            "Choose Total Character Level"
+          ) &&
+          multiclassClassHtml.includes(
+            'data-multiclass-total="true"'
           ),
         localAddStatus:
           multiclassClassHtml.includes(
@@ -13763,6 +13784,7 @@ export function runCharacterCreatorSelfTests(context) {
         addClass: true,
         addClassLabel: true,
         addClassHelper: true,
+        levelFirst: true,
         localAddStatus: true,
         levelUpWorkflow: true,
         fighterLevelInput: true,
@@ -13850,6 +13872,8 @@ export function runCharacterCreatorSelfTests(context) {
       creatorState.draft
     );
 
+    addCharacterLevelToClass(1);
+
     const rogueAdded =
       addMulticlassClass("rogue");
 
@@ -13914,8 +13938,10 @@ export function runCharacterCreatorSelfTests(context) {
 
     chooseSection12Class("wizard");
 
+    setCharacterLevel(2);
+
     const rogueBlockedByPrereq =
-      addMulticlassClass("rogue");
+      !addMulticlassClass("rogue");
 
     creatorState.draft.abilities.base = {
       ...creatorState.draft.abilities.base,
@@ -13928,7 +13954,12 @@ export function runCharacterCreatorSelfTests(context) {
     );
 
     const rogueAllowedByPrereq =
-      addMulticlassClass("rogue");
+      getMulticlassPrerequisiteResults(
+        creatorState.draft,
+        "rogue"
+      ).every((result) => {
+        return result.met;
+      });
 
     const rogueSkillSelected =
       toggleMulticlassSkillChoice(
@@ -13944,7 +13975,7 @@ export function runCharacterCreatorSelfTests(context) {
       );
 
     record(
-      "Multiclass prerequisites and secondary proficiencies apply",
+      "Multiclass requirement reminders and secondary proficiencies apply",
       {
         rogueBlockedByPrereq,
         rogueAllowedByPrereq,
@@ -13998,6 +14029,8 @@ export function runCharacterCreatorSelfTests(context) {
       createEmptyCharacter();
 
     chooseSection12Class("fighter");
+
+    setCharacterLevel(2);
 
     creatorState.draft.abilities.base = {
       ...creatorState.draft.abilities.base,
@@ -14232,6 +14265,8 @@ export function runCharacterCreatorSelfTests(context) {
 
     chooseSection12Class("fighter");
 
+    setCharacterLevel(2);
+
     creatorState.draft.abilities.base = {
       ...creatorState.draft.abilities.base,
       str: 13,
@@ -14430,12 +14465,12 @@ export function runCharacterCreatorSelfTests(context) {
           !/<details[^>]*class="hg-feat-picker-panel"[^>]*\sopen(?:\s|>)/.test(
             fighterAlertHtml
           ),
-        singleLatestFeatPicker:
+        noDuplicateLatestFeatPicker:
           (
             fighterAlertClassHtml.match(
               /class="hg-feat-picker-panel"/g
             ) || []
-          ).length === 1,
+          ).length <= 1,
         latestLevel:
           creatorState.draft
             .classProgression
@@ -14451,7 +14486,7 @@ export function runCharacterCreatorSelfTests(context) {
         compactFeatPicker: true,
         fighterAlertSelected: true,
         selectedFeatClosesPicker: true,
-        singleLatestFeatPicker: true,
+        noDuplicateLatestFeatPicker: true,
         latestLevel: 4
       }
     );
@@ -14476,6 +14511,8 @@ export function runCharacterCreatorSelfTests(context) {
 
     const wizardAddedForAsiAudit =
       addMulticlassClass("wizard");
+
+    addCharacterLevelToClass(0);
 
     const fighterThreeWizardOneSlots =
       getUnlockedFeatChoiceSlots(
@@ -17236,6 +17273,7 @@ export function runCharacterCreatorSelfTests(context) {
     chooseSection12Class(
       "fighter"
     );
+    setCharacterLevel(2);
     creatorState.draft
       .abilities.base = {
         ...creatorState.draft
@@ -17992,6 +18030,7 @@ export function runCharacterCreatorSelfTests(context) {
     chooseSection12Class(
       "fighter"
     );
+    setCharacterLevel(2);
     creatorState.draft
       .abilities.base = {
         ...creatorState.draft
@@ -18009,8 +18048,20 @@ export function runCharacterCreatorSelfTests(context) {
         "wizard"
       );
 
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "fighter"
+    );
+    setCharacterLevel(2);
     creatorState.draft
-      .abilities.base.dex = 13;
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        str: 12,
+        dex: 13,
+        int: 12
+      };
     recalculateAbilityTotals(
       creatorState.draft
     );
@@ -18020,8 +18071,20 @@ export function runCharacterCreatorSelfTests(context) {
         "wizard"
       );
 
+    creatorState.draft =
+      createEmptyCharacter();
+    chooseSection12Class(
+      "fighter"
+    );
+    setCharacterLevel(2);
     creatorState.draft
-      .abilities.base.int = 13;
+      .abilities.base = {
+        ...creatorState.draft
+          .abilities.base,
+        str: 12,
+        dex: 13,
+        int: 13
+      };
     recalculateAbilityTotals(
       creatorState.draft
     );
@@ -18032,8 +18095,10 @@ export function runCharacterCreatorSelfTests(context) {
       );
 
     record(
-      "Adding a class requires both existing and new class prerequisites",
+      "Adding a class reports existing and new class requirements without blocking Class",
       {
+        bothFailAdded:
+          phase3BothFail.ok,
         bothFailures:
           phase3BothFail
             .failedPrerequisites
@@ -18047,9 +18112,14 @@ export function runCharacterCreatorSelfTests(context) {
               return entry.classId;
             }),
         bothPass:
-          phase3BothPass.ok
+          phase3BothPass.ok,
+        bothPassWarnings:
+          phase3BothPass
+            .failedPrerequisites
+            .length
       },
       {
+        bothFailAdded: true,
         bothFailures: [
           "fighter",
           "wizard"
@@ -18057,7 +18127,8 @@ export function runCharacterCreatorSelfTests(context) {
         newOnlyFailure: [
           "wizard"
         ],
-        bothPass: true
+        bothPass: true,
+        bothPassWarnings: 0
       }
     );
 
@@ -18070,6 +18141,7 @@ export function runCharacterCreatorSelfTests(context) {
       chooseSection12Class(
         firstClassId
       );
+      setCharacterLevel(2);
       creatorState.draft
         .abilities.base = {
           ...creatorState.draft
@@ -18226,6 +18298,7 @@ export function runCharacterCreatorSelfTests(context) {
     chooseSection12Class(
       "fighter"
     );
+    setCharacterLevel(2);
     creatorState.draft
       .abilities.base = {
         ...creatorState.draft
@@ -18242,18 +18315,6 @@ export function runCharacterCreatorSelfTests(context) {
 
     creatorState.draft
       .abilities.base.int = 12;
-    recalculateAbilityTotals(
-      creatorState.draft
-    );
-
-    const directPrerequisiteBypass =
-      setMulticlassClassLevel(
-        1,
-        2
-      );
-
-    creatorState.draft
-      .abilities.base.int = 13;
     recalculateAbilityTotals(
       creatorState.draft
     );
@@ -18278,11 +18339,18 @@ export function runCharacterCreatorSelfTests(context) {
         ),
         "Defense"
       );
-    const directLevelAfterChoice =
+    const directPrerequisiteDeferred =
       setMulticlassClassLevel(
         1,
         2
       );
+
+    creatorState.draft
+      .abilities.base.int = 13;
+    recalculateAbilityTotals(
+      creatorState.draft
+    );
+
     const directSubclassBypass =
       setMulticlassClassLevel(
         1,
@@ -18300,15 +18368,13 @@ export function runCharacterCreatorSelfTests(context) {
       );
 
     record(
-      "Direct multiclass level editing cannot bypass prerequisites or choices",
+      "Direct multiclass level editing defers abilities but cannot bypass class choices",
       {
-        prerequisiteBypass:
-          directPrerequisiteBypass,
         pendingFeatureBypass:
           directPendingChoiceBypass,
         fighterStyleSelected,
-        afterFeatureChoice:
-          directLevelAfterChoice,
+        prerequisiteDeferred:
+          directPrerequisiteDeferred,
         pendingSubclassBypass:
           directSubclassBypass,
         wizardSubclassSelected,
@@ -18320,10 +18386,9 @@ export function runCharacterCreatorSelfTests(context) {
             .classes[1].level
       },
       {
-        prerequisiteBypass: false,
         pendingFeatureBypass: false,
         fighterStyleSelected: true,
-        afterFeatureChoice: true,
+        prerequisiteDeferred: true,
         pendingSubclassBypass: false,
         wizardSubclassSelected: true,
         afterSubclassChoice: true,
@@ -18505,6 +18570,7 @@ export function runCharacterCreatorSelfTests(context) {
     chooseSection12Class(
       "wizard"
     );
+    setCharacterLevel(2);
     creatorState.draft
       .abilities.base = {
         ...creatorState.draft
@@ -18605,6 +18671,7 @@ export function runCharacterCreatorSelfTests(context) {
     chooseSection12Class(
       "wizard"
     );
+    setCharacterLevel(2);
     creatorState.draft
       .equipment.items = [
         normalizeSection15Item({
@@ -18695,6 +18762,7 @@ export function runCharacterCreatorSelfTests(context) {
     chooseSection12Class(
       "wizard"
     );
+    setCharacterLevel(2);
     creatorState.draft
       .abilities.base = {
         ...creatorState.draft
@@ -18835,6 +18903,7 @@ export function runCharacterCreatorSelfTests(context) {
               "action-surge"
           );
         });
+    setCharacterLevel(2);
     addMulticlassClass(
       "wizard"
     );
@@ -19034,6 +19103,7 @@ export function runCharacterCreatorSelfTests(context) {
       ),
       "Defense"
     );
+    setCharacterLevel(2);
     addMulticlassClass(
       "wizard"
     );

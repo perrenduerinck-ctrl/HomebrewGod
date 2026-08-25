@@ -62,7 +62,7 @@ test(
       /Save screen separates/i,
       /Finalization status persists/i,
       /removing a Spells-step feat clears/i,
-      /Adding a class requires both existing and new class prerequisites/i,
+      /Adding a class reports existing and new class requirements/i,
       /Lowering or removing a class prunes/i
     ];
 
