@@ -799,6 +799,39 @@ export function createTokenSystem(options) {
         filter: brightness(1.15);
       }
 
+      .hg-token.hg-token-template-affected {
+        z-index: 120 !important;
+      }
+
+      .hg-token.hg-token-template-affected::before {
+        content: "";
+        position: absolute;
+        inset: -7px;
+        border: 3px solid #9dffbd;
+        border-radius: 18px;
+        background: rgba(72, 255, 142, 0.12);
+        box-shadow:
+          0 0 0 2px rgba(3, 18, 9, 0.82),
+          0 0 24px rgba(83, 255, 151, 0.92),
+          inset 0 0 18px rgba(83, 255, 151, 0.22);
+        pointer-events: none;
+        animation: hg-token-template-pulse 1.15s ease-in-out infinite alternate;
+      }
+
+      .hg-token.hg-token-template-affected img,
+      .hg-token.hg-token-template-affected .hg-token-fallback {
+        filter: brightness(1.18) saturate(1.2);
+      }
+
+      @keyframes hg-token-template-pulse {
+        from {
+          opacity: 0.72;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
       /* =====================================================
          SMALL SCREENS
       ===================================================== */
@@ -1320,6 +1353,9 @@ export function createTokenSystem(options) {
       const tokenEl = document.createElement("div");
       tokenEl.className = "hg-token hg-token-" + token.type;
       tokenEl.dataset.tokenId = token.id;
+      tokenEl.dataset.tokenName = token.name || "Token";
+      tokenEl.dataset.tokenType = token.type;
+      tokenEl.dataset.tokenSizeCategory = token.sizeCategory;
       tokenEl.title = token.name || "Token";
 
       positionTokenElement(tokenEl, token, safeRoom);
@@ -1403,6 +1439,17 @@ export function createTokenSystem(options) {
 
       layer.appendChild(tokenEl);
     });
+
+    document.dispatchEvent(
+      new CustomEvent(
+        "homebrewgod:tokens-rendered",
+        {
+          detail: {
+            count: visibleTokens.length
+          }
+        }
+      )
+    );
   }
 
 

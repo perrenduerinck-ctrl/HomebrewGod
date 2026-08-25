@@ -412,6 +412,7 @@ export function createMapTemplateEngine({
     clear,
     connect,
     destroy,
+    getOverlayElement: () => overlay,
     getState,
     refresh,
     setEnabled,
