@@ -2312,6 +2312,122 @@ test(
 );
 
 test(
+  "battle-map templates preview and lock reusable basic shapes",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=map-templates-stage3-20260825",
+      {
+        waitUntil: "domcontentloaded"
+      }
+    );
+    await page.waitForFunction(() => {
+      return Boolean(
+        window.__HOMEBREW_GOD_RELEASE_TEST__
+      );
+    });
+    await page.evaluate(() => {
+      return window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .openScreen("battle");
+    });
+
+    const toggle = page.locator(
+      "#templateToggleButton"
+    );
+    const clear = page.locator(
+      "#templateClearButton"
+    );
+    const shapeSelect = page.locator(
+      "#templateShapeSelect"
+    );
+    const status = page.locator(
+      "#templateStatus"
+    );
+    const overlay = page.locator(
+      ".hg-map-template-layer"
+    );
+    const templatePath = page.locator(
+      ".hg-map-template-shape"
+    );
+
+    await shapeSelect.selectOption("cone");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await overlay.scrollIntoViewIfNeeded();
+
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box.x + 120;
+    const startY = box.y + 150;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.click(startX, startY);
+    await page.mouse.move(
+      startX + 180,
+      startY + 40
+    );
+
+    await expect(overlay).toHaveAttribute(
+      "data-template-shape",
+      "cone"
+    );
+    await expect(overlay).toHaveAttribute(
+      "data-template-phase",
+      "aiming"
+    );
+    await expect(status).toContainText(
+      "move to aim"
+    );
+    await expect(templatePath).toHaveAttribute(
+      "d",
+      /^M /
+    );
+
+    await page.mouse.click(
+      startX + 180,
+      startY + 40
+    );
+    await expect(overlay).toHaveAttribute(
+      "data-template-phase",
+      "confirmed"
+    );
+    await expect(status).toContainText("locked");
+    await expect(clear).toBeEnabled();
+
+    await clear.click();
+    await expect(overlay).not.toHaveClass(
+      /has-template/
+    );
+
+    await shapeSelect.selectOption("line");
+    await page.locator("#templateSizeInput").fill("30");
+    await page.locator("#templateWidthInput").fill("10");
+    await page.mouse.move(startX, startY);
+    await page.mouse.click(startX, startY);
+    await page.mouse.move(startX, startY + 200);
+    await expect(overlay).toHaveAttribute(
+      "data-template-shape",
+      "line"
+    );
+    await expect(status).toContainText(
+      "Line · 30 ft × 10 ft"
+    );
+
+    await page.locator("#rulerToggleButton").click();
+    await expect(toggle).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    await expect(
+      page.locator("#rulerToggleButton")
+    ).toHaveAttribute("aria-pressed", "true");
+  }
+);
+
+test(
   "mobile layout does not overflow at a phone viewport",
   async ({ page }) => {
     await page.setViewportSize({
@@ -2565,4 +2681,5 @@ test(
     expect(hasOverflow).toBe(false);
   }
 );
+
 
