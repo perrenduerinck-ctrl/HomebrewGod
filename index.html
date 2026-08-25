@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=map-ruler-stage2-20260824">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=map-templates-stage3-20260825">
 </head>
 
 <body>
@@ -141,6 +141,59 @@
         aria-pressed="false"
       >Ruler: Off</button>
 
+      <label class="battleScaleControl" for="templateShapeSelect">
+        <span>Template</span>
+        <select id="templateShapeSelect">
+          <option value="circle">Circle</option>
+          <option value="cone">Cone</option>
+          <option value="line">Line</option>
+          <option value="square">Square</option>
+        </select>
+      </label>
+
+      <label class="battleScaleControl" for="templateSizeInput">
+        <span id="templateSizeLabelText">Radius</span>
+        <input
+          id="templateSizeInput"
+          type="number"
+          min="1"
+          max="1000"
+          step="1"
+          value="20"
+          inputmode="numeric"
+        >
+        <span>ft</span>
+      </label>
+
+      <label
+        id="templateWidthControl"
+        class="battleScaleControl hidden"
+        for="templateWidthInput"
+      >
+        <span>Width</span>
+        <input
+          id="templateWidthInput"
+          type="number"
+          min="1"
+          max="1000"
+          step="1"
+          value="5"
+          inputmode="numeric"
+        >
+        <span>ft</span>
+      </label>
+
+      <button
+        id="templateToggleButton"
+        type="button"
+        aria-pressed="false"
+      >Template: Off</button>
+      <button
+        id="templateClearButton"
+        type="button"
+        disabled
+      >Clear Template</button>
+
       <label class="battleScaleControl" for="mapFeetPerSquareInput">
         <span>Scale</span>
         <input
@@ -168,6 +221,10 @@
 
     <p id="rulerStatus" class="battleRulerStatus" aria-live="polite">
       Turn on the ruler, then drag across the map.
+    </p>
+
+    <p id="templateStatus" class="battleTemplateStatus" aria-live="polite">
+      Turn on templates to preview a circle, cone, line, or square.
     </p>
 
     <!-- =====================================================
@@ -651,7 +708,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=multiclass-flow-20260825"
+    src="./app.js?v=map-templates-stage3-20260825"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

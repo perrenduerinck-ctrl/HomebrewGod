@@ -41,7 +41,15 @@ import {
   createMapRuler,
   formatMapSquares,
   normalizeFeetPerSquare
-} from "./battleMap/measurement.js?v=stage2-20260824";
+} from "./battleMap/measurement.js?v=stage3-20260825";
+import {
+  getDefaultTemplateOptions,
+  normalizeTemplateDistance,
+  normalizeTemplateShape
+} from "./battleMap/templateGeometry.js?v=stage3-20260825";
+import {
+  createMapTemplateEngine
+} from "./battleMap/templateRenderer.js?v=stage3-20260825";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -163,6 +171,22 @@ const E = {
   mapFeetPerSquareInput:
     $("mapFeetPerSquareInput"),
   rulerStatus: $("rulerStatus"),
+  templateShapeSelect:
+    $("templateShapeSelect"),
+  templateSizeInput:
+    $("templateSizeInput"),
+  templateSizeLabelText:
+    $("templateSizeLabelText"),
+  templateWidthControl:
+    $("templateWidthControl"),
+  templateWidthInput:
+    $("templateWidthInput"),
+  templateToggleButton:
+    $("templateToggleButton"),
+  templateClearButton:
+    $("templateClearButton"),
+  templateStatus:
+    $("templateStatus"),
 
   // Old quick battle map controls, kept safe if missing
   battleDmMapControls: $("battleDmMapControls"),
@@ -224,6 +248,7 @@ let hasMigratedLegacyPuzzleTiles = false;
 
 let battleZoom = 1;
 let battleMapRuler = null;
+let battleMapTemplates = null;
 
 const appRealtimeListeners =
   createRealtimeListenerRegistry({
@@ -2750,6 +2775,7 @@ ensureBattleManagerPolishStyles();
 syncBattleManagerVisibility();
 ensurePuzzleDragListeners();
 initializeBattleMapRuler();
+initializeBattleMapTemplates();
 
 
 // =====================================================
@@ -2874,6 +2900,9 @@ function initializeBattleMapRuler() {
   E.rulerToggleButton?.addEventListener(
     "click",
     function () {
+      if (!battleMapRuler.getState().enabled) {
+        battleMapTemplates?.setEnabled(false);
+      }
       battleMapRuler.toggle();
     }
   );
@@ -2883,6 +2912,7 @@ function initializeBattleMapRuler() {
       "input",
       function () {
         battleMapRuler.refresh();
+        battleMapTemplates?.refresh();
       }
     );
 
@@ -2895,10 +2925,238 @@ function initializeBattleMapRuler() {
         E.mapFeetPerSquareInput.value =
           String(feetPerSquare);
         battleMapRuler.refresh();
+        battleMapTemplates?.refresh();
       }
     );
 
   return battleMapRuler;
+}
+
+
+// =====================================================
+// APP SECTION 12A.2 — REUSABLE AREA TEMPLATE PREVIEWS
+// Generic circle, cone, line, and square placement.
+// Spell and token rules connect to this engine in later stages.
+// =====================================================
+
+function getSelectedTemplateShape() {
+  return normalizeTemplateShape(
+    E.templateShapeSelect?.value
+  );
+}
+
+function getBattleMapTemplateOptions() {
+  const shape = getSelectedTemplateShape();
+  const defaults = getDefaultTemplateOptions(shape);
+  return {
+    sizeFeet: normalizeTemplateDistance(
+      E.templateSizeInput?.value,
+      defaults.sizeFeet
+    ),
+    widthFeet: normalizeTemplateDistance(
+      E.templateWidthInput?.value,
+      defaults.widthFeet
+    ),
+    angleDegrees: defaults.angleDegrees
+  };
+}
+
+function syncBattleMapTemplateControls(
+  shape = getSelectedTemplateShape(),
+  { resetValues = false } = {}
+) {
+  const normalizedShape = normalizeTemplateShape(shape);
+  const defaults = getDefaultTemplateOptions(
+    normalizedShape
+  );
+  const sizeLabels = {
+    circle: "Radius",
+    cone: "Length",
+    line: "Length",
+    square: "Side"
+  };
+
+  if (E.templateShapeSelect) {
+    E.templateShapeSelect.value = normalizedShape;
+  }
+  text(
+    E.templateSizeLabelText,
+    sizeLabels[normalizedShape]
+  );
+  E.templateWidthControl?.classList.toggle(
+    "hidden",
+    normalizedShape !== "line"
+  );
+
+  if (resetValues) {
+    if (E.templateSizeInput) {
+      E.templateSizeInput.value = String(
+        defaults.sizeFeet
+      );
+    }
+    if (E.templateWidthInput) {
+      E.templateWidthInput.value = String(
+        defaults.widthFeet
+      );
+    }
+  }
+}
+
+function updateBattleMapTemplateUi(state) {
+  if (E.templateToggleButton) {
+    E.templateToggleButton.textContent =
+      state.enabled
+        ? "Template: On"
+        : "Template: Off";
+    E.templateToggleButton.setAttribute(
+      "aria-pressed",
+      String(state.enabled)
+    );
+  }
+
+  if (E.templateClearButton) {
+    E.templateClearButton.disabled =
+      !state.enabled || !state.geometry;
+  }
+
+  if (!E.templateStatus) return;
+
+  if (!state.enabled) {
+    text(
+      E.templateStatus,
+      "Turn on templates to preview a circle, cone, line, or square."
+    );
+    return;
+  }
+
+  if (!state.geometry) {
+    text(
+      E.templateStatus,
+      state.shape === "cone" || state.shape === "line"
+        ? "Move over the map and click the effect's starting point."
+        : "Move over the map to preview the shape, then click to lock it."
+    );
+    return;
+  }
+
+  if (state.phase === "aiming") {
+    text(
+      E.templateStatus,
+      `${state.label} — move to aim, then click again to lock it.`
+    );
+    return;
+  }
+
+  if (state.phase === "confirmed") {
+    text(
+      E.templateStatus,
+      `${state.label} locked. Use Clear Template to place another.`
+    );
+    return;
+  }
+
+  text(
+    E.templateStatus,
+    `${state.label} — click to lock it.`
+  );
+}
+
+function initializeBattleMapTemplates() {
+  if (
+    battleMapTemplates ||
+    !E.battleMapSurface
+  ) {
+    return battleMapTemplates;
+  }
+
+  syncBattleMapTemplateControls(
+    getSelectedTemplateShape()
+  );
+  battleMapTemplates = createMapTemplateEngine({
+    surface: E.battleMapSurface,
+    getTargetElement: getActiveRulerTarget,
+    getPixelsPerSquare:
+      getBattleMapGridPixelSize,
+    getFeetPerSquare:
+      getRulerFeetPerSquare,
+    onStateChange:
+      updateBattleMapTemplateUi
+  });
+  battleMapTemplates.connect();
+  battleMapTemplates.setOptions(
+    getBattleMapTemplateOptions()
+  );
+
+  E.templateToggleButton?.addEventListener(
+    "click",
+    function () {
+      if (!battleMapTemplates.getState().enabled) {
+        battleMapRuler?.setEnabled(false);
+      }
+      battleMapTemplates.toggle();
+    }
+  );
+
+  E.templateClearButton?.addEventListener(
+    "click",
+    function () {
+      battleMapTemplates.clear();
+    }
+  );
+
+  E.templateShapeSelect?.addEventListener(
+    "change",
+    function () {
+      const shape = getSelectedTemplateShape();
+      syncBattleMapTemplateControls(
+        shape,
+        { resetValues: true }
+      );
+      battleMapTemplates.setShape(shape);
+      battleMapTemplates.setOptions(
+        getBattleMapTemplateOptions()
+      );
+    }
+  );
+
+  const handleTemplateSizeInput = function () {
+    battleMapTemplates.setOptions(
+      getBattleMapTemplateOptions()
+    );
+  };
+  const normalizeTemplateInputs = function () {
+    const options = getBattleMapTemplateOptions();
+    if (E.templateSizeInput) {
+      E.templateSizeInput.value = String(
+        options.sizeFeet
+      );
+    }
+    if (E.templateWidthInput) {
+      E.templateWidthInput.value = String(
+        options.widthFeet
+      );
+    }
+    battleMapTemplates.setOptions(options);
+  };
+
+  E.templateSizeInput?.addEventListener(
+    "input",
+    handleTemplateSizeInput
+  );
+  E.templateWidthInput?.addEventListener(
+    "input",
+    handleTemplateSizeInput
+  );
+  E.templateSizeInput?.addEventListener(
+    "change",
+    normalizeTemplateInputs
+  );
+  E.templateWidthInput?.addEventListener(
+    "change",
+    normalizeTemplateInputs
+  );
+
+  return battleMapTemplates;
 }
 
 
@@ -3632,6 +3890,7 @@ function showPuzzleBoardView() {
   }
 
   battleMapRuler?.refresh();
+  battleMapTemplates?.refresh();
 }
 
 function showSingleBattleMapView() {
@@ -3644,6 +3903,7 @@ function showSingleBattleMapView() {
   }
 
   battleMapRuler?.refresh();
+  battleMapTemplates?.refresh();
 }
 
 function keepTokenLayerReadyForExternalFile() {
@@ -4520,6 +4780,7 @@ function showAnyMainScreen(screenName) {
 
   if (screenName === "battle") {
     battleMapRuler?.refresh();
+    battleMapTemplates?.refresh();
   }
 
   syncRealtimeListenersForScreen(screenName);
@@ -4539,6 +4800,7 @@ function applyBattleZoom() {
 
   text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
   battleMapRuler?.refresh();
+  battleMapTemplates?.refresh();
 }
 
 function openToolTab(viewName) {
