@@ -120,14 +120,14 @@ test("every creator step uses shared services and never imports another step", (
 
   assert.equal(sharedServiceUses.length, stepFiles.length);
 
-  const priorityTenStepUrls = creator.match(
-    /\.\/steps\/[A-Za-z]+Step\.js\?v=priority10-20260822/g
+  const versionedStepUrls = creator.match(
+    /\.\/steps\/[A-Za-z]+Step\.js\?v=multiclass-flow-20260825/g
   ) || [];
 
   assert.equal(
-    priorityTenStepUrls.length,
+    versionedStepUrls.length,
     stepFiles.length,
-    "every moved step module must use the Priority 10 cache key"
+    "every moved step module must use the current cache key"
   );
 });
 

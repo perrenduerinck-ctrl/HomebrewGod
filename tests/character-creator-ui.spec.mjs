@@ -349,7 +349,7 @@ test(
   async ({ page }) => {
     const open =
       page.getByRole("button", {
-        name: "Add Another Class"
+        name: "Add a Multiclass"
       });
 
     await expect(open)

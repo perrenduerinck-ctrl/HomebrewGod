@@ -32,7 +32,7 @@ function createTestStep() {
   });
 }
 
-test("class completion preserves single-class and multiclass rules", () => {
+test("class completion defers multiclass ability prerequisites but preserves progression rules", () => {
   const step = createTestStep();
 
   assert.equal(step.isStepComplete({ classes: [] }), false);
@@ -70,7 +70,7 @@ test("class completion preserves single-class and multiclass rules", () => {
       prerequisites: [{ met: false }],
       pendingChoices: []
     }),
-    false
+    true
   );
   assert.equal(
     step.isStepComplete({

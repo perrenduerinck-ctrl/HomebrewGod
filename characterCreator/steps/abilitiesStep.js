@@ -1303,9 +1303,12 @@ export function createAbilitiesStep(dependencies = {}) {
     `;
   }
 
-  function renderLevelStep() {
+  function renderLevelStep(options = {}) {
     const draft =
       creatorState.draft;
+
+    const hideLevelInput =
+      options.hideLevelInput === true;
 
     const isMulticlass =
       isMulticlassDraft(draft);
@@ -1455,23 +1458,27 @@ export function createAbilitiesStep(dependencies = {}) {
       </div>
 
       <div class="hg-character-field-grid three">
-        ${wizardField(
-          isMulticlass
-            ? "Total Character Level"
-            : "Class Level",
-          "ccCharacterLevel",
-          level,
-          {
-            type: "number",
-            valueType: "integer",
-            extra:
-              `min="1" max="20" step="1" data-level-input="true"${
+        ${
+          hideLevelInput
+            ? ""
+            : wizardField(
                 isMulticlass
-                  ? ' disabled data-multiclass-total="true"'
-                  : ""
-              }`
-          }
-        )}
+                  ? "Total Character Level"
+                  : "Class Level",
+                "ccCharacterLevel",
+                level,
+                {
+                  type: "number",
+                  valueType: "integer",
+                  extra:
+                    `min="1" max="20" step="1" data-level-input="true"${
+                      isMulticlass
+                        ? ' disabled data-multiclass-total="true"'
+                        : ""
+                    }`
+                }
+              )
+        }
 
         ${wizardSelect(
           "HP Calculation",

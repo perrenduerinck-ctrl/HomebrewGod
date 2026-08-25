@@ -5,7 +5,80 @@ function safeNumber(value, fallback = 0) {
     : fallback;
 }
 
+export function planMulticlassLevelSplit(
+  classLevels = []
+) {
+  const levels = (
+    Array.isArray(classLevels)
+      ? classLevels
+      : []
+  ).map((level) => {
+    return Math.max(
+      1,
+      Math.round(
+        safeNumber(level, 1)
+      )
+    );
+  });
+  const totalLevel = levels.reduce(
+    (sum, level) => sum + level,
+    0
+  );
 
+  if (!levels.length) {
+    return {
+      allowed: true,
+      reason: "starting-class",
+      totalLevel,
+      donorIndex: -1,
+      nextLevels: []
+    };
+  }
+
+  if (totalLevel < 2) {
+    return {
+      allowed: false,
+      reason: "minimum-total-level",
+      totalLevel,
+      donorIndex: -1,
+      nextLevels: levels
+    };
+  }
+
+  let donorIndex = -1;
+
+  for (
+    let index = levels.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    if (levels[index] > 1) {
+      donorIndex = index;
+      break;
+    }
+  }
+
+  if (donorIndex < 0) {
+    return {
+      allowed: false,
+      reason: "no-level-to-split",
+      totalLevel,
+      donorIndex,
+      nextLevels: levels
+    };
+  }
+
+  const nextLevels = [...levels];
+  nextLevels[donorIndex] -= 1;
+
+  return {
+    allowed: true,
+    reason: "split-existing-level",
+    totalLevel,
+    donorIndex,
+    nextLevels
+  };
+}
 
 export const MULTICLASS_PREREQUISITES =
     Object.freeze({
@@ -229,7 +302,6 @@ export function isMulticlassRequirementMet(
       )
     : meetsItem(requirement);
 }
-
 export function evaluateMulticlassPrerequisites({
   classId,
   configuredRequirements = [],
@@ -260,4 +332,3 @@ export function evaluateMulticlassPrerequisites({
     failed
   };
 }
-

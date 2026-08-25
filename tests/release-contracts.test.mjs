@@ -1058,7 +1058,7 @@ test(
     );
     assert.match(
       enhancements,
-      /Add Another Class/
+      /Add a Multiclass/
     );
     assert.match(
       enhancements,
