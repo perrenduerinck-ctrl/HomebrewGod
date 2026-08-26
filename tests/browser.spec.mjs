@@ -2308,6 +2308,43 @@ test(
     await expect(
       page.locator(".hg-map-ruler-label")
     ).toHaveText("25 ft");
+
+    await page.locator(
+      "#rulerStartElevationInput"
+    ).fill("0");
+    await page.locator(
+      "#rulerEndElevationInput"
+    ).fill("40");
+    const elevatedStartX = box.x + 10;
+    await page.mouse.move(elevatedStartX, startY);
+    await page.mouse.down();
+    await page.mouse.move(
+      elevatedStartX + 384,
+      startY
+    );
+    await page.mouse.up();
+
+    await expect(status).toContainText(
+      "47.2 ft true"
+    );
+    await expect(status).toContainText(
+      "25 ft horizontal"
+    );
+    await expect(status).toContainText(
+      "40 ft vertical"
+    );
+    await expect(
+      page.locator(".hg-map-ruler-label")
+    ).toHaveText("47.2 ft");
+    await expect(
+      page.locator("#tokenElevationInput")
+    ).toHaveAttribute("min", "-1000");
+    await expect(
+      page.locator("#tokenElevationInput")
+    ).toHaveAttribute("max", "1000");
+    await expect(
+      page.locator("#tokenElevationInput")
+    ).toHaveAttribute("step", "1");
   }
 );
 
@@ -2814,6 +2851,109 @@ test(
         "#spellCastingResolution"
       )
     ).toContainText("3d6 fire");
+  }
+);
+
+test(
+  "spell range uses token and target elevation for true distance",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=token-elevation-stage7-20260826",
+      { waitUntil: "domcontentloaded" }
+    );
+    await page.waitForFunction(() => Boolean(
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+    ));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .openScreen("battle"));
+    await page.locator(
+      "#mapFeetPerSquareInput"
+    ).fill("50");
+    await page.evaluate(() => {
+      const layer = document.getElementById(
+        "tokenLayer"
+      );
+      const token =
+        document.createElement("div");
+      token.className =
+        "hg-token hg-token-player is-elevated";
+      token.dataset.tokenId =
+        "elevated-wizard-token";
+      token.dataset.tokenName =
+        "Elevated Wizard";
+      token.dataset.tokenType = "player";
+      token.dataset.tokenElevation = "100";
+      token.dataset.linkedCharacterId =
+        "elevated-character";
+      token.style.position = "absolute";
+      token.style.left = "100px";
+      token.style.top = "110px";
+      token.style.width = "64px";
+      token.style.height = "64px";
+      layer.appendChild(token);
+    });
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .beginSpellCast({
+        spellId: "fireball",
+        characterId: "elevated-character",
+        characterName: "Elevated Wizard"
+      }));
+
+    await expect(page.locator(
+      "#rulerStartElevationInput"
+    )).toHaveValue("100");
+    await expect(page.locator(
+      "#spellCastingCaster"
+    )).toContainText("+100 ft");
+
+    const overlay = page.locator(
+      ".hg-map-template-layer"
+    );
+    const token = page.locator(
+      '[data-token-id="elevated-wizard-token"]'
+    );
+    await overlay.scrollIntoViewIfNeeded();
+    const overlayBox = await overlay.boundingBox();
+    const tokenBox = await token.boundingBox();
+    expect(overlayBox).not.toBeNull();
+    expect(tokenBox).not.toBeNull();
+
+    const targetX = Math.min(
+      overlayBox.x + overlayBox.width - 20,
+      tokenBox.x + tokenBox.width / 2 + 154
+    );
+    const targetY =
+      tokenBox.y + tokenBox.height / 2;
+    await page.mouse.click(targetX, targetY);
+
+    await expect(page.locator(
+      "#spellCastingInstructions"
+    )).toContainText("out of range");
+    await expect(page.locator(
+      "#confirmSpellCastButton"
+    )).toBeDisabled();
+    const elevatedState = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .getSpellCastState());
+    expect(elevatedState.target.verticalFeet)
+      .toBe(100);
+    expect(elevatedState.target.distanceFeet)
+      .toBeGreaterThan(150);
+
+    await page.locator(
+      "#rulerEndElevationInput"
+    ).fill("100");
+    await expect(page.locator(
+      "#confirmSpellCastButton"
+    )).toBeEnabled();
+    const levelState = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .getSpellCastState());
+    expect(levelState.target.verticalFeet).toBe(0);
+    expect(levelState.target.distanceFeet)
+      .toBeLessThanOrEqual(150);
   }
 );
 

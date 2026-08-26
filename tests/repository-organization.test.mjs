@@ -51,6 +51,7 @@ test("runtime areas, data, assets, tests, and documentation have explicit homes"
   [
     "assets/styles/app.css",
     "battleMap/castingSession.js",
+    "battleMap/elevation.js",
     "battleMap/measurement.js",
     "battleMap/spellTemplates.js",
     "battleMap/templateGeometry.js",
@@ -84,6 +85,7 @@ test("the application and import map use the organized runtime paths", () => {
   [
     "./characterCreator/index.js",
     "./battleMap/castingSession.js",
+    "./battleMap/elevation.js",
     "./battleMap/spellTemplates.js",
     "./battleMap/templateGeometry.js",
     "./battleMap/templateRenderer.js",
@@ -99,7 +101,7 @@ test("the application and import map use the organized runtime paths", () => {
   });
   assert.match(
     index,
-    /\.\/assets\/styles\/app\.css\?v=character-sheet-casting-stage6-20260826/
+    /\.\/assets\/styles\/app\.css\?v=token-elevation-stage7-20260826/
   );
   assert.doesNotMatch(
     `${app}\n${index}`,

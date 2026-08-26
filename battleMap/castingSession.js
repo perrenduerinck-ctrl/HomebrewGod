@@ -202,6 +202,10 @@ export function createSpellCastingSession({
     locked = false,
     validRange = true,
     distanceFeet = null,
+    horizontalFeet = null,
+    verticalFeet = null,
+    startElevationFeet = 0,
+    endElevationFeet = 0,
     affectedTokens = [],
     geometry = null
   } = {}) {
@@ -220,6 +224,18 @@ export function createSpellCastingSession({
       distanceFeet: Number.isFinite(Number(distanceFeet))
         ? Number(distanceFeet)
         : null,
+      horizontalFeet: Number.isFinite(Number(horizontalFeet))
+        ? Number(horizontalFeet)
+        : null,
+      verticalFeet: Number.isFinite(Number(verticalFeet))
+        ? Number(verticalFeet)
+        : null,
+      startElevationFeet: Number.isFinite(Number(startElevationFeet))
+        ? Math.round(Number(startElevationFeet))
+        : 0,
+      endElevationFeet: Number.isFinite(Number(endElevationFeet))
+        ? Math.round(Number(endElevationFeet))
+        : 0,
       affectedTokens: Object.freeze(
         cloneAffectedTokens(affectedTokens)
       ),

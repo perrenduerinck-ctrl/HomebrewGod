@@ -36,30 +36,36 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=stage6-20260826";
+import { createTokenSystem } from "./tokens/index.js?v=stage7-20260826";
 import {
   createMapRuler,
+  formatMapDistance,
   formatMapSquares,
   normalizeFeetPerSquare
-} from "./battleMap/measurement.js?v=stage6-20260826";
+} from "./battleMap/measurement.js?v=stage7-20260826";
+import {
+  formatElevation,
+  measureSpatialDistance,
+  normalizeElevation
+} from "./battleMap/elevation.js?v=stage7-20260826";
 import {
   getDefaultTemplateOptions,
   normalizeTemplateDistance,
   normalizeTemplateShape
-} from "./battleMap/templateGeometry.js?v=stage6-20260826";
+} from "./battleMap/templateGeometry.js?v=stage7-20260826";
 import {
   createMapTemplateEngine
-} from "./battleMap/templateRenderer.js?v=stage6-20260826";
+} from "./battleMap/templateRenderer.js?v=stage7-20260826";
 import {
   findAffectedTokens
-} from "./battleMap/tokenCollision.js?v=stage6-20260826";
+} from "./battleMap/tokenCollision.js?v=stage7-20260826";
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=stage6-20260826";
+} from "./battleMap/spellTemplates.js?v=stage7-20260826";
 import {
   createSpellCastingSession
-} from "./battleMap/castingSession.js?v=stage6-20260826";
+} from "./battleMap/castingSession.js?v=stage7-20260826";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -180,6 +186,10 @@ const E = {
   rulerToggleButton: $("rulerToggleButton"),
   mapFeetPerSquareInput:
     $("mapFeetPerSquareInput"),
+  rulerStartElevationInput:
+    $("rulerStartElevationInput"),
+  rulerEndElevationInput:
+    $("rulerEndElevationInput"),
   rulerStatus: $("rulerStatus"),
   templateShapeSelect:
     $("templateShapeSelect"),
@@ -284,6 +294,7 @@ let battleMapTemplates = null;
 let activeSpellTemplateInstruction = null;
 let activeSpellCastingSession = null;
 let activeSpellCastingCasterPoint = null;
+let activeSpellCastingCasterElevationFeet = 0;
 let activeSpellCastingConfirm = null;
 
 const appRealtimeListeners =
@@ -2872,6 +2883,22 @@ function getRulerFeetPerSquare() {
   );
 }
 
+function getRulerElevations() {
+  return {
+    startElevationFeet: normalizeElevation(
+      E.rulerStartElevationInput?.value
+    ),
+    endElevationFeet: normalizeElevation(
+      E.rulerEndElevationInput?.value
+    )
+  };
+}
+
+function refreshElevationMeasurements() {
+  battleMapRuler?.refresh();
+  battleMapTemplates?.refresh();
+}
+
 function updateBattleMapRulerUi(state) {
   if (E.rulerToggleButton) {
     E.rulerToggleButton.textContent =
@@ -2904,11 +2931,25 @@ function updateBattleMapRulerUi(state) {
 
   text(
     E.rulerStatus,
-    `${state.label} · ${
-      formatMapSquares(
-        state.measurement.squares
-      )
-    }`
+    state.measurement.verticalFeet > 0
+      ? `${state.label} true · ${
+          formatMapDistance(
+            state.measurement.horizontalFeet
+          )
+        } horizontal · ${
+          formatMapDistance(
+            state.measurement.verticalFeet
+          )
+        } vertical · ${
+          formatMapSquares(
+            state.measurement.squares
+          )
+        }`
+      : `${state.label} · ${
+          formatMapSquares(
+            state.measurement.squares
+          )
+        }`
   );
 }
 
@@ -2928,6 +2969,8 @@ function initializeBattleMapRuler() {
       getBattleMapGridPixelSize,
     getFeetPerSquare:
       getRulerFeetPerSquare,
+    getElevations:
+      getRulerElevations,
     onStateChange:
       updateBattleMapRulerUi
   });
@@ -2964,6 +3007,25 @@ function initializeBattleMapRuler() {
         battleMapTemplates?.refresh();
       }
     );
+
+  [
+    E.rulerStartElevationInput,
+    E.rulerEndElevationInput
+  ].forEach((input) => {
+    input?.addEventListener(
+      "input",
+      refreshElevationMeasurements
+    );
+    input?.addEventListener(
+      "change",
+      function () {
+        input.value = String(
+          normalizeElevation(input.value)
+        );
+        refreshElevationMeasurements();
+      }
+    );
+  });
 
   return battleMapRuler;
 }
@@ -3070,6 +3132,9 @@ function collectBattleMapTokenFootprints() {
         type:
           element.dataset.tokenType ||
           "token",
+        elevation: normalizeElevation(
+          element.dataset.tokenElevation
+        ),
         left: rect.left - overlayRect.left,
         top: rect.top - overlayRect.top,
         width: rect.width,
@@ -3295,7 +3360,9 @@ function renderSpellCastingPanel() {
     `${sessionState.characterName} · ${
       sessionState.casterToken?.name ||
       "linked token"
-    }`
+    } · ${formatElevation(
+      sessionState.casterToken?.elevation
+    )}`
   );
 
   if (E.spellCastingSlotSelect) {
@@ -3373,7 +3440,15 @@ function renderSpellCastingPanel() {
   ) {
     text(
       E.spellCastingInstructions,
-      "Target locked. Review the affected tokens and slot, then confirm the cast."
+      `Target locked${
+        Number.isFinite(
+          sessionState.target?.distanceFeet
+        )
+          ? ` at ${formatMapDistance(
+              sessionState.target.distanceFeet
+            )} true distance`
+          : ""
+      }. Review the affected tokens and slot, then confirm the cast.`
     );
   } else if (
     sessionState.target &&
@@ -3381,9 +3456,9 @@ function renderSpellCastingPanel() {
   ) {
     text(
       E.spellCastingInstructions,
-      `Target is out of range (${Math.round(
+      `Target is out of range (${formatMapDistance(
         sessionState.target.distanceFeet || 0
-      )} / ${sessionState.instruction.rangeFeet} ft). Clear the template and choose a closer point.`
+      )} true / ${sessionState.instruction.rangeFeet} ft). Clear the template or change the target elevation and choose a closer point.`
     );
   } else {
     text(
@@ -3447,7 +3522,15 @@ function syncActiveSpellCastingTarget(
       ? templateState.geometry
       : null;
   let distanceFeet = null;
+  let horizontalFeet = null;
+  let verticalFeet = null;
   let validRange = true;
+  const targetElevationFeet =
+    sessionState.instruction.targetType ===
+      "point"
+      ? getRulerElevations()
+          .endElevationFeet
+      : activeSpellCastingCasterElevationFeet;
 
   if (
     geometry &&
@@ -3462,10 +3545,22 @@ function syncActiveSpellCastingTarget(
       geometry.anchor.y -
         activeSpellCastingCasterPoint.y
     );
-    distanceFeet =
+    horizontalFeet =
       pixels /
       getBattleMapGridPixelSize() *
       getRulerFeetPerSquare();
+    const spatialDistance =
+      measureSpatialDistance({
+        horizontalFeet,
+        startElevationFeet:
+          activeSpellCastingCasterElevationFeet,
+        endElevationFeet:
+          targetElevationFeet
+      });
+    distanceFeet =
+      spatialDistance.distanceFeet;
+    verticalFeet =
+      spatialDistance.verticalFeet;
     validRange =
       distanceFeet <=
       sessionState.instruction.rangeFeet +
@@ -3486,6 +3581,12 @@ function syncActiveSpellCastingTarget(
       validRange,
     validRange,
     distanceFeet,
+    horizontalFeet,
+    verticalFeet,
+    startElevationFeet:
+      activeSpellCastingCasterElevationFeet,
+    endElevationFeet:
+      targetElevationFeet,
     affectedTokens,
     geometry
   });
@@ -3507,6 +3608,7 @@ function cancelActiveSpellCasting({
 
   activeSpellCastingSession = null;
   activeSpellCastingCasterPoint = null;
+  activeSpellCastingCasterElevationFeet = 0;
   activeSpellCastingConfirm = null;
 
   if (clearTemplate) {
@@ -3645,7 +3747,10 @@ async function beginCharacterSpellTargeting({
         id: tokenElement.dataset.tokenId,
         name:
           tokenElement.dataset.tokenName ||
-          "Linked token"
+          "Linked token",
+        elevation: normalizeElevation(
+          tokenElement.dataset.tokenElevation
+        )
       },
     slotOptions,
     spellSaveDc:
@@ -3687,6 +3792,17 @@ async function beginCharacterSpellTargeting({
     getCastingCasterPoint(
       tokenElement
     );
+  activeSpellCastingCasterElevationFeet =
+    normalizeElevation(
+      linkedToken?.elevation ??
+      tokenElement.dataset.tokenElevation
+    );
+  if (E.rulerStartElevationInput) {
+    E.rulerStartElevationInput.value =
+      String(
+        activeSpellCastingCasterElevationFeet
+      );
+  }
 
   if (
     activeSpellCastingCasterPoint &&
@@ -3823,7 +3939,7 @@ async function loadSelectedSpellTemplate() {
 
   try {
     const { getDefaultSpellById } = await import(
-      "./data/defaultSpells.js?v=stage6-20260826"
+      "./data/defaultSpells.js?v=stage7-20260826"
     );
     const spell = getDefaultSpellById(spellId);
     const instruction =
@@ -6182,7 +6298,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
         } = {}) {
           const { getDefaultSpellById } =
             await import(
-              "./data/defaultSpells.js?v=stage6-20260826"
+              "./data/defaultSpells.js?v=stage7-20260826"
             );
           const spell =
             getDefaultSpellById(

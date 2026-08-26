@@ -370,6 +370,8 @@ button:disabled {
 }
 
 #mapFeetPerSquareInput,
+#rulerStartElevationInput,
+#rulerEndElevationInput,
 #templateSizeInput,
 #templateWidthInput {
   width: 68px;

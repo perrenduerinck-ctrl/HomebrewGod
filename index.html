@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=character-sheet-casting-stage6-20260826">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=token-elevation-stage7-20260826">
 </head>
 
 <body>
@@ -140,6 +140,34 @@
         type="button"
         aria-pressed="false"
       >Ruler: Off</button>
+
+      <label class="battleScaleControl" for="rulerStartElevationInput">
+        <span>From Elev.</span>
+        <input
+          id="rulerStartElevationInput"
+          type="number"
+          min="-1000"
+          max="1000"
+          step="1"
+          value="0"
+          inputmode="numeric"
+        >
+        <span>ft</span>
+      </label>
+
+      <label class="battleScaleControl" for="rulerEndElevationInput">
+        <span>To / Target Elev.</span>
+        <input
+          id="rulerEndElevationInput"
+          type="number"
+          min="-1000"
+          max="1000"
+          step="1"
+          value="0"
+          inputmode="numeric"
+        >
+        <span>ft</span>
+      </label>
 
       <label class="battleScaleControl" for="spellTemplateSelect">
         <span>Spell Preview</span>
@@ -365,6 +393,20 @@
                   <option value="huge">Huge</option>
                   <option value="gargantuan">Gargantuan</option>
                 </select>
+
+                <label class="tokenElevationInputLabel" for="tokenElevationInput">
+                  <span>Elevation</span>
+                  <input
+                    id="tokenElevationInput"
+                    type="number"
+                    min="-1000"
+                    max="1000"
+                    step="1"
+                    value="0"
+                    inputmode="numeric"
+                  >
+                  <span>ft</span>
+                </label>
 
                 <input id="tokenImageUploadInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,.jpg,.jpeg,.png,.webp,.gif,.avif">
 
@@ -753,7 +795,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=character-sheet-casting-stage6-20260826"
+    src="./app.js?v=token-elevation-stage7-20260826"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

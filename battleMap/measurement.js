@@ -1,3 +1,8 @@
+import {
+  measureSpatialDistance,
+  normalizeElevation
+} from "./elevation.js?v=stage7-20260826";
+
 export const DEFAULT_FEET_PER_SQUARE = 5;
 export const MIN_FEET_PER_SQUARE = 1;
 export const MAX_FEET_PER_SQUARE = 1000;
@@ -64,7 +69,11 @@ export function measureMapDistance(
     pixelsPerSquare =
       DEFAULT_GRID_PIXEL_SIZE,
     feetPerSquare =
-      DEFAULT_FEET_PER_SQUARE
+      DEFAULT_FEET_PER_SQUARE,
+    startElevationFeet =
+      startPoint?.elevation ?? 0,
+    endElevationFeet =
+      endPoint?.elevation ?? 0
   } = {}
 ) {
   const start = normalizePoint(startPoint);
@@ -86,9 +95,15 @@ export function measureMapDistance(
   const squares =
     pixelDistance /
     safePixelsPerSquare;
-  const feet =
+  const horizontalFeet =
     squares *
     safeFeetPerSquare;
+  const spatialDistance =
+    measureSpatialDistance({
+      horizontalFeet,
+      startElevationFeet,
+      endElevationFeet
+    });
 
   return Object.freeze({
     deltaX,
@@ -99,7 +114,15 @@ export function measureMapDistance(
     feetPerSquare:
       safeFeetPerSquare,
     squares,
-    feet
+    horizontalFeet:
+      spatialDistance.horizontalFeet,
+    verticalFeet:
+      spatialDistance.verticalFeet,
+    startElevationFeet:
+      spatialDistance.startElevationFeet,
+    endElevationFeet:
+      spatialDistance.endElevationFeet,
+    feet: spatialDistance.distanceFeet
   });
 }
 
@@ -158,6 +181,10 @@ export function createMapRuler({
   getFeetPerSquare = () => (
     DEFAULT_FEET_PER_SQUARE
   ),
+  getElevations = () => ({
+    startElevationFeet: 0,
+    endElevationFeet: 0
+  }),
   onStateChange = () => {}
 } = {}) {
   if (
@@ -214,6 +241,9 @@ export function createMapRuler({
   function getMeasurement() {
     if (!start || !end) return null;
 
+    const elevations =
+      getElevations() || {};
+
     return measureMapDistance(
       start,
       end,
@@ -221,7 +251,15 @@ export function createMapRuler({
         pixelsPerSquare:
           getPixelsPerSquare(),
         feetPerSquare:
-          getFeetPerSquare()
+          getFeetPerSquare(),
+        startElevationFeet:
+          normalizeElevation(
+            elevations.startElevationFeet
+          ),
+        endElevationFeet:
+          normalizeElevation(
+            elevations.endElevationFeet
+          )
       }
     );
   }
@@ -351,9 +389,15 @@ export function createMapRuler({
         measurement.feet
       );
     label.title =
-      formatMapSquares(
-        measurement.squares
-      );
+      measurement.verticalFeet > 0
+        ? `${formatMapDistance(
+            measurement.horizontalFeet
+          )} horizontal · ${formatMapDistance(
+            measurement.verticalFeet
+          )} vertical`
+        : formatMapSquares(
+            measurement.squares
+          );
     emitState();
   }
 
