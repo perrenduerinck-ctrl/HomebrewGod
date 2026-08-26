@@ -93,6 +93,7 @@ export function createMapTemplateEngine({
   };
   let cursor = null;
   let anchor = null;
+  let anchorLocked = false;
   let confirmed = false;
 
   overlay.hidden = true;
@@ -202,6 +203,7 @@ export function createMapTemplateEngine({
       shape,
       phase: getPhase(),
       confirmed,
+      anchorLocked,
       anchor: copyPoint(anchor),
       cursor: copyPoint(cursor),
       options: Object.freeze({ ...options }),
@@ -252,6 +254,7 @@ export function createMapTemplateEngine({
   function clear() {
     cursor = null;
     anchor = null;
+    anchorLocked = false;
     confirmed = false;
     render();
   }
@@ -282,10 +285,11 @@ export function createMapTemplateEngine({
     cursor = pointFromEvent(event);
 
     if (isDirectionalShape(shape)) {
-      if (!anchor || confirmed) {
+      if (!anchor || (confirmed && !anchorLocked)) {
         anchor = { ...cursor };
+        anchorLocked = false;
         confirmed = false;
-      } else {
+      } else if (!confirmed) {
         confirmed = true;
       }
     } else {
@@ -335,6 +339,7 @@ export function createMapTemplateEngine({
     );
     cursor = null;
     anchor = null;
+    anchorLocked = false;
     confirmed = false;
 
     if (enabled) {
@@ -355,6 +360,7 @@ export function createMapTemplateEngine({
     };
     cursor = null;
     anchor = null;
+    anchorLocked = false;
     confirmed = false;
     render();
     return shape;
@@ -378,6 +384,59 @@ export function createMapTemplateEngine({
     };
     render();
     return Object.freeze({ ...options });
+  }
+
+  function setAnchorPoint(
+    point,
+    {
+      locked = true,
+      confirm = false
+    } = {}
+  ) {
+    if (!point) {
+      anchor = null;
+      anchorLocked = false;
+      confirmed = false;
+      render();
+      return null;
+    }
+
+    syncBounds();
+    const width = Math.max(1, overlay.clientWidth);
+    const height = Math.max(1, overlay.clientHeight);
+    const xRatio = Number.isFinite(Number(point.xRatio))
+      ? clamp(Number(point.xRatio), 0, 1)
+      : clamp(Number(point.x) || 0, 0, width) / width;
+    const yRatio = Number.isFinite(Number(point.yRatio))
+      ? clamp(Number(point.yRatio), 0, 1)
+      : clamp(Number(point.y) || 0, 0, height) / height;
+
+    anchor = {
+      x: xRatio * width,
+      y: yRatio * height,
+      xRatio,
+      yRatio
+    };
+    anchorLocked = locked === true;
+    confirmed = confirm === true;
+
+    if (
+      !cursor ||
+      !isDirectionalShape(shape)
+    ) {
+      cursor = {
+        ...anchor,
+        x: isDirectionalShape(shape)
+          ? Math.min(width, anchor.x + 1)
+          : anchor.x,
+        xRatio: isDirectionalShape(shape)
+          ? Math.min(1, (anchor.x + 1) / width)
+          : anchor.xRatio
+      };
+    }
+
+    render();
+    return copyPoint(anchor);
   }
 
   function refresh() {
@@ -416,6 +475,7 @@ export function createMapTemplateEngine({
     getState,
     refresh,
     setEnabled,
+    setAnchorPoint,
     setOptions,
     setShape,
     toggle

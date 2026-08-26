@@ -113,6 +113,28 @@ export function ensureGameplayState(character) {
       )
     )
   };
+  combat.concentration =
+    isRecord(combat.concentration) &&
+    cleanText(
+      combat.concentration.spellName ||
+      combat.concentration.spellId
+    )
+      ? {
+          spellId: cleanText(
+            combat.concentration.spellId
+          ),
+          spellName: cleanText(
+            combat.concentration.spellName,
+            "Spell"
+          ),
+          startedAtMillis: integer(
+            combat.concentration
+              .startedAtMillis,
+            0,
+            0
+          )
+        }
+      : null;
 
   return combat;
 }
@@ -389,6 +411,28 @@ export function applyGameplayAction(character, action = {}) {
     };
   }
 
+  if (action.type === "end-concentration") {
+    const activeSpell = cleanText(
+      combat.concentration?.spellName,
+      "spell"
+    );
+
+    if (!combat.concentration) {
+      return {
+        changed: false,
+        message:
+          "The character is not concentrating on a spell."
+      };
+    }
+
+    combat.concentration = null;
+    return {
+      changed: true,
+      message:
+        `Concentration on ${activeSpell} ended.`
+    };
+  }
+
   if (action.type === "toggle-condition") {
     const condition = cleanText(action.condition);
 
@@ -435,11 +479,13 @@ export function applyGameplayAction(character, action = {}) {
   if (action.type === "long-rest-cleanup") {
     const changed =
       combat.deathSaves.successes !== 0 ||
-      combat.deathSaves.failures !== 0;
+      combat.deathSaves.failures !== 0 ||
+      combat.concentration !== null;
     combat.deathSaves = {
       successes: 0,
       failures: 0
     };
+    combat.concentration = null;
 
     return {
       changed,

@@ -2661,6 +2661,163 @@ test(
 );
 
 test(
+  "character-sheet area spells expose Target on Map without spending resources",
+  async ({ page }) => {
+    await page.goto(
+      "tests/browser-pages/playable-character-sheet.html",
+      { waitUntil: "domcontentloaded" }
+    );
+    await expect(page.locator("body"))
+      .toHaveAttribute("data-test-status", "pass");
+    await page.locator(
+      '[data-character-sheet-tab="spells"]'
+    ).click();
+    await page.locator(
+      '[data-character-sheet-input="spell-search"]'
+    ).fill("Fireball");
+
+    const fireball = page.locator(
+      '[data-sheet-spell-id="fireball"]'
+    ).first();
+    await expect(fireball).toContainText(
+      "Target on Map"
+    );
+    await fireball.locator(
+      '[data-character-sheet-action="target-spell"]'
+    ).click();
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-targeted-spell-id",
+        "fireball"
+      );
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-targeted-character-id",
+        "playable-sheet-fixture"
+      );
+    await expect(fireball).toContainText(
+      "no slot is spent until Confirm Cast"
+    );
+  }
+);
+
+test(
+  "character spell targeting anchors to its linked token and confirms exactly once",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=character-sheet-casting-stage6-20260826",
+      { waitUntil: "domcontentloaded" }
+    );
+    await page.waitForFunction(() => Boolean(
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+    ));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .openScreen("battle"));
+    await page.evaluate(() => {
+      const layer = document.getElementById(
+        "tokenLayer"
+      );
+      const token =
+        document.createElement("div");
+      token.className =
+        "hg-token hg-token-player";
+      token.dataset.tokenId =
+        "release-test-wizard-token";
+      token.dataset.tokenName =
+        "Release Test Wizard";
+      token.dataset.tokenType = "player";
+      token.dataset.linkedCharacterId =
+        "release-test-character";
+      token.style.position = "absolute";
+      token.style.left = "100px";
+      token.style.top = "110px";
+      token.style.width = "64px";
+      token.style.height = "64px";
+      layer.appendChild(token);
+    });
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .beginSpellCast({
+        spellId: "burning-hands",
+        characterId:
+          "release-test-character"
+      }));
+
+    const panel = page.locator(
+      "#spellCastingPanel"
+    );
+    const overlay = page.locator(
+      ".hg-map-template-layer"
+    );
+    const confirm = page.locator(
+      "#confirmSpellCastButton"
+    );
+
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(
+      "Burning Hands"
+    );
+    await expect(overlay).toHaveAttribute(
+      "data-template-shape",
+      "cone"
+    );
+    await expect(overlay).toHaveAttribute(
+      "data-template-phase",
+      "aiming"
+    );
+    await expect(confirm).toBeDisabled();
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-cast-confirmed",
+        "0"
+      );
+
+    await overlay.scrollIntoViewIfNeeded();
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(
+      box.x + 330,
+      box.y + 150
+    );
+    await page.mouse.click(
+      box.x + 330,
+      box.y + 150
+    );
+    await expect(overlay).toHaveAttribute(
+      "data-template-phase",
+      "confirmed"
+    );
+    await expect(confirm).toBeEnabled();
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-cast-confirmed",
+        "0"
+      );
+
+    await confirm.click();
+    await expect(page.locator("body"))
+      .toHaveAttribute(
+        "data-test-cast-confirmed",
+        "1"
+      );
+    await expect(confirm).toHaveText(
+      "Cast Confirmed"
+    );
+    await expect(
+      page.locator(
+        "#spellCastingResolution"
+      )
+    ).toContainText("DEX save DC 15");
+    await expect(
+      page.locator(
+        "#spellCastingResolution"
+      )
+    ).toContainText("3d6 fire");
+  }
+);
+
+test(
   "mobile layout does not overflow at a phone viewport",
   async ({ page }) => {
     await page.setViewportSize({

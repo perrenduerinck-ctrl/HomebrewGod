@@ -673,6 +673,18 @@
         }
         return character;
       },
+      onTargetSpell: ({
+        spell,
+        characterId
+      }) => {
+        document.body.dataset
+          .targetedSpellId =
+            spell.id;
+        document.body.dataset
+          .targetedCharacterId =
+            characterId;
+        return false;
+      },
       onRest: (restType) => {
         if (restType === "longRest") {
           character.combat.currentHp =

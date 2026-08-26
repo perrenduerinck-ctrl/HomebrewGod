@@ -409,6 +409,66 @@ button:disabled {
   color: #d8cfff;
 }
 
+.battleSpellCastingPanel {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.75fr) minmax(220px, 1fr) minmax(190px, auto);
+  gap: 10px 14px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 13px 14px;
+  border: 1px solid rgba(172, 145, 255, 0.5);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(39, 27, 77, 0.94), rgba(12, 17, 39, 0.96));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
+}
+
+.battleSpellCastingPanel > div:first-child,
+.battleSpellCastingPanel label {
+  display: grid;
+  gap: 4px;
+}
+
+.battleSpellCastingPanel strong {
+  color: #fff;
+  font-size: 17px;
+}
+
+.battleSpellCastingPanel span,
+.battleSpellCastingPanel label span {
+  color: #bfc9ec;
+  font-size: 12px;
+}
+
+#battleTopBar .battleSpellCastingPanel p {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+#spellCastingSlotSelect {
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+}
+
+.battleSpellCastingActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.battleSpellCastingActions button {
+  min-height: 40px;
+  margin: 0;
+}
+
+#spellCastingResolution {
+  grid-column: 1 / -1;
+  color: #dfffe9 !important;
+}
+
 #battleMapViewer {
   border: 1px solid rgba(113, 128, 230, 0.24);
   border-radius: 18px;
@@ -572,6 +632,14 @@ button:disabled {
   fill: rgba(91, 231, 170, 0.3);
   stroke: #b9ffdd;
   stroke-dasharray: none;
+}
+
+.hg-map-template-layer.is-invalid-target
+  .hg-map-template-shape {
+  fill: rgba(255, 79, 99, 0.24);
+  stroke: #ff8796;
+  stroke-dasharray: 5 5;
+  filter: drop-shadow(0 0 8px rgba(255, 74, 95, 0.75));
 }
 
 .hg-map-template-origin {
@@ -821,6 +889,14 @@ a:hover {
     width: 100%;
     box-sizing: border-box;
     justify-content: center;
+  }
+
+  .battleSpellCastingPanel {
+    grid-template-columns: 1fr;
+  }
+
+  #spellCastingResolution {
+    grid-column: 1;
   }
 
   .battleEditorInner input,

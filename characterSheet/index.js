@@ -13,6 +13,9 @@ import {
   getDefaultSpellById
 } from "../data/defaultSpells.js";
 import {
+  createSpellTemplateInstruction
+} from "../battleMap/spellTemplates.js?v=stage6-20260826";
+import {
   calculateInventoryLineWeight,
   countCharacterAttunedItems,
   getCharacterAttunementLimit
@@ -6154,7 +6157,8 @@ function getCompleteSpellDescription(spell) {
 function renderSpellCard(
   spell,
   {
-    expanded = false
+    expanded = false,
+    interactive = true
   } = {}
 ) {
   const source = [
@@ -6170,6 +6174,8 @@ function renderSpellCard(
   ].join(" \u00b7 ");
   const completeDescription =
     getCompleteSpellDescription(spell);
+  const templateInstruction =
+    createSpellTemplateInstruction(spell);
 
   return `
     <article
@@ -6244,6 +6250,17 @@ function renderSpellCard(
 
       ${spell.summary ? `
         <p class="hg-sheet-spell-summary">${escapeHtml(spell.summary)}</p>
+      ` : ""}
+
+      ${interactive && templateInstruction.supported ? `
+        <div class="hg-sheet-spell-actions hg-sheet-no-print">
+          <button
+            type="button"
+            data-character-sheet-action="target-spell"
+            data-target-spell-id="${escapeHtml(spell.id)}"
+          >Target on Map</button>
+          <small>Preview first; no slot is spent until Confirm Cast.</small>
+        </div>
       ` : ""}
 
       ${completeDescription ? `
@@ -6377,7 +6394,9 @@ function renderSpellLibraryResults(
                       expanded:
                         expanded.has(
                           spell.id
-                        )
+                        ),
+                      interactive:
+                        !printMode
                     }
                   );
                 }
@@ -6516,6 +6535,12 @@ function renderSpellPanel(
   } = {}
 ) {
   const magic = isRecord(character?.magic) ? character.magic : {};
+  const activeConcentration =
+    isRecord(
+      character?.combat?.concentration
+    )
+      ? character.combat.concentration
+      : null;
   const boundedClassSources =
     getBoundedClassSourceEntries(
       character,
@@ -6580,6 +6605,27 @@ function renderSpellPanel(
       <div class="hg-sheet-callout">
         Spell learning and preparation remain in the Character Creator. Uses and spell-slot spending can be tracked here.
       </div>
+
+      ${activeConcentration ? `
+        <div class="hg-sheet-callout hg-sheet-concentration-callout">
+          <div>
+            <strong>Concentrating</strong>
+            <span>${escapeHtml(
+              firstText(
+                activeConcentration.spellName,
+                activeConcentration.spellId,
+                "Spell"
+              )
+            )}</span>
+          </div>
+          ${printMode ? "" : `
+            <button
+              type="button"
+              data-character-sheet-action="end-concentration"
+            >End Concentration</button>
+          `}
+        </div>
+      ` : ""}
 
       <div class="hg-sheet-card-grid">
         ${classSources.length
@@ -7633,6 +7679,25 @@ function ensureStyles() {
       font-size: 11px;
     }
 
+    .hg-sheet-spell-actions {
+      display: grid;
+      grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      padding-top: 2px;
+    }
+
+    .hg-sheet-spell-actions button {
+      min-height: 42px;
+      padding: 9px 14px;
+      font-weight: 800;
+    }
+
+    .hg-sheet-spell-actions small {
+      color: #aeb9df;
+      line-height: 1.35;
+    }
+
     .hg-sheet-spell-badges {
       justify-content: flex-end;
       max-width: 190px;
@@ -7826,6 +7891,25 @@ function ensureStyles() {
       padding: 12px 14px;
       border-color: rgba(244, 216, 139, 0.32);
       color: #d8def8;
+    }
+
+    .hg-sheet-concentration-callout {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      border-color: rgba(185, 126, 255, 0.5);
+      background:
+        linear-gradient(135deg, rgba(64, 38, 91, 0.7), rgba(11, 17, 37, 0.96));
+    }
+
+    .hg-sheet-concentration-callout > div {
+      display: grid;
+      gap: 3px;
+    }
+
+    .hg-sheet-concentration-callout span {
+      color: #dfd6ff;
     }
 
     .hg-sheet-preserve-lines {
@@ -9001,6 +9085,10 @@ export function createCharacterSheetView(options = {}) {
       typeof options.onAdjustSpellSlot === "function"
         ? options.onAdjustSpellSlot
         : () => false,
+    onTargetSpell:
+      typeof options.onTargetSpell === "function"
+        ? options.onTargetSpell
+        : () => false,
     onRest: typeof options.onRest === "function"
       ? options.onRest
       : () => false,
@@ -9948,6 +10036,59 @@ export function createCharacterSheetView(options = {}) {
       return;
     }
 
+    if (action === "target-spell") {
+      const spellId = cleanText(
+        button.dataset.targetSpellId
+      );
+      const spell = getSpellCache()
+        .spells.find((entry) => (
+          cleanText(entry.id) === spellId
+        ));
+
+      if (!spell) {
+        deps.setStatus(
+          "That spell is no longer available on this character."
+        );
+        return;
+      }
+
+      try {
+        const result = deps.onTargetSpell({
+          spell: cloneSnapshot(spell),
+          character: cloneSnapshot(
+            state.character
+          ),
+          characterId: cleanText(
+            deps.getSheetContext()?.characterId,
+            state.character?.id
+          )
+        });
+
+        if (result && typeof result.then === "function") {
+          result
+            .then((value) => {
+              if (value !== false) {
+                close();
+              }
+            })
+            .catch((error) => {
+              deps.setStatus(
+                error?.message ||
+                "Spell targeting could not be opened."
+              );
+            });
+        } else if (result !== false) {
+          close();
+        }
+      } catch (error) {
+        deps.setStatus(
+          error?.message ||
+          "Spell targeting could not be opened."
+        );
+      }
+      return;
+    }
+
     if (
       action ===
       "toggle-inventory-filter"
@@ -10008,6 +10149,16 @@ export function createCharacterSheetView(options = {}) {
           type: "toggle-inspiration"
         }),
         ""
+      );
+      return;
+    }
+
+    if (action === "end-concentration") {
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: "end-concentration"
+        }),
+        "Concentration ended."
       );
       return;
     }
