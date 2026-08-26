@@ -66,6 +66,25 @@ test("zoomed grid pixels keep the same game distance", () => {
   assert.equal(zoomed.feet, 30);
 });
 
+test("ruler combines horizontal and vertical distance in three dimensions", () => {
+  const measurement = measureMapDistance(
+    { x: 0, y: 0 },
+    { x: 512, y: 0 },
+    {
+      pixelsPerSquare: 64,
+      feetPerSquare: 5,
+      startElevationFeet: 10,
+      endElevationFeet: 40
+    }
+  );
+
+  assert.equal(measurement.horizontalFeet, 40);
+  assert.equal(measurement.verticalFeet, 30);
+  assert.equal(measurement.startElevationFeet, 10);
+  assert.equal(measurement.endElevationFeet, 40);
+  assert.equal(measurement.feet, 50);
+});
+
 test("ruler scale inputs are finite and bounded", () => {
   assert.equal(normalizeFeetPerSquare("5"), 5);
   assert.equal(normalizeFeetPerSquare("7.8"), 8);

@@ -14,7 +14,7 @@ import {
 } from "../data/defaultSpells.js";
 import {
   createSpellTemplateInstruction
-} from "../battleMap/spellTemplates.js?v=stage6-20260826";
+} from "../battleMap/spellTemplates.js?v=stage7-20260826";
 import {
   calculateInventoryLineWeight,
   countCharacterAttunedItems,

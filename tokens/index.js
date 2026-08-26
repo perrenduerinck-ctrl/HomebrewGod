@@ -7,6 +7,11 @@
 import {
   createRealtimeListenerRegistry
 } from "../shared/realtimeListeners.js";
+import {
+  formatElevation,
+  getTokenElevation,
+  normalizeElevation
+} from "../battleMap/elevation.js?v=stage7-20260826";
 
 export function createTokenSystem(options) {
   const deps = {
@@ -78,6 +83,7 @@ export function createTokenSystem(options) {
     tokenNameInput: null,
     tokenTypeSelect: null,
     tokenSizeSelect: null,
+    tokenElevationInput: null,
     tokenImageUploadInput: null,
     addTokenButton: null,
     tokenBuilderStatus: null,
@@ -98,6 +104,7 @@ export function createTokenSystem(options) {
     T.tokenNameInput = $("tokenNameInput");
     T.tokenTypeSelect = $("tokenTypeSelect");
     T.tokenSizeSelect = $("tokenSizeSelect");
+    T.tokenElevationInput = $("tokenElevationInput");
     T.tokenImageUploadInput = $("tokenImageUploadInput");
     T.addTokenButton = $("addTokenButton");
     T.tokenBuilderStatus = $("tokenBuilderStatus");
@@ -511,6 +518,23 @@ export function createTokenSystem(options) {
         max-width: 100% !important;
       }
 
+      .tokenElevationInputLabel {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 4px;
+        color: #dfe6ff;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      #tokenElevationInput {
+        width: 82px !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        text-align: center;
+      }
+
       #tokenImageUploadInput {
         width: 220px !important;
         max-width: 100% !important;
@@ -776,6 +800,90 @@ export function createTokenSystem(options) {
         opacity: 1;
       }
 
+      .hg-token-elevation-badge {
+        position: absolute;
+        left: 50%;
+        bottom: 100%;
+        transform: translateX(-50%);
+        margin-bottom: 22px;
+        padding: 3px 7px;
+        border-radius: 999px;
+        background: rgba(11, 33, 57, 0.94);
+        color: #bcecff;
+        border: 1px solid rgba(105, 214, 255, 0.78);
+        box-shadow: 0 0 13px rgba(66, 190, 255, 0.38);
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1.1;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 4;
+      }
+
+      .hg-token.is-below-ground .hg-token-elevation-badge {
+        color: #ffd3a6;
+        background: rgba(54, 27, 16, 0.94);
+        border-color: rgba(255, 166, 91, 0.78);
+        box-shadow: 0 0 13px rgba(255, 135, 62, 0.32);
+      }
+
+      .hg-token.is-elevated::after {
+        content: "";
+        position: absolute;
+        left: 12%;
+        right: 12%;
+        top: 70%;
+        height: 35%;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.62);
+        filter: blur(7px);
+        transform: translateY(
+          var(--hg-token-elevation-shadow-offset, 12px)
+        );
+        opacity: 0.72;
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      .hg-token.is-elevated img,
+      .hg-token.is-elevated .hg-token-fallback {
+        box-shadow:
+          0 0 0 2px rgba(0, 0, 0, 0.65),
+          0 0 23px rgba(91, 201, 255, 0.72),
+          0 12px 18px rgba(0, 0, 0, 0.5);
+      }
+
+      .hg-token-elevation-controls {
+        position: absolute;
+        right: 100%;
+        top: 50%;
+        display: flex;
+        gap: 3px;
+        margin-right: 5px;
+        transform: translateY(-50%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+        z-index: 5;
+      }
+
+      .hg-token:hover .hg-token-elevation-controls,
+      .hg-token:focus-within .hg-token-elevation-controls {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .hg-token-elevation-controls button {
+        width: 28px !important;
+        min-width: 28px !important;
+        height: 28px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-radius: 999px !important;
+        font-size: 13px !important;
+        line-height: 1 !important;
+      }
+
       .hg-token-delete {
         position: absolute;
         right: -8px;
@@ -846,6 +954,7 @@ export function createTokenSystem(options) {
         #tokenTypeSelect,
         #tokenSizeSelect,
         #tokenNameInput,
+        #tokenElevationInput,
         #tokenImageUploadInput {
           display: block !important;
           width: 100% !important;
@@ -905,6 +1014,24 @@ export function createTokenSystem(options) {
         const mediumSize = clampMediumSize(T.tokenMediumSizeInput.value);
         showMapScalePreview(mediumSize, "Medium");
       });
+    }
+
+    if (
+      T.tokenElevationInput &&
+      T.tokenElevationInput.dataset
+        .homebrewGodElevationConnected !== "yes"
+    ) {
+      T.tokenElevationInput.dataset
+        .homebrewGodElevationConnected = "yes";
+      T.tokenElevationInput.addEventListener(
+        "change",
+        function () {
+          T.tokenElevationInput.value =
+            String(normalizeElevation(
+              T.tokenElevationInput.value
+            ));
+        }
+      );
     }
   }
 
@@ -1070,6 +1197,8 @@ export function createTokenSystem(options) {
         )
       )
     );
+    const elevation =
+      getTokenElevation(token);
 
     return {
       ...token,
@@ -1088,6 +1217,8 @@ export function createTokenSystem(options) {
       },
       armorClass,
       ac: armorClass,
+      elevation,
+      elevationFeet: elevation,
       linkedCharacterId:
         token.linkedCharacterId ||
         token.linkedCharacter?.id ||
@@ -1425,9 +1556,28 @@ export function createTokenSystem(options) {
       tokenEl.dataset.tokenName = token.name || "Token";
       tokenEl.dataset.tokenType = token.type;
       tokenEl.dataset.tokenSizeCategory = token.sizeCategory;
+      tokenEl.dataset.tokenElevation =
+        String(token.elevation);
       tokenEl.dataset.linkedCharacterId =
         token.linkedCharacterId || "";
-      tokenEl.title = token.name || "Token";
+      tokenEl.title = `${token.name || "Token"} · ${
+        formatElevation(token.elevation)
+      }`;
+      tokenEl.classList.toggle(
+        "is-elevated",
+        token.elevation > 0
+      );
+      tokenEl.classList.toggle(
+        "is-below-ground",
+        token.elevation < 0
+      );
+      tokenEl.style.setProperty(
+        "--hg-token-elevation-shadow-offset",
+        `${Math.min(
+          28,
+          8 + Math.abs(token.elevation) / 5
+        )}px`
+      );
 
       positionTokenElement(tokenEl, token, safeRoom);
 
@@ -1447,6 +1597,18 @@ export function createTokenSystem(options) {
       sizeBadge.className = "hg-token-size-badge";
       sizeBadge.textContent = sizeCategoryLabel(token.sizeCategory);
       tokenEl.appendChild(sizeBadge);
+
+      if (token.elevation !== 0) {
+        const elevationBadge =
+          document.createElement("div");
+        elevationBadge.className =
+          "hg-token-elevation-badge";
+        elevationBadge.textContent =
+          token.elevation > 0
+            ? `↑ ${token.elevation} ft`
+            : `↓ ${Math.abs(token.elevation)} ft`;
+        tokenEl.appendChild(elevationBadge);
+      }
 
       const label = document.createElement("div");
       label.className = "hg-token-label";
@@ -1506,6 +1668,43 @@ export function createTokenSystem(options) {
         });
 
         tokenEl.appendChild(deleteButton);
+
+        const elevationControls =
+          document.createElement("div");
+        elevationControls.className =
+          "hg-token-elevation-controls";
+        elevationControls.setAttribute(
+          "aria-label",
+          `Change ${token.name || "token"} elevation`
+        );
+
+        [-5, 5].forEach((change) => {
+          const button =
+            document.createElement("button");
+          button.type = "button";
+          button.textContent =
+            change > 0 ? "+" : "−";
+          button.title = `${
+            change > 0 ? "Raise" : "Lower"
+          } token 5 ft`;
+          button.setAttribute(
+            "aria-label",
+            button.title
+          );
+          button.addEventListener(
+            "click",
+            function (event) {
+              event.stopPropagation();
+              updateTokenElevation(
+                token.id,
+                token.elevation + change
+              );
+            }
+          );
+          elevationControls.appendChild(button);
+        });
+
+        tokenEl.appendChild(elevationControls);
       }
 
       layer.appendChild(tokenEl);
@@ -1632,6 +1831,14 @@ export function createTokenSystem(options) {
       const sizeCategory = T.tokenSizeSelect && T.tokenSizeSelect.value
         ? normalizeSizeCategory(T.tokenSizeSelect.value)
         : "medium";
+      const elevation = normalizeElevation(
+        T.tokenElevationInput?.value
+      );
+
+      if (T.tokenElevationInput) {
+        T.tokenElevationInput.value =
+          String(elevation);
+      }
 
       if (!deps.uploadImage) {
         alert("Token uploader is not connected.");
@@ -1659,6 +1866,8 @@ export function createTokenSystem(options) {
         tileKey: target.tileKey,
         sizeCategory,
         creatureSize: sizeCategory,
+        elevation,
+        elevationFeet: elevation,
         size: Math.round(mediumSize * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
         sheetId: null,
         display: {
@@ -1686,6 +1895,10 @@ export function createTokenSystem(options) {
 
       if (T.tokenImageUploadInput) {
         T.tokenImageUploadInput.value = "";
+      }
+
+      if (T.tokenElevationInput) {
+        T.tokenElevationInput.value = "0";
       }
 
       setStatus(sizeCategoryLabel(sizeCategory) + " token added.");
@@ -1771,6 +1984,8 @@ export function createTokenSystem(options) {
       type: "player",
       x: 50,
       y: 50,
+      elevation: 0,
+      elevationFeet: 0,
       mapMode: target.mapMode,
       tileKey: target.tileKey,
       display: {
@@ -1869,6 +2084,8 @@ export function createTokenSystem(options) {
       type: "enemy",
       x: 50,
       y: 50,
+      elevation: 0,
+      elevationFeet: 0,
       mapMode: target.mapMode,
       tileKey: target.tileKey,
       display: {
@@ -2024,6 +2241,69 @@ export function createTokenSystem(options) {
     };
   }
 
+  async function updateTokenElevation(
+    tokenId,
+    nextElevation
+  ) {
+    try {
+      const roomCode = deps.getCurrentRoomCode
+        ? deps.getCurrentRoomCode()
+        : null;
+      const isDM = deps.getCurrentIsDM
+        ? deps.getCurrentIsDM()
+        : false;
+      const elevation = normalizeElevation(
+        nextElevation
+      );
+
+      if (!roomCode || !isDM) {
+        throw new Error(
+          "Only the DM can change token elevation."
+        );
+      }
+
+      await deps.updateDoc(
+        deps.doc(
+          deps.db,
+          "rooms",
+          roomCode,
+          "tokens",
+          tokenId
+        ),
+        {
+          elevation,
+          elevationFeet: elevation,
+          updatedAtMillis: Date.now(),
+          updatedAt: deps.serverTimestamp()
+        }
+      );
+
+      tokenCache = tokenCache.map((token) => (
+        token.id === tokenId
+          ? normalizeToken({
+              ...token,
+              elevation,
+              elevationFeet: elevation
+            })
+          : token
+      ));
+      render(
+        deps.getCurrentRoomData
+          ? deps.getCurrentRoomData() || {}
+          : lastRenderedRoom || {}
+      );
+      setStatus(
+        `Token elevation set to ${formatElevation(elevation)}.`
+      );
+      return elevation;
+    } catch (error) {
+      console.error(error);
+      setStatus("Could not change token elevation.");
+      alert(error.message);
+      return null;
+    }
+  }
+
   async function deleteToken(tokenId) {
     try {
       const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
@@ -2087,7 +2367,9 @@ export function createTokenSystem(options) {
       return;
     }
 
-    if (event.target.closest(".hg-token-delete")) {
+    if (event.target.closest(
+      ".hg-token-delete, .hg-token-elevation-controls"
+    )) {
       return;
     }
 
@@ -2246,6 +2528,7 @@ export function createTokenSystem(options) {
     loadCharacterLinkedToken,
     getRoomTokens,
     syncLinkedCharacterTokens,
+    updateTokenElevation,
     deleteToken,
     saveTokenScale,
     startTokenListenerForRoom,
