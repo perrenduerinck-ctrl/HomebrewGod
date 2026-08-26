@@ -36,23 +36,27 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=stage4-20260825";
+import { createTokenSystem } from "./tokens/index.js?v=stage5-20260825";
 import {
   createMapRuler,
   formatMapSquares,
   normalizeFeetPerSquare
-} from "./battleMap/measurement.js?v=stage4-20260825";
+} from "./battleMap/measurement.js?v=stage5-20260825";
 import {
   getDefaultTemplateOptions,
   normalizeTemplateDistance,
   normalizeTemplateShape
-} from "./battleMap/templateGeometry.js?v=stage4-20260825";
+} from "./battleMap/templateGeometry.js?v=stage5-20260825";
 import {
   createMapTemplateEngine
-} from "./battleMap/templateRenderer.js?v=stage4-20260825";
+} from "./battleMap/templateRenderer.js?v=stage5-20260825";
 import {
   findAffectedTokens
-} from "./battleMap/tokenCollision.js?v=stage4-20260825";
+} from "./battleMap/tokenCollision.js?v=stage5-20260825";
+import {
+  createSpellTemplateInstruction,
+  formatSpellTemplateInstruction
+} from "./battleMap/spellTemplates.js?v=stage5-20260825";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -190,6 +194,10 @@ const E = {
     $("templateClearButton"),
   templateStatus:
     $("templateStatus"),
+  spellTemplateSelect:
+    $("spellTemplateSelect"),
+  loadSpellTemplateButton:
+    $("loadSpellTemplateButton"),
 
   // Old quick battle map controls, kept safe if missing
   battleDmMapControls: $("battleDmMapControls"),
@@ -252,6 +260,7 @@ let hasMigratedLegacyPuzzleTiles = false;
 let battleZoom = 1;
 let battleMapRuler = null;
 let battleMapTemplates = null;
+let activeSpellTemplateInstruction = null;
 
 const appRealtimeListeners =
   createRealtimeListenerRegistry({
@@ -3098,6 +3107,17 @@ function formatAffectedTokenStatus(affectedTokens) {
   }.`;
 }
 
+function getActiveSpellTemplateStatus() {
+  if (!activeSpellTemplateInstruction) {
+    return "";
+  }
+  return `${
+    formatSpellTemplateInstruction(
+      activeSpellTemplateInstruction
+    )
+  }. Preview only — no spell slot is spent. `;
+}
+
 function updateBattleMapTemplateUi(state) {
   const affectedTokens =
     updateAffectedTokenHighlights(
@@ -3109,6 +3129,8 @@ function updateBattleMapTemplateUi(state) {
     formatAffectedTokenStatus(
       affectedTokens
     );
+  const spellStatus =
+    getActiveSpellTemplateStatus();
 
   if (E.templateToggleButton) {
     E.templateToggleButton.textContent =
@@ -3131,7 +3153,7 @@ function updateBattleMapTemplateUi(state) {
   if (!state.enabled) {
     text(
       E.templateStatus,
-      "Turn on templates to preview a circle, cone, line, or square."
+      `${spellStatus}Turn on templates to preview a circle, cone, line, or square.`
     );
     return;
   }
@@ -3140,8 +3162,8 @@ function updateBattleMapTemplateUi(state) {
     text(
       E.templateStatus,
       state.shape === "cone" || state.shape === "line"
-        ? "Move over the map and click the effect's starting point."
-        : "Move over the map to preview the shape, then click to lock it."
+        ? `${spellStatus}Move over the map and click the effect's starting point.`
+        : `${spellStatus}Move over the map to preview the shape, then click to lock it.`
     );
     return;
   }
@@ -3149,7 +3171,7 @@ function updateBattleMapTemplateUi(state) {
   if (state.phase === "aiming") {
     text(
       E.templateStatus,
-      `${state.label} — move to aim, then click again to lock it. ${affectedStatus}`
+      `${spellStatus}${state.label} — move to aim, then click again to lock it. ${affectedStatus}`
     );
     return;
   }
@@ -3157,15 +3179,95 @@ function updateBattleMapTemplateUi(state) {
   if (state.phase === "confirmed") {
     text(
       E.templateStatus,
-      `${state.label} locked. Use Clear Template to place another. ${affectedStatus}`
+      `${spellStatus}${state.label} locked. Use Clear Template to place another. ${affectedStatus}`
     );
     return;
   }
 
   text(
     E.templateStatus,
-    `${state.label} — click to lock it. ${affectedStatus}`
+    `${spellStatus}${state.label} — click to lock it. ${affectedStatus}`
   );
+}
+
+async function loadSelectedSpellTemplate() {
+  const spellId = String(
+    E.spellTemplateSelect?.value || ""
+  ).trim();
+
+  if (!spellId) {
+    activeSpellTemplateInstruction = null;
+    updateBattleMapTemplateUi(
+      battleMapTemplates.getState()
+    );
+    return;
+  }
+
+  if (E.loadSpellTemplateButton) {
+    E.loadSpellTemplateButton.disabled = true;
+    E.loadSpellTemplateButton.textContent =
+      "Loading Spell…";
+  }
+
+  try {
+    const { getDefaultSpellById } = await import(
+      "./data/defaultSpells.js?v=stage5-20260825"
+    );
+    const spell = getDefaultSpellById(spellId);
+    const instruction =
+      createSpellTemplateInstruction(spell);
+
+    if (!instruction.supported) {
+      activeSpellTemplateInstruction = null;
+      text(
+        E.templateStatus,
+        instruction.reason
+      );
+      return;
+    }
+
+    activeSpellTemplateInstruction = instruction;
+    if (E.templateShapeSelect) {
+      E.templateShapeSelect.value =
+        instruction.templateShape;
+    }
+    syncBattleMapTemplateControls(
+      instruction.templateShape
+    );
+    if (E.templateSizeInput) {
+      E.templateSizeInput.value = String(
+        instruction.sizeFeet
+      );
+    }
+    if (E.templateWidthInput) {
+      E.templateWidthInput.value = String(
+        instruction.widthFeet
+      );
+    }
+
+    battleMapRuler?.setEnabled(false);
+    battleMapTemplates.setShape(
+      instruction.templateShape
+    );
+    battleMapTemplates.setOptions({
+      sizeFeet: instruction.sizeFeet,
+      widthFeet: instruction.widthFeet
+    });
+    battleMapTemplates.setEnabled(true);
+  } catch (error) {
+    console.error(error);
+    activeSpellTemplateInstruction = null;
+    text(
+      E.templateStatus,
+      "Spell preview could not be loaded."
+    );
+  } finally {
+    if (E.loadSpellTemplateButton) {
+      E.loadSpellTemplateButton.disabled = false;
+      E.loadSpellTemplateButton.textContent =
+        "Target Spell on Map";
+    }
+  }
 }
 
 function initializeBattleMapTemplates() {
@@ -3219,9 +3321,18 @@ function initializeBattleMapTemplates() {
     }
   );
 
+  E.loadSpellTemplateButton?.addEventListener(
+    "click",
+    loadSelectedSpellTemplate
+  );
+
   E.templateShapeSelect?.addEventListener(
     "change",
     function () {
+      activeSpellTemplateInstruction = null;
+      if (E.spellTemplateSelect) {
+        E.spellTemplateSelect.value = "";
+      }
       const shape = getSelectedTemplateShape();
       syncBattleMapTemplateControls(
         shape,
