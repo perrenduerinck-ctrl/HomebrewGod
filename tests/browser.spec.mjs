@@ -2586,6 +2586,81 @@ test(
 );
 
 test(
+  "structured spell data drives Fireball, Burning Hands, and Lightning Bolt templates",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=spell-templates-stage5-20260825",
+      { waitUntil: "domcontentloaded" }
+    );
+    await page.waitForFunction(() => Boolean(
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+    ));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .openScreen("battle"));
+
+    const spellSelect = page.locator(
+      "#spellTemplateSelect"
+    );
+    const loadButton = page.locator(
+      "#loadSpellTemplateButton"
+    );
+    const shapeSelect = page.locator(
+      "#templateShapeSelect"
+    );
+    const sizeInput = page.locator(
+      "#templateSizeInput"
+    );
+    const widthInput = page.locator(
+      "#templateWidthInput"
+    );
+    const status = page.locator(
+      "#templateStatus"
+    );
+    const overlay = page.locator(
+      ".hg-map-template-layer"
+    );
+
+    await spellSelect.selectOption("fireball");
+    await loadButton.click();
+    await expect(shapeSelect).toHaveValue("circle");
+    await expect(sizeInput).toHaveValue("20");
+    await expect(status).toContainText(
+      "Fireball · Range 150 feet · 20-ft radius"
+    );
+    await expect(status).toContainText(
+      "Preview only — no spell slot is spent"
+    );
+
+    await spellSelect.selectOption("burning-hands");
+    await loadButton.click();
+    await expect(shapeSelect).toHaveValue("cone");
+    await expect(sizeInput).toHaveValue("15");
+    await expect(status).toContainText(
+      "Burning Hands · Range Self · 15 ft"
+    );
+    await overlay.scrollIntoViewIfNeeded();
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(box.x + 120, box.y + 140);
+    await page.mouse.move(box.x + 280, box.y + 140);
+    await expect(overlay).toHaveAttribute(
+      "data-template-phase",
+      "aiming"
+    );
+
+    await spellSelect.selectOption("lightning-bolt");
+    await loadButton.click();
+    await expect(shapeSelect).toHaveValue("line");
+    await expect(sizeInput).toHaveValue("100");
+    await expect(widthInput).toHaveValue("5");
+    await expect(status).toContainText(
+      "Lightning Bolt · Range Self · 100 ft × 5 ft"
+    );
+  }
+);
+
+test(
   "mobile layout does not overflow at a phone viewport",
   async ({ page }) => {
     await page.setViewportSize({

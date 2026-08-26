@@ -51,6 +51,7 @@ test("runtime areas, data, assets, tests, and documentation have explicit homes"
   [
     "assets/styles/app.css",
     "battleMap/measurement.js",
+    "battleMap/spellTemplates.js",
     "battleMap/templateGeometry.js",
     "battleMap/templateRenderer.js",
     "battleMap/tokenCollision.js",
@@ -81,6 +82,7 @@ test("the application and import map use the organized runtime paths", () => {
 
   [
     "./characterCreator/index.js",
+    "./battleMap/spellTemplates.js",
     "./battleMap/templateGeometry.js",
     "./battleMap/templateRenderer.js",
     "./battleMap/tokenCollision.js",
@@ -95,7 +97,7 @@ test("the application and import map use the organized runtime paths", () => {
   });
   assert.match(
     index,
-    /\.\/assets\/styles\/app\.css\?v=token-detection-stage4-20260825/
+    /\.\/assets\/styles\/app\.css\?v=spell-templates-stage5-20260825/
   );
   assert.doesNotMatch(
     `${app}\n${index}`,

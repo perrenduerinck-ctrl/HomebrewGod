@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=token-detection-stage4-20260825">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=spell-templates-stage5-20260825">
 </head>
 
 <body>
@@ -140,6 +140,19 @@
         type="button"
         aria-pressed="false"
       >Ruler: Off</button>
+
+      <label class="battleScaleControl" for="spellTemplateSelect">
+        <span>Spell Preview</span>
+        <select id="spellTemplateSelect">
+          <option value="">Choose a spell</option>
+          <option value="fireball">Fireball</option>
+          <option value="burning-hands">Burning Hands</option>
+          <option value="lightning-bolt">Lightning Bolt</option>
+        </select>
+      </label>
+      <button id="loadSpellTemplateButton" type="button">
+        Target Spell on Map
+      </button>
 
       <label class="battleScaleControl" for="templateShapeSelect">
         <span>Template</span>
@@ -708,7 +721,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=token-detection-stage4-20260825"
+    src="./app.js?v=spell-templates-stage5-20260825"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>
