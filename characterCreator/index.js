@@ -210,6 +210,9 @@ export function createCharacterCreator(options = {}) {
     syncLinkedCharacterTokens:
       options.syncLinkedCharacterTokens,
 
+    targetSpellOnMap:
+      options.targetSpellOnMap,
+
     uploadCharacterPortrait:
       options.uploadCharacterPortrait ||
       options.uploadPortrait ||
@@ -36821,6 +36824,203 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
+  function getSection17SpellCastOptions(
+    spell
+  ) {
+    const baseLevel = Math.max(
+      0,
+      Math.min(
+        9,
+        Math.round(
+          safeNumber(spell?.level, 0)
+        )
+      )
+    );
+
+    if (baseLevel === 0) {
+      return [{
+        kind: "cantrip",
+        level: 0,
+        sourceId: "",
+        label: "Cantrip — no spell slot",
+        remaining: Number.POSITIVE_INFINITY
+      }];
+    }
+
+    const usage =
+      getSection12SpellSlotUsageState();
+
+    return [
+      ...Object.values(usage.normal)
+        .filter((slot) => (
+          slot.level >= baseLevel &&
+          slot.remaining > 0
+        ))
+        .map((slot) => ({
+          kind: "normal",
+          level: slot.level,
+          sourceId: "",
+          label:
+            `Level ${slot.level} slot (${slot.remaining} remaining)`,
+          remaining: slot.remaining
+        })),
+      ...usage.pactSources
+        .filter((slot) => (
+          slot.level >= baseLevel &&
+          slot.remaining > 0
+        ))
+        .map((slot) => ({
+          kind: "pact",
+          level: slot.level,
+          sourceId: slot.sourceId,
+          label:
+            `${slot.className} Pact slot — level ${slot.level} (${slot.remaining} remaining)`,
+          remaining: slot.remaining
+        }))
+    ];
+  }
+
+  async function confirmSection17SpellCast(
+    spell,
+    selection = {}
+  ) {
+    const previousDirty =
+      creatorState.dirty;
+    const previousSlotUsage =
+      cloneData(
+        creatorState.draft?.magic
+          ?.slotUsage || {}
+      );
+    const previousConcentration =
+      cloneData(
+        creatorState.draft?.combat
+          ?.concentration ?? null
+      );
+
+    const restoreUnconfirmedCast = () => {
+      if (!creatorState.draft.magic) {
+        creatorState.draft.magic = {};
+      }
+      creatorState.draft.magic.slotUsage =
+        previousSlotUsage;
+      const combat = ensureGameplayState(
+        creatorState.draft
+      );
+      combat.concentration =
+        previousConcentration;
+      creatorState.dirty =
+        previousDirty;
+      applyCompatibilityAliases(
+        creatorState.draft
+      );
+      scheduleDraftPersistence();
+      renderActionBar();
+    };
+
+    try {
+      const result =
+        await persistSection17SheetMutation(
+          () => {
+        const baseLevel = Math.max(
+          0,
+          Math.round(
+            safeNumber(spell?.level, 0)
+          )
+        );
+        let spentSlot = false;
+
+        if (baseLevel > 0) {
+          const available =
+            getSection17SpellCastOptions(
+              spell
+            ).find((option) => (
+              option.kind ===
+                cleanString(
+                  selection.kind,
+                  "normal"
+                ) &&
+              option.level ===
+                Math.round(
+                  safeNumber(
+                    selection.level,
+                    baseLevel
+                  )
+                ) &&
+              option.sourceId ===
+                cleanString(
+                  selection.sourceId
+                )
+            ));
+
+          if (!available) {
+            throw new Error(
+              "That spell slot is no longer available. No resource was spent."
+            );
+          }
+
+          spentSlot =
+            adjustSection12SpellSlotUsage(
+              available.kind,
+              available.level,
+              1,
+              available.sourceId
+            );
+
+          if (!spentSlot) {
+            throw new Error(
+              "The spell slot could not be spent. The cast was not confirmed."
+            );
+          }
+        }
+
+        const concentration = (
+          spell?.concentration === true ||
+          spell?.targeting?.duration
+            ?.concentration === true
+        );
+        let concentrationChanged = false;
+
+        if (concentration) {
+          const combat =
+            ensureGameplayState(
+              creatorState.draft
+            );
+          combat.concentration = {
+            spellId:
+              cleanString(spell?.id),
+            spellName:
+              cleanString(
+                spell?.name,
+                "Spell"
+              ),
+            startedAtMillis:
+              Date.now()
+          };
+          concentrationChanged = true;
+        }
+
+        return {
+          changed:
+            spentSlot ||
+            concentrationChanged,
+          message:
+            `${cleanString(spell?.name, "Spell")} cast confirmed${spentSlot ? " and spell slot spent" : ""}${concentration ? "; concentration started" : ""}.`
+        };
+          },
+          "Spell cast confirmed and saved."
+        );
+
+      if (result === false) {
+        restoreUnconfirmedCast();
+      }
+
+      return result;
+    } catch (error) {
+      restoreUnconfirmedCast();
+      throw error;
+    }
+  }
+
   function getSection17CharacterSheetView() {
     if (!characterSheetView) {
       characterSheetView = createCharacterSheetView({
@@ -36917,6 +37117,61 @@ export function createCharacterCreator(options = {}) {
               },
               "Spell-slot usage updated and saved."
             );
+          },
+        onTargetSpell:
+          ({
+            spell,
+            character,
+            characterId
+          }) => {
+            if (
+              typeof deps.targetSpellOnMap !==
+              "function"
+            ) {
+              setStatus(
+                "Battle-map spell targeting is unavailable."
+              );
+              return false;
+            }
+
+            if (!creatorState.currentCharacterId) {
+              setStatus(
+                "Save this character before targeting a spell on the map."
+              );
+              return false;
+            }
+
+            const slotOptions =
+              getSection17SpellCastOptions(
+                spell
+              );
+
+            if (
+              safeNumber(spell?.level, 0) > 0 &&
+              !slotOptions.length
+            ) {
+              setStatus(
+                "This character has no available slot that can cast that spell."
+              );
+              return false;
+            }
+
+            return deps.targetSpellOnMap({
+              spell,
+              character,
+              characterId:
+                characterId ||
+                creatorState
+                  .currentCharacterId,
+              slotOptions,
+              onConfirmCast:
+                (selection) => {
+                  return confirmSection17SpellCast(
+                    spell,
+                    selection
+                  );
+                }
+            });
           },
         onRest:
           handleSection17SheetRest,

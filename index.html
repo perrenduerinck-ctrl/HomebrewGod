@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=spell-templates-stage5-20260825">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=character-sheet-casting-stage6-20260826">
 </head>
 
 <body>
@@ -239,6 +239,38 @@
     <p id="templateStatus" class="battleTemplateStatus" aria-live="polite">
       Turn on templates to preview a circle, cone, line, or square.
     </p>
+
+    <section
+      id="spellCastingPanel"
+      class="battleSpellCastingPanel hidden"
+      aria-label="Spell cast confirmation"
+    >
+      <div>
+        <strong id="spellCastingTitle">Spell targeting</strong>
+        <span id="spellCastingCaster"></span>
+      </div>
+      <p id="spellCastingInstructions">
+        Place and lock the spell template before confirming the cast.
+      </p>
+      <label for="spellCastingSlotSelect">
+        <span>Cast using</span>
+        <select id="spellCastingSlotSelect"></select>
+      </label>
+      <p id="spellCastingAffected" aria-live="polite">
+        Affected tokens: none.
+      </p>
+      <div class="battleSpellCastingActions">
+        <button
+          id="confirmSpellCastButton"
+          type="button"
+          disabled
+        >Confirm Cast</button>
+        <button id="cancelSpellCastButton" type="button">
+          Cancel Targeting
+        </button>
+      </div>
+      <p id="spellCastingResolution" aria-live="polite"></p>
+    </section>
 
     <!-- =====================================================
          COLLAPSIBLE BATTLE MANAGER
@@ -721,7 +753,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=spell-templates-stage5-20260825"
+    src="./app.js?v=character-sheet-casting-stage6-20260826"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

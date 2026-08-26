@@ -1104,6 +1104,75 @@ export function createTokenSystem(options) {
     });
   }
 
+  function getCharacterLinkedToken(
+    characterOrId,
+    { currentViewOnly = true } = {}
+  ) {
+    const characterId = typeof characterOrId === "string"
+      ? String(characterOrId).trim()
+      : getLinkedCharacterId(characterOrId);
+    const room = deps.getCurrentRoomData
+      ? deps.getCurrentRoomData()
+      : lastRenderedRoom || {};
+
+    if (!characterId) {
+      return null;
+    }
+
+    return getRoomTokens().find((token) => (
+      String(token.linkedCharacterId || "").trim() ===
+        characterId &&
+      (
+        currentViewOnly !== true ||
+        tokenMatchesCurrentView(token, room)
+      )
+    )) || null;
+  }
+
+  async function loadCharacterLinkedToken(
+    characterOrId,
+    { currentViewOnly = true } = {}
+  ) {
+    const cached = getCharacterLinkedToken(
+      characterOrId,
+      { currentViewOnly }
+    );
+
+    if (cached) return cached;
+
+    const roomCode = deps.getCurrentRoomCode
+      ? deps.getCurrentRoomCode()
+      : "";
+
+    if (
+      !roomCode ||
+      !deps.getDocs ||
+      !deps.collection
+    ) {
+      return null;
+    }
+
+    const snapshot = await deps.getDocs(
+      deps.collection(
+        deps.db,
+        "rooms",
+        roomCode,
+        "tokens"
+      )
+    );
+    tokenCache = snapshot.docs.map(
+      (tokenDoc) => normalizeToken({
+        ...tokenDoc.data(),
+        id: tokenDoc.id
+      })
+    );
+
+    return getCharacterLinkedToken(
+      characterOrId,
+      { currentViewOnly }
+    );
+  }
+
   function stopTokenListener() {
     realtimeListeners.stop("tokens");
     tokenRoomCode = null;
@@ -1356,6 +1425,8 @@ export function createTokenSystem(options) {
       tokenEl.dataset.tokenName = token.name || "Token";
       tokenEl.dataset.tokenType = token.type;
       tokenEl.dataset.tokenSizeCategory = token.sizeCategory;
+      tokenEl.dataset.linkedCharacterId =
+        token.linkedCharacterId || "";
       tokenEl.title = token.name || "Token";
 
       positionTokenElement(tokenEl, token, safeRoom);
@@ -2171,6 +2242,9 @@ export function createTokenSystem(options) {
     buildMonsterLinkedTokenPatch,
     createCharacterLinkedToken,
     createMonsterLinkedToken,
+    getCharacterLinkedToken,
+    loadCharacterLinkedToken,
+    getRoomTokens,
     syncLinkedCharacterTokens,
     deleteToken,
     saveTokenScale,

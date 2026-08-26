@@ -36,27 +36,30 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=stage5-20260825";
+import { createTokenSystem } from "./tokens/index.js?v=stage6-20260826";
 import {
   createMapRuler,
   formatMapSquares,
   normalizeFeetPerSquare
-} from "./battleMap/measurement.js?v=stage5-20260825";
+} from "./battleMap/measurement.js?v=stage6-20260826";
 import {
   getDefaultTemplateOptions,
   normalizeTemplateDistance,
   normalizeTemplateShape
-} from "./battleMap/templateGeometry.js?v=stage5-20260825";
+} from "./battleMap/templateGeometry.js?v=stage6-20260826";
 import {
   createMapTemplateEngine
-} from "./battleMap/templateRenderer.js?v=stage5-20260825";
+} from "./battleMap/templateRenderer.js?v=stage6-20260826";
 import {
   findAffectedTokens
-} from "./battleMap/tokenCollision.js?v=stage5-20260825";
+} from "./battleMap/tokenCollision.js?v=stage6-20260826";
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=stage5-20260825";
+} from "./battleMap/spellTemplates.js?v=stage6-20260826";
+import {
+  createSpellCastingSession
+} from "./battleMap/castingSession.js?v=stage6-20260826";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -198,6 +201,24 @@ const E = {
     $("spellTemplateSelect"),
   loadSpellTemplateButton:
     $("loadSpellTemplateButton"),
+  spellCastingPanel:
+    $("spellCastingPanel"),
+  spellCastingTitle:
+    $("spellCastingTitle"),
+  spellCastingCaster:
+    $("spellCastingCaster"),
+  spellCastingInstructions:
+    $("spellCastingInstructions"),
+  spellCastingSlotSelect:
+    $("spellCastingSlotSelect"),
+  spellCastingAffected:
+    $("spellCastingAffected"),
+  confirmSpellCastButton:
+    $("confirmSpellCastButton"),
+  cancelSpellCastButton:
+    $("cancelSpellCastButton"),
+  spellCastingResolution:
+    $("spellCastingResolution"),
 
   // Old quick battle map controls, kept safe if missing
   battleDmMapControls: $("battleDmMapControls"),
@@ -261,6 +282,9 @@ let battleZoom = 1;
 let battleMapRuler = null;
 let battleMapTemplates = null;
 let activeSpellTemplateInstruction = null;
+let activeSpellCastingSession = null;
+let activeSpellCastingCasterPoint = null;
+let activeSpellCastingConfirm = null;
 
 const appRealtimeListeners =
   createRealtimeListenerRegistry({
@@ -3107,6 +3131,586 @@ function formatAffectedTokenStatus(affectedTokens) {
   }.`;
 }
 
+function findRenderedCharacterToken(
+  characterId
+) {
+  const id = String(characterId || "").trim();
+
+  if (!id) return null;
+
+  return Array.from(
+    E.tokenLayer?.querySelectorAll(
+      ".hg-token[data-token-id]"
+    ) || []
+  ).find((element) => (
+    String(
+      element.dataset.linkedCharacterId || ""
+    ).trim() === id
+  )) || null;
+}
+
+function getCastingCasterPoint(
+  tokenElement
+) {
+  const overlay =
+    battleMapTemplates?.getOverlayElement();
+  const overlayRect =
+    overlay?.getBoundingClientRect();
+  const tokenRect =
+    tokenElement?.getBoundingClientRect();
+
+  if (
+    !overlayRect ||
+    !tokenRect ||
+    overlayRect.width <= 0 ||
+    overlayRect.height <= 0
+  ) {
+    return null;
+  }
+
+  const x = Math.max(
+    0,
+    Math.min(
+      overlayRect.width,
+      tokenRect.left -
+        overlayRect.left +
+        tokenRect.width / 2
+    )
+  );
+  const y = Math.max(
+    0,
+    Math.min(
+      overlayRect.height,
+      tokenRect.top -
+        overlayRect.top +
+        tokenRect.height / 2
+    )
+  );
+
+  return {
+    x,
+    y,
+    xRatio: x / overlayRect.width,
+    yRatio: y / overlayRect.height
+  };
+}
+
+function encodeSpellSlotOption(option) {
+  return [
+    String(option.kind || "normal"),
+    String(Number(option.level) || 0),
+    encodeURIComponent(
+      String(option.sourceId || "")
+    )
+  ].join("|");
+}
+
+function decodeSpellSlotOption(value) {
+  const [kind, level, sourceId] =
+    String(value || "").split("|");
+  return {
+    kind: kind || "normal",
+    level: Number(level) || 0,
+    sourceId: decodeURIComponent(
+      sourceId || ""
+    )
+  };
+}
+
+function formatCastResolution(resolution) {
+  if (!resolution) return "";
+
+  const parts = [];
+
+  if (resolution.save) {
+    parts.push(
+      `${String(
+        resolution.save.ability || ""
+      ).toUpperCase()} save${
+        resolution.save.dc !== null
+          ? ` DC ${resolution.save.dc}`
+          : ""
+      }${
+        resolution.save.success
+          ? `; ${resolution.save.success} on success`
+          : ""
+      }`
+    );
+  }
+
+  if (resolution.attack) {
+    parts.push(
+      `${resolution.attack.type || "Spell"} attack${
+        resolution.attack.bonus !== null
+          ? ` ${
+              resolution.attack.bonus >= 0
+                ? "+"
+                : ""
+            }${resolution.attack.bonus}`
+          : ""
+      }`
+    );
+  }
+
+  if (resolution.damage.length) {
+    parts.push(
+      `Damage: ${resolution.damage.join(" + ")}`
+    );
+  }
+
+  if (resolution.concentration) {
+    parts.push("Concentration started");
+  }
+
+  return parts.length
+    ? parts.join(" · ")
+    : "Cast confirmed. Resolve any remaining spell text at the table.";
+}
+
+function renderSpellCastingPanel() {
+  if (!E.spellCastingPanel) return;
+
+  const sessionState =
+    activeSpellCastingSession?.getState();
+  const visible = Boolean(
+    sessionState &&
+    sessionState.phase !== "idle" &&
+    sessionState.phase !== "cancelled"
+  );
+
+  E.spellCastingPanel.classList.toggle(
+    "hidden",
+    !visible
+  );
+
+  if (!visible) return;
+
+  text(
+    E.spellCastingTitle,
+    sessionState.spell?.name ||
+      "Spell targeting"
+  );
+  text(
+    E.spellCastingCaster,
+    `${sessionState.characterName} · ${
+      sessionState.casterToken?.name ||
+      "linked token"
+    }`
+  );
+
+  if (E.spellCastingSlotSelect) {
+    const slotSignature =
+      sessionState.slotOptions
+        .map((option) => (
+          `${encodeSpellSlotOption(option)}:${option.remaining}:${option.label}`
+        ))
+        .join(";");
+
+    if (
+      E.spellCastingSlotSelect
+        .dataset.slotSignature !==
+      slotSignature
+    ) {
+      const previousValue =
+        E.spellCastingSlotSelect.value;
+      E.spellCastingSlotSelect.replaceChildren(
+        ...sessionState.slotOptions.map(
+          (option) => {
+            const element =
+              document.createElement(
+                "option"
+              );
+            element.value =
+              encodeSpellSlotOption(
+                option
+              );
+            element.textContent =
+              option.label;
+            return element;
+          }
+        )
+      );
+      E.spellCastingSlotSelect
+        .dataset.slotSignature =
+          slotSignature;
+
+      if (
+        Array.from(
+          E.spellCastingSlotSelect.options
+        ).some((option) => (
+          option.value === previousValue
+        ))
+      ) {
+        E.spellCastingSlotSelect.value =
+          previousValue;
+      }
+    }
+  }
+
+  const affectedTokens =
+    sessionState.target?.affectedTokens || [];
+  text(
+    E.spellCastingAffected,
+    formatAffectedTokenStatus(
+      affectedTokens
+    )
+  );
+
+  if (sessionState.phase === "confirmed") {
+    text(
+      E.spellCastingInstructions,
+      "Cast confirmed. The selected resource has been saved."
+    );
+  } else if (
+    sessionState.phase === "confirming"
+  ) {
+    text(
+      E.spellCastingInstructions,
+      "Saving the confirmed cast…"
+    );
+  } else if (
+    sessionState.phase === "target-selected"
+  ) {
+    text(
+      E.spellCastingInstructions,
+      "Target locked. Review the affected tokens and slot, then confirm the cast."
+    );
+  } else if (
+    sessionState.target &&
+    sessionState.target.validRange === false
+  ) {
+    text(
+      E.spellCastingInstructions,
+      `Target is out of range (${Math.round(
+        sessionState.target.distanceFeet || 0
+      )} / ${sessionState.instruction.rangeFeet} ft). Clear the template and choose a closer point.`
+    );
+  } else {
+    text(
+      E.spellCastingInstructions,
+      sessionState.instruction.targetType === "point"
+        ? `Choose a point within ${sessionState.instruction.rangeFeet} ft of the caster, then click to lock it.`
+        : "Aim from the linked character token, then click to lock the direction."
+    );
+  }
+
+  if (E.confirmSpellCastButton) {
+    E.confirmSpellCastButton.disabled =
+      !sessionState.canConfirm ||
+      sessionState.phase === "confirming";
+    E.confirmSpellCastButton.textContent =
+      sessionState.phase === "confirmed"
+        ? "Cast Confirmed"
+        : sessionState.phase === "confirming"
+          ? "Confirming…"
+          : "Confirm Cast";
+  }
+
+  if (E.cancelSpellCastButton) {
+    E.cancelSpellCastButton.textContent =
+      sessionState.phase === "confirmed"
+        ? "Close Cast Panel"
+        : "Cancel Targeting";
+  }
+
+  text(
+    E.spellCastingResolution,
+    sessionState.confirmationError ||
+      formatCastResolution(
+        sessionState.resolution
+      )
+  );
+}
+
+function syncActiveSpellCastingTarget(
+  templateState,
+  affectedTokens
+) {
+  const sessionState =
+    activeSpellCastingSession?.getState();
+
+  if (
+    !sessionState ||
+    [
+      "idle",
+      "cancelled",
+      "confirmed",
+      "confirming"
+    ].includes(sessionState.phase)
+  ) {
+    renderSpellCastingPanel();
+    return;
+  }
+
+  const geometry =
+    templateState.enabled
+      ? templateState.geometry
+      : null;
+  let distanceFeet = null;
+  let validRange = true;
+
+  if (
+    geometry &&
+    activeSpellCastingCasterPoint &&
+    Number.isFinite(
+      sessionState.instruction.rangeFeet
+    )
+  ) {
+    const pixels = Math.hypot(
+      geometry.anchor.x -
+        activeSpellCastingCasterPoint.x,
+      geometry.anchor.y -
+        activeSpellCastingCasterPoint.y
+    );
+    distanceFeet =
+      pixels /
+      getBattleMapGridPixelSize() *
+      getRulerFeetPerSquare();
+    validRange =
+      distanceFeet <=
+      sessionState.instruction.rangeFeet +
+        0.001;
+  }
+
+  battleMapTemplates
+    ?.getOverlayElement()
+    ?.classList.toggle(
+      "is-invalid-target",
+      !validRange
+    );
+
+  activeSpellCastingSession.updateTarget({
+    locked:
+      templateState.phase ===
+        "confirmed" &&
+      validRange,
+    validRange,
+    distanceFeet,
+    affectedTokens,
+    geometry
+  });
+  renderSpellCastingPanel();
+}
+
+function cancelActiveSpellCasting({
+  clearTemplate = true
+} = {}) {
+  const sessionState =
+    activeSpellCastingSession?.getState();
+
+  if (
+    sessionState &&
+    sessionState.phase !== "confirmed"
+  ) {
+    activeSpellCastingSession.cancel();
+  }
+
+  activeSpellCastingSession = null;
+  activeSpellCastingCasterPoint = null;
+  activeSpellCastingConfirm = null;
+
+  if (clearTemplate) {
+    activeSpellTemplateInstruction = null;
+    battleMapTemplates?.setEnabled(false);
+  }
+
+  renderSpellCastingPanel();
+}
+
+async function confirmActiveSpellCast() {
+  if (!activeSpellCastingSession) return;
+
+  const selection = decodeSpellSlotOption(
+    E.spellCastingSlotSelect?.value
+  );
+  const pending =
+    activeSpellCastingSession.confirm(
+      selection
+    );
+  renderSpellCastingPanel();
+  const result = await pending;
+  renderSpellCastingPanel();
+
+  if (result.ok) {
+    text(
+      E.templateStatus,
+      `${result.resolution.spellName} cast confirmed. ${formatCastResolution(result.resolution)}`
+    );
+  }
+}
+
+async function beginCharacterSpellTargeting({
+  spell,
+  character,
+  characterId,
+  slotOptions = [],
+  onConfirmCast,
+  allowWithoutRoom = false
+} = {}) {
+  if (!currentRoomCode && allowWithoutRoom !== true) {
+    throw new Error(
+      "Open a room before targeting a spell on its battle map."
+    );
+  }
+
+  const instruction =
+    createSpellTemplateInstruction(spell);
+
+  if (!instruction.supported) {
+    throw new Error(instruction.reason);
+  }
+
+  showAnyMainScreen("battle");
+  let linkedToken = null;
+
+  try {
+    linkedToken =
+      allowWithoutRoom === true
+        ? tokenSystem
+            ?.getCharacterLinkedToken?.(
+              characterId
+            ) || null
+        : await tokenSystem
+            ?.loadCharacterLinkedToken?.(
+              characterId
+            );
+
+    if (allowWithoutRoom !== true) {
+      tokenSystem?.render?.(
+        currentRoomData || {}
+      );
+    }
+  } catch (error) {
+    if (allowWithoutRoom !== true) {
+      showAnyMainScreen(
+        "characterCreator"
+      );
+    }
+    throw error;
+  }
+  battleMapTemplates?.refresh();
+
+  const tokenElement =
+    (
+      linkedToken?.id
+        ? Array.from(
+            E.tokenLayer?.querySelectorAll(
+              ".hg-token[data-token-id]"
+            ) || []
+          ).find((element) => (
+            element.dataset.tokenId ===
+              linkedToken.id
+          ))
+        : null
+    ) ||
+    findRenderedCharacterToken(
+      characterId
+    );
+
+  if (!tokenElement) {
+    if (allowWithoutRoom !== true) {
+      showAnyMainScreen(
+        "characterCreator"
+      );
+    }
+    throw new Error(
+      "Create or synchronize this character's linked token on the current map before targeting a spell."
+    );
+  }
+
+  activeSpellCastingConfirm =
+    typeof onConfirmCast === "function"
+      ? onConfirmCast
+      : () => true;
+  activeSpellCastingSession =
+    createSpellCastingSession({
+      onConfirm: ({ slot }) => {
+        return activeSpellCastingConfirm({
+          kind: slot.kind,
+          level: slot.level,
+          sourceId: slot.sourceId
+        });
+      }
+    });
+  activeSpellCastingSession.begin({
+    spell,
+    instruction,
+    character,
+    characterId,
+    characterName:
+      character?.identity?.name ||
+      character?.name,
+    casterToken:
+      linkedToken || {
+        id: tokenElement.dataset.tokenId,
+        name:
+          tokenElement.dataset.tokenName ||
+          "Linked token"
+      },
+    slotOptions,
+    spellSaveDc:
+      character?.magic?.spellSaveDc,
+    spellAttackBonus:
+      character?.magic
+        ?.spellAttackBonus
+  });
+
+  activeSpellTemplateInstruction =
+    instruction;
+  if (E.spellTemplateSelect) {
+    E.spellTemplateSelect.value =
+      instruction.spellId;
+  }
+  syncBattleMapTemplateControls(
+    instruction.templateShape
+  );
+  if (E.templateSizeInput) {
+    E.templateSizeInput.value =
+      String(instruction.sizeFeet);
+  }
+  if (E.templateWidthInput) {
+    E.templateWidthInput.value =
+      String(instruction.widthFeet);
+  }
+
+  battleMapRuler?.setEnabled(false);
+  battleMapTemplates.setShape(
+    instruction.templateShape
+  );
+  battleMapTemplates.setOptions({
+    sizeFeet: instruction.sizeFeet,
+    widthFeet: instruction.widthFeet
+  });
+  battleMapTemplates.setEnabled(true);
+  battleMapTemplates.refresh();
+  activeSpellCastingCasterPoint =
+    getCastingCasterPoint(
+      tokenElement
+    );
+
+  if (
+    activeSpellCastingCasterPoint &&
+    instruction.targetType !== "point"
+  ) {
+    battleMapTemplates.setAnchorPoint(
+      activeSpellCastingCasterPoint,
+      {
+        locked: true,
+        confirm:
+          instruction.targetType ===
+            "self" &&
+          instruction.templateShape !==
+            "cone" &&
+          instruction.templateShape !==
+            "line"
+      }
+    );
+  }
+
+  renderSpellCastingPanel();
+  return true;
+}
+
 function getActiveSpellTemplateStatus() {
   if (!activeSpellTemplateInstruction) {
     return "";
@@ -3131,6 +3735,11 @@ function updateBattleMapTemplateUi(state) {
     );
   const spellStatus =
     getActiveSpellTemplateStatus();
+
+  syncActiveSpellCastingTarget(
+    state,
+    affectedTokens
+  );
 
   if (E.templateToggleButton) {
     E.templateToggleButton.textContent =
@@ -3191,6 +3800,9 @@ function updateBattleMapTemplateUi(state) {
 }
 
 async function loadSelectedSpellTemplate() {
+  cancelActiveSpellCasting({
+    clearTemplate: false
+  });
   const spellId = String(
     E.spellTemplateSelect?.value || ""
   ).trim();
@@ -3211,7 +3823,7 @@ async function loadSelectedSpellTemplate() {
 
   try {
     const { getDefaultSpellById } = await import(
-      "./data/defaultSpells.js?v=stage5-20260825"
+      "./data/defaultSpells.js?v=stage6-20260826"
     );
     const spell = getDefaultSpellById(spellId);
     const instruction =
@@ -3326,9 +3938,26 @@ function initializeBattleMapTemplates() {
     loadSelectedSpellTemplate
   );
 
+  E.confirmSpellCastButton
+    ?.addEventListener(
+      "click",
+      confirmActiveSpellCast
+    );
+
+  E.cancelSpellCastButton
+    ?.addEventListener(
+      "click",
+      function () {
+        cancelActiveSpellCasting();
+      }
+    );
+
   E.templateShapeSelect?.addEventListener(
     "change",
     function () {
+      cancelActiveSpellCasting({
+        clearTemplate: false
+      });
       activeSpellTemplateInstruction = null;
       if (E.spellTemplateSelect) {
         E.spellTemplateSelect.value = "";
@@ -5158,6 +5787,12 @@ async function initCharacterCreatorSystem() {
       return tokenSystem.syncLinkedCharacterTokens(
         character
       );
+    },
+
+    targetSpellOnMap: function (request) {
+      return beginCharacterSpellTargeting(
+        request
+      );
     }
     });
 
@@ -5534,6 +6169,71 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
               monsterCreatorSystem?.getListenerSnapshot?.() ||
               null
           };
+        },
+
+      beginSpellCast:
+        async function ({
+          spellId = "fireball",
+          characterId =
+            "release-test-character",
+          characterName =
+            "Release Test Wizard",
+          slotOptions = null
+        } = {}) {
+          const { getDefaultSpellById } =
+            await import(
+              "./data/defaultSpells.js?v=stage6-20260826"
+            );
+          const spell =
+            getDefaultSpellById(
+              spellId
+            );
+
+          document.body.dataset
+            .testCastConfirmed = "0";
+
+          await beginCharacterSpellTargeting({
+            spell,
+            characterId,
+            character: {
+              id: characterId,
+              identity: {
+                name: characterName
+              },
+              magic: {
+                spellSaveDc: 15,
+                spellAttackBonus: 7
+              }
+            },
+            slotOptions:
+              slotOptions || [{
+                kind: "normal",
+                level:
+                  Math.max(
+                    1,
+                    Number(spell?.level) || 1
+                  ),
+                sourceId: "",
+                label:
+                  `Level ${Math.max(1, Number(spell?.level) || 1)} slot (1 remaining)`,
+                remaining: 1
+              }],
+            onConfirmCast: () => {
+              document.body.dataset
+                .testCastConfirmed = "1";
+              return true;
+            },
+            allowWithoutRoom: true
+          });
+
+          return activeSpellCastingSession
+            ?.getState();
+        },
+
+      getSpellCastState:
+        function () {
+          return activeSpellCastingSession
+            ?.getState() || null;
         }
     });
 }
