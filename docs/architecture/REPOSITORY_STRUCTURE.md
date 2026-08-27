@@ -12,7 +12,7 @@ Homebrew God keeps runtime code, game data, tests, documentation, and static ass
 | Monster Creator | `monsters/` | Monster creation and monster persistence |
 | Battle Map | `battleMap/` | Measurement, targeting templates, casting sessions, elevation, and token collision |
 | Token system | `tokens/` | Token state, synchronization, and token interactions |
-| Visual effects | `vfx/` | Presentation-only effect lifecycle, rendering, particles, sprites, and persistent visuals |
+| Visual effects | `vfx/` | Presentation-only effect lifecycle, damage-type visual identities, rendering, particles, sprites, and persistent visuals |
 | Shared code | `shared/` | Realtime-listener lifecycle and security-aware persistence used by multiple features |
 | Game data | `data/` | Built-in classes, subclasses, feats, spells, species/background content, and the 2014 ruleset |
 | Static assets | `assets/` | Styles and future images or static media |
