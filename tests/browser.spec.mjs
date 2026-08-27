@@ -2860,7 +2860,7 @@ test(
   "character spell targeting anchors to its linked token and confirms exactly once",
   async ({ page }) => {
     await page.goto(
-      "?smokeTest=1&release=character-sheet-casting-stage6-20260826",
+      "?smokeTest=1&release=vfx-cast-stage2-20260827",
       { waitUntil: "domcontentloaded" }
     );
     await page.waitForFunction(() => Boolean(
@@ -2870,6 +2870,15 @@ test(
       .__HOMEBREW_GOD_RELEASE_TEST__
       .openScreen("battle"));
     await page.evaluate(() => {
+      window.__RELEASE_TEST_CAST_VFX_EVENTS__ = [];
+      document.addEventListener(
+        "homebrewgod:spell-cast-confirmed",
+        (event) => {
+          window.__RELEASE_TEST_CAST_VFX_EVENTS__.push(
+            JSON.parse(JSON.stringify(event.detail))
+          );
+        }
+      );
       const layer = document.getElementById(
         "tokenLayer"
       );
@@ -2927,6 +2936,16 @@ test(
         "data-test-cast-confirmed",
         "0"
       );
+    expect(await page.evaluate(() => ({
+      events:
+        window.__RELEASE_TEST_CAST_VFX_EVENTS__.length,
+      activeEffects:
+        window.__HOMEBREW_GOD_RELEASE_TEST__
+          .getVfxState()?.activeCount || 0
+    }))).toEqual({
+      events: 0,
+      activeEffects: 0
+    });
 
     await overlay.scrollIntoViewIfNeeded();
     const box = await overlay.boundingBox();
@@ -2949,6 +2968,16 @@ test(
         "data-test-cast-confirmed",
         "0"
       );
+    expect(await page.evaluate(() => ({
+      events:
+        window.__RELEASE_TEST_CAST_VFX_EVENTS__.length,
+      activeEffects:
+        window.__HOMEBREW_GOD_RELEASE_TEST__
+          .getVfxState()?.activeCount || 0
+    }))).toEqual({
+      events: 0,
+      activeEffects: 0
+    });
 
     await confirm.click();
     await expect(page.locator("body"))
@@ -2969,6 +2998,55 @@ test(
         "#spellCastingResolution"
       )
     ).toContainText("3d6 fire");
+    const confirmedVfx = await page.evaluate(() => ({
+      events:
+        window.__RELEASE_TEST_CAST_VFX_EVENTS__,
+      state:
+        window.__HOMEBREW_GOD_RELEASE_TEST__
+          .getVfxState()
+    }));
+    expect(confirmedVfx.events).toHaveLength(1);
+    expect(confirmedVfx.events[0]).toMatchObject({
+      schemaVersion: 1,
+      spellId: "burning-hands",
+      spellName: "Burning Hands",
+      casterTokenId:
+        "release-test-wizard-token",
+      casterElevation: 0,
+      targetElevation: 0,
+      damageTypes: ["fire"],
+      spellLevel: 1,
+      intensity: 1,
+      deliveryType: "cone",
+      geometry: {
+        shape: "cone"
+      }
+    });
+    expect(
+      Number.isFinite(
+        confirmedVfx.events[0].casterPoint.x
+      )
+    ).toBe(true);
+    expect(
+      Number.isFinite(
+        confirmedVfx.events[0].targetPoint.x
+      )
+    ).toBe(true);
+    expect(
+      Array.isArray(
+        confirmedVfx.events[0].affectedTokens
+      )
+    ).toBe(true);
+    expect(confirmedVfx.state.activeCount).toBe(1);
+    await expect(page.locator(
+      '.hg-map-vfx-effect[data-effect-type="procedural-pulse"]'
+    )).toHaveCount(1);
+    await expect(page.locator(
+      ".hg-map-vfx-effect"
+    )).toHaveCount(0, { timeout: 5000 });
+    expect(await page.evaluate(() => (
+      window.__RELEASE_TEST_CAST_VFX_EVENTS__.length
+    ))).toBe(1);
   }
 );
 

@@ -72,6 +72,10 @@ import {
   normalizeEffectsMode
 } from "./vfx/effectEngine.js?v=vfx-core-stage1-20260827";
 import {
+  createSpellVfxEvent,
+  dispatchConfirmedSpellVfxEvent
+} from "./vfx/castEvent.js?v=vfx-cast-stage2-20260827";
+import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
 import {
@@ -3681,6 +3685,58 @@ async function confirmActiveSpellCast() {
   }
 }
 
+function handleConfirmedSpellVfx({
+  spell,
+  slot,
+  target,
+  casterToken
+} = {}) {
+  try {
+    const castEvent = createSpellVfxEvent({
+      spell,
+      slot,
+      casterToken,
+      casterPoint:
+        activeSpellCastingCasterPoint,
+      casterElevation:
+        activeSpellCastingCasterElevationFeet,
+      targetElevation:
+        target?.endElevationFeet,
+      geometry: target?.geometry,
+      affectedTokens:
+        target?.affectedTokens
+    });
+
+    dispatchConfirmedSpellVfxEvent(
+      castEvent
+    );
+    (
+      battleMapVfx ||
+      initializeBattleMapVfx()
+    )?.play({
+      type: "procedural-pulse",
+      position:
+        castEvent.targetPoint ||
+        castEvent.casterPoint,
+      elevation: castEvent.targetElevation,
+      intensity: castEvent.intensity,
+      duration: 900,
+      metadata: {
+        eventType: "confirmed-cast",
+        spellId: castEvent.spellId,
+        casterTokenId:
+          castEvent.casterTokenId,
+        deliveryType:
+          castEvent.deliveryType
+      }
+    });
+    return castEvent;
+  } catch {
+    // VFX is presentation-only and cannot change cast resolution.
+    return null;
+  }
+}
+
 async function beginCharacterSpellTargeting({
   spell,
   character,
@@ -3784,7 +3840,8 @@ async function beginCharacterSpellTargeting({
           level: slot.level,
           sourceId: slot.sourceId
         });
-      }
+      },
+      onConfirmed: handleConfirmedSpellVfx
     });
   activeSpellCastingSession.begin({
     spell,
