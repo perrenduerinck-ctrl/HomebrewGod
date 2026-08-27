@@ -68,7 +68,13 @@ test("runtime areas, data, assets, tests, and documentation have explicit homes"
     "monsters/creator.js",
     "shared/realtimeListeners.js",
     "shared/securityPersistence.js",
-    "tokens/index.js"
+    "tokens/index.js",
+    "vfx/effectEngine.js",
+    "vfx/effectRegistry.js",
+    "vfx/effectRenderer.js",
+    "vfx/particles.js",
+    "vfx/persistentEffects.js",
+    "vfx/spriteAnimator.js"
   ].forEach((relativePath) => {
     assert.equal(
       fs.existsSync(path.join(root, relativePath)),
@@ -93,7 +99,8 @@ test("the application and import map use the organized runtime paths", () => {
     "./monsters/creator.js",
     "./shared/realtimeListeners.js",
     "./shared/securityPersistence.js",
-    "./tokens/index.js"
+    "./tokens/index.js",
+    "./vfx/effectEngine.js"
   ].forEach((specifier) => {
     assert.match(`${app}\n${index}`, new RegExp(
       specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -101,7 +108,7 @@ test("the application and import map use the organized runtime paths", () => {
   });
   assert.match(
     index,
-    /\.\/assets\/styles\/app\.css\?v=true-2-5d-targeting-stage8-20260826/
+    /\.\/assets\/styles\/app\.css\?v=vfx-core-stage1-20260827/
   );
   assert.doesNotMatch(
     `${app}\n${index}`,
@@ -121,7 +128,8 @@ test("the Pages build includes runtime folders but excludes development folders"
     "data",
     "monsters",
     "shared",
-    "tokens"
+    "tokens",
+    "vfx"
   ].forEach((directory) => {
     assert.match(build, new RegExp(`"${directory}"`));
   });

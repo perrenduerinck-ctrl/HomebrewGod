@@ -109,7 +109,8 @@ for (
     "data",
     "monsters",
     "shared",
-    "tokens"
+    "tokens",
+    "vfx"
   ]
 ) {
   await cp(
