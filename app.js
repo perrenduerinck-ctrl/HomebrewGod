@@ -102,8 +102,9 @@ const firebaseConfig = {
 };
 
 const cloudName = "dkezxpnl6";
+const uploadPreset = "homebrewgod_maps";
 const cloudinaryUploadEndpoint =
-  "https://us-central1-homebrewgd.cloudfunctions.net/uploadCloudinaryImage";
+  "https://api.cloudinary.com/v1_1/" + cloudName + "/image/upload";
 const cloudinaryDeleteEndpoint =
   "https://us-central1-homebrewgd.cloudfunctions.net/deleteCloudinaryAsset";
 const CLOUDINARY_DELETE_TOKEN_MAX_AGE_MS = 9 * 60 * 1000;
@@ -1778,125 +1779,58 @@ function validateImageUploadFile(file) {
   );
 }
 
-function readImageFileAsDataUrl(file) {
-  return new Promise(
-    function (resolve, reject) {
-      const reader =
-        new FileReader();
+async function postUnsignedCloudinaryUpload(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
 
-      reader.addEventListener(
-        "load",
-        function () {
-          resolve(
-            String(
-              reader.result || ""
-            )
-          );
-        }
-      );
-
-      reader.addEventListener(
-        "error",
-        function () {
-          reject(
-            reader.error ||
-            new Error(
-              "The selected image could not be read."
-            )
-          );
-        }
-      );
-
-      reader.readAsDataURL(file);
+  const response = await fetch(
+    cloudinaryUploadEndpoint,
+    {
+      method: "POST",
+      body: formData
     }
   );
-}
-
-async function postSecureCloudinaryUpload(
-  file,
-  assetKind
-) {
-  if (
-    !currentUser ||
-    !currentRoomCode
-  ) {
-    throw new Error(
-      "Open a room and sign in before uploading an image."
-    );
-  }
-
-  const descriptor =
-    validateImageUploadFile(file);
-  const idToken =
-    await currentUser.getIdToken();
-  const fileBase64 =
-    await readImageFileAsDataUrl(
-      file
-    );
-  const response =
-    await fetch(
-      cloudinaryUploadEndpoint,
-      {
-        method: "POST",
-        headers: {
-          "Authorization":
-            "Bearer " + idToken,
-          "Content-Type":
-            "application/json"
-        },
-        body: JSON.stringify({
-          roomCode:
-            currentRoomCode,
-          assetKind:
-            assetKind || "map",
-          fileName:
-            file.name || "image",
-          mimeType:
-            descriptor.mimeType,
-          fileBase64
-        })
-      }
-    );
-  const payload =
-    await response
-      .json()
-      .catch(function () {
-        return {};
-      });
+  const payload = await response
+    .json()
+    .catch(function () {
+      return {};
+    });
 
   if (!response.ok) {
-    const error =
-      new Error(
-        payload?.error?.message ||
-        "The secure upload service rejected the image."
-      );
-    error.code =
-      payload?.error?.code ||
-      "cloudinary/upload-rejected";
+    const error = new Error(
+      payload?.error?.message ||
+      "Cloudinary rejected the image upload."
+    );
+    error.code = response.status === 413
+      ? "resource-exhausted"
+      : "cloudinary/upload-rejected";
+    throw error;
+  }
+
+  if (!payload.secure_url) {
+    const error = new Error(
+      "Cloudinary did not return an image URL."
+    );
+    error.code = "cloudinary/invalid-response";
     throw error;
   }
 
   return payload;
 }
 
-async function uploadMapToCloudinary(
-  file,
-  assetKind = "map"
-) {
+async function uploadMapToCloudinary(file) {
   validateImageUploadFile(file);
 
   try {
-    return await postSecureCloudinaryUpload(
-      file,
-      assetKind
-    );
+    return await postUnsignedCloudinaryUpload(file);
   } catch (error) {
     throw new Error(
       friendlyServiceError(
         error,
         {
           service:
-            "secure image service",
+            "Cloudinary",
           action:
             "upload that image"
         }
@@ -6066,10 +6000,7 @@ async function initCharacterCreatorSystem() {
     uploadCharacterPortrait: function (
       file
     ) {
-      return uploadMapToCloudinary(
-        file,
-        "portrait"
-      );
+      return uploadMapToCloudinary(file);
     },
 
     deleteCharacterPortrait: function (

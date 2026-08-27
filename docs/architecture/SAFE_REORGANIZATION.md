@@ -40,9 +40,10 @@ Structural work must preserve all of the following:
 
 - `firebase.json` points to `firestore.rules` and the `functions/` source directory.
 - Firestore retains its deny-by-default fallback and room ownership checks.
-- The client uses only the authenticated `uploadCloudinaryImage` and `deleteCloudinaryAsset` endpoints for managed uploads and deletion.
-- Cloudinary requests carry a Firebase ID token.
-- Server functions verify the ID token, room membership, asset ownership, MIME signature, size limit, and managed room folder.
+- Browser uploads post image files directly to Cloudinary with the unsigned `homebrewgod_maps` preset; they never include a Cloudinary API key or secret.
+- Client-side validation limits accepted image types and sizes before an unsigned upload is attempted.
+- Secure deletion remains separate from uploading and may use the authenticated `deleteCloudinaryAsset` endpoint.
+- Server-side deletion verifies the Firebase ID token, room membership, asset ownership, and managed room folder.
 - `functions/index.js`, `firebase.json`, and `firestore.rules` remain available to the deployed security audit page.
 
 The automated `tests/reorganization-safety.test.mjs` contract protects these paths and service boundaries. The browser-facing security suite provides the final deployed verification without sending a real upload or mutating production data.

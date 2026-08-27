@@ -46,13 +46,36 @@ test("Firestore ownership rules survived the repository move", () => {
   );
 });
 
-test("the client retains authenticated Cloudinary endpoints", () => {
+test("the client uses the unsigned Cloudinary upload preset without browser secrets", () => {
   const app = read("app.js");
 
+  assert.match(app, /const uploadPreset = "homebrewgod_maps"/);
   assert.match(
     app,
-    /cloudfunctions\.net\/uploadCloudinaryImage/
+    /api\.cloudinary\.com\/v1_1\/" \+ cloudName \+ "\/image\/upload/
   );
+  assert.match(app, /new FormData\(\)/);
+  assert.match(app, /formData\.append\("file", file\)/);
+  assert.match(
+    app,
+    /formData\.append\("upload_preset", uploadPreset\)/
+  );
+  assert.doesNotMatch(app, /uploadCloudinaryImage/);
+  assert.doesNotMatch(app, /CLOUDINARY_API_KEY/);
+  assert.doesNotMatch(app, /CLOUDINARY_API_SECRET/);
+  assert.doesNotMatch(app, /fileBase64/);
+  assert.equal(
+    app.match(/await uploadMapToCloudinary\(file\)/g)?.length,
+    3,
+    "battle-map and puzzle uploads use the shared unsigned uploader"
+  );
+  assert.match(app, /uploadImage: uploadMapToCloudinary/);
+  assert.match(
+    app,
+    /uploadCharacterPortrait:[\s\S]*?return uploadMapToCloudinary\(file\)/
+  );
+
+  // Secure deletion remains a separate, authenticated operation.
   assert.match(
     app,
     /cloudfunctions\.net\/deleteCloudinaryAsset/
@@ -65,23 +88,15 @@ test("the client retains authenticated Cloudinary endpoints", () => {
     app,
     /"Authorization":\s*\n\s*"Bearer " \+ idToken/
   );
-  assert.doesNotMatch(app, /homebrewgod_maps/);
-  assert.doesNotMatch(
-    app,
-    /upload_preset["']?\s*:/
-  );
 });
 
-test("Cloudinary functions retain authentication, validation, and ownership guards", () => {
+test("the optional Cloudinary deletion function retains ownership guards", () => {
   const functionsSource = read("functions/index.js");
 
   [
-    "exports.uploadCloudinaryImage",
     "exports.deleteCloudinaryAsset",
     "verifyIdToken",
     "getRoomAccess",
-    "detectImageMimeType",
-    "MAX_IMAGE_BYTES",
     "isAssetReferenced",
     "CLOUDINARY_API_KEY",
     "CLOUDINARY_API_SECRET"
@@ -91,7 +106,6 @@ test("Cloudinary functions retain authentication, validation, and ownership guar
       contract
     );
   });
-  assert.match(functionsSource, /8 \* 1024 \* 1024/);
   assert.match(
     functionsSource,
     /`homebrewgod\/\$\{roomCode\}`/

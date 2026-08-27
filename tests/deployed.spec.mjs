@@ -83,7 +83,7 @@ const deployedSelfTests = [
     path:
       "tests/browser-pages/security-persistence-self-test.html?release=phase20-20260727",
     selector: "#testResult",
-    expected: "60 Phase 18"
+    expected: "64 Phase 18"
   }
 ];
 
