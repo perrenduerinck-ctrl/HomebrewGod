@@ -7,6 +7,7 @@ import {
   getTemplateDirection,
   normalizeTemplateAngle,
   normalizeTemplateDistance,
+  normalizeTemplateHeight,
   normalizeTemplateShape
 } from "../battleMap/templateGeometry.js";
 
@@ -113,14 +114,73 @@ test("square templates use their cursor as the center", () => {
   );
 });
 
+test("volume templates keep their real vertical bounds", () => {
+  const sphere = createTemplateGeometry({
+    shape: "sphere",
+    pointer: { x: 100, y: 100 },
+    sizeFeet: 20,
+    elevationFeet: 30,
+    pixelsPerSquare: 10,
+    feetPerSquare: 5
+  });
+  const cylinder = createTemplateGeometry({
+    shape: "cylinder",
+    pointer: { x: 100, y: 100 },
+    sizeFeet: 10,
+    heightFeet: 40,
+    elevationFeet: 5,
+    pixelsPerSquare: 10,
+    feetPerSquare: 5
+  });
+  const cube = createTemplateGeometry({
+    shape: "cube",
+    pointer: { x: 100, y: 100 },
+    sizeFeet: 20,
+    elevationFeet: 30,
+    pixelsPerSquare: 10,
+    feetPerSquare: 5
+  });
+
+  assert.deepEqual(sphere.verticalBounds, {
+    minFeet: 10,
+    maxFeet: 50,
+    heightFeet: 40
+  });
+  assert.deepEqual(cylinder.verticalBounds, {
+    minFeet: 5,
+    maxFeet: 45,
+    heightFeet: 40
+  });
+  assert.deepEqual(cube.verticalBounds, {
+    minFeet: 20,
+    maxFeet: 40,
+    heightFeet: 20
+  });
+  assert.equal(
+    formatTemplateLabel(sphere),
+    "Sphere · 20-ft radius · center +30 ft"
+  );
+  assert.equal(
+    formatTemplateLabel(cylinder),
+    "Cylinder · 10-ft radius × 40 ft high · base +5 ft"
+  );
+  assert.equal(
+    formatTemplateLabel(cube),
+    "Cube · 20 ft · center +30 ft"
+  );
+});
+
 test("template inputs remain finite and bounded", () => {
   assert.equal(normalizeTemplateShape("LINE"), "line");
+  assert.equal(normalizeTemplateShape("SPHERE"), "sphere");
   assert.equal(normalizeTemplateShape("fireball"), "circle");
   assert.equal(normalizeTemplateDistance(Infinity, 20), 20);
   assert.equal(normalizeTemplateDistance(0, 20), 1);
   assert.equal(normalizeTemplateDistance(50000, 20), 1000);
   assert.equal(normalizeTemplateAngle(NaN, 60), 60);
   assert.equal(normalizeTemplateAngle(0, 60), 1);
+  assert.equal(normalizeTemplateHeight(-1, 40), 0);
+  assert.equal(normalizeTemplateHeight(50000, 40), 1000);
   assert.equal(
     feetToMapPixels(30, {
       pixelsPerSquare: 64,

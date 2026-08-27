@@ -1,7 +1,7 @@
 import {
   measureSpatialDistance,
   normalizeElevation
-} from "./elevation.js?v=stage7-20260826";
+} from "./elevation.js?v=stage8-20260826";
 
 export const DEFAULT_FEET_PER_SQUARE = 5;
 export const MIN_FEET_PER_SQUARE = 1;

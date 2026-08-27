@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=token-elevation-stage7-20260826">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=true-2-5d-targeting-stage8-20260826">
 </head>
 
 <body>
@@ -174,6 +174,8 @@
         <select id="spellTemplateSelect">
           <option value="">Choose a spell</option>
           <option value="fireball">Fireball</option>
+          <option value="flame-strike">Flame Strike</option>
+          <option value="ice-storm">Ice Storm</option>
           <option value="burning-hands">Burning Hands</option>
           <option value="lightning-bolt">Lightning Bolt</option>
         </select>
@@ -186,9 +188,12 @@
         <span>Template</span>
         <select id="templateShapeSelect">
           <option value="circle">Circle</option>
+          <option value="sphere">Sphere</option>
+          <option value="cylinder">Cylinder</option>
           <option value="cone">Cone</option>
           <option value="line">Line</option>
           <option value="square">Square</option>
+          <option value="cube">Cube</option>
         </select>
       </label>
 
@@ -219,6 +224,24 @@
           max="1000"
           step="1"
           value="5"
+          inputmode="numeric"
+        >
+        <span>ft</span>
+      </label>
+
+      <label
+        id="templateHeightControl"
+        class="battleScaleControl hidden"
+        for="templateHeightInput"
+      >
+        <span>Height</span>
+        <input
+          id="templateHeightInput"
+          type="number"
+          min="0"
+          max="1000"
+          step="1"
+          value="40"
           inputmode="numeric"
         >
         <span>ft</span>
@@ -795,7 +818,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=token-elevation-stage7-20260826"
+    src="./app.js?v=true-2-5d-targeting-stage8-20260826"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>
