@@ -155,6 +155,7 @@ test("affected-token results preserve useful token metadata", () => {
       id: "goblin",
       name: "Goblin",
       type: "enemy",
+      elevation: 15,
       left: 90,
       top: 90,
       width: 20,
@@ -164,6 +165,7 @@ test("affected-token results preserve useful token metadata", () => {
       id: "wizard",
       name: "Wizard",
       type: "player",
+      elevation: 30,
       left: 300,
       top: 300,
       width: 20,
@@ -175,13 +177,15 @@ test("affected-token results preserve useful token metadata", () => {
     affected.map((token) => ({
       id: token.id,
       name: token.name,
-      type: token.type
+      type: token.type,
+      elevation: token.elevation
     })),
     [
       {
         id: "goblin",
         name: "Goblin",
-        type: "enemy"
+        type: "enemy",
+        elevation: 15
       }
     ]
   );
@@ -196,4 +200,128 @@ test("affected-token results preserve useful token metadata", () => {
     ),
     false
   );
+});
+
+test("sphere collision combines horizontal and vertical distance", () => {
+  const sphere = createTemplateGeometry({
+    shape: "sphere",
+    pointer: { x: 100, y: 100 },
+    sizeFeet: 20,
+    elevationFeet: 20,
+    pixelsPerSquare: 10,
+    feetPerSquare: 5
+  });
+  const token = {
+    top: 98,
+    width: 4,
+    height: 4
+  };
+
+  assert.equal(tokenIntersectsTemplate(sphere, {
+    ...token,
+    left: 124,
+    elevation: 32
+  }), true);
+  assert.equal(tokenIntersectsTemplate(sphere, {
+    ...token,
+    left: 130,
+    elevation: 35
+  }), false);
+  assert.equal(tokenIntersectsTemplate(sphere, {
+    ...token,
+    left: 98,
+    elevation: 40
+  }), true);
+  assert.equal(tokenIntersectsTemplate(sphere, {
+    ...token,
+    left: 98,
+    elevation: 41
+  }), false);
+});
+
+test("cylinder collision uses its base elevation and height", () => {
+  const cylinder = createTemplateGeometry({
+    shape: "cylinder",
+    pointer: { x: 100, y: 100 },
+    sizeFeet: 10,
+    heightFeet: 40,
+    elevationFeet: 0,
+    pixelsPerSquare: 10,
+    feetPerSquare: 5
+  });
+  const inside = {
+    left: 98,
+    top: 98,
+    width: 4,
+    height: 4
+  };
+
+  assert.equal(tokenIntersectsTemplate(cylinder, {
+    ...inside,
+    elevation: 0
+  }), true);
+  assert.equal(tokenIntersectsTemplate(cylinder, {
+    ...inside,
+    elevation: 40
+  }), true);
+  assert.equal(tokenIntersectsTemplate(cylinder, {
+    ...inside,
+    elevation: 41
+  }), false);
+  assert.equal(tokenIntersectsTemplate(cylinder, {
+    ...inside,
+    elevation: -1
+  }), false);
+});
+
+test("cube collision requires both map overlap and vertical overlap", () => {
+  const cube = createTemplateGeometry({
+    shape: "cube",
+    pointer: { x: 100, y: 100 },
+    sizeFeet: 20,
+    elevationFeet: 20,
+    pixelsPerSquare: 10,
+    feetPerSquare: 5
+  });
+  const inside = {
+    left: 90,
+    top: 90,
+    width: 4,
+    height: 4
+  };
+
+  assert.equal(tokenIntersectsTemplate(cube, {
+    ...inside,
+    elevation: 10
+  }), true);
+  assert.equal(tokenIntersectsTemplate(cube, {
+    ...inside,
+    elevation: 30
+  }), true);
+  assert.equal(tokenIntersectsTemplate(cube, {
+    ...inside,
+    elevation: 31
+  }), false);
+  assert.equal(tokenIntersectsTemplate(cube, {
+    ...inside,
+    left: 130,
+    elevation: 20
+  }), false);
+});
+
+test("flat templates retain their original 2D collision behavior", () => {
+  const circle = createTemplateGeometry({
+    shape: "circle",
+    pointer: { x: 100, y: 100 },
+    sizeFeet: 5,
+    ...mapScale
+  });
+
+  assert.equal(tokenIntersectsTemplate(circle, {
+    left: 95,
+    top: 95,
+    width: 10,
+    height: 10,
+    elevation: 1000
+  }), true);
 });

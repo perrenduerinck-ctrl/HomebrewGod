@@ -11,7 +11,7 @@ import {
   formatElevation,
   getTokenElevation,
   normalizeElevation
-} from "../battleMap/elevation.js?v=stage7-20260826";
+} from "../battleMap/elevation.js?v=stage8-20260826";
 
 export function createTokenSystem(options) {
   const deps = {

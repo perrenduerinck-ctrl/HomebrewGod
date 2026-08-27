@@ -373,7 +373,8 @@ button:disabled {
 #rulerStartElevationInput,
 #rulerEndElevationInput,
 #templateSizeInput,
-#templateWidthInput {
+#templateWidthInput,
+#templateHeightInput {
   width: 68px;
   min-height: 32px;
   margin: 0;

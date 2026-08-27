@@ -4,6 +4,7 @@ import {
   getDefaultTemplateOptions,
   normalizeTemplateAngle,
   normalizeTemplateDistance,
+  normalizeTemplateHeight,
   normalizeTemplateShape
 } from "./templateGeometry.js";
 
@@ -89,7 +90,8 @@ export function createMapTemplateEngine({
   let connected = false;
   let shape = "circle";
   let options = {
-    ...getDefaultTemplateOptions(shape)
+    ...getDefaultTemplateOptions(shape),
+    elevationFeet: 0
   };
   let cursor = null;
   let anchor = null;
@@ -190,6 +192,8 @@ export function createMapTemplateEngine({
       pointer: geometryPointer,
       sizeFeet: options.sizeFeet,
       widthFeet: options.widthFeet,
+      heightFeet: options.heightFeet,
+      elevationFeet: options.elevationFeet,
       angleDegrees: options.angleDegrees,
       pixelsPerSquare: getPixelsPerSquare(),
       feetPerSquare: getFeetPerSquare()
@@ -356,7 +360,8 @@ export function createMapTemplateEngine({
   function setShape(nextShape) {
     shape = normalizeTemplateShape(nextShape);
     options = {
-      ...getDefaultTemplateOptions(shape)
+      ...getDefaultTemplateOptions(shape),
+      elevationFeet: options.elevationFeet ?? 0
     };
     cursor = null;
     anchor = null;
@@ -377,6 +382,15 @@ export function createMapTemplateEngine({
         nextOptions.widthFeet,
         options.widthFeet
       ),
+      heightFeet: normalizeTemplateHeight(
+        nextOptions.heightFeet,
+        options.heightFeet
+      ),
+      elevationFeet: Number.isFinite(
+        Number(nextOptions.elevationFeet)
+      )
+        ? Number(nextOptions.elevationFeet)
+        : options.elevationFeet,
       angleDegrees: normalizeTemplateAngle(
         nextOptions.angleDegrees,
         options.angleDegrees || 53.130102

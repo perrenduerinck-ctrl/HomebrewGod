@@ -34,6 +34,9 @@ export function normalizeTokenFootprint(token = {}) {
     id: String(token.id || "").trim(),
     name: String(token.name || "Token").trim() || "Token",
     type: String(token.type || "token").trim() || "token",
+    elevation: finiteNumber(
+      token.elevation ?? token.elevationFeet
+    ),
     left,
     top,
     right: left + width,
@@ -250,6 +253,35 @@ function circleIntersectsRectangle(
   );
 }
 
+function horizontalDistanceSquared(
+  center,
+  rectangle
+) {
+  const closestX = clamp(
+    center.x,
+    rectangle.left,
+    rectangle.right
+  );
+  const closestY = clamp(
+    center.y,
+    rectangle.top,
+    rectangle.bottom
+  );
+  return (
+    (center.x - closestX) ** 2 +
+    (center.y - closestY) ** 2
+  );
+}
+
+function elevationInsideVolume(geometry, elevation) {
+  const bounds = geometry.verticalBounds;
+  if (!bounds) return true;
+  return (
+    elevation >= bounds.minFeet - EPSILON &&
+    elevation <= bounds.maxFeet + EPSILON
+  );
+}
+
 export function templateGeometryToPolygon(
   geometry,
   { coneArcSegments = 24 } = {}
@@ -258,7 +290,8 @@ export function templateGeometryToPolygon(
 
   if (
     geometry.shape === "line" ||
-    geometry.shape === "square"
+    geometry.shape === "square" ||
+    geometry.shape === "cube"
   ) {
     return Object.freeze(
       (geometry.points || []).map(normalizePoint)
@@ -329,6 +362,55 @@ export function tokenIntersectsTemplate(
       ),
       footprint
     );
+  }
+
+
+  if (geometry.shape === "sphere") {
+    const radius = Math.max(
+      0,
+      finiteNumber(geometry.sizePixels)
+    );
+    const verticalPixels = (
+      footprint.elevation -
+      finiteNumber(geometry.elevationFeet)
+    ) * Math.max(
+      0,
+      finiteNumber(geometry.pixelsPerFoot)
+    );
+    return (
+      horizontalDistanceSquared(
+        normalizePoint(geometry.anchor),
+        footprint
+      ) + verticalPixels ** 2 <=
+      radius ** 2 + EPSILON
+    );
+  }
+
+  if (geometry.shape === "cylinder") {
+    return (
+      elevationInsideVolume(
+        geometry,
+        footprint.elevation
+      ) &&
+      circleIntersectsRectangle(
+        normalizePoint(geometry.anchor),
+        Math.max(
+          0,
+          finiteNumber(geometry.sizePixels)
+        ),
+        footprint
+      )
+    );
+  }
+
+  if (
+    geometry.shape === "cube" &&
+    !elevationInsideVolume(
+      geometry,
+      footprint.elevation
+    )
+  ) {
+    return false;
   }
 
   return polygonIntersectsRectangle(

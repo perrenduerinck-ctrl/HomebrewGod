@@ -1,13 +1,14 @@
 import {
-  normalizeTemplateDistance
+  normalizeTemplateDistance,
+  normalizeTemplateHeight
 } from "./templateGeometry.js";
 
 const SHAPE_MAP = Object.freeze({
-  sphere: "circle",
-  cylinder: "circle",
+  sphere: "sphere",
+  cylinder: "cylinder",
   cone: "cone",
   line: "line",
-  cube: "square"
+  cube: "cube"
 });
 
 function cleanText(value, fallback = "") {
@@ -15,7 +16,10 @@ function cleanText(value, fallback = "") {
 }
 
 function getAreaSize(area, templateShape) {
-  if (templateShape === "circle") {
+  if (
+    templateShape === "sphere" ||
+    templateShape === "cylinder"
+  ) {
     return area.radius;
   }
   if (
@@ -66,9 +70,19 @@ export function createSpellTemplateInstruction(spell = {}) {
   );
   const widthFeet = normalizeTemplateDistance(
     area.width,
-    templateShape === "square"
+    templateShape === "cube"
       ? sizeFeet
       : 5
+  );
+  const heightFeet = normalizeTemplateHeight(
+    area.height,
+    templateShape === "sphere"
+      ? sizeFeet * 2
+      : templateShape === "cube"
+        ? sizeFeet
+        : templateShape === "cylinder"
+          ? sizeFeet * 2
+          : 0
   );
   const rangeFeet = Number.isFinite(
     targeting.range?.feet
@@ -90,6 +104,7 @@ export function createSpellTemplateInstruction(spell = {}) {
         : "direction",
     sizeFeet,
     widthFeet,
+    heightFeet,
     rangeType: targeting.range?.type || "special",
     rangeFeet,
     rangeText: cleanText(
@@ -107,10 +122,14 @@ export function formatSpellTemplateInstruction(instruction) {
     return instruction?.reason || "Spell template unavailable.";
   }
 
-  const area = instruction.templateShape === "circle"
+  const area = instruction.templateShape === "sphere"
     ? `${instruction.sizeFeet}-ft radius`
+    : instruction.templateShape === "cylinder"
+      ? `${instruction.sizeFeet}-ft radius × ${instruction.heightFeet} ft high`
     : instruction.templateShape === "line"
       ? `${instruction.sizeFeet} ft × ${instruction.widthFeet} ft`
-      : `${instruction.sizeFeet} ft`;
+      : instruction.templateShape === "cube"
+        ? `${instruction.sizeFeet}-ft cube`
+        : `${instruction.sizeFeet} ft`;
   return `${instruction.spellName} · Range ${instruction.rangeText} · ${area}`;
 }

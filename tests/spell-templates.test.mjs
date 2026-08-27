@@ -8,21 +8,69 @@ import {
   formatSpellTemplateInstruction
 } from "../battleMap/spellTemplates.js";
 
-test("Fireball drives a point-placed circle without merging cast range and radius", () => {
+test("Fireball drives a point-placed sphere without merging cast range and radius", () => {
   const instruction = createSpellTemplateInstruction(
     getDefaultSpellById("fireball")
   );
 
   assert.equal(instruction.supported, true);
-  assert.equal(instruction.templateShape, "circle");
+  assert.equal(instruction.templateShape, "sphere");
   assert.equal(instruction.placementMode, "point");
   assert.equal(instruction.rangeFeet, 150);
   assert.equal(instruction.sizeFeet, 20);
+  assert.equal(instruction.heightFeet, 40);
   assert.equal(instruction.previewOnly, true);
   assert.equal(
     formatSpellTemplateInstruction(instruction),
     "Fireball · Range 150 feet · 20-ft radius"
   );
+});
+
+test("cylinder spells preserve their vertical height", () => {
+  const instruction = createSpellTemplateInstruction(
+    getDefaultSpellById("flame-strike")
+  );
+  const groundOnlyInstruction =
+    createSpellTemplateInstruction(
+      getDefaultSpellById("spike-growth")
+    );
+
+  assert.equal(instruction.supported, true);
+  assert.equal(instruction.templateShape, "cylinder");
+  assert.equal(instruction.sizeFeet, 10);
+  assert.equal(instruction.heightFeet, 40);
+  assert.equal(
+    formatSpellTemplateInstruction(instruction),
+    "Flame Strike · Range 60 feet · 10-ft radius × 40 ft high"
+  );
+  assert.equal(
+    groundOnlyInstruction.templateShape,
+    "cylinder"
+  );
+  assert.equal(
+    groundOnlyInstruction.heightFeet,
+    0
+  );
+});
+
+test("cube areas preserve their side as all three dimensions", () => {
+  const instruction = createSpellTemplateInstruction({
+    id: "test-cube",
+    name: "Test Cube",
+    targeting: {
+      range: {
+        type: "distance",
+        feet: 60,
+        text: "60 feet"
+      },
+      target: { type: "point" },
+      area: { shape: "cube", side: 15 }
+    }
+  });
+
+  assert.equal(instruction.templateShape, "cube");
+  assert.equal(instruction.sizeFeet, 15);
+  assert.equal(instruction.heightFeet, 15);
 });
 
 test("Burning Hands drives a caster-origin cone", () => {

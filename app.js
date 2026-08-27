@@ -36,36 +36,37 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=stage7-20260826";
+import { createTokenSystem } from "./tokens/index.js?v=stage8-20260826";
 import {
   createMapRuler,
   formatMapDistance,
   formatMapSquares,
   normalizeFeetPerSquare
-} from "./battleMap/measurement.js?v=stage7-20260826";
+} from "./battleMap/measurement.js?v=stage8-20260826";
 import {
   formatElevation,
   measureSpatialDistance,
   normalizeElevation
-} from "./battleMap/elevation.js?v=stage7-20260826";
+} from "./battleMap/elevation.js?v=stage8-20260826";
 import {
   getDefaultTemplateOptions,
   normalizeTemplateDistance,
+  normalizeTemplateHeight,
   normalizeTemplateShape
-} from "./battleMap/templateGeometry.js?v=stage7-20260826";
+} from "./battleMap/templateGeometry.js?v=stage8-20260826";
 import {
   createMapTemplateEngine
-} from "./battleMap/templateRenderer.js?v=stage7-20260826";
+} from "./battleMap/templateRenderer.js?v=stage8-20260826";
 import {
   findAffectedTokens
-} from "./battleMap/tokenCollision.js?v=stage7-20260826";
+} from "./battleMap/tokenCollision.js?v=stage8-20260826";
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=stage7-20260826";
+} from "./battleMap/spellTemplates.js?v=stage8-20260826";
 import {
   createSpellCastingSession
-} from "./battleMap/castingSession.js?v=stage7-20260826";
+} from "./battleMap/castingSession.js?v=stage8-20260826";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -201,6 +202,10 @@ const E = {
     $("templateWidthControl"),
   templateWidthInput:
     $("templateWidthInput"),
+  templateHeightControl:
+    $("templateHeightControl"),
+  templateHeightInput:
+    $("templateHeightInput"),
   templateToggleButton:
     $("templateToggleButton"),
   templateClearButton:
@@ -2896,7 +2901,11 @@ function getRulerElevations() {
 
 function refreshElevationMeasurements() {
   battleMapRuler?.refresh();
-  battleMapTemplates?.refresh();
+  if (battleMapTemplates) {
+    battleMapTemplates.setOptions(
+      getBattleMapTemplateOptions()
+    );
+  }
 }
 
 function updateBattleMapRulerUi(state) {
@@ -3033,8 +3042,8 @@ function initializeBattleMapRuler() {
 
 // =====================================================
 // APP SECTION 12A.2 — REUSABLE AREA TEMPLATE PREVIEWS
-// Generic circle, cone, line, and square placement.
-// Spell and token rules connect to this engine in later stages.
+// Generic 2D and 2.5D area placement.
+// Spheres, cylinders, and cubes test token elevation.
 // =====================================================
 
 function getSelectedTemplateShape() {
@@ -3055,6 +3064,15 @@ function getBattleMapTemplateOptions() {
       E.templateWidthInput?.value,
       defaults.widthFeet
     ),
+    heightFeet: normalizeTemplateHeight(
+      E.templateHeightInput?.value,
+      defaults.heightFeet
+    ),
+    elevationFeet:
+      activeSpellTemplateInstruction &&
+      activeSpellTemplateInstruction.targetType !== "point"
+        ? activeSpellCastingCasterElevationFeet
+        : getRulerElevations().endElevationFeet,
     angleDegrees: defaults.angleDegrees
   };
 }
@@ -3069,9 +3087,12 @@ function syncBattleMapTemplateControls(
   );
   const sizeLabels = {
     circle: "Radius",
+    sphere: "Radius",
+    cylinder: "Radius",
     cone: "Length",
     line: "Length",
-    square: "Side"
+    square: "Side",
+    cube: "Side"
   };
 
   if (E.templateShapeSelect) {
@@ -3085,6 +3106,10 @@ function syncBattleMapTemplateControls(
     "hidden",
     normalizedShape !== "line"
   );
+  E.templateHeightControl?.classList.toggle(
+    "hidden",
+    normalizedShape !== "cylinder"
+  );
 
   if (resetValues) {
     if (E.templateSizeInput) {
@@ -3095,6 +3120,11 @@ function syncBattleMapTemplateControls(
     if (E.templateWidthInput) {
       E.templateWidthInput.value = String(
         defaults.widthFeet
+      );
+    }
+    if (E.templateHeightInput) {
+      E.templateHeightInput.value = String(
+        defaults.heightFeet
       );
     }
   }
@@ -3720,6 +3750,18 @@ async function beginCharacterSpellTargeting({
     );
   }
 
+  activeSpellCastingCasterElevationFeet =
+    normalizeElevation(
+      linkedToken?.elevation ??
+      tokenElement.dataset.tokenElevation
+    );
+  if (E.rulerStartElevationInput) {
+    E.rulerStartElevationInput.value =
+      String(
+        activeSpellCastingCasterElevationFeet
+      );
+  }
+
   activeSpellCastingConfirm =
     typeof onConfirmCast === "function"
       ? onConfirmCast
@@ -3777,6 +3819,10 @@ async function beginCharacterSpellTargeting({
     E.templateWidthInput.value =
       String(instruction.widthFeet);
   }
+  if (E.templateHeightInput) {
+    E.templateHeightInput.value =
+      String(instruction.heightFeet);
+  }
 
   battleMapRuler?.setEnabled(false);
   battleMapTemplates.setShape(
@@ -3784,7 +3830,13 @@ async function beginCharacterSpellTargeting({
   );
   battleMapTemplates.setOptions({
     sizeFeet: instruction.sizeFeet,
-    widthFeet: instruction.widthFeet
+    widthFeet: instruction.widthFeet,
+    heightFeet: instruction.heightFeet,
+    elevationFeet:
+      instruction.targetType === "point"
+        ? getRulerElevations()
+            .endElevationFeet
+        : activeSpellCastingCasterElevationFeet
   });
   battleMapTemplates.setEnabled(true);
   battleMapTemplates.refresh();
@@ -3792,17 +3844,6 @@ async function beginCharacterSpellTargeting({
     getCastingCasterPoint(
       tokenElement
     );
-  activeSpellCastingCasterElevationFeet =
-    normalizeElevation(
-      linkedToken?.elevation ??
-      tokenElement.dataset.tokenElevation
-    );
-  if (E.rulerStartElevationInput) {
-    E.rulerStartElevationInput.value =
-      String(
-        activeSpellCastingCasterElevationFeet
-      );
-  }
 
   if (
     activeSpellCastingCasterPoint &&
@@ -3878,7 +3919,7 @@ function updateBattleMapTemplateUi(state) {
   if (!state.enabled) {
     text(
       E.templateStatus,
-      `${spellStatus}Turn on templates to preview a circle, cone, line, or square.`
+      `${spellStatus}Turn on templates to preview a 2D shape or a sphere, cylinder, or cube with elevation.`
     );
     return;
   }
@@ -3939,7 +3980,7 @@ async function loadSelectedSpellTemplate() {
 
   try {
     const { getDefaultSpellById } = await import(
-      "./data/defaultSpells.js?v=stage7-20260826"
+      "./data/defaultSpells.js?v=stage8-20260826"
     );
     const spell = getDefaultSpellById(spellId);
     const instruction =
@@ -3972,6 +4013,11 @@ async function loadSelectedSpellTemplate() {
         instruction.widthFeet
       );
     }
+    if (E.templateHeightInput) {
+      E.templateHeightInput.value = String(
+        instruction.heightFeet
+      );
+    }
 
     battleMapRuler?.setEnabled(false);
     battleMapTemplates.setShape(
@@ -3979,7 +4025,11 @@ async function loadSelectedSpellTemplate() {
     );
     battleMapTemplates.setOptions({
       sizeFeet: instruction.sizeFeet,
-      widthFeet: instruction.widthFeet
+      widthFeet: instruction.widthFeet,
+      heightFeet: instruction.heightFeet,
+      elevationFeet:
+        getRulerElevations()
+          .endElevationFeet
     });
     battleMapTemplates.setEnabled(true);
   } catch (error) {
@@ -4107,6 +4157,11 @@ function initializeBattleMapTemplates() {
         options.widthFeet
       );
     }
+    if (E.templateHeightInput) {
+      E.templateHeightInput.value = String(
+        options.heightFeet
+      );
+    }
     battleMapTemplates.setOptions(options);
   };
 
@@ -4118,11 +4173,19 @@ function initializeBattleMapTemplates() {
     "input",
     handleTemplateSizeInput
   );
+  E.templateHeightInput?.addEventListener(
+    "input",
+    handleTemplateSizeInput
+  );
   E.templateSizeInput?.addEventListener(
     "change",
     normalizeTemplateInputs
   );
   E.templateWidthInput?.addEventListener(
+    "change",
+    normalizeTemplateInputs
+  );
+  E.templateHeightInput?.addEventListener(
     "change",
     normalizeTemplateInputs
   );
@@ -6298,7 +6361,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
         } = {}) {
           const { getDefaultSpellById } =
             await import(
-              "./data/defaultSpells.js?v=stage7-20260826"
+              "./data/defaultSpells.js?v=stage8-20260826"
             );
           const spell =
             getDefaultSpellById(

@@ -2623,6 +2623,110 @@ test(
 );
 
 test(
+  "sphere templates include tokens by true 3D position",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=true-2-5d-targeting-stage8-20260826",
+      { waitUntil: "domcontentloaded" }
+    );
+    await page.waitForFunction(() => Boolean(
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+    ));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .openScreen("battle"));
+
+    await page.locator(
+      "#templateShapeSelect"
+    ).selectOption("sphere");
+    await page.locator(
+      "#templateSizeInput"
+    ).fill("20");
+    await page.locator(
+      "#rulerEndElevationInput"
+    ).fill("20");
+    await page.locator(
+      "#templateToggleButton"
+    ).click();
+
+    const overlay = page.locator(
+      ".hg-map-template-layer"
+    );
+    await overlay.scrollIntoViewIfNeeded();
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    const center = {
+      x: Math.min(300, box.width / 2),
+      y: Math.min(240, box.height / 2)
+    };
+
+    await page.evaluate((point) => {
+      const layer = document.getElementById(
+        "tokenLayer"
+      );
+      const templateLayer = document.querySelector(
+        ".hg-map-template-layer"
+      );
+      const layerRect = layer.getBoundingClientRect();
+      const templateRect =
+        templateLayer.getBoundingClientRect();
+      const offsetX =
+        templateRect.left - layerRect.left;
+      const offsetY =
+        templateRect.top - layerRect.top;
+
+      layer.innerHTML = "";
+      [
+        ["ground-token", "Ground Token", 0],
+        ["center-token", "Center Token", 20],
+        ["high-token", "High Token", 41]
+      ].forEach(([id, name, elevation]) => {
+        const token = document.createElement("div");
+        token.className = "hg-token hg-token-enemy";
+        token.dataset.tokenId = id;
+        token.dataset.tokenName = name;
+        token.dataset.tokenType = "enemy";
+        token.dataset.tokenElevation = String(elevation);
+        token.style.left = `${offsetX + point.x - 16}px`;
+        token.style.top = `${offsetY + point.y - 16}px`;
+        token.style.width = "32px";
+        token.style.height = "32px";
+        layer.appendChild(token);
+      });
+    }, center);
+
+    await page.mouse.move(
+      box.x + center.x,
+      box.y + center.y
+    );
+    await expect(page.locator(
+      '[data-token-id="ground-token"]'
+    )).toHaveClass(/hg-token-template-affected/);
+    await expect(page.locator(
+      '[data-token-id="center-token"]'
+    )).toHaveClass(/hg-token-template-affected/);
+    await expect(page.locator(
+      '[data-token-id="high-token"]'
+    )).not.toHaveClass(/hg-token-template-affected/);
+    await expect(page.locator(
+      "#templateStatus"
+    )).toContainText(
+      "Sphere · 20-ft radius · center +20 ft"
+    );
+
+    await page.locator(
+      "#rulerEndElevationInput"
+    ).fill("50");
+    await expect(page.locator(
+      '[data-token-id="ground-token"]'
+    )).not.toHaveClass(/hg-token-template-affected/);
+    await expect(page.locator(
+      '[data-token-id="high-token"]'
+    )).toHaveClass(/hg-token-template-affected/);
+  }
+);
+
+test(
   "structured spell data drives Fireball, Burning Hands, and Lightning Bolt templates",
   async ({ page }) => {
     await page.goto(
@@ -2660,13 +2764,27 @@ test(
 
     await spellSelect.selectOption("fireball");
     await loadButton.click();
-    await expect(shapeSelect).toHaveValue("circle");
+    await expect(shapeSelect).toHaveValue("sphere");
     await expect(sizeInput).toHaveValue("20");
     await expect(status).toContainText(
       "Fireball · Range 150 feet · 20-ft radius"
     );
     await expect(status).toContainText(
       "Preview only — no spell slot is spent"
+    );
+
+    await spellSelect.selectOption("flame-strike");
+    await loadButton.click();
+    await expect(shapeSelect).toHaveValue("cylinder");
+    await expect(sizeInput).toHaveValue("10");
+    await expect(page.locator(
+      "#templateHeightInput"
+    )).toHaveValue("40");
+    await expect(page.locator(
+      "#templateHeightControl"
+    )).not.toHaveClass(/hidden/);
+    await expect(status).toContainText(
+      "Flame Strike · Range 60 feet · 10-ft radius × 40 ft high"
     );
 
     await spellSelect.selectOption("burning-hands");
