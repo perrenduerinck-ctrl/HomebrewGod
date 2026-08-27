@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=true-2-5d-targeting-stage8-20260826">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=vfx-core-stage1-20260827">
 </head>
 
 <body>
@@ -257,6 +257,15 @@
         type="button"
         disabled
       >Clear Template</button>
+
+      <label class="battleScaleControl" for="battleVfxModeSelect">
+        <span>Effects</span>
+        <select id="battleVfxModeSelect">
+          <option value="full">Full</option>
+          <option value="reduced">Reduced</option>
+          <option value="off">Off</option>
+        </select>
+      </label>
 
       <label class="battleScaleControl" for="mapFeetPerSquareInput">
         <span>Scale</span>
@@ -818,7 +827,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=true-2-5d-targeting-stage8-20260826"
+    src="./app.js?v=vfx-core-stage1-20260827"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

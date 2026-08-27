@@ -3076,6 +3076,175 @@ test(
 );
 
 test(
+  "battle-map VFX stay aligned, click through, honor modes, and clean themselves up",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=vfx-core-stage1-20260827",
+      { waitUntil: "domcontentloaded" }
+    );
+    await page.waitForFunction(() => Boolean(
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+    ));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .openScreen("battle"));
+
+    const layer = page.locator(
+      ".hg-map-vfx-layer"
+    );
+    const viewer = page.locator(
+      "#battleMapViewer"
+    );
+    const modeSelect = page.locator(
+      "#battleVfxModeSelect"
+    );
+
+    await expect(layer).toHaveCount(1);
+    await modeSelect.selectOption("full");
+    const presentation = await layer.evaluate(
+      (element) => {
+        const style = getComputedStyle(element);
+        return {
+          ariaHidden:
+            element.getAttribute("aria-hidden"),
+          pointerEvents: style.pointerEvents,
+          zIndex: style.zIndex
+        };
+      }
+    );
+    expect(presentation).toEqual({
+      ariaHidden: "true",
+      pointerEvents: "none",
+      zIndex: "50"
+    });
+
+    await page.evaluate(() => {
+      window.__VFX_CLICK_THROUGH__ = 0;
+      document.getElementById("battleMapViewer")
+        .addEventListener("click", () => {
+          window.__VFX_CLICK_THROUGH__ += 1;
+        }, { once: true });
+    });
+    const layerBox = await layer.boundingBox();
+    expect(layerBox).not.toBeNull();
+    await page.mouse.click(
+      layerBox.x + layerBox.width / 2,
+      layerBox.y + layerBox.height / 2
+    );
+    await expect.poll(() => page.evaluate(
+      () => window.__VFX_CLICK_THROUGH__
+    )).toBe(1);
+
+    const played = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest({
+        duration: 120,
+        intensity: 3
+      }));
+    expect(played.ok).toBe(true);
+    const effect = layer.locator(
+      `[data-effect-id="${played.id}"]`
+    );
+    await expect(effect).toHaveCount(1);
+    await expect(effect).toHaveAttribute(
+      "data-effect-state",
+      "active"
+    );
+    await expect(effect).toHaveCount(0, {
+      timeout: 2000
+    });
+    await expect.poll(async () => (
+      await page.evaluate(() => window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .getVfxState().activeCount)
+    )).toBe(0);
+
+    await page.setViewportSize({
+      width: 900,
+      height: 700
+    });
+    await expect.poll(async () => {
+      const [vfxBox, viewerBox] = await Promise.all([
+        layer.boundingBox(),
+        viewer.boundingBox()
+      ]);
+      return Math.max(
+        Math.abs(vfxBox.x - viewerBox.x),
+        Math.abs(vfxBox.y - viewerBox.y),
+        Math.abs(vfxBox.width - viewerBox.width),
+        Math.abs(vfxBox.height - viewerBox.height)
+      );
+    }).toBeLessThanOrEqual(1);
+
+    const zoomPlayed = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest({ duration: 2000 }));
+    const zoomEffect = layer.locator(
+      `[data-effect-id="${zoomPlayed.id}"]`
+    );
+    await expect(zoomEffect).toHaveCSS(
+      "--hg-vfx-scale",
+      "1"
+    );
+    await page.locator("#zoomInButton").click();
+    await expect(zoomEffect).toHaveCSS(
+      "--hg-vfx-scale",
+      "1.25"
+    );
+    await expect.poll(async () => {
+      const [vfxBox, viewerBox] = await Promise.all([
+        layer.boundingBox(),
+        viewer.boundingBox()
+      ]);
+      return Math.max(
+        Math.abs(vfxBox.x - viewerBox.x),
+        Math.abs(vfxBox.y - viewerBox.y),
+        Math.abs(vfxBox.width - viewerBox.width),
+        Math.abs(vfxBox.height - viewerBox.height)
+      );
+    }).toBeLessThanOrEqual(1);
+
+    await modeSelect.selectOption("reduced");
+    await expect(layer).toHaveAttribute(
+      "data-effects-mode",
+      "reduced"
+    );
+    const reduced = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest({
+        duration: 5000,
+        intensity: 5,
+        particles: { count: 999 }
+      }));
+    const reducedEffect = layer.locator(
+      `[data-effect-id="${reduced.id}"]`
+    );
+    await expect(reducedEffect).toHaveCSS(
+      "--hg-vfx-duration",
+      "1000ms"
+    );
+    await expect(
+      reducedEffect.locator(".hg-vfx-particle")
+    ).toHaveCount(24);
+
+    await modeSelect.selectOption("off");
+    await expect(layer).toHaveAttribute(
+      "data-effects-mode",
+      "off"
+    );
+    await expect(reducedEffect).toHaveCount(0);
+    const skipped = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest());
+    expect(skipped).toMatchObject({
+      ok: true,
+      skipped: true,
+      reason: "effects-off"
+    });
+  }
+);
+
+test(
   "mobile layout does not overflow at a phone viewport",
   async ({ page }) => {
     await page.setViewportSize({

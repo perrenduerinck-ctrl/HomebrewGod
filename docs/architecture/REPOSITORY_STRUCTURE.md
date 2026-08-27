@@ -10,12 +10,14 @@ Homebrew God keeps runtime code, game data, tests, documentation, and static ass
 | Character Creator | `characterCreator/` | Creator coordinator, steps, validation, rules, rendering, and creator persistence |
 | Character Sheet | `characterSheet/` | Playable sheet UI, gameplay state, and sheet persistence |
 | Monster Creator | `monsters/` | Monster creation and monster persistence |
+| Battle Map | `battleMap/` | Measurement, targeting templates, casting sessions, elevation, and token collision |
 | Token system | `tokens/` | Token state, synchronization, and token interactions |
+| Visual effects | `vfx/` | Presentation-only effect lifecycle, rendering, particles, sprites, and persistent visuals |
 | Shared code | `shared/` | Realtime-listener lifecycle and security-aware persistence used by multiple features |
 | Game data | `data/` | Built-in classes, subclasses, feats, spells, species/background content, and the 2014 ruleset |
 | Static assets | `assets/` | Styles and future images or static media |
 
-The Battle Map currently remains part of `app.js` because it shares the room lifecycle, DOM registry, and realtime listeners owned by the application shell. There are no independent Battle Map source files to group yet. Extracting it requires a behavior-preserving feature change and is intentionally not disguised as a simple file move.
+The application shell still owns Battle Map room lifecycle and DOM wiring. Reusable measurement, targeting, collision, and visual-effect behavior stays in the `battleMap/` and `vfx/` modules so it can be tested without owning game state.
 
 ## Tests and documentation
 

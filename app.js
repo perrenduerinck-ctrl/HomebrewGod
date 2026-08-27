@@ -68,6 +68,10 @@ import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=stage8-20260826";
 import {
+  createBattleMapEffectEngine,
+  normalizeEffectsMode
+} from "./vfx/effectEngine.js?v=vfx-core-stage1-20260827";
+import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
 import {
@@ -212,6 +216,8 @@ const E = {
     $("templateClearButton"),
   templateStatus:
     $("templateStatus"),
+  battleVfxModeSelect:
+    $("battleVfxModeSelect"),
   spellTemplateSelect:
     $("spellTemplateSelect"),
   loadSpellTemplateButton:
@@ -296,6 +302,9 @@ let hasMigratedLegacyPuzzleTiles = false;
 let battleZoom = 1;
 let battleMapRuler = null;
 let battleMapTemplates = null;
+let battleMapVfx = null;
+const BATTLE_VFX_MODE_STORAGE_KEY =
+  "homebrewGodBattleVfxMode";
 let activeSpellTemplateInstruction = null;
 let activeSpellCastingSession = null;
 let activeSpellCastingCasterPoint = null;
@@ -2828,6 +2837,7 @@ syncBattleManagerVisibility();
 ensurePuzzleDragListeners();
 initializeBattleMapRuler();
 initializeBattleMapTemplates();
+initializeBattleMapVfx();
 
 
 // =====================================================
@@ -4195,6 +4205,86 @@ function initializeBattleMapTemplates() {
 
 
 // =====================================================
+// APP SECTION 12A.3 — BATTLE-MAP VISUAL EFFECTS
+// Presentation only: no spell resolution or game state lives here.
+// =====================================================
+
+function getInitialBattleMapVfxMode() {
+  try {
+    const stored = localStorage.getItem(
+      BATTLE_VFX_MODE_STORAGE_KEY
+    );
+    const normalized = normalizeEffectsMode(
+      stored
+    );
+    if (
+      stored &&
+      normalized === stored.trim().toLowerCase()
+    ) {
+      return normalized;
+    }
+  } catch {
+    // Storage may be unavailable in privacy-restricted browsers.
+  }
+
+  return window.matchMedia?.(
+    "(prefers-reduced-motion: reduce)"
+  ).matches
+    ? "reduced"
+    : "full";
+}
+
+function setStoredBattleMapVfxMode(mode) {
+  try {
+    localStorage.setItem(
+      BATTLE_VFX_MODE_STORAGE_KEY,
+      mode
+    );
+  } catch {
+    // The setting still applies for this page when storage is blocked.
+  }
+}
+
+function initializeBattleMapVfx() {
+  if (
+    battleMapVfx ||
+    !E.battleMapSurface
+  ) {
+    return battleMapVfx;
+  }
+
+  const mode = getInitialBattleMapVfxMode();
+  battleMapVfx = createBattleMapEffectEngine({
+    surface: E.battleMapSurface,
+    getTargetElement: getActiveRulerTarget,
+    getScale: () => battleZoom,
+    mode
+  });
+  battleMapVfx.connect();
+
+  if (E.battleVfxModeSelect) {
+    E.battleVfxModeSelect.value = mode;
+    E.battleVfxModeSelect.addEventListener(
+      "change",
+      function () {
+        const selectedMode =
+          battleMapVfx.setMode(
+            E.battleVfxModeSelect.value
+          );
+        E.battleVfxModeSelect.value =
+          selectedMode;
+        setStoredBattleMapVfxMode(
+          selectedMode
+        );
+      }
+    );
+  }
+
+  return battleMapVfx;
+}
+
+
+// =====================================================
 // APP SECTION 12B — BATTLE MANAGER POLISH STYLES
 // Keeps Battle Manager UI above map tokens
 // =====================================================
@@ -4925,6 +5015,7 @@ function showPuzzleBoardView() {
 
   battleMapRuler?.refresh();
   battleMapTemplates?.refresh();
+  battleMapVfx?.refresh();
 }
 
 function showSingleBattleMapView() {
@@ -4938,6 +5029,7 @@ function showSingleBattleMapView() {
 
   battleMapRuler?.refresh();
   battleMapTemplates?.refresh();
+  battleMapVfx?.refresh();
 }
 
 function keepTokenLayerReadyForExternalFile() {
@@ -5815,6 +5907,7 @@ function showAnyMainScreen(screenName) {
   if (screenName === "battle") {
     battleMapRuler?.refresh();
     battleMapTemplates?.refresh();
+    battleMapVfx?.refresh();
   }
 
   syncRealtimeListenersForScreen(screenName);
@@ -5835,6 +5928,7 @@ function applyBattleZoom() {
   text(E.battleZoomText, Math.round(battleZoom * 100) + "%");
   battleMapRuler?.refresh();
   battleMapTemplates?.refresh();
+  battleMapVfx?.refresh();
 }
 
 function openToolTab(viewName) {
@@ -6224,6 +6318,7 @@ window.addEventListener("pagehide", function () {
   characterCreatorSystem?.cleanupListeners?.();
   monsterCreatorSystem?.cleanupListeners?.();
   tokenSystem?.stopTokenListener?.();
+  battleMapVfx?.destroy();
   removeActivePlayerSession();
 });
 
@@ -6348,6 +6443,54 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
               monsterCreatorSystem?.getListenerSnapshot?.() ||
               null
           };
+        },
+
+      playVfxTest:
+        function (options = {}) {
+          const overlay =
+            battleMapVfx?.getOverlayElement();
+          const result = battleMapVfx?.play({
+            type:
+              options.type ||
+              "procedural-pulse",
+            position:
+              options.position || {
+                x:
+                  Math.max(
+                    1,
+                    overlay?.clientWidth || 1
+                  ) / 2,
+                y:
+                  Math.max(
+                    1,
+                    overlay?.clientHeight || 1
+                  ) / 2
+              },
+            duration:
+              options.duration ?? 250,
+            delay:
+              options.delay ?? 0,
+            intensity:
+              options.intensity ?? 1,
+            particles:
+              options.particles || null
+          }) || {
+            ok: false,
+            skipped: true,
+            reason: "engine-unavailable"
+          };
+
+          return {
+            ok: result.ok,
+            skipped: result.skipped,
+            reason: result.reason || "",
+            id: result.id || ""
+          };
+        },
+
+      getVfxState:
+        function () {
+          return battleMapVfx?.getState() || null;
         },
 
       beginSpellCast:
