@@ -136,8 +136,12 @@ test("only a locked in-range target can confirm and spend a slot", async () => {
 });
 
 test("failed persistence returns to target-selected without consuming resources", async () => {
+  let confirmedEvents = 0;
   const session = createSpellCastingSession({
-    onConfirm: () => false
+    onConfirm: () => false,
+    onConfirmed: () => {
+      confirmedEvents += 1;
+    }
   });
 
   session.begin({
@@ -170,6 +174,64 @@ test("failed persistence returns to target-selected without consuming resources"
     session.getState().confirmationError,
     /no resource was spent/i
   );
+  assert.equal(confirmedEvents, 0);
+});
+
+test("presentation runs once after confirmation and cannot break the cast", async () => {
+  const calls = [];
+  const session = createSpellCastingSession({
+    onConfirm: () => ({ saved: true }),
+    onConfirmed: (confirmed) => {
+      calls.push(confirmed);
+      throw new Error("expected presentation failure");
+    }
+  });
+
+  session.begin({
+    spell: getDefaultSpellById("burning-hands"),
+    characterId: "wizard-1",
+    casterToken: { id: "wizard-token" },
+    slotOptions: [{
+      kind: "normal",
+      level: 1,
+      sourceId: "",
+      remaining: 1
+    }]
+  });
+  session.updateTarget({
+    locked: false,
+    validRange: true
+  });
+  assert.equal(calls.length, 0);
+  session.updateTarget({
+    locked: true,
+    validRange: true,
+    geometry: {
+      shape: "cone"
+    }
+  });
+  assert.equal(calls.length, 0);
+
+  const result = await session.confirm({
+    kind: "normal",
+    level: 1,
+    sourceId: ""
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.state.phase, "confirmed");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].state.phase, "confirmed");
+  assert.equal(calls[0].spell.id, "burning-hands");
+  assert.equal(calls[0].casterToken.id, "wizard-token");
+
+  const repeated = await session.confirm({
+    kind: "normal",
+    level: 1,
+    sourceId: ""
+  });
+  assert.equal(repeated.ok, false);
+  assert.equal(calls.length, 1);
 });
 
 test("resolution reports concentration and attack/save mechanics without rolling", () => {

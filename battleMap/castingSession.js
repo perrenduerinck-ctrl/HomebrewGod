@@ -121,7 +121,8 @@ export function createCastResolution({
 }
 
 export function createSpellCastingSession({
-  onConfirm = () => true
+  onConfirm = () => true,
+  onConfirmed = () => {}
 } = {}) {
   let phase = "idle";
   let spell = null;
@@ -322,13 +323,29 @@ export function createSpellCastingSession({
         spellAttackBonus
       });
       phase = "confirmed";
+      const confirmedState = getState();
+
+      try {
+        const presentationResult = onConfirmed({
+          spell,
+          slot,
+          target,
+          characterId,
+          casterToken,
+          resolution,
+          state: confirmedState
+        });
+        presentationResult?.catch?.(() => {});
+      } catch {
+        // Presentation callbacks must never change a confirmed cast.
+      }
 
       return Object.freeze({
         ok: true,
         slot,
         resolution,
         result,
-        state: getState()
+        state: confirmedState
       });
     } catch (error) {
       phase = "target-selected";
