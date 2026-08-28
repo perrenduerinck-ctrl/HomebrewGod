@@ -379,4 +379,28 @@ test("single images and sprite sheets share bounded sprite animation options", (
       backgroundPosition: "-128px 0px"
     }
   );
+
+  const grid = normalizeSpriteOptions({
+    src: "fire-impact.png",
+    frameWidth: 160,
+    frameHeight: 160,
+    frameCount: 16,
+    columns: 4
+  });
+  assert.equal(grid.columns, 4);
+  assert.deepEqual(
+    getSpriteFrameStyle(grid, 6),
+    {
+      width: "160px",
+      height: "160px",
+      backgroundPosition: "-320px -160px"
+    }
+  );
+  assert.equal(
+    normalizeSpriteOptions({
+      frameCount: 3,
+      columns: 999
+    }).columns,
+    3
+  );
 });

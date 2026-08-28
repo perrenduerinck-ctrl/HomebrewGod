@@ -1,3 +1,7 @@
+import {
+  FIRE_EFFECT_DEFINITIONS
+} from "./fireEffects.js?v=vfx-fire-stage5-20260828";
+
 const EFFECT_KINDS = Object.freeze([
   "procedural",
   "sprite"
@@ -108,7 +112,8 @@ export function createDefaultEffectRegistry() {
       id: "sprite",
       kind: "sprite",
       className: "sprite"
-    }
+    },
+    ...FIRE_EFFECT_DEFINITIONS
   ]);
 }
 

@@ -70,14 +70,14 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=vfx-core-stage1-20260827";
+} from "./vfx/effectEngine.js?v=vfx-fire-stage5-20260828";
 import {
   createSpellVfxEvent,
   dispatchConfirmedSpellVfxEvent
 } from "./vfx/castEvent.js?v=vfx-cast-stage2-20260827";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=vfx-casting-sequence-stage4-20260828";
+} from "./vfx/castingSequence.js?v=vfx-fire-stage5-20260828";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";

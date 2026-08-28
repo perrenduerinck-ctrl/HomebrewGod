@@ -1,3 +1,7 @@
+import {
+  FIRE_CASTING_SEQUENCE_DEFINITIONS
+} from "./fireEffects.js?v=vfx-fire-stage5-20260828";
+
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
   "charge",
@@ -239,9 +243,9 @@ function matchesSequence(definition, event = {}) {
 function matchScore(definition) {
   return (
     definition.priority +
-    definition.match.spellIds.length * 1000 +
-    definition.match.deliveryTypes.length * 100 +
-    definition.match.damageTypes.length * 10
+    (definition.match.spellIds.length ? 1000 : 0) +
+    (definition.match.deliveryTypes.length ? 100 : 0) +
+    (definition.match.damageTypes.length ? 10 : 0)
   );
 }
 
@@ -400,9 +404,16 @@ export const DEFAULT_CASTING_SEQUENCES = Object.freeze([
   }))
 ]);
 
+export const DEFAULT_FIRE_CASTING_SEQUENCES = Object.freeze(
+  FIRE_CASTING_SEQUENCE_DEFINITIONS.map(defineCastingSequence)
+);
+
 export function createDefaultCastingSequenceRegistry() {
   return createCastingSequenceRegistry(
-    DEFAULT_CASTING_SEQUENCES
+    [
+      ...DEFAULT_CASTING_SEQUENCES,
+      ...DEFAULT_FIRE_CASTING_SEQUENCES
+    ]
   );
 }
 

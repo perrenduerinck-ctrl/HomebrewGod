@@ -3044,6 +3044,10 @@ test(
       .toBeGreaterThan(0);
     expect(confirmedVfx.sequenceState.activeCount)
       .toBe(1);
+    expect(
+      confirmedVfx.sequenceState
+        .sequences[0].definitionId
+    ).toBe("fire-directional");
     expect([
       "charge",
       "release",
@@ -3054,8 +3058,11 @@ test(
       confirmedVfx.sequenceState
         .sequences[0].phase
     );
+    expect(confirmedVfx.state.effects.every(
+      ({ type }) => type.startsWith("fire-")
+    )).toBe(true);
     expect(await page.locator(
-      '.hg-map-vfx-effect[data-effect-type="procedural-pulse"]'
+      '.hg-map-vfx-effect[data-effect-type^="fire-"]'
     ).count()).toBeGreaterThan(0);
     await expect(page.locator(
       ".hg-map-vfx-effect"

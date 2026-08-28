@@ -79,6 +79,7 @@ test("runtime areas, data, assets, tests, and documentation have explicit homes"
     "vfx/effectEngine.js",
     "vfx/effectRegistry.js",
     "vfx/effectRenderer.js",
+    "vfx/fireEffects.js",
     "vfx/particles.js",
     "vfx/persistentEffects.js",
     "vfx/spriteAnimator.js"
@@ -117,7 +118,7 @@ test("the application and import map use the organized runtime paths", () => {
   });
   assert.match(
     index,
-    /\.\/assets\/styles\/app\.css\?v=vfx-core-stage1-20260827/
+    /\.\/assets\/styles\/app\.css\?v=vfx-fire-stage5-20260828/
   );
   assert.doesNotMatch(
     `${app}\n${index}`,
