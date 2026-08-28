@@ -76,6 +76,9 @@ import {
   dispatchConfirmedSpellVfxEvent
 } from "./vfx/castEvent.js?v=vfx-cast-stage2-20260827";
 import {
+  createCastingSequenceSystem
+} from "./vfx/castingSequence.js?v=vfx-casting-sequence-stage4-20260828";
+import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
 import {
@@ -308,6 +311,7 @@ let battleZoom = 1;
 let battleMapRuler = null;
 let battleMapTemplates = null;
 let battleMapVfx = null;
+let battleMapVfxSequences = null;
 const BATTLE_VFX_MODE_STORAGE_KEY =
   "homebrewGodBattleVfxMode";
 let activeSpellTemplateInstruction = null;
@@ -3644,26 +3648,17 @@ function handleConfirmedSpellVfx({
     dispatchConfirmedSpellVfxEvent(
       castEvent
     );
-    (
+    const vfxEngine = (
       battleMapVfx ||
       initializeBattleMapVfx()
-    )?.play({
-      type: "procedural-pulse",
-      position:
-        castEvent.targetPoint ||
-        castEvent.casterPoint,
-      elevation: castEvent.targetElevation,
-      intensity: castEvent.intensity,
-      duration: 900,
-      metadata: {
-        eventType: "confirmed-cast",
-        spellId: castEvent.spellId,
-        casterTokenId:
-          castEvent.casterTokenId,
-        deliveryType:
-          castEvent.deliveryType
-      }
-    });
+    );
+    if (vfxEngine && !battleMapVfxSequences) {
+      battleMapVfxSequences =
+        createCastingSequenceSystem({
+          effectEngine: vfxEngine
+        });
+    }
+    battleMapVfxSequences?.play(castEvent);
     return castEvent;
   } catch {
     // VFX is presentation-only and cannot change cast resolution.
@@ -4251,6 +4246,10 @@ function initializeBattleMapVfx() {
     getScale: () => battleZoom,
     mode
   });
+  battleMapVfxSequences =
+    createCastingSequenceSystem({
+      effectEngine: battleMapVfx
+    });
   battleMapVfx.connect();
 
   if (E.battleVfxModeSelect) {
@@ -4267,6 +4266,11 @@ function initializeBattleMapVfx() {
         setStoredBattleMapVfxMode(
           selectedMode
         );
+        if (selectedMode === "off") {
+          battleMapVfxSequences?.clear(
+            "effects-off"
+          );
+        }
       }
     );
   }
@@ -6306,6 +6310,8 @@ window.addEventListener("pagehide", function () {
   characterCreatorSystem?.cleanupListeners?.();
   monsterCreatorSystem?.cleanupListeners?.();
   tokenSystem?.stopTokenListener?.();
+  battleMapVfxSequences?.destroy();
+  battleMapVfxSequences = null;
   battleMapVfx?.destroy();
   removeActivePlayerSession();
 });
@@ -6479,6 +6485,12 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       getVfxState:
         function () {
           return battleMapVfx?.getState() || null;
+        },
+
+      getVfxSequenceState:
+        function () {
+          return battleMapVfxSequences
+            ?.getState() || null;
         },
 
       beginSpellCast:
