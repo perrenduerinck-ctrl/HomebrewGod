@@ -70,6 +70,7 @@ test("runtime areas, data, assets, tests, and documentation have explicit homes"
     "shared/securityPersistence.js",
     "tokens/index.js",
     "vfx/castEvent.js",
+    "vfx/castingSequence.js",
     "vfx/damageTypes/elemental.js",
     "vfx/damageTypes/index.js",
     "vfx/damageTypes/mystic.js",
@@ -107,6 +108,7 @@ test("the application and import map use the organized runtime paths", () => {
     "./shared/securityPersistence.js",
     "./tokens/index.js",
     "./vfx/castEvent.js",
+    "./vfx/castingSequence.js",
     "./vfx/effectEngine.js"
   ].forEach((specifier) => {
     assert.match(`${app}\n${index}`, new RegExp(

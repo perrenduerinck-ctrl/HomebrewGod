@@ -3003,7 +3003,10 @@ test(
         window.__RELEASE_TEST_CAST_VFX_EVENTS__,
       state:
         window.__HOMEBREW_GOD_RELEASE_TEST__
-          .getVfxState()
+          .getVfxState(),
+      sequenceState:
+        window.__HOMEBREW_GOD_RELEASE_TEST__
+          .getVfxSequenceState()
     }));
     expect(confirmedVfx.events).toHaveLength(1);
     expect(confirmedVfx.events[0]).toMatchObject({
@@ -3037,13 +3040,30 @@ test(
         confirmedVfx.events[0].affectedTokens
       )
     ).toBe(true);
-    expect(confirmedVfx.state.activeCount).toBe(1);
-    await expect(page.locator(
+    expect(confirmedVfx.state.activeCount)
+      .toBeGreaterThan(0);
+    expect(confirmedVfx.sequenceState.activeCount)
+      .toBe(1);
+    expect([
+      "charge",
+      "release",
+      "travel",
+      "impact",
+      "aftermath"
+    ]).toContain(
+      confirmedVfx.sequenceState
+        .sequences[0].phase
+    );
+    expect(await page.locator(
       '.hg-map-vfx-effect[data-effect-type="procedural-pulse"]'
-    )).toHaveCount(1);
+    ).count()).toBeGreaterThan(0);
     await expect(page.locator(
       ".hg-map-vfx-effect"
     )).toHaveCount(0, { timeout: 5000 });
+    await expect.poll(() => page.evaluate(() => (
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getVfxSequenceState()?.activeCount || 0
+    ))).toBe(0);
     expect(await page.evaluate(() => (
       window.__RELEASE_TEST_CAST_VFX_EVENTS__.length
     ))).toBe(1);
