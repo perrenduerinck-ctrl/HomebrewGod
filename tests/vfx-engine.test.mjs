@@ -18,6 +18,7 @@ import {
   createPersistentEffectStore
 } from "../vfx/persistentEffects.js";
 import {
+  createSpriteAnimator,
   getSpriteFrameStyle,
   normalizeSpriteOptions
 } from "../vfx/spriteAnimator.js";
@@ -60,6 +61,30 @@ function createScheduler() {
     now: () => timestamp,
     pending: () => tasks.size,
     setTimeout
+  };
+}
+
+function createFrameHarness() {
+  let nextHandle = 1;
+  const callbacks = new Map();
+
+  return {
+    cancel: (handle) => callbacks.delete(handle),
+    pending: () => callbacks.size,
+    request(callback) {
+      const handle = nextHandle++;
+      callbacks.set(handle, callback);
+      return handle;
+    },
+    step(timestamp) {
+      const scheduled = Array.from(
+        callbacks.values()
+      );
+      callbacks.clear();
+      scheduled.forEach((callback) => {
+        callback(timestamp);
+      });
+    }
   };
 }
 
@@ -225,16 +250,16 @@ test("off mode skips safely and changing to off clears active effects", () => {
   );
 });
 
-test("render failures and unknown effect ids never escape the engine", () => {
+test("procedural and sprite render failures never escape the engine", () => {
   const renderer = createRenderer({ failRender: true });
   const engine = createEffectEngine({ renderer });
 
-  assert.doesNotThrow(() => {
-    const failed = engine.play({
-      type: "procedural-pulse"
+  ["procedural-pulse", "sprite"].forEach((type) => {
+    assert.doesNotThrow(() => {
+      const failed = engine.play({ type });
+      assert.equal(failed.ok, false);
+      assert.equal(failed.skipped, true);
     });
-    assert.equal(failed.ok, false);
-    assert.equal(failed.skipped, true);
   });
   assert.equal(engine.getState().activeCount, 0);
   assert.equal(
@@ -371,6 +396,9 @@ test("single images and sprite sheets share bounded sprite animation options", (
   assert.equal(normalized.frameCount, 240);
   assert.equal(normalized.framesPerSecond, 60);
   assert.equal(normalized.loops, 100);
+  assert.equal(normalized.columns, 240);
+  assert.equal(normalized.rows, 1);
+  assert.equal(normalized.loop, false);
   assert.deepEqual(
     getSpriteFrameStyle(normalized, 2),
     {
@@ -385,9 +413,13 @@ test("single images and sprite sheets share bounded sprite animation options", (
     frameWidth: 160,
     frameHeight: 160,
     frameCount: 16,
-    columns: 4
+    columns: 4,
+    rows: 4,
+    loop: false
   });
   assert.equal(grid.columns, 4);
+  assert.equal(grid.rows, 4);
+  assert.equal(grid.removeOnComplete, true);
   assert.deepEqual(
     getSpriteFrameStyle(grid, 6),
     {
@@ -403,4 +435,133 @@ test("single images and sprite sheets share bounded sprite animation options", (
     }).columns,
     3
   );
+  assert.deepEqual(
+    normalizeSpriteOptions({
+      frameCount: 15,
+      rows: 3
+    }),
+    {
+      src: "",
+      frameWidth: 64,
+      frameHeight: 64,
+      frameCount: 15,
+      columns: 5,
+      rows: 3,
+      framesPerSecond: 24,
+      loops: 1,
+      loop: false,
+      removeOnComplete: true
+    }
+  );
+});
+
+test("multi-row sprite playback advances rows and cleans up one-shots", () => {
+  const frames = createFrameHarness();
+  let removed = 0;
+  let completed = 0;
+  const element = {
+    style: {},
+    remove: () => {
+      removed += 1;
+    }
+  };
+  const animator = createSpriteAnimator({
+    element,
+    options: {
+      src: "transparent-fire.png",
+      frameWidth: 160,
+      frameHeight: 160,
+      frameCount: 16,
+      columns: 4,
+      rows: 4,
+      framesPerSecond: 10,
+      loop: false
+    },
+    requestFrame: (callback) => (
+      frames.request(callback)
+    ),
+    cancelFrame: (handle) => frames.cancel(handle),
+    onComplete: () => {
+      completed += 1;
+      throw new Error("observer failures stay presentation-only");
+    }
+  });
+
+  assert.equal(
+    element.style.backgroundImage,
+    'url("transparent-fire.png")'
+  );
+  assert.equal(element.style.backgroundSize, "640px 640px");
+  assert.equal(animator.start(), true);
+  frames.step(0);
+  assert.equal(element.style.backgroundPosition, "0px 0px");
+  frames.step(600);
+  assert.equal(
+    element.style.backgroundPosition,
+    "-320px -160px"
+  );
+  assert.doesNotThrow(() => frames.step(1600));
+  assert.equal(animator.getState().running, false);
+  assert.equal(animator.getState().completed, true);
+  assert.equal(animator.start(), false);
+  assert.equal(element.style.backgroundImage, "none");
+  assert.equal(element.style.backgroundSize, "auto");
+  assert.equal(removed, 1);
+  assert.equal(completed, 1);
+  assert.equal(frames.pending(), 0);
+});
+
+test("looping WebP sprites stay bounded by explicit engine cleanup", () => {
+  const frames = createFrameHarness();
+  let removed = 0;
+  let completed = 0;
+  const element = {
+    style: {},
+    remove: () => {
+      removed += 1;
+    }
+  };
+  const animator = createSpriteAnimator({
+    element,
+    options: {
+      src: "neutral-glow.webp",
+      frameWidth: 64,
+      frameHeight: 64,
+      frameCount: 4,
+      columns: 2,
+      rows: 2,
+      framesPerSecond: 10,
+      loop: true,
+      removeOnComplete: true
+    },
+    requestFrame: (callback) => (
+      frames.request(callback)
+    ),
+    cancelFrame: (handle) => frames.cancel(handle),
+    onComplete: () => {
+      completed += 1;
+    }
+  });
+
+  assert.equal(animator.getState().options.loop, true);
+  assert.equal(
+    animator.getState().options.removeOnComplete,
+    false
+  );
+  animator.start();
+  frames.step(0);
+  frames.step(1000);
+  assert.equal(
+    element.style.backgroundPosition,
+    "0px -64px"
+  );
+  assert.equal(animator.getState().running, true);
+  assert.equal(removed, 0);
+  assert.equal(completed, 0);
+  animator.destroy();
+  assert.equal(animator.getState().running, false);
+  assert.equal(animator.getState().destroyed, true);
+  assert.equal(animator.start(), false);
+  assert.equal(element.style.backgroundImage, "none");
+  assert.equal(frames.pending(), 0);
 });

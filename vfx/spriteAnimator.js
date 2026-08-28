@@ -21,12 +21,44 @@ export function normalizeSpriteOptions(
     1,
     MAX_SPRITE_FRAMES
   );
-  const columns = clamp(
-    Math.round(
-      finiteNumber(options.columns) ?? frameCount
-    ),
-    1,
-    frameCount
+  const requestedColumns = finiteNumber(
+    options.columns
+  );
+  const requestedRows = finiteNumber(
+    options.rows
+  );
+  let columns = frameCount;
+  let rows = 1;
+
+  if (requestedColumns !== null) {
+    columns = clamp(
+      Math.round(requestedColumns),
+      1,
+      frameCount
+    );
+    rows = clamp(
+      Math.round(
+        requestedRows ??
+        Math.ceil(frameCount / columns)
+      ),
+      Math.ceil(frameCount / columns),
+      frameCount
+    );
+  } else if (requestedRows !== null) {
+    rows = clamp(
+      Math.round(requestedRows),
+      1,
+      frameCount
+    );
+    columns = Math.ceil(frameCount / rows);
+  }
+  const loop = options.loop === true;
+  const removeOnComplete = !loop && (
+    options.removeOnComplete === true ||
+    (
+      options.removeOnComplete !== false &&
+      frameCount > 1
+    )
   );
 
   return Object.freeze({
@@ -47,6 +79,7 @@ export function normalizeSpriteOptions(
     ),
     frameCount,
     columns,
+    rows,
     framesPerSecond: clamp(
       finiteNumber(options.framesPerSecond) ?? 24,
       1,
@@ -58,7 +91,9 @@ export function normalizeSpriteOptions(
       ),
       1,
       100
-    )
+    ),
+    loop,
+    removeOnComplete
   });
 }
 
@@ -117,12 +152,16 @@ export function createSpriteAnimator({
     ? cancelFrame
     : fallbackCancel;
   const totalFrames =
-    normalized.frameCount * normalized.loops;
+    normalized.loop
+      ? Infinity
+      : normalized.frameCount * normalized.loops;
   const frameDuration =
     1000 / normalized.framesPerSecond;
   let frameHandle = null;
   let startedAt = null;
   let running = false;
+  let completed = false;
+  let destroyed = false;
 
   element.style.backgroundImage = normalized.src
     ? `url(${JSON.stringify(normalized.src)})`
@@ -130,9 +169,16 @@ export function createSpriteAnimator({
   element.style.backgroundRepeat = "no-repeat";
   element.style.backgroundSize =
     `${normalized.frameWidth * normalized.columns}px ` +
-    `${normalized.frameHeight * Math.ceil(
-      normalized.frameCount / normalized.columns
-    )}px`;
+    `${normalized.frameHeight * normalized.rows}px`;
+
+  function clearSprite() {
+    try {
+      element.style.backgroundImage = "none";
+      element.style.backgroundSize = "auto";
+    } catch {
+      // A failed visual adapter must not affect spell resolution.
+    }
+  }
 
   function applyFrame(frameIndex) {
     const style = getSpriteFrameStyle(
@@ -166,7 +212,20 @@ export function createSpriteAnimator({
     if (absoluteFrame >= totalFrames) {
       applyFrame(normalized.frameCount - 1);
       stop();
-      onComplete();
+      completed = true;
+      if (normalized.removeOnComplete) {
+        clearSprite();
+        try {
+          element.remove?.();
+        } catch {
+          // The engine still owns the outer effect cleanup timer.
+        }
+      }
+      try {
+        onComplete();
+      } catch {
+        // Presentation observers cannot break animation cleanup.
+      }
       return;
     }
 
@@ -177,8 +236,16 @@ export function createSpriteAnimator({
   }
 
   function start() {
-    if (running) return false;
+    if (
+      running ||
+      destroyed ||
+      (
+        completed &&
+        normalized.removeOnComplete
+      )
+    ) return false;
     running = true;
+    completed = false;
     startedAt = null;
     applyFrame(0);
     frameHandle = schedule(tick);
@@ -187,13 +254,15 @@ export function createSpriteAnimator({
 
   function destroy() {
     stop();
-    element.style.backgroundImage = "none";
-    element.style.backgroundSize = "auto";
+    destroyed = true;
+    clearSprite();
   }
 
   return Object.freeze({
     destroy,
     getState: () => Object.freeze({
+      completed,
+      destroyed,
       running,
       options: normalized
     }),

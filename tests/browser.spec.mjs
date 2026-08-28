@@ -3296,6 +3296,49 @@ test(
       "--hg-vfx-scale",
       "1.25"
     );
+
+    const spritePlayed = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest({
+        type: "fire-impact-sprite",
+        duration: 2000,
+        scale: 1.2,
+        rotation: 30,
+        opacity: 0.6
+      }));
+    expect(spritePlayed.ok).toBe(true);
+    const spriteEffect = layer.locator(
+      `[data-effect-id="${spritePlayed.id}"]`
+    );
+    await expect(spriteEffect).toHaveAttribute(
+      "data-effect-kind",
+      "sprite"
+    );
+    await expect(spriteEffect).toHaveCSS(
+      "--hg-vfx-scale",
+      "1.5"
+    );
+    await expect(spriteEffect).toHaveCSS(
+      "--hg-vfx-rotation",
+      "30deg"
+    );
+    await expect(spriteEffect).toHaveCSS(
+      "opacity",
+      "0.6"
+    );
+    const spriteNode = spriteEffect.locator(
+      ".hg-vfx-sprite"
+    );
+    await expect(spriteNode).toHaveCount(1);
+    await expect(spriteNode).toHaveCSS(
+      "background-size",
+      "640px 640px"
+    );
+    await expect(spriteNode).toHaveCount(0, {
+      timeout: 1500
+    });
+    await expect(spriteEffect).toHaveCount(1);
+
     await expect.poll(async () => {
       const [vfxBox, viewerBox] = await Promise.all([
         layer.boundingBox(),
