@@ -70,7 +70,7 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=vfx-fire-stage5-20260828";
+} from "./vfx/effectEngine.js?v=vfx-sprite-phase-a-20260828";
 import {
   createSpellVfxEvent,
   dispatchConfirmedSpellVfxEvent
@@ -6466,8 +6466,16 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
               options.delay ?? 0,
             intensity:
               options.intensity ?? 1,
+            scale:
+              options.scale ?? 1,
+            rotation:
+              options.rotation ?? 0,
+            opacity:
+              options.opacity ?? 1,
             particles:
-              options.particles || null
+              options.particles || null,
+            sprite:
+              options.sprite || null
           }) || {
             ok: false,
             skipped: true,

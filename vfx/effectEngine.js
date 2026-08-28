@@ -1,9 +1,9 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=vfx-fire-stage5-20260828";
+} from "./effectRegistry.js?v=vfx-sprite-phase-a-20260828";
 import {
   createEffectRenderer
-} from "./effectRenderer.js";
+} from "./effectRenderer.js?v=vfx-sprite-phase-a-20260828";
 import {
   createPersistentEffectStore,
   MAX_PERSISTENT_LIFETIME_MS

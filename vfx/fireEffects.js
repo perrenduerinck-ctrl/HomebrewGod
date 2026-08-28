@@ -125,8 +125,11 @@ export const FIRE_EFFECT_DEFINITIONS = Object.freeze([
       frameHeight: 160,
       frameCount: 16,
       columns: 4,
+      rows: 4,
       framesPerSecond: 18,
-      loops: 1
+      loops: 1,
+      loop: false,
+      removeOnComplete: true
     }
   })
 ]);

@@ -152,7 +152,10 @@ test("the supplied fire artwork is used as an optional 4 by 4 impact sheet", () 
   );
   assert.equal(sprite.sprite.frameCount, 16);
   assert.equal(sprite.sprite.columns, 4);
+  assert.equal(sprite.sprite.rows, 4);
   assert.equal(sprite.sprite.loops, 1);
+  assert.equal(sprite.sprite.loop, false);
+  assert.equal(sprite.sprite.removeOnComplete, true);
 });
 
 test("the fire slice has procedural styles without mandatory image assets", () => {
