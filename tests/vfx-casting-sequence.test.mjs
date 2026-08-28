@@ -116,9 +116,9 @@ test("Fireball, Lightning Bolt, and Burning Hands resolve declaratively", () => 
     spell: getDefaultSpellById("burning-hands")
   });
 
-  assert.equal(registry.resolve(fireball).id, "generic-burst");
+  assert.equal(registry.resolve(fireball).id, "fire-burst");
   assert.equal(registry.resolve(lightningBolt).id, "generic-line");
-  assert.equal(registry.resolve(burningHands).id, "generic-cone");
+  assert.equal(registry.resolve(burningHands).id, "fire-directional");
   assert.deepEqual(
     registry.resolve(fireball).phases.map(({ phase }) => phase),
     ["charge", "release", "travel", "impact", "aftermath", "cleanup"]
@@ -155,15 +155,24 @@ test("a casting sequence advances in order and uses authoritative event points",
   scheduler.advance(result.definition.totalDuration);
   assert.deepEqual(phases, CASTING_SEQUENCE_PHASES);
   const requests = effectEngine.getStats().requests;
-  assert.deepEqual(requests[2].startPosition, event.casterPoint);
-  assert.deepEqual(requests[2].endPosition, event.targetPoint);
-  assert.equal(requests[2].metadata.phase, "travel");
-  assert.equal(requests[3].metadata.phase, "impact");
-  assert.deepEqual(requests[3].position, event.targetPoint);
+  const travel = requests.find((request) => (
+    request.metadata.phase === "travel" &&
+    request.startPosition &&
+    request.endPosition
+  ));
+  const impact = requests.find((request) => (
+    request.metadata.phase === "impact"
+  ));
+  assert.deepEqual(travel.startPosition, event.casterPoint);
+  assert.deepEqual(travel.endPosition, event.targetPoint);
+  assert.deepEqual(impact.position, event.targetPoint);
   assert.equal(requests.every(({ intensity }) => intensity === 3), true);
   assert.equal(system.getState().activeCount, 0);
   assert.equal(scheduler.pending(), 0);
-  assert.equal(effectEngine.getStats().cancelled.length, 5);
+  assert.equal(
+    effectEngine.getStats().cancelled.length,
+    requests.length
+  );
 });
 
 test("custom phases compose multiple bounded effects and affected-token impacts", () => {

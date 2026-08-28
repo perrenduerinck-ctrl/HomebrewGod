@@ -1,6 +1,6 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js";
+} from "./effectRegistry.js?v=vfx-fire-stage5-20260828";
 import {
   createEffectRenderer
 } from "./effectRenderer.js";

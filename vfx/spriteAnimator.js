@@ -14,6 +14,21 @@ const clamp = (value, minimum, maximum) => (
 export function normalizeSpriteOptions(
   options = {}
 ) {
+  const frameCount = clamp(
+    Math.round(
+      finiteNumber(options.frameCount) ?? 1
+    ),
+    1,
+    MAX_SPRITE_FRAMES
+  );
+  const columns = clamp(
+    Math.round(
+      finiteNumber(options.columns) ?? frameCount
+    ),
+    1,
+    frameCount
+  );
+
   return Object.freeze({
     src: String(options.src || "").trim(),
     frameWidth: clamp(
@@ -30,13 +45,8 @@ export function normalizeSpriteOptions(
       1,
       4096
     ),
-    frameCount: clamp(
-      Math.round(
-        finiteNumber(options.frameCount) ?? 1
-      ),
-      1,
-      MAX_SPRITE_FRAMES
-    ),
+    frameCount,
+    columns,
     framesPerSecond: clamp(
       finiteNumber(options.framesPerSecond) ?? 24,
       1,
@@ -64,11 +74,16 @@ export function getSpriteFrameStyle(
     0,
     normalized.frameCount - 1
   );
+  const column = frame % normalized.columns;
+  const row = Math.floor(
+    frame / normalized.columns
+  );
   return Object.freeze({
     width: `${normalized.frameWidth}px`,
     height: `${normalized.frameHeight}px`,
     backgroundPosition:
-      `${-frame * normalized.frameWidth}px 0px`
+      `${-column * normalized.frameWidth}px ` +
+      `${-row * normalized.frameHeight}px`
   });
 }
 
@@ -113,6 +128,11 @@ export function createSpriteAnimator({
     ? `url(${JSON.stringify(normalized.src)})`
     : "none";
   element.style.backgroundRepeat = "no-repeat";
+  element.style.backgroundSize =
+    `${normalized.frameWidth * normalized.columns}px ` +
+    `${normalized.frameHeight * Math.ceil(
+      normalized.frameCount / normalized.columns
+    )}px`;
 
   function applyFrame(frameIndex) {
     const style = getSpriteFrameStyle(
@@ -168,6 +188,7 @@ export function createSpriteAnimator({
   function destroy() {
     stop();
     element.style.backgroundImage = "none";
+    element.style.backgroundSize = "auto";
   }
 
   return Object.freeze({
