@@ -10,7 +10,7 @@ import {
   assertCharacterSerializedSize,
   normalizeCharacterTextFields
 } from "./fieldLimits.js?v=creator-fix-pass-20260730";
-import "./uiEnhancements.js?v=multiclass-flow-20260825";
+import "./uiEnhancements.js?v=dm-preview-class-state-20260829";
 
 const basePersistencePath =
   import.meta.url.includes(

@@ -97,19 +97,19 @@ import {
   createCatalogPage,
   CREATOR_CATALOG_BATCH_SIZE
 } from "./catalogPagination.js";
-import { createClassStep } from "./steps/classStep.js?v=multiclass-flow-20260825";
-import { createMulticlassStep } from "./steps/multiclassStep.js?v=multiclass-flow-20260825";
-import { createFeatsStep } from "./steps/featsStep.js?v=multiclass-flow-20260825";
-import { createSpeciesStep } from "./steps/speciesStep.js?v=multiclass-flow-20260825";
-import { createBackgroundStep } from "./steps/backgroundStep.js?v=multiclass-flow-20260825";
-import { createAbilitiesStep } from "./steps/abilitiesStep.js?v=multiclass-flow-20260825";
-import { createSkillsStep } from "./steps/skillsStep.js?v=multiclass-flow-20260825";
-import { createDescriptionStep } from "./steps/descriptionStep.js?v=multiclass-flow-20260825";
-import { createBasicsStep } from "./steps/basicsStep.js?v=multiclass-flow-20260825";
-import { createReviewStep } from "./steps/reviewStep.js?v=multiclass-flow-20260825";
-import { createFinishStep } from "./steps/finishStep.js?v=multiclass-flow-20260825";
-import { createEquipmentStep } from "./steps/equipmentStep.js?v=multiclass-flow-20260825";
-import { createSpellsStep } from "./steps/spellsStep.js?v=multiclass-flow-20260825";
+import { createClassStep } from "./steps/classStep.js?v=dm-preview-class-state-20260829";
+import { createMulticlassStep } from "./steps/multiclassStep.js?v=dm-preview-class-state-20260829";
+import { createFeatsStep } from "./steps/featsStep.js?v=dm-preview-class-state-20260829";
+import { createSpeciesStep } from "./steps/speciesStep.js?v=dm-preview-class-state-20260829";
+import { createBackgroundStep } from "./steps/backgroundStep.js?v=dm-preview-class-state-20260829";
+import { createAbilitiesStep } from "./steps/abilitiesStep.js?v=dm-preview-class-state-20260829";
+import { createSkillsStep } from "./steps/skillsStep.js?v=dm-preview-class-state-20260829";
+import { createDescriptionStep } from "./steps/descriptionStep.js?v=dm-preview-class-state-20260829";
+import { createBasicsStep } from "./steps/basicsStep.js?v=dm-preview-class-state-20260829";
+import { createReviewStep } from "./steps/reviewStep.js?v=dm-preview-class-state-20260829";
+import { createFinishStep } from "./steps/finishStep.js?v=dm-preview-class-state-20260829";
+import { createEquipmentStep } from "./steps/equipmentStep.js?v=dm-preview-class-state-20260829";
+import { createSpellsStep } from "./steps/spellsStep.js?v=dm-preview-class-state-20260829";
 import {
   calculateAbilityModifier,
   calculateAbilityModifiers,

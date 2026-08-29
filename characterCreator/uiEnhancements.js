@@ -732,12 +732,23 @@ function enhanceMulticlass(root) {
     ) || root;
 
   if (
-    panel.dataset
-      .hgMulticlassEnhanced ===
-      "true"
+    select.closest(
+      "[data-hg-multiclass-dialog]"
+    )
   ) {
     return;
   }
+
+  panel.querySelectorAll(
+    "[data-hg-multiclass-dialog]"
+  ).forEach((dialog) => {
+    dialog.remove();
+  });
+  panel.querySelectorAll(
+    '[data-hg-ui-action="open-multiclass"]'
+  ).forEach((button) => {
+    button.remove();
+  });
 
   panel.dataset.hgMulticlassEnhanced =
     "true";

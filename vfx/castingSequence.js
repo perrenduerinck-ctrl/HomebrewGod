@@ -538,7 +538,10 @@ function makeEffectRequest({
     persistentLifetime: effect.persistentLifetime ?? duration,
     metadata: {
       ...effect.metadata,
-      eventType: "confirmed-cast-sequence",
+      eventType: event?.preview === true
+        ? "preview-cast-sequence"
+        : "confirmed-cast-sequence",
+      preview: event?.preview === true,
       sequenceId,
       phase: phase.phase,
       phaseIndex,

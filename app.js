@@ -74,10 +74,10 @@ import {
 import {
   createSpellVfxEvent,
   dispatchConfirmedSpellVfxEvent
-} from "./vfx/castEvent.js?v=vfx-cast-stage2-20260827";
+} from "./vfx/castEvent.js?v=dm-preview-class-state-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=vfx-fireball-20260829";
+} from "./vfx/castingSequence.js?v=dm-preview-class-state-20260829";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -230,6 +230,10 @@ const E = {
     $("spellTemplateSelect"),
   loadSpellTemplateButton:
     $("loadSpellTemplateButton"),
+  setSpellPreviewCasterButton:
+    $("setSpellPreviewCasterButton"),
+  playSpellPreviewVfxButton:
+    $("playSpellPreviewVfxButton"),
   spellCastingPanel:
     $("spellCastingPanel"),
   spellCastingTitle:
@@ -315,6 +319,12 @@ let battleMapVfxSequences = null;
 const BATTLE_VFX_MODE_STORAGE_KEY =
   "homebrewGodBattleVfxMode";
 let activeSpellTemplateInstruction = null;
+let activeSpellPreviewSpell = null;
+let spellPreviewCasterPoint = null;
+let spellPreviewCasterMarker = null;
+let settingSpellPreviewCaster = false;
+let lastSpellPreviewVfxEvent = null;
+let lastSpellPreviewVfxResult = null;
 let activeSpellCastingSession = null;
 let activeSpellCastingCasterPoint = null;
 let activeSpellCastingCasterElevationFeet = 0;
@@ -580,6 +590,8 @@ function setDmControlsVisible(isVisible) {
 
     E.deleteRoomButton.classList.toggle("hidden", !canDeleteRoom);
   }
+
+  updateSpellPreviewVfxControls();
 }
 
 function normalizeCurrentMapData(mapData) {
@@ -3602,6 +3614,9 @@ function cancelActiveSpellCasting({
 
   if (clearTemplate) {
     activeSpellTemplateInstruction = null;
+    resetSpellPreviewVfxState({
+      clearSpell: true
+    });
     battleMapTemplates?.setEnabled(false);
   }
 
@@ -3673,6 +3688,325 @@ function handleConfirmedSpellVfx({
   }
 }
 
+function clearSpellPreviewCaster() {
+  spellPreviewCasterPoint = null;
+  settingSpellPreviewCaster = false;
+  spellPreviewCasterMarker?.remove();
+  spellPreviewCasterMarker = null;
+}
+
+function resetSpellPreviewVfxState({
+  clearSpell = false
+} = {}) {
+  clearSpellPreviewCaster();
+  lastSpellPreviewVfxEvent = null;
+  lastSpellPreviewVfxResult = null;
+  if (clearSpell) {
+    activeSpellPreviewSpell = null;
+  }
+  updateSpellPreviewVfxControls();
+}
+
+function renderSpellPreviewCasterMarker() {
+  const overlay =
+    battleMapTemplates?.getOverlayElement();
+
+  if (!overlay || !spellPreviewCasterPoint) {
+    spellPreviewCasterMarker?.remove();
+    spellPreviewCasterMarker = null;
+    return;
+  }
+
+  if (!spellPreviewCasterMarker) {
+    spellPreviewCasterMarker =
+      document.createElement("div");
+    spellPreviewCasterMarker.className =
+      "hg-spell-preview-caster";
+    spellPreviewCasterMarker.setAttribute(
+      "aria-hidden",
+      "true"
+    );
+    overlay.appendChild(
+      spellPreviewCasterMarker
+    );
+  }
+
+  const width = Math.max(
+    1,
+    overlay.clientWidth
+  );
+  const height = Math.max(
+    1,
+    overlay.clientHeight
+  );
+  const x = Number.isFinite(
+    Number(spellPreviewCasterPoint.xRatio)
+  )
+    ? spellPreviewCasterPoint.xRatio * width
+    : spellPreviewCasterPoint.x;
+  const y = Number.isFinite(
+    Number(spellPreviewCasterPoint.yRatio)
+  )
+    ? spellPreviewCasterPoint.yRatio * height
+    : spellPreviewCasterPoint.y;
+
+  spellPreviewCasterPoint = {
+    x,
+    y,
+    xRatio: x / width,
+    yRatio: y / height
+  };
+  spellPreviewCasterMarker.style.left =
+    `${x}px`;
+  spellPreviewCasterMarker.style.top =
+    `${y}px`;
+}
+
+function updateSpellPreviewVfxControls(
+  templateState =
+    battleMapTemplates?.getState?.() || null
+) {
+  const isDmPreview = currentIsDM === true;
+  const hasSpell = Boolean(
+    activeSpellPreviewSpell &&
+    activeSpellTemplateInstruction?.supported
+  );
+  const needsPreviewCaster = Boolean(
+    activeSpellTemplateInstruction?.singleTarget
+  );
+  const locked = Boolean(
+    templateState?.enabled &&
+    templateState?.phase === "confirmed" &&
+    templateState?.geometry
+  );
+
+  if (E.setSpellPreviewCasterButton) {
+    E.setSpellPreviewCasterButton.classList.toggle(
+      "hidden",
+      !isDmPreview || !needsPreviewCaster
+    );
+    E.setSpellPreviewCasterButton.disabled =
+      !isDmPreview ||
+      !hasSpell ||
+      !templateState?.enabled;
+    E.setSpellPreviewCasterButton.textContent =
+      settingSpellPreviewCaster
+        ? "Click Map for Caster"
+        : spellPreviewCasterPoint
+          ? "Move Preview Caster"
+          : "Set Preview Caster";
+    E.setSpellPreviewCasterButton.setAttribute(
+      "aria-pressed",
+      String(settingSpellPreviewCaster)
+    );
+  }
+
+  if (E.playSpellPreviewVfxButton) {
+    E.playSpellPreviewVfxButton.classList.toggle(
+      "hidden",
+      !isDmPreview
+    );
+    E.playSpellPreviewVfxButton.disabled =
+      !isDmPreview ||
+      !hasSpell ||
+      !locked ||
+      (
+        needsPreviewCaster &&
+        !spellPreviewCasterPoint
+      );
+  }
+
+  renderSpellPreviewCasterMarker();
+}
+
+function beginSettingSpellPreviewCaster() {
+  if (
+    currentIsDM !== true ||
+    !activeSpellPreviewSpell ||
+    !activeSpellTemplateInstruction?.singleTarget
+  ) {
+    return false;
+  }
+
+  settingSpellPreviewCaster = true;
+  updateSpellPreviewVfxControls();
+  text(
+    E.templateStatus,
+    "Click the map where the preview caster should stand. This point is visual-only."
+  );
+  return true;
+}
+
+function handleSpellPreviewCasterPointerDown(
+  event
+) {
+  if (
+    !settingSpellPreviewCaster ||
+    currentIsDM !== true ||
+    event.isPrimary === false ||
+    (
+      event.pointerType === "mouse" &&
+      event.button !== 0
+    )
+  ) {
+    return;
+  }
+
+  const overlay =
+    battleMapTemplates?.getOverlayElement();
+  const rect = overlay?.getBoundingClientRect();
+  if (!overlay || !rect) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  const x = Math.min(
+    width,
+    Math.max(0, event.clientX - rect.left)
+  );
+  const y = Math.min(
+    height,
+    Math.max(0, event.clientY - rect.top)
+  );
+  spellPreviewCasterPoint = {
+    x,
+    y,
+    xRatio: x / width,
+    yRatio: y / height
+  };
+  settingSpellPreviewCaster = false;
+  updateSpellPreviewVfxControls();
+  text(
+    E.templateStatus,
+    "Preview caster set. Lock the spell target, then choose Play Preview VFX."
+  );
+}
+
+function playSelectedSpellPreviewVfx() {
+  if (currentIsDM !== true) {
+    return null;
+  }
+
+  const templateState =
+    battleMapTemplates?.getState();
+  const geometry =
+    templateState?.geometry || null;
+  const instruction =
+    activeSpellTemplateInstruction;
+
+  if (
+    !activeSpellPreviewSpell ||
+    !instruction?.supported ||
+    templateState?.phase !== "confirmed" ||
+    !geometry
+  ) {
+    text(
+      E.templateStatus,
+      "Lock the selected spell target or template before playing its preview VFX."
+    );
+    updateSpellPreviewVfxControls(
+      templateState
+    );
+    return null;
+  }
+
+  if (
+    instruction.singleTarget &&
+    !spellPreviewCasterPoint
+  ) {
+    text(
+      E.templateStatus,
+      "Set the preview caster point before playing this projectile VFX."
+    );
+    updateSpellPreviewVfxControls(
+      templateState
+    );
+    return null;
+  }
+
+  try {
+    const targetPoint =
+      instruction.targetType === "point"
+        ? geometry.anchor
+        : geometry.pointer ||
+          geometry.endPoint ||
+          geometry.labelPoint ||
+          geometry.anchor;
+    const casterPoint =
+      instruction.singleTarget
+        ? spellPreviewCasterPoint
+        : geometry.anchor || targetPoint;
+    const previewEvent =
+      createSpellVfxEvent({
+        spell:
+          activeSpellPreviewSpell,
+        casterPoint,
+        casterElevation:
+          instruction.targetType === "point"
+            ? getRulerElevations()
+                .startElevationFeet
+            : geometry.elevationFeet,
+        targetPoint,
+        targetElevation:
+          geometry.elevationFeet ??
+          getRulerElevations()
+            .endElevationFeet,
+        geometry,
+        affectedTokens: [],
+        preview: true
+      });
+    const vfxEngine =
+      battleMapVfx ||
+      initializeBattleMapVfx();
+
+    if (vfxEngine && !battleMapVfxSequences) {
+      battleMapVfxSequences =
+        createCastingSequenceSystem({
+          effectEngine: vfxEngine
+        });
+    }
+
+    const result =
+      battleMapVfxSequences?.play(
+        previewEvent
+      ) || {
+        ok: false,
+        skipped: true,
+        reason: "engine-unavailable"
+      };
+    lastSpellPreviewVfxEvent =
+      previewEvent;
+    lastSpellPreviewVfxResult = result;
+
+    text(
+      E.templateStatus,
+      result.reason === "effects-off"
+        ? "Preview VFX was not played because Effects is Off."
+        : result.ok
+          ? `${previewEvent.spellName} preview VFX playing. No cast, roll, damage, HP, slot, or character resource was changed.`
+          : "Preview VFX could not be played. Gameplay state was not changed."
+    );
+    return {
+      event: previewEvent,
+      result
+    };
+  } catch {
+    lastSpellPreviewVfxEvent = null;
+    lastSpellPreviewVfxResult = {
+      ok: false,
+      skipped: true,
+      reason: "preview-failed"
+    };
+    text(
+      E.templateStatus,
+      "Preview VFX could not be played. Gameplay state was not changed."
+    );
+    return null;
+  }
+}
+
 async function beginCharacterSpellTargeting({
   spell,
   character,
@@ -3693,6 +4027,10 @@ async function beginCharacterSpellTargeting({
   if (!instruction.supported) {
     throw new Error(instruction.reason);
   }
+
+  resetSpellPreviewVfxState({
+    clearSpell: true
+  });
 
   showAnyMainScreen("battle");
   let linkedToken = null;
@@ -3900,6 +4238,7 @@ function updateBattleMapTemplateUi(state) {
     state,
     affectedTokens
   );
+  updateSpellPreviewVfxControls(state);
 
   if (E.templateToggleButton) {
     E.templateToggleButton.textContent =
@@ -3963,6 +4302,9 @@ async function loadSelectedSpellTemplate() {
   cancelActiveSpellCasting({
     clearTemplate: false
   });
+  resetSpellPreviewVfxState({
+    clearSpell: true
+  });
   const spellId = String(
     E.spellTemplateSelect?.value || ""
   ).trim();
@@ -3999,6 +4341,7 @@ async function loadSelectedSpellTemplate() {
     }
 
     activeSpellTemplateInstruction = instruction;
+    activeSpellPreviewSpell = spell;
     if (E.templateShapeSelect) {
       E.templateShapeSelect.value =
         instruction.templateShape;
@@ -4038,6 +4381,7 @@ async function loadSelectedSpellTemplate() {
   } catch (error) {
     console.error(error);
     activeSpellTemplateInstruction = null;
+    activeSpellPreviewSpell = null;
     text(
       E.templateStatus,
       "Spell preview could not be loaded."
@@ -4048,6 +4392,7 @@ async function loadSelectedSpellTemplate() {
       E.loadSpellTemplateButton.textContent =
         "Target Spell on Map";
     }
+    updateSpellPreviewVfxControls();
   }
 }
 
@@ -4073,6 +4418,13 @@ function initializeBattleMapTemplates() {
       updateBattleMapTemplateUi
   });
   battleMapTemplates.connect();
+  battleMapTemplates
+    .getOverlayElement()
+    ?.addEventListener(
+      "pointerdown",
+      handleSpellPreviewCasterPointerDown,
+      true
+    );
   battleMapTemplates.setOptions(
     getBattleMapTemplateOptions()
   );
@@ -4107,6 +4459,27 @@ function initializeBattleMapTemplates() {
     loadSelectedSpellTemplate
   );
 
+  E.spellTemplateSelect?.addEventListener(
+    "change",
+    function () {
+      resetSpellPreviewVfxState({
+        clearSpell: true
+      });
+    }
+  );
+
+  E.setSpellPreviewCasterButton
+    ?.addEventListener(
+      "click",
+      beginSettingSpellPreviewCaster
+    );
+
+  E.playSpellPreviewVfxButton
+    ?.addEventListener(
+      "click",
+      playSelectedSpellPreviewVfx
+    );
+
   E.confirmSpellCastButton
     ?.addEventListener(
       "click",
@@ -4128,6 +4501,9 @@ function initializeBattleMapTemplates() {
         clearTemplate: false
       });
       activeSpellTemplateInstruction = null;
+      resetSpellPreviewVfxState({
+        clearSpell: true
+      });
       if (E.spellTemplateSelect) {
         E.spellTemplateSelect.value = "";
       }
@@ -5955,7 +6331,7 @@ async function initCharacterCreatorSystem() {
 
   if (!characterCreatorModulePromise) {
     characterCreatorModulePromise = import(
-      "./characterCreator/index.js"
+      "./characterCreator/index.js?v=dm-preview-class-state-20260829"
     );
   }
 
@@ -6608,6 +6984,153 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
         function () {
           return battleMapVfxSequences
             ?.getState() || null;
+        },
+
+      setDmRole:
+        function (isDm) {
+          currentIsDM = isDm === true;
+          setDmControlsVisible(
+            currentIsDM
+          );
+          return currentIsDM;
+        },
+
+      getSpellPreviewVfxState:
+        function () {
+          return {
+            isDm: currentIsDM,
+            casterPoint:
+              spellPreviewCasterPoint
+                ? {
+                    ...spellPreviewCasterPoint
+                  }
+                : null,
+            event:
+              lastSpellPreviewVfxEvent
+                ? JSON.parse(JSON.stringify(
+                    lastSpellPreviewVfxEvent
+                  ))
+                : null,
+            result:
+              lastSpellPreviewVfxResult
+                ? {
+                    ok:
+                      lastSpellPreviewVfxResult.ok === true,
+                    skipped:
+                      lastSpellPreviewVfxResult.skipped === true,
+                    reason:
+                      lastSpellPreviewVfxResult.reason || "",
+                    id:
+                      lastSpellPreviewVfxResult.id || ""
+                  }
+                : null
+          };
+        },
+
+      prepareCharacterCreatorClassTest:
+        function ({
+          totalLevel = 1,
+          stepId = "abilities"
+        } = {}) {
+          if (!characterCreatorSystem) {
+            throw new Error(
+              "Character Creator is not initialized."
+            );
+          }
+
+          const draft = JSON.parse(
+            JSON.stringify(
+              characterCreatorSystem.getDraft?.() || {}
+            )
+          );
+          const level = Math.max(
+            1,
+            Math.min(
+              20,
+              Math.round(
+                Number(totalLevel) || 1
+              )
+            )
+          );
+          draft.classProgression = {
+            ...(draft.classProgression || {}),
+            totalLevel: level,
+            classes: [],
+            levelOrder: []
+          };
+          draft.className = "";
+          draft.selectedClassSnapshot = null;
+          draft.subclassName = "";
+          draft.level = level;
+          draft.abilities = {
+            ...(draft.abilities || {}),
+            method: "manual"
+          };
+
+          characterCreatorSystem.replaceDraft(
+            draft,
+            {
+              skipDiscardGuard: true
+            }
+          );
+          characterCreatorSystem.navigateToStep(
+            stepId,
+            { replace: true }
+          );
+
+          return {
+            currentStepId:
+              characterCreatorSystem
+                .getState?.()
+                ?.currentStepId || "",
+            classProgression:
+              JSON.parse(JSON.stringify(
+                characterCreatorSystem
+                  .getDraft?.()
+                  ?.classProgression || {}
+              ))
+          };
+        },
+
+      setCharacterCreatorTestStep:
+        function (stepId) {
+          if (!characterCreatorSystem) {
+            throw new Error(
+              "Character Creator is not initialized."
+            );
+          }
+          characterCreatorSystem.navigateToStep(
+            stepId,
+            { replace: true }
+          );
+          return characterCreatorSystem
+            .getState?.()
+            ?.currentStepId || "";
+        },
+
+      getCharacterCreatorTestState:
+        function () {
+          if (!characterCreatorSystem) {
+            return null;
+          }
+          const state =
+            characterCreatorSystem.getState?.();
+          return {
+            currentStepId:
+              state?.currentStepId || "",
+            statusMessage:
+              state?.statusMessage || "",
+            multiclassAddStatus:
+              state?.multiclassAddStatus
+                ? { ...state.multiclassAddStatus }
+                : null,
+            classProgression:
+              JSON.parse(JSON.stringify(
+                characterCreatorSystem
+                  .getDraft?.()
+                  ?.classProgression || {}
+              ))
+          };
         },
 
       beginSpellCast:

@@ -121,7 +121,7 @@ test("every creator step uses shared services and never imports another step", (
   assert.equal(sharedServiceUses.length, stepFiles.length);
 
   const versionedStepUrls = creator.match(
-    /\.\/steps\/[A-Za-z]+Step\.js\?v=multiclass-flow-20260825/g
+    /\.\/steps\/[A-Za-z]+Step\.js\?v=dm-preview-class-state-20260829/g
   ) || [];
 
   assert.equal(

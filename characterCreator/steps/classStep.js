@@ -166,7 +166,22 @@ export function createClassStep(dependencies = {}) {
   }
 
   function renderStep() {
-    if (isMulticlassDraft()) {
+    const progressionEntries =
+      getCharacterClassEntries(
+        creatorState.draft
+      );
+    const hasStartingClass = Boolean(
+      progressionEntries.length > 0 &&
+      getPrimaryClassEntry(
+        creatorState.draft
+      )
+    );
+
+    if (
+      hasStartingClass &&
+      progressionEntries.length > 1 &&
+      isMulticlassDraft()
+    ) {
       return `
         ${renderLevelFirstPanel()}
 
@@ -381,7 +396,7 @@ export function createClassStep(dependencies = {}) {
 
       <hr>
 
-      <h3>2. Choose Starting Class</h3>
+      <h3 data-starting-class-selector="true">2. Choose Starting Class</h3>
 
       <div class="hg-character-current-choice">
         <b>Current class:</b>

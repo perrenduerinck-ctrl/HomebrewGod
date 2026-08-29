@@ -12,7 +12,7 @@ test(
   () => {
     assert.doesNotMatch(
       appSource,
-      /import\s+\{\s*createCharacterCreator\s*\}\s+from\s+["']\.\/characterCreator\/index\.js["']/
+      /import\s+\{\s*createCharacterCreator\s*\}\s+from\s+["']\.\/characterCreator\/index\.js(?:\?[^"']+)?["']/
     );
     assert.doesNotMatch(
       appSource,
@@ -20,7 +20,7 @@ test(
     );
     assert.match(
       appSource,
-      /characterCreatorModulePromise\s*=\s*import\(\s*["']\.\/characterCreator\/index\.js["']\s*\)/
+      /characterCreatorModulePromise\s*=\s*import\(\s*["']\.\/characterCreator\/index\.js(?:\?[^"']+)?["']\s*\)/
     );
     assert.match(
       appSource,
