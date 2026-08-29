@@ -70,14 +70,14 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=vfx-fire-bolt-20260829";
+} from "./vfx/effectEngine.js?v=vfx-fireball-20260829";
 import {
   createSpellVfxEvent,
   dispatchConfirmedSpellVfxEvent
 } from "./vfx/castEvent.js?v=vfx-cast-stage2-20260827";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=vfx-fire-bolt-20260829";
+} from "./vfx/castingSequence.js?v=vfx-fireball-20260829";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";

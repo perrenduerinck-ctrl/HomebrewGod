@@ -812,6 +812,31 @@ button:disabled {
     both;
 }
 
+.hg-vfx-fireball-projectile-sprite.has-path {
+  height: 1px;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+
+.hg-vfx-fireball-projectile-sprite.has-path
+  .hg-vfx-sprite {
+  left: 0;
+  top: 50%;
+  mix-blend-mode: screen;
+  filter:
+    saturate(1.12)
+    drop-shadow(0 0 14px rgba(255, 98, 0, 0.9));
+  animation:
+    hg-vfx-fireball-projectile
+    var(--hg-vfx-duration)
+    linear
+    both;
+  will-change: left, transform, opacity;
+}
+
 .hg-map-vfx-effect[data-effect-intensity="1"] {
   filter: saturate(0.9) brightness(0.92);
 }
@@ -1082,6 +1107,39 @@ button:disabled {
   100% {
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.31);
+  }
+}
+
+@keyframes hg-vfx-fireball-projectile {
+  0% {
+    left: 2%;
+    opacity: 0;
+    transform:
+      translate(-50%, -50%)
+      scale(-0.1, 0.1);
+  }
+
+  14% {
+    opacity: 1;
+    transform:
+      translate(-50%, -50%)
+      scale(-0.15, 0.15);
+  }
+
+  88% {
+    left: 94%;
+    opacity: 1;
+    transform:
+      translate(-50%, -50%)
+      scale(-0.17, 0.17);
+  }
+
+  100% {
+    left: 98%;
+    opacity: 0;
+    transform:
+      translate(-50%, -50%)
+      scale(-0.12, 0.12);
   }
 }
 

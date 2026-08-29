@@ -116,7 +116,7 @@ test("Fireball, Lightning Bolt, and Burning Hands resolve declaratively", () => 
     spell: getDefaultSpellById("burning-hands")
   });
 
-  assert.equal(registry.resolve(fireball).id, "fire-burst");
+  assert.equal(registry.resolve(fireball).id, "fireball");
   assert.equal(registry.resolve(lightningBolt).id, "generic-line");
   assert.equal(registry.resolve(burningHands).id, "fire-directional");
   assert.deepEqual(

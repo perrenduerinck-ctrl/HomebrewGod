@@ -15,6 +15,7 @@ import {
 import {
   FIRE_BOLT_IMPACT_EFFECT_ID,
   FIRE_BOLT_PROJECTILE_EFFECT_ID,
+  FIREBALL_PROJECTILE_EFFECT_ID,
   FIRE_CASTING_SEQUENCE_DEFINITIONS,
   FIRE_EFFECT_DEFINITIONS,
   FIRE_EFFECT_IDS,
@@ -114,7 +115,8 @@ test("the fire vertical slice registers every required procedural effect", () =>
     [
       FIRE_SPRITE_EFFECT_ID,
       FIRE_BOLT_PROJECTILE_EFFECT_ID,
-      FIRE_BOLT_IMPACT_EFFECT_ID
+      FIRE_BOLT_IMPACT_EFFECT_ID,
+      FIREBALL_PROJECTILE_EFFECT_ID
     ]
   );
 
@@ -130,6 +132,7 @@ test("the fire vertical slice registers every required procedural effect", () =>
     impactSheet: "assets/vfx/fire/fire-impact-spritesheet.png",
     fireBoltProjectile: "assets/vfx/fire/fire-bolt-projectile.png",
     fireBoltImpact: "assets/vfx/fire/fire-bolt-impact.png",
+    fireballProjectile: "assets/vfx/fire/fireball-projectile.png",
     scorch: "assets/vfx/fire/scorch.webp"
   });
   assert.equal(
@@ -150,7 +153,7 @@ test("the fire vertical slice registers every required procedural effect", () =>
   );
 });
 
-test("the supplied fire artwork includes bounded Fire Bolt sprites", () => {
+test("the supplied fire artwork includes bounded spell sprites", () => {
   const impactSheet = readFileSync(
     new URL(
       `../${FIRE_OPTIONAL_ASSET_PATHS.impactSheet}`,
@@ -165,8 +168,12 @@ test("the supplied fire artwork includes bounded Fire Bolt sprites", () => {
     `../${FIRE_OPTIONAL_ASSET_PATHS.fireBoltImpact}`,
     import.meta.url
   ));
+  const fireballProjectile = readFileSync(new URL(
+    `../${FIRE_OPTIONAL_ASSET_PATHS.fireballProjectile}`,
+    import.meta.url
+  ));
 
-  [impactSheet, projectile, impact].forEach((asset) => {
+  [impactSheet, projectile, impact, fireballProjectile].forEach((asset) => {
     assert.ok(asset.byteLength > 0);
     assert.deepEqual(
       Array.from(asset.subarray(0, 8)),
@@ -180,6 +187,13 @@ test("the supplied fire artwork includes bounded Fire Bolt sprites", () => {
   assert.deepEqual(
     [impact.readUInt32BE(16), impact.readUInt32BE(20)],
     [512, 512]
+  );
+  assert.deepEqual(
+    [
+      fireballProjectile.readUInt32BE(16),
+      fireballProjectile.readUInt32BE(20)
+    ],
+    [1254, 1254]
   );
 
   const sprite = FIRE_EFFECT_DEFINITIONS.find(
@@ -211,6 +225,19 @@ test("the supplied fire artwork includes bounded Fire Bolt sprites", () => {
     impactDefinition.sprite.src,
     /fire-bolt-impact\.png$/
   );
+
+  const fireballProjectileDefinition = FIRE_EFFECT_DEFINITIONS.find(
+    ({ id }) => id === FIREBALL_PROJECTILE_EFFECT_ID
+  );
+  assert.equal(fireballProjectileDefinition.sprite.frameCount, 1);
+  assert.equal(
+    fireballProjectileDefinition.sprite.removeOnComplete,
+    false
+  );
+  assert.match(
+    fireballProjectileDefinition.sprite.src,
+    /fireball-projectile\.png$/
+  );
 });
 
 test("the fire slice has procedural styles without mandatory image assets", () => {
@@ -241,6 +268,7 @@ test("fire sequences are generic by delivery type and damage type", () => {
     FIRE_CASTING_SEQUENCE_DEFINITIONS.map(({ id }) => id),
     [
       "fire-bolt",
+      "fireball",
       "fire-projectile",
       "fire-burst",
       "fire-directional",
@@ -254,6 +282,11 @@ test("fire sequences are generic by delivery type and damage type", () => {
     damageTypes: ["fire"],
     deliveryType: "projectile"
   }).id, "fire-bolt");
+  assert.equal(registry.resolve({
+    spellId: "fireball",
+    damageTypes: ["fire"],
+    deliveryType: "burst"
+  }).id, "fireball");
   assert.equal(registry.resolve({
     damageTypes: ["fire"],
     deliveryType: "projectile"
@@ -329,7 +362,7 @@ test("Fire Bolt follows spell geometry from charge through ember fade", () => {
   assert.equal(scheduler.pending(), 0);
 });
 
-test("a confirmed fire burst composes all seven visuals and cleans up", () => {
+test("Fireball scales to its geometry, travels, and reacts on affected tokens", () => {
   const scheduler = createScheduler();
   const effectEngine = createEffectEngine();
   const phases = [];
@@ -344,12 +377,41 @@ test("a confirmed fire burst composes all seven visuals and cleans up", () => {
     targetPoint: { x: 150, y: 125 },
     casterElevation: 5,
     targetElevation: 15,
+    geometry: {
+      shape: "sphere",
+      sizeFeet: 20,
+      sizePixels: 256,
+      pixelsPerFoot: 12.8,
+      anchor: { x: 150, y: 125 },
+      bounds: {
+        minX: -106,
+        minY: -131,
+        maxX: 406,
+        maxY: 381,
+        width: 512,
+        height: 512
+      }
+    },
+    affectedTokens: [
+      {
+        id: "goblin-one",
+        name: "Goblin One",
+        center: { x: 130, y: 110 },
+        elevation: 10
+      },
+      {
+        id: "goblin-two",
+        name: "Goblin Two",
+        center: { x: 180, y: 150 },
+        elevation: 15
+      }
+    ],
     intensity: 3
   });
   const result = system.play(event);
 
   assert.equal(result.ok, true);
-  assert.equal(result.definition.id, "fire-burst");
+  assert.equal(result.definition.id, "fireball");
   assert.deepEqual(
     effectEngine.getStats().requests.map(({ type }) => type),
     ["fire-glow", "fire-embers"]
@@ -371,6 +433,30 @@ test("a confirmed fire burst composes all seven visuals and cleans up", () => {
   const trail = requests.find(({ type }) => type === "fire-trail");
   assert.deepEqual(trail.startPosition, event.casterPoint);
   assert.deepEqual(trail.endPosition, event.targetPoint);
+  const projectile = requests.find(
+    ({ type }) => type === FIREBALL_PROJECTILE_EFFECT_ID
+  );
+  assert.deepEqual(projectile.startPosition, event.casterPoint);
+  assert.deepEqual(projectile.endPosition, event.targetPoint);
+  const spriteExplosion = requests.find(
+    ({ metadata }) => metadata.role === "fireball-explosion-sprite"
+  );
+  assert.equal(spriteExplosion.scale, 3.2);
+  const fallbackExplosion = requests.find(
+    ({ metadata }) => metadata.role === "fireball-explosion-fallback"
+  );
+  assert.ok(Math.abs(fallbackExplosion.scale - (512 / 72)) < 0.001);
+  const tokenHits = requests.filter(
+    ({ metadata }) => metadata.role === "fireball-token-hit"
+  );
+  assert.deepEqual(
+    tokenHits.map(({ affectedTokenId }) => affectedTokenId),
+    ["goblin-one", "goblin-two"]
+  );
+  assert.deepEqual(
+    tokenHits.map(({ position }) => position),
+    event.affectedTokens.map(({ center }) => center)
+  );
   assert.equal(
     requests.every(({ metadata }) => (
       metadata.damageType === "fire" &&
@@ -401,7 +487,7 @@ test("fire effect and sequence collections stay immutable and bounded", () => {
   });
 
   const fireBurst = FIRE_CASTING_SEQUENCE_DEFINITIONS.find(
-    ({ id }) => id === "fire-burst"
+    ({ id }) => id === "fireball"
   );
   assert.equal(
     fireBurst.phases.impact.effects.some(

@@ -1,6 +1,6 @@
 import {
   FIRE_EFFECT_DEFINITIONS
-} from "./fireEffects.js?v=vfx-fire-bolt-20260829";
+} from "./fireEffects.js?v=vfx-fireball-20260829";
 
 const EFFECT_KINDS = Object.freeze([
   "procedural",
