@@ -79,6 +79,79 @@ test(
 );
 
 test(
+  "release verification can attach a bounded image to every upload path",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&uploadTestKind=roomMap&release=upload-verification-20260828",
+      {
+        waitUntil: "domcontentloaded"
+      }
+    );
+
+    await expect(
+      page.locator("#homebrewGodSmokeResult")
+    ).toContainText(
+      "SMOKE TEST PASS",
+      {
+        timeout: 30000
+      }
+    );
+
+    await page.getByRole("button", {
+      name: "Attach roomMap test image",
+      exact: true
+    }).click();
+
+    const attached =
+      await page.locator(
+        "#roomMapUploadInput"
+      ).evaluate((input) => ({
+        count: input.files?.length || 0,
+        name: input.files?.[0]?.name || "",
+        size: input.files?.[0]?.size || 0,
+        type: input.files?.[0]?.type || ""
+      }));
+
+    expect(attached).toEqual({
+      count: 1,
+      name:
+        "ai-upload-verification-roomMap.png",
+      size: 68,
+      type: "image/png"
+    });
+
+    const allAttached =
+      await page.evaluate(() => {
+        return [
+          "roomMap",
+          "puzzleTile",
+          "token",
+          "characterPortrait"
+        ].map((kind) => {
+          return window
+            .__HOMEBREW_GOD_RELEASE_TEST__
+            .attachImageUploadTestFile(kind);
+        });
+      });
+
+    expect(
+      allAttached.map(({ kind }) => kind)
+    ).toEqual([
+      "roomMap",
+      "puzzleTile",
+      "token",
+      "characterPortrait"
+    ]);
+    expect(
+      allAttached.every((file) => (
+        file.size === 68 &&
+        file.type === "image/png"
+      ))
+    ).toBe(true);
+  }
+);
+
+test(
   "Spells-step Remove Feat clears the feat instead of re-adding its compatibility alias",
   async ({ page }) => {
     await page.goto(

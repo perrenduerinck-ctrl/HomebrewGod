@@ -48,6 +48,7 @@ test("Firestore ownership rules survived the repository move", () => {
 
 test("the client uses the unsigned Cloudinary upload preset without browser secrets", () => {
   const app = read("app.js");
+  const index = read("index.html");
 
   assert.match(app, /const uploadPreset = "homebrewgod_maps"/);
   assert.match(
@@ -74,6 +75,15 @@ test("the client uses the unsigned Cloudinary upload preset without browser secr
     app,
     /uploadCharacterPortrait:[\s\S]*?return uploadMapToCloudinary\(file\)/
   );
+  [
+    "roomMapUploadInput",
+    "uploadRoomMapButton",
+    "puzzleTileUploadInput",
+    "tokenImageUploadInput",
+    "characterImageUploadInput"
+  ].forEach((id) => {
+    assert.match(index, new RegExp(`id=["']${id}["']`));
+  });
 
   // Secure deletion remains a separate, authenticated operation.
   assert.match(
@@ -88,6 +98,17 @@ test("the client uses the unsigned Cloudinary upload preset without browser secr
     app,
     /"Authorization":\s*\n\s*"Bearer " \+ idToken/
   );
+});
+
+test("new room creation does not pre-read a room forbidden by membership rules", () => {
+  const app = read("app.js");
+  const createRoomSource = app.match(
+    /async function createRoom\(\) \{[\s\S]*?\n\}/
+  )?.[0] || "";
+
+  assert.match(createRoomSource, /await setDoc\(roomRef,/);
+  assert.doesNotMatch(createRoomSource, /transaction\.get\(roomRef\)/);
+  assert.doesNotMatch(createRoomSource, /runTransaction\(db,/);
 });
 
 test("the optional Cloudinary deletion function retains ownership guards", () => {
