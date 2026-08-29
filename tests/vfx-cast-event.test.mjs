@@ -53,6 +53,7 @@ test("confirmed-cast events expose the complete immutable VFX contract", () => {
     Object.keys(event),
     [
       "schemaVersion",
+      "preview",
       "spellId",
       "spellName",
       "casterTokenId",
@@ -68,6 +69,7 @@ test("confirmed-cast events expose the complete immutable VFX contract", () => {
       "deliveryType"
     ]
   );
+  assert.equal(event.preview, false);
   assert.equal(event.spellId, "burning-hands");
   assert.equal(event.spellName, "Burning Hands");
   assert.equal(event.casterTokenId, "wizard-token");
@@ -90,6 +92,32 @@ test("confirmed-cast events expose the complete immutable VFX contract", () => {
   assert.equal(Object.isFrozen(event.geometry.bounds), true);
   assert.equal(Object.isFrozen(event.affectedTokens), true);
   assert.equal(Object.isFrozen(event.affectedTokens[0]), true);
+});
+
+test("preview events are explicit immutable presentation-only events", () => {
+  const event = createSpellVfxEvent({
+    spell: getDefaultSpellById("fire-bolt"),
+    casterPoint: { x: 20, y: 30 },
+    targetPoint: { x: 220, y: 130 },
+    affectedTokens: [{ id: "ignored-by-caller" }],
+    preview: true
+  });
+
+  assert.equal(event.preview, true);
+  assert.equal(event.spellId, "fire-bolt");
+  assert.deepEqual(event.casterPoint, {
+    x: 20,
+    y: 30,
+    xRatio: null,
+    yRatio: null
+  });
+  assert.deepEqual(event.targetPoint, {
+    x: 220,
+    y: 130,
+    xRatio: null,
+    yRatio: null
+  });
+  assert.equal(Object.isFrozen(event), true);
 });
 
 test("delivery inference supports every initial VFX geometry", () => {

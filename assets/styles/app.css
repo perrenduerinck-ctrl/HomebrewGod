@@ -1316,6 +1316,29 @@ button:disabled {
   filter: drop-shadow(0 0 8px rgba(255, 74, 95, 0.75));
 }
 
+.hg-spell-preview-caster {
+  position: absolute;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  border: 3px solid #fff3b8;
+  border-radius: 50%;
+  background: rgba(255, 142, 52, 0.72);
+  box-shadow:
+    0 0 0 2px rgba(20, 10, 4, 0.86),
+    0 0 18px rgba(255, 178, 74, 0.98);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.hg-spell-preview-caster::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: #fffdf1;
+}
+
 .hg-map-template-origin {
   position: absolute;
   width: 14px;

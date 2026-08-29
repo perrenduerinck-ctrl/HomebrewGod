@@ -175,6 +175,43 @@ test("a casting sequence advances in order and uses authoritative event points",
   );
 });
 
+test("preview projectile sequences keep origin-to-target travel metadata separate from confirmed casts", () => {
+  const scheduler = createScheduler();
+  const effectEngine = createEffectEngine();
+  const system = createCastingSequenceSystem({
+    effectEngine,
+    scheduler
+  });
+  const event = createSpellVfxEvent({
+    spell: getDefaultSpellById("fire-bolt"),
+    casterPoint: { x: 15, y: 25 },
+    targetPoint: { x: 315, y: 125 },
+    preview: true
+  });
+  const result = system.play(event);
+
+  scheduler.advance(result.definition.totalDuration);
+  const requests = effectEngine.getStats().requests;
+  const travel = requests.find((request) => (
+    request.metadata.phase === "travel" &&
+    request.startPosition &&
+    request.endPosition
+  ));
+
+  assert.equal(result.ok, true);
+  assert.ok(travel);
+  assert.deepEqual(travel.startPosition, event.casterPoint);
+  assert.deepEqual(travel.endPosition, event.targetPoint);
+  assert.equal(
+    requests.every((request) => (
+      request.metadata.preview === true &&
+      request.metadata.eventType === "preview-cast-sequence"
+    )),
+    true
+  );
+  assert.equal(system.getState().activeCount, 0);
+});
+
 test("custom phases compose multiple bounded effects and affected-token impacts", () => {
   const affectedTokens = Array.from({ length: 100 }, (_, index) => ({
     id: `token-${index}`,

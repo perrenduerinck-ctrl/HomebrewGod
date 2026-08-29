@@ -6,7 +6,7 @@ import {
   installWalkingSpeedInputGuard,
   normalizeCharacterWalkingSpeed
 } from "./walkingSpeed.js?v=custom-movement-speeds-20260731";
-import "./uiEnhancements.js?v=multiclass-flow-20260825";
+import "./uiEnhancements.js?v=dm-preview-class-state-20260829";
 
 const basePersistencePath =
   import.meta.url.includes(

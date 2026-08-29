@@ -275,7 +275,8 @@ export function createSpellVfxEvent({
   spellLevel = null,
   slot = null,
   intensity = null,
-  deliveryType = ""
+  deliveryType = "",
+  preview = false
 } = {}) {
   const normalizedCasterPoint = normalizePoint(casterPoint);
   const normalizedGeometry = normalizeGeometry(geometry);
@@ -299,6 +300,7 @@ export function createSpellVfxEvent({
 
   return Object.freeze({
     schemaVersion: SPELL_VFX_EVENT_SCHEMA_VERSION,
+    preview: preview === true,
     spellId: cleanText(spellId, "", 160),
     spellName: cleanText(spellName, "Spell", 160) || "Spell",
     casterTokenId: cleanText(casterTokenId, "", 160),

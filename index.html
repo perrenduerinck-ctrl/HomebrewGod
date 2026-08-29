@@ -235,6 +235,18 @@
       <button id="loadSpellTemplateButton" type="button">
         Target Spell on Map
       </button>
+      <button
+        id="setSpellPreviewCasterButton"
+        class="hidden"
+        type="button"
+        disabled
+      >Set Preview Caster</button>
+      <button
+        id="playSpellPreviewVfxButton"
+        class="hidden"
+        type="button"
+        disabled
+      >Play Preview VFX</button>
 
       <label class="battleScaleControl" for="templateShapeSelect">
         <span>Template</span>
@@ -845,7 +857,7 @@
         "./shared/realtimeListeners.js": "./shared/realtimeListeners.js?v=priority10-20260822",
         "./monsters/creator.js": "./monsters/creator.js?v=priority10-20260822",
         "./shared/securityPersistence.js": "./shared/securityPersistence.js?v=priority10-20260822",
-        "./characterCreator/index.js": "./characterCreator/index.js?v=multiclass-flow-20260825",
+        "./characterCreator/index.js": "./characterCreator/index.js?v=dm-preview-class-state-20260829",
         "./characterCreator/walkingSpeed.js?v=creator-fix-pass-20260730": "./characterCreator/walkingSpeed.js?v=custom-movement-speeds-20260731",
         "./characterCreator/customClassTools.js?v=creator-fix-pass-20260730": "./characterCreator/customClassTools.js?v=custom-movement-speeds-20260731",
         "./characterSheet/index.js": "./characterSheet/index.js?v=priority10-20260822",
@@ -879,7 +891,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=vfx-fireball-20260829"
+    src="./app.js?v=dm-preview-class-state-20260829"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

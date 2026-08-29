@@ -2910,6 +2910,345 @@ test(
 );
 
 test(
+  "DM-only Spell Preview VFX uses locked geometry without casting or changing gameplay",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=dm-preview-vfx-20260829",
+      { waitUntil: "domcontentloaded" }
+    );
+    await page.waitForFunction(() => Boolean(
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+    ));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .openScreen("battle"));
+
+    const playButton = page.locator(
+      "#playSpellPreviewVfxButton"
+    );
+    const casterButton = page.locator(
+      "#setSpellPreviewCasterButton"
+    );
+    const spellSelect = page.locator(
+      "#spellTemplateSelect"
+    );
+    const loadButton = page.locator(
+      "#loadSpellTemplateButton"
+    );
+    const overlay = page.locator(
+      ".hg-map-template-layer"
+    );
+
+    await expect(playButton).toBeHidden();
+    await expect(casterButton).toBeHidden();
+    await page.evaluate(() => {
+      window.__PREVIEW_CONFIRMED_EVENTS__ = 0;
+      window.__PREVIEW_GAMEPLAY_SENTINEL__ = {
+        currentHp: 37,
+        spellSlots: 2,
+        resources: 5
+      };
+      document.addEventListener(
+        "homebrewgod:spell-cast-confirmed",
+        () => {
+          window.__PREVIEW_CONFIRMED_EVENTS__ += 1;
+        }
+      );
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+        .setDmRole(true);
+    });
+    await expect(playButton).toBeVisible();
+    await expect(playButton).toBeDisabled();
+
+    await spellSelect.selectOption("fire-bolt");
+    await loadButton.click();
+    await expect(casterButton).toBeVisible();
+    await overlay.scrollIntoViewIfNeeded();
+    const fireBoltBox = await overlay.boundingBox();
+    expect(fireBoltBox).not.toBeNull();
+    const fireBoltTarget = {
+      x: fireBoltBox.x + Math.min(440, fireBoltBox.width * 0.72),
+      y: fireBoltBox.y + Math.min(260, fireBoltBox.height * 0.56)
+    };
+    const fireBoltCaster = {
+      x: fireBoltBox.x + Math.min(100, fireBoltBox.width * 0.18),
+      y: fireBoltBox.y + Math.min(260, fireBoltBox.height * 0.56)
+    };
+    await page.mouse.click(
+      fireBoltTarget.x,
+      fireBoltTarget.y
+    );
+    await expect(playButton).toBeDisabled();
+    await casterButton.click();
+    await page.mouse.click(
+      fireBoltCaster.x,
+      fireBoltCaster.y
+    );
+    await expect(page.locator(
+      ".hg-spell-preview-caster"
+    )).toBeVisible();
+    await expect(playButton).toBeEnabled();
+    await playButton.click();
+
+    const fireBoltState = await page.evaluate(() => {
+      return window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getSpellPreviewVfxState();
+    });
+    expect(fireBoltState.event.preview).toBe(true);
+    expect(fireBoltState.event.spellId).toBe("fire-bolt");
+    expect(fireBoltState.event.deliveryType).toBe("projectile");
+    expect(fireBoltState.event.casterTokenId).toBe("");
+    expect(fireBoltState.event.casterPoint.x)
+      .toBeLessThan(fireBoltState.event.targetPoint.x);
+    expect(fireBoltState.event.affectedTokens).toEqual([]);
+    expect(fireBoltState.result.ok).toBe(true);
+
+    await spellSelect.selectOption("fireball");
+    await loadButton.click();
+    await expect(casterButton).toBeHidden();
+    const fireballBox = await overlay.boundingBox();
+    expect(fireballBox).not.toBeNull();
+    await page.mouse.click(
+      fireballBox.x + Math.min(320, fireballBox.width * 0.55),
+      fireballBox.y + Math.min(220, fireballBox.height * 0.48)
+    );
+    await expect(playButton).toBeEnabled();
+    await playButton.click();
+    const fireballState = await page.evaluate(() => {
+      return window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getSpellPreviewVfxState();
+    });
+    expect(fireballState.event.spellId).toBe("fireball");
+    expect(fireballState.event.deliveryType).toBe("burst");
+    expect(fireballState.event.targetPoint)
+      .toEqual(fireballState.event.geometry.anchor);
+    expect(fireballState.event.affectedTokens).toEqual([]);
+
+    for (const [spellId, deliveryType] of [
+      ["burning-hands", "cone"],
+      ["lightning-bolt", "line"]
+    ]) {
+      await spellSelect.selectOption(spellId);
+      await loadButton.click();
+      const directionBox = await overlay.boundingBox();
+      expect(directionBox).not.toBeNull();
+      await overlay.click({
+        force: true,
+        position: {
+          x: directionBox.width * 0.28,
+          y: directionBox.height * 0.52
+        }
+      });
+      await overlay.hover({
+        force: true,
+        position: {
+          x: directionBox.width * 0.7,
+          y: directionBox.height * 0.4
+        }
+      });
+      await overlay.click({
+        force: true,
+        position: {
+          x: directionBox.width * 0.7,
+          y: directionBox.height * 0.4
+        }
+      });
+      await expect(playButton).toBeEnabled();
+      await playButton.click();
+      const directionState = await page.evaluate(() => {
+        return window.__HOMEBREW_GOD_RELEASE_TEST__
+          .getSpellPreviewVfxState();
+      });
+      expect(directionState.event.spellId).toBe(spellId);
+      expect(directionState.event.deliveryType).toBe(deliveryType);
+      expect(directionState.event.casterPoint)
+        .toEqual(directionState.event.geometry.anchor);
+      expect(directionState.event.targetPoint)
+        .toEqual(directionState.event.geometry.pointer);
+    }
+
+    await page.locator(
+      "#battleVfxModeSelect"
+    ).selectOption("off");
+    await playButton.click();
+    const offState = await page.evaluate(() => {
+      return window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getSpellPreviewVfxState();
+    });
+    expect(offState.result).toMatchObject({
+      ok: true,
+      skipped: true,
+      reason: "effects-off"
+    });
+
+    await page.locator(
+      "#battleVfxModeSelect"
+    ).selectOption("full");
+    for (let index = 0; index < 20; index += 1) {
+      await playButton.click();
+    }
+    const cappedState = await page.evaluate(() => ({
+      vfx: window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getVfxState(),
+      sequences: window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getVfxSequenceState()
+    }));
+    expect(cappedState.vfx.activeCount).toBeLessThanOrEqual(64);
+    expect(cappedState.sequences.activeCount).toBeLessThanOrEqual(16);
+    await page.waitForTimeout(5000);
+    const cleanedState = await page.evaluate(() => ({
+      vfx: window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getVfxState(),
+      sequences: window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getVfxSequenceState(),
+      cast: window.__HOMEBREW_GOD_RELEASE_TEST__
+        .getSpellCastState(),
+      confirmedEvents: window.__PREVIEW_CONFIRMED_EVENTS__,
+      sentinel: window.__PREVIEW_GAMEPLAY_SENTINEL__
+    }));
+    expect(cleanedState.vfx.activeCount).toBe(0);
+    expect(cleanedState.sequences.activeCount).toBe(0);
+    expect(cleanedState.cast).toBeNull();
+    expect(cleanedState.confirmedEvents).toBe(0);
+    expect(cleanedState.sentinel).toEqual({
+      currentHp: 37,
+      spellSlots: 2,
+      resources: 5
+    });
+  }
+);
+
+test(
+  "Class step keeps starting-class selection after Abilities and rerenders multiclass success immediately",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&release=class-state-regressions-20260829",
+      { waitUntil: "domcontentloaded" }
+    );
+    await page.waitForFunction(() => Boolean(
+      window.__HOMEBREW_GOD_RELEASE_TEST__
+    ));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .openScreen("characterCreator"));
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .prepareCharacterCreatorClassTest({
+        totalLevel: 2,
+        stepId: "abilities"
+      }));
+
+    const strength = page.locator(
+      "#ccAbility-str"
+    );
+    await expect(strength).toBeVisible();
+    await strength.fill("13");
+    await strength.blur();
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .setCharacterCreatorTestStep("class"));
+
+    await expect(page.locator(
+      '[data-starting-class-selector="true"]'
+    )).toBeVisible();
+    const beforeClass = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .getCharacterCreatorTestState());
+    expect(beforeClass.classProgression.classes).toEqual([]);
+
+    await page.locator(
+      "#ccCharacterLevel"
+    ).fill("2");
+    await page.locator(
+      "#ccCharacterLevel"
+    ).blur();
+    await expect(page.locator(
+      "#ccCharacterLevel"
+    )).toHaveValue("2");
+
+    await page.locator(
+      '[data-cc-action="choose-class"][data-class-id="artificer"]'
+    ).click();
+    await expect(page.locator(
+      "[data-level-first-panel]"
+    )).toContainText("Artificer 2");
+
+    await page.getByRole("button", {
+      name: "Add a Multiclass"
+    }).click();
+    let dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", {
+      name: "Split 1 Level Into Selected Class"
+    }).click();
+    await expect(dialog.locator(
+      "#ccMulticlassAddStatus"
+    )).toContainText("Choose a class to add first");
+    await dialog.locator(
+      "#ccMulticlassAddClass"
+    ).selectOption("wizard");
+    await dialog.getByRole("button", {
+      name: "Split 1 Level Into Selected Class"
+    }).click();
+
+    await expect(page.locator(
+      "[data-level-first-panel]"
+    )).toContainText("Artificer 1 / Wizard 1");
+    await expect(page.getByRole("heading", {
+      name: /Artificer.*Starting Class/,
+      exact: false
+    }).locator("..")).toContainText("Class Level: 1");
+    await expect(page.getByRole("heading", {
+      name: "Wizard",
+      exact: true
+    }).first().locator("..")).toContainText("Class Level: 1");
+    await expect(page.locator(
+      "#ccMulticlassAddStatus"
+    )).not.toContainText("Choose a class to add first");
+    await expect(page.locator(
+      "#ccMulticlassAddStatus"
+    )).not.toContainText(
+      "That class is already in this character's progression"
+    );
+    await expect(page.locator(
+      "#ccMulticlassAddClass"
+    )).toHaveValue("");
+    await expect(page.locator(
+      "#ccMulticlassAddClass option"
+    ).first()).toHaveText("Add another character level first");
+    await expect(page.locator(
+      '[data-cc-action="add-multiclass-class"]'
+    )).toBeDisabled();
+
+    const classState = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .getCharacterCreatorTestState());
+    expect(classState.classProgression.classes.map((entry) => ({
+      classId: entry.classId,
+      level: entry.level
+    }))).toEqual([
+      { classId: "artificer", level: 1 },
+      { classId: "wizard", level: 1 }
+    ]);
+
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .setCharacterCreatorTestStep("review"));
+    await expect(page.locator(
+      "#characterWizardStepBody"
+    )).toContainText("Artificer 1");
+    await expect(page.locator(
+      "#characterWizardStepBody"
+    )).toContainText("Wizard 1");
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .setCharacterCreatorTestStep("class"));
+    await expect(page.locator(
+      "[data-level-first-panel]"
+    )).toContainText("Artificer 1 / Wizard 1");
+  }
+);
+
+test(
   "character-sheet area spells expose Target on Map without spending resources",
   async ({ page }) => {
     await page.goto(

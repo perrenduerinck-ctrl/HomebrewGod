@@ -564,9 +564,7 @@ export function createMulticlassStep(dependencies = {}) {
     }
 
     const roots = [
-      localRoot,
-      W.stepBody,
-      W.root
+      localRoot
     ].filter((root, index, values) => {
       return (
         root &&
@@ -1419,6 +1417,12 @@ export function createMulticlassStep(dependencies = {}) {
       return false;
     }
 
+    setSection12MulticlassAddStatus(
+      "",
+      "warning",
+      localRoot
+    );
+
     const addResult =
       tryAddMulticlassClass(
         classId
@@ -1474,10 +1478,15 @@ export function createMulticlassStep(dependencies = {}) {
 
     renderCreatorView();
 
-    setSection12MulticlassAddStatus(
-      addResult.message,
-      resultTone
-    );
+    const refreshedSelect =
+      typeof document !== "undefined"
+        ? document.querySelector(
+            "#ccMulticlassAddClass"
+          )
+        : null;
+    if (refreshedSelect) {
+      refreshedSelect.value = "";
+    }
 
     return true;
   }

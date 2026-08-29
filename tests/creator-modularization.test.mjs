@@ -194,10 +194,10 @@ test("characterCreator/index.js remains the browser-facing coordinator", () => {
   );
   assert.match(
     app,
-    /import\(\s*"\.\/characterCreator\/index\.js"\s*\)/
+    /import\(\s*"\.\/characterCreator\/index\.js(?:\?[^"']+)?"\s*\)/
   );
   assert.match(
     index,
-    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=multiclass-flow-20260825"/
+    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=dm-preview-class-state-20260829"/
   );
 });
