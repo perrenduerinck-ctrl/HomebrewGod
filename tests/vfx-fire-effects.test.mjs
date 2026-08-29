@@ -13,6 +13,8 @@ import {
   createDefaultEffectRegistry
 } from "../vfx/effectRegistry.js";
 import {
+  FIRE_BOLT_IMPACT_EFFECT_ID,
+  FIRE_BOLT_PROJECTILE_EFFECT_ID,
   FIRE_CASTING_SEQUENCE_DEFINITIONS,
   FIRE_EFFECT_DEFINITIONS,
   FIRE_EFFECT_IDS,
@@ -105,11 +107,15 @@ test("the fire vertical slice registers every required procedural effect", () =>
       .map(({ id }) => id),
     FIRE_EFFECT_IDS
   );
-  assert.equal(
+  assert.deepEqual(
     FIRE_EFFECT_DEFINITIONS
-      .filter(({ id }) => id !== FIRE_SPRITE_EFFECT_ID)
-      .every(({ kind }) => kind === "procedural"),
-    true
+      .filter(({ kind }) => kind === "sprite")
+      .map(({ id }) => id),
+    [
+      FIRE_SPRITE_EFFECT_ID,
+      FIRE_BOLT_PROJECTILE_EFFECT_ID,
+      FIRE_BOLT_IMPACT_EFFECT_ID
+    ]
   );
 
   const registry = createDefaultEffectRegistry();
@@ -122,6 +128,8 @@ test("the fire vertical slice registers every required procedural effect", () =>
     glow: "assets/vfx/fire/glow.webp",
     impact: "assets/vfx/fire/fire-impact.webp",
     impactSheet: "assets/vfx/fire/fire-impact-spritesheet.png",
+    fireBoltProjectile: "assets/vfx/fire/fire-bolt-projectile.png",
+    fireBoltImpact: "assets/vfx/fire/fire-bolt-impact.png",
     scorch: "assets/vfx/fire/scorch.webp"
   });
   assert.equal(
@@ -132,19 +140,46 @@ test("the fire vertical slice registers every required procedural effect", () =>
     registry.get(FIRE_SPRITE_EFFECT_ID)?.sprite.columns,
     4
   );
+  assert.equal(
+    registry.get(FIRE_BOLT_PROJECTILE_EFFECT_ID)?.kind,
+    "sprite"
+  );
+  assert.equal(
+    registry.get(FIRE_BOLT_IMPACT_EFFECT_ID)?.kind,
+    "sprite"
+  );
 });
 
-test("the supplied fire artwork is used as an optional 4 by 4 impact sheet", () => {
-  const asset = readFileSync(
+test("the supplied fire artwork includes bounded Fire Bolt sprites", () => {
+  const impactSheet = readFileSync(
     new URL(
       `../${FIRE_OPTIONAL_ASSET_PATHS.impactSheet}`,
       import.meta.url
     )
   );
-  assert.ok(asset.byteLength > 0);
+  const projectile = readFileSync(new URL(
+    `../${FIRE_OPTIONAL_ASSET_PATHS.fireBoltProjectile}`,
+    import.meta.url
+  ));
+  const impact = readFileSync(new URL(
+    `../${FIRE_OPTIONAL_ASSET_PATHS.fireBoltImpact}`,
+    import.meta.url
+  ));
+
+  [impactSheet, projectile, impact].forEach((asset) => {
+    assert.ok(asset.byteLength > 0);
+    assert.deepEqual(
+      Array.from(asset.subarray(0, 8)),
+      [137, 80, 78, 71, 13, 10, 26, 10]
+    );
+  });
   assert.deepEqual(
-    Array.from(asset.subarray(0, 8)),
-    [137, 80, 78, 71, 13, 10, 26, 10]
+    [projectile.readUInt32BE(16), projectile.readUInt32BE(20)],
+    [512, 192]
+  );
+  assert.deepEqual(
+    [impact.readUInt32BE(16), impact.readUInt32BE(20)],
+    [512, 512]
   );
 
   const sprite = FIRE_EFFECT_DEFINITIONS.find(
@@ -156,6 +191,26 @@ test("the supplied fire artwork is used as an optional 4 by 4 impact sheet", () 
   assert.equal(sprite.sprite.loops, 1);
   assert.equal(sprite.sprite.loop, false);
   assert.equal(sprite.sprite.removeOnComplete, true);
+
+  const projectileDefinition = FIRE_EFFECT_DEFINITIONS.find(
+    ({ id }) => id === FIRE_BOLT_PROJECTILE_EFFECT_ID
+  );
+  assert.equal(projectileDefinition.sprite.frameCount, 1);
+  assert.equal(projectileDefinition.sprite.removeOnComplete, false);
+  assert.match(
+    projectileDefinition.sprite.src,
+    /fire-bolt-projectile\.png$/
+  );
+
+  const impactDefinition = FIRE_EFFECT_DEFINITIONS.find(
+    ({ id }) => id === FIRE_BOLT_IMPACT_EFFECT_ID
+  );
+  assert.equal(impactDefinition.sprite.frameCount, 1);
+  assert.equal(impactDefinition.sprite.removeOnComplete, false);
+  assert.match(
+    impactDefinition.sprite.src,
+    /fire-bolt-impact\.png$/
+  );
 });
 
 test("the fire slice has procedural styles without mandatory image assets", () => {
@@ -185,6 +240,7 @@ test("fire sequences are generic by delivery type and damage type", () => {
   assert.deepEqual(
     FIRE_CASTING_SEQUENCE_DEFINITIONS.map(({ id }) => id),
     [
+      "fire-bolt",
       "fire-projectile",
       "fire-burst",
       "fire-directional",
@@ -193,6 +249,11 @@ test("fire sequences are generic by delivery type and damage type", () => {
   );
 
   const registry = createDefaultCastingSequenceRegistry();
+  assert.equal(registry.resolve({
+    spellId: "fire-bolt",
+    damageTypes: ["fire"],
+    deliveryType: "projectile"
+  }).id, "fire-bolt");
   assert.equal(registry.resolve({
     damageTypes: ["fire"],
     deliveryType: "projectile"
@@ -213,6 +274,59 @@ test("fire sequences are generic by delivery type and damage type", () => {
     damageTypes: ["cold"],
     deliveryType: "projectile"
   }).id, "generic-projectile");
+});
+
+test("Fire Bolt follows spell geometry from charge through ember fade", () => {
+  const scheduler = createScheduler();
+  const effectEngine = createEffectEngine();
+  const system = createCastingSequenceSystem({
+    effectEngine,
+    scheduler
+  });
+  const event = createSpellVfxEvent({
+    spell: getDefaultSpellById("fire-bolt"),
+    casterPoint: { x: 24, y: 36 },
+    targetPoint: { x: 214, y: 136 },
+    intensity: 1
+  });
+  const result = system.play(event);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.definition.id, "fire-bolt");
+  scheduler.advance(result.definition.totalDuration);
+
+  const requests = effectEngine.getStats().requests;
+  const roles = new Set(
+    requests.map(({ metadata }) => metadata.role)
+  );
+  [
+    "fire-bolt-charge",
+    "fire-bolt-projectile",
+    "fire-bolt-trail",
+    "fire-bolt-impact-sprite",
+    "fire-bolt-impact-fallback",
+    "fire-bolt-ember-fade"
+  ].forEach((role) => assert.equal(roles.has(role), true));
+
+  const projectile = requests.find(
+    ({ type }) => type === FIRE_BOLT_PROJECTILE_EFFECT_ID
+  );
+  assert.deepEqual(projectile.startPosition, event.casterPoint);
+  assert.deepEqual(projectile.endPosition, event.targetPoint);
+  assert.equal(
+    requests.some(({ type }) => type === "fire-trail"),
+    true
+  );
+  assert.equal(
+    requests.some(({ type }) => type === "fire-smoke"),
+    false
+  );
+  assert.equal(
+    requests.some(({ type }) => type === "fire-scorch"),
+    false
+  );
+  assert.equal(system.getState().activeCount, 0);
+  assert.equal(scheduler.pending(), 0);
 });
 
 test("a confirmed fire burst composes all seven visuals and cleans up", () => {

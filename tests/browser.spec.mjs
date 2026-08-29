@@ -3412,6 +3412,64 @@ test(
     });
     await expect(spriteEffect).toHaveCount(1);
 
+    const fireBoltProjectile = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest({
+        type: "fire-bolt-projectile-sprite",
+        startPosition: { x: 90, y: 140 },
+        endPosition: { x: 420, y: 240 },
+        duration: 800
+      }));
+    expect(fireBoltProjectile.ok).toBe(true);
+    const fireBoltProjectileEffect = layer.locator(
+      `[data-effect-id="${fireBoltProjectile.id}"]`
+    );
+    await expect(fireBoltProjectileEffect).toHaveClass(
+      /has-path/
+    );
+    const fireBoltProjectileNode = fireBoltProjectileEffect.locator(
+      ".hg-vfx-sprite"
+    );
+    await expect(fireBoltProjectileNode).toHaveCSS(
+      "background-size",
+      "512px 192px"
+    );
+    await expect(fireBoltProjectileNode).toHaveCSS(
+      "animation-name",
+      "hg-vfx-fire-bolt-projectile"
+    );
+    expect(await fireBoltProjectileNode.evaluate((element) => (
+      getComputedStyle(element).backgroundImage
+    ))).toContain("fire-bolt-projectile.png");
+
+    const fireBoltImpact = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest({
+        type: "fire-bolt-impact-sprite",
+        duration: 700
+      }));
+    expect(fireBoltImpact.ok).toBe(true);
+    const fireBoltImpactNode = layer.locator(
+      `[data-effect-id="${fireBoltImpact.id}"] .hg-vfx-sprite`
+    );
+    await expect(fireBoltImpactNode).toHaveCSS(
+      "background-size",
+      "512px 512px"
+    );
+    await expect(fireBoltImpactNode).toHaveCSS(
+      "animation-name",
+      "hg-vfx-fire-bolt-impact"
+    );
+    expect(await fireBoltImpactNode.evaluate((element) => (
+      getComputedStyle(element).backgroundImage
+    ))).toContain("fire-bolt-impact.png");
+    await expect(fireBoltProjectileEffect).toHaveCount(0, {
+      timeout: 2000
+    });
+    await expect(fireBoltImpactNode).toHaveCount(0, {
+      timeout: 2000
+    });
+
     await expect.poll(async () => {
       const [vfxBox, viewerBox] = await Promise.all([
         layer.boundingBox(),

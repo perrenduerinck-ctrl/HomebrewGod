@@ -14,11 +14,17 @@ export const FIRE_OPTIONAL_ASSET_PATHS = Object.freeze({
   glow: "assets/vfx/fire/glow.webp",
   impact: "assets/vfx/fire/fire-impact.webp",
   impactSheet: "assets/vfx/fire/fire-impact-spritesheet.png",
+  fireBoltProjectile: "assets/vfx/fire/fire-bolt-projectile.png",
+  fireBoltImpact: "assets/vfx/fire/fire-bolt-impact.png",
   scorch: "assets/vfx/fire/scorch.webp"
 });
 
 export const FIRE_SPRITE_EFFECT_ID =
   "fire-impact-sprite";
+export const FIRE_BOLT_PROJECTILE_EFFECT_ID =
+  "fire-bolt-projectile-sprite";
+export const FIRE_BOLT_IMPACT_EFFECT_ID =
+  "fire-bolt-impact-sprite";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) {
@@ -130,6 +136,40 @@ export const FIRE_EFFECT_DEFINITIONS = Object.freeze([
       loops: 1,
       loop: false,
       removeOnComplete: true
+    }
+  }),
+  deepFreeze({
+    id: FIRE_BOLT_PROJECTILE_EFFECT_ID,
+    kind: "sprite",
+    className: FIRE_BOLT_PROJECTILE_EFFECT_ID,
+    sprite: {
+      src: `./${FIRE_OPTIONAL_ASSET_PATHS.fireBoltProjectile}`,
+      frameWidth: 512,
+      frameHeight: 192,
+      frameCount: 1,
+      columns: 1,
+      rows: 1,
+      framesPerSecond: 24,
+      loops: 1,
+      loop: false,
+      removeOnComplete: false
+    }
+  }),
+  deepFreeze({
+    id: FIRE_BOLT_IMPACT_EFFECT_ID,
+    kind: "sprite",
+    className: FIRE_BOLT_IMPACT_EFFECT_ID,
+    sprite: {
+      src: `./${FIRE_OPTIONAL_ASSET_PATHS.fireBoltImpact}`,
+      frameWidth: 512,
+      frameHeight: 512,
+      frameCount: 1,
+      columns: 1,
+      rows: 1,
+      framesPerSecond: 24,
+      loops: 1,
+      loop: false,
+      removeOnComplete: false
     }
   })
 ]);
@@ -291,7 +331,103 @@ function makeFireCastingSequence({
   });
 }
 
+function makeFireBoltCastingSequence() {
+  return deepFreeze({
+    id: "fire-bolt",
+    label: "Fire Bolt",
+    priority: 100,
+    match: {
+      spellIds: ["fire-bolt"],
+      damageTypes: ["fire"],
+      deliveryTypes: ["projectile"]
+    },
+    phases: {
+      charge: {
+        duration: 240,
+        effects: [
+          effect("fire-glow", "caster", {
+            duration: 340,
+            scale: 0.56,
+            role: "fire-bolt-charge"
+          }),
+          effect("fire-embers", "caster", {
+            duration: 420,
+            particles: { count: 5, distance: 26, size: 3 },
+            scale: 0.58,
+            role: "fire-bolt-charge-embers"
+          })
+        ]
+      },
+      release: {
+        duration: 100,
+        effects: [
+          effect("fire-glow", "caster", {
+            duration: 240,
+            scale: 0.76,
+            role: "fire-bolt-release"
+          }),
+          effect("fire-flames", "caster", {
+            duration: 320,
+            particles: { count: 6, distance: 28, size: 6 },
+            scale: 0.58,
+            role: "fire-bolt-release-flames"
+          })
+        ]
+      },
+      travel: {
+        duration: 420,
+        effects: [
+          effect(FIRE_BOLT_PROJECTILE_EFFECT_ID, "path", {
+            duration: 420,
+            role: "fire-bolt-projectile"
+          }),
+          effect("fire-trail", "path", {
+            duration: 420,
+            scale: 0.62,
+            role: "fire-bolt-trail"
+          })
+        ]
+      },
+      impact: {
+        duration: 280,
+        effects: [
+          effect(FIRE_BOLT_IMPACT_EFFECT_ID, "target", {
+            duration: 520,
+            scale: 0.72,
+            role: "fire-bolt-impact-sprite"
+          }),
+          effect("fire-explosion", "target", {
+            duration: 420,
+            particles: { count: 12, distance: 54, size: 5 },
+            scale: 0.55,
+            role: "fire-bolt-impact-fallback"
+          }),
+          effect("fire-flames", "target", {
+            duration: 420,
+            particles: { count: 8, distance: 34, size: 6 },
+            scale: 0.58,
+            role: "fire-bolt-impact-flames"
+          })
+        ]
+      },
+      aftermath: {
+        duration: 920,
+        effects: [
+          effect("fire-embers", "target", {
+            duration: 900,
+            particles: { count: 12, distance: 52, size: 3 },
+            scale: 0.7,
+            role: "fire-bolt-ember-fade"
+          })
+        ]
+      },
+      cleanup: {}
+    }
+  });
+}
+
 export const FIRE_CASTING_SEQUENCE_DEFINITIONS = Object.freeze([
+  makeFireBoltCastingSequence(),
   makeFireCastingSequence({
     id: "fire-projectile",
     label: "Fire Projectile",
