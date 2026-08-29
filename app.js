@@ -1004,19 +1004,23 @@ async function loadMoreMyRooms() {
 async function createRoom() {
   const roomName = E.roomNameInput.value.trim() || "Unnamed Room";
   let roomCode = null;
+  let lastCreateError = null;
+  const knownRoomCodes = new Set(
+    savedRoomDocs.map(function (roomDoc) {
+      return normalizeRoomCode(roomDoc.id);
+    })
+  );
 
   for (let attempt = 0; attempt < 10; attempt++) {
     const candidateCode = makeRoomCode();
+    if (knownRoomCodes.has(candidateCode)) {
+      continue;
+    }
+
     const roomRef = doc(db, "rooms", candidateCode);
 
-    const created = await runTransaction(db, async function (transaction) {
-      const roomSnap = await transaction.get(roomRef);
-
-      if (roomSnap.exists()) {
-        return false;
-      }
-
-      transaction.set(roomRef, {
+    try {
+      await setDoc(roomRef, {
         roomCode: candidateCode,
         roomName,
         dmUid: currentUser.uid,
@@ -1027,17 +1031,20 @@ async function createRoom() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-
-      return true;
-    });
-
-    if (created) {
       roomCode = candidateCode;
       break;
+    } catch (error) {
+      lastCreateError = error;
+      if (error?.code !== "permission-denied") {
+        throw error;
+      }
     }
   }
 
   if (!roomCode) {
+    if (lastCreateError) {
+      throw lastCreateError;
+    }
     throw new Error("Could not generate a unique room code. Please try again.");
   }
 
@@ -6345,9 +6352,107 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
     characterCreator:
       E.characterCreatorScreen
   };
+  const releaseTestUploadSelectors =
+    Object.freeze({
+      roomMap: "#roomMapUploadInput",
+      puzzleTile: "#puzzleTileUploadInput",
+      token: "#tokenImageUploadInput",
+      characterPortrait:
+        '[data-cc-portrait-upload="true"], #characterImageUploadInput'
+    });
+  const releaseTestPngBytes =
+    Object.freeze([
+      137, 80, 78, 71, 13, 10, 26, 10,
+      0, 0, 0, 13, 73, 72, 68, 82,
+      0, 0, 0, 1, 0, 0, 0, 1,
+      8, 4, 0, 0, 0, 181, 28, 12,
+      2, 0, 0, 0, 11, 73, 68, 65,
+      84, 120, 218, 99, 252, 255, 31, 0,
+      2, 235, 1, 245, 143, 89, 46, 28,
+      0, 0, 0, 0, 73, 69, 78, 68,
+      174, 66, 96, 130
+    ]);
+  function attachReleaseTestImageUploadFile(
+    uploadKind
+  ) {
+    const selector =
+      releaseTestUploadSelectors[
+        uploadKind
+      ];
+    const input = selector
+      ? document.querySelector(selector)
+      : null;
+
+    if (!input) {
+      throw new Error(
+        `Unknown or unavailable upload control: ${uploadKind}`
+      );
+    }
+
+    const transfer = new DataTransfer();
+    const file = new File(
+      [new Uint8Array(releaseTestPngBytes)],
+      `ai-upload-verification-${uploadKind}.png`,
+      { type: "image/png" }
+    );
+    transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(
+      new Event("change", {
+        bubbles: true
+      })
+    );
+
+    return {
+      kind: uploadKind,
+      name: input.files[0]?.name || "",
+      size: input.files[0]?.size || 0,
+      type: input.files[0]?.type || ""
+    };
+  }
+
+  const releaseTestUploadKind =
+    new URLSearchParams(
+      window.location.search
+    ).get("uploadTestKind");
+
+  if (
+    releaseTestUploadSelectors[
+      releaseTestUploadKind
+    ]
+  ) {
+    const attachButton =
+      document.createElement("button");
+    attachButton.type = "button";
+    attachButton.textContent =
+      `Attach ${releaseTestUploadKind} test image`;
+    attachButton.style.cssText = [
+      "position:fixed",
+      "left:1rem",
+      "bottom:1rem",
+      "z-index:99999"
+    ].join(";");
+    attachButton.addEventListener(
+      "click",
+      function () {
+        const result =
+          attachReleaseTestImageUploadFile(
+            releaseTestUploadKind
+          );
+        document.body.dataset
+          .uploadTestAttached = result.kind;
+        attachButton.textContent =
+          `Attached ${result.name}`;
+      }
+    );
+    document.body.appendChild(attachButton);
+  }
 
   window.__HOMEBREW_GOD_RELEASE_TEST__ =
     Object.freeze({
+      attachImageUploadTestFile:
+        attachReleaseTestImageUploadFile,
+
       openScreen:
         async function (screenName) {
           if (
