@@ -1,6 +1,6 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
-} from "./fireEffects.js?v=vfx-fire-bolt-20260829";
+} from "./fireEffects.js?v=vfx-fireball-20260829";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
@@ -100,6 +100,15 @@ function normalizeSequenceEffect(effect = {}) {
     duration: finiteNumber(effect.duration) === null
       ? null
       : Math.round(boundedNumber(effect.duration, 0, 0, 5000)),
+    geometryScaleBasePixels:
+      finiteNumber(effect.geometryScaleBasePixels) === null
+        ? null
+        : boundedNumber(
+            effect.geometryScaleBasePixels,
+            72,
+            8,
+            4096
+          ),
     intensityOffset: Math.round(boundedNumber(
       effect.intensityOffset,
       0,
@@ -500,11 +509,25 @@ function makeEffectRequest({
   const duration = Math.round(
     (effect.duration ?? phase.duration) * timingScale
   );
+  const geometryDiameter = Math.max(
+    finiteNumber(event?.geometry?.bounds?.width) ?? 0,
+    finiteNumber(event?.geometry?.bounds?.height) ?? 0,
+    (finiteNumber(event?.geometry?.sizePixels) ?? 0) * 2
+  );
+  const scale = effect.geometryScaleBasePixels && geometryDiameter > 0
+    ? clamp(
+        geometryDiameter /
+          effect.geometryScaleBasePixels *
+          effect.scale,
+        0.05,
+        20
+      )
+    : effect.scale;
 
   return {
     type: effect.type,
     ...points,
-    scale: effect.scale,
+    scale,
     rotation: effect.rotation,
     opacity: effect.opacity,
     duration,

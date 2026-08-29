@@ -16,6 +16,7 @@ export const FIRE_OPTIONAL_ASSET_PATHS = Object.freeze({
   impactSheet: "assets/vfx/fire/fire-impact-spritesheet.png",
   fireBoltProjectile: "assets/vfx/fire/fire-bolt-projectile.png",
   fireBoltImpact: "assets/vfx/fire/fire-bolt-impact.png",
+  fireballProjectile: "assets/vfx/fire/fireball-projectile.png",
   scorch: "assets/vfx/fire/scorch.webp"
 });
 
@@ -25,6 +26,8 @@ export const FIRE_BOLT_PROJECTILE_EFFECT_ID =
   "fire-bolt-projectile-sprite";
 export const FIRE_BOLT_IMPACT_EFFECT_ID =
   "fire-bolt-impact-sprite";
+export const FIREBALL_PROJECTILE_EFFECT_ID =
+  "fireball-projectile-sprite";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) {
@@ -171,6 +174,23 @@ export const FIRE_EFFECT_DEFINITIONS = Object.freeze([
       loop: false,
       removeOnComplete: false
     }
+  }),
+  deepFreeze({
+    id: FIREBALL_PROJECTILE_EFFECT_ID,
+    kind: "sprite",
+    className: FIREBALL_PROJECTILE_EFFECT_ID,
+    sprite: {
+      src: `./${FIRE_OPTIONAL_ASSET_PATHS.fireballProjectile}`,
+      frameWidth: 1254,
+      frameHeight: 1254,
+      frameCount: 1,
+      columns: 1,
+      rows: 1,
+      framesPerSecond: 24,
+      loops: 1,
+      loop: false,
+      removeOnComplete: false
+    }
   })
 ]);
 
@@ -180,6 +200,7 @@ function effect(
   {
     duration,
     intensityOffset = 0,
+    geometryScaleBasePixels = null,
     opacity = 1,
     particles = null,
     scale = 1,
@@ -191,6 +212,7 @@ function effect(
     anchor,
     duration,
     intensityOffset,
+    geometryScaleBasePixels,
     opacity,
     particles,
     scale,
@@ -199,6 +221,114 @@ function effect(
       role
     }
   };
+}
+
+function makeFireballCastingSequence() {
+  return deepFreeze({
+    id: "fireball",
+    label: "Fireball",
+    priority: 100,
+    match: {
+      spellIds: ["fireball"],
+      damageTypes: ["fire"],
+      deliveryTypes: ["burst"]
+    },
+    phases: {
+      charge: {
+        duration: 280,
+        effects: [
+          effect("fire-glow", "caster", {
+            duration: 420,
+            scale: 0.82,
+            role: "fireball-charge"
+          }),
+          effect("fire-embers", "caster", {
+            duration: 520,
+            particles: { count: 8, distance: 38, size: 4 },
+            scale: 0.8,
+            role: "fireball-charge-embers"
+          })
+        ]
+      },
+      release: {
+        duration: 120,
+        effects: [
+          effect("fire-glow", "caster", {
+            duration: 300,
+            scale: 1.05,
+            role: "fireball-release"
+          }),
+          effect("fire-flames", "caster", {
+            duration: 440,
+            particles: { count: 10, distance: 42, size: 8 },
+            scale: 0.88,
+            role: "fireball-release-flames"
+          })
+        ]
+      },
+      travel: {
+        duration: 560,
+        effects: [
+          effect(FIREBALL_PROJECTILE_EFFECT_ID, "path", {
+            duration: 560,
+            role: "fireball-projectile"
+          }),
+          effect("fire-trail", "path", {
+            duration: 560,
+            particles: { count: 18, distance: 38, size: 5 },
+            scale: 1.05,
+            role: "fireball-trail"
+          })
+        ]
+      },
+      impact: {
+        duration: 360,
+        effects: [
+          effect(FIRE_SPRITE_EFFECT_ID, "target", {
+            duration: 920,
+            geometryScaleBasePixels: 160,
+            role: "fireball-explosion-sprite"
+          }),
+          effect("fire-explosion", "target", {
+            duration: 680,
+            geometryScaleBasePixels: 72,
+            role: "fireball-explosion-fallback"
+          }),
+          effect("fire-glow", "affected-tokens", {
+            duration: 360,
+            scale: 0.5,
+            role: "fireball-token-hit"
+          })
+        ]
+      },
+      aftermath: {
+        duration: 1400,
+        effects: [
+          effect("fire-embers", "target", {
+            duration: 980,
+            geometryScaleBasePixels: 72,
+            scale: 0.82,
+            role: "fireball-ember-field"
+          }),
+          effect("fire-smoke", "target", {
+            duration: 1360,
+            geometryScaleBasePixels: 72,
+            opacity: 0.72,
+            scale: 0.86,
+            role: "fireball-smoke"
+          }),
+          effect("fire-scorch", "target", {
+            duration: 1380,
+            geometryScaleBasePixels: 72,
+            opacity: 0.54,
+            scale: 0.94,
+            role: "fireball-scorch"
+          })
+        ]
+      },
+      cleanup: {}
+    }
+  });
 }
 
 function makeFireCastingSequence({
@@ -428,6 +558,7 @@ function makeFireBoltCastingSequence() {
 
 export const FIRE_CASTING_SEQUENCE_DEFINITIONS = Object.freeze([
   makeFireBoltCastingSequence(),
+  makeFireballCastingSequence(),
   makeFireCastingSequence({
     id: "fire-projectile",
     label: "Fire Projectile",

@@ -3484,11 +3484,42 @@ test(
     expect(await fireBoltImpactNode.evaluate((element) => (
       getComputedStyle(element).backgroundImage
     ))).toContain("fire-bolt-impact.png");
+
+    const fireballProjectile = await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .playVfxTest({
+        type: "fireball-projectile-sprite",
+        startPosition: { x: 90, y: 180 },
+        endPosition: { x: 470, y: 260 },
+        duration: 1000
+      }));
+    expect(fireballProjectile.ok).toBe(true);
+    const fireballProjectileEffect = layer.locator(
+      `[data-effect-id="${fireballProjectile.id}"]`
+    );
+    await expect(fireballProjectileEffect).toHaveClass(/has-path/);
+    const fireballProjectileNode = fireballProjectileEffect.locator(
+      ".hg-vfx-sprite"
+    );
+    await expect(fireballProjectileNode).toHaveCSS(
+      "background-size",
+      "1254px 1254px"
+    );
+    await expect(fireballProjectileNode).toHaveCSS(
+      "animation-name",
+      "hg-vfx-fireball-projectile"
+    );
+    expect(await fireballProjectileNode.evaluate((element) => (
+      getComputedStyle(element).backgroundImage
+    ))).toContain("fireball-projectile.png");
     await expect(fireBoltProjectileEffect).toHaveCount(0, {
       timeout: 2000
     });
     await expect(fireBoltImpactNode).toHaveCount(0, {
       timeout: 2000
+    });
+    await expect(fireballProjectileEffect).toHaveCount(0, {
+      timeout: 2500
     });
 
     await expect.poll(async () => {
