@@ -1,6 +1,6 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
-} from "./fireEffects.js?v=vfx-fire-stage5-20260828";
+} from "./fireEffects.js?v=vfx-fire-bolt-20260829";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([

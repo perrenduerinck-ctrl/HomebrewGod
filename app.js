@@ -70,14 +70,14 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=vfx-sprite-phase-a-20260828";
+} from "./vfx/effectEngine.js?v=vfx-fire-bolt-20260829";
 import {
   createSpellVfxEvent,
   dispatchConfirmedSpellVfxEvent
 } from "./vfx/castEvent.js?v=vfx-cast-stage2-20260827";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=vfx-fire-stage5-20260828";
+} from "./vfx/castingSequence.js?v=vfx-fire-bolt-20260829";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -6565,6 +6565,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
                     overlay?.clientHeight || 1
                   ) / 2
               },
+            startPosition:
+              options.startPosition || null,
+            endPosition:
+              options.endPosition || null,
             duration:
               options.duration ?? 250,
             delay:

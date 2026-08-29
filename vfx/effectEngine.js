@@ -1,6 +1,6 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=vfx-sprite-phase-a-20260828";
+} from "./effectRegistry.js?v=vfx-fire-bolt-20260829";
 import {
   createEffectRenderer
 } from "./effectRenderer.js?v=vfx-sprite-phase-a-20260828";
