@@ -2800,7 +2800,7 @@ test(
 );
 
 test(
-  "structured spell data drives Fireball, Burning Hands, and Lightning Bolt templates",
+  "structured spell data drives Fire Bolt and area spell templates",
   async ({ page }) => {
     await page.goto(
       "?smokeTest=1&release=spell-templates-stage5-20260825",
@@ -2833,6 +2833,27 @@ test(
     );
     const overlay = page.locator(
       ".hg-map-template-layer"
+    );
+
+    for (const selector of [
+      "#battleManagerBar",
+      "#puzzleMapControls",
+      "#tokenBuilderControls",
+      "#creatorLauncherControls"
+    ]) {
+      await expect(page.locator(selector))
+        .toHaveJSProperty("open", false);
+    }
+
+    await expect(spellSelect.locator(
+      'option[value="fire-bolt"]'
+    )).toHaveText("Fire Bolt");
+    await spellSelect.selectOption("fire-bolt");
+    await loadButton.click();
+    await expect(shapeSelect).toHaveValue("circle");
+    await expect(sizeInput).toHaveValue("2.5");
+    await expect(status).toContainText(
+      "Fire Bolt · Range 120 feet · single target"
     );
 
     await spellSelect.selectOption("fireball");

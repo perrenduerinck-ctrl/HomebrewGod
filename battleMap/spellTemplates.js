@@ -10,6 +10,11 @@ const SHAPE_MAP = Object.freeze({
   line: "line",
   cube: "cube"
 });
+const SINGLE_TARGET_TYPES = Object.freeze([
+  "creature",
+  "object"
+]);
+const SINGLE_TARGET_RADIUS_FEET = 2.5;
 
 function cleanText(value, fallback = "") {
   return String(value || fallback).trim();
@@ -38,6 +43,41 @@ export function createSpellTemplateInstruction(spell = {}) {
   const targetType = cleanText(
     targeting?.target?.type
   ).toLowerCase();
+  const rangeFeet = Number.isFinite(
+    targeting?.range?.feet
+  )
+    ? targeting.range.feet
+    : null;
+  const name = cleanText(spell.name, "Spell");
+
+  if (
+    targeting &&
+    !area &&
+    rangeFeet !== null &&
+    SINGLE_TARGET_TYPES.includes(targetType)
+  ) {
+    return Object.freeze({
+      supported: true,
+      spellId: cleanText(spell.id),
+      spellName: name,
+      sourceShape: "single-target",
+      templateShape: "circle",
+      targetType: "point",
+      sourceTargetType: targetType,
+      placementMode: "point",
+      sizeFeet: SINGLE_TARGET_RADIUS_FEET,
+      widthFeet: SINGLE_TARGET_RADIUS_FEET * 2,
+      heightFeet: 0,
+      rangeType: targeting.range?.type || "distance",
+      rangeFeet,
+      rangeText: cleanText(
+        targeting.range?.text,
+        `${rangeFeet} feet`
+      ),
+      singleTarget: true,
+      previewOnly: true
+    });
+  }
 
   if (!targeting || !area) {
     return Object.freeze({
@@ -84,13 +124,6 @@ export function createSpellTemplateInstruction(spell = {}) {
           ? sizeFeet * 2
           : 0
   );
-  const rangeFeet = Number.isFinite(
-    targeting.range?.feet
-  )
-    ? targeting.range.feet
-    : null;
-  const name = cleanText(spell.name, "Spell");
-
   return Object.freeze({
     supported: true,
     spellId: cleanText(spell.id),
@@ -120,6 +153,10 @@ export function createSpellTemplateInstruction(spell = {}) {
 export function formatSpellTemplateInstruction(instruction) {
   if (!instruction?.supported) {
     return instruction?.reason || "Spell template unavailable.";
+  }
+
+  if (instruction.singleTarget) {
+    return `${instruction.spellName} · Range ${instruction.rangeText} · single target`;
   }
 
   const area = instruction.templateShape === "sphere"
