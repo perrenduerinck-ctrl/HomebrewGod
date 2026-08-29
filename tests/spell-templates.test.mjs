@@ -8,6 +8,25 @@ import {
   formatSpellTemplateInstruction
 } from "../battleMap/spellTemplates.js";
 
+test("Fire Bolt uses reusable single-target map placement", () => {
+  const instruction = createSpellTemplateInstruction(
+    getDefaultSpellById("fire-bolt")
+  );
+
+  assert.equal(instruction.supported, true);
+  assert.equal(instruction.singleTarget, true);
+  assert.equal(instruction.sourceShape, "single-target");
+  assert.equal(instruction.sourceTargetType, "creature");
+  assert.equal(instruction.templateShape, "circle");
+  assert.equal(instruction.placementMode, "point");
+  assert.equal(instruction.rangeFeet, 120);
+  assert.equal(instruction.sizeFeet, 2.5);
+  assert.equal(
+    formatSpellTemplateInstruction(instruction),
+    "Fire Bolt · Range 120 feet · single target"
+  );
+});
+
 test("Fireball drives a point-placed sphere without merging cast range and radius", () => {
   const instruction = createSpellTemplateInstruction(
     getDefaultSpellById("fireball")

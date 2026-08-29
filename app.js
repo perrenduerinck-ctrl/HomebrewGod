@@ -63,10 +63,10 @@ import {
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=stage8-20260826";
+} from "./battleMap/spellTemplates.js?v=map-single-target-20260829";
 import {
   createSpellCastingSession
-} from "./battleMap/castingSession.js?v=stage8-20260826";
+} from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode

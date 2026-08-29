@@ -1,6 +1,6 @@
 import {
   createSpellTemplateInstruction
-} from "./spellTemplates.js";
+} from "./spellTemplates.js?v=map-single-target-20260829";
 
 function cleanText(value, fallback = "") {
   return String(value ?? fallback).trim();
