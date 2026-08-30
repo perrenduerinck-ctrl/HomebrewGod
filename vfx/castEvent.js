@@ -101,6 +101,7 @@ function normalizeGeometry(value) {
     pointer: normalizePoint(value.pointer),
     startPoint: normalizePoint(value.startPoint),
     endPoint: normalizePoint(value.endPoint),
+    directionPoint: normalizePoint(value.directionPoint),
     labelPoint: normalizePoint(value.labelPoint),
     points: Object.freeze(points),
     verticalBounds: normalizeNumericRecord(

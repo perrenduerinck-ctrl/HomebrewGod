@@ -459,6 +459,26 @@ export function createMapTemplateEngine({
     render();
   }
 
+  // Programmatic placement shares the same geometry/render path as map clicks.
+  // Used by the DM preview controller; ordinary and real-cast input is unchanged.
+  function setPlacement({ origin = null, target = null, locked = false } = {}) {
+    syncBounds();
+    const responsivePoint = (point) => point ? {
+      ...point,
+      xRatio: Number.isFinite(point.xRatio)
+        ? point.xRatio : point.x / Math.max(1, overlay.clientWidth),
+      yRatio: Number.isFinite(point.yRatio)
+        ? point.yRatio : point.y / Math.max(1, overlay.clientHeight)
+    } : null;
+    anchor = responsivePoint(origin);
+    cursor = responsivePoint(target);
+    anchorLocked = Boolean(anchor);
+    confirmed = locked === true && Boolean(cursor);
+    syncBounds();
+    render();
+    return getState();
+  }
+
   function destroy() {
     if (!connected) return;
     connected = false;
@@ -491,6 +511,7 @@ export function createMapTemplateEngine({
     setEnabled,
     setAnchorPoint,
     setOptions,
+    setPlacement,
     setShape,
     toggle
   });

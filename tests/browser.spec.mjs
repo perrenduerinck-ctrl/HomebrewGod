@@ -2812,6 +2812,7 @@ test(
     await page.evaluate(() => window
       .__HOMEBREW_GOD_RELEASE_TEST__
       .openScreen("battle"));
+    await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setDmRole(true));
 
     const spellSelect = page.locator(
       "#spellTemplateSelect"
@@ -2909,214 +2910,179 @@ test(
   }
 );
 
-test(
-  "DM-only Spell Preview VFX uses locked geometry without casting or changing gameplay",
-  async ({ page }) => {
-    await page.goto(
-      "?smokeTest=1&release=dm-preview-vfx-20260829",
-      { waitUntil: "domcontentloaded" }
-    );
-    await page.waitForFunction(() => Boolean(
-      window.__HOMEBREW_GOD_RELEASE_TEST__
-    ));
-    await page.evaluate(() => window
-      .__HOMEBREW_GOD_RELEASE_TEST__
-      .openScreen("battle"));
-
-    const playButton = page.locator(
-      "#playSpellPreviewVfxButton"
-    );
-    const casterButton = page.locator(
-      "#setSpellPreviewCasterButton"
-    );
-    const spellSelect = page.locator(
-      "#spellTemplateSelect"
-    );
-    const loadButton = page.locator(
-      "#loadSpellTemplateButton"
-    );
-    const overlay = page.locator(
-      ".hg-map-template-layer"
-    );
-
-    await expect(playButton).toBeHidden();
-    await expect(casterButton).toBeHidden();
-    await page.evaluate(() => {
-      window.__PREVIEW_CONFIRMED_EVENTS__ = 0;
-      window.__PREVIEW_GAMEPLAY_SENTINEL__ = {
-        currentHp: 37,
-        spellSlots: 2,
-        resources: 5
-      };
-      document.addEventListener(
-        "homebrewgod:spell-cast-confirmed",
-        () => {
-          window.__PREVIEW_CONFIRMED_EVENTS__ += 1;
-        }
-      );
-      window.__HOMEBREW_GOD_RELEASE_TEST__
-        .setDmRole(true);
-    });
-    await expect(playButton).toBeVisible();
-    await expect(playButton).toBeDisabled();
-
-    await spellSelect.selectOption("fire-bolt");
-    await loadButton.click();
-    await expect(casterButton).toBeVisible();
-    await overlay.scrollIntoViewIfNeeded();
-    const fireBoltBox = await overlay.boundingBox();
-    expect(fireBoltBox).not.toBeNull();
-    const fireBoltTarget = {
-      x: fireBoltBox.x + Math.min(440, fireBoltBox.width * 0.72),
-      y: fireBoltBox.y + Math.min(260, fireBoltBox.height * 0.56)
-    };
-    const fireBoltCaster = {
-      x: fireBoltBox.x + Math.min(100, fireBoltBox.width * 0.18),
-      y: fireBoltBox.y + Math.min(260, fireBoltBox.height * 0.56)
-    };
-    await page.mouse.click(
-      fireBoltTarget.x,
-      fireBoltTarget.y
-    );
-    await expect(playButton).toBeDisabled();
-    await casterButton.click();
-    await page.mouse.click(
-      fireBoltCaster.x,
-      fireBoltCaster.y
-    );
-    await expect(page.locator(
-      ".hg-spell-preview-caster"
-    )).toBeVisible();
-    await expect(playButton).toBeEnabled();
-    await playButton.click();
-
-    const fireBoltState = await page.evaluate(() => {
-      return window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getSpellPreviewVfxState();
-    });
-    expect(fireBoltState.event.preview).toBe(true);
-    expect(fireBoltState.event.spellId).toBe("fire-bolt");
-    expect(fireBoltState.event.deliveryType).toBe("projectile");
-    expect(fireBoltState.event.casterTokenId).toBe("");
-    expect(fireBoltState.event.casterPoint.x)
-      .toBeLessThan(fireBoltState.event.targetPoint.x);
-    expect(fireBoltState.event.affectedTokens).toEqual([]);
-    expect(fireBoltState.result.ok).toBe(true);
-
-    await spellSelect.selectOption("fireball");
-    await loadButton.click();
-    await expect(casterButton).toBeHidden();
-    const fireballBox = await overlay.boundingBox();
-    expect(fireballBox).not.toBeNull();
-    await page.mouse.click(
-      fireballBox.x + Math.min(320, fireballBox.width * 0.55),
-      fireballBox.y + Math.min(220, fireballBox.height * 0.48)
-    );
-    await expect(playButton).toBeEnabled();
-    await playButton.click();
-    const fireballState = await page.evaluate(() => {
-      return window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getSpellPreviewVfxState();
-    });
-    expect(fireballState.event.spellId).toBe("fireball");
-    expect(fireballState.event.deliveryType).toBe("burst");
-    expect(fireballState.event.targetPoint)
-      .toEqual(fireballState.event.geometry.anchor);
-    expect(fireballState.event.affectedTokens).toEqual([]);
-
-    for (const [spellId, deliveryType] of [
-      ["burning-hands", "cone"],
-      ["lightning-bolt", "line"]
-    ]) {
-      await spellSelect.selectOption(spellId);
-      await loadButton.click();
-      const directionBox = await overlay.boundingBox();
-      expect(directionBox).not.toBeNull();
-      await overlay.click({
-        force: true,
-        position: {
-          x: directionBox.width * 0.28,
-          y: directionBox.height * 0.52
-        }
-      });
-      await overlay.hover({
-        force: true,
-        position: {
-          x: directionBox.width * 0.7,
-          y: directionBox.height * 0.4
-        }
-      });
-      await overlay.click({
-        force: true,
-        position: {
-          x: directionBox.width * 0.7,
-          y: directionBox.height * 0.4
-        }
-      });
-      await expect(playButton).toBeEnabled();
-      await playButton.click();
-      const directionState = await page.evaluate(() => {
-        return window.__HOMEBREW_GOD_RELEASE_TEST__
-          .getSpellPreviewVfxState();
-      });
-      expect(directionState.event.spellId).toBe(spellId);
-      expect(directionState.event.deliveryType).toBe(deliveryType);
-      expect(directionState.event.casterPoint)
-        .toEqual(directionState.event.geometry.anchor);
-      expect(directionState.event.targetPoint)
-        .toEqual(directionState.event.geometry.pointer);
-    }
-
-    await page.locator(
-      "#battleVfxModeSelect"
-    ).selectOption("off");
-    await playButton.click();
-    const offState = await page.evaluate(() => {
-      return window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getSpellPreviewVfxState();
-    });
-    expect(offState.result).toMatchObject({
-      ok: true,
-      skipped: true,
-      reason: "effects-off"
-    });
-
-    await page.locator(
-      "#battleVfxModeSelect"
-    ).selectOption("full");
-    for (let index = 0; index < 20; index += 1) {
-      await playButton.click();
-    }
-    const cappedState = await page.evaluate(() => ({
-      vfx: window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getVfxState(),
-      sequences: window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getVfxSequenceState()
-    }));
-    expect(cappedState.vfx.activeCount).toBeLessThanOrEqual(64);
-    expect(cappedState.sequences.activeCount).toBeLessThanOrEqual(16);
-    await page.waitForTimeout(5000);
-    const cleanedState = await page.evaluate(() => ({
-      vfx: window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getVfxState(),
-      sequences: window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getVfxSequenceState(),
-      cast: window.__HOMEBREW_GOD_RELEASE_TEST__
-        .getSpellCastState(),
-      confirmedEvents: window.__PREVIEW_CONFIRMED_EVENTS__,
-      sentinel: window.__PREVIEW_GAMEPLAY_SENTINEL__
-    }));
-    expect(cleanedState.vfx.activeCount).toBe(0);
-    expect(cleanedState.sequences.activeCount).toBe(0);
-    expect(cleanedState.cast).toBeNull();
-    expect(cleanedState.confirmedEvents).toBe(0);
-    expect(cleanedState.sentinel).toEqual({
-      currentHp: 37,
-      spellSlots: 2,
-      resources: 5
-    });
+async function openDmSpellPreview(page) {
+  await page.goto("?smokeTest=1&release=unified-preview-20260829",
+    { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle"));
+  for (const id of ["spellPreviewControl", "loadSpellTemplateButton",
+    "playSpellPreviewVfxButton", "resetSpellPreviewButton"]) {
+    await expect(page.locator("#" + id)).toBeHidden();
   }
-);
+  // Even a programmatic click on the hidden button cannot start a player preview.
+  await page.locator("#loadSpellTemplateButton").evaluate((button) => button.click());
+  expect(await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__
+    .getSpellPreviewVfxState().preview)).toBeNull();
+  await page.evaluate(() => {
+    window.__PREVIEW_CONFIRMED_EVENTS__ = 0;
+    document.addEventListener("homebrewgod:spell-cast-confirmed",
+      () => { window.__PREVIEW_CONFIRMED_EVENTS__ += 1; });
+    window.__HOMEBREW_GOD_RELEASE_TEST__.setDmRole(true);
+  });
+  const overlay = page.locator(".hg-map-template-layer");
+  const play = page.locator("#playSpellPreviewVfxButton");
+  const reset = page.locator("#resetSpellPreviewButton");
+  const status = page.locator("#templateStatus");
+  async function select(spell) {
+    await page.locator("#spellTemplateSelect").selectOption(spell);
+    await page.locator("#loadSpellTemplateButton").click();
+    await expect(status).toContainText("Click caster position.");
+    await expect(play).toBeDisabled();
+  }
+  async function point(x, y, hover = false) {
+    const options = { force: true, position: { x, y } };
+    if (hover) await overlay.hover(options);
+    else await overlay.click(options);
+  }
+  const state = () => page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellPreviewVfxState());
+  return { overlay, play, reset, status, select, point, state };
+}
+
+test("DM Spell Preview Fire Bolt travels in all eight directions after two clicks", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  await ui.select("fire-bolt");
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  for (const [dx, dy] of [[140,0],[-140,0],[0,100],[0,-100],
+    [100,100],[-100,100],[100,-100],[-100,-100]]) {
+    await ui.reset.click();
+    await ui.point(240, 180);
+    await expect(ui.status).toContainText("Caster set. Click target.");
+    await expect(ui.play).toBeDisabled();
+    await ui.point(240 + dx, 180 + dy, true);
+    await expect(ui.status).toContainText("/ 120 ft");
+    await ui.point(240 + dx, 180 + dy);
+    await expect(ui.play).toBeEnabled();
+    await expect(ui.overlay).toHaveAttribute("data-preview-phase", "locked");
+    const locked = (await ui.state()).preview;
+    await ui.point(20, 20);
+    expect((await ui.state()).preview.previewTargetPoint).toEqual(locked.previewTargetPoint);
+    await ui.play.click();
+    const played = await ui.state();
+    expect(played.event.preview).toBe(true);
+    expect(played.event.casterTokenId).toBe("");
+    expect(played.event.deliveryType).toBe("projectile");
+    expect(played.event.targetPoint.x - played.event.casterPoint.x).toBeCloseTo(dx, 0);
+    expect(played.event.targetPoint.y - played.event.casterPoint.y).toBeCloseTo(dy, 0);
+    expect(played.result.ok).toBe(true);
+    // Check the actual rendered path, not only event data (the old null-ratio
+    // normalization bug passed event-only checks but rendered toward 0,0).
+    const projectile = page.locator(".hg-vfx-fire-bolt-projectile-sprite.has-path").last();
+    await expect(projectile).toBeVisible();
+    const path = await projectile.evaluate((element) => ({
+      rotation: parseFloat(element.style.getPropertyValue("--hg-vfx-path-rotation")),
+      length: parseFloat(element.style.getPropertyValue("--hg-vfx-path-length"))
+    }));
+    expect(path.rotation).toBeCloseTo(Math.atan2(dy, dx) * 180 / Math.PI, 0);
+    expect(path.length).toBeCloseTo(Math.hypot(dx, dy), 0);
+    await expect(projectile).toHaveCount(0);
+  }
+});
+
+test("DM Spell Preview areas, directions and target-only effects use existing geometry", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  for (const [spell, delivery, shape, size] of [
+    ["fireball","burst","sphere",20], ["flame-strike","burst","cylinder",10],
+    ["ice-storm","burst","cylinder",20], ["burning-hands","cone","cone",15],
+    ["lightning-bolt","line","line",100], ["sacred-flame","impact","circle",2.5]
+  ]) {
+    await ui.select(spell);
+    await expect(page.locator("#templateSizeInput")).toBeDisabled();
+    await ui.point(200, 180);
+    await ui.point(300, 100, true);
+    await ui.point(300, 100);
+    await ui.play.click();
+    const state = await ui.state();
+    expect(state.event.spellId).toBe(spell);
+    expect(state.event.deliveryType).toBe(delivery);
+    expect(state.event.geometry.shape).toBe(shape);
+    expect(state.event.geometry.sizeFeet).toBe(size);
+    const directional = ["cone","line"].includes(shape);
+    const center = directional ? state.event.casterPoint : state.event.targetPoint;
+    expect(state.event.geometry.anchor.x).toBeCloseTo(center.x, 1);
+    expect(state.event.geometry.anchor.y).toBeCloseTo(center.y, 1);
+    if (directional) {
+      expect(state.event.geometry.directionRadians).toBeCloseTo(Math.atan2(-80, 100), 2);
+      const endpoint = state.event.geometry.directionPoint;
+      expect(Math.hypot(endpoint.x - center.x, endpoint.y - center.y))
+        .toBeCloseTo(state.event.geometry.sizePixels, 1);
+    }
+    expect(state.event.affectedTokens).toEqual([]);
+  }
+  await ui.reset.click();
+  expect((await ui.state()).preview).toMatchObject({
+    previewCasterPoint: null, previewTargetPoint: null, previewLocked: false, phase: "caster"
+  });
+  await expect(ui.play).toBeDisabled();
+  await expect(page.locator(".hg-spell-preview-caster")).toHaveCount(0);
+  await expect(page.locator(".hg-spell-preview-range")).toHaveCount(0);
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setDmRole(false));
+  await expect(ui.play).toBeHidden();
+  await expect(ui.overlay).toBeHidden();
+});
+
+test("DM Spell Preview validates live range/elevation and never resolves gameplay; modes and cleanup remain bounded", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  // Prepare a real pending cast, then switch to preview. Its resource-spending
+  // confirmation callback must never run.
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({ spellId: "fireball" }));
+  await ui.select("fire-bolt");
+  await expect(page.locator("#spellCastingPanel")).toBeHidden();
+  await ui.point(100, 160);
+  await ui.point(400, 160, true);
+  const near = (await ui.state()).preview.rangeFeet;
+  await ui.point(500, 160, true);
+  expect((await ui.state()).preview.rangeFeet).toBeGreaterThan(near);
+  await page.locator("#rulerEndElevationInput").fill("150");
+  await expect(ui.status).toContainText("Out of range");
+  await expect(ui.overlay).toHaveClass(/is-invalid-target/);
+  await ui.point(500, 160);
+  await expect(ui.play).toBeDisabled();
+  await page.locator("#rulerEndElevationInput").fill("0");
+  await expect(ui.play).toBeEnabled();
+  await ui.reset.click();
+  await expect(ui.status).toContainText("Click caster position.");
+  await ui.point(100, 160);
+  await ui.point(400, 160);
+  for (const mode of ["full", "reduced", "off"]) {
+    await page.locator("#battleVfxModeSelect").selectOption(mode);
+    await ui.play.click();
+    expect((await ui.state()).result.ok).toBe(true);
+    if (mode === "off") {
+      expect((await ui.state()).result.reason).toBe("effects-off");
+      expect(await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.getVfxState().activeCount)).toBe(0);
+      await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+    }
+  }
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  for (let i = 0; i < 24; i += 1) await ui.play.click();
+  const getCounts = () => page.evaluate(() => ({
+    effects: window.__HOMEBREW_GOD_RELEASE_TEST__.getVfxState().activeCount,
+    sequences: window.__HOMEBREW_GOD_RELEASE_TEST__.getVfxSequenceState().activeCount
+  }));
+  const counts = await getCounts();
+  expect(counts.effects).toBeLessThanOrEqual(64);
+  expect(counts.sequences).toBeLessThanOrEqual(16);
+  await expect.poll(getCounts, { timeout: 8000 }).toEqual({ effects: 0, sequences: 0 });
+  expect(await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState())).toBeNull();
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+  await expect(page.locator("body")).toHaveAttribute("data-test-cast-confirmed", "0");
+  // Returning to real casting clears all preview points and restores its UI.
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({ spellId: "fireball" }));
+  expect((await ui.state()).preview).toBeNull();
+  await expect(ui.play).toBeDisabled();
+  await expect(page.locator("#spellCastingPanel")).toBeVisible();
+  await page.locator("#cancelSpellCastButton").click();
+});
 
 test(
   "Class step keeps starting-class selection after Abilities and rerenders multiclass success immediately",
