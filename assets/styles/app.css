@@ -667,6 +667,38 @@ button:disabled {
   .hg-vfx-storm-lightning-beam svg, .hg-vfx-storm-lightning-echo svg { animation-name: hg-storm-frost; }
 }
 
+/* Isolated 25-frame experiment. One shared animator, no tiled copies. */
+.hg-map-vfx-effect.hg-vfx-lightning5-charge { width: 52px; height: 52px; }
+.hg-vfx-lightning5-charge::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, #f4ffff, #4cacff66 25%, transparent 70%);
+  animation: hg-storm-frost var(--hg-vfx-duration) ease-out both;
+}
+.hg-map-vfx-effect.hg-vfx-lightning5-main.has-path {
+  height: 160px; background: none; border-radius: 0; box-shadow: none;
+  animation: none; overflow: visible;
+}
+.hg-lightning5-stage {
+  position: absolute; top: 50%; left: 0; width: 160px; height: 160px;
+  transform-origin: center;
+  animation: hg-lightning5-stage var(--hg-vfx-duration) linear both;
+}
+.hg-lightning5-stage .hg-vfx-sprite {
+  transform: translate(-50%, -50%) rotate(var(--lightning-art-rotation));
+  transform-origin: center;
+}
+@keyframes hg-lightning5-stage {
+  0% { left: 0; opacity: .6; transform: translate(-50%, -50%) scale(.45); }
+  16% { left: 0; opacity: 1; transform: translate(-50%, -50%) scale(.6); }
+  20%, 56% { left: 50%; opacity: 1; transform: translate(-50%, -50%) scaleX(calc(var(--hg-vfx-path-pixels) / 208)) scaleY(.95); }
+  60% { left: 100%; opacity: 1; transform: translate(-50%, -50%) scale(.65); }
+  84% { left: 100%; opacity: .85; transform: translate(-50%, -50%) scale(.75); }
+  100% { left: 100%; opacity: 0; transform: translate(-50%, -50%) scale(.85); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hg-lightning5-stage { animation-timing-function: steps(1, end); }
+}
+
 .hg-map-vfx-effect {
   --hg-vfx-scale: 1;
   --hg-vfx-rotation: 0deg;

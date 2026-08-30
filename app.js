@@ -63,18 +63,18 @@ import {
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=storm-polish-20260830";
+} from "./battleMap/spellTemplates.js?v=lightning5-test-20260830";
 import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
   createSpellPreviewSession,
   formatSpellPreviewStatus
-} from "./battleMap/spellPreview.js?v=storm-polish-20260830";
+} from "./battleMap/spellPreview.js?v=lightning5-test-20260830";
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=storm-polish-20260830";
+} from "./vfx/effectEngine.js?v=lightning5-test-20260830";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,9 +82,9 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=storm-polish-20260830";
-import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=storm-polish-20260830";
-import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=storm-polish-20260830";
+} from "./vfx/castingSequence.js?v=lightning5-test-20260830";
+import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=lightning5-test-20260830";
+import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=lightning5-test-20260830";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -243,6 +243,8 @@ const E = {
     $("resetSpellPreviewButton"),
   playSpellPreviewVfxButton:
     $("playSpellPreviewVfxButton"),
+  lightningVfxTestControl: $("lightningVfxTestControl"),
+  lightningVfxTestSelect: $("lightningVfxTestSelect"),
   spellCastingPanel:
     $("spellCastingPanel"),
   spellCastingTitle:
@@ -3799,6 +3801,9 @@ function updateSpellPreviewVfxControls(
 ) {
   const isDm = currentIsDM === true;
   const state = activeSpellPreviewSession?.getState();
+  const lightningTestVisible = isDm && E.spellTemplateSelect?.value === "lightning-bolt";
+  E.lightningVfxTestControl?.classList.toggle("hidden", !lightningTestVisible);
+  if (E.lightningVfxTestSelect) E.lightningVfxTestSelect.disabled = !lightningTestVisible || spellPreviewLoading;
   for (const control of [
     E.spellPreviewControl, E.loadSpellTemplateButton,
     E.playSpellPreviewVfxButton, E.resetSpellPreviewButton
@@ -3812,7 +3817,7 @@ function updateSpellPreviewVfxControls(
   }
   if (E.playSpellPreviewVfxButton) {
     E.playSpellPreviewVfxButton.disabled =
-      !isDm || !templateState?.enabled || !state?.canPlay;
+      !isDm || spellPreviewLoading || !templateState?.enabled || !state?.canPlay;
   }
   if (E.resetSpellPreviewButton) {
     E.resetSpellPreviewButton.disabled = !isDm || !state;
@@ -3900,7 +3905,9 @@ function playSelectedSpellPreviewVfx() {
     if (vfxEngine && !battleMapVfxSequences) {
       battleMapVfxSequences = createBattleMapCastingSequences(vfxEngine);
     }
-    const result = battleMapVfxSequences?.play(previewEvent) || {
+    const baseline = previewEvent.spellId === "lightning-bolt" && E.lightningVfxTestSelect?.value === "4x4";
+    const result = battleMapVfxSequences?.play(previewEvent,
+      baseline ? { sequenceId: "profile-lightning-bolt" } : {}) || {
       ok: false, skipped: true, reason: "engine-unavailable"
     };
     lastSpellPreviewVfxEvent = previewEvent;
@@ -4268,7 +4275,7 @@ async function loadSelectedSpellTemplate() {
     }
 
     if (battleMapVfx?.getState().mode !== "off") {
-      await preloadCantripSprites(spellId);
+      await preloadCantripSprites(spellId, { lightningVariant: E.lightningVfxTestSelect?.value });
     }
     if (currentIsDM !== true || E.spellTemplateSelect?.value !== spellId ||
         generation !== spellPreviewGeneration) return;
@@ -4435,6 +4442,19 @@ function initializeBattleMapTemplates() {
       "click",
       playSelectedSpellPreviewVfx
     );
+
+  E.lightningVfxTestSelect?.addEventListener("change", async () => {
+    if (currentIsDM !== true || E.spellTemplateSelect?.value !== "lightning-bolt") return;
+    battleMapVfxSequences?.clearPreviews();
+    spellPreviewLoading = true;
+    updateSpellPreviewVfxControls();
+    try {
+      await preloadCantripSprites("lightning-bolt", { lightningVariant: E.lightningVfxTestSelect.value });
+    } finally {
+      spellPreviewLoading = false;
+      updateSpellPreviewVfxControls();
+    }
+  });
 
   E.confirmSpellCastButton
     ?.addEventListener(

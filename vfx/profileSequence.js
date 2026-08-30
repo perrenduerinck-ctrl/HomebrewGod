@@ -1,4 +1,4 @@
-import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=storm-polish-20260830";
+import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=lightning5-test-20260830";
 
 // Pure compiler: no DOM, timers, characters, rolls, or persistence. The existing
 // sequence system owns scheduling and the existing engine owns all cleanup.

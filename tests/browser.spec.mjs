@@ -2921,7 +2921,7 @@ async function openDmSpellPreview(page) {
   await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle"));
   for (const id of ["spellPreviewControl", "loadSpellTemplateButton",
-    "playSpellPreviewVfxButton", "resetSpellPreviewButton"]) {
+    "playSpellPreviewVfxButton", "resetSpellPreviewButton", "lightningVfxTestControl"]) {
     await expect(page.locator("#" + id)).toBeHidden();
   }
   // Even a programmatic click on the hidden button cannot start a player preview.
@@ -3074,6 +3074,74 @@ test("profile preview sample covers projectile, impact, touch, beam, utility, gr
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-safe", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  const variant = page.locator("#lightningVfxTestSelect");
+  await expect(variant).toBeHidden();
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await ui.select("lightning-bolt");
+  await expect(variant).toBeVisible(); await expect(variant).toHaveValue("5x5");
+  await page.evaluate(() => {
+    window.__BOLT5_RENDERED__ = [];
+    const observer = new MutationObserver(records => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 || !node.matches(".hg-map-vfx-effect")) continue;
+        const sprite = node.querySelector(".hg-vfx-sprite");
+        const matrix = sprite ? new DOMMatrix(getComputedStyle(sprite).transform) : null;
+        window.__BOLT5_RENDERED__.push({ type: node.dataset.effectType,
+          rotation: parseFloat(node.style.getPropertyValue("--hg-vfx-path-rotation")),
+          length: parseFloat(node.style.getPropertyValue("--hg-vfx-path-length")),
+          x: parseFloat(node.style.left), y: parseFloat(node.style.top),
+          size: sprite?.style.backgroundSize, src: sprite?.style.backgroundImage,
+          artAngle: matrix ? Math.atan2(matrix.b, matrix.a) * 180 / Math.PI : null,
+          artX: matrix?.e, artY: matrix?.f,
+          children: node.querySelectorAll(".hg-vfx-sprite").length });
+      }
+    });
+    for (const layer of document.querySelectorAll(".hg-map-vfx-layer, .hg-map-vfx-light-layer")) {
+      observer.observe(layer, {childList:true});
+    }
+  });
+  const rendered = () => page.evaluate(() => window.__BOLT5_RENDERED__);
+  for (const [dx,dy,angle] of [[1,0,0],[-1,0,180],[0,1,90],[0,-1,-90],[1,1,45],[-1,1,135],[1,-1,-45],[-1,-1,-135]]) {
+    await ui.reset.click(); await ui.point(240,220); await ui.point(240+dx*30,220+dy*30);
+    const locked = (await ui.state()).preview;
+    await page.evaluate(() => { window.__BOLT5_RENDERED__ = []; });
+    await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
+    await expect.poll(async () => (await rendered()).length).toBe(2);
+    const main = (await rendered()).find(e => e.type === "lightning5-main");
+    expect(main.size).toBe("800px 800px"); expect(main.children).toBe(1);
+    expect(main.src).toContain("lightning-bolt-main-5x5.png");
+    expect(main.rotation).toBeCloseTo(angle, 2);
+    expect(main.artAngle).toBeCloseTo(-135, 2);
+    expect(main.artX).toBeCloseTo(-80, 2); expect(main.artY).toBeCloseTo(-80, 2);
+    expect(main.x).toBeCloseTo(locked.previewCasterPoint.x, 0);
+    expect(main.y).toBeCloseTo(locked.previewCasterPoint.y, 0);
+    expect(main.length).toBeCloseTo(locked.previewGeometry.sizePixels, 0);
+    await expect(ui.overlay).toHaveCSS("opacity", "1", {timeout:4000});
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+    expect((await ui.state()).preview).toEqual(locked);
+  }
+  await page.locator("#battleVfxModeSelect").selectOption("reduced");
+  await page.evaluate(() => { window.__BOLT5_RENDERED__ = []; });
+  await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
+  await expect(ui.overlay).toHaveCSS("opacity", "1", {timeout:4000});
+  expect((await rendered()).map(e=>e.type)).toEqual(["lightning5-main"]);
+  await page.locator("#battleVfxModeSelect").selectOption("off");
+  await page.evaluate(() => { window.__BOLT5_RENDERED__ = []; });
+  await ui.play.click(); expect(await rendered()).toEqual([]);
+  expect((await ui.state()).result.reason).toBe("effects-off");
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await variant.selectOption("4x4"); await ui.play.click();
+  await expect.poll(async () => (await rendered()).some(e=>e.type === "storm-lightning-beam")).toBe(true);
+  await variant.selectOption("5x5"); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  for (let i=0; i<5; i++) await ui.play.click();
+  await ui.reset.click(); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setDmRole(false));
+  await expect(variant).toBeHidden();
+});
+
 test("storm profiles render full-line lightning and area-local hail with bounded cleanup", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   await page.locator("#battleVfxModeSelect").selectOption("full");
@@ -3101,6 +3169,7 @@ test("storm profiles render full-line lightning and area-local hail with bounded
   });
   const captured = type => page.evaluate(type => window.__STORM_RENDERED__.find(e => e.type === type), type);
   await ui.select("lightning-bolt"); await ui.point(100, 220); await ui.point(150, 220);
+  await page.locator("#lightningVfxTestSelect").selectOption("4x4");
   const line = (await ui.state()).preview;
   await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
   await expect.poll(() => captured("storm-lightning-beam")).toBeTruthy();
