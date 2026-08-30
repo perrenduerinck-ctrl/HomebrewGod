@@ -46,8 +46,11 @@ function normalizePoint(value) {
   return Object.freeze({
     x,
     y,
-    xRatio: finiteNumber(value.xRatio),
-    yRatio: finiteNumber(value.yRatio)
+    // Geometry points omit ratios. Null is not the map's zero coordinate.
+    xRatio: value.xRatio == null || value.xRatio === ""
+      ? null : finiteNumber(value.xRatio),
+    yRatio: value.yRatio == null || value.yRatio === ""
+      ? null : finiteNumber(value.yRatio)
   });
 }
 

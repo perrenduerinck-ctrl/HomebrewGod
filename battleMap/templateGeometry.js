@@ -461,6 +461,7 @@ export function createTemplateGeometry({
       directionRadians,
       startPoint,
       endPoint,
+      directionPoint: pointAt(safeAnchor, directionRadians, sizePixels),
       path,
       labelPoint: pointAt(
         safeAnchor,
@@ -513,6 +514,7 @@ export function createTemplateGeometry({
     anchor: freezePoint(safeAnchor),
     pointer: freezePoint(safePointer),
     directionRadians,
+    directionPoint: freezePoint(end),
     points: Object.freeze(points),
     path: pathFromPoints(points),
     labelPoint: pointAt(

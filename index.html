@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=vfx-fireball-20260829">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=unified-preview-20260829">
 </head>
 
 <body>
@@ -220,11 +220,12 @@
         <span>ft</span>
       </label>
 
-      <label class="battleScaleControl" for="spellTemplateSelect">
+      <label id="spellPreviewControl" class="battleScaleControl hidden" for="spellTemplateSelect">
         <span>Spell Preview</span>
         <select id="spellTemplateSelect">
           <option value="">Choose a spell</option>
           <option value="fire-bolt">Fire Bolt</option>
+          <option value="sacred-flame">Sacred Flame</option>
           <option value="fireball">Fireball</option>
           <option value="flame-strike">Flame Strike</option>
           <option value="ice-storm">Ice Storm</option>
@@ -232,21 +233,21 @@
           <option value="lightning-bolt">Lightning Bolt</option>
         </select>
       </label>
-      <button id="loadSpellTemplateButton" type="button">
+      <button id="loadSpellTemplateButton" class="hidden" type="button" disabled>
         Target Spell on Map
       </button>
-      <button
-        id="setSpellPreviewCasterButton"
-        class="hidden"
-        type="button"
-        disabled
-      >Set Preview Caster</button>
       <button
         id="playSpellPreviewVfxButton"
         class="hidden"
         type="button"
         disabled
       >Play Preview VFX</button>
+      <button
+        id="resetSpellPreviewButton"
+        class="hidden"
+        type="button"
+        disabled
+      >Reset Preview</button>
 
       <label class="battleScaleControl" for="templateShapeSelect">
         <span>Template</span>
@@ -853,6 +854,7 @@
   <script type="importmap">
     {
       "imports": {
+        "./battleMap/templateGeometry.js": "./battleMap/templateGeometry.js?v=unified-preview-20260829",
         "./tokens/index.js": "./tokens/index.js?v=priority10-20260822",
         "./shared/realtimeListeners.js": "./shared/realtimeListeners.js?v=priority10-20260822",
         "./monsters/creator.js": "./monsters/creator.js?v=priority10-20260822",
@@ -891,7 +893,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=dm-preview-class-state-20260829"
+    src="./app.js?v=unified-preview-20260829"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

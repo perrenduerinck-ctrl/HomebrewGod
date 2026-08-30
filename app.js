@@ -53,10 +53,10 @@ import {
   normalizeTemplateDistance,
   normalizeTemplateHeight,
   normalizeTemplateShape
-} from "./battleMap/templateGeometry.js?v=stage8-20260826";
+} from "./battleMap/templateGeometry.js?v=unified-preview-20260829";
 import {
   createMapTemplateEngine
-} from "./battleMap/templateRenderer.js?v=stage8-20260826";
+} from "./battleMap/templateRenderer.js?v=unified-preview-20260829";
 import {
   findAffectedTokens
 } from "./battleMap/tokenCollision.js?v=stage8-20260826";
@@ -68,16 +68,21 @@ import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
+  createSpellPreviewSession,
+  formatSpellPreviewStatus
+} from "./battleMap/spellPreview.js?v=unified-preview-20260829";
+import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=vfx-fireball-20260829";
+} from "./vfx/effectEngine.js?v=unified-preview-20260829";
 import {
   createSpellVfxEvent,
+  inferSpellVfxDeliveryType,
   dispatchConfirmedSpellVfxEvent
-} from "./vfx/castEvent.js?v=dm-preview-class-state-20260829";
+} from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=dm-preview-class-state-20260829";
+} from "./vfx/castingSequence.js?v=unified-preview-20260829";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -230,8 +235,10 @@ const E = {
     $("spellTemplateSelect"),
   loadSpellTemplateButton:
     $("loadSpellTemplateButton"),
-  setSpellPreviewCasterButton:
-    $("setSpellPreviewCasterButton"),
+  spellPreviewControl:
+    $("spellPreviewControl"),
+  resetSpellPreviewButton:
+    $("resetSpellPreviewButton"),
   playSpellPreviewVfxButton:
     $("playSpellPreviewVfxButton"),
   spellCastingPanel:
@@ -320,9 +327,12 @@ const BATTLE_VFX_MODE_STORAGE_KEY =
   "homebrewGodBattleVfxMode";
 let activeSpellTemplateInstruction = null;
 let activeSpellPreviewSpell = null;
-let spellPreviewCasterPoint = null;
+let activeSpellPreviewSession = null;
+let spellPreviewLoading = false;
+let spellPreviewGeneration = 0;
 let spellPreviewCasterMarker = null;
-let settingSpellPreviewCaster = false;
+let spellPreviewTargetMarker = null;
+let spellPreviewRangeLine = null;
 let lastSpellPreviewVfxEvent = null;
 let lastSpellPreviewVfxResult = null;
 let activeSpellCastingSession = null;
@@ -572,6 +582,11 @@ function getSafeMapName(fileName) {
 }
 
 function setDmControlsVisible(isVisible) {
+  if (!isVisible && activeSpellPreviewSession) {
+    resetSpellPreviewVfxState({ clearSpell: true });
+    activeSpellTemplateInstruction = null;
+    battleMapTemplates?.setEnabled(false);
+  }
   const controls = [E.dmMapControls, E.battleDmMapControls, E.puzzleMapControls];
 
   controls.forEach((el) => {
@@ -3040,7 +3055,9 @@ function getBattleMapTemplateOptions() {
       defaults.heightFeet
     ),
     elevationFeet:
-      activeSpellTemplateInstruction &&
+      activeSpellPreviewSession
+        ? activeSpellPreviewSession.getState().previewTargetElevation
+        : activeSpellTemplateInstruction &&
       activeSpellTemplateInstruction.targetType !== "point"
         ? activeSpellCastingCasterElevationFeet
         : getRulerElevations().endElevationFeet,
@@ -3688,321 +3705,219 @@ function handleConfirmedSpellVfx({
   }
 }
 
-function clearSpellPreviewCaster() {
-  spellPreviewCasterPoint = null;
-  settingSpellPreviewCaster = false;
+function clearSpellPreviewMarkers() {
   spellPreviewCasterMarker?.remove();
+  spellPreviewTargetMarker?.remove();
+  spellPreviewRangeLine?.remove();
   spellPreviewCasterMarker = null;
+  spellPreviewTargetMarker = null;
+  spellPreviewRangeLine = null;
 }
 
-function resetSpellPreviewVfxState({
-  clearSpell = false
-} = {}) {
-  clearSpellPreviewCaster();
+function resetSpellPreviewVfxState({ clearSpell = false } = {}) {
+  activeSpellPreviewSession?.reset();
   lastSpellPreviewVfxEvent = null;
   lastSpellPreviewVfxResult = null;
   if (clearSpell) {
+    spellPreviewGeneration += 1;
+    activeSpellPreviewSession = null;
     activeSpellPreviewSpell = null;
   }
+  clearSpellPreviewMarkers();
+  battleMapTemplates?.getOverlayElement()?.classList.remove("is-invalid-target");
   updateSpellPreviewVfxControls();
 }
 
-function renderSpellPreviewCasterMarker() {
-  const overlay =
-    battleMapTemplates?.getOverlayElement();
+function getSpellPreviewMetrics() {
+  const overlay = battleMapTemplates?.getOverlayElement();
+  return {
+    width: overlay?.clientWidth || 0,
+    height: overlay?.clientHeight || 0,
+    pixelsPerSquare: getBattleMapGridPixelSize(),
+    feetPerSquare: getRulerFeetPerSquare(),
+    ...getRulerElevations()
+  };
+}
 
-  if (!overlay || !spellPreviewCasterPoint) {
-    spellPreviewCasterMarker?.remove();
-    spellPreviewCasterMarker = null;
+function renderSpellPreviewMarkers(state) {
+  const overlay = battleMapTemplates?.getOverlayElement();
+  if (!overlay || !state?.previewCasterPoint) {
+    clearSpellPreviewMarkers();
     return;
   }
-
-  if (!spellPreviewCasterMarker) {
-    spellPreviewCasterMarker =
-      document.createElement("div");
-    spellPreviewCasterMarker.className =
-      "hg-spell-preview-caster";
-    spellPreviewCasterMarker.setAttribute(
-      "aria-hidden",
-      "true"
-    );
-    overlay.appendChild(
-      spellPreviewCasterMarker
-    );
+  function marker(element, className, label, point) {
+    if (!point) {
+      element?.remove();
+      return null;
+    }
+    if (!element) {
+      element = document.createElement("div");
+      element.className = className;
+      element.textContent = label;
+      element.setAttribute("aria-hidden", "true");
+      overlay.appendChild(element);
+    }
+    element.style.left = `${point.x}px`;
+    element.style.top = `${point.y}px`;
+    return element;
   }
-
-  const width = Math.max(
-    1,
-    overlay.clientWidth
+  spellPreviewCasterMarker = marker(
+    spellPreviewCasterMarker, "hg-spell-preview-caster",
+    "Caster", state.previewCasterPoint
   );
-  const height = Math.max(
-    1,
-    overlay.clientHeight
+  spellPreviewTargetMarker = marker(
+    spellPreviewTargetMarker, "hg-spell-preview-target",
+    "Target", state.previewTargetPoint
   );
-  const x = Number.isFinite(
-    Number(spellPreviewCasterPoint.xRatio)
-  )
-    ? spellPreviewCasterPoint.xRatio * width
-    : spellPreviewCasterPoint.x;
-  const y = Number.isFinite(
-    Number(spellPreviewCasterPoint.yRatio)
-  )
-    ? spellPreviewCasterPoint.yRatio * height
-    : spellPreviewCasterPoint.y;
-
-  spellPreviewCasterPoint = {
-    x,
-    y,
-    xRatio: x / width,
-    yRatio: y / height
-  };
-  spellPreviewCasterMarker.style.left =
-    `${x}px`;
-  spellPreviewCasterMarker.style.top =
-    `${y}px`;
+  if (!state.previewTargetPoint) {
+    spellPreviewRangeLine?.remove();
+    spellPreviewRangeLine = null;
+    return;
+  }
+  if (!spellPreviewRangeLine) {
+    const namespace = "http://www.w3.org/2000/svg";
+    spellPreviewRangeLine = document.createElementNS(namespace, "svg");
+    spellPreviewRangeLine.setAttribute("class", "hg-spell-preview-range");
+    spellPreviewRangeLine.setAttribute("aria-hidden", "true");
+    spellPreviewRangeLine.appendChild(document.createElementNS(namespace, "line"));
+    overlay.appendChild(spellPreviewRangeLine);
+  }
+  spellPreviewRangeLine.setAttribute(
+    "viewBox", `0 0 ${Math.max(1, overlay.clientWidth)} ${Math.max(1, overlay.clientHeight)}`
+  );
+  const line = spellPreviewRangeLine.firstElementChild;
+  line.setAttribute("x1", state.previewCasterPoint.x);
+  line.setAttribute("y1", state.previewCasterPoint.y);
+  line.setAttribute("x2", state.previewTargetPoint.x);
+  line.setAttribute("y2", state.previewTargetPoint.y);
 }
 
 function updateSpellPreviewVfxControls(
-  templateState =
-    battleMapTemplates?.getState?.() || null
+  templateState = battleMapTemplates?.getState?.() || null
 ) {
-  const isDmPreview = currentIsDM === true;
-  const hasSpell = Boolean(
-    activeSpellPreviewSpell &&
-    activeSpellTemplateInstruction?.supported
-  );
-  const needsPreviewCaster = Boolean(
-    activeSpellTemplateInstruction?.singleTarget
-  );
-  const locked = Boolean(
-    templateState?.enabled &&
-    templateState?.phase === "confirmed" &&
-    templateState?.geometry
-  );
-
-  if (E.setSpellPreviewCasterButton) {
-    E.setSpellPreviewCasterButton.classList.toggle(
-      "hidden",
-      !isDmPreview || !needsPreviewCaster
-    );
-    E.setSpellPreviewCasterButton.disabled =
-      !isDmPreview ||
-      !hasSpell ||
-      !templateState?.enabled;
-    E.setSpellPreviewCasterButton.textContent =
-      settingSpellPreviewCaster
-        ? "Click Map for Caster"
-        : spellPreviewCasterPoint
-          ? "Move Preview Caster"
-          : "Set Preview Caster";
-    E.setSpellPreviewCasterButton.setAttribute(
-      "aria-pressed",
-      String(settingSpellPreviewCaster)
-    );
+  const isDm = currentIsDM === true;
+  const state = activeSpellPreviewSession?.getState();
+  for (const control of [
+    E.spellPreviewControl, E.loadSpellTemplateButton,
+    E.playSpellPreviewVfxButton, E.resetSpellPreviewButton
+  ]) {
+    control?.classList.toggle("hidden", !isDm);
   }
-
+  if (E.spellTemplateSelect) E.spellTemplateSelect.disabled = !isDm;
+  if (E.loadSpellTemplateButton) {
+    E.loadSpellTemplateButton.disabled = !isDm ||
+      !E.spellTemplateSelect?.value || spellPreviewLoading;
+  }
   if (E.playSpellPreviewVfxButton) {
-    E.playSpellPreviewVfxButton.classList.toggle(
-      "hidden",
-      !isDmPreview
-    );
     E.playSpellPreviewVfxButton.disabled =
-      !isDmPreview ||
-      !hasSpell ||
-      !locked ||
-      (
-        needsPreviewCaster &&
-        !spellPreviewCasterPoint
-      );
+      !isDm || !templateState?.enabled || !state?.canPlay;
   }
-
-  renderSpellPreviewCasterMarker();
+  if (E.resetSpellPreviewButton) {
+    E.resetSpellPreviewButton.disabled = !isDm || !state;
+  }
+  for (const control of [
+    E.templateSizeInput, E.templateWidthInput, E.templateHeightInput
+  ]) {
+    if (control) control.disabled = Boolean(state);
+  }
+  const overlay = battleMapTemplates?.getOverlayElement();
+  if (overlay) {
+    if (state && isDm) overlay.dataset.previewPhase = state.phase;
+    else delete overlay.dataset.previewPhase;
+    // Real casting owns this class when no preview is active.
+    if (state) {
+      overlay.classList.toggle("is-invalid-target",
+        Boolean(state.previewTargetPoint && !state.inRange));
+    }
+  }
+  renderSpellPreviewMarkers(isDm && templateState?.enabled ? state : null);
 }
 
-function beginSettingSpellPreviewCaster() {
-  if (
-    currentIsDM !== true ||
-    !activeSpellPreviewSpell ||
-    !activeSpellTemplateInstruction?.singleTarget
-  ) {
-    return false;
-  }
-
-  settingSpellPreviewCaster = true;
-  updateSpellPreviewVfxControls();
-  text(
-    E.templateStatus,
-    "Click the map where the preview caster should stand. This point is visual-only."
-  );
-  return true;
+function renderActiveSpellPreviewPlacement() {
+  const state = activeSpellPreviewSession?.getState();
+  if (!state || !battleMapTemplates) return;
+  battleMapTemplates.setPlacement({
+    origin: state.previewCasterPoint,
+    target: state.hasDirection ? state.previewTargetPoint : null,
+    locked: state.previewLocked
+  });
 }
 
-function handleSpellPreviewCasterPointerDown(
-  event
-) {
-  if (
-    !settingSpellPreviewCaster ||
-    currentIsDM !== true ||
-    event.isPrimary === false ||
-    (
-      event.pointerType === "mouse" &&
-      event.button !== 0
-    )
-  ) {
-    return;
-  }
+function resetSelectedSpellPreview() {
+  if (currentIsDM !== true || !activeSpellPreviewSession) return;
+  resetSpellPreviewVfxState();
+  battleMapRuler?.setEnabled(false);
+  battleMapTemplates.setEnabled(true);
+  renderActiveSpellPreviewPlacement();
+}
 
-  const overlay =
-    battleMapTemplates?.getOverlayElement();
-  const rect = overlay?.getBoundingClientRect();
-  if (!overlay || !rect) return;
-
+function handleSpellPreviewPointer(event) {
+  if (!activeSpellPreviewSession || currentIsDM !== true ||
+      !battleMapTemplates?.getState().enabled ||
+      event.isPrimary === false ||
+      (event.type === "pointerdown" && event.button !== 0)) return;
+  // Capture only the presentation-only preview. Generic templates and real
+  // casting keep their existing pointer handlers and confirmation workflow.
   event.preventDefault();
   event.stopImmediatePropagation();
-
+  if (activeSpellPreviewSession.getState().previewLocked) return;
+  const rect = battleMapTemplates.getOverlayElement().getBoundingClientRect();
   const width = Math.max(1, rect.width);
   const height = Math.max(1, rect.height);
-  const x = Math.min(
-    width,
-    Math.max(0, event.clientX - rect.left)
-  );
-  const y = Math.min(
-    height,
-    Math.max(0, event.clientY - rect.top)
-  );
-  spellPreviewCasterPoint = {
-    x,
-    y,
-    xRatio: x / width,
-    yRatio: y / height
-  };
-  settingSpellPreviewCaster = false;
-  updateSpellPreviewVfxControls();
-  text(
-    E.templateStatus,
-    "Preview caster set. Lock the spell target, then choose Play Preview VFX."
-  );
+  const x = Math.min(width, Math.max(0, event.clientX - rect.left));
+  const y = Math.min(height, Math.max(0, event.clientY - rect.top));
+  const point = { x, y, xRatio: x / width, yRatio: y / height };
+  if (event.type === "pointerdown") activeSpellPreviewSession.pickPoint(point);
+  else activeSpellPreviewSession.aimAt(point);
+  renderActiveSpellPreviewPlacement();
 }
 
 function playSelectedSpellPreviewVfx() {
-  if (currentIsDM !== true) {
+  if (currentIsDM !== true) return null;
+  const state = activeSpellPreviewSession?.getState();
+  if (!activeSpellPreviewSpell || !state?.canPlay ||
+      !battleMapTemplates?.getState().enabled) {
+    updateSpellPreviewVfxControls();
     return null;
   }
-
-  const templateState =
-    battleMapTemplates?.getState();
-  const geometry =
-    templateState?.geometry || null;
-  const instruction =
-    activeSpellTemplateInstruction;
-
-  if (
-    !activeSpellPreviewSpell ||
-    !instruction?.supported ||
-    templateState?.phase !== "confirmed" ||
-    !geometry
-  ) {
-    text(
-      E.templateStatus,
-      "Lock the selected spell target or template before playing its preview VFX."
-    );
-    updateSpellPreviewVfxControls(
-      templateState
-    );
-    return null;
-  }
-
-  if (
-    instruction.singleTarget &&
-    !spellPreviewCasterPoint
-  ) {
-    text(
-      E.templateStatus,
-      "Set the preview caster point before playing this projectile VFX."
-    );
-    updateSpellPreviewVfxControls(
-      templateState
-    );
-    return null;
-  }
-
   try {
-    const targetPoint =
-      instruction.targetType === "point"
-        ? geometry.anchor
-        : geometry.pointer ||
-          geometry.endPoint ||
-          geometry.labelPoint ||
-          geometry.anchor;
-    const casterPoint =
-      instruction.singleTarget
-        ? spellPreviewCasterPoint
-        : geometry.anchor || targetPoint;
-    const previewEvent =
-      createSpellVfxEvent({
-        spell:
-          activeSpellPreviewSpell,
-        casterPoint,
-        casterElevation:
-          instruction.targetType === "point"
-            ? getRulerElevations()
-                .startElevationFeet
-            : geometry.elevationFeet,
-        targetPoint,
-        targetElevation:
-          geometry.elevationFeet ??
-          getRulerElevations()
-            .endElevationFeet,
-        geometry,
-        affectedTokens: [],
-        preview: true
-      });
-    const vfxEngine =
-      battleMapVfx ||
-      initializeBattleMapVfx();
-
+    const previewEvent = createSpellVfxEvent({
+      spell: activeSpellPreviewSpell,
+      casterPoint: state.previewCasterPoint,
+      casterElevation: state.previewCasterElevation,
+      targetPoint: state.previewTargetPoint,
+      targetElevation: state.previewTargetElevation,
+      geometry: state.previewGeometry,
+      // A single-target selection circle is a marker, not a spell area.
+      deliveryType: state.previewInstruction.singleTarget
+        ? inferSpellVfxDeliveryType({ spell: activeSpellPreviewSpell }) : "",
+      affectedTokens: [],
+      preview: true
+    });
+    const vfxEngine = battleMapVfx || initializeBattleMapVfx();
     if (vfxEngine && !battleMapVfxSequences) {
-      battleMapVfxSequences =
-        createCastingSequenceSystem({
-          effectEngine: vfxEngine
-        });
+      battleMapVfxSequences = createCastingSequenceSystem({ effectEngine: vfxEngine });
     }
-
-    const result =
-      battleMapVfxSequences?.play(
-        previewEvent
-      ) || {
-        ok: false,
-        skipped: true,
-        reason: "engine-unavailable"
-      };
-    lastSpellPreviewVfxEvent =
-      previewEvent;
+    const result = battleMapVfxSequences?.play(previewEvent) || {
+      ok: false, skipped: true, reason: "engine-unavailable"
+    };
+    lastSpellPreviewVfxEvent = previewEvent;
     lastSpellPreviewVfxResult = result;
-
-    text(
-      E.templateStatus,
+    text(E.templateStatus,
       result.reason === "effects-off"
         ? "Preview VFX was not played because Effects is Off."
         : result.ok
           ? `${previewEvent.spellName} preview VFX playing. No cast, roll, damage, HP, slot, or character resource was changed.`
           : "Preview VFX could not be played. Gameplay state was not changed."
     );
-    return {
-      event: previewEvent,
-      result
-    };
+    return { event: previewEvent, result };
   } catch {
     lastSpellPreviewVfxEvent = null;
     lastSpellPreviewVfxResult = {
-      ok: false,
-      skipped: true,
-      reason: "preview-failed"
+      ok: false, skipped: true, reason: "preview-failed"
     };
-    text(
-      E.templateStatus,
-      "Preview VFX could not be played. Gameplay state was not changed."
-    );
+    text(E.templateStatus,
+      "Preview VFX could not be played. Gameplay state was not changed.");
     return null;
   }
 }
@@ -4221,9 +4136,10 @@ function getActiveSpellTemplateStatus() {
 }
 
 function updateBattleMapTemplateUi(state) {
+  const preview = activeSpellPreviewSession?.getState();
   const affectedTokens =
     updateAffectedTokenHighlights(
-      state.enabled
+      state.enabled && !preview
         ? state.geometry
         : null
     );
@@ -4234,10 +4150,7 @@ function updateBattleMapTemplateUi(state) {
   const spellStatus =
     getActiveSpellTemplateStatus();
 
-  syncActiveSpellCastingTarget(
-    state,
-    affectedTokens
-  );
+  if (!preview) syncActiveSpellCastingTarget(state, affectedTokens);
   updateSpellPreviewVfxControls(state);
 
   if (E.templateToggleButton) {
@@ -4253,10 +4166,15 @@ function updateBattleMapTemplateUi(state) {
 
   if (E.templateClearButton) {
     E.templateClearButton.disabled =
-      !state.enabled || !state.geometry;
+      !state.enabled || (!state.geometry && !preview?.previewCasterPoint);
   }
 
   if (!E.templateStatus) return;
+
+  if (preview && state.enabled) {
+    text(E.templateStatus, `${spellStatus}${formatSpellPreviewStatus(preview)}`);
+    return;
+  }
 
   if (!state.enabled) {
     text(
@@ -4299,6 +4217,7 @@ function updateBattleMapTemplateUi(state) {
 }
 
 async function loadSelectedSpellTemplate() {
+  if (currentIsDM !== true || spellPreviewLoading) return;
   cancelActiveSpellCasting({
     clearTemplate: false
   });
@@ -4317,6 +4236,8 @@ async function loadSelectedSpellTemplate() {
     return;
   }
 
+  spellPreviewLoading = true;
+  const generation = spellPreviewGeneration;
   if (E.loadSpellTemplateButton) {
     E.loadSpellTemplateButton.disabled = true;
     E.loadSpellTemplateButton.textContent =
@@ -4328,6 +4249,8 @@ async function loadSelectedSpellTemplate() {
       "./data/defaultSpells.js?v=stage8-20260826"
     );
     const spell = getDefaultSpellById(spellId);
+    if (currentIsDM !== true || E.spellTemplateSelect?.value !== spellId ||
+        generation !== spellPreviewGeneration) return;
     const instruction =
       createSpellTemplateInstruction(spell);
 
@@ -4342,6 +4265,9 @@ async function loadSelectedSpellTemplate() {
 
     activeSpellTemplateInstruction = instruction;
     activeSpellPreviewSpell = spell;
+    activeSpellPreviewSession = createSpellPreviewSession({
+      spell, instruction, getMetrics: getSpellPreviewMetrics
+    });
     if (E.templateShapeSelect) {
       E.templateShapeSelect.value =
         instruction.templateShape;
@@ -4374,19 +4300,20 @@ async function loadSelectedSpellTemplate() {
       widthFeet: instruction.widthFeet,
       heightFeet: instruction.heightFeet,
       elevationFeet:
-        getRulerElevations()
-          .endElevationFeet
+        activeSpellPreviewSession.getState().previewTargetElevation
     });
     battleMapTemplates.setEnabled(true);
   } catch (error) {
     console.error(error);
     activeSpellTemplateInstruction = null;
     activeSpellPreviewSpell = null;
+    activeSpellPreviewSession = null;
     text(
       E.templateStatus,
       "Spell preview could not be loaded."
     );
   } finally {
+    spellPreviewLoading = false;
     if (E.loadSpellTemplateButton) {
       E.loadSpellTemplateButton.disabled = false;
       E.loadSpellTemplateButton.textContent =
@@ -4422,9 +4349,19 @@ function initializeBattleMapTemplates() {
     .getOverlayElement()
     ?.addEventListener(
       "pointerdown",
-      handleSpellPreviewCasterPointerDown,
+      handleSpellPreviewPointer,
       true
     );
+  battleMapTemplates.getOverlayElement()?.addEventListener(
+    "pointermove", handleSpellPreviewPointer, true
+  );
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && activeSpellPreviewSession &&
+        !event.target?.closest?.("input, textarea, select, [contenteditable]")) {
+      event.stopImmediatePropagation();
+      resetSelectedSpellPreview();
+    }
+  }, true);
   battleMapTemplates.setOptions(
     getBattleMapTemplateOptions()
   );
@@ -4443,6 +4380,7 @@ function initializeBattleMapTemplates() {
       if (!battleMapTemplates.getState().enabled) {
         battleMapRuler?.setEnabled(false);
       }
+      if (activeSpellPreviewSession) resetSpellPreviewVfxState();
       battleMapTemplates.toggle();
     }
   );
@@ -4450,6 +4388,10 @@ function initializeBattleMapTemplates() {
   E.templateClearButton?.addEventListener(
     "click",
     function () {
+      if (activeSpellPreviewSession) {
+        resetSelectedSpellPreview();
+        return;
+      }
       battleMapTemplates.clear();
     }
   );
@@ -4462,16 +4404,21 @@ function initializeBattleMapTemplates() {
   E.spellTemplateSelect?.addEventListener(
     "change",
     function () {
+      const hadPreview = Boolean(activeSpellPreviewSession);
       resetSpellPreviewVfxState({
         clearSpell: true
       });
+      if (hadPreview) {
+        activeSpellTemplateInstruction = null;
+        battleMapTemplates.setEnabled(false);
+      }
     }
   );
 
-  E.setSpellPreviewCasterButton
+  E.resetSpellPreviewButton
     ?.addEventListener(
       "click",
-      beginSettingSpellPreviewCaster
+      resetSelectedSpellPreview
     );
 
   E.playSpellPreviewVfxButton
@@ -6999,12 +6946,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
         function () {
           return {
             isDm: currentIsDM,
-            casterPoint:
-              spellPreviewCasterPoint
-                ? {
-                    ...spellPreviewCasterPoint
-                  }
-                : null,
+            preview: activeSpellPreviewSession?.getState() || null,
             event:
               lastSpellPreviewVfxEvent
                 ? JSON.parse(JSON.stringify(

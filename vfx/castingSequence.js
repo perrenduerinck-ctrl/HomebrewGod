@@ -447,7 +447,9 @@ function getTimingScale(effectEngine) {
 
 function resolveAnchorPoints(effect, event) {
   const casterPoint = event?.casterPoint || event?.targetPoint || null;
-  const targetPoint = event?.targetPoint || event?.casterPoint || null;
+  const directional = ["cone", "line"].includes(event?.geometry?.shape);
+  const targetPoint = (directional && event?.geometry?.directionPoint) ||
+    event?.targetPoint || event?.casterPoint || null;
 
   if (effect.anchor === "caster") {
     return [{
