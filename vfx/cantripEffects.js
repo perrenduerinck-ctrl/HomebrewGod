@@ -1,5 +1,6 @@
 // User-supplied art is shared by spell-specific, presentation-only sequences.
 // Single images are oriented in CSS; sheets are 4x4, read left-to-right.
+import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=all-cantrips-20260830";
 const asset = (name) => `./assets/vfx/cantrips/${name}.png`;
 
 function sprite(id, file, { sheet = false, className, angle = 0, tipX = 50, tipY = 50 } = {}) {
@@ -28,6 +29,8 @@ function sprite(id, file, { sheet = false, className, angle = 0, tipX = 50, tipY
 }
 
 export const CANTRIP_EFFECT_DEFINITIONS = Object.freeze([
+  sprite("dark-projectile-sprite", "dark-projectile", { angle: -45, tipX: 94, tipY: 84 }),
+  sprite("dark-impact-sprite", "dark-impact", { sheet: true }),
   sprite("frost-projectile-sprite", "frost-projectile", { angle: 32, tipX: 97, tipY: 20 }),
   sprite("force-projectile-sprite", "force-projectile", { angle: 45, tipX: 94, tipY: 14 }),
   sprite("frost-impact-sprite", "frost-impact", { sheet: true }),
@@ -91,6 +94,7 @@ export function getCantripSpritePaths(spellId) {
   const definition = CANTRIP_CASTING_SEQUENCE_DEFINITIONS.find((entry) => entry.id === spellId);
   const types = new Set(Object.values(definition?.phases || {})
     .flatMap((phase) => phase.effects || []).map((entry) => entry.type));
+  getProfileEffectIds(getSpellVfxProfile(spellId)).forEach((type) => types.add(type));
   return CANTRIP_EFFECT_DEFINITIONS.filter((entry) => types.has(entry.id))
     .map((entry) => entry.sprite.src);
 }

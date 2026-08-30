@@ -1,7 +1,9 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
-import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=cantrip-batch1-20260830";
+import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=all-cantrips-20260830";
+import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=all-cantrips-20260830";
+import { compileSpellVfxProfile } from "./profileSequence.js?v=all-cantrips-20260830";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
@@ -116,6 +118,8 @@ function normalizeSequenceEffect(effect = {}) {
       -4,
       4
     )),
+    intensity: finiteNumber(effect.intensity) === null ? null
+      : Math.round(boundedNumber(effect.intensity, 1, 1, 5)),
     particles: freezeOptions(effect.particles),
     sprite: freezeOptions(effect.sprite),
     persistent: effect.persistent === true,
@@ -206,6 +210,10 @@ export function defineCastingSequence(definition = {}) {
     schemaVersion: CASTING_SEQUENCE_SCHEMA_VERSION,
     id,
     label: cleanText(definition.label, id) || id,
+    source: definition.source === "profile" ? "profile" : "sequence",
+    family: cleanId(definition.family),
+    spellLevel: Math.round(boundedNumber(definition.spellLevel, 0, 0, 9)),
+    scaling: definition.scaling ? Object.freeze({ ...definition.scaling }) : null,
     priority: Math.round(boundedNumber(
       definition.priority,
       0,
@@ -260,9 +268,16 @@ function matchScore(definition) {
 }
 
 export function createCastingSequenceRegistry(
-  initialDefinitions = []
+  initialDefinitions = [],
+  { profiles = [] } = {}
 ) {
   const definitions = new Map();
+  const profileMap = new Map();
+  for (const raw of profiles) {
+    const profile = defineSpellVfxProfile(raw);
+    if (profileMap.has(profile.spellId)) throw new Error(`Duplicate profile: ${profile.spellId}`);
+    profileMap.set(profile.spellId, profile);
+  }
 
   function register(definition, { replace = false } = {}) {
     const normalized = defineCastingSequence(definition);
@@ -276,23 +291,33 @@ export function createCastingSequenceRegistry(
   }
 
   function get(id) {
-    return definitions.get(cleanId(id)) || null;
+    const key = cleanId(id);
+    const profile = profileMap.get(key.replace(/^profile-/, ""));
+    return definitions.get(key) || (profile
+      ? defineCastingSequence(compileSpellVfxProfile(profile)) : null);
   }
 
   function resolve(event) {
-    return Array.from(definitions.values())
+    const matches = Array.from(definitions.values())
       .filter((definition) => matchesSequence(definition, event))
       .sort((left, right) => (
         matchScore(right) - matchScore(left)
-      ))[0] || null;
+      ));
+    // An explicit override always wins, regardless of generic priority.
+    const override = matches.find((definition) => definition.match.spellIds.length);
+    if (override) return override;
+    const profile = profileMap.get(cleanId(event?.spellId));
+    if (profile) return defineCastingSequence(compileSpellVfxProfile(profile, event));
+    return matches[0] || null;
   }
 
   initialDefinitions.forEach((definition) => register(definition));
 
   return Object.freeze({
     get,
-    has: (id) => definitions.has(cleanId(id)),
-    list: () => Object.freeze(Array.from(definitions.values())),
+    has: (id) => Boolean(get(id)),
+    list: () => Object.freeze([...definitions.values(), ...Array.from(profileMap.values())
+      .map((profile) => defineCastingSequence(compileSpellVfxProfile(profile)))]),
     register,
     resolve,
     unregister: (id) => definitions.delete(cleanId(id))
@@ -424,7 +449,8 @@ export function createDefaultCastingSequenceRegistry() {
       ...DEFAULT_CASTING_SEQUENCES,
       ...DEFAULT_FIRE_CASTING_SEQUENCES,
       ...CANTRIP_CASTING_SEQUENCE_DEFINITIONS
-    ]
+    ],
+    { profiles: SPELL_VFX_PROFILES }
   );
 }
 
@@ -504,7 +530,7 @@ function makeEffectRequest({
 }) {
   const intensity = clamp(
     Math.round(
-      (finiteNumber(event?.intensity) ?? 1) +
+      (effect.intensity ?? finiteNumber(event?.intensity) ?? 1) +
       effect.intensityOffset
     ),
     1,
@@ -550,6 +576,7 @@ function makeEffectRequest({
       phase: phase.phase,
       phaseIndex,
       spellId: cleanText(event?.spellId, "", 160),
+      spellLevel: Math.round(boundedNumber(event?.spellLevel, 0, 0, 9)),
       casterTokenId: cleanText(event?.casterTokenId, "", 160),
       deliveryType: cleanId(event?.deliveryType),
       damageTypes: Object.freeze([

@@ -63,18 +63,18 @@ import {
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=cantrip-batch1-20260830";
+} from "./battleMap/spellTemplates.js?v=all-cantrips-20260830";
 import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
   createSpellPreviewSession,
   formatSpellPreviewStatus
-} from "./battleMap/spellPreview.js?v=unified-preview-20260829";
+} from "./battleMap/spellPreview.js?v=all-cantrips-20260830";
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=cantrip-batch1-20260830";
+} from "./vfx/effectEngine.js?v=all-cantrips-20260830";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,8 +82,9 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=cantrip-batch1-20260830";
-import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=cantrip-batch1-20260830";
+} from "./vfx/castingSequence.js?v=all-cantrips-20260830";
+import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=all-cantrips-20260830";
+import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=all-cantrips-20260830";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -4253,7 +4254,9 @@ async function loadSelectedSpellTemplate() {
     if (currentIsDM !== true || E.spellTemplateSelect?.value !== spellId ||
         generation !== spellPreviewGeneration) return;
     const instruction =
-      createSpellTemplateInstruction(spell, { allowTouchPreview: true });
+      createSpellTemplateInstruction(spell, {
+        allowTouchPreview: true, vfxPreview: getSpellVfxProfile(spellId)?.preview
+      });
 
     if (!instruction.supported) {
       activeSpellTemplateInstruction = null;
