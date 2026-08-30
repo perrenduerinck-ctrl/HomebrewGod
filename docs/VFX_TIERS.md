@@ -32,6 +32,11 @@ staggered hail, ice bursts and fading frost. Ice Storm fits the exact template
 radius rather than increasing the affected area with visual intensity.
 These two requested visual upgrades do not start the Level 1 batch.
 
+Lightning Bolt additionally has a bounded **5×5 test** override: one 25-frame
+sprite, plus one small charge in Full mode (Reduced: one effect; Off: zero).
+The DM's Lightning VFX selector preserves the 4×4 baseline for comparison.
+This adds no new spell mappings or tier work. See `LIGHTNING_5X5_TEST.md`.
+
 Eldritch Blast currently demonstrates one beam from the selected origin to one
 target. Level-scaled multi-beam and separate targets are a later cantrip task.
 Shocking Grasp's character-free preview uses a labeled five-foot touch reach;

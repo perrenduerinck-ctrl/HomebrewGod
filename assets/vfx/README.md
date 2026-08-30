@@ -47,3 +47,14 @@ cleaner sheet will be needed before animating that variant. It is not used now.
 
 The normal and additive layers share engine caps, resize, Off/Reduced settings,
 and cleanup. No extra persistent effects or gameplay state are created.
+
+## Lightning Bolt 5×5 experiment
+
+`lightning/lightning-bolt-main-5x5.png` is the owner's unchanged 1254×1254 RGBA
+attachment ending `70c61d39f438`: 5 columns, 5 rows, 25 frames at 24 fps, no loop.
+One main sprite contains charge, line discharge and endpoint fade. Full adds
+one tiny procedural charge (2 effects total); Reduced uses only the main sprite
+(1); Off uses none. No per-token effects or persistent aftermath are spawned.
+The DM-only Lightning VFX selector keeps the 4×4 baseline available; its older
+textures are loaded only when that comparison is selected. See
+`docs/LIGHTNING_5X5_TEST.md` for the budget, tradeoffs and validation.

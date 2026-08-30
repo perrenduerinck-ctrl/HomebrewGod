@@ -1,9 +1,10 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
-import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=storm-polish-20260830";
-import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=storm-polish-20260830";
-import { compileSpellVfxProfile } from "./profileSequence.js?v=storm-polish-20260830";
+import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=lightning5-test-20260830";
+import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=lightning5-test-20260830";
+import { compileSpellVfxProfile } from "./profileSequence.js?v=lightning5-test-20260830";
+import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=lightning5-test-20260830";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
@@ -123,6 +124,7 @@ function normalizeSequenceEffect(effect = {}) {
     particles: freezeOptions(effect.particles),
     sprite: freezeOptions(effect.sprite),
     persistent: effect.persistent === true,
+    fullOnly: effect.fullOnly === true,
     persistentLifetime: finiteNumber(effect.persistentLifetime) === null
       ? null
       : Math.round(boundedNumber(
@@ -290,11 +292,11 @@ export function createCastingSequenceRegistry(
     return normalized;
   }
 
-  function get(id) {
+  function get(id, event = {}) {
     const key = cleanId(id);
     const profile = profileMap.get(key.replace(/^profile-/, ""));
     return definitions.get(key) || (profile
-      ? defineCastingSequence(compileSpellVfxProfile(profile)) : null);
+      ? defineCastingSequence(compileSpellVfxProfile(profile, event)) : null);
   }
 
   function resolve(event) {
@@ -448,7 +450,8 @@ export function createDefaultCastingSequenceRegistry() {
     [
       ...DEFAULT_CASTING_SEQUENCES,
       ...DEFAULT_FIRE_CASTING_SEQUENCES,
-      ...CANTRIP_CASTING_SEQUENCE_DEFINITIONS
+      ...CANTRIP_CASTING_SEQUENCE_DEFINITIONS,
+      LIGHTNING_5X5_SEQUENCE
     ],
     { profiles: SPELL_VFX_PROFILES }
   );
@@ -683,6 +686,7 @@ export function createCastingSequenceSystem({
 
     let instanceCount = 0;
     for (const effect of phase.effects) {
+      if (effect.fullOnly && getTimingScale(effectEngine) !== 1) continue;
       const anchors = resolveAnchorPoints(effect, record.event);
       for (const points of anchors) {
         if (
@@ -781,7 +785,7 @@ export function createCastingSequenceSystem({
     }
 
     const definition = sequenceId
-      ? registry.get(sequenceId)
+      ? registry.get(sequenceId, event)
       : registry.resolve(event);
     if (!definition) {
       return Object.freeze({

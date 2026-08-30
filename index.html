@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-<link rel="stylesheet" href="./assets/styles/app.css?v=storm-polish-20260830">
+<link rel="stylesheet" href="./assets/styles/app.css?v=lightning5-test-20260830">
 </head>
 
 <body>
@@ -295,6 +295,13 @@
         type="button"
         disabled
       >Play Preview VFX</button>
+      <label id="lightningVfxTestControl" class="battleScaleControl hidden" for="lightningVfxTestSelect">
+        <span>Lightning VFX</span>
+        <select id="lightningVfxTestSelect">
+          <option value="5x5">5×5 test (25 frames)</option>
+          <option value="4x4">4×4 baseline</option>
+        </select>
+      </label>
       <button
         id="resetSpellPreviewButton"
         class="hidden"
@@ -946,7 +953,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=storm-polish-20260830"
+    src="./app.js?v=lightning5-test-20260830"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

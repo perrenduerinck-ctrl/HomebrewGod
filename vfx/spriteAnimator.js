@@ -168,6 +168,7 @@ export function createSpriteAnimator({
   let running = false;
   let completed = false;
   let destroyed = false;
+  let lastAppliedFrame = -1;
 
   element.style.backgroundImage = normalized.src
     ? `url(${JSON.stringify(normalized.src)})`
@@ -187,6 +188,9 @@ export function createSpriteAnimator({
   }
 
   function applyFrame(frameIndex) {
+    // A 24-fps sheet should not rewrite styles at the display's 60/120 Hz.
+    if (frameIndex === lastAppliedFrame) return;
+    lastAppliedFrame = frameIndex;
     const style = getSpriteFrameStyle(
       normalized,
       frameIndex

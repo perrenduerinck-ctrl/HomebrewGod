@@ -45,13 +45,13 @@ function eventFor(id, pointer = { x: 230, y: 160 }) {
 test("storm spells resolve through profiles and preload only their required artwork", () => {
   const registry = createDefaultCastingSequenceRegistry(), effects = createDefaultEffectRegistry();
   for (const id of ["lightning-bolt", "ice-storm"]) {
-    const sequence = registry.resolve(eventFor(id));
+    const sequence = id === "lightning-bolt" ? registry.get("profile-lightning-bolt", eventFor(id)) : registry.resolve(eventFor(id));
     assert.equal(sequence.source, "profile");
     assert.equal(sequence.id, "profile-" + id);
     assert.ok(sequence.totalDuration < 5000);
     for (const phase of sequence.phases) for (const effect of phase.effects) assert.ok(effects.has(effect.type));
   }
-  assert.deepEqual(getCantripSpritePaths("lightning-bolt").sort(), [STORM_ASSETS.charge, STORM_ASSETS.impact].sort());
+  assert.deepEqual(getCantripSpritePaths("lightning-bolt", { lightningVariant: "4x4" }).sort(), [STORM_ASSETS.charge, STORM_ASSETS.impact].sort());
   assert.deepEqual(getCantripSpritePaths("ice-storm"), [STORM_ASSETS.ice]);
   for (const path of Object.values(STORM_ASSETS)) {
     const png = readFileSync(new URL("../" + path, import.meta.url));
@@ -69,7 +69,7 @@ test("Lightning Bolt follows the full 100-ft line in all eight directions, not t
   for (const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]) {
     const event = eventFor("lightning-bolt", { x: 200 + dx * 30, y: 160 + dy * 30 });
     const before = JSON.stringify(event), h = harness();
-    h.system.play(event); h.finish();
+    h.system.play(event, { sequenceId: "profile-lightning-bolt" }); h.finish();
     const beam = h.requests.find(r => r.type === "storm-lightning-beam");
     const echo = h.requests.find(r => r.type === "storm-lightning-echo");
     const impact = h.requests.find(r => r.type === "storm-lightning-impact");

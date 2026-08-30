@@ -3,7 +3,7 @@ import {
 } from "./particles.js";
 import {
   createSpriteAnimator
-} from "./spriteAnimator.js?v=storm-polish-20260830";
+} from "./spriteAnimator.js?v=lightning5-test-20260830";
 
 function createElement(
   documentRef,
@@ -192,6 +192,7 @@ export function createEffectRenderer({
       const deltaX = end.x - start.x;
       const deltaY = end.y - start.y;
       const length = Math.hypot(deltaX, deltaY);
+      setCssNumber(record.element, "--hg-vfx-path-pixels", length);
       record.element.style.left = `${start.x}px`;
       record.element.style.top = `${start.y}px`;
       setCssNumber(

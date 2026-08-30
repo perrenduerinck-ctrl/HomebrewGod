@@ -1,8 +1,9 @@
 // User-supplied art is shared by spell-specific, presentation-only sequences.
 // Single images are oriented in CSS; sheets are 4x4, read left-to-right.
-import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=storm-polish-20260830";
+import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=lightning5-test-20260830";
 const asset = (name) => `./assets/vfx/cantrips/${name}.png`;
-import { getStormSpritePaths } from "./stormEffects.js?v=storm-polish-20260830";
+import { getStormSpritePaths } from "./stormEffects.js?v=lightning5-test-20260830";
+import { LIGHTNING_5X5_ASSET } from "./lightning5x5.js?v=lightning5-test-20260830";
 
 function sprite(id, file, { sheet = false, className, angle = 0, tipX = 50, tipY = 50 } = {}) {
   return Object.freeze({
@@ -91,7 +92,8 @@ export const CANTRIP_CASTING_SEQUENCE_DEFINITIONS = Object.freeze([
     impact: "radiant-strike-sprite", targetOnly: true })
 ]);
 
-export function getCantripSpritePaths(spellId) {
+export function getCantripSpritePaths(spellId, { lightningVariant = "5x5" } = {}) {
+  if (spellId === "lightning-bolt" && lightningVariant !== "4x4") return [LIGHTNING_5X5_ASSET];
   const definition = CANTRIP_CASTING_SEQUENCE_DEFINITIONS.find((entry) => entry.id === spellId);
   const types = new Set(Object.values(definition?.phases || {})
     .flatMap((phase) => phase.effects || []).map((entry) => entry.type));
@@ -101,9 +103,9 @@ export function getCantripSpritePaths(spellId) {
 }
 
 const assetLoads = new Map();
-export function preloadCantripSprites(spellId) {
+export function preloadCantripSprites(spellId, options) {
   if (typeof Image !== "function") return Promise.resolve();
-  return Promise.all(getCantripSpritePaths(spellId).map((src) => {
+  return Promise.all(getCantripSpritePaths(spellId, options).map((src) => {
     if (!assetLoads.has(src)) {
       assetLoads.set(src, new Promise((resolve) => {
         const image = new Image();
