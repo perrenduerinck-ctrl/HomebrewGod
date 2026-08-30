@@ -2388,12 +2388,17 @@ test(
     await page.locator(
       "#rulerEndElevationInput"
     ).fill("40");
-    const elevatedStartX = box.x + 10;
-    await page.mouse.move(elevatedStartX, startY);
+    // Editing controls can scroll/reflow the toolbar. Re-measure the map,
+    // then draw a real 25-ft segment rather than relying on an old drag.
+    await overlay.scrollIntoViewIfNeeded();
+    const elevatedBox = await overlay.boundingBox();
+    const elevatedStartX = elevatedBox.x + 90;
+    const elevatedStartY = elevatedBox.y + 90;
+    await page.mouse.move(elevatedStartX, elevatedStartY);
     await page.mouse.down();
     await page.mouse.move(
-      elevatedStartX + 384,
-      startY
+      elevatedStartX + 320,
+      elevatedStartY
     );
     await page.mouse.up();
 
@@ -2952,6 +2957,23 @@ test("DM Spell Preview Fire Bolt travels in all eight directions after two click
   const ui = await openDmSpellPreview(page);
   await ui.select("fire-bolt");
   await page.locator("#battleVfxModeSelect").selectOption("full");
+  // Capture the real rendered element when inserted. Polling for a 420-ms
+  // animation can miss its entire lifetime on a busy CI worker.
+  await page.evaluate(() => {
+    window.__PREVIEW_RENDERED_PATHS__ = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 ||
+            !node.matches('.hg-vfx-fire-bolt-projectile-sprite.has-path')) continue;
+        window.__PREVIEW_RENDERED_PATHS__.push({
+          rotation: parseFloat(node.style.getPropertyValue('--hg-vfx-path-rotation')),
+          length: parseFloat(node.style.getPropertyValue('--hg-vfx-path-length')),
+          kind: node.dataset.effectKind
+        });
+      }
+    });
+    observer.observe(document.querySelector('.hg-map-vfx-layer'), { childList: true });
+  });
   for (const [dx, dy] of [[140,0],[-140,0],[0,100],[0,-100],
     [100,100],[-100,100],[100,-100],[-100,-100]]) {
     await ui.reset.click();
@@ -2966,6 +2988,7 @@ test("DM Spell Preview Fire Bolt travels in all eight directions after two click
     const locked = (await ui.state()).preview;
     await ui.point(20, 20);
     expect((await ui.state()).preview.previewTargetPoint).toEqual(locked.previewTargetPoint);
+    await page.evaluate(() => { window.__PREVIEW_RENDERED_PATHS__ = []; });
     await ui.play.click();
     const played = await ui.state();
     expect(played.event.preview).toBe(true);
@@ -2976,15 +2999,12 @@ test("DM Spell Preview Fire Bolt travels in all eight directions after two click
     expect(played.result.ok).toBe(true);
     // Check the actual rendered path, not only event data (the old null-ratio
     // normalization bug passed event-only checks but rendered toward 0,0).
-    const projectile = page.locator(".hg-vfx-fire-bolt-projectile-sprite.has-path").last();
-    await expect(projectile).toBeVisible();
-    const path = await projectile.evaluate((element) => ({
-      rotation: parseFloat(element.style.getPropertyValue("--hg-vfx-path-rotation")),
-      length: parseFloat(element.style.getPropertyValue("--hg-vfx-path-length"))
-    }));
+    await expect.poll(() => page.evaluate(() => window.__PREVIEW_RENDERED_PATHS__.length)).toBe(1);
+    const path = await page.evaluate(() => window.__PREVIEW_RENDERED_PATHS__[0]);
+    expect(path.kind).toBe("sprite");
     expect(path.rotation).toBeCloseTo(Math.atan2(dy, dx) * 180 / Math.PI, 0);
     expect(path.length).toBeCloseTo(Math.hypot(dx, dy), 0);
-    await expect(projectile).toHaveCount(0);
+    await expect(page.locator('.hg-vfx-fire-bolt-projectile-sprite.has-path')).toHaveCount(0);
   }
 });
 
@@ -3034,6 +3054,17 @@ test("DM Spell Preview validates live range/elevation and never resolves gamepla
   const ui = await openDmSpellPreview(page);
   // Prepare a real pending cast, then switch to preview. Its resource-spending
   // confirmation callback must never run.
+  await page.evaluate(() => {
+    const token = document.createElement('div');
+    token.className = 'hg-token hg-token-player';
+    token.dataset.tokenId = 'preview-isolation-token';
+    token.dataset.tokenType = 'player';
+    token.dataset.linkedCharacterId = 'release-test-character';
+    Object.assign(token.style, {
+      position: 'absolute', left: '100px', top: '110px', width: '64px', height: '64px'
+    });
+    document.getElementById('tokenLayer').appendChild(token);
+  });
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({ spellId: "fireball" }));
   await ui.select("fire-bolt");
   await expect(page.locator("#spellCastingPanel")).toBeHidden();
