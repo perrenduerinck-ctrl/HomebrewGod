@@ -911,6 +911,168 @@ button:disabled {
   }
 }
 
+/* Shared profile primitives. Animate children, preserving map anchor/scale. */
+.hg-vfx-profile { color: var(--hg-profile-color, #b9a0ff); }
+.hg-vfx-profile .hg-vfx-particle {
+  background: currentColor;
+  box-shadow: 0 0 5px currentColor;
+}
+.hg-vfx-profile::before, .hg-vfx-profile::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  animation: hg-profile-bloom var(--hg-vfx-duration) ease-out both;
+}
+.hg-profile-glyph {
+  position: absolute;
+  inset: 5%;
+  width: 90%;
+  height: 90%;
+  fill: color-mix(in srgb, currentColor 16%, transparent);
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px currentColor);
+  animation: hg-profile-manifest var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-glyph::before, .hg-vfx-profile-hand::before,
+.hg-vfx-profile-glow::before, .hg-vfx-profile-leaves::before {
+  background: radial-gradient(circle, currentColor, transparent 70%);
+  opacity: 0.25;
+}
+.hg-vfx-profile-glow::before { inset: -20%; }
+.hg-vfx-profile-ripple::before, .hg-vfx-profile-ripple::after,
+.hg-vfx-profile-ground::before, .hg-vfx-profile-ground::after,
+.hg-vfx-profile-wind::before, .hg-vfx-profile-wind::after {
+  border: 2px solid currentColor;
+  box-shadow: 0 0 7px currentColor, inset 0 0 7px currentColor;
+}
+.hg-vfx-profile-ripple::after, .hg-vfx-profile-ground::after { inset: 24%; }
+.hg-vfx-profile-ground::before, .hg-vfx-profile-ground::after {
+  border-radius: 40% 55% 38% 60%;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+}
+.hg-vfx-profile-wind::before, .hg-vfx-profile-wind::after {
+  border-left-color: transparent;
+  border-right-color: transparent;
+  animation-name: hg-profile-swirl;
+}
+.hg-vfx-profile-wind::after { inset: 25%; animation-direction: reverse; }
+.hg-vfx-profile-splash::before {
+  background: currentColor;
+  clip-path: polygon(50% 0,60% 28%,85% 5%,75% 35%,100% 50%,73% 63%,90% 92%,59% 78%,48% 100%,35% 73%,5% 88%,25% 60%,0 41%,31% 34%,15% 5%,44% 23%);
+}
+.hg-vfx-profile-splash::after { border: 2px solid currentColor; }
+.hg-vfx-profile-mist::before, .hg-vfx-profile-mist::after {
+  background: radial-gradient(ellipse, currentColor, transparent 70%);
+  filter: blur(5px);
+  inset: -15%;
+  opacity: 0.5;
+}
+.hg-vfx-profile-mist::after { inset: 20% -25% -10% 25%; }
+.hg-vfx-profile-shard::before {
+  background: currentColor;
+  clip-path: polygon(55% 0,75% 34%,58% 47%,100% 53%,54% 63%,30% 100%,39% 58%,0 37%,46% 39%);
+}
+.hg-vfx-profile-shimmer::before, .hg-vfx-profile-shimmer::after {
+  border: 2px dashed currentColor;
+  border-radius: 18%;
+  animation-name: hg-profile-swirl;
+}
+.hg-vfx-profile-shimmer::after { inset: 25%; animation-direction: reverse; }
+.hg-vfx-profile-slash::before, .hg-vfx-profile-slash::after {
+  border-top: 6px solid currentColor;
+  border-right: 2px solid currentColor;
+  filter: drop-shadow(0 0 6px currentColor);
+  animation-name: hg-profile-slash;
+}
+.hg-vfx-profile-slash::after { inset: 27% 4% 2% 23%; }
+.hg-vfx-profile-sparkles::before, .hg-vfx-profile-rays::before {
+  background: repeating-conic-gradient(currentColor 0deg 5deg, transparent 5deg 45deg);
+  mask-image: radial-gradient(circle, transparent 15%, black 40%, transparent 70%);
+}
+.hg-vfx-profile i {
+  position: absolute;
+  left: 50%; top: 50%; width: 9px; height: 9px;
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 9px currentColor;
+  --hg-profile-angle: calc(var(--hg-profile-index) * 360deg / var(--hg-profile-count));
+  animation: hg-profile-orbit var(--hg-vfx-duration) ease-in-out both;
+}
+.hg-vfx-profile-swarm i {
+  width: 5px; height: 3px; border-radius: 20%; box-shadow: -3px -3px 0 currentColor, 3px -3px 0 currentColor;
+}
+.hg-vfx-profile-stones i { width: 14px; height: 18px; border: 2px solid #eee; border-radius: 45% 35%; }
+.hg-vfx-profile-blades i { width: 5px; height: 30px; border-radius: 80% 80% 0 0; }
+.hg-vfx-profile-lights i { width: 13px; height: 13px; box-shadow: 0 0 14px 4px currentColor; }
+.hg-vfx-profile.has-path { background: none; box-shadow: none; animation: none; }
+.hg-vfx-profile-orb.has-path, .hg-vfx-profile-message.has-path { height: 1px; }
+.hg-vfx-profile-orb.has-path::before, .hg-vfx-profile-message.has-path::before {
+  inset: auto; left: 0; top: 0; width: 20px; height: 20px;
+  background: radial-gradient(circle, #fff 0 10%, currentColor 35%, transparent 72%);
+  box-shadow: 0 0 10px currentColor;
+  animation: hg-profile-travel var(--hg-vfx-duration) linear both;
+}
+.hg-vfx-profile-message.has-path::before { background: none; border: 2px solid currentColor; width: 14px; height: 14px; }
+.hg-vfx-profile-beam.has-path::before {
+  inset: 0; background: currentColor; box-shadow: 0 0 8px currentColor;
+  animation: hg-profile-beam var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-cone.has-path { height: calc(var(--hg-vfx-path-length) * 0.8); }
+.hg-vfx-profile-cone.has-path::before {
+  inset: 0; border-radius: 0;
+  background: linear-gradient(90deg, currentColor, transparent);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+  animation: hg-profile-beam var(--hg-vfx-duration) ease-out both;
+}
+@keyframes hg-profile-bloom {
+  0% { opacity: 0; transform: scale(0.2); }
+  25% { opacity: 0.75; }
+  100% { opacity: 0; transform: scale(1.2); }
+}
+@keyframes hg-profile-manifest {
+  0% { opacity: 0; transform: translateY(12px) scale(0.65); }
+  25%, 65% { opacity: 0.95; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(1.05); }
+}
+@keyframes hg-profile-swirl {
+  0% { opacity: 0; transform: rotate(-40deg) scale(0.4); }
+  30% { opacity: 0.9; }
+  100% { opacity: 0; transform: rotate(100deg) scale(1.15); }
+}
+@keyframes hg-profile-slash {
+  0% { opacity: 0; transform: rotate(-80deg) scale(0.4); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(65deg) scale(1.15); }
+}
+@keyframes hg-profile-orbit {
+  0% { opacity: 0; transform: rotate(var(--hg-profile-angle)) translateX(8px); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(calc(var(--hg-profile-angle) + 70deg)) translateX(30px); }
+}
+@keyframes hg-profile-travel {
+  0% { left: 0; opacity: 0; transform: translate(-50%, -50%); }
+  10%, 90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; transform: translate(-50%, -50%); }
+}
+@keyframes hg-profile-beam {
+  0% { opacity: 0; scale: 0 1; transform-origin: left; }
+  20%, 60% { opacity: 0.9; scale: 1 1; }
+  100% { opacity: 0; scale: 1 0.4; }
+}
+.hg-map-vfx-layer[data-effects-mode="reduced"] .hg-vfx-profile :is(i, svg),
+.hg-map-vfx-layer[data-effects-mode="reduced"] .hg-vfx-profile::before,
+.hg-map-vfx-layer[data-effects-mode="reduced"] .hg-vfx-profile::after { filter: none; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) {
+  .hg-vfx-profile :is(i, svg), .hg-vfx-profile::before, .hg-vfx-profile::after {
+    animation-timing-function: steps(2, end);
+    filter: none;
+  }
+}
+
 .hg-map-vfx-effect[data-effect-intensity="1"] {
   filter: saturate(0.9) brightness(0.92);
 }

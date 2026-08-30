@@ -139,6 +139,6 @@ test("tier inventory remains accurate and distinguishes dedicated sequences from
   const registry = createDefaultCastingSequenceRegistry();
   const dedicated = DEFAULT_SPELLS.filter((spell) =>
     registry.resolve(createSpellVfxEvent({ spell }))?.match.spellIds.includes(spell.id));
-  assert.equal(dedicated.filter((spell) => spell.level === 0).length, 6);
-  assert.equal(dedicated.length, 7);
+  assert.equal(dedicated.filter((spell) => spell.level === 0).length, 45);
+  assert.equal(dedicated.length, 46);
 });

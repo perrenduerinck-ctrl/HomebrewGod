@@ -64,7 +64,7 @@ export function createSpellPreviewSession({
     const maxRangeFeet = instruction.rangeType !== "self" &&
       Number.isFinite(instruction.rangeFeet)
       ? instruction.rangeFeet : null;
-    const hasDirection = (!directional && !projectile) ||
+    const hasDirection = selfCentered || (!directional && !projectile) ||
       (measurement?.pixelDistance || 0) > 0.001;
     const inRange = Boolean(measurement && hasDirection && (
       maxRangeFeet === null || measurement.feet <= maxRangeFeet + 0.001

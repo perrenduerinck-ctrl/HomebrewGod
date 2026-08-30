@@ -36,7 +36,7 @@ function getAreaSize(area, templateShape) {
   return area.side;
 }
 
-export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview = false } = {}) {
+export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview = false, vfxPreview = null } = {}) {
   const targeting = spell.targeting;
   const area = targeting?.area;
   const templateShape = SHAPE_MAP[area?.shape];
@@ -52,6 +52,21 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
     ? targeting.range.feet
     : null;
   const name = cleanText(spell.name, "Spell");
+
+  // Profile placement is opt-in for DM presentation, never a real cast rule.
+  if (allowTouchPreview && vfxPreview && spell.level === 0) {
+    const self = vfxPreview.mode === "self";
+    const cube = vfxPreview.shape === "cube";
+    const size = normalizeTemplateDistance(vfxPreview.sizeFeet, 2.5);
+    return Object.freeze({ supported: true, spellId: cleanText(spell.id), spellName: name,
+      sourceShape: cube ? "cube" : "single-target", templateShape: cube ? "cube" : "circle",
+      targetType: self ? "self" : "point", sourceTargetType: targetType,
+      placementMode: "point", sizeFeet: size, widthFeet: cube ? size : size * 2,
+      heightFeet: cube ? size : 0, rangeType: self ? "self" : "distance",
+      rangeFeet: self ? null : normalizeTemplateDistance(vfxPreview.rangeFeet, 5),
+      rangeText: cleanText(vfxPreview.label, self ? "Self (visual preview)" : "Preview reach"),
+      singleTarget: !cube, previewOnly: true });
+  }
 
   if (
     targeting &&

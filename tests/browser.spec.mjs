@@ -3013,6 +3013,67 @@ test("cantrip sprite batch plays in preview while targeting hides temporarily an
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("profile preview sample covers projectile, impact, touch, beam, utility, ground, and weapon families", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await page.evaluate(() => {
+    window.__PROFILE_SAMPLE__ = [];
+    new MutationObserver((records) => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 || !node.matches(".hg-map-vfx-effect")) continue;
+        window.__PROFILE_SAMPLE__.push({ type: node.dataset.effectType,
+          path: node.classList.contains("has-path"),
+          glyph: Boolean(node.querySelector("svg path")),
+          x: parseFloat(node.style.left), y: parseFloat(node.style.top),
+          length: parseFloat(node.style.getPropertyValue("--hg-vfx-path-length")),
+          rotation: parseFloat(node.style.getPropertyValue("--hg-vfx-path-rotation")) });
+      }
+    }).observe(document.querySelector(".hg-map-vfx-layer"), { childList: true });
+  });
+  for (const [spell, type, path, glyph] of [
+    ["acid-splash", "profile-orb", true, false],
+    ["toll-the-dead", "profile-glyph", false, true],
+    ["mending", "profile-glyph", false, true],
+    ["lightning-lure", "profile-beam", true, false],
+    ["mage-hand", "profile-hand", false, true],
+    ["create-bonfire", "fire-flames", false, false],
+    ["booming-blade", "profile-slash", false, false]
+  ]) {
+    await ui.select(spell);
+    await ui.point(240, 180);
+    await ui.point(270, 180);
+    await expect(ui.play).toBeEnabled();
+    const locked = (await ui.state()).preview;
+    await page.evaluate(() => { window.__PROFILE_SAMPLE__ = []; });
+    await ui.play.click();
+    await expect(ui.overlay).toHaveCSS("opacity", "0");
+    await expect.poll(() => page.evaluate((type) =>
+      window.__PROFILE_SAMPLE__.some(e => e.type === type), type)).toBe(true);
+    const rendered = await page.evaluate((type) =>
+      window.__PROFILE_SAMPLE__.find(e => e.type === type), type);
+    expect(rendered.path).toBe(path); expect(rendered.glyph).toBe(glyph);
+    const event = (await ui.state()).event;
+    expect(event.preview).toBe(true); expect(event.casterTokenId).toBe("");
+    if (path) {
+      expect(rendered.x).toBeCloseTo(event.casterPoint.x, 0);
+      expect(rendered.length).toBeCloseTo(30, 0);
+      expect(rendered.rotation).toBeCloseTo(0, 0);
+    } else {
+      expect(rendered.x).toBeCloseTo(event.targetPoint.x, 0);
+      expect(rendered.y).toBeCloseTo(event.targetPoint.y, 0);
+    }
+    await expect(ui.overlay).toHaveCSS("opacity", "1", { timeout: 5000 });
+    expect((await ui.state()).preview).toEqual(locked);
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  }
+  // A self utility spell locks at one click and never asks for a character.
+  await ui.select("blade-ward"); await ui.point(240, 180);
+  await expect(ui.play).toBeEnabled(); await ui.play.click();
+  await ui.reset.click(); await expect(ui.overlay).toHaveCSS("opacity", "1");
+  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("DM Spell Preview Fire Bolt travels in all eight directions after two clicks", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   await ui.select("fire-bolt");
