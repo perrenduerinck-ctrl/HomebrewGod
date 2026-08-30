@@ -3074,6 +3074,77 @@ test("profile preview sample covers projectile, impact, touch, beam, utility, gr
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("storm profiles render full-line lightning and area-local hail with bounded cleanup", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await page.evaluate(() => {
+    window.__STORM_RENDERED__ = [];
+    const observer = new MutationObserver(records => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 || !node.matches(".hg-map-vfx-effect")) continue;
+        window.__STORM_RENDERED__.push({ type: node.dataset.effectType,
+          x: parseFloat(node.style.left), y: parseFloat(node.style.top),
+          length: parseFloat(node.style.getPropertyValue("--hg-vfx-path-length")),
+          scale: parseFloat(node.style.getPropertyValue("--hg-vfx-scale")),
+          width: parseFloat(getComputedStyle(node).width),
+          height: parseFloat(getComputedStyle(node).height),
+          branches: node.querySelectorAll("svg path").length,
+          sprite: Boolean(node.querySelector(".hg-vfx-sprite")),
+          stones: node.querySelectorAll(".hg-storm-hailstone").length,
+          bursts: node.querySelectorAll(".hg-storm-ice-burst").length,
+          blend: getComputedStyle(node.parentElement).mixBlendMode });
+      }
+    });
+    for (const layer of document.querySelectorAll(".hg-map-vfx-layer, .hg-map-vfx-light-layer")) {
+      observer.observe(layer, { childList: true });
+    }
+  });
+  const captured = type => page.evaluate(type => window.__STORM_RENDERED__.find(e => e.type === type), type);
+  await ui.select("lightning-bolt"); await ui.point(100, 220); await ui.point(150, 220);
+  const line = (await ui.state()).preview;
+  await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
+  await expect.poll(() => captured("storm-lightning-beam")).toBeTruthy();
+  const beam = await captured("storm-lightning-beam");
+  expect(beam.branches).toBe(4);
+  expect(beam.sprite).toBe(true);
+  expect(beam.blend).toBe("screen");
+  expect(beam.height).toBe(42);
+  expect(beam.length).toBeCloseTo(line.previewGeometry.sizePixels, 0);
+  expect(beam.length).toBeGreaterThan(50);
+  await expect.poll(() => captured("storm-lightning-impact")).toBeTruthy();
+  expect((await captured("storm-lightning-impact")).blend).toBe("screen");
+  await expect(ui.overlay).toHaveCSS("opacity", "1", { timeout: 6000 });
+  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  expect((await ui.state()).preview).toEqual(line);
+  await ui.select("ice-storm"); await ui.point(160, 180); await ui.point(360, 220);
+  const area = (await ui.state()).preview;
+  await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
+  await expect.poll(() => captured("storm-hail")).toBeTruthy();
+  const hail = await captured("storm-hail");
+  expect(hail.stones).toBeGreaterThan(15); expect(hail.stones).toBeLessThanOrEqual(32);
+  expect(hail.bursts).toBe(7);
+  expect(hail.width).toBe(160);
+  expect(hail.x).toBeCloseTo(area.previewTargetPoint.x, 0);
+  expect(hail.y).toBeCloseTo(area.previewTargetPoint.y, 0);
+  expect(hail.scale * 160).toBeCloseTo(area.previewGeometry.sizePixels * 2, 0);
+  await expect.poll(() => captured("storm-frost")).toBeTruthy();
+  await expect(ui.overlay).toHaveCSS("opacity", "1", { timeout: 6000 });
+  expect((await ui.state()).preview).toEqual(area);
+  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  await page.locator("#battleVfxModeSelect").selectOption("reduced");
+  await page.evaluate(() => { window.__STORM_RENDERED__ = []; });
+  await ui.play.click();
+  await expect.poll(() => captured("storm-hail")).toBeTruthy();
+  expect((await captured("storm-hail")).stones).toBe(7);
+  expect((await captured("storm-hail")).bursts).toBe(2);
+  await ui.reset.click(); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  await page.locator("#battleVfxModeSelect").selectOption("off");
+  await ui.select("lightning-bolt"); await ui.point(100, 220); await ui.point(150, 220);
+  await ui.play.click(); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  expect((await ui.state()).result.reason).toBe("effects-off");
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("DM Spell Preview Fire Bolt travels in all eight directions after two clicks", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   await ui.select("fire-bolt");

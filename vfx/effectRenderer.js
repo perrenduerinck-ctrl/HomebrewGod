@@ -3,7 +3,7 @@ import {
 } from "./particles.js";
 import {
   createSpriteAnimator
-} from "./spriteAnimator.js?v=vfx-sprite-phase-a-20260828";
+} from "./spriteAnimator.js?v=storm-polish-20260830";
 
 function createElement(
   documentRef,
@@ -79,6 +79,11 @@ export function createEffectRenderer({
     "hg-map-vfx-layer"
   );
   const records = new Map();
+  // Black-backed light art must blend at the map surface, outside the normal
+  // paint-contained effect group. Both layers share the same lifecycle/caps.
+  const lightOverlay = createElement(documentRef, "hg-map-vfx-light-layer");
+  lightOverlay.setAttribute("aria-hidden", "true");
+  lightOverlay.dataset.effectsMode = "full";
   let connected = false;
   let resizeObserver = null;
   let observedTarget = null;
@@ -136,6 +141,11 @@ export function createEffectRenderer({
     overlay.style.height = `${height}px`;
     overlay.dataset.mapScale = String(mapScale);
     bounds = { width, height };
+    lightOverlay.style.left = overlay.style.left;
+    lightOverlay.style.top = overlay.style.top;
+    lightOverlay.style.width = overlay.style.width;
+    lightOverlay.style.height = overlay.style.height;
+    lightOverlay.dataset.mapScale = String(mapScale);
 
     if (
       resizeObserver &&
@@ -250,9 +260,11 @@ export function createEffectRenderer({
     };
     // New cantrip sheets finish their full frame cycle in the scaled lifetime.
     // Existing sprites retain their own timing contracts.
-    if (effect.definition.className === "cantrip-impact-sprite") {
+    if (effect.definition.className === "cantrip-impact-sprite" || spriteOptions.fitDuration === true) {
+      const frames = (spriteOptions.endFrame ?? spriteOptions.frameCount - 1) -
+        (spriteOptions.startFrame ?? 0) + 1;
       spriteOptions.framesPerSecond = Math.min(60,
-        spriteOptions.frameCount * 1000 / Math.max(1, effect.duration));
+        frames * 1000 / Math.max(1, effect.duration));
     }
     const sprite = createElement(
       documentRef,
@@ -319,7 +331,7 @@ export function createEffectRenderer({
     }
 
     records.set(effect.id, record);
-    overlay.appendChild(element);
+    (effect.definition.blendMode === "screen" ? lightOverlay : overlay).appendChild(element);
     positionRecord(record);
     try {
       effect.definition.configureElement?.({
@@ -351,6 +363,7 @@ export function createEffectRenderer({
     if (connected) return overlay;
     connected = true;
     surface.appendChild(overlay);
+    surface.appendChild(lightOverlay);
     windowRef?.addEventListener("resize", syncBounds);
     if (typeof windowRef?.ResizeObserver === "function") {
       resizeObserver = new windowRef.ResizeObserver(syncBounds);
@@ -362,6 +375,7 @@ export function createEffectRenderer({
 
   function setMode(mode) {
     overlay.dataset.effectsMode = mode;
+    lightOverlay.dataset.effectsMode = mode;
   }
 
   function destroy() {
@@ -371,6 +385,7 @@ export function createEffectRenderer({
     observedTarget = null;
     windowRef?.removeEventListener("resize", syncBounds);
     overlay.remove();
+    lightOverlay.remove();
     connected = false;
   }
 

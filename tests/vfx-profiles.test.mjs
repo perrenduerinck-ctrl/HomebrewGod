@@ -39,8 +39,8 @@ function clock() {
 
 test("every catalog cantrip has intentional, valid, asset-safe, bounded VFX and a preview option", () => {
   assert.equal(cantrips.length, 45);
-  assert.equal(SPELL_VFX_PROFILES.length, 39);
-  assert.equal(new Set(SPELL_VFX_PROFILES.map(p => p.spellId)).size, 39);
+  assert.equal(SPELL_VFX_PROFILES.filter(p => cantrips.some(s => s.id === p.spellId)).length, 39);
+  assert.equal(new Set(SPELL_VFX_PROFILES.map(p => p.spellId)).size, SPELL_VFX_PROFILES.length);
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const options = html.match(/<optgroup label="Cantrips">([\s\S]*?)<\/optgroup>/)[1];
   const ids = [...options.matchAll(/value="([^"]+)"/g)].map(m => m[1]);
@@ -70,8 +70,9 @@ test("every catalog cantrip has intentional, valid, asset-safe, bounded VFX and 
       }
     }
   }
-  // No level-one work slipped into this batch; the existing Fireball remains.
-  for (const spell of DEFAULT_SPELLS.filter(s => s.level > 0 && s.id !== "fireball")) {
+  // No level-one work slipped in; only the requested storm upgrades are added.
+  for (const spell of DEFAULT_SPELLS.filter(s => s.level > 0 &&
+    !["fireball", "lightning-bolt", "ice-storm"].includes(s.id))) {
     assert.equal(getSpellVfxProfile(spell.id), null);
   }
 });

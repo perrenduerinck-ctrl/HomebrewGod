@@ -1,8 +1,9 @@
 import {
   FIRE_EFFECT_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
-import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=all-cantrips-20260830";
-import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=all-cantrips-20260830";
+import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=storm-polish-20260830";
+import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=storm-polish-20260830";
+import { STORM_EFFECT_DEFINITIONS } from "./stormEffects.js?v=storm-polish-20260830";
 
 const EFFECT_KINDS = Object.freeze([
   "procedural",
@@ -117,7 +118,8 @@ export function createDefaultEffectRegistry() {
     },
     ...FIRE_EFFECT_DEFINITIONS,
     ...CANTRIP_EFFECT_DEFINITIONS,
-    ...PROFILE_EFFECT_DEFINITIONS
+    ...PROFILE_EFFECT_DEFINITIONS,
+    ...STORM_EFFECT_DEFINITIONS
   ]);
 }
 

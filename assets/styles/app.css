@@ -505,7 +505,8 @@ button:disabled {
   opacity: 0;
 }
 
-.hg-map-vfx-layer {
+.hg-map-vfx-layer,
+.hg-map-vfx-light-layer {
   position: absolute;
   z-index: 50;
   overflow: hidden;
@@ -514,13 +515,156 @@ button:disabled {
 }
 
 .hg-map-vfx-layer,
-.hg-map-vfx-layer * {
+.hg-map-vfx-layer *,
+.hg-map-vfx-light-layer,
+.hg-map-vfx-light-layer * {
   pointer-events: none !important;
   user-select: none;
 }
 
-.hg-map-vfx-layer[data-effects-mode="off"] {
+.hg-map-vfx-layer[data-effects-mode="off"],
+.hg-map-vfx-light-layer[data-effects-mode="off"] {
   display: none;
+}
+
+.hg-map-vfx-light-layer { mix-blend-mode: screen; }
+
+/* Storm profiles: additive sprites, branching arcs and area-local hail. */
+.hg-map-vfx-effect.hg-vfx-storm-lightning-sprite { width: 160px; height: 160px; }
+.hg-vfx-storm-lightning-sprite .hg-vfx-sprite {
+  /* RGB sheets are opaque: a drop-shadow would outline the whole square. */
+  filter: saturate(1.12);
+}
+.hg-map-vfx-effect.hg-vfx-storm-lightning-beam.has-path,
+.hg-map-vfx-effect.hg-vfx-storm-lightning-echo.has-path {
+  height: 42px; background: none; box-shadow: none; border-radius: 0;
+  animation: none; overflow: visible;
+}
+.hg-vfx-storm-lightning-beam svg,
+.hg-vfx-storm-lightning-echo svg {
+  width: 100%; height: 100%; overflow: visible;
+  filter: drop-shadow(0 0 5px #168aff) drop-shadow(0 0 11px #317bff);
+  animation: hg-storm-bolt var(--hg-vfx-duration) ease-out both;
+}
+.storm-arc { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.storm-arc-0 { stroke: #f4fdff; stroke-width: 3; }
+.storm-arc-1 { stroke: #64caff; stroke-width: 1.7; opacity: .85; }
+.storm-arc-2 { stroke: #83cfff; stroke-width: 1; opacity: .72; }
+.storm-arc-3 { stroke: #346bff; stroke-width: 6; opacity: .27; }
+.hg-vfx-storm-lightning-echo svg { opacity: .4; filter: drop-shadow(0 0 3px #398cff); }
+.hg-vfx-storm-lightning-beam .hg-vfx-sprite {
+  position: absolute; left: 0; top: 50%;
+  filter: saturate(1.15);
+  animation: hg-storm-bolt-head var(--hg-vfx-duration) linear both;
+}
+@keyframes hg-storm-bolt-head {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-155deg); }
+  8% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(var(--hg-vfx-path-length) - 50%), -50%) rotate(-155deg); }
+}
+@keyframes hg-storm-bolt {
+  0% { opacity: 0; clip-path: inset(0 100% 0 0); }
+  14% { opacity: 1; clip-path: inset(-100% 0 -100% 0); }
+  38% { opacity: .95; }
+  100% { opacity: 0; clip-path: inset(-100% 0 -100% 0); }
+}
+.hg-map-vfx-effect.hg-vfx-storm-cloud,
+.hg-map-vfx-effect.hg-vfx-storm-hail,
+.hg-map-vfx-effect.hg-vfx-storm-frost {
+  width: 160px; height: 160px; overflow: visible;
+}
+.hg-vfx-storm-cloud::before, .hg-vfx-storm-cloud::after,
+.hg-vfx-storm-hail::before, .hg-vfx-storm-frost::before,
+.hg-vfx-storm-frost::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  pointer-events: none;
+}
+.hg-vfx-storm-cloud::before {
+  background: radial-gradient(ellipse at 30% 35%, #d3f6ff80, transparent 35%),
+    radial-gradient(ellipse at 66% 45%, #629ccf99, transparent 43%),
+    radial-gradient(ellipse at 48% 60%, #102c5cbb, transparent 65%);
+  filter: blur(3px);
+  animation: hg-storm-gather var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-storm-cloud::after {
+  border: 1px solid #a1eaff66;
+  box-shadow: inset 0 0 24px #6baef277, 0 0 15px #69d8ff55;
+  animation: hg-storm-gather var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-storm-hail::before {
+  background: radial-gradient(ellipse, #b9efff19 20%, #75acdf38 54%, transparent 70%);
+  animation: hg-storm-frost var(--hg-vfx-duration) ease-out both;
+}
+.hg-storm-hailstone {
+  position: absolute; width: 4px; height: 12px; opacity: 0;
+  background: linear-gradient(110deg, #efffff, #76d0ff 42%, #2c7fd0 70%, #d9ffff);
+  clip-path: polygon(45% 0, 100% 32%, 75% 83%, 35% 100%, 0 48%);
+  filter: drop-shadow(0 0 2px #9edfff);
+  animation: hg-storm-hail-fall calc(var(--hg-vfx-duration) * .34) ease-in
+    calc(var(--hg-vfx-duration) * var(--storm-delay)) both;
+}
+.hg-storm-ice-burst {
+  position: absolute; width: 160px; height: 160px;
+  background-repeat: no-repeat; background-size: 640px 640px;
+  transform: translate(-50%, -50%) scale(.28);
+  mix-blend-mode: screen; opacity: 0;
+  animation: hg-storm-ice-sheet calc(var(--hg-vfx-duration) * .42) steps(1, end)
+      calc(var(--hg-vfx-duration) * var(--storm-delay)) both,
+    hg-storm-ice-fade calc(var(--hg-vfx-duration) * .42) linear
+      calc(var(--hg-vfx-duration) * var(--storm-delay)) both;
+}
+.hg-vfx-storm-frost::before {
+  background: radial-gradient(ellipse at 35% 40%, #d7f8ff55, transparent 26%),
+    radial-gradient(ellipse at 70% 64%, #a3d9ff55, transparent 25%),
+    repeating-conic-gradient(from 10deg, transparent 0 28deg, #b5edff66 29deg 30deg);
+  mask-image: radial-gradient(circle, #000 8%, #0008 50%, transparent 71%);
+  animation: hg-storm-frost var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-storm-frost::after {
+  inset: 12%; border: 1px solid #cefbff77;
+  background: radial-gradient(ellipse, #d6f6ff25, transparent 65%);
+  filter: blur(3px);
+  animation: hg-storm-frost var(--hg-vfx-duration) ease-out both;
+}
+@keyframes hg-storm-gather {
+  0% { opacity: 0; transform: scale(.65) translateY(-12px); }
+  65% { opacity: .9; }
+  100% { opacity: .3; transform: scale(1); }
+}
+@keyframes hg-storm-hail-fall {
+  0% { opacity: 0; transform: translate(var(--storm-drift), -65px) scale(var(--storm-size)); }
+  15% { opacity: 1; }
+  78% { opacity: 1; transform: translate(0, 0) scale(var(--storm-size)); }
+  100% { opacity: 0; transform: translate(0, 3px) scale(.25); }
+}
+@keyframes hg-storm-ice-sheet {
+  0% { background-position: 0 0; }
+  6.25% { background-position: -160px 0; }
+  12.5% { background-position: -320px 0; }
+  18.75% { background-position: -480px 0; }
+  25% { background-position: 0 -160px; }
+  31.25% { background-position: -160px -160px; }
+  37.5% { background-position: -320px -160px; }
+  43.75% { background-position: -480px -160px; }
+  50% { background-position: 0 -320px; }
+  56.25% { background-position: -160px -320px; }
+  62.5% { background-position: -320px -320px; }
+  68.75% { background-position: -480px -320px; }
+  75% { background-position: 0 -480px; }
+  81.25% { background-position: -160px -480px; }
+  87.5% { background-position: -320px -480px; }
+  93.75%, 100% { background-position: -480px -480px; }
+}
+@keyframes hg-storm-ice-fade { 0%, 100% { opacity: 0; } 12%, 70% { opacity: .95; } }
+@keyframes hg-storm-frost { 0% { opacity: 0; } 22% { opacity: .8; } 100% { opacity: 0; } }
+.hg-map-vfx-layer[data-effects-mode="reduced"] :is(.hg-storm-hailstone, .hg-vfx-storm-lightning-beam svg) {
+  filter: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hg-vfx-storm-lightning-beam .hg-vfx-sprite { display: none; }
+  .hg-storm-hailstone { animation-name: hg-storm-ice-fade; }
+  .hg-vfx-storm-lightning-beam svg, .hg-vfx-storm-lightning-echo svg { animation-name: hg-storm-frost; }
 }
 
 .hg-map-vfx-effect {
