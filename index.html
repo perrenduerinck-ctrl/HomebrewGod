@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=unified-preview-20260829">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=cantrip-batch1-20260830">
 </head>
 
 <body>
@@ -224,13 +224,27 @@
         <span>Spell Preview</span>
         <select id="spellTemplateSelect">
           <option value="">Choose a spell</option>
-          <option value="fire-bolt">Fire Bolt</option>
-          <option value="sacred-flame">Sacred Flame</option>
-          <option value="fireball">Fireball</option>
-          <option value="flame-strike">Flame Strike</option>
-          <option value="ice-storm">Ice Storm</option>
-          <option value="burning-hands">Burning Hands</option>
-          <option value="lightning-bolt">Lightning Bolt</option>
+          <optgroup label="Cantrips">
+            <option value="eldritch-blast">Eldritch Blast</option>
+            <option value="fire-bolt">Fire Bolt</option>
+            <option value="frostbite">Frostbite</option>
+            <option value="ray-of-frost">Ray of Frost</option>
+            <option value="sacred-flame">Sacred Flame</option>
+            <option value="shocking-grasp">Shocking Grasp</option>
+          </optgroup>
+          <optgroup label="Level 1">
+            <option value="burning-hands">Burning Hands</option>
+          </optgroup>
+          <optgroup label="Level 3">
+            <option value="fireball">Fireball</option>
+            <option value="lightning-bolt">Lightning Bolt</option>
+          </optgroup>
+          <optgroup label="Level 4">
+            <option value="ice-storm">Ice Storm</option>
+          </optgroup>
+          <optgroup label="Level 5">
+            <option value="flame-strike">Flame Strike</option>
+          </optgroup>
         </select>
       </label>
       <button id="loadSpellTemplateButton" class="hidden" type="button" disabled>
@@ -893,7 +907,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=unified-preview-20260829"
+    src="./app.js?v=cantrip-batch1-20260830"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

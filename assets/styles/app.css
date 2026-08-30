@@ -499,6 +499,12 @@ button:disabled {
   color: var(--text-dim);
 }
 
+/* Keep placement and pointer capture intact; only hide targeting visuals. */
+#battleMapSurface.is-playing-spell-vfx .hg-map-template-layer,
+#battleMapSurface.is-playing-spell-vfx .hg-map-ruler-layer {
+  opacity: 0;
+}
+
 .hg-map-vfx-layer {
   position: absolute;
   z-index: 50;
@@ -835,6 +841,74 @@ button:disabled {
     linear
     both;
   will-change: left, transform, opacity;
+}
+
+.hg-vfx-cantrip-projectile-sprite.has-path {
+  height: 1px;
+  overflow: visible;
+  background: none;
+  box-shadow: none;
+  animation: none;
+}
+
+.hg-vfx-cantrip-projectile-sprite .hg-vfx-sprite,
+.hg-vfx-cantrip-radiant-strike .hg-vfx-sprite {
+  transform-origin: var(--hg-vfx-tip-x) var(--hg-vfx-tip-y);
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 5px rgba(190, 230, 255, 0.7));
+}
+
+.hg-vfx-cantrip-projectile-sprite .hg-vfx-sprite {
+  left: 0;
+  animation: hg-vfx-cantrip-flight var(--hg-vfx-duration) linear both;
+}
+
+.hg-vfx-cantrip-impact-sprite {
+  width: 160px;
+  height: 160px;
+  mix-blend-mode: screen;
+}
+
+.hg-vfx-cantrip-radiant-strike {
+  width: 1px;
+  height: 1px;
+}
+
+.hg-vfx-cantrip-radiant-strike .hg-vfx-sprite {
+  animation: hg-vfx-cantrip-radiant-fall var(--hg-vfx-duration) ease-in both;
+}
+
+@keyframes hg-vfx-cantrip-flight {
+  0% {
+    left: 0;
+    opacity: 0;
+    transform: translate(calc(-1 * var(--hg-vfx-tip-x)), calc(-1 * var(--hg-vfx-tip-y)))
+      rotate(var(--hg-vfx-art-angle)) scale(0.45);
+  }
+  12%, 90% { opacity: 1; }
+  100% {
+    left: 100%;
+    opacity: 0;
+    transform: translate(calc(-1 * var(--hg-vfx-tip-x)), calc(-1 * var(--hg-vfx-tip-y)))
+      rotate(var(--hg-vfx-art-angle)) scale(0.45);
+  }
+}
+
+@keyframes hg-vfx-cantrip-radiant-fall {
+  0% {
+    top: -120px;
+    opacity: 0;
+    transform: translate(calc(-1 * var(--hg-vfx-tip-x)), calc(-1 * var(--hg-vfx-tip-y)))
+      rotate(var(--hg-vfx-art-angle)) scale(0.65);
+  }
+  15% { opacity: 1; }
+  40% { top: 0; opacity: 1; }
+  100% {
+    top: 0;
+    opacity: 0;
+    transform: translate(calc(-1 * var(--hg-vfx-tip-x)), calc(-1 * var(--hg-vfx-tip-y)))
+      rotate(var(--hg-vfx-art-angle)) scale(0.65);
+  }
 }
 
 .hg-map-vfx-effect[data-effect-intensity="1"] {

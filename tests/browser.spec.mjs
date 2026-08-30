@@ -2953,6 +2953,66 @@ async function openDmSpellPreview(page) {
   return { overlay, play, reset, status, select, point, state };
 }
 
+test("cantrip sprite batch plays in preview while targeting hides temporarily and restores unchanged", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await page.evaluate(() => {
+    window.__CANTRIP_SPRITES__ = [];
+    new MutationObserver((records) => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 || node.dataset.effectKind !== "sprite") continue;
+        window.__CANTRIP_SPRITES__.push({
+          type: node.dataset.effectType,
+          path: node.classList.contains("has-path"),
+          image: node.querySelector(".hg-vfx-sprite")?.style.backgroundImage
+        });
+      }
+    }).observe(document.querySelector(".hg-map-vfx-layer"), { childList: true });
+  });
+  for (const [spell, sprite, hasPath] of [
+    ["ray-of-frost", "frost-projectile-sprite", true],
+    ["eldritch-blast", "force-projectile-sprite", true],
+    ["frostbite", "frost-impact-sprite", false],
+    ["shocking-grasp", "lightning-impact-sprite", false],
+    ["sacred-flame", "radiant-strike-sprite", false]
+  ]) {
+    await ui.select(spell);
+    await ui.point(240, 180);
+    await ui.point(spell === "shocking-grasp" ? 280 : 420, 180);
+    const locked = (await ui.state()).preview;
+    await page.evaluate(() => { window.__CANTRIP_SPRITES__ = []; });
+    await ui.play.click();
+    await expect(ui.overlay).toHaveCSS("opacity", "0");
+    await expect.poll(() => page.evaluate((type) =>
+      window.__CANTRIP_SPRITES__.some((entry) => entry.type === type), sprite)).toBe(true);
+    const rendered = await page.evaluate((type) =>
+      window.__CANTRIP_SPRITES__.find((entry) => entry.type === type), sprite);
+    expect(rendered.path).toBe(hasPath);
+    expect(rendered.image).toContain("assets/vfx/cantrips/");
+    expect((await ui.state()).event.casterTokenId).toBe("");
+    await expect(ui.overlay).toHaveCSS("opacity", "1", { timeout: 5000 });
+    expect((await ui.state()).preview).toEqual(locked);
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+    await expect(ui.play).toBeEnabled();
+  }
+  await ui.play.click();
+  await expect(ui.overlay).toHaveCSS("opacity", "0");
+  await ui.reset.click();
+  await expect(ui.overlay).toHaveCSS("opacity", "1");
+  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  expect((await ui.state()).preview.phase).toBe("caster");
+  await ui.select("ray-of-frost");
+  await ui.point(240, 180);
+  await ui.point(420, 180);
+  await ui.play.click();
+  await page.locator("#battleVfxModeSelect").selectOption("off");
+  await expect(ui.overlay).toHaveCSS("opacity", "1");
+  await ui.play.click();
+  await expect(ui.overlay).toHaveCSS("opacity", "1");
+  expect((await ui.state()).result.reason).toBe("effects-off");
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("DM Spell Preview Fire Bolt travels in all eight directions after two clicks", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   await ui.select("fire-bolt");

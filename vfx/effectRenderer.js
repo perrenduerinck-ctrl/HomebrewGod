@@ -248,6 +248,12 @@ export function createEffectRenderer({
       ...(effect.definition.sprite || {}),
       ...(effect.sprite || {})
     };
+    // New cantrip sheets finish their full frame cycle in the scaled lifetime.
+    // Existing sprites retain their own timing contracts.
+    if (effect.definition.className === "cantrip-impact-sprite") {
+      spriteOptions.framesPerSecond = Math.min(60,
+        spriteOptions.frameCount * 1000 / Math.max(1, effect.duration));
+    }
     const sprite = createElement(
       documentRef,
       "hg-vfx-sprite"

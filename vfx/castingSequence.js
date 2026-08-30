@@ -1,6 +1,7 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
+import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=cantrip-batch1-20260830";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
@@ -421,7 +422,8 @@ export function createDefaultCastingSequenceRegistry() {
   return createCastingSequenceRegistry(
     [
       ...DEFAULT_CASTING_SEQUENCES,
-      ...DEFAULT_FIRE_CASTING_SEQUENCES
+      ...DEFAULT_FIRE_CASTING_SEQUENCES,
+      ...CANTRIP_CASTING_SEQUENCE_DEFINITIONS
     ]
   );
 }
@@ -727,6 +729,12 @@ export function createCastingSequenceSystem({
     });
   }
 
+  function clearPreviews() {
+    Array.from(records.values()).forEach((record) => {
+      if (record.event.preview === true) stopRecord(record, "preview-reset");
+    });
+  }
+
   function play(event = {}, { sequenceId = "" } = {}) {
     if (destroyed) {
       return Object.freeze({
@@ -807,6 +815,7 @@ export function createCastingSequenceSystem({
   return Object.freeze({
     cancel,
     clear,
+    clearPreviews,
     destroy,
     getState,
     play,
