@@ -36,11 +36,17 @@ export function defineSpellVfxProfile(raw = {}) {
     travelSpeed: vfxNumber(raw.travelSpeed, 0, 0, 4000),
     travelDuration: vfxNumber(raw.travelDuration, 440, 80, 2000),
     impactDuration: vfxNumber(raw.impactDuration, 800, 160, 2400),
+    chargeDuration: vfxNumber(raw.chargeDuration, 180, 0, 1200),
+    aftermathDuration: vfxNumber(raw.aftermathDuration, 420, 0, 2400),
     screenShakeIntensity: vfxNumber(raw.screenShakeIntensity, 0, 0, 1),
     specialOptions: {
       variant: id(raw.specialOptions?.variant || "rune"),
       anchor: raw.specialOptions?.anchor === "caster" ? "caster" : "target",
       geometryScale: raw.specialOptions?.geometryScale === true,
+      geometryBasePixels: vfxNumber(raw.specialOptions?.geometryBasePixels, 72, 16, 512),
+      fitGeometry: raw.specialOptions?.fitGeometry === true,
+      chargeAtTarget: raw.specialOptions?.chargeAtTarget === true,
+      aftermathAtPath: raw.specialOptions?.aftermathAtPath === true,
       particles: Math.round(vfxNumber(raw.specialOptions?.particles, 7, 0, 24))
     },
     assetTodo: String(raw.assetTodo || "").slice(0, 200),
@@ -66,6 +72,18 @@ const melee = { mode: "target", rangeFeet: 5, label: "5-ft weapon preview reach"
 const ground = { mode: "target", rangeFeet: 60, shape: "cube", sizeFeet: 5, label: "60 feet" };
 
 export const SPELL_VFX_PROFILES = Object.freeze([
+  p("lightning-bolt", "Lightning Bolt", "line", "storm-lightning-impact", {
+    damageType: "lightning", casterEffect: "storm-lightning-charge",
+    projectileEffect: "storm-lightning-beam", aftermathEffect: "storm-lightning-echo",
+    scale: 0.85, chargeDuration: 420, travelDuration: 720, impactDuration: 1000,
+    aftermathDuration: 620, specialOptions: { particles: 0, aftermathAtPath: true }
+  }),
+  p("ice-storm", "Ice Storm", "ground-effect", "storm-hail", {
+    damageType: "cold", casterEffect: "storm-cloud", aftermathEffect: "storm-frost",
+    chargeDuration: 520, impactDuration: 1800, aftermathDuration: 1200,
+    specialOptions: { particles: 0, geometryScale: true, geometryBasePixels: 160,
+      fitGeometry: true, chargeAtTarget: true }
+  }),
   p("acid-splash", "Acid Splash", "projectile-impact", "profile-splash", { damageType: "acid", projectileEffect: "profile-orb", aftermathEffect: "profile-mist", assetTodo: "Optional acid bubble/splash art; procedural liquid is intentional." }),
   p("poison-spray", "Poison Spray", "target-impact", "profile-mist", { damageType: "poison", casterEffect: "profile-mist", impactDuration: 1100, scale: 1.15, assetTodo: "Optional poison-cloud sheet." }),
   p("chill-touch", "Chill Touch", "utility-hand", "profile-hand", { damageType: "necrotic", aftermathEffect: "dark-impact-sprite", assetTodo: "Optional skeletal hand art; vector hand is intentional." }),

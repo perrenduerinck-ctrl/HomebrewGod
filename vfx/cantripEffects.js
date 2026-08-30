@@ -1,7 +1,8 @@
 // User-supplied art is shared by spell-specific, presentation-only sequences.
 // Single images are oriented in CSS; sheets are 4x4, read left-to-right.
-import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=all-cantrips-20260830";
+import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=storm-polish-20260830";
 const asset = (name) => `./assets/vfx/cantrips/${name}.png`;
+import { getStormSpritePaths } from "./stormEffects.js?v=storm-polish-20260830";
 
 function sprite(id, file, { sheet = false, className, angle = 0, tipX = 50, tipY = 50 } = {}) {
   return Object.freeze({
@@ -95,8 +96,8 @@ export function getCantripSpritePaths(spellId) {
   const types = new Set(Object.values(definition?.phases || {})
     .flatMap((phase) => phase.effects || []).map((entry) => entry.type));
   getProfileEffectIds(getSpellVfxProfile(spellId)).forEach((type) => types.add(type));
-  return CANTRIP_EFFECT_DEFINITIONS.filter((entry) => types.has(entry.id))
-    .map((entry) => entry.sprite.src);
+  return [...CANTRIP_EFFECT_DEFINITIONS.filter((entry) => types.has(entry.id))
+    .map((entry) => entry.sprite.src), ...getStormSpritePaths(types)];
 }
 
 const assetLoads = new Map();

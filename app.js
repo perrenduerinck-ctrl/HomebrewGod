@@ -63,18 +63,18 @@ import {
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=all-cantrips-20260830";
+} from "./battleMap/spellTemplates.js?v=storm-polish-20260830";
 import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
   createSpellPreviewSession,
   formatSpellPreviewStatus
-} from "./battleMap/spellPreview.js?v=all-cantrips-20260830";
+} from "./battleMap/spellPreview.js?v=storm-polish-20260830";
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=all-cantrips-20260830";
+} from "./vfx/effectEngine.js?v=storm-polish-20260830";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,9 +82,9 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=all-cantrips-20260830";
-import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=all-cantrips-20260830";
-import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=all-cantrips-20260830";
+} from "./vfx/castingSequence.js?v=storm-polish-20260830";
+import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=storm-polish-20260830";
+import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=storm-polish-20260830";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";

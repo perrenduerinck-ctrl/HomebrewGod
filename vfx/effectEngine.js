@@ -1,9 +1,9 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=all-cantrips-20260830";
+} from "./effectRegistry.js?v=storm-polish-20260830";
 import {
   createEffectRenderer
-} from "./effectRenderer.js?v=all-cantrips-20260830";
+} from "./effectRenderer.js?v=storm-polish-20260830";
 import {
   createPersistentEffectStore,
   MAX_PERSISTENT_LIFETIME_MS

@@ -53,6 +53,9 @@ export function normalizeSpriteOptions(
     columns = Math.ceil(frameCount / rows);
   }
   const loop = options.loop === true;
+  const startFrame = clamp(Math.round(finiteNumber(options.startFrame) ?? 0), 0, frameCount - 1);
+  const endFrame = clamp(Math.round(finiteNumber(options.endFrame) ?? frameCount - 1),
+    startFrame, frameCount - 1);
   const removeOnComplete = !loop && (
     options.removeOnComplete === true ||
     (
@@ -78,6 +81,8 @@ export function normalizeSpriteOptions(
       4096
     ),
     frameCount,
+    startFrame,
+    endFrame,
     columns,
     rows,
     framesPerSecond: clamp(
@@ -154,7 +159,8 @@ export function createSpriteAnimator({
   const totalFrames =
     normalized.loop
       ? Infinity
-      : normalized.frameCount * normalized.loops;
+      : (normalized.endFrame - normalized.startFrame + 1) * normalized.loops;
+  const playbackFrames = normalized.endFrame - normalized.startFrame + 1;
   const frameDuration =
     1000 / normalized.framesPerSecond;
   let frameHandle = null;
@@ -210,7 +216,7 @@ export function createSpriteAnimator({
     );
 
     if (absoluteFrame >= totalFrames) {
-      applyFrame(normalized.frameCount - 1);
+      applyFrame(normalized.endFrame);
       stop();
       completed = true;
       if (normalized.removeOnComplete) {
@@ -230,7 +236,7 @@ export function createSpriteAnimator({
     }
 
     applyFrame(
-      absoluteFrame % normalized.frameCount
+      normalized.startFrame + absoluteFrame % playbackFrames
     );
     frameHandle = schedule(tick);
   }
@@ -247,7 +253,7 @@ export function createSpriteAnimator({
     running = true;
     completed = false;
     startedAt = null;
-    applyFrame(0);
+    applyFrame(normalized.startFrame);
     frameHandle = schedule(tick);
     return true;
   }

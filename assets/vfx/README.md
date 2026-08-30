@@ -24,9 +24,26 @@ The two force impact attachments ending `82ded898a0d2` and
 - `cantrips/lightning-projectile.png`: lightning bolt, reserved.
 - `library/meteor-*.png`: meteor projectile and impact sheet.
 - `library/lightning-spear.png`, `lightning-storm-impact.png`: stronger lightning.
-- `library/ice-spear.png`, `ice-burst.png`: alternate ice projectile/impact.
+- `library/ice-spear.png`: alternate ice projectile (Ice Storm uses `ice-burst.png` below).
 - `library/void-*.png`: void projectile and impact sheet.
 - `library/radiant-spear.png`: alternate radiant projectile.
 
 The meteor impact sheet has visible grid seams; crop/padding metadata or a
 cleaner sheet will be needed before animating that variant. It is not used now.
+
+## Lightning Bolt / Ice Storm polish
+
+- `storms/lightning-charge.png`: owner attachment ending `f200bab78219`,
+  unchanged 1254px RGB, 4x4. Frames 0–3 form the charge; frames 4–11 animate
+  the moving bolt head. Shared frame windows keep these phases separate.
+- `storms/lightning-impact.png`: attachment ending `eccaca59d728`, unchanged
+  1254px RGB, 4x4. Full 16-frame impact.
+- The above black-backed sheets use an additive surface layer (screen blend),
+  not fake transparency or a black rectangle over the battle map.
+- `library/ice-burst.png` is now used for Ice Storm's staggered ground impacts.
+  Shared procedural hail/cloud/frost complete the effect inside its template.
+- The supplied lance (`df0f9abe`) and vortex (`48636a1e`) sheets remain optional
+  future variants; they are not copied or downloaded for these compositions.
+
+The normal and additive layers share engine caps, resize, Off/Reduced settings,
+and cleanup. No extra persistent effects or gameplay state are created.

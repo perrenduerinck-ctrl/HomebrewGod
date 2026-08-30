@@ -10,21 +10,27 @@ The current cantrip tier is complete. Level 1 is next, not part of this pass.
 | Cantrips | 45 | 45 | 0 |
 | 1 | 49 | 0 | 49 |
 | 2 | 54 | 0 | 54 |
-| 3 | 42 | 1 | 41 |
-| 4 | 31 | 0 | 31 |
+| 3 | 42 | 2 | 40 |
+| 4 | 31 | 1 | 30 |
 | 5 | 37 | 0 | 37 |
 | 6 | 31 | 0 | 31 |
 | 7 | 20 | 0 | 20 |
 | 8 | 16 | 0 | 16 |
 | 9 | 15 | 0 | 15 |
-| **Total** | **340** | **46** | **294** |
+| **Total** | **340** | **48** | **292** |
 
 ## Existing bespoke overrides (preserved)
 
 Fire Bolt, Ray of Frost, Frostbite, Eldritch Blast, Shocking Grasp, Sacred Flame.
-Fireball also already has a dedicated sequence. Burning Hands, Lightning Bolt,
-Ice Storm and Flame Strike remain available in Preview but still use fallback
+Fireball also already has a dedicated sequence. Burning Hands and Flame Strike
+remain available in Preview but still use fallback
 sequences; their presence in the dropdown does not mean bespoke VFX are done.
+
+Lightning Bolt and Ice Storm now have richer shared-profile compositions:
+charge, branching full-length lightning and sprite impact; or gathering cloud,
+staggered hail, ice bursts and fading frost. Ice Storm fits the exact template
+radius rather than increasing the affected area with visual intensity.
+These two requested visual upgrades do not start the Level 1 batch.
 
 Eldritch Blast currently demonstrates one beam from the selected origin to one
 target. Level-scaled multi-beam and separate targets are a later cantrip task.

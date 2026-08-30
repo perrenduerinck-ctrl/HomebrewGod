@@ -1,4 +1,4 @@
-import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=all-cantrips-20260830";
+import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=storm-polish-20260830";
 
 // Pure compiler: no DOM, timers, characters, rolls, or persistence. The existing
 // sequence system owns scheduling and the existing engine owns all cleanup.
@@ -32,15 +32,21 @@ export function compileSpellVfxProfile(rawProfile, event = {}) {
   const impactType = profile.impactEffect || profile.targetEffect ||
     defaults[profile.family] || "profile-splash";
   function effect(type, at, duration, factor = 1, extra = {}) {
-    return { type, anchor: at, duration, scale: scale * factor, intensity,
+    const fitted = extra.geometryScaleBasePixels && profile.specialOptions.fitGeometry;
+    return { type, anchor: at, duration, scale: (fitted ? profile.scale : scale) * factor, intensity,
       particles: { count: particleCount, size: 3, distance: 24, duration },
       metadata: { profileId: profile.spellId, family: profile.family, spellLevel: level,
         palette: profile.palette, variant: profile.specialOptions.variant }, ...extra };
   }
-  const geometryScaleBasePixels = profile.specialOptions.geometryScale ? 72 : null;
+  const geometryScaleBasePixels = profile.specialOptions.geometryScale
+    ? profile.specialOptions.geometryBasePixels : null;
+  const fieldGeometry = profile.specialOptions.fitGeometry ? { geometryScaleBasePixels } : {};
+  const chargeAnchor = profile.specialOptions.chargeAtTarget ? anchor : "caster";
+  const aftermathAnchor = profile.specialOptions.aftermathAtPath ? "path" : anchor;
   const phases = {
-    charge: { duration: profile.casterEffect ? 180 : 0,
-      effects: profile.casterEffect ? [effect(profile.casterEffect, "caster", 180, 0.55)] : [] },
+    charge: { duration: profile.casterEffect ? profile.chargeDuration : 0,
+      effects: profile.casterEffect ? [effect(profile.casterEffect, chargeAnchor,
+        profile.chargeDuration, profile.specialOptions.chargeAtTarget ? 1 : 0.55, fieldGeometry)] : [] },
     release: { duration: 0, effects: [] },
     travel: { duration: traveling ? travelDuration : 0,
       effects: traveling ? [effect(pathType, "path", travelDuration, 1,
@@ -49,11 +55,12 @@ export function compileSpellVfxProfile(rawProfile, event = {}) {
       effects: Array.from({ length: profile.impactCount }, (_, index) =>
         effect(impactType, anchor, impactDuration, 1 - index * 0.12,
           { rotation: index * 32, geometryScaleBasePixels })) },
-    aftermath: { duration: profile.aftermathEffect || profile.aftershockCount ? 420 : 0,
+    aftermath: { duration: profile.aftermathEffect || profile.aftershockCount ? profile.aftermathDuration : 0,
       effects: [
-        ...(profile.aftermathEffect ? [effect(profile.aftermathEffect, anchor, 420, 0.7)] : []),
+        ...(profile.aftermathEffect ? [effect(profile.aftermathEffect, aftermathAnchor,
+          profile.aftermathDuration, profile.specialOptions.fitGeometry ? 1 : 0.7, fieldGeometry)] : []),
         ...Array.from({ length: profile.aftershockCount }, (_, index) =>
-          effect("profile-ripple", anchor, 420, 1.1 + index * 0.3,
+          effect("profile-ripple", anchor, profile.aftermathDuration, 1.1 + index * 0.3,
             { opacity: 0.5, geometryScaleBasePixels }))
       ] },
     cleanup: { duration: 0, effects: [] }

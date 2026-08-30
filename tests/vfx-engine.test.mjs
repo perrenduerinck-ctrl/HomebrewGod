@@ -445,6 +445,8 @@ test("single images and sprite sheets share bounded sprite animation options", (
       frameWidth: 64,
       frameHeight: 64,
       frameCount: 15,
+      startFrame: 0,
+      endFrame: 14,
       columns: 5,
       rows: 3,
       framesPerSecond: 24,

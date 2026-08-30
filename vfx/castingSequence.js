@@ -1,9 +1,9 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
-import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=all-cantrips-20260830";
-import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=all-cantrips-20260830";
-import { compileSpellVfxProfile } from "./profileSequence.js?v=all-cantrips-20260830";
+import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=storm-polish-20260830";
+import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=storm-polish-20260830";
+import { compileSpellVfxProfile } from "./profileSequence.js?v=storm-polish-20260830";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
