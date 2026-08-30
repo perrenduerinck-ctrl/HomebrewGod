@@ -1,6 +1,7 @@
 import {
   FIRE_EFFECT_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
+import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=cantrip-batch1-20260830";
 
 const EFFECT_KINDS = Object.freeze([
   "procedural",
@@ -113,7 +114,8 @@ export function createDefaultEffectRegistry() {
       kind: "sprite",
       className: "sprite"
     },
-    ...FIRE_EFFECT_DEFINITIONS
+    ...FIRE_EFFECT_DEFINITIONS,
+    ...CANTRIP_EFFECT_DEFINITIONS
   ]);
 }
 

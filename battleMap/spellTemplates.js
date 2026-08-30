@@ -36,14 +36,17 @@ function getAreaSize(area, templateShape) {
   return area.side;
 }
 
-export function createSpellTemplateInstruction(spell = {}) {
+export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview = false } = {}) {
   const targeting = spell.targeting;
   const area = targeting?.area;
   const templateShape = SHAPE_MAP[area?.shape];
   const targetType = cleanText(
     targeting?.target?.type
   ).toLowerCase();
-  const rangeFeet = Number.isFinite(
+  // A character-free DM preview uses a one-square touch reach. Real casting
+  // keeps its existing targeting rules; this opt-in is presentation only.
+  const touchPreview = allowTouchPreview && targeting?.range?.type === "touch";
+  const rangeFeet = touchPreview ? 5 : Number.isFinite(
     targeting?.range?.feet
   )
     ? targeting.range.feet
@@ -70,7 +73,7 @@ export function createSpellTemplateInstruction(spell = {}) {
       heightFeet: 0,
       rangeType: targeting.range?.type || "distance",
       rangeFeet,
-      rangeText: cleanText(
+      rangeText: touchPreview ? "Touch (5-ft preview reach)" : cleanText(
         targeting.range?.text,
         `${rangeFeet} feet`
       ),

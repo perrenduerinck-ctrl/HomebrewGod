@@ -63,7 +63,7 @@ import {
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=map-single-target-20260829";
+} from "./battleMap/spellTemplates.js?v=cantrip-batch1-20260830";
 import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
@@ -74,7 +74,7 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=unified-preview-20260829";
+} from "./vfx/effectEngine.js?v=cantrip-batch1-20260830";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,7 +82,8 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=unified-preview-20260829";
+} from "./vfx/castingSequence.js?v=cantrip-batch1-20260830";
+import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=cantrip-batch1-20260830";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -3693,9 +3694,7 @@ function handleConfirmedSpellVfx({
     );
     if (vfxEngine && !battleMapVfxSequences) {
       battleMapVfxSequences =
-        createCastingSequenceSystem({
-          effectEngine: vfxEngine
-        });
+        createBattleMapCastingSequences(vfxEngine);
     }
     battleMapVfxSequences?.play(castEvent);
     return castEvent;
@@ -3715,6 +3714,8 @@ function clearSpellPreviewMarkers() {
 }
 
 function resetSpellPreviewVfxState({ clearSpell = false } = {}) {
+  // Stop every outstanding preview, without cancelling any confirmed casts.
+  battleMapVfxSequences?.clearPreviews();
   activeSpellPreviewSession?.reset();
   lastSpellPreviewVfxEvent = null;
   lastSpellPreviewVfxResult = null;
@@ -3896,7 +3897,7 @@ function playSelectedSpellPreviewVfx() {
     });
     const vfxEngine = battleMapVfx || initializeBattleMapVfx();
     if (vfxEngine && !battleMapVfxSequences) {
-      battleMapVfxSequences = createCastingSequenceSystem({ effectEngine: vfxEngine });
+      battleMapVfxSequences = createBattleMapCastingSequences(vfxEngine);
     }
     const result = battleMapVfxSequences?.play(previewEvent) || {
       ok: false, skipped: true, reason: "engine-unavailable"
@@ -4252,7 +4253,7 @@ async function loadSelectedSpellTemplate() {
     if (currentIsDM !== true || E.spellTemplateSelect?.value !== spellId ||
         generation !== spellPreviewGeneration) return;
     const instruction =
-      createSpellTemplateInstruction(spell);
+      createSpellTemplateInstruction(spell, { allowTouchPreview: true });
 
     if (!instruction.supported) {
       activeSpellTemplateInstruction = null;
@@ -4263,6 +4264,11 @@ async function loadSelectedSpellTemplate() {
       return;
     }
 
+    if (battleMapVfx?.getState().mode !== "off") {
+      await preloadCantripSprites(spellId);
+    }
+    if (currentIsDM !== true || E.spellTemplateSelect?.value !== spellId ||
+        generation !== spellPreviewGeneration) return;
     activeSpellTemplateInstruction = instruction;
     activeSpellPreviewSpell = spell;
     activeSpellPreviewSession = createSpellPreviewSession({
@@ -4561,6 +4567,17 @@ function setStoredBattleMapVfxMode(mode) {
   }
 }
 
+function createBattleMapCastingSequences(effectEngine) {
+  return createCastingSequenceSystem({
+    effectEngine,
+    onStateChange(state) {
+      // Opacity hides the shape, labels, range line and caster/target markers.
+      // Keep the hit layer and locked geometry intact throughout playback.
+      E.battleMapSurface?.classList.toggle("is-playing-spell-vfx", state.activeCount > 0);
+    }
+  });
+}
+
 function initializeBattleMapVfx() {
   if (
     battleMapVfx ||
@@ -4577,9 +4594,7 @@ function initializeBattleMapVfx() {
     mode
   });
   battleMapVfxSequences =
-    createCastingSequenceSystem({
-      effectEngine: battleMapVfx
-    });
+    createBattleMapCastingSequences(battleMapVfx);
   battleMapVfx.connect();
 
   if (E.battleVfxModeSelect) {

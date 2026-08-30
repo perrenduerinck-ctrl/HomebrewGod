@@ -1,9 +1,9 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=vfx-fireball-20260829";
+} from "./effectRegistry.js?v=cantrip-batch1-20260830";
 import {
   createEffectRenderer
-} from "./effectRenderer.js?v=vfx-sprite-phase-a-20260828";
+} from "./effectRenderer.js?v=cantrip-batch1-20260830";
 import {
   createPersistentEffectStore,
   MAX_PERSISTENT_LIFETIME_MS

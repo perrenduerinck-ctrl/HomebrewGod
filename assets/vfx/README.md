@@ -1,0 +1,32 @@
+# Supplied VFX artwork
+
+The PNGs in `cantrips/` and `library/` were supplied by the project owner.
+They are copied unchanged, with transparent backgrounds retained. The renderer
+scales and rotates them at runtime; no image-generation or external upload
+service is involved. Only assets used by the selected spell are preloaded.
+
+## Cantrip batch 1
+
+- Ray of Frost: frost-projectile + frost-impact (4x4, 16 frames).
+- Frostbite: the same frost-impact sheet, target only.
+- Eldritch Blast: force-projectile + force-impact (4x4, 16 frames).
+- Shocking Grasp: lightning-impact (4x4, 16 frames), target only.
+- Sacred Flame: radiant-projectile falling at the target + radiant-impact
+  (4x4, 16 frames). It does not travel from the caster.
+- Fire Bolt retains its existing assets in `fire/`.
+
+The two force impact attachments ending `82ded898a0d2` and
+`219885d8cdfa` are byte-for-byte duplicates; only one copy is stored.
+
+## Reserved artwork (not loaded at startup)
+
+- `cantrips/dark-*.png`: dark-energy projectile/impact, reserved.
+- `cantrips/lightning-projectile.png`: lightning bolt, reserved.
+- `library/meteor-*.png`: meteor projectile and impact sheet.
+- `library/lightning-spear.png`, `lightning-storm-impact.png`: stronger lightning.
+- `library/ice-spear.png`, `ice-burst.png`: alternate ice projectile/impact.
+- `library/void-*.png`: void projectile and impact sheet.
+- `library/radiant-spear.png`: alternate radiant projectile.
+
+The meteor impact sheet has visible grid seams; crop/padding metadata or a
+cleaner sheet will be needed before animating that variant. It is not used now.
