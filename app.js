@@ -7066,6 +7066,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
           setDmControlsVisible(
             currentIsDM
           );
+          syncBattleManagerVisibility();
           return currentIsDM;
         },
 
