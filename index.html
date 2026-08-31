@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-<link rel="stylesheet" href="./assets/styles/app.css?v=lightning5-test-20260830">
+<link rel="stylesheet" href="./assets/styles/app.css?v=lightning-sound-20260830">
 </head>
 
 <body>
@@ -390,6 +390,11 @@
           <option value="reduced">Reduced</option>
           <option value="off">Off</option>
         </select>
+      </label>
+
+      <label class="battleScaleControl" for="battleVfxSoundToggle">
+        <input id="battleVfxSoundToggle" type="checkbox" checked>
+        <span>Spell sound</span>
       </label>
 
       <label class="battleScaleControl" for="mapFeetPerSquareInput">
@@ -953,7 +958,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=lightning5-test-20260830"
+    src="./app.js?v=lightning-sound-20260830"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

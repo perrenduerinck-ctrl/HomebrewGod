@@ -3074,6 +3074,44 @@ test("profile preview sample covers projectile, impact, touch, beam, utility, gr
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("Lightning Bolt plays supplied sound once, with mute, modes, tails and reset cleanup", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  const sound = page.locator("#battleVfxSoundToggle");
+  const media = page.locator('audio[data-vfx-audio="spell"]');
+  const paused = () => media.evaluate(el => el.paused);
+  await expect(sound).toBeChecked();
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await ui.select("lightning-bolt");await ui.point(100,220);await ui.point(160,220);
+  await ui.play.click();await expect(media).toHaveCount(1);
+  await expect.poll(paused).toBe(false);
+  await expect.poll(() => media.evaluate(el => el.currentTime)).toBeGreaterThan(0);
+  const metadata=await media.evaluate(el => ({src:el.getAttribute("src"),duration:el.duration,volume:el.volume,loop:el.loop,error:el.error}));
+  expect(metadata.src).toContain("assets/audio/spells/lightning-bolt.mp3");
+  expect(metadata.duration).toBeGreaterThan(3);expect(metadata.duration).toBeLessThan(6);
+  expect(metadata.volume).toBe(.6);expect(metadata.loop).toBe(false);expect(metadata.error).toBeNull();
+  await expect(ui.overlay).toHaveCSS("opacity","1",{timeout:4000});
+  expect(await paused()).toBe(false); // The short thunder tail is independent of the template overlay.
+  await ui.reset.click();expect(await paused()).toBe(true);
+  await ui.point(100,220);await ui.point(160,220);
+  await page.locator("#lightningVfxTestSelect").selectOption("4x4");
+  await ui.play.click();await expect.poll(paused).toBe(false);
+  await sound.uncheck();expect(await paused()).toBe(true);
+  await ui.play.click();await expect(ui.overlay).toHaveCSS("opacity","1",{timeout:5000});expect(await paused()).toBe(true);
+  await sound.check();await page.locator("#battleVfxModeSelect").selectOption("reduced");
+  await ui.play.click();await expect.poll(paused).toBe(false);expect(await media.evaluate(el=>el.volume)).toBeCloseTo(.39);
+  await page.locator("#battleVfxModeSelect").selectOption("off");expect(await paused()).toBe(true);
+  await ui.play.click();expect(await paused()).toBe(true);
+  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await page.locator("#lightningVfxTestSelect").selectOption("5x5");
+  for(let i=0;i<5;i++)await ui.play.click();
+  await expect(media).toHaveCount(1);await expect.poll(paused).toBe(false);
+  await expect.poll(paused,{timeout:7000}).toBe(true);
+  await ui.play.click();await expect.poll(paused).toBe(false);
+  await page.getByRole("button",{name:"Back To Room Dashboard",exact:true}).click();
+  expect(await paused()).toBe(true);
+  expect(await page.evaluate(()=>window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-safe", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   const variant = page.locator("#lightningVfxTestSelect");

@@ -1,5 +1,6 @@
 // Experimental, presentation-only override. One texture / one animator contains
 // the charge, line discharge and endpoint fade; no per-token effects are used.
+import { LIGHTNING_BOLT_SOUND } from "./spellAudio.js?v=lightning-sound-20260830";
 export const LIGHTNING_5X5_ASSET = "./assets/vfx/lightning/lightning-bolt-main-5x5.png";
 export const LIGHTNING_5X5_DURATION = Math.ceil(25 / 24 * 1000);
 export const LIGHTNING_5X5_SEQUENCE_ID = "lightning-bolt-5x5-test";
@@ -27,6 +28,7 @@ export const LIGHTNING_5X5_EFFECTS = Object.freeze([
 export const LIGHTNING_5X5_SEQUENCE = Object.freeze({
   id: LIGHTNING_5X5_SEQUENCE_ID, label: "Lightning Bolt · 5×5 test", priority: 100,
   family: "line", match: { spellIds: ["lightning-bolt"] },
+  sound: { ...LIGHTNING_BOLT_SOUND, delay: Math.round(LIGHTNING_5X5_DURATION * .2) },
   phases: {
     charge: { duration: 120, effects: [{ type: "lightning5-charge", anchor: "caster",
       duration: 120, scale: .45, fullOnly: true, particles: { count: 0 } }] },

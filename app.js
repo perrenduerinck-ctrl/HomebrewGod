@@ -63,18 +63,18 @@ import {
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=lightning5-test-20260830";
+} from "./battleMap/spellTemplates.js?v=lightning-sound-20260830";
 import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
   createSpellPreviewSession,
   formatSpellPreviewStatus
-} from "./battleMap/spellPreview.js?v=lightning5-test-20260830";
+} from "./battleMap/spellPreview.js?v=lightning-sound-20260830";
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=lightning5-test-20260830";
+} from "./vfx/effectEngine.js?v=lightning-sound-20260830";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,9 +82,9 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=lightning5-test-20260830";
-import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=lightning5-test-20260830";
-import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=lightning5-test-20260830";
+} from "./vfx/castingSequence.js?v=lightning-sound-20260830";
+import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=lightning-sound-20260830";
+import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=lightning-sound-20260830";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
@@ -233,6 +233,7 @@ const E = {
     $("templateStatus"),
   battleVfxModeSelect:
     $("battleVfxModeSelect"),
+  battleVfxSoundToggle: $("battleVfxSoundToggle"),
   spellTemplateSelect:
     $("spellTemplateSelect"),
   loadSpellTemplateButton:
@@ -521,6 +522,9 @@ function stopRoomViewListeners() {
 function syncRealtimeListenersForScreen(
   screenName
 ) {
+  if (activeMainScreenName === "battle" && screenName !== "battle") {
+    battleMapVfxSequences?.clear("screen-change");
+  }
   activeMainScreenName = screenName;
 
   if (screenName === "lobby") {
@@ -4591,7 +4595,7 @@ function setStoredBattleMapVfxMode(mode) {
 }
 
 function createBattleMapCastingSequences(effectEngine) {
-  return createCastingSequenceSystem({
+  const sequences = createCastingSequenceSystem({
     effectEngine,
     onStateChange(state) {
       // Opacity hides the shape, labels, range line and caster/target markers.
@@ -4599,6 +4603,8 @@ function createBattleMapCastingSequences(effectEngine) {
       E.battleMapSurface?.classList.toggle("is-playing-spell-vfx", state.activeCount > 0);
     }
   });
+  sequences.setSoundEnabled(E.battleVfxSoundToggle?.checked !== false);
+  return sequences;
 }
 
 function initializeBattleMapVfx() {
@@ -4619,6 +4625,10 @@ function initializeBattleMapVfx() {
   battleMapVfxSequences =
     createBattleMapCastingSequences(battleMapVfx);
   battleMapVfx.connect();
+
+  E.battleVfxSoundToggle?.addEventListener("change", () => {
+    battleMapVfxSequences?.setSoundEnabled(E.battleVfxSoundToggle.checked);
+  });
 
   if (E.battleVfxModeSelect) {
     E.battleVfxModeSelect.value = mode;
