@@ -48,6 +48,7 @@ export function defineSpellVfxProfile(raw = {}) {
       geometryScale: raw.specialOptions?.geometryScale === true,
       geometryBasePixels: vfxNumber(raw.specialOptions?.geometryBasePixels, 72, 16, 512),
       fitGeometry: raw.specialOptions?.fitGeometry === true,
+      maxGeometryScale: vfxNumber(raw.specialOptions?.maxGeometryScale, 20, .1, 20),
       chargeAtTarget: raw.specialOptions?.chargeAtTarget === true,
       aftermathAtPath: raw.specialOptions?.aftermathAtPath === true,
       impactAtPath: raw.specialOptions?.impactAtPath === true,

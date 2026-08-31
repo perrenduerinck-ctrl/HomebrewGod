@@ -4,7 +4,8 @@ Scope: the app's current 2014 catalog, not every published D&D spell or
 user-created spell. Counts are checked by `tests/vfx-cantrips.test.mjs`.
 Intentional shared profiles count as mapped; generic delivery fallbacks do not.
 The current cantrip tier is complete. The owner-supplied atlas batch adds
-12 selected level 1–2 profiles and 19 selected level 3–6 profiles. Other spells
+12 selected level 1–2 profiles, 19 selected level 3–6 profiles, and 28 selected
+level 7–9 profiles. Other spells
 still use their existing generic presentation; dropdown presence is not full-tier completion.
 
 | Spell level | Catalog spells | Intentional VFX mappings | Remaining |
@@ -16,10 +17,10 @@ still use their existing generic presentation; dropdown presence is not full-tie
 | 4 | 31 | 5 | 26 |
 | 5 | 37 | 3 | 34 |
 | 6 | 31 | 8 | 23 |
-| 7 | 20 | 0 | 20 |
-| 8 | 16 | 0 | 16 |
-| 9 | 15 | 0 | 15 |
-| **Total** | **340** | **79** | **261** |
+| 7 | 20 | 9 | 11 |
+| 8 | 16 | 10 | 6 |
+| 9 | 15 | 9 | 6 |
+| **Total** | **340** | **107** | **233** |
 
 ## Existing bespoke overrides (preserved)
 
@@ -104,8 +105,8 @@ all 45 cantrips already have intentional preview compositions.
   weapon slash and insect swarm.
 
 Art policy follows the spell's base level: 4×4/16 frames for levels 0–2,
-5×5/25 for levels 3–6, and 6×6/36 for levels 7–9. Real 6×6 artwork has not
-been supplied; the player supports it but existing high-level fallbacks remain.
+5×5/25 for levels 3–6, and 6×6/36 for levels 7–9. Thirteen upper-tier sheets
+are supplied, with 28 intentional high-level mappings; other fallbacks remain.
 Do not relabel a 4×4 or 5×5 sheet as 6×6. Keep consistent centers and cell
 padding, no labels/grid lines, and preferably transparent backgrounds.
 See `SPRITE_ATLAS_BATCH.md` for assets, mappings, budgets and verification.

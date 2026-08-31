@@ -101,6 +101,7 @@ function normalizeSequenceEffect(effect = {}) {
       ? requestedAnchor
       : "target",
     scale: boundedNumber(effect.scale, 1, 0.05, 20),
+    maxGeometryScale: boundedNumber(effect.maxGeometryScale, 20, .1, 20),
     rotation: boundedNumber(effect.rotation, 0, -3600, 3600),
     opacity: boundedNumber(effect.opacity, 1, 0, 1),
     duration: finiteNumber(effect.duration) === null
@@ -556,7 +557,7 @@ function makeEffectRequest({
           effect.geometryScaleBasePixels *
           effect.scale,
         0.05,
-        20
+        effect.maxGeometryScale
       )
     : effect.scale;
 

@@ -36,6 +36,7 @@ export function compileSpellVfxProfile(rawProfile, event = {}) {
     const fitted = extra.geometryScaleBasePixels && profile.specialOptions.fitGeometry;
     return { type, anchor: at, duration, scale: (fitted ? profile.scale : scale) * factor, intensity,
       particles: { count: particleCount, size: 3, distance: 24, duration },
+      maxGeometryScale: profile.specialOptions.maxGeometryScale,
       metadata: { profileId: profile.spellId, family: profile.family, spellLevel: level,
         palette: profile.palette, variant: profile.specialOptions.variant }, ...extra };
   }

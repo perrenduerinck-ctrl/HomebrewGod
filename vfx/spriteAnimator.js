@@ -64,7 +64,21 @@ export function normalizeSpriteOptions(
     )
   );
 
+  const validBounds = (values, count, extent) => Array.isArray(values) &&
+    values.length === count + 1 && values.every((v, i) => Number.isFinite(v) &&
+      v >= 0 && v <= extent && (!i || v - values[i - 1] >= 4));
+  const sourceAtlas = options.atlas;
+  const atlas = sourceAtlas && Number.isFinite(sourceAtlas.width) &&
+    Number.isFinite(sourceAtlas.height) && sourceAtlas.width <= 16384 &&
+    sourceAtlas.height <= 16384 &&
+    validBounds(sourceAtlas.columns, columns, sourceAtlas.width) &&
+    validBounds(sourceAtlas.rows, rows, sourceAtlas.height)
+    ? Object.freeze({ width: sourceAtlas.width, height: sourceAtlas.height,
+      columns: Object.freeze([...sourceAtlas.columns]), rows: Object.freeze([...sourceAtlas.rows]) })
+    : null;
+
   return Object.freeze({
+    ...(atlas ? { atlas } : {}),
     src: String(options.src || "").trim(),
     frameWidth: clamp(
       Math.round(
@@ -118,6 +132,21 @@ export function getSpriteFrameStyle(
   const row = Math.floor(
     frame / normalized.columns
   );
+  if (normalized.atlas) {
+    const atlas = normalized.atlas;
+    // Inset a pixel into each measured gutter, preserving the complete image
+    // on disk. Contain each rectangular cell in the fixed output frame.
+    const x = atlas.columns[column] + 1, y = atlas.rows[row] + 1;
+    const width = atlas.columns[column + 1] - x - 1;
+    const height = atlas.rows[row + 1] - y - 1;
+    const scale = Math.min(normalized.frameWidth / width, normalized.frameHeight / height);
+    const px = n => `${Math.round(n * 10000) / 10000}px`;
+    return Object.freeze({
+      width: px(width * scale), height: px(height * scale),
+      backgroundSize: `${px(atlas.width * scale)} ${px(atlas.height * scale)}`,
+      backgroundPosition: `${px(-x * scale)} ${px(-y * scale)}`
+    });
+  }
   return Object.freeze({
     width: `${normalized.frameWidth}px`,
     height: `${normalized.frameHeight}px`,
