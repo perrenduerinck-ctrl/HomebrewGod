@@ -3,7 +3,7 @@ import {
 } from "./particles.js";
 import {
   createSpriteAnimator
-} from "./spriteAnimator.js?v=lightning-sound-20260830";
+} from "./spriteAnimator.js?v=tier-sprites-20260831";
 
 function createElement(
   documentRef,
