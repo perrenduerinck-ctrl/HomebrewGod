@@ -1,4 +1,4 @@
-import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=lightning5-test-20260830";
+import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=lightning-sound-20260830";
 
 // Pure compiler: no DOM, timers, characters, rolls, or persistence. The existing
 // sequence system owns scheduling and the existing engine owns all cleanup.
@@ -66,7 +66,7 @@ export function compileSpellVfxProfile(rawProfile, event = {}) {
     cleanup: { duration: 0, effects: [] }
   };
   return { id: `profile-${profile.spellId}`, label: profile.label,
-    source: "profile", family: profile.family, spellLevel: level,
+    source: "profile", family: profile.family, spellLevel: level, sound: profile.sound,
     scaling: { scale, intensity, particleCount, travelDuration, impactDuration,
       impactCount: profile.impactCount, aftershockCount: profile.aftershockCount,
       screenShakeIntensity: profile.screenShakeIntensity },

@@ -1,10 +1,10 @@
 import {
   FIRE_EFFECT_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
-import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=lightning5-test-20260830";
-import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=lightning5-test-20260830";
-import { STORM_EFFECT_DEFINITIONS } from "./stormEffects.js?v=lightning5-test-20260830";
-import { LIGHTNING_5X5_EFFECTS } from "./lightning5x5.js?v=lightning5-test-20260830";
+import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=lightning-sound-20260830";
+import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=lightning-sound-20260830";
+import { STORM_EFFECT_DEFINITIONS } from "./stormEffects.js?v=lightning-sound-20260830";
+import { LIGHTNING_5X5_EFFECTS } from "./lightning5x5.js?v=lightning-sound-20260830";
 
 const EFFECT_KINDS = Object.freeze([
   "procedural",

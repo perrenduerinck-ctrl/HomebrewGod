@@ -1,10 +1,12 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
 } from "./fireEffects.js?v=vfx-fireball-20260829";
-import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=lightning5-test-20260830";
-import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=lightning5-test-20260830";
-import { compileSpellVfxProfile } from "./profileSequence.js?v=lightning5-test-20260830";
-import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=lightning5-test-20260830";
+import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=lightning-sound-20260830";
+import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=lightning-sound-20260830";
+import { compileSpellVfxProfile } from "./profileSequence.js?v=lightning-sound-20260830";
+import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=lightning-sound-20260830";
+
+import { createSpellAudioPlayer, normalizeSoundCue } from "./spellAudio.js?v=lightning-sound-20260830";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
@@ -214,6 +216,7 @@ export function defineCastingSequence(definition = {}) {
     label: cleanText(definition.label, id) || id,
     source: definition.source === "profile" ? "profile" : "sequence",
     family: cleanId(definition.family),
+    sound: normalizeSoundCue(definition.sound),
     spellLevel: Math.round(boundedNumber(definition.spellLevel, 0, 0, 9)),
     scaling: definition.scaling ? Object.freeze({ ...definition.scaling }) : null,
     priority: Math.round(boundedNumber(
@@ -595,6 +598,7 @@ export function createCastingSequenceSystem({
   registry = createDefaultCastingSequenceRegistry(),
   scheduler = createDefaultScheduler(),
   maximumActiveSequences = MAX_ACTIVE_CASTING_SEQUENCES,
+  audioPlayer = null,
   onPhase = () => {},
   onStateChange = () => {}
 } = {}) {
@@ -611,6 +615,11 @@ export function createCastingSequenceSystem({
     MAX_ACTIVE_CASTING_SEQUENCES
   ));
   const records = new Map();
+  const sounds = audioPlayer || createSpellAudioPlayer({ scheduler,
+    getMode: () => effectEngine.getState?.().mode || "full" });
+  const soundCall = (method, ...args) => {
+    try { return sounds[method]?.(...args); } catch { return false; }
+  };
   let nextId = 1;
   let destroyed = false;
 
@@ -640,6 +649,8 @@ export function createCastingSequenceSystem({
 
   function stopRecord(record, reason) {
     if (!records.has(record.id)) return false;
+    // Natural thunder tails may outlast the flash, but never cancellation.
+    if (reason !== "completed") soundCall("cancel", record.id);
     record.timers.forEach((handle) => {
       try {
         scheduler.clearTimeout(handle);
@@ -748,19 +759,22 @@ export function createCastingSequenceSystem({
   }
 
   function cancel(id, reason = "cancelled") {
+    const soundCancelled = soundCall("cancel", id);
     const record = records.get(String(id || ""));
     return record
       ? stopRecord(record, reason)
-      : false;
+      : soundCancelled;
   }
 
   function clear(reason = "cleared") {
+    soundCall("clear");
     Array.from(records.values()).forEach((record) => {
       stopRecord(record, reason);
     });
   }
 
   function clearPreviews() {
+    soundCall("clearPreviews");
     Array.from(records.values()).forEach((record) => {
       if (record.event.preview === true) stopRecord(record, "preview-reset");
     });
@@ -819,6 +833,16 @@ export function createCastingSequenceSystem({
 
     try {
       scheduleRecord(record);
+      if (definition.sound && records.has(id)) {
+        let soundDelay = 0;
+        for (const phase of definition.phases) {
+          soundDelay += phase.delay;
+          if (phase.phase === definition.sound.phase) break;
+          soundDelay += phase.duration;
+        }
+        soundCall("play", definition.sound, { id, preview: event.preview === true,
+          delay: Math.round((soundDelay + definition.sound.delay) * timingScale) });
+      }
     } catch {
       stopRecord(record, "schedule-failed");
       return Object.freeze({
@@ -840,6 +864,7 @@ export function createCastingSequenceSystem({
   function destroy() {
     if (destroyed) return;
     clear("destroyed");
+    soundCall("destroy");
     destroyed = true;
   }
 
@@ -849,6 +874,7 @@ export function createCastingSequenceSystem({
     clearPreviews,
     destroy,
     getState,
+    setSoundEnabled: value => soundCall("setEnabled", value),
     play,
     registry
   });

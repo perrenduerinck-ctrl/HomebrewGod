@@ -13,6 +13,12 @@ Spell on Map**, then place the origin and aimed direction. Once locked, click
 The selector changes only DM preview playback; it never changes a real cast.
 It is hidden from non-DMs and for other spells. Reset cancels previews.
 
+The supplied Lightning Bolt MP3 now plays at discharge in both versions. **Spell
+sound** beside Effects mutes it independently. One audio channel is reused across
+casts, with a natural four-second thunder tail and a six-second safety cap;
+Reset/Off/navigation stop it. Audio does not add visual effects or extend the
+hidden-template duration. See `assets/audio/README.md` for source and behavior.
+
 ## Asset and playback
 
 - Added `assets/vfx/lightning/lightning-bolt-main-5x5.png`, copied unchanged from
