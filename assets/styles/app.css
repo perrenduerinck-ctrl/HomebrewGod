@@ -325,8 +325,19 @@ button:disabled {
    STYLE SECTION 8 — BATTLE MAP SCREEN FRAME
 ====================================================== */
 
+body:has(#battleMapScreen:not(.hidden)) {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
+  flex: none;
+}
+
 #battleMapScreen {
-  height: calc(100dvh - 40px);
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2126,7 +2137,6 @@ a:hover {
     padding: 12px;
   }
 
-  #battleMapScreen { height: calc(100dvh - 24px); }
   #battleQuickActions { flex-basis: 100%; }
 
   .box {
@@ -2175,7 +2185,6 @@ a:hover {
     padding: 10px;
   }
 
-  #battleMapScreen { height: calc(100dvh - 20px); }
 
   button {
     width: 100%;
