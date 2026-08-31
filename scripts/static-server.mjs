@@ -28,6 +28,7 @@ const mimeTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
+  ".mp3": "audio/mpeg",
   ".svg": "image/svg+xml",
   ".webp": "image/webp"
 };
@@ -92,6 +93,7 @@ const server = createServer(
 
       response.writeHead(200, {
         "Cache-Control": "no-store",
+        "Content-Length": info.size,
         "Content-Type":
           mimeTypes[
             path.extname(filePath)

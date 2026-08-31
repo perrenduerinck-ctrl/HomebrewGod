@@ -3085,10 +3085,15 @@ test("Lightning Bolt plays supplied sound once, with mute, modes, tails and rese
   await ui.play.click();await expect(media).toHaveCount(1);
   await expect.poll(paused).toBe(false);
   await expect.poll(() => media.evaluate(el => el.currentTime)).toBeGreaterThan(0);
+  // Streaming metadata may briefly report Infinity before the MP3 is loaded.
+  await expect.poll(() => media.evaluate(el => Number.isFinite(el.duration))).toBe(true);
   const metadata=await media.evaluate(el => ({src:el.getAttribute("src"),duration:el.duration,volume:el.volume,loop:el.loop,error:el.error}));
   expect(metadata.src).toContain("assets/audio/spells/lightning-bolt.mp3");
   expect(metadata.duration).toBeGreaterThan(3);expect(metadata.duration).toBeLessThan(6);
   expect(metadata.volume).toBe(.6);expect(metadata.loop).toBe(false);expect(metadata.error).toBeNull();
+  // Start a warm replay so loading time cannot consume the tail being checked.
+  await ui.play.click();await expect.poll(paused).toBe(false);
+  await expect.poll(() => media.evaluate(el => el.currentTime)).toBeGreaterThan(0);
   await expect(ui.overlay).toHaveCSS("opacity","1",{timeout:4000});
   expect(await paused()).toBe(false); // The short thunder tail is independent of the template overlay.
   await ui.reset.click();expect(await paused()).toBe(true);
