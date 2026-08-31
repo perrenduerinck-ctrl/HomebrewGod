@@ -3,6 +3,26 @@ import {
   test
 } from "@playwright/test";
 
+async function openMapTools(page) {
+  const menu = page.locator("#battleToolsMenu");
+  if (!await menu.evaluate(el => el.open)) await menu.locator("summary").click();
+  await expect(menu).toHaveJSProperty("open", true);
+}
+
+async function closeMapTools(page) {
+  const menu = page.locator("#battleToolsMenu");
+  // Clicking outside is idempotent if an async targeting load also closes it.
+  if (await menu.evaluate(el => el.open)) await page.locator("#battleTopBar").click({position:{x:2,y:2}});
+  await expect(menu).toHaveJSProperty("open", false);
+}
+
+async function useMapTool(page, control, action, ...args) {
+  await openMapTools(page);
+  const locator = typeof control === "string" ? page.locator(control) : control;
+  await locator[action](...args);
+  await closeMapTools(page);
+}
+
 async function readJsonResult(
   page,
   relativeUrl,
@@ -2344,7 +2364,7 @@ test(
       "#rulerStatus"
     );
 
-    await toggle.click();
+    await useMapTool(page, toggle, "click");
     await expect(toggle).toHaveAttribute(
       "aria-pressed",
       "true"
@@ -2382,12 +2402,8 @@ test(
       page.locator(".hg-map-ruler-label")
     ).toHaveText("25 ft");
 
-    await page.locator(
-      "#rulerStartElevationInput"
-    ).fill("0");
-    await page.locator(
-      "#rulerEndElevationInput"
-    ).fill("40");
+    await useMapTool(page, "#rulerStartElevationInput", "fill", "0");
+    await useMapTool(page, "#rulerEndElevationInput", "fill", "40");
     // Editing controls can scroll/reflow the toolbar. Re-measure the map,
     // then draw a real 25-ft segment rather than relying on an old drag.
     await overlay.scrollIntoViewIfNeeded();
@@ -2465,8 +2481,8 @@ test(
       ".hg-map-template-shape"
     );
 
-    await shapeSelect.selectOption("cone");
-    await toggle.click();
+    await useMapTool(page, shapeSelect, "selectOption", "cone");
+    await useMapTool(page, toggle, "click");
     await expect(toggle).toHaveAttribute(
       "aria-pressed",
       "true"
@@ -2512,14 +2528,14 @@ test(
     await expect(status).toContainText("locked");
     await expect(clear).toBeEnabled();
 
-    await clear.click();
+    await useMapTool(page, clear, "click");
     await expect(overlay).not.toHaveClass(
       /has-template/
     );
 
-    await shapeSelect.selectOption("line");
-    await page.locator("#templateSizeInput").fill("30");
-    await page.locator("#templateWidthInput").fill("10");
+    await useMapTool(page, shapeSelect, "selectOption", "line");
+    await useMapTool(page, "#templateSizeInput", "fill", "30");
+    await useMapTool(page, "#templateWidthInput", "fill", "10");
     await page.mouse.move(startX, startY);
     await page.mouse.click(startX, startY);
     await page.mouse.move(startX, startY + 200);
@@ -2562,15 +2578,9 @@ test(
         .openScreen("battle");
     });
 
-    await page.locator(
-      "#templateShapeSelect"
-    ).selectOption("circle");
-    await page.locator(
-      "#templateSizeInput"
-    ).fill("5");
-    await page.locator(
-      "#templateToggleButton"
-    ).click();
+    await useMapTool(page, "#templateShapeSelect", "selectOption", "circle");
+    await useMapTool(page, "#templateSizeInput", "fill", "5");
+    await useMapTool(page, "#templateToggleButton", "click");
 
     const overlay = page.locator(
       ".hg-map-template-layer"
@@ -2688,9 +2698,7 @@ test(
       /hg-token-template-affected/
     );
 
-    await page.locator(
-      "#templateClearButton"
-    ).click();
+    await useMapTool(page, "#templateClearButton", "click");
     await expect(ogre).not.toHaveClass(
       /hg-token-template-affected/
     );
@@ -2714,18 +2722,10 @@ test(
       .__HOMEBREW_GOD_RELEASE_TEST__
       .openScreen("battle"));
 
-    await page.locator(
-      "#templateShapeSelect"
-    ).selectOption("sphere");
-    await page.locator(
-      "#templateSizeInput"
-    ).fill("20");
-    await page.locator(
-      "#rulerEndElevationInput"
-    ).fill("20");
-    await page.locator(
-      "#templateToggleButton"
-    ).click();
+    await useMapTool(page, "#templateShapeSelect", "selectOption", "sphere");
+    await useMapTool(page, "#templateSizeInput", "fill", "20");
+    await useMapTool(page, "#rulerEndElevationInput", "fill", "20");
+    await useMapTool(page, "#templateToggleButton", "click");
 
     const overlay = page.locator(
       ".hg-map-template-layer"
@@ -2792,9 +2792,7 @@ test(
       "Sphere · 20-ft radius · center +20 ft"
     );
 
-    await page.locator(
-      "#rulerEndElevationInput"
-    ).fill("50");
+    await useMapTool(page, "#rulerEndElevationInput", "fill", "50");
     await expect(page.locator(
       '[data-token-id="ground-token"]'
     )).not.toHaveClass(/hg-token-template-affected/);
@@ -2854,16 +2852,16 @@ test(
     await expect(spellSelect.locator(
       'option[value="fire-bolt"]'
     )).toHaveText("Fire Bolt");
-    await spellSelect.selectOption("fire-bolt");
-    await loadButton.click();
+    await useMapTool(page, spellSelect, "selectOption", "fire-bolt");
+    await useMapTool(page, loadButton, "click");
     await expect(shapeSelect).toHaveValue("circle");
     await expect(sizeInput).toHaveValue("2.5");
     await expect(status).toContainText(
       "Fire Bolt · Range 120 feet · single target"
     );
 
-    await spellSelect.selectOption("fireball");
-    await loadButton.click();
+    await useMapTool(page, spellSelect, "selectOption", "fireball");
+    await useMapTool(page, loadButton, "click");
     await expect(shapeSelect).toHaveValue("sphere");
     await expect(sizeInput).toHaveValue("20");
     await expect(status).toContainText(
@@ -2873,8 +2871,8 @@ test(
       "Preview only — no spell slot is spent"
     );
 
-    await spellSelect.selectOption("flame-strike");
-    await loadButton.click();
+    await useMapTool(page, spellSelect, "selectOption", "flame-strike");
+    await useMapTool(page, loadButton, "click");
     await expect(shapeSelect).toHaveValue("cylinder");
     await expect(sizeInput).toHaveValue("10");
     await expect(page.locator(
@@ -2887,8 +2885,8 @@ test(
       "Flame Strike · Range 60 feet · 10-ft radius × 40 ft high"
     );
 
-    await spellSelect.selectOption("burning-hands");
-    await loadButton.click();
+    await useMapTool(page, spellSelect, "selectOption", "burning-hands");
+    await useMapTool(page, loadButton, "click");
     await expect(shapeSelect).toHaveValue("cone");
     await expect(sizeInput).toHaveValue("15");
     await expect(status).toContainText(
@@ -2904,8 +2902,8 @@ test(
       "aiming"
     );
 
-    await spellSelect.selectOption("lightning-bolt");
-    await loadButton.click();
+    await useMapTool(page, spellSelect, "selectOption", "lightning-bolt");
+    await useMapTool(page, loadButton, "click");
     await expect(shapeSelect).toHaveValue("line");
     await expect(sizeInput).toHaveValue("100");
     await expect(widthInput).toHaveValue("5");
@@ -2939,8 +2937,8 @@ async function openDmSpellPreview(page) {
   const reset = page.locator("#resetSpellPreviewButton");
   const status = page.locator("#templateStatus");
   async function select(spell) {
-    await page.locator("#spellTemplateSelect").selectOption(spell);
-    await page.locator("#loadSpellTemplateButton").click();
+    await useMapTool(page, "#spellTemplateSelect", "selectOption", spell);
+    await useMapTool(page, "#loadSpellTemplateButton", "click");
     await expect(status).toContainText("Click caster position.");
     await expect(play).toBeDisabled();
   }
@@ -2953,9 +2951,76 @@ async function openDmSpellPreview(page) {
   return { overlay, play, reset, status, select, point, state };
 }
 
+test("compact map menus preserve viewport space, keyboard access and locked previews", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  const tools = page.locator("#battleToolsMenu");
+  const manager = page.locator("#battleManagerBar");
+  const surface = page.locator("#battleMapSurface");
+  for (const size of [{width:1280,height:800},{width:390,height:844}]) {
+    await page.setViewportSize(size);
+    await expect(tools).toHaveJSProperty("open", false);
+    await expect(manager).toHaveJSProperty("open", false);
+    await expect(page.locator("#battleInfoLine")).toBeHidden();
+    await expect(page.locator("#rulerStatus")).toBeHidden();
+    await expect(ui.status).toBeHidden();
+    const before = await surface.boundingBox();
+    expect(before.height).toBeGreaterThan(size.height * .65);
+    expect(before.y + before.height).toBeLessThanOrEqual(size.height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(size.height);
+
+    await tools.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#battleInfoLine")).toBeVisible();
+    expect(await surface.boundingBox()).toEqual(before);
+    const panel = await page.locator("#battleToolsPanel").boundingBox();
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(size.width);
+    expect(panel.y + panel.height).toBeLessThanOrEqual(size.height);
+    await page.keyboard.press("Escape");
+    await expect(tools).toHaveJSProperty("open", false);
+    await expect(tools.locator("summary")).toBeFocused();
+    await openMapTools(page);
+    await manager.locator(":scope > summary").click();
+    await expect(tools).toHaveJSProperty("open", false);
+    await expect(manager).toHaveJSProperty("open", true);
+    expect(await surface.boundingBox()).toEqual(before);
+    // Outside clicks dismiss menus without changing the map dimensions.
+    await page.locator("#zoomResetButton").click();
+    await expect(manager).toHaveJSProperty("open", false);
+  }
+  await ui.select("fire-bolt");
+  await expect(tools).toHaveJSProperty("open", false);
+  await expect(page.locator("#battleMapHint")).toContainText("Click caster position");
+  // Revealing Play/Reset wraps the phone toolbar; the overlay must resize too.
+  await expect.poll(async () => {
+    const [overlayBox, surfaceBox] = await Promise.all([ui.overlay.boundingBox(), surface.boundingBox()]);
+    return Math.max(Math.abs(overlayBox.width-surfaceBox.width), Math.abs(overlayBox.height-surfaceBox.height));
+  }).toBeLessThanOrEqual(1);
+  await ui.point(100,180);await ui.point(240,180);
+  const locked = (await ui.state()).preview;
+  await openMapTools(page);await page.keyboard.press("Escape");
+  await expect(tools).toHaveJSProperty("open", false);
+  expect((await ui.state()).preview).toEqual(locked);
+  await expect(ui.play).toBeVisible();await expect(ui.play).toBeEnabled();
+  await ui.play.click();await expect(ui.overlay).toHaveCSS("opacity","0");
+  await expect(ui.overlay).toHaveCSS("opacity","1",{timeout:5000});
+  expect((await ui.state()).preview).toEqual(locked);
+  await openMapTools(page);
+  await page.getByRole("button",{name:"Back To Room Dashboard",exact:true}).click();
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle"));
+  await expect(tools).toHaveJSProperty("open", false);
+  await expect(manager).toHaveJSProperty("open", false);
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setDmRole(false));
+  await openMapTools(page);
+  await expect(page.locator("#spellPreviewControl")).toBeHidden();
+  await expect(ui.play).toBeHidden();
+  await expect(manager).toBeHidden();
+});
+
 test("cantrip sprite batch plays in preview while targeting hides temporarily and restores unchanged", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
-  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   await page.evaluate(() => {
     window.__CANTRIP_SPRITES__ = [];
     new MutationObserver((records) => {
@@ -3005,7 +3070,7 @@ test("cantrip sprite batch plays in preview while targeting hides temporarily an
   await ui.point(240, 180);
   await ui.point(420, 180);
   await ui.play.click();
-  await page.locator("#battleVfxModeSelect").selectOption("off");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "off");
   await expect(ui.overlay).toHaveCSS("opacity", "1");
   await ui.play.click();
   await expect(ui.overlay).toHaveCSS("opacity", "1");
@@ -3015,7 +3080,7 @@ test("cantrip sprite batch plays in preview while targeting hides temporarily an
 
 test("profile preview sample covers projectile, impact, touch, beam, utility, ground, and weapon families", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
-  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   await page.evaluate(() => {
     window.__PROFILE_SAMPLE__ = [];
     new MutationObserver((records) => {
@@ -3080,7 +3145,7 @@ test("Lightning Bolt plays supplied sound once, with mute, modes, tails and rese
   const media = page.locator('audio[data-vfx-audio="spell"]');
   const paused = () => media.evaluate(el => el.paused);
   await expect(sound).toBeChecked();
-  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   await ui.select("lightning-bolt");await ui.point(100,220);await ui.point(160,220);
   await ui.play.click();await expect(media).toHaveCount(1);
   await expect.poll(paused).toBe(false);
@@ -3098,16 +3163,16 @@ test("Lightning Bolt plays supplied sound once, with mute, modes, tails and rese
   expect(await paused()).toBe(false); // The short thunder tail is independent of the template overlay.
   await ui.reset.click();expect(await paused()).toBe(true);
   await ui.point(100,220);await ui.point(160,220);
-  await page.locator("#lightningVfxTestSelect").selectOption("4x4");
+  await useMapTool(page, "#lightningVfxTestSelect", "selectOption", "4x4");
   await ui.play.click();await expect.poll(paused).toBe(false);
-  await sound.uncheck();expect(await paused()).toBe(true);
+  await useMapTool(page, sound, "uncheck");expect(await paused()).toBe(true);
   await ui.play.click();await expect(ui.overlay).toHaveCSS("opacity","1",{timeout:5000});expect(await paused()).toBe(true);
-  await sound.check();await page.locator("#battleVfxModeSelect").selectOption("reduced");
+  await useMapTool(page, sound, "check");await useMapTool(page, "#battleVfxModeSelect", "selectOption", "reduced");
   await ui.play.click();await expect.poll(paused).toBe(false);expect(await media.evaluate(el=>el.volume)).toBeCloseTo(.39);
-  await page.locator("#battleVfxModeSelect").selectOption("off");expect(await paused()).toBe(true);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "off");expect(await paused()).toBe(true);
   await ui.play.click();expect(await paused()).toBe(true);
-  await page.locator("#battleVfxModeSelect").selectOption("full");
-  await page.locator("#lightningVfxTestSelect").selectOption("5x5");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+  await useMapTool(page, "#lightningVfxTestSelect", "selectOption", "5x5");
   for(let i=0;i<5;i++)await ui.play.click();
   await expect(media).toHaveCount(1);await expect.poll(paused).toBe(false);
   await expect.poll(paused,{timeout:7000}).toBe(true);
@@ -3121,9 +3186,11 @@ test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-saf
   const ui = await openDmSpellPreview(page);
   const variant = page.locator("#lightningVfxTestSelect");
   await expect(variant).toBeHidden();
-  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   await ui.select("lightning-bolt");
+  await openMapTools(page);
   await expect(variant).toBeVisible(); await expect(variant).toHaveValue("5x5");
+  await closeMapTools(page);
   await page.evaluate(() => {
     window.__BOLT5_RENDERED__ = [];
     const observer = new MutationObserver(records => {
@@ -3165,19 +3232,19 @@ test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-saf
     await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
     expect((await ui.state()).preview).toEqual(locked);
   }
-  await page.locator("#battleVfxModeSelect").selectOption("reduced");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "reduced");
   await page.evaluate(() => { window.__BOLT5_RENDERED__ = []; });
   await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
   await expect(ui.overlay).toHaveCSS("opacity", "1", {timeout:4000});
   expect((await rendered()).map(e=>e.type)).toEqual(["lightning5-main"]);
-  await page.locator("#battleVfxModeSelect").selectOption("off");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "off");
   await page.evaluate(() => { window.__BOLT5_RENDERED__ = []; });
   await ui.play.click(); expect(await rendered()).toEqual([]);
   expect((await ui.state()).result.reason).toBe("effects-off");
-  await page.locator("#battleVfxModeSelect").selectOption("full");
-  await variant.selectOption("4x4"); await ui.play.click();
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+  await useMapTool(page, variant, "selectOption", "4x4"); await ui.play.click();
   await expect.poll(async () => (await rendered()).some(e=>e.type === "storm-lightning-beam")).toBe(true);
-  await variant.selectOption("5x5"); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+  await useMapTool(page, variant, "selectOption", "5x5"); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
   for (let i=0; i<5; i++) await ui.play.click();
   await ui.reset.click(); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
@@ -3187,7 +3254,7 @@ test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-saf
 
 test("storm profiles render full-line lightning and area-local hail with bounded cleanup", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
-  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   await page.evaluate(() => {
     window.__STORM_RENDERED__ = [];
     const observer = new MutationObserver(records => {
@@ -3212,7 +3279,7 @@ test("storm profiles render full-line lightning and area-local hail with bounded
   });
   const captured = type => page.evaluate(type => window.__STORM_RENDERED__.find(e => e.type === type), type);
   await ui.select("lightning-bolt"); await ui.point(100, 220); await ui.point(150, 220);
-  await page.locator("#lightningVfxTestSelect").selectOption("4x4");
+  await useMapTool(page, "#lightningVfxTestSelect", "selectOption", "4x4");
   const line = (await ui.state()).preview;
   await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
   await expect.poll(() => captured("storm-lightning-beam")).toBeTruthy();
@@ -3243,14 +3310,14 @@ test("storm profiles render full-line lightning and area-local hail with bounded
   await expect(ui.overlay).toHaveCSS("opacity", "1", { timeout: 6000 });
   expect((await ui.state()).preview).toEqual(area);
   await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
-  await page.locator("#battleVfxModeSelect").selectOption("reduced");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "reduced");
   await page.evaluate(() => { window.__STORM_RENDERED__ = []; });
   await ui.play.click();
   await expect.poll(() => captured("storm-hail")).toBeTruthy();
   expect((await captured("storm-hail")).stones).toBe(7);
   expect((await captured("storm-hail")).bursts).toBe(2);
   await ui.reset.click(); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
-  await page.locator("#battleVfxModeSelect").selectOption("off");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "off");
   await ui.select("lightning-bolt"); await ui.point(100, 220); await ui.point(150, 220);
   await ui.play.click(); await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
   expect((await ui.state()).result.reason).toBe("effects-off");
@@ -3260,7 +3327,7 @@ test("storm profiles render full-line lightning and area-local hail with bounded
 test("DM Spell Preview Fire Bolt travels in all eight directions after two clicks", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   await ui.select("fire-bolt");
-  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   // Capture the real rendered element when inserted. Polling for a 420-ms
   // animation can miss its entire lifetime on a busy CI worker.
   await page.evaluate(() => {
@@ -3377,19 +3444,19 @@ test("DM Spell Preview validates live range/elevation and never resolves gamepla
   const near = (await ui.state()).preview.rangeFeet;
   await ui.point(500, 160, true);
   expect((await ui.state()).preview.rangeFeet).toBeGreaterThan(near);
-  await page.locator("#rulerEndElevationInput").fill("150");
+  await useMapTool(page, "#rulerEndElevationInput", "fill", "150");
   await expect(ui.status).toContainText("Out of range");
   await expect(ui.overlay).toHaveClass(/is-invalid-target/);
   await ui.point(500, 160);
   await expect(ui.play).toBeDisabled();
-  await page.locator("#rulerEndElevationInput").fill("0");
+  await useMapTool(page, "#rulerEndElevationInput", "fill", "0");
   await expect(ui.play).toBeEnabled();
   await ui.reset.click();
   await expect(ui.status).toContainText("Click caster position.");
   await ui.point(100, 160);
   await ui.point(400, 160);
   for (const mode of ["full", "reduced", "off"]) {
-    await page.locator("#battleVfxModeSelect").selectOption(mode);
+    await useMapTool(page, "#battleVfxModeSelect", "selectOption", mode);
     await ui.play.click();
     expect((await ui.state()).result.ok).toBe(true);
     if (mode === "off") {
@@ -3398,7 +3465,7 @@ test("DM Spell Preview validates live range/elevation and never resolves gamepla
       await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
     }
   }
-  await page.locator("#battleVfxModeSelect").selectOption("full");
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   for (let i = 0; i < 24; i += 1) await ui.play.click();
   const getCounts = () => page.evaluate(() => ({
     effects: window.__HOMEBREW_GOD_RELEASE_TEST__.getVfxState().activeCount,
@@ -3824,9 +3891,7 @@ test(
     await page.evaluate(() => window
       .__HOMEBREW_GOD_RELEASE_TEST__
       .openScreen("battle"));
-    await page.locator(
-      "#mapFeetPerSquareInput"
-    ).fill("50");
+    await useMapTool(page, "#mapFeetPerSquareInput", "fill", "50");
     await page.evaluate(() => {
       const layer = document.getElementById(
         "tokenLayer"
@@ -3899,9 +3964,7 @@ test(
     expect(elevatedState.target.distanceFeet)
       .toBeGreaterThan(150);
 
-    await page.locator(
-      "#rulerEndElevationInput"
-    ).fill("100");
+    await useMapTool(page, "#rulerEndElevationInput", "fill", "100");
     await expect(page.locator(
       "#confirmSpellCastButton"
     )).toBeEnabled();
@@ -3939,7 +4002,7 @@ test(
     );
 
     await expect(layer).toHaveCount(1);
-    await modeSelect.selectOption("full");
+    await useMapTool(page, modeSelect, "selectOption", "full");
     const presentation = await layer.evaluate(
       (element) => {
         const style = getComputedStyle(element);
@@ -4175,7 +4238,7 @@ test(
       );
     }).toBeLessThanOrEqual(1);
 
-    await modeSelect.selectOption("reduced");
+    await useMapTool(page, modeSelect, "selectOption", "reduced");
     await expect(layer).toHaveAttribute(
       "data-effects-mode",
       "reduced"
@@ -4198,7 +4261,7 @@ test(
       reducedEffect.locator(".hg-vfx-particle")
     ).toHaveCount(24);
 
-    await modeSelect.selectOption("off");
+    await useMapTool(page, modeSelect, "selectOption", "off");
     await expect(layer).toHaveAttribute(
       "data-effects-mode",
       "off"

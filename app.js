@@ -403,7 +403,60 @@ let alreadyUsedStartupLink = false;
 // APP SECTION 4 — HELPERS
 // =====================================================
 
+let battleToolbarInitialized = false;
+
+function closeBattleMapMenus(restoreFocus = false) {
+  for (const menu of document.querySelectorAll("#battleTopBar > .battleToolbarMenu[open]")) {
+    menu.open = false;
+    if (restoreFocus) menu.querySelector("summary")?.focus();
+  }
+}
+
+function initializeBattleMapToolbar() {
+  if (battleToolbarInitialized) return;
+  battleToolbarInitialized = true;
+  const menus = [...document.querySelectorAll("#battleTopBar > .battleToolbarMenu")];
+  for (const menu of menus) {
+    menu.addEventListener("toggle", () => {
+      if (menu.open) for (const other of menus) if (other !== menu) other.open = false;
+    });
+  }
+  document.addEventListener("pointerdown", event => {
+    for (const menu of menus) if (menu.open && !menu.contains(event.target)) menu.open = false;
+  });
+  window.addEventListener("keydown", event => {
+    if (event.key === "Escape" && menus.some(menu => menu.open)) {
+      event.preventDefault();
+      // Dismiss the menu, not the map's current targeting session.
+      event.stopImmediatePropagation();
+      closeBattleMapMenus(true);
+    }
+  }, true);
+  // Wrapped controls and cast confirmation can resize the map without a
+  // window resize. Keep all presentation layers on the same map bounds.
+  if (typeof ResizeObserver !== "undefined" && E.battleMapSurface) {
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (E.battleMapScreen.classList.contains("hidden")) return;
+        battleMapRuler?.refresh();
+        battleMapTemplates?.refresh();
+        renderActiveSpellPreviewPlacement();
+        battleMapVfx?.refresh();
+      });
+    });
+    observer.observe(E.battleMapSurface);
+    window.addEventListener("pagehide", () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    }, { once: true });
+  }
+}
+
 function showScreen(screenName) {
+  initializeBattleMapToolbar();
+  closeBattleMapMenus();
   E.authScreen.classList.add("hidden");
   E.lobbyScreen.classList.add("hidden");
   E.roomDashboardScreen.classList.add("hidden");
@@ -2903,6 +2956,7 @@ function refreshElevationMeasurements() {
 }
 
 function updateBattleMapRulerUi(state) {
+  updateBattleMapCompactHint();
   if (E.rulerToggleButton) {
     E.rulerToggleButton.textContent =
       state.enabled
@@ -3809,10 +3863,12 @@ function updateSpellPreviewVfxControls(
   E.lightningVfxTestControl?.classList.toggle("hidden", !lightningTestVisible);
   if (E.lightningVfxTestSelect) E.lightningVfxTestSelect.disabled = !lightningTestVisible || spellPreviewLoading;
   for (const control of [
-    E.spellPreviewControl, E.loadSpellTemplateButton,
-    E.playSpellPreviewVfxButton, E.resetSpellPreviewButton
+    E.spellPreviewControl, E.loadSpellTemplateButton
   ]) {
     control?.classList.toggle("hidden", !isDm);
+  }
+  for (const control of [E.playSpellPreviewVfxButton, E.resetSpellPreviewButton]) {
+    control?.classList.toggle("hidden", !isDm || !state);
   }
   if (E.spellTemplateSelect) E.spellTemplateSelect.disabled = !isDm;
   if (E.loadSpellTemplateButton) {
@@ -3826,6 +3882,7 @@ function updateSpellPreviewVfxControls(
   if (E.resetSpellPreviewButton) {
     E.resetSpellPreviewButton.disabled = !isDm || !state;
   }
+  updateBattleMapCompactHint();
   for (const control of [
     E.templateSizeInput, E.templateWidthInput, E.templateHeightInput
   ]) {
@@ -4148,6 +4205,27 @@ function getActiveSpellTemplateStatus() {
   }. Preview only — no spell slot is spent. `;
 }
 
+function updateBattleMapCompactHint() {
+  const hint = $("battleMapHint");
+  if (!hint) return;
+  const ruler = battleMapRuler?.getState();
+  const template = battleMapTemplates?.getState();
+  const preview = activeSpellPreviewSession?.getState();
+  let message = "";
+  if (ruler?.enabled) {
+    message = ruler.measurement ? `${ruler.label} · ${formatMapSquares(ruler.measurement.squares)}`
+      : "Ruler · Drag to measure";
+  } else if (template?.enabled && preview) {
+    message = `${activeSpellPreviewSpell?.name || "Spell preview"} · ${formatSpellPreviewStatus(preview)}`;
+  } else if (template?.enabled) {
+    message = template.phase === "confirmed" ? `${template.label} locked`
+      : template.phase === "aiming" ? "Template · Aim, then click to lock"
+      : "Template · Click to place";
+  }
+  if (hint.textContent !== message) text(hint, message);
+  hint.classList.toggle("hidden", !message);
+}
+
 function updateBattleMapTemplateUi(state) {
   const preview = activeSpellPreviewSession?.getState();
   const affectedTokens =
@@ -4323,6 +4401,7 @@ async function loadSelectedSpellTemplate() {
         activeSpellPreviewSession.getState().previewTargetElevation
     });
     battleMapTemplates.setEnabled(true);
+    closeBattleMapMenus();
   } catch (error) {
     console.error(error);
     activeSpellTemplateInstruction = null;

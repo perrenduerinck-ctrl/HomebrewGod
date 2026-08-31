@@ -326,7 +326,10 @@ button:disabled {
 ====================================================== */
 
 #battleMapScreen {
-  min-height: calc(100vh - 40px);
+  height: calc(100dvh - 40px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 #battleTopBar {
@@ -336,8 +339,12 @@ button:disabled {
   border-radius: 20px;
   padding: 10px;
   margin-bottom: 12px;
-  position: sticky;
-  top: 0;
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: none;
   z-index: 10;
   box-shadow: var(--shadow-main), var(--shadow-glow);
   backdrop-filter: blur(6px);
@@ -352,6 +359,101 @@ button:disabled {
 
 #battleTopActions button {
   margin: 0;
+}
+
+#battleQuickActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+#battleQuickActions button,
+#battleTopBar > .battleToolbarMenu > summary {
+  width: auto;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+#battleTopBar > .battleToolbarMenu {
+  position: static;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+#battleTopBar > .battleToolbarMenu > summary {
+  cursor: pointer;
+  color: #e5dcff;
+  border: 1px solid rgba(150, 130, 255, .4);
+  border-radius: 10px;
+  background: #202443;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#battleTopBar > .battleToolbarMenu > summary::-webkit-details-marker { display: none; }
+#battleTopBar > .battleToolbarMenu > summary::after { content: "▾"; }
+#battleTopBar > .battleToolbarMenu[open] > summary::after { content: "▴"; }
+#battleTopBar > .battleToolbarMenu > summary:focus-visible {
+  outline: 2px solid var(--blue-soft);
+  outline-offset: 3px;
+}
+
+#battleTopBar .battleToolbarPanel {
+  position: absolute;
+  inset: calc(100% + 8px) 0 auto;
+  z-index: 2200;
+  max-height: min(68dvh, 580px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  border: 1px solid rgba(150, 130, 255, .45);
+  border-radius: 14px;
+  background: #101529;
+  box-shadow: 0 16px 40px #000a;
+}
+
+#battleToolsMenu { order: 1; }
+#battleManagerBar { order: 2; }
+#spellCastingPanel { order: 3; flex: 1 0 100%; max-height: 42dvh; overflow: auto; }
+#battleToolsPanel #battleInfoLine { overflow-wrap: anywhere; font-size: 12px; }
+#battleToolsPanel > p:last-child { margin-bottom: 0; }
+
+#battleMapSurface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+#battleMapScreen #battleMapViewer,
+#battleMapScreen #puzzleMapBoard {
+  height: 100%;
+  min-height: 0;
+  margin-top: 0;
+}
+
+#battleMapHint {
+  position: absolute;
+  z-index: 60;
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  padding: 8px 12px;
+  border: 1px solid #8c9af055;
+  border-radius: 10px;
+  background: #080c1de8;
+  color: #e2e7ff;
+  font-size: 13px;
+  pointer-events: none;
 }
 
 .battleScaleControl {
@@ -501,7 +603,8 @@ button:disabled {
 
 /* Keep placement and pointer capture intact; only hide targeting visuals. */
 #battleMapSurface.is-playing-spell-vfx .hg-map-template-layer,
-#battleMapSurface.is-playing-spell-vfx .hg-map-ruler-layer {
+#battleMapSurface.is-playing-spell-vfx .hg-map-ruler-layer,
+#battleMapSurface.is-playing-spell-vfx #battleMapHint {
   opacity: 0;
 }
 
@@ -2023,6 +2126,9 @@ a:hover {
     padding: 12px;
   }
 
+  #battleMapScreen { height: calc(100dvh - 24px); }
+  #battleQuickActions { flex-basis: 100%; }
+
   .box {
     padding: 14px;
   }
@@ -2069,6 +2175,8 @@ a:hover {
     padding: 10px;
   }
 
+  #battleMapScreen { height: calc(100dvh - 20px); }
+
   button {
     width: 100%;
     margin: 5px 0;
@@ -2083,7 +2191,7 @@ a:hover {
   }
 
   #battleTopBar {
-    position: static;
+    position: relative;
   }
 
   #battleTopActions {
