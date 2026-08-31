@@ -70,9 +70,8 @@ test("every catalog cantrip has intentional, valid, asset-safe, bounded VFX and 
       }
     }
   }
-  // No level-one work slipped in; only the requested storm upgrades are added.
-  for (const spell of DEFAULT_SPELLS.filter(s => s.level > 0 &&
-    !["fireball", "lightning-bolt", "ice-storm"].includes(s.id))) {
+  // Unsupported utility/wall spells must not receive arbitrary explosions.
+  for (const spell of DEFAULT_SPELLS.filter(s => ["prismatic-wall", "mirage-arcane", "clone"].includes(s.id))) {
     assert.equal(getSpellVfxProfile(spell.id), null);
   }
 });

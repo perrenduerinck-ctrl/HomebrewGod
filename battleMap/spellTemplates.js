@@ -54,7 +54,7 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
   const name = cleanText(spell.name, "Spell");
 
   // Profile placement is opt-in for DM presentation, never a real cast rule.
-  if (allowTouchPreview && vfxPreview && spell.level === 0) {
+  if (allowTouchPreview && vfxPreview) {
     const self = vfxPreview.mode === "self";
     const cube = vfxPreview.shape === "cube";
     const size = normalizeTemplateDistance(vfxPreview.sizeFeet, 2.5);

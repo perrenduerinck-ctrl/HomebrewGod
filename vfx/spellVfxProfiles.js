@@ -2,6 +2,7 @@
 // not another animation engine. Fire Bolt/Fireball and the first five sprite
 // cantrips remain higher-priority bespoke overrides in castingSequence.js.
 import { LIGHTNING_BOLT_SOUND, normalizeSoundCue } from "./spellAudio.js?v=lightning-sound-20260830";
+import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=tier-sprites-20260831";
 export const SPELL_VFX_FAMILIES = Object.freeze([
   "projectile-impact", "target-impact", "beam", "line", "cone", "burst",
   "aura", "self", "touch", "weapon-strike", "ground-effect", "utility-glyph",
@@ -47,8 +48,12 @@ export function defineSpellVfxProfile(raw = {}) {
       geometryScale: raw.specialOptions?.geometryScale === true,
       geometryBasePixels: vfxNumber(raw.specialOptions?.geometryBasePixels, 72, 16, 512),
       fitGeometry: raw.specialOptions?.fitGeometry === true,
+      maxGeometryScale: vfxNumber(raw.specialOptions?.maxGeometryScale, 20, .1, 20),
       chargeAtTarget: raw.specialOptions?.chargeAtTarget === true,
       aftermathAtPath: raw.specialOptions?.aftermathAtPath === true,
+      impactAtPath: raw.specialOptions?.impactAtPath === true,
+      chargeFullOnly: raw.specialOptions?.chargeFullOnly === true,
+      scaleWithLevel: raw.specialOptions?.scaleWithLevel !== false,
       particles: Math.round(vfxNumber(raw.specialOptions?.particles, 7, 0, 24))
     },
     assetTodo: String(raw.assetTodo || "").slice(0, 200),
@@ -74,6 +79,7 @@ const melee = { mode: "target", rangeFeet: 5, label: "5-ft weapon preview reach"
 const ground = { mode: "target", rangeFeet: 60, shape: "cube", sizeFeet: 5, label: "60 feet" };
 
 export const SPELL_VFX_PROFILES = Object.freeze([
+  ...TIER_SPELL_PROFILES.map(defineSpellVfxProfile),
   p("lightning-bolt", "Lightning Bolt", "line", "storm-lightning-impact", {
     sound: LIGHTNING_BOLT_SOUND,
     damageType: "lightning", casterEffect: "storm-lightning-charge",
@@ -87,8 +93,12 @@ export const SPELL_VFX_PROFILES = Object.freeze([
     specialOptions: { particles: 0, geometryScale: true, geometryBasePixels: 160,
       fitGeometry: true, chargeAtTarget: true }
   }),
-  p("acid-splash", "Acid Splash", "projectile-impact", "profile-splash", { damageType: "acid", projectileEffect: "profile-orb", aftermathEffect: "profile-mist", assetTodo: "Optional acid bubble/splash art; procedural liquid is intentional." }),
-  p("poison-spray", "Poison Spray", "target-impact", "profile-mist", { damageType: "poison", casterEffect: "profile-mist", impactDuration: 1100, scale: 1.15, assetTodo: "Optional poison-cloud sheet." }),
+  p("acid-splash", "Acid Splash", "projectile-impact", "lesser-acid-burst", {
+    damageType: "acid", projectileEffect: "lesser-acid-flight", scale: .55,
+    specialOptions: { particles: 0 } }),
+  p("poison-spray", "Poison Spray", "target-impact", "lesser-poison-cloud", {
+    damageType: "poison", casterEffect: "profile-mist", impactDuration: 1100, scale: .65,
+    specialOptions: { particles: 0, chargeFullOnly: true } }),
   p("chill-touch", "Chill Touch", "utility-hand", "profile-hand", { damageType: "necrotic", aftermathEffect: "dark-impact-sprite", assetTodo: "Optional skeletal hand art; vector hand is intentional." }),
   p("toll-the-dead", "Toll the Dead", "target-impact", "profile-glyph", { damageType: "necrotic", specialOptions: { variant: "bell" }, aftermathEffect: "profile-ripple", aftershockCount: 1 }),
   p("mind-sliver", "Mind Sliver", "target-impact", "profile-shard", { damageType: "psychic", aftermathEffect: "profile-ripple", specialOptions: { variant: "mind" }, assetTodo: "Optional psychic fracture sheet." }),

@@ -1,12 +1,12 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
-} from "./fireEffects.js?v=vfx-fireball-20260829";
-import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=lightning-sound-20260830";
-import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=lightning-sound-20260830";
-import { compileSpellVfxProfile } from "./profileSequence.js?v=lightning-sound-20260830";
-import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=lightning-sound-20260830";
+} from "./fireEffects.js?v=tier-sprites-20260831";
+import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=tier-sprites-20260831";
+import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=tier-sprites-20260831";
+import { compileSpellVfxProfile } from "./profileSequence.js?v=tier-sprites-20260831";
+import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=tier-sprites-20260831";
 
-import { createSpellAudioPlayer, normalizeSoundCue } from "./spellAudio.js?v=lightning-sound-20260830";
+import { createSpellAudioPlayer, normalizeSoundCue } from "./spellAudio.js?v=tier-sprites-20260831";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([
@@ -101,6 +101,7 @@ function normalizeSequenceEffect(effect = {}) {
       ? requestedAnchor
       : "target",
     scale: boundedNumber(effect.scale, 1, 0.05, 20),
+    maxGeometryScale: boundedNumber(effect.maxGeometryScale, 20, .1, 20),
     rotation: boundedNumber(effect.rotation, 0, -3600, 3600),
     opacity: boundedNumber(effect.opacity, 1, 0, 1),
     duration: finiteNumber(effect.duration) === null
@@ -556,7 +557,7 @@ function makeEffectRequest({
           effect.geometryScaleBasePixels *
           effect.scale,
         0.05,
-        20
+        effect.maxGeometryScale
       )
     : effect.scale;
 

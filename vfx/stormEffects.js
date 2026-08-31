@@ -1,9 +1,11 @@
 // Shared storm primitives. Geometry, scheduling and disposal remain owned by
 // the existing sequence/renderer/engine; these definitions only draw visuals.
+import { getTierSpriteAsset, getTierFrameWindow } from "./tierEffects.js?v=tier-sprites-20260831";
+import { normalizeSpriteOptions, getSpriteFrameStyle } from "./spriteAnimator.js?v=tier-sprites-20260831";
 export const STORM_ASSETS = Object.freeze({
   charge: "./assets/vfx/storms/lightning-charge.png",
   impact: "./assets/vfx/storms/lightning-impact.png",
-  ice: "./assets/vfx/library/ice-burst.png"
+  ice: "./assets/vfx/tiers3-6/cold-cast-5x5.png"
 });
 
 function sheet(id, src, startFrame = 0, endFrame = 15) {
@@ -73,15 +75,32 @@ function hail({ document, element, effect }) {
     stone.style.setProperty("--storm-drift", (index % 2 ? 13 : -11) + "px");
     element.appendChild(stone);
   });
+  const animations = [];
+  const sprite = normalizeSpriteOptions({ ...getTierSpriteAsset("cold", 4),
+    frameWidth: 160, frameHeight: 160 });
+  const [first, last] = getTierFrameWindow("cold", 4, "burst");
   stormParticleLayout(reduced ? 2 : 7).forEach((point, index) => {
     const burst = document.createElement("i");
     burst.className = "hg-storm-ice-burst";
     burst.style.left = point.x + "%";
     burst.style.top = point.y + "%";
     burst.style.backgroundImage = `url(${JSON.stringify(STORM_ASSETS.ice)})`;
+    burst.style.backgroundSize = `${sprite.frameWidth * sprite.columns}px ${sprite.frameHeight * sprite.rows}px`;
+    burst.style.backgroundPosition = getSpriteFrameStyle(sprite, first).backgroundPosition;
     burst.style.setProperty("--storm-delay", 0.12 + index * 0.055);
     element.appendChild(burst);
+    // Native stepped animation uses the same grid math as the main player,
+    // with no additional RAF loops and explicit early-cancel cleanup.
+    const frames = Array.from({ length: last - first + 1 }, (_, frame) => ({
+      backgroundPosition: getSpriteFrameStyle(sprite, first + frame).backgroundPosition,
+      offset: frame / (last - first + 1), easing: "steps(1, end)"
+    }));
+    frames.push({ ...frames.at(-1), offset: 1 });
+    const animation = burst.animate?.(frames, { duration: effect.duration * .42,
+      delay: effect.duration * (0.12 + index * .055), fill: "both" });
+    if (animation) animations.push(animation);
   });
+  return () => animations.forEach(animation => animation.cancel());
 }
 
 const primitive = (id, configureElement = null, assets = []) => Object.freeze({
