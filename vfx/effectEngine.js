@@ -1,9 +1,9 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=lightning-sound-20260830";
+} from "./effectRegistry.js?v=tier-sprites-20260831";
 import {
   createEffectRenderer
-} from "./effectRenderer.js?v=lightning-sound-20260830";
+} from "./effectRenderer.js?v=tier-sprites-20260831";
 import {
   createPersistentEffectStore,
   MAX_PERSISTENT_LIFETIME_MS

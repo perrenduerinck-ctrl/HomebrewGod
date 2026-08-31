@@ -118,7 +118,7 @@ test("Fireball, Lightning Bolt, and Burning Hands resolve declaratively", () => 
 
   assert.equal(registry.resolve(fireball).id, "fireball");
   assert.equal(registry.resolve(lightningBolt).id, "lightning-bolt-5x5-test");
-  assert.equal(registry.resolve(burningHands).id, "fire-directional");
+  assert.equal(registry.resolve(burningHands).id, "profile-burning-hands");
   assert.deepEqual(
     registry.resolve(fireball).phases.map(({ phase }) => phase),
     ["charge", "release", "travel", "impact", "aftermath", "cleanup"]

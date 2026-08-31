@@ -70,9 +70,8 @@ test("every catalog cantrip has intentional, valid, asset-safe, bounded VFX and 
       }
     }
   }
-  // No level-one work slipped in; only the requested storm upgrades are added.
-  for (const spell of DEFAULT_SPELLS.filter(s => s.level > 0 &&
-    !["fireball", "lightning-bolt", "ice-storm"].includes(s.id))) {
+  // No high-level profiles are invented before the owner supplies 6x6 art.
+  for (const spell of DEFAULT_SPELLS.filter(s => s.level > 6)) {
     assert.equal(getSpellVfxProfile(spell.id), null);
   }
 });

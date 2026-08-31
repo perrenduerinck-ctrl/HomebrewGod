@@ -1,9 +1,10 @@
 // User-supplied art is shared by spell-specific, presentation-only sequences.
 // Single images are oriented in CSS; sheets are 4x4, read left-to-right.
-import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=lightning-sound-20260830";
+import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=tier-sprites-20260831";
 const asset = (name) => `./assets/vfx/cantrips/${name}.png`;
-import { getStormSpritePaths } from "./stormEffects.js?v=lightning-sound-20260830";
-import { LIGHTNING_5X5_ASSET } from "./lightning5x5.js?v=lightning-sound-20260830";
+import { getStormSpritePaths } from "./stormEffects.js?v=tier-sprites-20260831";
+import { LIGHTNING_5X5_ASSET } from "./lightning5x5.js?v=tier-sprites-20260831";
+import { getTierSpritePaths } from "./tierEffects.js?v=tier-sprites-20260831";
 
 function sprite(id, file, { sheet = false, className, angle = 0, tipX = 50, tipY = 50 } = {}) {
   return Object.freeze({
@@ -98,8 +99,9 @@ export function getCantripSpritePaths(spellId, { lightningVariant = "5x5" } = {}
   const types = new Set(Object.values(definition?.phases || {})
     .flatMap((phase) => phase.effects || []).map((entry) => entry.type));
   getProfileEffectIds(getSpellVfxProfile(spellId)).forEach((type) => types.add(type));
-  return [...CANTRIP_EFFECT_DEFINITIONS.filter((entry) => types.has(entry.id))
-    .map((entry) => entry.sprite.src), ...getStormSpritePaths(types)];
+  if (spellId === "fireball") types.add("tier-fire-burst");
+  return [...new Set([...CANTRIP_EFFECT_DEFINITIONS.filter((entry) => types.has(entry.id))
+    .map((entry) => entry.sprite.src), ...getStormSpritePaths(types), ...getTierSpritePaths(types)])];
 }
 
 const assetLoads = new Map();

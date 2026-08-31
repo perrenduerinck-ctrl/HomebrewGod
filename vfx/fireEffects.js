@@ -224,109 +224,27 @@ function effect(
 }
 
 function makeFireballCastingSequence() {
+  // One flight and one area burst share the same texture. No per-token spam.
   return deepFreeze({
-    id: "fireball",
-    label: "Fireball",
-    priority: 100,
-    match: {
-      spellIds: ["fireball"],
-      damageTypes: ["fire"],
-      deliveryTypes: ["burst"]
-    },
+    id: "fireball", label: "Fireball", priority: 100,
+    match: { spellIds: ["fireball"], damageTypes: ["fire"], deliveryTypes: ["burst"] },
     phases: {
-      charge: {
-        duration: 280,
-        effects: [
-          effect("fire-glow", "caster", {
-            duration: 420,
-            scale: 0.82,
-            role: "fireball-charge"
-          }),
-          effect("fire-embers", "caster", {
-            duration: 520,
-            particles: { count: 8, distance: 38, size: 4 },
-            scale: 0.8,
-            role: "fireball-charge-embers"
-          })
-        ]
-      },
-      release: {
-        duration: 120,
-        effects: [
-          effect("fire-glow", "caster", {
-            duration: 300,
-            scale: 1.05,
-            role: "fireball-release"
-          }),
-          effect("fire-flames", "caster", {
-            duration: 440,
-            particles: { count: 10, distance: 42, size: 8 },
-            scale: 0.88,
-            role: "fireball-release-flames"
-          })
-        ]
-      },
-      travel: {
-        duration: 560,
-        effects: [
-          effect(FIREBALL_PROJECTILE_EFFECT_ID, "path", {
-            duration: 560,
-            role: "fireball-projectile"
-          }),
-          effect("fire-trail", "path", {
-            duration: 560,
-            particles: { count: 18, distance: 38, size: 5 },
-            scale: 1.05,
-            role: "fireball-trail"
-          })
-        ]
-      },
-      impact: {
-        duration: 360,
-        effects: [
-          effect(FIRE_SPRITE_EFFECT_ID, "target", {
-            duration: 920,
-            geometryScaleBasePixels: 160,
-            role: "fireball-explosion-sprite"
-          }),
-          effect("fire-explosion", "target", {
-            duration: 680,
-            geometryScaleBasePixels: 72,
-            role: "fireball-explosion-fallback"
-          }),
-          effect("fire-glow", "affected-tokens", {
-            duration: 360,
-            scale: 0.5,
-            role: "fireball-token-hit"
-          })
-        ]
-      },
-      aftermath: {
-        duration: 1400,
-        effects: [
-          effect("fire-embers", "target", {
-            duration: 980,
-            geometryScaleBasePixels: 72,
-            scale: 0.82,
-            role: "fireball-ember-field"
-          }),
-          effect("fire-smoke", "target", {
-            duration: 1360,
-            geometryScaleBasePixels: 72,
-            opacity: 0.72,
-            scale: 0.86,
-            role: "fireball-smoke"
-          }),
-          effect("fire-scorch", "target", {
-            duration: 1380,
-            geometryScaleBasePixels: 72,
-            opacity: 0.54,
-            scale: 0.94,
-            role: "fireball-scorch"
-          })
-        ]
-      },
-      cleanup: {}
+      charge: { duration: 140, effects: [{
+        ...effect("fire-glow", "caster", { duration: 140, scale: .45,
+          particles: { count: 0 }, role: "fireball-charge" }), fullOnly: true
+      }] },
+      release: { duration: 0, effects: [] },
+      travel: { duration: 320, effects: [
+        effect("tier-fire-flight", "path", { duration: 320,
+          particles: { count: 0 }, role: "fireball-projectile" })
+      ] },
+      impact: { duration: 920, effects: [
+        effect("tier-fire-burst", "target", { duration: 920,
+          geometryScaleBasePixels: 160, particles: { count: 0 },
+          role: "fireball-explosion-sprite" })
+      ] },
+      aftermath: { duration: 0, effects: [] },
+      cleanup: { duration: 0, effects: [] }
     }
   });
 }

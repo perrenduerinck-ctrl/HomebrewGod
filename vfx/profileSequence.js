@@ -1,11 +1,12 @@
-import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=lightning-sound-20260830";
+import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=tier-sprites-20260831";
 
 // Pure compiler: no DOM, timers, characters, rolls, or persistence. The existing
 // sequence system owns scheduling and the existing engine owns all cleanup.
 export function compileSpellVfxProfile(rawProfile, event = {}) {
   const profile = defineSpellVfxProfile(rawProfile);
   const level = Math.round(vfxNumber(event.spellLevel, 0, 0, 9));
-  const scale = vfxNumber(profile.scale * (1 + level * 0.22), 1, 0.1, 12);
+  const scale = vfxNumber(profile.scale *
+    (profile.specialOptions.scaleWithLevel ? 1 + level * 0.22 : 1), 1, 0.1, 12);
   const intensity = Math.round(vfxNumber(Math.max(profile.intensity,
     vfxNumber(event.intensity, 1, 1, 5), 1 + Math.floor(level / 2)), 1, 1, 5));
   const particleCount = Math.round(vfxNumber(profile.specialOptions.particles *
@@ -46,14 +47,16 @@ export function compileSpellVfxProfile(rawProfile, event = {}) {
   const phases = {
     charge: { duration: profile.casterEffect ? profile.chargeDuration : 0,
       effects: profile.casterEffect ? [effect(profile.casterEffect, chargeAnchor,
-        profile.chargeDuration, profile.specialOptions.chargeAtTarget ? 1 : 0.55, fieldGeometry)] : [] },
+        profile.chargeDuration, profile.specialOptions.chargeAtTarget ? 1 : 0.55,
+        { ...(profile.specialOptions.chargeAtTarget ? fieldGeometry : {}),
+          fullOnly: profile.specialOptions.chargeFullOnly })] : [] },
     release: { duration: 0, effects: [] },
     travel: { duration: traveling ? travelDuration : 0,
       effects: traveling ? [effect(pathType, "path", travelDuration, 1,
         { particles: { count: 0 } })] : [] },
     impact: { duration: impactDuration,
       effects: Array.from({ length: profile.impactCount }, (_, index) =>
-        effect(impactType, anchor, impactDuration, 1 - index * 0.12,
+        effect(impactType, profile.specialOptions.impactAtPath ? "path" : anchor, impactDuration, 1 - index * 0.12,
           { rotation: index * 32, geometryScaleBasePixels })) },
     aftermath: { duration: profile.aftermathEffect || profile.aftershockCount ? profile.aftermathDuration : 0,
       effects: [

@@ -2951,6 +2951,77 @@ async function openDmSpellPreview(page) {
   return { overlay, play, reset, status, select, point, state };
 }
 
+test("tier sprite batch uses the correct grids, bounded modes, path alignment and cleanup", async ({ page }, testInfo) => {
+  const ui = await openDmSpellPreview(page);
+  await page.evaluate(() => {
+    window.__TIER_RENDERED__ = [];
+    const observer = new MutationObserver(records => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType !== 1 || !node.matches(".hg-map-vfx-effect")) continue;
+        const sprite = node.querySelector(".hg-vfx-sprite");
+        window.__TIER_RENDERED__.push({type:node.dataset.effectType,
+          path:node.classList.contains("has-path"), size:sprite?.style.backgroundSize,
+          image:sprite?.style.backgroundImage, blend:getComputedStyle(node.parentElement).mixBlendMode,
+          angle:parseFloat(node.style.getPropertyValue("--hg-vfx-path-rotation")),
+          artAngle:node.style.getPropertyValue("--hg-tier-art-angle"),
+          x:parseFloat(node.style.left), y:parseFloat(node.style.top),
+          length:parseFloat(node.style.getPropertyValue("--hg-vfx-path-length")),
+          particles:node.querySelectorAll(".hg-vfx-particle").length});
+      }
+    });
+    for (const layer of document.querySelectorAll(".hg-map-vfx-layer, .hg-map-vfx-light-layer")) {
+      observer.observe(layer, {childList:true});
+    }
+  });
+  const rendered = () => page.evaluate(() => window.__TIER_RENDERED__);
+  for (const [spell, role, grid, full, reduced] of [
+    ["fireball", "tier-fire-burst", 5, 3, 2],
+    ["cloudkill", "tier-poison-cloud", 5, 2, 1],
+    ["stinking-cloud", "tier-poison-comet-cloud", 5, 2, 1],
+    ["cone-of-cold", "tier-cold-cone", 5, 3, 2],
+    ["disintegrate", "tier-acid-stream-beam", 5, 3, 2],
+    ["acid-arrow", "lesser-acid-flight", 4, 3, 2],
+    ["vampiric-touch", "tier-necrotic-burst", 5, 2, 1]
+  ]) {
+    await ui.select(spell); await ui.point(240,220);
+    await ui.point(spell === "vampiric-touch" ? 280 : 450,220);
+    const locked = (await ui.state()).preview;
+    for (const [mode, count] of [["full",full],["reduced",reduced],["off",0]]) {
+      await useMapTool(page, "#battleVfxModeSelect", "selectOption", mode);
+      await page.evaluate(() => { window.__TIER_RENDERED__ = []; });
+      await ui.play.click();
+      if (mode !== "off") {
+        await expect(ui.overlay).toHaveCSS("opacity", "0");
+        if (mode === "full" && ["fireball","cloudkill","cone-of-cold"].includes(spell)) {
+          await expect(page.locator(`[data-effect-type="${role}"]`)).toBeVisible();
+          await page.waitForTimeout(200);
+          await page.screenshot({path:testInfo.outputPath(spell + ".png")});
+        }
+        await expect(ui.overlay).toHaveCSS("opacity", "1", {timeout:5000});
+      }
+      const effects = await rendered();
+      expect(effects.length, spell + " " + mode).toBe(count);
+      expect(effects.every(e => e.particles === 0)).toBe(true);
+      if (count) {
+        const effect = effects.find(e => e.type === role);
+        expect(effect.size).toBe(`${160*grid}px ${160*grid}px`);
+        expect(effect.image).toContain(grid === 4 ? "tiers0-2/" : "tiers3-6/");
+        if (["cloudkill","stinking-cloud","disintegrate"].includes(spell)) expect(effect.blend).toBe("screen");
+        for (const path of effects.filter(e=>e.path)) {
+          expect(path.angle).toBeCloseTo(0,2);
+          expect(path.x).toBeCloseTo(locked.previewCasterPoint.x,0);
+          expect(path.y).toBeCloseTo(locked.previewCasterPoint.y,0);
+          expect(path.length).toBeGreaterThan(0);
+          if (path.type.endsWith("-beam") || path.type.endsWith("-flight")) expect(path.artAngle).toBe("-135deg");
+        }
+      }
+      await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0);
+      expect((await ui.state()).preview).toEqual(locked);
+    }
+  }
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("compact map menus preserve viewport space, keyboard access and locked previews", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   const tools = page.locator("#battleToolsMenu");
@@ -3096,7 +3167,7 @@ test("profile preview sample covers projectile, impact, touch, beam, utility, gr
     }).observe(document.querySelector(".hg-map-vfx-layer"), { childList: true });
   });
   for (const [spell, type, path, glyph] of [
-    ["acid-splash", "profile-orb", true, false],
+    ["acid-splash", "lesser-acid-flight", true, false],
     ["toll-the-dead", "profile-glyph", false, true],
     ["mending", "profile-glyph", false, true],
     ["lightning-lure", "profile-beam", true, false],

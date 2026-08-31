@@ -362,108 +362,27 @@ test("Fire Bolt follows spell geometry from charge through ember fade", () => {
   assert.equal(scheduler.pending(), 0);
 });
 
-test("Fireball scales to its geometry, travels, and reacts on affected tokens", () => {
-  const scheduler = createScheduler();
-  const effectEngine = createEffectEngine();
-  const phases = [];
-  const system = createCastingSequenceSystem({
-    effectEngine,
-    scheduler,
-    onPhase: ({ phase }) => phases.push(phase)
-  });
+test("Fireball uses one shared-sheet flight and one area burst, with no per-token effects", () => {
+  const scheduler = createScheduler(), effectEngine = createEffectEngine();
+  const system = createCastingSequenceSystem({ effectEngine, scheduler });
   const event = createSpellVfxEvent({
-    spell: getDefaultSpellById("fireball"),
-    casterPoint: { x: 15, y: 25 },
+    spell: getDefaultSpellById("fireball"), casterPoint: { x: 15, y: 25 },
     targetPoint: { x: 150, y: 125 },
-    casterElevation: 5,
-    targetElevation: 15,
-    geometry: {
-      shape: "sphere",
-      sizeFeet: 20,
-      sizePixels: 256,
-      pixelsPerFoot: 12.8,
-      anchor: { x: 150, y: 125 },
-      bounds: {
-        minX: -106,
-        minY: -131,
-        maxX: 406,
-        maxY: 381,
-        width: 512,
-        height: 512
-      }
-    },
-    affectedTokens: [
-      {
-        id: "goblin-one",
-        name: "Goblin One",
-        center: { x: 130, y: 110 },
-        elevation: 10
-      },
-      {
-        id: "goblin-two",
-        name: "Goblin Two",
-        center: { x: 180, y: 150 },
-        elevation: 15
-      }
-    ],
-    intensity: 3
+    geometry: { shape: "sphere", sizeFeet: 20, sizePixels: 256,
+      bounds: { width: 512, height: 512 } },
+    affectedTokens: Array.from({length:100}, (_, i) => ({id: "token-" + i, center:{x:150,y:125}}))
   });
-  const result = system.play(event);
-
+  const before = JSON.stringify(event), result = system.play(event);
   assert.equal(result.ok, true);
   assert.equal(result.definition.id, "fireball");
-  assert.deepEqual(
-    effectEngine.getStats().requests.map(({ type }) => type),
-    ["fire-glow", "fire-embers"]
-  );
-
   scheduler.advance(result.definition.totalDuration);
   const requests = effectEngine.getStats().requests;
-  const types = new Set(requests.map(({ type }) => type));
-  FIRE_EFFECT_IDS.forEach((id) => assert.equal(types.has(id), true));
-  assert.deepEqual(phases, [
-    "charge",
-    "release",
-    "travel",
-    "impact",
-    "aftermath",
-    "cleanup"
-  ]);
-
-  const trail = requests.find(({ type }) => type === "fire-trail");
-  assert.deepEqual(trail.startPosition, event.casterPoint);
-  assert.deepEqual(trail.endPosition, event.targetPoint);
-  const projectile = requests.find(
-    ({ type }) => type === FIREBALL_PROJECTILE_EFFECT_ID
-  );
-  assert.deepEqual(projectile.startPosition, event.casterPoint);
-  assert.deepEqual(projectile.endPosition, event.targetPoint);
-  const spriteExplosion = requests.find(
-    ({ metadata }) => metadata.role === "fireball-explosion-sprite"
-  );
-  assert.equal(spriteExplosion.scale, 3.2);
-  const fallbackExplosion = requests.find(
-    ({ metadata }) => metadata.role === "fireball-explosion-fallback"
-  );
-  assert.ok(Math.abs(fallbackExplosion.scale - (512 / 72)) < 0.001);
-  const tokenHits = requests.filter(
-    ({ metadata }) => metadata.role === "fireball-token-hit"
-  );
-  assert.deepEqual(
-    tokenHits.map(({ affectedTokenId }) => affectedTokenId),
-    ["goblin-one", "goblin-two"]
-  );
-  assert.deepEqual(
-    tokenHits.map(({ position }) => position),
-    event.affectedTokens.map(({ center }) => center)
-  );
-  assert.equal(
-    requests.every(({ metadata }) => (
-      metadata.damageType === "fire" &&
-      metadata.eventType === "confirmed-cast-sequence"
-    )),
-    true
-  );
+  assert.deepEqual(requests.map(r => r.type), ["fire-glow", "tier-fire-flight", "tier-fire-burst"]);
+  assert.deepEqual(requests[1].startPosition, event.casterPoint);
+  assert.deepEqual(requests[1].endPosition, event.targetPoint);
+  assert.equal(requests[2].scale, 3.2);
+  assert.ok(requests.every(r => !r.affectedTokenId && r.particles.count === 0));
+  assert.equal(JSON.stringify(event), before);
   assert.equal(system.getState().activeCount, 0);
   assert.equal(scheduler.pending(), 0);
   assert.equal(effectEngine.getStats().cancelled.length, requests.length);
@@ -491,14 +410,14 @@ test("fire effect and sequence collections stay immutable and bounded", () => {
   );
   assert.equal(
     fireBurst.phases.impact.effects.some(
-      ({ type }) => type === FIRE_SPRITE_EFFECT_ID
+      ({ type }) => type === "tier-fire-burst"
     ),
     true
   );
   assert.equal(
     fireBurst.phases.impact.effects.some(
-      ({ type }) => type === "fire-explosion"
+      ({ anchor }) => anchor === "affected-tokens"
     ),
-    true
+    false
   );
 });

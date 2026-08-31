@@ -1,0 +1,73 @@
+/* Shared 3rd–6th-level atlas roles. Frame stepping stays in spriteAnimator. */
+/* Ice bursts use grid-aware native keyframes supplied by stormEffects. */
+.hg-storm-ice-burst {
+  animation: hg-storm-ice-fade calc(var(--hg-vfx-duration) * .42) linear
+    calc(var(--hg-vfx-duration) * var(--storm-delay)) both;
+}
+.hg-map-vfx-effect:is(.hg-vfx-tier-burst, .hg-vfx-tier-cloud) {
+  width: 160px; height: 160px; border-radius: 0;
+}
+.hg-vfx-tier-burst .hg-vfx-sprite {
+  animation: hg-tier-burst var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-tier-cloud .hg-vfx-sprite {
+  animation: hg-tier-cloud var(--hg-vfx-duration) ease-out both;
+}
+/* A few supplied frames touch their cell's upper/lower gutter. Clip the rim
+   so a fragment of the neighboring row cannot flash above a burst/cloud. */
+.hg-vfx-tier-burst .hg-vfx-sprite,
+.hg-vfx-tier-cloud .hg-vfx-sprite {
+  clip-path: inset(10% 2%);
+  mask-image: linear-gradient(transparent 10%, #000 18%, #000 82%, transparent 90%);
+}
+.hg-map-vfx-effect:is(.hg-vfx-tier-flight, .hg-vfx-tier-beam, .hg-vfx-tier-cone).has-path {
+  background: none; box-shadow: none; border-radius: 0; animation: none;
+}
+.hg-vfx-tier-flight.has-path { height: 1px; }
+.hg-vfx-tier-flight .hg-vfx-sprite {
+  transform-origin: 25% 75%;
+  animation: hg-tier-flight var(--hg-vfx-duration) linear both;
+}
+.hg-vfx-tier-beam.has-path { height: 160px; }
+.hg-vfx-tier-beam .hg-tier-stage {
+  position: absolute; left: 50%; top: 50%; width: 160px; height: 160px;
+  transform: translate(-50%, -50%) scaleX(calc(var(--hg-vfx-path-pixels) / 215)) scaleY(.25);
+}
+.hg-vfx-tier-beam .hg-vfx-sprite {
+  transform: translate(-50%, -50%) rotate(var(--hg-tier-art-angle));
+  animation: hg-tier-flash var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-tier-cone.has-path {
+  height: var(--hg-vfx-path-length);
+  /* Length/width are already projected map pixels. Don't double-scale at zoom. */
+  transform: translateY(-50%) rotate(var(--hg-vfx-path-rotation));
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+.hg-vfx-tier-cone .hg-tier-stage {
+  position: absolute; left: 58%; top: 50%; width: 160px; height: 160px;
+  transform: translate(-50%, -50%) scale(calc(var(--hg-vfx-path-pixels) / 145));
+}
+.hg-vfx-tier-cone .hg-vfx-sprite {
+  animation: hg-tier-burst var(--hg-vfx-duration) ease-out both;
+}
+@keyframes hg-tier-flight {
+  0% { left: 0; opacity: 0; transform: translate(-25%, -75%) rotate(var(--hg-tier-art-angle)) scale(.5); }
+  12%, 96% { opacity: 1; }
+  100% { left: 100%; opacity: 0; transform: translate(-25%, -75%) rotate(var(--hg-tier-art-angle)) scale(.5); }
+}
+@keyframes hg-tier-burst {
+  0% { opacity: .25; transform: translate(-50%, -50%) scale(.7); }
+  14% { opacity: 1; }
+  75% { opacity: .9; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes hg-tier-cloud {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.7); }
+  22%, 66% { opacity: .85; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes hg-tier-flash { 0%, 100% { opacity: 0; } 10%, 72% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .hg-vfx-tier-flight .hg-vfx-sprite { animation-timing-function: steps(1, end); }
+  .hg-map-vfx-effect[class*="hg-vfx-tier-"] { filter: none; }
+}

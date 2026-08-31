@@ -319,7 +319,8 @@ export function createEffectRenderer({
         bounds.width,
         bounds.height
       ),
-      animator: null
+      animator: null,
+      dispose: null
     };
 
     if (effect.definition.kind === "sprite") {
@@ -335,11 +336,12 @@ export function createEffectRenderer({
     (effect.definition.blendMode === "screen" ? lightOverlay : overlay).appendChild(element);
     positionRecord(record);
     try {
-      effect.definition.configureElement?.({
+      const dispose = effect.definition.configureElement?.({
         document: documentRef,
         effect,
         element
       });
+      if (typeof dispose === "function") record.dispose = dispose;
     } catch (error) {
       remove(effect.id);
       throw error;
@@ -351,6 +353,7 @@ export function createEffectRenderer({
     const record = records.get(String(id || ""));
     if (!record) return false;
     record.animator?.destroy?.();
+    record.dispose?.();
     record.element.remove();
     records.delete(record.effect.id);
     return true;

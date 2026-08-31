@@ -3,39 +3,40 @@
 Scope: the app's current 2014 catalog, not every published D&D spell or
 user-created spell. Counts are checked by `tests/vfx-cantrips.test.mjs`.
 Intentional shared profiles count as mapped; generic delivery fallbacks do not.
-The current cantrip tier is complete. Level 1 is next, not part of this pass.
+The current cantrip tier is complete. The owner-supplied atlas batch adds
+12 selected level 1–2 profiles and 19 selected level 3–6 profiles. Other spells
+still use their existing generic presentation; dropdown presence is not full-tier completion.
 
 | Spell level | Catalog spells | Intentional VFX mappings | Remaining |
 | --- | ---: | ---: | ---: |
 | Cantrips | 45 | 45 | 0 |
-| 1 | 49 | 0 | 49 |
-| 2 | 54 | 0 | 54 |
-| 3 | 42 | 2 | 40 |
-| 4 | 31 | 1 | 30 |
-| 5 | 37 | 0 | 37 |
-| 6 | 31 | 0 | 31 |
+| 1 | 49 | 7 | 42 |
+| 2 | 54 | 5 | 49 |
+| 3 | 42 | 6 | 36 |
+| 4 | 31 | 5 | 26 |
+| 5 | 37 | 3 | 34 |
+| 6 | 31 | 8 | 23 |
 | 7 | 20 | 0 | 20 |
 | 8 | 16 | 0 | 16 |
 | 9 | 15 | 0 | 15 |
-| **Total** | **340** | **48** | **292** |
+| **Total** | **340** | **79** | **261** |
 
 ## Existing bespoke overrides (preserved)
 
 Fire Bolt, Ray of Frost, Frostbite, Eldritch Blast, Shocking Grasp, Sacred Flame.
-Fireball also already has a dedicated sequence. Burning Hands and Flame Strike
-remain available in Preview but still use fallback
-sequences; their presence in the dropdown does not mean bespoke VFX are done.
+Fireball uses the supplied 5×5 fire atlas for one projectile and one explosion.
+Burning Hands and Flame Strike now have intentional shared profiles.
 
 Lightning Bolt and Ice Storm now have richer shared-profile compositions:
 charge, branching full-length lightning and sprite impact; or gathering cloud,
 staggered hail, ice bursts and fading frost. Ice Storm fits the exact template
 radius rather than increasing the affected area with visual intensity.
-These two requested visual upgrades do not start the Level 1 batch.
+Ice Storm now uses the supplied 5×5 cold atlas with bounded native frame stepping.
 
 Lightning Bolt additionally has a bounded **5×5 test** override: one 25-frame
 sprite, plus one small charge in Full mode (Reduced: one effect; Off: zero).
 The DM's Lightning VFX selector preserves the 4×4 baseline for comparison.
-This adds no new spell mappings or tier work. See `LIGHTNING_5X5_TEST.md`.
+Its sound and comparison selector are unchanged. See `LIGHTNING_5X5_TEST.md`.
 
 Eldritch Blast currently demonstrates one beam from the selected origin to one
 target. Level-scaled multi-beam and separate targets are a later cantrip task.
@@ -88,7 +89,7 @@ sequence normalization, placement, levels, caps, Full/Reduced/Off and cleanup.
 A small browser sample covers projectile, target impact, touch, beam, utility,
 ground and weapon compositions, alongside the existing sprite regressions.
 
-Next batch: **Level 1 — all 49 spells**. No Level 1 profiles were added here.
+Further work: the 42 remaining level 1 spells and other unmapped catalog spells.
 Multi-beam Eldritch Blast and real weapon attachments remain future enhancements;
 all 45 cantrips already have intentional preview compositions.
 
@@ -102,9 +103,12 @@ all 45 cantrips already have intentional preview compositions.
 - Later: wind swirl, water ripple, leaf/healing glow, shield/rune ring,
   weapon slash and insect swarm.
 
-Prefer transparent PNG, a uniform 4x4 grid of 16 frames, consistent center and
-padding in every cell, no labels/grid lines, and a separate single projectile
-pointing horizontally right. Leave a little transparent padding at each edge.
+Art policy follows the spell's base level: 4×4/16 frames for levels 0–2,
+5×5/25 for levels 3–6, and 6×6/36 for levels 7–9. Real 6×6 artwork has not
+been supplied; the player supports it but existing high-level fallbacks remain.
+Do not relabel a 4×4 or 5×5 sheet as 6×6. Keep consistent centers and cell
+padding, no labels/grid lines, and preferably transparent backgrounds.
+See `SPRITE_ATLAS_BATCH.md` for assets, mappings, budgets and verification.
 
 ## Safety and playback
 
