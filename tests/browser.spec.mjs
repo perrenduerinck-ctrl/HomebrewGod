@@ -12,7 +12,7 @@ async function openMapTools(page) {
 async function closeMapTools(page) {
   const menu = page.locator("#battleToolsMenu");
   // Clicking outside is idempotent if an async targeting load also closes it.
-  if (await menu.evaluate(el => el.open)) await page.locator("#battleTopBar").click({position:{x:2,y:2}});
+  if (await menu.evaluate(el => el.open)) await page.locator("#battleTopBar").click({position:{x:5,y:30}});
   await expect(menu).toHaveJSProperty("open", false);
 }
 
