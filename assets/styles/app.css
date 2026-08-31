@@ -527,6 +527,15 @@ button:disabled {
   display: none;
 }
 
+#battleVfxSoundToggle {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  margin: 0;
+  padding: 0;
+  flex: none;
+}
+
 .hg-map-vfx-light-layer { mix-blend-mode: screen; }
 
 /* Storm profiles: additive sprites, branching arcs and area-local hail. */
