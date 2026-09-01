@@ -695,6 +695,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 }
 
 .hg-map-vfx-light-layer { mix-blend-mode: screen; }
+.hg-map-vfx-light-layer > .hg-map-vfx-effect { mix-blend-mode: screen; }
 
 .hg-vfx-ground-shadow {
   position: absolute;
