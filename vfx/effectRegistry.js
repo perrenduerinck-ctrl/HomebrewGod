@@ -1,11 +1,12 @@
 import {
   FIRE_EFFECT_DEFINITIONS
-} from "./fireEffects.js?v=tier-sprites-20260831";
-import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=tier-sprites-20260831";
-import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=tier-sprites-20260831";
-import { STORM_EFFECT_DEFINITIONS } from "./stormEffects.js?v=tier-sprites-20260831";
-import { LIGHTNING_5X5_EFFECTS } from "./lightning5x5.js?v=tier-sprites-20260831";
-import { TIER_EFFECT_DEFINITIONS } from "./tierEffects.js?v=tier-sprites-20260831";
+} from "./fireEffects.js?v=status-sprites-20260831";
+import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=status-sprites-20260831";
+import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=status-sprites-20260831";
+import { STORM_EFFECT_DEFINITIONS } from "./stormEffects.js?v=status-sprites-20260831";
+import { LIGHTNING_5X5_EFFECTS } from "./lightning5x5.js?v=status-sprites-20260831";
+import { TIER_EFFECT_DEFINITIONS } from "./tierEffects.js?v=status-sprites-20260831";
+import { STATUS_EFFECT_DEFINITIONS } from "./statusEffects.js?v=status-sprites-20260831";
 
 const EFFECT_KINDS = Object.freeze([
   "procedural",
@@ -123,7 +124,8 @@ export function createDefaultEffectRegistry() {
     ...PROFILE_EFFECT_DEFINITIONS,
     ...STORM_EFFECT_DEFINITIONS,
     ...LIGHTNING_5X5_EFFECTS,
-    ...TIER_EFFECT_DEFINITIONS
+    ...TIER_EFFECT_DEFINITIONS,
+    ...STATUS_EFFECT_DEFINITIONS
   ]);
 }
 

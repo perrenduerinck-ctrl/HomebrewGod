@@ -3,7 +3,7 @@ import {
 } from "./particles.js";
 import {
   createSpriteAnimator
-} from "./spriteAnimator.js?v=tier-sprites-20260831";
+} from "./spriteAnimator.js?v=status-sprites-20260831";
 
 function createElement(
   documentRef,

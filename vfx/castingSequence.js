@@ -1,12 +1,12 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
-} from "./fireEffects.js?v=tier-sprites-20260831";
-import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=tier-sprites-20260831";
-import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=tier-sprites-20260831";
-import { compileSpellVfxProfile } from "./profileSequence.js?v=tier-sprites-20260831";
-import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=tier-sprites-20260831";
+} from "./fireEffects.js?v=status-sprites-20260831";
+import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=status-sprites-20260831";
+import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=status-sprites-20260831";
+import { compileSpellVfxProfile } from "./profileSequence.js?v=status-sprites-20260831";
+import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=status-sprites-20260831";
 
-import { createSpellAudioPlayer, normalizeSoundCue } from "./spellAudio.js?v=tier-sprites-20260831";
+import { createSpellAudioPlayer, normalizeSoundCue } from "./spellAudio.js?v=status-sprites-20260831";
 
 export const CASTING_SEQUENCE_SCHEMA_VERSION = 1;
 export const CASTING_SEQUENCE_PHASES = Object.freeze([

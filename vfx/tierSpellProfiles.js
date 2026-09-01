@@ -36,6 +36,12 @@ function epic(spellId, label, theme, family, options = {}) {
 }
 
 export const TIER_SPELL_PROFILES = Object.freeze([
+  lesser("bane", "Bane", "necrotic", "ground-effect", {
+    targetEffect: "status-debuff-power-down"
+  }),
+  lesser("bless", "Bless", "radiant", "aura", {
+    targetEffect: "status-buff-blessing"
+  }),
   lesser("burning-hands", "Burning Hands", "fire", "cone", {
     scale: 1, projectileEffect: "profile-cone", travelDuration: 140,
     targetEffect: "tier-fire-cone", specialOptions: { impactAtPath: true }
@@ -48,7 +54,25 @@ export const TIER_SPELL_PROFILES = Object.freeze([
   lesser("magic-missile", "Magic Missile", "force", "projectile-impact", {
     projectileEffect: "tier-force-flight", scale: .6
   }),
-  lesser("sleep", "Sleep", "psychic", "ground-effect", { targetEffect: "tier-psychic-cloud" }),
+  lesser("entangle", "Entangle", "poison", "ground-effect", {
+    targetEffect: "status-debuff-entangle"
+  }),
+  lesser("mage-armor", "Mage Armor", "force", "self", {
+    targetEffect: "status-buff-armor",
+    specialOptions: { anchor: "caster" },
+    preview: { mode: "self", label: "Self (visual preview)" }
+  }),
+  lesser("shield", "Shield", "force", "self", {
+    targetEffect: "status-buff-shield",
+    specialOptions: { anchor: "caster" },
+    preview: { mode: "self", label: "Self (visual preview)" }
+  }),
+  lesser("shield-of-faith", "Shield of Faith", "radiant", "aura", {
+    targetEffect: "status-buff-shield"
+  }),
+  lesser("sleep", "Sleep", "psychic", "ground-effect", {
+    targetEffect: "status-debuff-sleep"
+  }),
   lesser("thunderwave", "Thunderwave", "thunder", "burst"),
   lesser("acid-arrow", "Acid Arrow", "acid", "projectile-impact", {
     projectileEffect: "tier-acid-flight", scale: .65
@@ -59,7 +83,14 @@ export const TIER_SPELL_PROFILES = Object.freeze([
   lesser("shatter", "Shatter", "thunder", "ground-effect"),
   lesser("moonbeam", "Moonbeam", "radiant", "ground-effect"),
   lesser("ray-of-enfeeblement", "Ray of Enfeeblement", "necrotic", "beam", {
-    projectileEffect: "tier-necrotic-beam", scale: .65
+    projectileEffect: "tier-necrotic-beam", targetEffect: "status-debuff-power-down",
+    scale: .65
+  }),
+  lesser("silence", "Silence", "psychic", "ground-effect", {
+    targetEffect: "status-debuff-silence"
+  }),
+  lesser("magic-weapon", "Magic Weapon", "radiant", "touch", {
+    targetEffect: "status-buff-radiant-weapon"
   }),
   profile("call-lightning", "Call Lightning", "lightning", "ground-effect", {
     casterEffect: "storm-cloud", specialOptions: { chargeAtTarget: true }
@@ -76,7 +107,24 @@ export const TIER_SPELL_PROFILES = Object.freeze([
   }),
   profile("blight", "Blight", "necrotic", "target-impact"),
   profile("phantasmal-killer", "Phantasmal Killer", "psychic", "target-impact"),
-  profile("confusion", "Confusion", "psychic", "ground-effect"),
+  profile("confusion", "Confusion", "psychic", "ground-effect", {
+    targetEffect: "status-debuff-confusion"
+  }),
+  profile("bestow-curse", "Bestow Curse", "necrotic", "touch", {
+    targetEffect: "status-debuff-ominous-eye"
+  }),
+  profile("enhance-ability", "Enhance Ability", "force", "aura", {
+    targetEffect: "status-buff-power-up"
+  }),
+  profile("haste", "Haste", "force", "aura", {
+    targetEffect: "status-buff-haste"
+  }),
+  profile("protection-from-energy", "Protection from Energy", "force", "aura", {
+    targetEffect: "status-buff-elemental-ward"
+  }),
+  profile("slow", "Slow", "cold", "ground-effect", {
+    targetEffect: "status-debuff-chill"
+  }),
   profile("guardian-of-faith", "Guardian of Faith", "radiant", "ground-effect", {
     targetEffect: "tier-radiant-cloud", impactDuration: 1200
   }),
@@ -105,8 +153,14 @@ export const TIER_SPELL_PROFILES = Object.freeze([
   }),
   profile("harm", "Harm", "necrotic", "target-impact"),
   profile("globe-of-invulnerability", "Globe of Invulnerability", "force", "aura", {
-    targetEffect: "tier-force-cloud", scale: 1,
+    targetEffect: "status-buff-barrier", scale: 1,
     specialOptions: { anchor: "caster", geometryScale: true, fitGeometry: true }
+  }),
+  profile("regenerate", "Regenerate", "radiant", "touch", {
+    targetEffect: "status-buff-regeneration"
+  }),
+  profile("true-seeing", "True Seeing", "psychic", "touch", {
+    targetEffect: "status-buff-truesight"
   }),
   profile("sunbeam", "Sunbeam", "radiant", "line", {
     scale: 1, projectileEffect: "tier-radiant-beam", travelDuration: 500
@@ -144,7 +198,9 @@ export const TIER_SPELL_PROFILES = Object.freeze([
     targetEffect: "epic-fire-cloud", impactDuration: 1500
   }),
   epic("maze", "Maze", "force", "utility-glyph", { targetEffect: "epic-psychic-portal" }),
-  epic("power-word-stun", "Power Word Stun", "psychic", "target-impact", { targetEffect: "epic-psychic-rune" }),
+  epic("power-word-stun", "Power Word Stun", "psychic", "target-impact", {
+    targetEffect: "status-debuff-shock"
+  }),
   epic("sunburst", "Sunburst", "radiant", "ground-effect"),
   epic("gate", "Gate", "force", "utility-glyph", { targetEffect: "epic-psychic-portal", scale: 1.2 }),
   epic("imprisonment", "Imprisonment", "force", "utility-glyph", { targetEffect: "epic-force-rune" }),

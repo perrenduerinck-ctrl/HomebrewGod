@@ -63,18 +63,18 @@ import {
 import {
   createSpellTemplateInstruction,
   formatSpellTemplateInstruction
-} from "./battleMap/spellTemplates.js?v=tier-sprites-20260831";
+} from "./battleMap/spellTemplates.js?v=status-sprites-20260831";
 import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
   createSpellPreviewSession,
   formatSpellPreviewStatus
-} from "./battleMap/spellPreview.js?v=tier-sprites-20260831";
+} from "./battleMap/spellPreview.js?v=status-sprites-20260831";
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=tier-sprites-20260831";
+} from "./vfx/effectEngine.js?v=status-sprites-20260831";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,9 +82,9 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=tier-sprites-20260831";
-import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=tier-sprites-20260831";
-import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=tier-sprites-20260831";
+} from "./vfx/castingSequence.js?v=status-sprites-20260831";
+import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=status-sprites-20260831";
+import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=status-sprites-20260831";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";

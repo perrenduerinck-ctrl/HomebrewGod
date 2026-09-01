@@ -1,7 +1,7 @@
 // Shared storm primitives. Geometry, scheduling and disposal remain owned by
 // the existing sequence/renderer/engine; these definitions only draw visuals.
-import { getTierSpriteAsset, getTierFrameWindow } from "./tierEffects.js?v=tier-sprites-20260831";
-import { normalizeSpriteOptions, getSpriteFrameStyle } from "./spriteAnimator.js?v=tier-sprites-20260831";
+import { getTierSpriteAsset, getTierFrameWindow } from "./tierEffects.js?v=status-sprites-20260831";
+import { normalizeSpriteOptions, getSpriteFrameStyle } from "./spriteAnimator.js?v=status-sprites-20260831";
 export const STORM_ASSETS = Object.freeze({
   charge: "./assets/vfx/storms/lightning-charge.png",
   impact: "./assets/vfx/storms/lightning-impact.png",

@@ -158,7 +158,8 @@ test("preview and cast stay under three effects, independent of target count, wi
       assert.equal(h.tasks.size, 0); assert.equal(h.visible.size, 0);
       assert.equal(h.system.getState().activeCount, 0); assert.equal(h.engine.getState().activeCount, 0);
       for (const e of h.requests.filter(e => e.definition.kind === "sprite")) {
-        assert.equal(e.definition.sprite.columns, getSpellSpriteTier(spell.level).columns, id);
+        assert.equal(e.definition.sprite.columns,
+          e.definition.id.startsWith("status-") ? 5 : getSpellSpriteTier(spell.level).columns, id);
         assert.ok(getCantripSpritePaths(id).includes(e.definition.sprite.src), "selected-only preload: " + id);
       }
     }

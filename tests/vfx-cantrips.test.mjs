@@ -140,6 +140,6 @@ test("tier inventory remains accurate and distinguishes dedicated sequences from
   const dedicated = DEFAULT_SPELLS.filter((spell) =>
     registry.resolve(createSpellVfxEvent({ spell }))?.match.spellIds.includes(spell.id));
   assert.equal(dedicated.filter((spell) => spell.level === 0).length, 45);
-  assert.equal(dedicated.length, 107);
-  assert.deepEqual([7,8,9].map(level => dedicated.filter(s => s.level === level).length), [9,10,9]);
+  assert.equal(dedicated.length, 122);
+  assert.deepEqual([7,8,9].map(level => dedicated.filter(s => s.level === level).length), [10,10,9]);
 });

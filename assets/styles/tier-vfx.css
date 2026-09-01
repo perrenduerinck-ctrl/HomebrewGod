@@ -72,7 +72,25 @@
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
 }
 @keyframes hg-tier-flash { 0%, 100% { opacity: 0; } 10%, 72% { opacity: 1; } }
+.hg-map-vfx-effect.hg-vfx-status-sprite {
+  width: 160px;
+  height: 160px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.hg-vfx-status-sprite .hg-vfx-sprite {
+  animation: hg-status-sprite var(--hg-vfx-duration) ease-in-out both;
+  /* Fade the dark square/card backgrounds while retaining the bright icon. */
+  mask-image: radial-gradient(circle, #000 42%, rgba(0, 0, 0, .96) 61%, transparent 76%);
+}
+@keyframes hg-status-sprite {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.82); }
+  12%, 76% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.04); }
+}
 @media (prefers-reduced-motion: reduce) {
   .hg-vfx-tier-flight .hg-vfx-sprite { animation-timing-function: steps(1, end); }
   .hg-map-vfx-effect[class*="hg-vfx-tier-"] { filter: none; }
+  .hg-vfx-status-sprite .hg-vfx-sprite { animation-timing-function: steps(1, end); }
 }

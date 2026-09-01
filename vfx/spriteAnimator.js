@@ -74,7 +74,8 @@ export function normalizeSpriteOptions(
     validBounds(sourceAtlas.columns, columns, sourceAtlas.width) &&
     validBounds(sourceAtlas.rows, rows, sourceAtlas.height)
     ? Object.freeze({ width: sourceAtlas.width, height: sourceAtlas.height,
-      columns: Object.freeze([...sourceAtlas.columns]), rows: Object.freeze([...sourceAtlas.rows]) })
+      columns: Object.freeze([...sourceAtlas.columns]), rows: Object.freeze([...sourceAtlas.rows]),
+      inset: clamp(Math.round(finiteNumber(sourceAtlas.inset) ?? 1), 0, 64) })
     : null;
 
   return Object.freeze({
@@ -134,11 +135,14 @@ export function getSpriteFrameStyle(
   );
   if (normalized.atlas) {
     const atlas = normalized.atlas;
-    // Inset a pixel into each measured gutter, preserving the complete image
-    // on disk. Contain each rectangular cell in the fixed output frame.
-    const x = atlas.columns[column] + 1, y = atlas.rows[row] + 1;
-    const width = atlas.columns[column + 1] - x - 1;
-    const height = atlas.rows[row + 1] - y - 1;
+    // Inset into each measured gutter, preserving the complete source image
+    // on disk. Status sheets use a larger inset to exclude their drawn grid.
+    const inset = Math.min(atlas.inset,
+      Math.floor((atlas.columns[column + 1] - atlas.columns[column] - 1) / 2),
+      Math.floor((atlas.rows[row + 1] - atlas.rows[row] - 1) / 2));
+    const x = atlas.columns[column] + inset, y = atlas.rows[row] + inset;
+    const width = atlas.columns[column + 1] - x - inset;
+    const height = atlas.rows[row + 1] - y - inset;
     const scale = Math.min(normalized.frameWidth / width, normalized.frameHeight / height);
     const px = n => `${Math.round(n * 10000) / 10000}px`;
     return Object.freeze({

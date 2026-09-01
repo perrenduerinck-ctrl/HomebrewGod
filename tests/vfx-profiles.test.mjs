@@ -168,7 +168,8 @@ test("utility profiles use small non-explosion compositions and geometry stays p
   for (const id of ["mage-hand", "light", "guidance", "resistance", "message", "minor-illusion",
     "mending", "mold-earth", "shape-water", "gust", "druidcraft", "prestidigitation", "thaumaturgy"]) {
     const profile = getSpellVfxProfile(id);
-    assert.ok(getProfileEffectIds(profile).every(type => type.startsWith("profile-")), id);
+    assert.ok(getProfileEffectIds(profile).every(type =>
+      type.startsWith("profile-") || type.startsWith("status-buff-")), id);
     assert.ok(profile.scale <= 1);
   }
   const source = readFileSync(new URL("../vfx/profileSequence.js", import.meta.url), "utf8");

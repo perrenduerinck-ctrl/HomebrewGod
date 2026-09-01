@@ -48,6 +48,19 @@ cleaner sheet will be needed before animating that variant. It is not used now.
 The normal and additive layers share engine caps, resize, Off/Reduced settings,
 and cleanup. No extra persistent effects or gameplay state are created.
 
+## Buff and debuff status batch
+
+The 20 unique 5×5 atlases in `status/` are the owner's unchanged 1254×1254
+uploads: 10 buffs and 10 debuffs. One second purple-eye attachment was an exact
+duplicate and is intentionally not stored twice. Runtime atlas bounds and
+insets remove the drawn card/grid borders; a radial screen-blended mask removes
+the dark cell background without rewriting the original PNGs.
+
+Status VFX are presentation only. Spell profiles can select an icon, but the
+renderer never applies a condition, changes a roll, or mutates character/combat
+state. Ambiguous artwork keeps a descriptive neutral name (`hostile-flame`,
+`ominous-eye`, `power-up`, and `power-down`) instead of inventing rules.
+
 ## Lightning Bolt 5×5 experiment
 
 `lightning/lightning-bolt-main-5x5.png` is the owner's unchanged 1254×1254 RGBA

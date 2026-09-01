@@ -2,7 +2,7 @@
 // not another animation engine. Fire Bolt/Fireball and the first five sprite
 // cantrips remain higher-priority bespoke overrides in castingSequence.js.
 import { LIGHTNING_BOLT_SOUND, normalizeSoundCue } from "./spellAudio.js?v=lightning-sound-20260830";
-import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=tier-sprites-20260831";
+import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=status-sprites-20260831";
 export const SPELL_VFX_FAMILIES = Object.freeze([
   "projectile-impact", "target-impact", "beam", "line", "cone", "burst",
   "aura", "self", "touch", "weapon-strike", "ground-effect", "utility-glyph",
@@ -116,12 +116,12 @@ export const SPELL_VFX_PROFILES = Object.freeze([
   p("thunderclap", "Thunderclap", "burst", "profile-ripple", { damageType: "thunder", aftershockCount: 2, specialOptions: { anchor: "caster", geometryScale: true } }),
   p("word-of-radiance", "Word of Radiance", "burst", "profile-rays", { damageType: "radiant", specialOptions: { anchor: "caster", geometryScale: true }, aftermathEffect: "profile-sparkles" }),
   p("magic-stone", "Magic Stone", "touch", "profile-stones", { palette: "earth", aftermathEffect: "profile-sparkles", specialOptions: { particles: 3 } }),
-  p("blade-ward", "Blade Ward", "self", "profile-glyph", { palette: "arcane", preview: self, specialOptions: { variant: "shield", particles: 3 } }),
+  p("blade-ward", "Blade Ward", "self", "status-buff-armor", { palette: "arcane", preview: self, specialOptions: { variant: "shield", particles: 0 } }),
   p("dancing-lights", "Dancing Lights", "utility-glyph", "profile-lights", { palette: "radiant", impactDuration: 1500, specialOptions: { particles: 0 } }),
   p("druidcraft", "Druidcraft", "utility-glyph", "profile-leaves", { palette: "nature", aftermathEffect: "profile-sparkles", scale: 0.75 }),
   p("encode-thoughts", "Encode Thoughts", "self", "profile-ripple", { palette: "psychic", preview: self, specialOptions: { variant: "thought", particles: 4 } }),
   p("friends", "Friends", "self", "profile-glyph", { palette: "rose", preview: self, specialOptions: { variant: "heart", particles: 3 }, scale: 0.75 }),
-  p("guidance", "Guidance", "aura", "profile-glyph", { palette: "radiant", specialOptions: { variant: "star", particles: 4 }, scale: 0.8 }),
+  p("guidance", "Guidance", "aura", "status-buff-blessing", { palette: "radiant", specialOptions: { variant: "star", particles: 0 }, scale: 0.8 }),
   p("gust", "Gust", "utility-ripple", "profile-wind", { palette: "wind", specialOptions: { particles: 4 }, scale: 0.85 }),
   p("light", "Light", "touch", "profile-glow", { palette: "radiant", impactDuration: 1600, scale: 0.65, specialOptions: { particles: 3 } }),
   p("mage-hand", "Mage Hand", "utility-hand", "profile-hand", { palette: "arcane", impactDuration: 1400, specialOptions: { particles: 3 }, assetTodo: "Optional spectral hand sprite; vector manifestation is intentional." }),
@@ -130,12 +130,12 @@ export const SPELL_VFX_PROFILES = Object.freeze([
   p("minor-illusion", "Minor Illusion", "utility-glyph", "profile-shimmer", { palette: "arcane", impactDuration: 1400, specialOptions: { particles: 3 } }),
   p("mold-earth", "Mold Earth", "ground-effect", "profile-ground", { palette: "earth", aftermathEffect: "profile-mist", scale: 0.9 }),
   p("prestidigitation", "Prestidigitation", "utility-glyph", "profile-glyph", { palette: "arcane", specialOptions: { variant: "star", particles: 8 }, aftermathEffect: "profile-sparkles", scale: 0.75 }),
-  p("resistance", "Resistance", "aura", "profile-glyph", { palette: "radiant", specialOptions: { variant: "shield", particles: 4 }, scale: 0.85 }),
+  p("resistance", "Resistance", "aura", "status-buff-elemental-ward", { palette: "radiant", specialOptions: { variant: "shield", particles: 0 }, scale: 0.85 }),
   p("shape-water", "Shape Water", "utility-ripple", "profile-ripple", { palette: "water", aftershockCount: 1, specialOptions: { particles: 4 } }),
   p("shillelagh", "Shillelagh", "touch", "profile-glyph", { palette: "nature", specialOptions: { variant: "staff", particles: 3 }, aftermathEffect: "profile-leaves" }),
   p("spare-the-dying", "Spare the Dying", "touch", "profile-glyph", { palette: "healing", specialOptions: { variant: "heart", particles: 2 }, aftermathEffect: "profile-glow", scale: 0.65 }),
   p("thaumaturgy", "Thaumaturgy", "utility-glyph", "profile-glyph", { palette: "radiant", specialOptions: { variant: "rune", particles: 5 }, aftermathEffect: "profile-ripple" }),
-  p("true-strike", "True Strike", "utility-glyph", "profile-glyph", { palette: "arcane", specialOptions: { variant: "target", particles: 3 }, scale: 0.8 })
+  p("true-strike", "True Strike", "utility-glyph", "status-buff-power-up", { palette: "arcane", specialOptions: { variant: "target", particles: 0 }, scale: 0.8 })
 ]);
 
 const profiles = new Map(SPELL_VFX_PROFILES.map((profile) => [profile.spellId, profile]));
