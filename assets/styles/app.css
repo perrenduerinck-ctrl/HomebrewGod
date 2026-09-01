@@ -622,13 +622,11 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-map-vfx-layer,
 .hg-map-vfx-light-layer {
   position: absolute;
+  z-index: 50;
   overflow: hidden;
   pointer-events: none;
   contain: none;
 }
-
-.hg-map-vfx-layer,
-.hg-map-vfx-light-layer { z-index: auto; }
 
 .hg-map-vfx-layer,
 .hg-map-vfx-layer *,
@@ -696,7 +694,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   font: 10px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-.hg-map-vfx-light-layer > .hg-map-vfx-effect { mix-blend-mode: screen; }
+.hg-map-vfx-light-layer { mix-blend-mode: screen; }
 
 .hg-vfx-ground-shadow {
   position: absolute;
