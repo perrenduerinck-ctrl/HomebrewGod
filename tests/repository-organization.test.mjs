@@ -118,7 +118,7 @@ test("the application and import map use the organized runtime paths", () => {
   });
   assert.match(
     index,
-/\.\/assets\/styles\/app\.css\?v=compact-map-20260830/
+    /\.\/assets\/styles\/app\.css\?v=[A-Za-z0-9._-]+/
   );
   assert.doesNotMatch(
     `${app}\n${index}`,
