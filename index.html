@@ -9,8 +9,8 @@
 
   <title>Homebrew God</title>
 
-<link rel="stylesheet" href="./assets/styles/app.css?v=compact-map-20260830">
-<link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=status-sprites-20260831">
+<link rel="stylesheet" href="./assets/styles/app.css?v=2d5-animation-20260901">
+<link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-animation-20260901">
 </head>
 
 <body>
@@ -474,6 +474,20 @@
         <input id="battleVfxSoundToggle" type="checkbox" checked>
         <span>Spell sound</span>
       </label>
+
+      <fieldset id="battleVfxDebugPanel" class="battleVfxDebugPanel">
+        <legend>2.5D Debug</legend>
+        <div class="battleVfxDebugOptions">
+          <label><input id="battleVfxDebugEnabledToggle" type="checkbox"> Live readout</label>
+          <label><input id="battleVfxDebugShadowToggle" type="checkbox" checked> Shadows</label>
+          <label><input id="battleVfxDebugZToggle" type="checkbox" checked> Z axis</label>
+          <label><input id="battleVfxDebugScaleToggle" type="checkbox" checked> Height scale</label>
+          <label><input id="battleVfxDebugSpriteToggle" type="checkbox" checked> Sprite animation</label>
+          <label><input id="battleVfxDebugLayerToggle" type="checkbox"> Layers</label>
+          <label><input id="battleVfxDebugLabelToggle" type="checkbox"> Labels</label>
+        </div>
+        <pre id="battleVfxDebugReadout">No active effects.</pre>
+      </fieldset>
 
       <label class="battleScaleControl" for="mapFeetPerSquareInput">
         <span>Scale</span>
@@ -1001,7 +1015,7 @@
     {
       "imports": {
         "./battleMap/templateGeometry.js": "./battleMap/templateGeometry.js?v=unified-preview-20260829",
-        "./tokens/index.js": "./tokens/index.js?v=priority10-20260822",
+        "./tokens/index.js": "./tokens/index.js?v=2d5-animation-20260901",
         "./shared/realtimeListeners.js": "./shared/realtimeListeners.js?v=priority10-20260822",
         "./monsters/creator.js": "./monsters/creator.js?v=priority10-20260822",
         "./shared/securityPersistence.js": "./shared/securityPersistence.js?v=priority10-20260822",
@@ -1039,7 +1053,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=status-sprites-20260831"
+    src="./app.js?v=2d5-animation-20260901"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

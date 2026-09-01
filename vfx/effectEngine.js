@@ -1,13 +1,21 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=status-sprites-20260831";
+} from "./effectRegistry.js?v=2d5-animation-20260901";
 import {
   createEffectRenderer
-} from "./effectRenderer.js?v=status-sprites-20260831";
+} from "./effectRenderer.js?v=2d5-animation-20260901";
 import {
   createPersistentEffectStore,
   MAX_PERSISTENT_LIFETIME_MS
 } from "./persistentEffects.js";
+import { elevationToVisualPixels } from "../battleMap/elevation.js?v=2d5-animation-20260901";
+import { applyEffectPreset } from "./effectPresets.js";
+import { normalizeEffectLayer } from "./effectLayers.js";
+import {
+  normalizeMotion25d,
+  resolveMotionDuration
+} from "./motion25d.js";
+import { normalizeEffectTimeline } from "./effectTimeline.js";
 
 export const EFFECTS_MODES = Object.freeze([
   "full",
@@ -63,15 +71,51 @@ export function normalizeEffectRequest(
   } = {}
 ) {
   const effectsMode = normalizeEffectsMode(mode);
+  const source = applyEffectPreset({
+    preset: request.preset ?? definition.preset,
+    ...(definition.effectDefaults || {}),
+    ...request
+  });
+  const position = normalizePoint(source.position || source.targetPoint);
+  const startPosition = normalizePoint(source.startPosition || source.startPoint);
+  const endPosition = normalizePoint(source.endPosition || source.endPoint);
+  const elevation = clamp(Math.round(
+    finiteNumber(source.elevation ?? source.targetElevation) ?? 0
+  ), -1000, 1000);
+  const startElevation = clamp(Math.round(
+    finiteNumber(source.startElevation) ?? elevation
+  ), -1000, 1000);
+  const endElevation = clamp(Math.round(
+    finiteNumber(source.endElevation) ?? elevation
+  ), -1000, 1000);
+  const motion = normalizeMotion25d(
+    source.motion ?? definition.motion,
+    {
+      type:
+        startPosition &&
+        endPosition &&
+        (startElevation !== 0 || endElevation !== 0)
+          ? "straight"
+          : "stationary",
+      startZ: elevationToVisualPixels(startElevation),
+      endZ: elevationToVisualPixels(endElevation)
+    }
+  );
   const duration = clamp(
-    finiteNumber(request.duration) ?? 900,
+    resolveMotionDuration({
+      duration: source.duration,
+      speed: motion.speed,
+      start: startPosition,
+      end: endPosition,
+      fallback: 900
+    }),
     0,
     effectsMode === "reduced"
       ? 1000
       : MAX_EFFECT_DURATION_MS
   );
   const delay = clamp(
-    finiteNumber(request.delay) ?? 0,
+    finiteNumber(source.delay) ?? 0,
     0,
     effectsMode === "reduced"
       ? 100
@@ -79,7 +123,7 @@ export function normalizeEffectRequest(
   );
   const rawIntensity = clamp(
     Math.round(
-      finiteNumber(request.intensity) ?? 1
+      finiteNumber(source.intensity) ?? 1
     ),
     1,
     5
@@ -89,70 +133,71 @@ export function normalizeEffectRequest(
     id: String(id || request.id || "").trim(),
     type: definition.id,
     definition,
-    position: normalizePoint(
-      request.position || request.targetPoint
-    ),
-    startPosition: normalizePoint(
-      request.startPosition || request.startPoint
-    ),
-    endPosition: normalizePoint(
-      request.endPosition || request.endPoint
-    ),
+    position,
+    startPosition,
+    endPosition,
     scale: clamp(
-      finiteNumber(request.scale) ?? 1,
+      finiteNumber(source.scale) ?? 1,
       0.05,
       20
     ),
     rotation: clamp(
-      finiteNumber(request.rotation) ?? 0,
+      finiteNumber(source.rotation) ?? 0,
       -3600,
       3600
     ),
     opacity: clamp(
-      finiteNumber(request.opacity) ?? 1,
+      finiteNumber(source.opacity) ?? 1,
       0,
       1
     ),
     duration,
     delay,
-    elevation: clamp(
-      Math.round(
-        finiteNumber(
-          request.elevation ?? request.targetElevation
-        ) ?? 0
-      ),
-      -1000,
-      1000
-    ),
-    startElevation: clamp(
-      Math.round(
-        finiteNumber(request.startElevation) ?? 0
-      ),
-      -1000,
-      1000
-    ),
-    endElevation: clamp(
-      Math.round(
-        finiteNumber(request.endElevation) ?? 0
-      ),
-      -1000,
-      1000
-    ),
+    elevation,
+    startElevation,
+    endElevation,
     intensity: effectsMode === "reduced"
       ? Math.min(2, rawIntensity)
       : rawIntensity,
     effectsMode,
-    particles: request.particles || null,
-    sprite: request.sprite || null,
-    persistent: request.persistent === true,
+    particles: source.particles || null,
+    sprite: source.sprite || null,
+    layer: normalizeEffectLayer(source.layer ?? definition.layer,
+      source.persistent === true ? "ground" : "airborne"),
+    motion,
+    shadow: source.shadow === false
+      ? null
+      : Object.freeze({
+          ...(source.shadow === true ? {} : (source.shadow || {})),
+          enabled: source.shadow === true || source.shadow?.enabled === true
+        }),
+    heightScaling: source.heightScaling === false
+      ? null
+      : Object.freeze({
+          ...(source.heightScaling === true ? {} : (source.heightScaling || {})),
+          enabled: source.heightScaling === true || source.heightScaling?.enabled === true
+        }),
+    attachment: source.attachment && typeof source.attachment === "object"
+      ? Object.freeze({
+          tokenId: String(source.attachment.tokenId || "").trim(),
+          position: ["under", "centered", "above", "orbit", "overhead"]
+            .includes(String(source.attachment.position || "").toLowerCase())
+              ? String(source.attachment.position).toLowerCase()
+              : "centered",
+          radius: clamp(finiteNumber(source.attachment.radius) ?? 36, 0, 1000),
+          cycles: clamp(finiteNumber(source.attachment.cycles) ?? 1, -20, 20)
+        })
+      : null,
+    persistent: source.persistent === true,
     persistentLifetime: clamp(
-      finiteNumber(request.persistentLifetime) ?? duration,
+      finiteNumber(source.persistentLifetime) ?? duration,
       1,
       MAX_PERSISTENT_LIFETIME_MS
     ),
-    metadata: Object.freeze({
-      ...(request.metadata || {})
-    })
+    fadeOut: source.fadeOut !== false,
+    attachToGrid: source.attachToGrid === true,
+    timeline: normalizeEffectTimeline(source.timeline || source.events, duration),
+    metadata: Object.freeze({ ...(source.metadata || {}) })
   });
 }
 
@@ -250,6 +295,14 @@ export function createEffectEngine({
         // The record is still removed from the engine below.
       }
     }
+    record.eventTimers.forEach((handle) => {
+      try {
+        scheduler.clearTimeout(handle);
+      } catch {
+        // Continue removing the visual and record.
+      }
+    });
+    record.eventTimers.clear();
     try {
       renderer.remove(record.effect.id);
     } catch {
@@ -289,6 +342,53 @@ export function createEffectEngine({
         // The effect can still render as a normal timed visual.
       }
     }
+    record.effect.timeline.forEach((event) => {
+      let handle = null;
+      const runEvent = () => {
+        if (handle !== null) record.eventTimers.delete(handle);
+        if (!records.has(record.effect.id)) return;
+        if (event.type === "layer" && event.layer) {
+          try {
+            renderer.update?.(record.effect.id, { layer: event.layer });
+          } catch {
+            // Layer changes are optional presentation events.
+          }
+        }
+        if (event.type === "spawn" && event.effect) {
+          const anchor = record.effect.endPosition ||
+            record.effect.position || record.effect.startPosition;
+          play({
+            position: anchor,
+            elevation: record.effect.endElevation ?? record.effect.elevation,
+            ...event.effect,
+            metadata: {
+              ...record.effect.metadata,
+              ...(event.effect.metadata || {}),
+              parentEffectId: record.effect.id,
+              timelineEventId: event.id
+            }
+          });
+        }
+        try {
+          renderer.notifyTimelineEvent?.(record.effect.id, event);
+        } catch {
+          // Debug adapters cannot interrupt cleanup.
+        }
+      };
+      if (event.atMilliseconds === 0) {
+        runEvent();
+      } else {
+        try {
+          handle = scheduler.setTimeout(runEvent, event.atMilliseconds);
+          record.eventTimers.add(handle);
+        } catch {
+          // A missed presentation event does not invalidate the parent effect.
+        }
+      }
+    });
+    // A zero-time follow-up may evict this parent at the active-effect cap.
+    // Do not leave an unowned cleanup timer behind in that case.
+    if (!records.has(record.effect.id)) return;
     try {
       record.cleanupTimer = scheduler.setTimeout(
         () => cancel(record.effect.id, "completed"),
@@ -358,7 +458,8 @@ export function createEffectEngine({
         : "starting",
       createdAt: scheduler.now(),
       delayTimer: null,
-      cleanupTimer: null
+      cleanupTimer: null,
+      eventTimers: new Set()
     };
     records.set(id, record);
 
@@ -433,6 +534,7 @@ export function createEffectEngine({
     connect,
     destroy,
     getOverlayElement: () => renderer.getOverlayElement?.() || null,
+    getDebugState: () => renderer.getDebugState?.() || null,
     getState,
     play,
     refresh: () => {
@@ -444,6 +546,7 @@ export function createEffectEngine({
       }
     },
     registry,
+    setDebugOptions: (options) => renderer.setDebugOptions?.(options) || null,
     setMode
   });
 }
@@ -452,13 +555,15 @@ export function createBattleMapEffectEngine({
   surface,
   getTargetElement,
   getScale,
+  getTokenElement,
   ...options
 } = {}) {
   const renderer = options.renderer ||
     createEffectRenderer({
       surface,
       getTargetElement,
-      getScale
+      getScale,
+      getTokenElement
     });
   return createEffectEngine({
     ...options,

@@ -33,6 +33,12 @@
   transform-origin: 25% 75%;
   animation: hg-tier-flight var(--hg-vfx-duration) linear both;
 }
+.hg-vfx-tier-flight.uses-2d5-motion .hg-vfx-sprite {
+  left: 50%;
+  top: 50%;
+  animation: none;
+  transform: translate(-25%, -75%) rotate(var(--hg-tier-art-angle)) scale(.5);
+}
 .hg-vfx-tier-beam.has-path { height: 160px; }
 .hg-vfx-tier-beam .hg-tier-stage {
   position: absolute; left: 50%; top: 50%; width: 160px; height: 160px;

@@ -1,6 +1,6 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
-} from "./fireEffects.js?v=status-sprites-20260831";
+} from "./fireEffects.js?v=2d5-animation-20260901";
 import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=status-sprites-20260831";
 import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=status-sprites-20260831";
 import { compileSpellVfxProfile } from "./profileSequence.js?v=status-sprites-20260831";
@@ -89,6 +89,14 @@ function freezeOptions(value) {
   return Object.freeze({ ...value });
 }
 
+function freezeList(value, maximum = 32) {
+  return Object.freeze(
+    (Array.isArray(value) ? value : [])
+      .slice(0, maximum)
+      .map((item) => Object.freeze({ ...(item || {}) }))
+  );
+}
+
 function normalizeSequenceEffect(effect = {}) {
   const type = cleanId(
     effect.type || effect.effectType || "procedural-pulse"
@@ -97,6 +105,7 @@ function normalizeSequenceEffect(effect = {}) {
 
   return Object.freeze({
     type,
+    preset: cleanId(effect.preset),
     anchor: CASTING_SEQUENCE_ANCHORS.includes(requestedAnchor)
       ? requestedAnchor
       : "target",
@@ -126,7 +135,17 @@ function normalizeSequenceEffect(effect = {}) {
       : Math.round(boundedNumber(effect.intensity, 1, 1, 5)),
     particles: freezeOptions(effect.particles),
     sprite: freezeOptions(effect.sprite),
+    layer: cleanId(effect.layer),
+    motion: freezeOptions(effect.motion),
+    shadow: effect.shadow === false ? false : freezeOptions(effect.shadow),
+    heightScaling: effect.heightScaling === false
+      ? false
+      : freezeOptions(effect.heightScaling),
+    attachment: freezeOptions(effect.attachment),
+    timeline: freezeList(effect.timeline || effect.events),
     persistent: effect.persistent === true,
+    fadeOut: effect.fadeOut !== false,
+    attachToGrid: effect.attachToGrid === true,
     fullOnly: effect.fullOnly === true,
     persistentLifetime: finiteNumber(effect.persistentLifetime) === null
       ? null
@@ -571,7 +590,16 @@ function makeEffectRequest({
     intensity,
     particles: effect.particles,
     sprite: effect.sprite,
+    preset: effect.preset,
+    layer: effect.layer,
+    motion: effect.motion,
+    shadow: effect.shadow,
+    heightScaling: effect.heightScaling,
+    attachment: effect.attachment,
+    timeline: effect.timeline,
     persistent: effect.persistent,
+    fadeOut: effect.fadeOut,
+    attachToGrid: effect.attachToGrid,
     persistentLifetime: effect.persistentLifetime ?? duration,
     metadata: {
       ...effect.metadata,

@@ -141,7 +141,7 @@ test("every mapped spell keeps its real rules and has a working DM-only preview 
   }
 });
 
-test("preview and cast stay under three effects, independent of target count, with complete cleanup", () => {
+test("preview and cast stay bounded, independent of target count, with complete cleanup", () => {
   for (const id of ids) for (const preview of [false, true]) {
     const counts = {};
     for (const mode of ["full", "reduced", "off"]) {
@@ -152,8 +152,10 @@ test("preview and cast stay under three effects, independent of target count, wi
       const before = JSON.stringify(event);
       assert.equal(h.system.play(event).ok, true, id); h.finish();
       counts[mode] = h.requests.length;
-      assert.ok(h.requests.length <= 3, id);
-      assert.ok(h.requests.every(e => !e.affectedTokenId && !e.persistent && e.particles?.count === 0), id);
+      assert.ok(h.requests.length <= (id === "fireball" ? 4 : 3), id);
+      assert.ok(h.requests.every(e => !e.affectedTokenId && !e.persistent &&
+        (e.particles?.count === 0 || e.metadata?.role === "fireball-smoke" &&
+          e.particles?.count <= 8)), id);
       assert.equal(JSON.stringify(event), before);
       assert.equal(h.tasks.size, 0); assert.equal(h.visible.size, 0);
       assert.equal(h.system.getState().activeCount, 0); assert.equal(h.engine.getState().activeCount, 0);

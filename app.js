@@ -36,7 +36,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=stage8-20260826";
+import { createTokenSystem } from "./tokens/index.js?v=2d5-animation-20260901";
 import {
   createMapRuler,
   formatMapDistance,
@@ -47,7 +47,7 @@ import {
   formatElevation,
   measureSpatialDistance,
   normalizeElevation
-} from "./battleMap/elevation.js?v=stage8-20260826";
+} from "./battleMap/elevation.js?v=2d5-animation-20260901";
 import {
   getDefaultTemplateOptions,
   normalizeTemplateDistance,
@@ -74,7 +74,7 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=status-sprites-20260831";
+} from "./vfx/effectEngine.js?v=2d5-animation-20260901";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,7 +82,7 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=status-sprites-20260831";
+} from "./vfx/castingSequence.js?v=2d5-animation-20260901";
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=status-sprites-20260831";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=status-sprites-20260831";
 import {
@@ -234,6 +234,15 @@ const E = {
   battleVfxModeSelect:
     $("battleVfxModeSelect"),
   battleVfxSoundToggle: $("battleVfxSoundToggle"),
+  battleVfxDebugPanel: $("battleVfxDebugPanel"),
+  battleVfxDebugEnabledToggle: $("battleVfxDebugEnabledToggle"),
+  battleVfxDebugShadowToggle: $("battleVfxDebugShadowToggle"),
+  battleVfxDebugZToggle: $("battleVfxDebugZToggle"),
+  battleVfxDebugScaleToggle: $("battleVfxDebugScaleToggle"),
+  battleVfxDebugSpriteToggle: $("battleVfxDebugSpriteToggle"),
+  battleVfxDebugLayerToggle: $("battleVfxDebugLayerToggle"),
+  battleVfxDebugLabelToggle: $("battleVfxDebugLabelToggle"),
+  battleVfxDebugReadout: $("battleVfxDebugReadout"),
   spellTemplateSelect:
     $("spellTemplateSelect"),
   loadSpellTemplateButton:
@@ -4699,6 +4708,9 @@ function initializeBattleMapVfx() {
     surface: E.battleMapSurface,
     getTargetElement: getActiveRulerTarget,
     getScale: () => battleZoom,
+    getTokenElement: (tokenId) => E.battleMapSurface.querySelector(
+      `.hg-token[data-token-id="${CSS.escape(String(tokenId || ""))}"]`
+    ),
     mode
   });
   battleMapVfxSequences =
@@ -4708,6 +4720,55 @@ function initializeBattleMapVfx() {
   E.battleVfxSoundToggle?.addEventListener("change", () => {
     battleMapVfxSequences?.setSoundEnabled(E.battleVfxSoundToggle.checked);
   });
+
+  let vfxDebugFrame = null;
+  const debugInputs = [
+    E.battleVfxDebugEnabledToggle,
+    E.battleVfxDebugShadowToggle,
+    E.battleVfxDebugZToggle,
+    E.battleVfxDebugScaleToggle,
+    E.battleVfxDebugSpriteToggle,
+    E.battleVfxDebugLayerToggle,
+    E.battleVfxDebugLabelToggle
+  ].filter(Boolean);
+  function getVfxDebugOptions() {
+    return {
+      enabled: E.battleVfxDebugEnabledToggle?.checked === true,
+      shadows: E.battleVfxDebugShadowToggle?.checked !== false,
+      zAxis: E.battleVfxDebugZToggle?.checked !== false,
+      scaling: E.battleVfxDebugScaleToggle?.checked !== false,
+      sprites: E.battleVfxDebugSpriteToggle?.checked !== false,
+      layers: E.battleVfxDebugLayerToggle?.checked === true,
+      labels: E.battleVfxDebugLabelToggle?.checked === true
+    };
+  }
+  function renderVfxDebugReadout() {
+    vfxDebugFrame = null;
+    if (E.battleVfxDebugEnabledToggle?.checked !== true) return;
+    const state = battleMapVfx?.getDebugState();
+    const effects = state?.effects || [];
+    if (E.battleVfxDebugReadout) {
+      E.battleVfxDebugReadout.textContent = effects.length
+        ? effects.map((effect) => [
+            effect.id,
+            `X ${effect.x.toFixed(1)} · Y ${effect.y.toFixed(1)} · Z ${effect.z.toFixed(1)}`,
+            `${Math.round(effect.progress * 100)}% · frame ${effect.frame ?? "-"} · ${effect.layer}`
+          ].join("\n")).join("\n\n")
+        : "No active effects.";
+    }
+    vfxDebugFrame = requestAnimationFrame(renderVfxDebugReadout);
+  }
+  function syncVfxDebug() {
+    battleMapVfx?.setDebugOptions(getVfxDebugOptions());
+    if (E.battleVfxDebugEnabledToggle?.checked === true && vfxDebugFrame === null) {
+      vfxDebugFrame = requestAnimationFrame(renderVfxDebugReadout);
+    } else if (E.battleVfxDebugEnabledToggle?.checked !== true && vfxDebugFrame !== null) {
+      cancelAnimationFrame(vfxDebugFrame);
+      vfxDebugFrame = null;
+    }
+  }
+  debugInputs.forEach((input) => input.addEventListener("change", syncVfxDebug));
+  syncVfxDebug();
 
   if (E.battleVfxModeSelect) {
     E.battleVfxModeSelect.value = mode;
@@ -6769,6 +6830,10 @@ window.addEventListener("pagehide", function () {
   tokenSystem?.stopTokenListener?.();
   battleMapVfxSequences?.destroy();
   battleMapVfxSequences = null;
+  if (E.battleVfxDebugEnabledToggle) {
+    E.battleVfxDebugEnabledToggle.checked = false;
+    E.battleVfxDebugEnabledToggle.dispatchEvent(new Event("change"));
+  }
   battleMapVfx?.destroy();
   removeActivePlayerSession();
 });
@@ -7034,7 +7099,16 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             particles:
               options.particles || null,
             sprite:
-              options.sprite || null
+              options.sprite || null,
+            preset: options.preset || "",
+            layer: options.layer || "",
+            motion: options.motion || null,
+            shadow: options.shadow ?? false,
+            heightScaling: options.heightScaling ?? false,
+            attachment: options.attachment || null,
+            timeline: options.timeline || null,
+            persistent: options.persistent === true,
+            persistentLifetime: options.persistentLifetime
           }) || {
             ok: false,
             skipped: true,
@@ -7052,6 +7126,11 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       getVfxState:
         function () {
           return battleMapVfx?.getState() || null;
+        },
+
+      getVfxDebugState:
+        function () {
+          return battleMapVfx?.getDebugState() || null;
         },
 
       getVfxSequenceState:

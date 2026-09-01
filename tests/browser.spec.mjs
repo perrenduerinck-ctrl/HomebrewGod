@@ -2963,7 +2963,7 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
           columns:Number(node.dataset.spriteColumns), rows:Number(node.dataset.spriteRows),
           frameCount:Number(node.dataset.spriteFrames),
           path:node.classList.contains("has-path"), size:sprite?.style.backgroundSize,
-          image:sprite?.style.backgroundImage, blend:getComputedStyle(node.parentElement).mixBlendMode,
+          image:sprite?.style.backgroundImage, blend:getComputedStyle(node).mixBlendMode,
           angle:parseFloat(node.style.getPropertyValue("--hg-vfx-path-rotation")),
           artAngle:node.style.getPropertyValue("--hg-tier-art-angle"),
           x:parseFloat(node.style.left), y:parseFloat(node.style.top),
@@ -2977,7 +2977,7 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
   });
   const rendered = () => page.evaluate(() => window.__TIER_RENDERED__);
   for (const [spell, role, grid, full, reduced] of [
-    ["fireball", "tier-fire-burst", 5, 3, 2],
+    ["fireball", "tier-fire-burst", 5, 4, 2],
     ["cloudkill", "tier-poison-cloud", 5, 2, 1],
     ["stinking-cloud", "tier-poison-comet-cloud", 5, 2, 1],
     ["cone-of-cold", "tier-cold-cone", 5, 3, 2],
@@ -3011,7 +3011,8 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
       }
       const effects = await rendered();
       expect(effects.length, spell + " " + mode).toBe(count);
-      expect(effects.every(e => e.particles === 0)).toBe(true);
+      expect(effects.every(e => e.particles === 0 ||
+        e.type === "fire-smoke" && e.particles <= 24)).toBe(true);
       if (count) {
         const effect = effects.find(e => e.type === role);
         if (grid < 6) expect(effect.size).toBe(`${160*grid}px ${160*grid}px`);
@@ -3042,6 +3043,54 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
     }
   }
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
+test("Fireball uses fake Z, airborne depth, a ground shadow and live debug state", async ({ page }) => {
+  const ui = await openDmSpellPreview(page);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+  await useMapTool(page, "#battleVfxDebugEnabledToggle", "check");
+  await ui.select("fireball");
+  await ui.point(240, 220);
+  await ui.point(450, 220);
+  await ui.play.click();
+
+  const flight = page.locator('[data-effect-type="tier-fire-flight"]');
+  await expect(flight).toBeVisible();
+  await page.waitForFunction(() => {
+    const effect = document.querySelector('[data-effect-type="tier-fire-flight"]');
+    return Number(effect?.dataset.vfxZ || 0) > 24;
+  });
+
+  const snapshot = await flight.evaluate((effect) => {
+    const shadow = document.querySelector(
+      `[data-parent-effect-id="${CSS.escape(effect.dataset.effectId)}"]`
+    );
+    return {
+      worldY: Number(effect.dataset.vfxY),
+      z: Number(effect.dataset.vfxZ),
+      screenY: Number.parseFloat(effect.style.top),
+      scale: Number.parseFloat(effect.style.getPropertyValue("--hg-vfx-scale")),
+      layer: effect.dataset.effectLayer,
+      shadowY: Number.parseFloat(shadow?.style.top || "NaN"),
+      shadowOpacity: Number.parseFloat(shadow?.style.opacity || "NaN")
+    };
+  });
+  expect(snapshot.layer).toBe("airborne");
+  expect(snapshot.z).toBeGreaterThan(24);
+  expect(snapshot.screenY).toBeCloseTo(snapshot.worldY - snapshot.z, 1);
+  expect(snapshot.scale).toBeGreaterThan(1);
+  expect(snapshot.shadowY).toBeCloseTo(snapshot.worldY, 1);
+  expect(snapshot.shadowOpacity).toBeGreaterThan(0);
+  expect(snapshot.shadowOpacity).toBeLessThan(.58);
+
+  const debug = await page.evaluate(() =>
+    window.__HOMEBREW_GOD_RELEASE_TEST__.getVfxDebugState()
+  );
+  expect(debug.options.enabled).toBe(true);
+  expect(debug.effects.some((effect) =>
+    effect.layer === "airborne" && effect.z > 24
+  )).toBe(true);
+  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
 });
 
 test("compact map menus preserve viewport space, keyboard access and locked previews", async ({ page }) => {

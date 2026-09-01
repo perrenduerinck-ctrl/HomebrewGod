@@ -622,11 +622,13 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-map-vfx-layer,
 .hg-map-vfx-light-layer {
   position: absolute;
-  z-index: 50;
   overflow: hidden;
   pointer-events: none;
-  contain: layout style paint;
+  contain: none;
 }
+
+.hg-map-vfx-layer,
+.hg-map-vfx-light-layer { z-index: auto; }
 
 .hg-map-vfx-layer,
 .hg-map-vfx-layer *,
@@ -650,7 +652,95 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   flex: none;
 }
 
-.hg-map-vfx-light-layer { mix-blend-mode: screen; }
+.battleVfxDebugPanel {
+  align-self: center;
+  display: grid;
+  gap: 6px;
+  min-width: 260px;
+  padding: 6px 8px 8px;
+  border: 1px solid rgba(112, 151, 210, .3);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.battleVfxDebugPanel > legend {
+  padding: 0 4px;
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.battleVfxDebugOptions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+
+.battleVfxDebugOptions label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+#battleVfxDebugReadout {
+  width: 100%;
+  max-height: 190px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(112, 151, 210, .4);
+  border-radius: 6px;
+  background: rgba(5, 9, 20, .96);
+  color: #dffbff;
+  font: 10px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.hg-map-vfx-light-layer > .hg-map-vfx-effect { mix-blend-mode: screen; }
+
+.hg-vfx-ground-shadow {
+  position: absolute;
+  width: 58px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, .72), rgba(0, 0, 0, 0) 72%);
+  filter: blur(3px);
+  transform-origin: center;
+  will-change: left, top, transform, opacity;
+}
+
+.hg-map-vfx-layer.show-vfx-layers,
+.hg-map-vfx-light-layer.show-vfx-layers {
+  outline: 2px dashed rgba(44, 220, 255, .55);
+  outline-offset: -2px;
+}
+
+.hg-map-vfx-layer.show-vfx-layers .hg-map-vfx-effect[data-effect-layer="ground"] {
+  outline: 1px solid #6bd36b88;
+}
+.hg-map-vfx-layer.show-vfx-layers .hg-map-vfx-effect[data-effect-layer="airborne"],
+.hg-map-vfx-light-layer.show-vfx-layers .hg-map-vfx-effect[data-effect-layer="airborne"] {
+  outline: 1px solid #54b7ff99;
+}
+.hg-map-vfx-layer.show-vfx-layers .hg-map-vfx-effect[data-effect-layer="overhead"],
+.hg-map-vfx-light-layer.show-vfx-layers .hg-map-vfx-effect[data-effect-layer="overhead"] {
+  outline: 1px solid #df79ff99;
+}
+
+.hg-vfx-debug-label {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  min-width: 150px;
+  padding: 4px 6px;
+  border: 1px solid rgba(94, 222, 255, .7);
+  border-radius: 5px;
+  background: rgba(2, 8, 18, .88);
+  color: #dffbff;
+  font: 10px/1.25 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre;
+  transform: translateX(-50%);
+}
 
 /* Storm profiles: additive sprites, branching arcs and area-local hail. */
 .hg-map-vfx-effect.hg-vfx-storm-lightning-sprite { width: 160px; height: 160px; }
@@ -1678,6 +1768,27 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   }
 }
 
+/* The 2.5D runtime moves the effect shell once per animation frame. Existing
+   CSS-path effects keep their original animations when this class is absent. */
+.hg-map-vfx-effect.has-path.uses-2d5-motion {
+  width: 72px;
+  height: 72px;
+  overflow: visible;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+  transform: translate(-50%, -50%) rotate(var(--hg-vfx-rotation))
+    scale(var(--hg-vfx-scale));
+  transform-origin: center;
+}
+
+.hg-map-vfx-effect.uses-2d5-motion > .hg-vfx-sprite {
+  left: 50%;
+  top: 50%;
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hg-map-vfx-layer[data-effects-mode="reduced"]
     .hg-map-vfx-effect,
@@ -1706,7 +1817,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 
 .hg-map-ruler-layer {
   position: absolute;
-  z-index: 60;
+  z-index: 9000;
   overflow: hidden;
   pointer-events: auto;
   cursor: crosshair;
@@ -1778,7 +1889,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 
 .hg-map-template-layer {
   position: absolute;
-  z-index: 61;
+  z-index: 9001;
   overflow: hidden;
   pointer-events: auto;
   cursor: crosshair;

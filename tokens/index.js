@@ -10,8 +10,10 @@ import {
 import {
   formatElevation,
   getTokenElevation,
-  normalizeElevation
-} from "../battleMap/elevation.js?v=stage8-20260826";
+  normalizeElevation,
+  elevationToVisualPixels
+} from "../battleMap/elevation.js?v=2d5-animation-20260901";
+import { getTokenDepthSortValue } from "../vfx/effectLayers.js";
 
 export function createTokenSystem(options) {
   const deps = {
@@ -638,7 +640,7 @@ export function createTokenSystem(options) {
         width: 100%;
         height: 100%;
         pointer-events: none;
-        z-index: 40;
+        z-index: 4000;
       }
 
       .hg-map-scale-preview {
@@ -687,6 +689,11 @@ export function createTokenSystem(options) {
         cursor: grab;
         user-select: none;
         transform: translateZ(0);
+        --hg-token-visual-z: 0px;
+      }
+
+      .hg-token > * {
+        translate: 0 calc(-1 * var(--hg-token-visual-z));
       }
 
       .hg-token img,
@@ -1486,7 +1493,7 @@ export function createTokenSystem(options) {
     T.tokenLayer.style.width = "100%";
     T.tokenLayer.style.height = "100%";
     T.tokenLayer.style.pointerEvents = "none";
-    T.tokenLayer.style.zIndex = "40";
+    T.tokenLayer.style.zIndex = "4000";
 
     return T.tokenLayer;
   }
@@ -1505,6 +1512,13 @@ export function createTokenSystem(options) {
     tokenEl.style.height = size + "px";
     tokenEl.style.left = "calc(" + x + "% - " + (size / 2) + "px)";
     tokenEl.style.top = "calc(" + y + "% - " + (size / 2) + "px)";
+    const visualZ = elevationToVisualPixels(token.elevation);
+    tokenEl.dataset.visualZ = String(visualZ);
+    tokenEl.style.setProperty("--hg-token-visual-z", `${visualZ}px`);
+    tokenEl.style.zIndex = String(getTokenDepthSortValue({
+      y: y * 10,
+      elevation: token.elevation
+    }));
   }
 
   function render(room) {

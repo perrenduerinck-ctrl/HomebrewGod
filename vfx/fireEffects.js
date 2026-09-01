@@ -204,7 +204,8 @@ function effect(
     opacity = 1,
     particles = null,
     scale = 1,
-    role = type
+    role = type,
+    ...presentation
   } = {}
 ) {
   return {
@@ -216,6 +217,7 @@ function effect(
     opacity,
     particles,
     scale,
+    ...presentation,
     metadata: {
       damageType: "fire",
       role
@@ -236,14 +238,24 @@ function makeFireballCastingSequence() {
       release: { duration: 0, effects: [] },
       travel: { duration: 320, effects: [
         effect("tier-fire-flight", "path", { duration: 320,
-          particles: { count: 0 }, role: "fireball-projectile" })
+          particles: { count: 0 }, role: "fireball-projectile",
+          preset: "projectile", layer: "airborne",
+          motion: { type: "arc", maxZ: 112, rotationMode: "direction" },
+          shadow: { enabled: true, opacity: .58, fadeDistance: 220 },
+          heightScaling: { enabled: true, amount: .002, maximum: 1.28 } })
       ] },
       impact: { duration: 920, effects: [
         effect("tier-fire-burst", "target", { duration: 920,
           geometryScaleBasePixels: 160, particles: { count: 0 },
           role: "fireball-explosion-sprite" })
       ] },
-      aftermath: { duration: 0, effects: [] },
+      aftermath: { duration: 720, effects: [
+        { ...effect("fire-smoke", "target", { duration: 720, scale: 1.25,
+          opacity: .65, particles: { count: 8 }, role: "fireball-smoke",
+          layer: "airborne", motion: { type: "rising", startZ: 0, endZ: 72 },
+          heightScaling: { enabled: true, amount: .0015, maximum: 1.18 } }),
+          fullOnly: true }
+      ] },
       cleanup: { duration: 0, effects: [] }
     }
   });

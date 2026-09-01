@@ -63,6 +63,15 @@ export function normalizeSpriteOptions(
       frameCount > 1
     )
   );
+  const requestedFrameDuration = finiteNumber(
+    options.frameDuration ?? options.frameDurationMs
+  );
+  const framesPerSecond = clamp(
+    finiteNumber(options.framesPerSecond) ??
+      (requestedFrameDuration > 0 ? 1000 / requestedFrameDuration : 24),
+    1,
+    60
+  );
 
   const validBounds = (values, count, extent) => Array.isArray(values) &&
     values.length === count + 1 && values.every((v, i) => Number.isFinite(v) &&
@@ -100,11 +109,7 @@ export function normalizeSpriteOptions(
     endFrame,
     columns,
     rows,
-    framesPerSecond: clamp(
-      finiteNumber(options.framesPerSecond) ?? 24,
-      1,
-      60
-    ),
+    framesPerSecond,
     loops: clamp(
       Math.round(
         finiteNumber(options.loops) ?? 1
@@ -163,6 +168,7 @@ export function getSpriteFrameStyle(
 export function createSpriteAnimator({
   element,
   options = {},
+  manual = false,
   requestFrame = globalThis.requestAnimationFrame,
   cancelFrame = globalThis.cancelAnimationFrame,
   now = () => globalThis.performance?.now?.() ?? Date.now(),
@@ -194,8 +200,7 @@ export function createSpriteAnimator({
       ? Infinity
       : (normalized.endFrame - normalized.startFrame + 1) * normalized.loops;
   const playbackFrames = normalized.endFrame - normalized.startFrame + 1;
-  const frameDuration =
-    1000 / normalized.framesPerSecond;
+  const frameDuration = 1000 / normalized.framesPerSecond;
   let frameHandle = null;
   let startedAt = null;
   let running = false;
@@ -239,7 +244,7 @@ export function createSpriteAnimator({
     running = false;
   }
 
-  function tick(timestamp) {
+  function tick(timestamp, scheduleNext = true) {
     if (!running) return;
     if (startedAt === null) {
       startedAt = timestamp;
@@ -275,7 +280,9 @@ export function createSpriteAnimator({
     applyFrame(
       normalized.startFrame + absoluteFrame % playbackFrames
     );
-    frameHandle = schedule(tick);
+    if (scheduleNext && !manual) {
+      frameHandle = schedule(tick);
+    }
   }
 
   function start() {
@@ -291,7 +298,15 @@ export function createSpriteAnimator({
     completed = false;
     startedAt = null;
     applyFrame(normalized.startFrame);
-    frameHandle = schedule(tick);
+    if (!manual) {
+      frameHandle = schedule(tick);
+    }
+    return true;
+  }
+
+  function seek(timestamp) {
+    if (!manual || !running || destroyed) return false;
+    tick(finiteNumber(timestamp) ?? now(), false);
     return true;
   }
 
@@ -305,10 +320,14 @@ export function createSpriteAnimator({
     destroy,
     getState: () => Object.freeze({
       completed,
+      currentFrame: lastAppliedFrame < 0
+        ? normalized.startFrame
+        : lastAppliedFrame,
       destroyed,
       running,
       options: normalized
     }),
+    seek,
     start,
     stop
   });

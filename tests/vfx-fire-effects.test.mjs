@@ -362,7 +362,7 @@ test("Fire Bolt follows spell geometry from charge through ember fade", () => {
   assert.equal(scheduler.pending(), 0);
 });
 
-test("Fireball uses one shared-sheet flight and one area burst, with no per-token effects", () => {
+test("Fireball arcs one shared-sheet flight into a burst and smoke cleanup", () => {
   const scheduler = createScheduler(), effectEngine = createEffectEngine();
   const system = createCastingSequenceSystem({ effectEngine, scheduler });
   const event = createSpellVfxEvent({
@@ -377,11 +377,18 @@ test("Fireball uses one shared-sheet flight and one area burst, with no per-toke
   assert.equal(result.definition.id, "fireball");
   scheduler.advance(result.definition.totalDuration);
   const requests = effectEngine.getStats().requests;
-  assert.deepEqual(requests.map(r => r.type), ["fire-glow", "tier-fire-flight", "tier-fire-burst"]);
+  assert.deepEqual(requests.map(r => r.type), [
+    "fire-glow", "tier-fire-flight", "tier-fire-burst", "fire-smoke"
+  ]);
   assert.deepEqual(requests[1].startPosition, event.casterPoint);
   assert.deepEqual(requests[1].endPosition, event.targetPoint);
+  assert.equal(requests[1].preset, "projectile");
+  assert.equal(requests[1].motion.type, "arc");
+  assert.equal(requests[1].motion.maxZ, 112);
+  assert.equal(requests[1].shadow.enabled, true);
   assert.equal(requests[2].scale, 3.2);
-  assert.ok(requests.every(r => !r.affectedTokenId && r.particles.count === 0));
+  assert.equal(requests[3].motion.type, "rising");
+  assert.ok(requests.every(r => !r.affectedTokenId));
   assert.equal(JSON.stringify(event), before);
   assert.equal(system.getState().activeCount, 0);
   assert.equal(scheduler.pending(), 0);

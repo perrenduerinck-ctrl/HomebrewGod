@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  elevationToVisualPixels,
   formatElevation,
   getTokenElevation,
   measureSpatialDistance,
@@ -17,6 +18,14 @@ test("token elevation defaults safely and uses whole bounded feet", () => {
   assert.equal(getTokenElevation({}), 0);
   assert.equal(getTokenElevation({ elevation: 35 }), 35);
   assert.equal(getTokenElevation({ elevationFeet: -10 }), -10);
+});
+
+test("visual elevation offsets stay separate from gameplay feet", () => {
+  assert.equal(elevationToVisualPixels(0), 0);
+  assert.equal(elevationToVisualPixels(50), 30);
+  assert.equal(elevationToVisualPixels(-25), -15);
+  assert.equal(elevationToVisualPixels(1000), 240);
+  assert.equal(normalizeElevation(50), 50);
 });
 
 test("spatial distance combines horizontal and vertical distance", () => {

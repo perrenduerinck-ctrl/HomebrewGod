@@ -1,6 +1,8 @@
 export const DEFAULT_TOKEN_ELEVATION_FEET = 0;
 export const MIN_TOKEN_ELEVATION_FEET = -1000;
 export const MAX_TOKEN_ELEVATION_FEET = 1000;
+export const DEFAULT_VISUAL_PIXELS_PER_FOOT = 0.6;
+export const MAX_VISUAL_ELEVATION_PIXELS = 240;
 
 const finiteNumber = (value) => {
   const parsed = Number(value);
@@ -71,4 +73,21 @@ export function formatElevation(value) {
 
   if (elevation === 0) return "Ground";
   return `${elevation > 0 ? "+" : ""}${elevation} ft`;
+}
+
+export function elevationToVisualPixels(
+  value,
+  pixelsPerFoot = DEFAULT_VISUAL_PIXELS_PER_FOOT
+) {
+  const elevation = normalizeElevation(value);
+  const scale = clamp(
+    finiteNumber(pixelsPerFoot) ?? DEFAULT_VISUAL_PIXELS_PER_FOOT,
+    0,
+    10
+  );
+  return clamp(
+    elevation * scale,
+    -MAX_VISUAL_ELEVATION_PIXELS,
+    MAX_VISUAL_ELEVATION_PIXELS
+  );
 }
