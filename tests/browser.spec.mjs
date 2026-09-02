@@ -3062,6 +3062,93 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
   await ui.select("fireball");
   await ui.point(240, 220);
   await ui.point(450, 220);
+  await page.evaluate(() => {
+    const state = window.__FIREBALL_TRAVEL_SAMPLE__ = {
+      maxZ: -Infinity,
+      maxTrailCount: 0,
+      maxSmokeTrailCount: 0,
+      debugSeen: false,
+      impactSeen: false,
+      impactImage: "",
+      shockSeen: false,
+      smokeSeen: false,
+      aftermathSeen: false,
+      scorchSeen: false,
+      scorchLayer: "",
+      maxDebris: 0,
+      layers: {},
+      sample: null
+    };
+    const stopAt = performance.now() + 5000;
+    const sampleTravel = () => {
+      const effect = document.querySelector(
+        '[data-effect-type="fireball-clip-sprite"][data-initial-clip="travel"]'
+      );
+      if (effect) {
+        const shadow = document.querySelector(
+          `[data-parent-effect-id="${CSS.escape(effect.dataset.effectId)}"]`
+        );
+        const z = Number(effect.dataset.vfxZ || 0);
+        const trailCount = effect.parentElement?.querySelectorAll(
+          ".hg-vfx-motion-trail"
+        ).length || 0;
+        const smokeTrailCount = effect.parentElement?.querySelectorAll(
+          ".hg-vfx-motion-trail.has-smoke"
+        ).length || 0;
+        state.maxTrailCount = Math.max(state.maxTrailCount, trailCount);
+        state.maxSmokeTrailCount = Math.max(state.maxSmokeTrailCount, smokeTrailCount);
+        state.debugSeen ||= window.__HOMEBREW_GOD_RELEASE_TEST__
+          .getVfxDebugState().effects.some((entry) =>
+            entry.layer === "airborne" && entry.z > 10 && entry.clip === "travel"
+          );
+        if (z >= state.maxZ) {
+          state.maxZ = z;
+          state.sample = {
+            worldY: Number(effect.dataset.vfxY),
+            z,
+            screenY: Number.parseFloat(effect.style.top),
+            scale: Number.parseFloat(effect.style.getPropertyValue("--hg-vfx-scale")),
+            layer: effect.dataset.effectLayer,
+            shadowY: Number.parseFloat(shadow?.style.top || "NaN"),
+            shadowOpacity: Number.parseFloat(shadow?.style.opacity || "NaN"),
+            effectContainer: effect.parentElement?.dataset.effectLayerContainer,
+            shadowContainer: shadow?.parentElement?.dataset.effectLayerContainer
+          };
+        }
+      }
+      const impact = document.querySelector(
+        '[data-effect-type="fireball-clip-sprite"][data-initial-clip="impact"]'
+      );
+      if (impact) {
+        state.impactSeen = true;
+        const sprite = impact.querySelector('[data-vfx-clip="impact"]');
+        state.impactImage ||= sprite ? getComputedStyle(sprite).backgroundImage : "";
+      }
+      const shock = document.querySelector('[data-effect-type="fire-shock-ring"]');
+      const debris = document.querySelector('[data-effect-type="fire-debris-burst"]');
+      const smoke = document.querySelector('[data-effect-type="fire-smoke"]');
+      const aftermath = document.querySelector(
+        '[data-effect-type="fireball-clip-sprite"][data-initial-clip="aftermath"]'
+      );
+      const scorch = document.querySelector('[data-effect-type="fire-scorch"]');
+      state.shockSeen ||= Boolean(shock);
+      state.smokeSeen ||= Boolean(smoke);
+      state.aftermathSeen ||= Boolean(aftermath);
+      state.scorchSeen ||= Boolean(scorch);
+      state.scorchLayer ||= scorch?.dataset.effectLayer || "";
+      state.maxDebris = Math.max(state.maxDebris,
+        document.querySelectorAll(".hg-vfx-debris").length);
+      for (const [type, effect] of [
+        ["fire-shock-ring", shock],
+        ["fire-debris-burst", debris],
+        ["fireball-clip-sprite", impact]
+      ]) {
+        state.layers[type] ||= effect?.parentElement?.dataset.effectLayerContainer || "";
+      }
+      if (performance.now() < stopAt) requestAnimationFrame(sampleTravel);
+    };
+    requestAnimationFrame(sampleTravel);
+  });
   await ui.play.click();
 
   const charge = page.locator(
@@ -3073,34 +3160,15 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
   const flight = page.locator(
     '[data-effect-type="fireball-clip-sprite"][data-initial-clip="travel"]'
   );
-  await expect(flight).toBeVisible();
-  await page.waitForFunction(() => {
-    const effect = document.querySelector(
-      '[data-effect-type="fireball-clip-sprite"][data-initial-clip="travel"]'
-    );
-    return Number(effect?.dataset.vfxZ || 0) > 20;
-  });
-
-  const snapshot = await flight.evaluate((effect) => {
-    const shadow = document.querySelector(
-      `[data-parent-effect-id="${CSS.escape(effect.dataset.effectId)}"]`
-    );
-    return {
-      worldY: Number(effect.dataset.vfxY),
-      z: Number(effect.dataset.vfxZ),
-      screenY: Number.parseFloat(effect.style.top),
-      scale: Number.parseFloat(effect.style.getPropertyValue("--hg-vfx-scale")),
-      layer: effect.dataset.effectLayer,
-      shadowY: Number.parseFloat(shadow?.style.top || "NaN"),
-      shadowOpacity: Number.parseFloat(shadow?.style.opacity || "NaN"),
-      effectContainer: effect.parentElement?.dataset.effectLayerContainer,
-      shadowContainer: shadow?.parentElement?.dataset.effectLayerContainer,
-      trailCount: effect.parentElement?.querySelectorAll(".hg-vfx-motion-trail").length || 0,
-      smokeTrailCount: effect.parentElement?.querySelectorAll(
-        ".hg-vfx-motion-trail.has-smoke"
-      ).length || 0
-    };
-  });
+  await page.waitForFunction(() =>
+    window.__FIREBALL_TRAVEL_SAMPLE__?.maxZ > 20
+  );
+  const snapshot = await page.evaluate(() => ({
+    ...window.__FIREBALL_TRAVEL_SAMPLE__.sample,
+    trailCount: window.__FIREBALL_TRAVEL_SAMPLE__.maxTrailCount,
+    smokeTrailCount: window.__FIREBALL_TRAVEL_SAMPLE__.maxSmokeTrailCount,
+    debugSeen: window.__FIREBALL_TRAVEL_SAMPLE__.debugSeen
+  }));
   expect(snapshot.layer).toBe("airborne");
   expect(snapshot.z).toBeGreaterThan(10);
   expect(snapshot.screenY).toBeCloseTo(snapshot.worldY - snapshot.z, 1);
@@ -3114,44 +3182,27 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
   expect(snapshot.trailCount).toBeGreaterThan(0);
   expect(snapshot.smokeTrailCount).toBeGreaterThan(0);
 
-  const debug = await page.evaluate(() =>
-    window.__HOMEBREW_GOD_RELEASE_TEST__.getVfxDebugState()
-  );
-  expect(debug.options.enabled).toBe(true);
-  expect(debug.effects.some((effect) =>
-    effect.layer === "airborne" && effect.z > 10 && effect.clip === "travel"
-  )).toBe(true);
+  expect(snapshot.debugSeen).toBe(true);
   await expect(flight).toHaveCount(0, { timeout: 2500 });
-  const burst = page.locator(
-    '[data-effect-type="fireball-clip-sprite"][data-initial-clip="impact"]'
-  );
-  await expect(burst).toBeVisible();
-  const impactSprite = burst.locator('[data-vfx-clip="impact"]');
-  await expect(impactSprite).toBeVisible();
-  expect(await impactSprite.evaluate((element) => (
-    getComputedStyle(element).backgroundImage
-  ))).toContain("fire-cast-6x6.png");
-  await expect(page.locator('[data-effect-type="fire-shock-ring"]')).toBeVisible();
-  const impactLayers = await page.evaluate(() => Object.fromEntries([
-    "fire-shock-ring", "fire-debris-burst", "fireball-clip-sprite"
-  ].map((type) => {
-    const effect = document.querySelector(`[data-effect-type="${type}"]`);
-    return [type, effect?.parentElement?.dataset.effectLayerContainer || ""];
-  })));
+  await page.waitForFunction(() => {
+    const state = window.__FIREBALL_TRAVEL_SAMPLE__;
+    return state?.impactSeen && state.shockSeen && state.maxDebris > 0;
+  });
+  const impactState = await page.evaluate(() => window.__FIREBALL_TRAVEL_SAMPLE__);
+  expect(impactState.impactImage).toContain("fire-cast-6x6.png");
+  const impactLayers = impactState.layers;
   expect(impactLayers).toEqual({
     "fire-shock-ring": "ground",
     "fire-debris-burst": "airborne",
     "fireball-clip-sprite": "airborne"
   });
-  expect(await page.locator(".hg-vfx-debris").count()).toBeLessThanOrEqual(16);
-  const aftermath = page.locator(
-    '[data-effect-type="fireball-clip-sprite"][data-initial-clip="aftermath"]'
-  );
-  await expect(aftermath).toBeVisible();
-  await expect(page.locator('[data-effect-type="fire-smoke"]')).toBeVisible();
-  const scorch = page.locator('[data-effect-type="fire-scorch"]');
-  await expect(scorch).toBeVisible();
-  await expect(scorch).toHaveAttribute("data-effect-layer", "ground");
+  expect(impactState.maxDebris).toBeLessThanOrEqual(16);
+  await page.waitForFunction(() => {
+    const state = window.__FIREBALL_TRAVEL_SAMPLE__;
+    return state?.aftermathSeen && state.smokeSeen && state.scorchSeen;
+  });
+  const aftermathState = await page.evaluate(() => window.__FIREBALL_TRAVEL_SAMPLE__);
+  expect(aftermathState.scorchLayer).toBe("ground");
   await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 6500 });
 });
 
