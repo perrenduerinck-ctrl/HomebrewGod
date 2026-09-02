@@ -1,9 +1,14 @@
+import { getVfxClipSet } from "./vfxAssetManifest.js?v=clip-vfx-20260902";
+
 export const FIRE_EFFECT_IDS = Object.freeze([
   "fire-glow",
   "fire-embers",
   "fire-flames",
   "fire-smoke",
   "fire-explosion",
+  "fire-impact-flash",
+  "fire-shock-ring",
+  "fire-debris-burst",
   "fire-trail",
   "fire-scorch"
 ]);
@@ -28,6 +33,8 @@ export const FIRE_BOLT_IMPACT_EFFECT_ID =
   "fire-bolt-impact-sprite";
 export const FIREBALL_PROJECTILE_EFFECT_ID =
   "fireball-projectile-sprite";
+export const FIREBALL_CLIP_EFFECT_ID =
+  "fireball-clip-sprite";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) {
@@ -40,12 +47,14 @@ function deepFreeze(value) {
 function defineFireEffect({
   id,
   className,
-  particles = {}
+  particles = {},
+  blendMode = "normal"
 }) {
   return deepFreeze({
     id,
     kind: "procedural",
     className,
+    blendMode,
     particles
   });
 }
@@ -105,6 +114,23 @@ export const FIRE_EFFECT_DEFINITIONS = Object.freeze([
       duration: 780,
       spread: 1.15
     }
+  }),
+  defineFireEffect({
+    id: "fire-impact-flash",
+    className: "fire-impact-flash",
+    blendMode: "screen",
+    particles: { count: 0 }
+  }),
+  defineFireEffect({
+    id: "fire-shock-ring",
+    className: "fire-shock-ring",
+    blendMode: "screen",
+    particles: { count: 0 }
+  }),
+  defineFireEffect({
+    id: "fire-debris-burst",
+    className: "fire-debris-burst",
+    particles: { count: 0 }
   }),
   defineFireEffect({
     id: "fire-trail",
@@ -191,6 +217,18 @@ export const FIRE_EFFECT_DEFINITIONS = Object.freeze([
       loop: false,
       removeOnComplete: false
     }
+  }),
+  deepFreeze({
+    id: FIREBALL_CLIP_EFFECT_ID,
+    kind: "sprite",
+    className: FIREBALL_CLIP_EFFECT_ID,
+    blendMode: "screen",
+    clips: getVfxClipSet("fireball"),
+    initialClip: "travel",
+    configureElement({ element, effect }) {
+      element.dataset.clipSet = "fireball";
+      element.dataset.initialClip = effect.clip || "travel";
+    }
   })
 ]);
 
@@ -226,35 +264,62 @@ function effect(
 }
 
 function makeFireballCastingSequence() {
-  // One flight and one area burst share the same texture. No per-token spam.
+  // Each phase owns one visual responsibility. World travel remains code-driven.
   return deepFreeze({
     id: "fireball", label: "Fireball", priority: 100,
     match: { spellIds: ["fireball"], damageTypes: ["fire"], deliveryTypes: ["burst"] },
     phases: {
-      charge: { duration: 140, effects: [{
-        ...effect("fire-glow", "caster", { duration: 140, scale: .45,
-          particles: { count: 0 }, role: "fireball-charge" }), fullOnly: true
-      }] },
-      release: { duration: 0, effects: [] },
-      travel: { duration: 320, effects: [
-        effect("tier-fire-flight", "path", { duration: 320,
+      charge: { duration: 300, effects: [
+        effect(FIREBALL_CLIP_EFFECT_ID, "caster", { duration: 300,
+          clip: "charge", scale: .62, particles: { count: 0 },
+          role: "fireball-charge-clip", heightGlow: { enabled: true } }),
+        { ...effect("fire-glow", "caster", { duration: 300, scale: .5,
+          particles: { count: 0 }, role: "fireball-charge-glow" }), fullOnly: true }
+      ] },
+      release: { duration: 140, effects: [
+        effect(FIREBALL_CLIP_EFFECT_ID, "caster", { duration: 140,
+          clip: "release", scale: .78, particles: { count: 0 },
+          role: "fireball-release-clip",
+          impactPunch: { enabled: true, amount: .12, durationRatio: .55 } })
+      ] },
+      travel: { duration: 480, effects: [
+        effect(FIREBALL_CLIP_EFFECT_ID, "path", { duration: 480,
+          clip: "travel", scale: .5,
           particles: { count: 0 }, role: "fireball-projectile",
           preset: "projectile", layer: "airborne",
-          motion: { type: "arc", maxZ: 112, rotationMode: "direction" },
-          shadow: { enabled: true, opacity: .58, fadeDistance: 220 },
-          heightScaling: { enabled: true, amount: .002, maximum: 1.28 } })
+          motion: { type: "arc", maxZ: 88, arcPower: 1.22,
+            easing: "fast-out", rotationMode: "direction" },
+          shadow: { enabled: true, opacity: .58, fadeDistance: 210,
+            shrinkDistance: 245, offsetX: 9, offsetY: 5 },
+          heightScaling: { enabled: true, amount: .00235, maximum: 1.22 },
+          heightGlow: { enabled: true },
+          trail: { enabled: true, lifetime: 190, maxPoints: 14,
+            spacing: 10, interval: 26, size: 18, opacity: .76, smoke: true } })
       ] },
-      impact: { duration: 920, effects: [
-        effect("tier-fire-burst", "target", { duration: 920,
+      impact: { duration: 900, effects: [
+        effect(FIREBALL_CLIP_EFFECT_ID, "target", { duration: 900,
+          clip: "impact",
           geometryScaleBasePixels: 160, particles: { count: 0 },
-          role: "fireball-explosion-sprite" })
+          role: "fireball-impact-clip",
+          impactPunch: { enabled: true, amount: .16, durationRatio: .18 } }),
+        effect("fire-explosion", "target", { duration: 480, scale: 1.12,
+          particles: { count: 4 }, role: "fireball-core-explosion",
+          impactPunch: { enabled: true, amount: .12, durationRatio: .2 } }),
+        effect("fire-debris-burst", "target", { duration: 560,
+          particles: { count: 0 }, role: "fireball-debris",
+          layer: "airborne", debris: { enabled: true, count: 10,
+            speed: 115, gravity: 390, lifetime: 540, size: 6 } })
       ] },
-      aftermath: { duration: 720, effects: [
-        { ...effect("fire-smoke", "target", { duration: 720, scale: 1.25,
-          opacity: .65, particles: { count: 8 }, role: "fireball-smoke",
-          layer: "airborne", motion: { type: "rising", startZ: 0, endZ: 72 },
-          heightScaling: { enabled: true, amount: .0015, maximum: 1.18 } }),
-          fullOnly: true }
+      aftermath: { duration: 1400, effects: [
+        effect(FIREBALL_CLIP_EFFECT_ID, "target", { duration: 750,
+          clip: "aftermath", scale: 1, opacity: .72,
+          particles: { count: 0 }, role: "fireball-aftermath-clip" }),
+        effect("fire-embers", "target", { duration: 920, scale: 1.05,
+          particles: { count: 8, distance: 54, size: 3 },
+          role: "fireball-aftermath-embers" }),
+        effect("fire-scorch", "target", { duration: 1380, scale: 1.25,
+          opacity: .58, particles: { count: 0 }, role: "fireball-scorch",
+          layer: "ground" })
       ] },
       cleanup: { duration: 0, effects: [] }
     }

@@ -605,10 +605,14 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 #battleMapImage {
   max-width: 100%;
   display: none;
+  position: relative;
+  z-index: 0;
   transform-origin: center center;
 }
 
 #noBattleMapText {
+  position: relative;
+  z-index: 0;
   color: var(--text-dim);
 }
 
@@ -619,15 +623,17 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   opacity: 0;
 }
 
+.hg-map-vfx-depth-layer,
 .hg-map-vfx-layer,
 .hg-map-vfx-light-layer {
   position: absolute;
-  z-index: 50;
   overflow: hidden;
   pointer-events: none;
   contain: none;
 }
 
+.hg-map-vfx-depth-layer,
+.hg-map-vfx-depth-layer *,
 .hg-map-vfx-layer,
 .hg-map-vfx-layer *,
 .hg-map-vfx-light-layer,
@@ -636,6 +642,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   user-select: none;
 }
 
+.hg-map-vfx-depth-layer[data-effects-mode="off"],
 .hg-map-vfx-layer[data-effects-mode="off"],
 .hg-map-vfx-light-layer[data-effects-mode="off"] {
   display: none;
@@ -694,9 +701,6 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   font: 10px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
-.hg-map-vfx-light-layer { mix-blend-mode: screen; }
-.hg-map-vfx-light-layer > .hg-map-vfx-effect { mix-blend-mode: screen; }
-
 .hg-vfx-ground-shadow {
   position: absolute;
   width: 58px;
@@ -708,10 +712,82 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   will-change: left, top, transform, opacity;
 }
 
+.hg-map-vfx-depth-layer.show-vfx-layers,
 .hg-map-vfx-layer.show-vfx-layers,
 .hg-map-vfx-light-layer.show-vfx-layers {
   outline: 2px dashed rgba(44, 220, 255, .55);
   outline-offset: -2px;
+}
+
+.hg-map-vfx-depth-layer.show-vfx-layers::before {
+  content: attr(data-effect-layer-container) " · z " attr(data-depth-z);
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  z-index: 9999;
+  max-width: 180px;
+  overflow: hidden;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #020817d9;
+  color: #bff8ff;
+  font: 9px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.hg-vfx-motion-trail,
+.hg-vfx-debris,
+.hg-vfx-z-line {
+  position: absolute;
+  pointer-events: none;
+  will-change: left, top, transform, opacity;
+}
+
+.hg-vfx-motion-trail {
+  width: var(--hg-vfx-trail-size, 18px);
+  height: var(--hg-vfx-trail-size, 18px);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fffbd1 0 8%, #ffb21f 24%, #ff4b08 48%, transparent 72%);
+  box-shadow: 0 0 9px #ffb21f, 0 0 18px #ff4208aa;
+}
+
+.hg-vfx-motion-trail.has-smoke::after {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(82, 67, 61, .48), rgba(45, 39, 37, .2) 48%, transparent 72%);
+  filter: blur(2px);
+  transform: translate(-35%, -24%) scale(1.15);
+  opacity: .68;
+}
+
+.hg-vfx-debris {
+  width: var(--hg-vfx-debris-size, 6px);
+  height: var(--hg-vfx-debris-size, 6px);
+  border-radius: 35%;
+  background: linear-gradient(135deg, #5f4435, #1b1210);
+  box-shadow: 0 0 3px #ff6b1f99;
+}
+
+.hg-vfx-z-line {
+  width: 1px;
+  border-left: 1px dashed #72edff;
+  filter: drop-shadow(0 0 2px #23b9ff);
+}
+
+.hg-map-vfx-effect.has-height-glow {
+  filter: drop-shadow(0 0 var(--hg-vfx-height-glow-radius, 5px) rgba(255, 143, 28, .9));
+}
+
+.hg-map-vfx-effect.hide-vfx-sprite > .hg-vfx-sprite,
+.hg-map-vfx-effect.hide-vfx-particles > .hg-vfx-particle {
+  visibility: hidden;
+}
+
+#battleMapSurface.hg-vfx-screen-shake > #battleMapViewer,
+#battleMapSurface.hg-vfx-screen-shake > #puzzleMapBoard {
+  translate: var(--hg-vfx-shake-x, 0) var(--hg-vfx-shake-y, 0);
 }
 
 .hg-map-vfx-layer.show-vfx-layers .hg-map-vfx-effect[data-effect-layer="ground"] {
@@ -1097,6 +1173,31 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   animation-delay: 65ms;
 }
 
+.hg-vfx-fire-impact-flash {
+  width: 104px;
+  height: 104px;
+  background: radial-gradient(circle, #fff 0 5%, #fff5bd 13%, #ffbf35aa 35%, transparent 68%);
+  box-shadow: 0 0 22px #fff6c9, 0 0 58px #ff8a1ecc;
+  animation: hg-vfx-fire-impact-flash var(--hg-vfx-duration) ease-out both;
+}
+
+.hg-vfx-fire-shock-ring {
+  width: 104px;
+  height: 56px;
+  border: 3px solid #ffd36bcc;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 12px #ff9d2ccc, inset 0 0 9px #ff6b1f99;
+  animation: hg-vfx-fire-shock-ring var(--hg-vfx-duration) ease-out both;
+}
+
+.hg-vfx-fire-debris-burst {
+  width: 1px;
+  height: 1px;
+  background: transparent;
+  box-shadow: none;
+}
+
 .hg-vfx-fire-trail.has-path {
   height: 11px;
   background: linear-gradient(
@@ -1229,6 +1330,36 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
     linear
     both;
   will-change: left, transform, opacity;
+}
+
+.hg-vfx-fireball-clip-sprite {
+  width: 160px;
+  height: 160px;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.hg-vfx-fireball-clip-sprite .hg-vfx-clip-sprite {
+  mix-blend-mode: screen;
+  filter:
+    saturate(1.14)
+    drop-shadow(0 0 10px rgba(255, 118, 8, 0.92))
+    drop-shadow(0 0 22px rgba(255, 52, 0, 0.52));
+}
+
+.hg-vfx-fireball-clip-sprite
+  .hg-vfx-clip-sprite[data-vfx-clip="travel"] {
+  transform: translate(-50%, -50%) rotate(-135deg);
+}
+
+.hg-vfx-fireball-clip-sprite
+  .hg-vfx-clip-sprite[data-vfx-clip="aftermath"] {
+  filter:
+    saturate(.82)
+    brightness(.78)
+    drop-shadow(0 0 8px rgba(255, 79, 0, .48));
 }
 
 .hg-vfx-cantrip-projectile-sprite.has-path {
@@ -1767,6 +1898,17 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   }
 }
 
+@keyframes hg-vfx-fire-impact-flash {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.18); }
+  24% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.38); }
+}
+
+@keyframes hg-vfx-fire-shock-ring {
+  0% { opacity: .96; transform: translate(-50%, -50%) scale(.18); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+}
+
 /* The 2.5D runtime moves the effect shell once per animation frame. Existing
    CSS-path effects keep their original animations when this class is absent. */
 .hg-map-vfx-effect.has-path.uses-2d5-motion {
@@ -1789,6 +1931,17 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  #battleMapSurface.hg-vfx-screen-shake > #battleMapViewer,
+  #battleMapSurface.hg-vfx-screen-shake > #puzzleMapBoard {
+    translate: none;
+  }
+
+  .hg-map-vfx-depth-layer[data-effects-mode="reduced"]
+    :is(.hg-map-vfx-effect, .hg-vfx-particle) {
+    animation-duration: 180ms !important;
+    animation-delay: 0ms !important;
+  }
+
   .hg-map-vfx-layer[data-effects-mode="reduced"]
     .hg-map-vfx-effect,
   .hg-map-vfx-layer[data-effects-mode="reduced"]

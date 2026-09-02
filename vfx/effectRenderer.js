@@ -1,11 +1,18 @@
 import { createParticleDescriptors } from "./particles.js";
-import { createSpriteAnimator } from "./spriteAnimator.js?v=2d5-animation-20260901";
+import { createSpriteAnimator } from "./spriteAnimator.js?v=2d5-vfx-polish-20260902";
+import { createVfxClipController } from "./clipController.js?v=clip-vfx-20260902";
+import { createVfxAssetCache } from "./vfxAssetManifest.js?v=clip-vfx-20260902";
 import {
   calculateHeightScale,
   calculateMotion25d,
   calculateShadow25d
 } from "./motion25d.js";
-import { getDepthSortValue, normalizeEffectLayer } from "./effectLayers.js";
+import {
+  EFFECT_LAYER_ORDER,
+  getEffectLayer,
+  getLocalDepthSortValue,
+  normalizeEffectLayer
+} from "./effectLayers.js";
 
 function createElement(documentRef, className) {
   const element = documentRef.createElement("div");
@@ -77,6 +84,7 @@ export function createEffectRenderer({
   ),
   requestFrame,
   cancelFrame,
+  assetCache = null,
   now = () => globalThis.performance?.now?.() ?? Date.now()
 } = {}) {
   if (!surface?.appendChild) throw new TypeError("Battle-map VFX require a map surface.");
@@ -86,8 +94,22 @@ export function createEffectRenderer({
   const scheduleFrame = requestFrame || windowRef?.requestAnimationFrame?.bind(windowRef) ||
     ((callback) => setTimeout(() => callback(now()), 16));
   const stopFrame = cancelFrame || windowRef?.cancelAnimationFrame?.bind(windowRef) || clearTimeout;
-  const overlay = createElement(documentRef, "hg-map-vfx-layer");
-  const lightOverlay = createElement(documentRef, "hg-map-vfx-light-layer");
+  const clipAssetCache = assetCache || createVfxAssetCache({
+    createImage: () => new windowRef.Image()
+  });
+  const depthLayers = new Map(EFFECT_LAYER_ORDER.map((layerId) => {
+    const legacyClass = layerId === "airborne" ? " hg-map-vfx-layer" : "";
+    const layer = createElement(documentRef,
+      `hg-map-vfx-depth-layer hg-map-vfx-${layerId}-layer${legacyClass}`);
+    layer.dataset.effectLayerContainer = layerId;
+    layer.dataset.depthZ = String(getEffectLayer(layerId).zIndex);
+    layer.style.zIndex = layer.dataset.depthZ;
+    layer.setAttribute("aria-hidden", "true");
+    layer.dataset.effectsMode = "full";
+    return [layerId, layer];
+  }));
+  const overlay = depthLayers.get("airborne");
+  const layerElements = Array.from(depthLayers.values());
   const records = new Map();
   const debugOptions = {
     enabled: false,
@@ -95,6 +117,9 @@ export function createEffectRenderer({
     zAxis: true,
     scaling: true,
     sprites: true,
+    particles: true,
+    trails: true,
+    glows: true,
     layers: false,
     labels: false
   };
@@ -104,10 +129,14 @@ export function createEffectRenderer({
   let frameHandle = null;
   let bounds = { width: 1, height: 1 };
   let mapScale = 1;
+  let activeTarget = surface;
 
-  for (const layer of [overlay, lightOverlay]) {
-    layer.setAttribute("aria-hidden", "true");
-    layer.dataset.effectsMode = "full";
+  function getDynamicNodeCount() {
+    let count = 0;
+    records.forEach((record) => {
+      count += record.trailPoints.length + record.debrisParticles.length;
+    });
+    return count;
   }
 
   function ensureFrame() {
@@ -121,14 +150,25 @@ export function createEffectRenderer({
     try { requestedScale = getScale(); } catch { requestedScale = 1; }
     const surfaceRect = surface.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
+    const canContainLayers = !/^(IMG|CANVAS|VIDEO|SVG)$/i.test(target.tagName || "");
+    const layerHost = canContainLayers ? target : (target.parentElement || surface);
+    const hostRect = layerHost.getBoundingClientRect();
     const width = Math.max(1, targetRect.width || surfaceRect.width);
     const height = Math.max(1, targetRect.height || surfaceRect.height);
     mapScale = clamp(finiteNumber(requestedScale, 1), 0.05, 20);
-    const left = targetRect.left - surfaceRect.left + surface.scrollLeft;
-    const top = targetRect.top - surfaceRect.top + surface.scrollTop;
-    for (const layer of [overlay, lightOverlay]) {
-      layer.style.left = `${left}px`;
-      layer.style.top = `${top}px`;
+    if (activeTarget !== layerHost || layerElements.some((layer) => layer.parentNode !== layerHost)) {
+      activeTarget = layerHost;
+      layerElements.forEach((layer) => layerHost.appendChild(layer));
+    }
+    const layerLeft = target === layerHost
+      ? 0
+      : targetRect.left - hostRect.left + finiteNumber(layerHost.scrollLeft);
+    const layerTop = target === layerHost
+      ? 0
+      : targetRect.top - hostRect.top + finiteNumber(layerHost.scrollTop);
+    for (const layer of layerElements) {
+      layer.style.left = `${layerLeft}px`;
+      layer.style.top = `${layerTop}px`;
       layer.style.width = `${width}px`;
       layer.style.height = `${height}px`;
       layer.dataset.mapScale = String(mapScale);
@@ -164,7 +204,7 @@ export function createEffectRenderer({
     try { token = getTokenElement(requested.tokenId); } catch { token = null; }
     if (!token?.getBoundingClientRect) return null;
     const tokenRect = token.getBoundingClientRect();
-    const overlayRect = overlay.getBoundingClientRect();
+    const overlayRect = record.container.getBoundingClientRect();
     return resolveAttachmentGroundPoint({
       tokenRect,
       overlayRect,
@@ -175,6 +215,130 @@ export function createEffectRenderer({
       cycles: requested.cycles,
       progress
     });
+  }
+
+  function updateMotionTrail(record, timestamp, point) {
+    const options = record.effect.trail;
+    const enabled = options?.enabled && debugOptions.trails;
+    const lifetime = clamp(finiteNumber(options?.lifetime, 180), 60, 1200);
+    const requestedMaximum = Math.round(clamp(finiteNumber(options?.maxPoints, 12), 1, 32));
+    const maximum = record.effect.effectsMode === "reduced"
+      ? Math.min(4, requestedMaximum)
+      : requestedMaximum;
+    record.trailPoints = record.trailPoints.filter((trailPoint) => {
+      const age = timestamp - trailPoint.bornAt;
+      if (!enabled || age >= lifetime) {
+        trailPoint.element.remove();
+        return false;
+      }
+      const remaining = 1 - age / lifetime;
+      trailPoint.element.style.opacity = String(remaining * finiteNumber(options.opacity, .72));
+      trailPoint.element.style.transform =
+        `translate(-50%, -50%) scale(${(.35 + remaining * .65) * mapScale})`;
+      return true;
+    });
+    if (!enabled) {
+      record.lastTrailSample = point;
+      return;
+    }
+    const prior = record.lastTrailSample;
+    const spacing = clamp(finiteNumber(options.spacing, 12), 2, 96) * mapScale;
+    const interval = clamp(finiteNumber(options.interval, 28), 12, 180);
+    if (prior && getDynamicNodeCount() < 320 && (
+      Math.hypot(point.x - prior.x, point.y - prior.y) >= spacing ||
+      timestamp - finiteNumber(record.lastTrailAt, 0) >= interval
+    )) {
+      const trail = createElement(documentRef, "hg-vfx-motion-trail");
+      trail.classList.toggle("has-smoke", options.smoke === true);
+      trail.style.left = `${prior.x}px`;
+      trail.style.top = `${prior.y}px`;
+      trail.style.mixBlendMode = record.element.style.mixBlendMode;
+      setCssNumber(trail, "--hg-vfx-trail-size",
+        clamp(finiteNumber(options.size, 18), 2, 96) * mapScale, "px");
+      record.container.appendChild(trail);
+      record.trailPoints.push({ element: trail, bornAt: timestamp });
+      while (record.trailPoints.length > maximum) {
+        record.trailPoints.shift().element.remove();
+      }
+      record.lastTrailAt = timestamp;
+    }
+    record.lastTrailSample = point;
+  }
+
+  function createDebris(record) {
+    const options = record.effect.debris;
+    if (!options?.enabled || record.effect.effectsMode === "reduced" && options.reduced !== true) {
+      return [];
+    }
+    const count = Math.min(
+      Math.round(clamp(finiteNumber(options.count, 8), 0, 16)),
+      Math.max(0, 320 - getDynamicNodeCount())
+    );
+    const speed = clamp(finiteNumber(options.speed, 105), 8, 600);
+    return Array.from({ length: count }, (_, index) => {
+      const element = createElement(documentRef, "hg-vfx-debris");
+      const angle = -Math.PI * (.12 + .76 * ((index * .61803398875) % 1));
+      const velocity = speed * (.62 + (index % 5) * .095);
+      setCssNumber(element, "--hg-vfx-debris-size",
+        clamp(finiteNumber(options.size, 6) * (.7 + index % 3 * .16), 2, 18), "px");
+      record.container.appendChild(element);
+      return {
+        element,
+        origin: null,
+        velocityX: Math.cos(angle) * velocity,
+        velocityY: Math.sin(angle) * velocity,
+        rotation: index * 47,
+        rotationSpeed: (index % 2 ? -1 : 1) * (160 + index * 19)
+      };
+    });
+  }
+
+  function updateDebris(record, timestamp, anchor) {
+    const options = record.effect.debris;
+    const duration = clamp(finiteNumber(options?.lifetime, record.effect.duration), 80, 1800);
+    const gravity = clamp(finiteNumber(options?.gravity, 360), 0, 1600);
+    const elapsed = Math.max(0, timestamp - record.startedAt);
+    const seconds = elapsed / 1000;
+    record.debrisParticles.forEach((particle) => {
+      particle.origin ||= { ...anchor };
+      const x = particle.origin.x + particle.velocityX * seconds * mapScale;
+      const y = particle.origin.y + (
+        particle.velocityY * seconds + gravity * seconds * seconds * .5
+      ) * mapScale;
+      particle.element.style.left = `${x}px`;
+      particle.element.style.top = `${y}px`;
+      particle.element.style.opacity = String(clamp(1 - elapsed / duration, 0, 1));
+      particle.element.style.transform = `translate(-50%, -50%) rotate(${(
+        particle.rotation + particle.rotationSpeed * seconds
+      ).toFixed(1)}deg)`;
+    });
+  }
+
+  function updateZLine(record, { x, screenY, groundY, z }) {
+    if (!record.zLine) return;
+    record.zLine.hidden = !debugOptions.labels || Math.abs(z) < .5;
+    record.zLine.style.left = `${x}px`;
+    record.zLine.style.top = `${Math.min(screenY, groundY)}px`;
+    record.zLine.style.height = `${Math.abs(z)}px`;
+  }
+
+  function applyScreenShake(timestamp) {
+    let shakeX = 0;
+    let shakeY = 0;
+    records.forEach((record) => {
+      const options = record.effect.shake;
+      if (!options?.enabled || record.effect.effectsMode !== "full") return;
+      const duration = clamp(finiteNumber(options.duration, 110), 40, 240);
+      const elapsed = timestamp - record.startedAt;
+      if (elapsed < 0 || elapsed > duration) return;
+      const amplitude = clamp(finiteNumber(options.amplitude, 3), 0, 6) *
+        (1 - elapsed / duration);
+      shakeX += Math.sin(elapsed * .22 + record.effect.id.length) * amplitude;
+      shakeY += Math.cos(elapsed * .27 + record.effect.id.length) * amplitude * .65;
+    });
+    surface.classList.toggle("hg-vfx-screen-shake", Math.abs(shakeX) + Math.abs(shakeY) > .05);
+    setCssNumber(surface, "--hg-vfx-shake-x", shakeX, "px");
+    setCssNumber(surface, "--hg-vfx-shake-y", shakeY, "px");
   }
 
   function positionRecord(record, timestamp) {
@@ -202,13 +366,21 @@ export function createEffectRenderer({
     const screenY = groundY - z;
     const heightScale = debugOptions.scaling
       ? calculateHeightScale(z, effect.heightScaling) : 1;
-    const visualScale = effect.scale * mapScale * heightScale;
+    const punchDuration = clamp(finiteNumber(
+      effect.impactPunch?.durationRatio, .2
+    ), .05, .6);
+    const punch = effect.impactPunch?.enabled && progress < punchDuration
+      ? Math.sin(progress / punchDuration * Math.PI) * clamp(
+          finiteNumber(effect.impactPunch.amount, .14), 0, .5
+        )
+      : 0;
+    const visualScale = effect.scale * mapScale * heightScale * (1 + punch);
 
     record.element.classList.toggle("uses-2d5-motion", uses25d);
     record.element.style.left = `${x}px`;
     record.element.style.top = `${screenY}px`;
-    record.element.style.zIndex = String(getDepthSortValue({
-      layer: record.layer, y: groundY, z, elevation: effect.elevation
+    record.element.style.zIndex = String(getLocalDepthSortValue({
+      y: groundY, z, elevation: effect.elevation
     }));
     record.element.dataset.effectLayer = record.layer;
     record.element.dataset.elevation = String(effect.elevation);
@@ -217,6 +389,15 @@ export function createEffectRenderer({
     record.element.dataset.vfxZ = String(Math.round(z * 100) / 100);
     record.element.dataset.vfxProgress = String(Math.round(progress * 1000) / 1000);
     setCssNumber(record.element, "--hg-vfx-scale", visualScale);
+    const heightGlow = effect.heightGlow?.enabled
+      ? clamp(Math.abs(z) / Math.max(1, finiteNumber(effect.motion.maxZ, 80)), 0, 1)
+      : 0;
+    setCssNumber(record.element, "--hg-vfx-height-glow", heightGlow);
+    setCssNumber(record.element, "--hg-vfx-height-glow-radius", 5 + heightGlow * 9, "px");
+    record.element.classList.toggle("has-height-glow",
+      debugOptions.glows && heightGlow > 0);
+    record.element.classList.toggle("hide-vfx-sprite", !debugOptions.sprites);
+    record.element.classList.toggle("hide-vfx-particles", !debugOptions.particles);
     setCssNumber(record.element, "--hg-vfx-rotation",
       uses25d ? state.rotation : effect.rotation, "deg");
     if (effect.persistent && effect.fadeOut) {
@@ -226,31 +407,38 @@ export function createEffectRenderer({
     if (record.shadow) {
       const shadow = calculateShadow25d(z, effect.shadow);
       record.shadow.hidden = !debugOptions.shadows;
-      record.shadow.style.left = `${x}px`;
-      record.shadow.style.top = `${groundY}px`;
+      record.shadow.style.left = `${x + shadow.offsetX * mapScale}px`;
+      record.shadow.style.top = `${groundY + shadow.offsetY * mapScale}px`;
       record.shadow.style.opacity = String(shadow.opacity);
       record.shadow.style.transform =
         `translate(-50%, -50%) scale(${shadow.scale * mapScale})`;
-      record.shadow.style.zIndex = String(getDepthSortValue({
-        layer: "shadows", y: groundY, z: 0
+      record.shadow.style.zIndex = String(getLocalDepthSortValue({
+        y: groundY, z: 0
       }));
     }
+    updateMotionTrail(record, timestamp, { x, y: screenY });
+    updateDebris(record, timestamp, { x, y: groundY });
+    updateZLine(record, { x, screenY, groundY, z });
     if (debugOptions.sprites) record.animator?.seek?.(timestamp);
+    const animationState = record.animator?.getState?.();
     record.current = Object.freeze({
       id: effect.id, type: effect.type, x, y: groundY, screenY, z, progress,
-      frame: record.animator?.getState?.().currentFrame ?? null,
+      frame: animationState?.currentFrame ?? null,
+      clip: animationState?.clipName || "",
       layer: record.layer
     });
     if (record.debugLabel) {
       record.debugLabel.textContent = `${effect.id} · ${record.layer}\n` +
         `X ${x.toFixed(1)} Y ${groundY.toFixed(1)} Z ${z.toFixed(1)}\n` +
-        `${Math.round(progress * 100)}% · F ${record.current.frame ?? "-"}`;
+        `${Math.round(progress * 100)}% · ${record.current.clip || "sprite"} ` +
+        `F ${record.current.frame ?? "-"}`;
     }
   }
 
   function renderFrame(timestamp) {
     frameHandle = null;
     records.forEach((record) => positionRecord(record, timestamp));
+    applyScreenShake(timestamp);
     ensureFrame();
   }
 
@@ -269,7 +457,25 @@ export function createEffectRenderer({
     });
   }
 
-  function appendSprite(element, effect) {
+  function appendSprite(element, effect, hooks = {}) {
+    if (effect.clips && Object.keys(effect.clips).length) {
+      const sprite = createElement(documentRef, "hg-vfx-sprite hg-vfx-clip-sprite");
+      element.appendChild(sprite);
+      return createVfxClipController({
+        element: sprite,
+        clips: effect.clips,
+        initialClip: effect.clip,
+        assetCache: clipAssetCache,
+        requestFrame: scheduleFrame,
+        cancelFrame: stopFrame,
+        now,
+        manual: true,
+        onEvent: (event) => {
+          element.dataset.lastClipEvent = event.id;
+          hooks.onClipEvent?.(event);
+        }
+      });
+    }
     const spriteOptions = { ...(effect.definition.sprite || {}), ...(effect.sprite || {}) };
     if (effect.definition.className === "cantrip-impact-sprite" ||
         spriteOptions.fitDuration === true) {
@@ -289,11 +495,11 @@ export function createEffectRenderer({
     if (!effect.shadow?.enabled) return null;
     const shadow = createElement(documentRef, "hg-vfx-ground-shadow");
     shadow.dataset.parentEffectId = effect.id;
-    overlay.appendChild(shadow);
+    depthLayers.get("shadows").appendChild(shadow);
     return shadow;
   }
 
-  function render(effect) {
+  function render(effect, hooks = {}) {
     if (!connected) connect();
     syncBounds();
     remove(effect.id);
@@ -305,26 +511,40 @@ export function createEffectRenderer({
     element.dataset.effectState = "active";
     element.dataset.effectIntensity = String(effect.intensity);
     element.style.opacity = String(effect.opacity);
+    if (effect.definition.blendMode) {
+      element.style.mixBlendMode = effect.definition.blendMode;
+    }
     setCssNumber(element, "--hg-vfx-rotation", effect.rotation, "deg");
     setCssNumber(element, "--hg-vfx-duration", effect.duration, "ms");
     setCssNumber(element, "--hg-vfx-intensity", effect.intensity);
+    const container = depthLayers.get(effect.layer) || overlay;
     const record = {
       effect, element, layer: effect.layer,
+      container,
       position: makeResponsivePoint(effect.position, bounds.width, bounds.height),
       start: makeResponsivePoint(effect.startPosition, bounds.width, bounds.height),
       end: makeResponsivePoint(effect.endPosition, bounds.width, bounds.height),
-      animator: null, shadow: null, debugLabel: null, current: null,
+      animator: null, shadow: null, debugLabel: null, zLine: null, current: null,
+      trailPoints: [], lastTrailSample: null, lastTrailAt: 0,
+      debrisParticles: [],
       dispose: null, startedAt: now()
     };
-    if (effect.definition.kind === "sprite") record.animator = appendSprite(element, effect);
+    if (effect.definition.kind === "sprite") {
+      record.animator = appendSprite(element, effect, hooks);
+    }
     else appendParticles(element, effect);
     if (debugOptions.labels) {
       record.debugLabel = createElement(documentRef, "hg-vfx-debug-label");
       element.appendChild(record.debugLabel);
     }
+    record.zLine = createElement(documentRef, "hg-vfx-z-line");
+    record.zLine.dataset.parentEffectId = effect.id;
+    record.zLine.hidden = true;
+    container.appendChild(record.zLine);
     record.shadow = createShadow(effect);
     records.set(effect.id, record);
-    (effect.definition.blendMode === "screen" ? lightOverlay : overlay).appendChild(element);
+    container.appendChild(element);
+    record.debrisParticles = createDebris(record);
     positionRecord(record, record.startedAt);
     try {
       const dispose = effect.definition.configureElement?.({ document: documentRef, effect, element });
@@ -343,8 +563,12 @@ export function createEffectRenderer({
     record.animator?.destroy?.();
     record.dispose?.();
     record.shadow?.remove();
+    record.zLine?.remove();
+    record.trailPoints.forEach((trailPoint) => trailPoint.element.remove());
+    record.debrisParticles.forEach((particle) => particle.element.remove());
     record.element.remove();
     records.delete(record.effect.id);
+    applyScreenShake(now());
     if (!records.size && frameHandle !== null) {
       stopFrame(frameHandle);
       frameHandle = null;
@@ -355,7 +579,15 @@ export function createEffectRenderer({
   function update(id, changes = {}) {
     const record = records.get(String(id || ""));
     if (!record) return false;
-    if (changes.layer) record.layer = normalizeEffectLayer(changes.layer, record.layer);
+    if (changes.layer) {
+      record.layer = normalizeEffectLayer(changes.layer, record.layer);
+      record.container = depthLayers.get(record.layer) || overlay;
+      record.container.appendChild(record.element);
+      record.container.appendChild(record.zLine);
+      record.trailPoints.forEach(({ element }) => record.container.appendChild(element));
+      record.debrisParticles.forEach(({ element }) => record.container.appendChild(element));
+    }
+    if (changes.clip) record.animator?.playClip?.(changes.clip);
     positionRecord(record, now());
     return true;
   }
@@ -364,7 +596,7 @@ export function createEffectRenderer({
     Object.keys(debugOptions).forEach((key) => {
       if (typeof options[key] === "boolean") debugOptions[key] = options[key];
     });
-    for (const layer of [overlay, lightOverlay]) {
+    for (const layer of layerElements) {
       layer.classList.toggle("show-vfx-layers", debugOptions.layers);
     }
     records.forEach((record) => {
@@ -385,8 +617,6 @@ export function createEffectRenderer({
   function connect() {
     if (connected) return overlay;
     connected = true;
-    surface.appendChild(overlay);
-    surface.appendChild(lightOverlay);
     windowRef?.addEventListener("resize", syncBounds);
     if (typeof windowRef?.ResizeObserver === "function") {
       resizeObserver = new windowRef.ResizeObserver(syncBounds);
@@ -397,8 +627,7 @@ export function createEffectRenderer({
   }
 
   function setMode(mode) {
-    overlay.dataset.effectsMode = mode;
-    lightOverlay.dataset.effectsMode = mode;
+    layerElements.forEach((layer) => { layer.dataset.effectsMode = mode; });
   }
 
   function destroy() {
@@ -407,8 +636,9 @@ export function createEffectRenderer({
     resizeObserver = null;
     observedTarget = null;
     windowRef?.removeEventListener("resize", syncBounds);
-    overlay.remove();
-    lightOverlay.remove();
+    layerElements.forEach((layer) => layer.remove());
+    clipAssetCache.clear?.();
+    surface.classList.remove("hg-vfx-screen-shake");
     connected = false;
   }
 
@@ -420,6 +650,7 @@ export function createEffectRenderer({
         .map((record) => record.current).filter(Boolean))
     }),
     getEffectElement: (id) => records.get(String(id || ""))?.element || null,
+    getLayerElement: (layer) => depthLayers.get(normalizeEffectLayer(layer)) || null,
     getOverlayElement: () => overlay,
     notifyTimelineEvent: (id, event) => {
       const element = records.get(String(id || ""))?.element;

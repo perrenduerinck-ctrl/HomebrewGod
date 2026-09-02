@@ -1,6 +1,6 @@
 import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
-} from "./fireEffects.js?v=2d5-animation-20260901";
+} from "./fireEffects.js?v=2d5-vfx-polish-20260902";
 import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=status-sprites-20260831";
 import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=status-sprites-20260831";
 import { compileSpellVfxProfile } from "./profileSequence.js?v=status-sprites-20260831";
@@ -135,12 +135,21 @@ function normalizeSequenceEffect(effect = {}) {
       : Math.round(boundedNumber(effect.intensity, 1, 1, 5)),
     particles: freezeOptions(effect.particles),
     sprite: freezeOptions(effect.sprite),
+    clips: freezeOptions(effect.clips),
+    clip: cleanId(effect.clip || effect.initialClip),
     layer: cleanId(effect.layer),
     motion: freezeOptions(effect.motion),
     shadow: effect.shadow === false ? false : freezeOptions(effect.shadow),
     heightScaling: effect.heightScaling === false
       ? false
       : freezeOptions(effect.heightScaling),
+    heightGlow: effect.heightGlow === false ? false : freezeOptions(effect.heightGlow),
+    trail: effect.trail === false ? false : freezeOptions(effect.trail),
+    debris: effect.debris === false ? false : freezeOptions(effect.debris),
+    shake: effect.shake === false ? false : freezeOptions(effect.shake),
+    impactPunch: effect.impactPunch === false
+      ? false
+      : freezeOptions(effect.impactPunch),
     attachment: freezeOptions(effect.attachment),
     timeline: freezeList(effect.timeline || effect.events),
     persistent: effect.persistent === true,
@@ -590,11 +599,18 @@ function makeEffectRequest({
     intensity,
     particles: effect.particles,
     sprite: effect.sprite,
+    clips: effect.clips,
+    clip: effect.clip,
     preset: effect.preset,
     layer: effect.layer,
     motion: effect.motion,
     shadow: effect.shadow,
     heightScaling: effect.heightScaling,
+    heightGlow: effect.heightGlow,
+    trail: effect.trail,
+    debris: effect.debris,
+    shake: effect.shake,
+    impactPunch: effect.impactPunch,
     attachment: effect.attachment,
     timeline: effect.timeline,
     persistent: effect.persistent,

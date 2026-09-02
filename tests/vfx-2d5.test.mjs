@@ -5,6 +5,7 @@ import { createEffectEngine, normalizeEffectRequest } from "../vfx/effectEngine.
 import { resolveAttachmentGroundPoint } from "../vfx/effectRenderer.js";
 import { createEffectRegistry } from "../vfx/effectRegistry.js";
 import {
+  EFFECT_LAYERS,
   EFFECT_LAYER_ORDER,
   getDepthSortValue,
   normalizeEffectLayer
@@ -12,6 +13,7 @@ import {
 import { applyEffectPreset } from "../vfx/effectPresets.js";
 import { normalizeEffectTimeline } from "../vfx/effectTimeline.js";
 import {
+  applyMotionEasing,
   calculateHeightScale,
   calculateMotion25d,
   calculateShadow25d,
@@ -69,9 +71,16 @@ test("fake Z projects screenY as world Y minus Z without changing XY", () => {
 
 test("movement, scale, rotation and shadow helpers cover reusable 2.5D modes", () => {
   for (const type of [
-    "straight", "arc", "lob", "falling", "rising", "hovering", "homing"
+    "straight", "arc", "lob", "falling", "rising", "hovering"
   ]) {
     assert.equal(normalizeMotion25d({ type }).type, type);
+  }
+  assert.equal(normalizeMotion25d({ type: "homing" }).type, "straight");
+  for (const easing of [
+    "linear", "ease-in", "ease-out", "ease-in-out", "fast-out", "impact", "float"
+  ]) {
+    assert.ok(applyMotionEasing(.5, easing) >= 0);
+    assert.ok(applyMotionEasing(.5, easing) <= 1);
   }
   const spin = calculateMotion25d({
     progress: 0.5,
@@ -85,7 +94,7 @@ test("movement, scale, rotation and shadow helpers cover reusable 2.5D modes", (
   }), 1.2);
   assert.deepEqual(calculateShadow25d(90, {
     opacity: 0.6, fadeDistance: 180, shrinkDistance: 180
-  }), { opacity: 0.3, scale: 0.5 });
+  }), { opacity: 0.3, scale: 0.5, offsetX: 0, offsetY: 0 });
   assert.equal(resolveMotionDuration({
     speed: 100,
     start: { x: 0, y: 0 },
@@ -110,6 +119,10 @@ test("effect layers and presets remain explicit and reusable", () => {
   assert.deepEqual(EFFECT_LAYER_ORDER, [
     "ground", "shadows", "tokens", "airborne", "overhead", "ui"
   ]);
+  assert.deepEqual(Object.fromEntries(EFFECT_LAYER_ORDER.map((layer) => [
+    layer, EFFECT_LAYERS[layer].zIndex
+  ])), { ground: 100, shadows: 200, tokens: 300,
+    airborne: 400, overhead: 500, ui: 600 });
   assert.equal(normalizeEffectLayer("OVERHEAD"), "overhead");
   assert.equal(normalizeEffectLayer("unknown"), "airborne");
   assert.ok(getDepthSortValue({ layer: "ground", y: 900 }) <

@@ -15,6 +15,7 @@ import {
 import {
   FIRE_BOLT_IMPACT_EFFECT_ID,
   FIRE_BOLT_PROJECTILE_EFFECT_ID,
+  FIREBALL_CLIP_EFFECT_ID,
   FIREBALL_PROJECTILE_EFFECT_ID,
   FIRE_CASTING_SEQUENCE_DEFINITIONS,
   FIRE_EFFECT_DEFINITIONS,
@@ -99,6 +100,9 @@ test("the fire vertical slice registers every required procedural effect", () =>
     "fire-flames",
     "fire-smoke",
     "fire-explosion",
+    "fire-impact-flash",
+    "fire-shock-ring",
+    "fire-debris-burst",
     "fire-trail",
     "fire-scorch"
   ]);
@@ -116,7 +120,8 @@ test("the fire vertical slice registers every required procedural effect", () =>
       FIRE_SPRITE_EFFECT_ID,
       FIRE_BOLT_PROJECTILE_EFFECT_ID,
       FIRE_BOLT_IMPACT_EFFECT_ID,
-      FIREBALL_PROJECTILE_EFFECT_ID
+      FIREBALL_PROJECTILE_EFFECT_ID,
+      FIREBALL_CLIP_EFFECT_ID
     ]
   );
 
@@ -149,6 +154,10 @@ test("the fire vertical slice registers every required procedural effect", () =>
   );
   assert.equal(
     registry.get(FIRE_BOLT_IMPACT_EFFECT_ID)?.kind,
+    "sprite"
+  );
+  assert.equal(
+    registry.get(FIREBALL_CLIP_EFFECT_ID)?.kind,
     "sprite"
   );
 });
@@ -238,6 +247,16 @@ test("the supplied fire artwork includes bounded spell sprites", () => {
     fireballProjectileDefinition.sprite.src,
     /fireball-projectile\.png$/
   );
+
+  const fireballClipDefinition = FIRE_EFFECT_DEFINITIONS.find(
+    ({ id }) => id === FIREBALL_CLIP_EFFECT_ID
+  );
+  assert.deepEqual(Object.keys(fireballClipDefinition.clips), [
+    "charge", "release", "travel", "impact", "aftermath"
+  ]);
+  assert.equal(fireballClipDefinition.clips.travel.loop, true);
+  assert.equal(fireballClipDefinition.clips.impact.frameCount, 36);
+  assert.equal(fireballClipDefinition.clips.impact.columns, 6);
 });
 
 test("the fire slice has procedural styles without mandatory image assets", () => {
@@ -362,7 +381,7 @@ test("Fire Bolt follows spell geometry from charge through ember fade", () => {
   assert.equal(scheduler.pending(), 0);
 });
 
-test("Fireball arcs one shared-sheet flight into a burst and smoke cleanup", () => {
+test("Fireball composes named clips, 2.5D travel, impact layers and aftermath", () => {
   const scheduler = createScheduler(), effectEngine = createEffectEngine();
   const system = createCastingSequenceSystem({ effectEngine, scheduler });
   const event = createSpellVfxEvent({
@@ -378,16 +397,26 @@ test("Fireball arcs one shared-sheet flight into a burst and smoke cleanup", () 
   scheduler.advance(result.definition.totalDuration);
   const requests = effectEngine.getStats().requests;
   assert.deepEqual(requests.map(r => r.type), [
-    "fire-glow", "tier-fire-flight", "tier-fire-burst", "fire-smoke"
+    FIREBALL_CLIP_EFFECT_ID, "fire-glow", FIREBALL_CLIP_EFFECT_ID,
+    FIREBALL_CLIP_EFFECT_ID, FIREBALL_CLIP_EFFECT_ID, "fire-explosion",
+    "fire-debris-burst", FIREBALL_CLIP_EFFECT_ID, "fire-embers", "fire-scorch"
   ]);
-  assert.deepEqual(requests[1].startPosition, event.casterPoint);
-  assert.deepEqual(requests[1].endPosition, event.targetPoint);
-  assert.equal(requests[1].preset, "projectile");
-  assert.equal(requests[1].motion.type, "arc");
-  assert.equal(requests[1].motion.maxZ, 112);
-  assert.equal(requests[1].shadow.enabled, true);
-  assert.equal(requests[2].scale, 3.2);
-  assert.equal(requests[3].motion.type, "rising");
+  assert.deepEqual(requests[3].startPosition, event.casterPoint);
+  assert.deepEqual(requests[3].endPosition, event.targetPoint);
+  assert.equal(requests[3].clip, "travel");
+  assert.equal(requests[3].preset, "projectile");
+  assert.equal(requests[3].motion.type, "arc");
+  assert.equal(requests[3].motion.maxZ, 88);
+  assert.equal(requests[3].motion.arcPower, 1.22);
+  assert.equal(requests[3].trail.enabled, true);
+  assert.equal(requests[3].heightGlow.enabled, true);
+  assert.equal(requests[3].shadow.enabled, true);
+  assert.equal(requests[4].clip, "impact");
+  assert.equal(requests[4].scale, 3.2);
+  assert.equal(requests[6].debris.count, 10);
+  assert.equal(requests[7].clip, "aftermath");
+  assert.equal(requests[9].layer, "ground");
+  assert.equal(requests[9].persistent, false);
   assert.ok(requests.every(r => !r.affectedTokenId));
   assert.equal(JSON.stringify(event), before);
   assert.equal(system.getState().activeCount, 0);
@@ -417,7 +446,7 @@ test("fire effect and sequence collections stay immutable and bounded", () => {
   );
   assert.equal(
     fireBurst.phases.impact.effects.some(
-      ({ type }) => type === "tier-fire-burst"
+      ({ type, clip }) => type === FIREBALL_CLIP_EFFECT_ID && clip === "impact"
     ),
     true
   );

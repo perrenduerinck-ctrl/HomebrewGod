@@ -36,7 +36,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=2d5-animation-20260901";
+import { createTokenSystem } from "./tokens/index.js?v=2d5-vfx-polish-20260902";
 import {
   createMapRuler,
   formatMapDistance,
@@ -47,7 +47,7 @@ import {
   formatElevation,
   measureSpatialDistance,
   normalizeElevation
-} from "./battleMap/elevation.js?v=2d5-animation-20260901";
+} from "./battleMap/elevation.js?v=2d5-vfx-polish-20260902";
 import {
   getDefaultTemplateOptions,
   normalizeTemplateDistance,
@@ -74,7 +74,7 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=2d5-animation-20260901";
+} from "./vfx/effectEngine.js?v=2d5-vfx-polish-20260902";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,7 +82,7 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=2d5-animation-20260901";
+} from "./vfx/castingSequence.js?v=2d5-vfx-polish-20260902";
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=status-sprites-20260831";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=status-sprites-20260831";
 import {
@@ -240,8 +240,12 @@ const E = {
   battleVfxDebugZToggle: $("battleVfxDebugZToggle"),
   battleVfxDebugScaleToggle: $("battleVfxDebugScaleToggle"),
   battleVfxDebugSpriteToggle: $("battleVfxDebugSpriteToggle"),
+  battleVfxDebugParticleToggle: $("battleVfxDebugParticleToggle"),
+  battleVfxDebugTrailToggle: $("battleVfxDebugTrailToggle"),
+  battleVfxDebugGlowToggle: $("battleVfxDebugGlowToggle"),
   battleVfxDebugLayerToggle: $("battleVfxDebugLayerToggle"),
   battleVfxDebugLabelToggle: $("battleVfxDebugLabelToggle"),
+  battleVfxTestFireballButton: $("battleVfxTestFireballButton"),
   battleVfxDebugReadout: $("battleVfxDebugReadout"),
   spellTemplateSelect:
     $("spellTemplateSelect"),
@@ -4728,6 +4732,9 @@ function initializeBattleMapVfx() {
     E.battleVfxDebugZToggle,
     E.battleVfxDebugScaleToggle,
     E.battleVfxDebugSpriteToggle,
+    E.battleVfxDebugParticleToggle,
+    E.battleVfxDebugTrailToggle,
+    E.battleVfxDebugGlowToggle,
     E.battleVfxDebugLayerToggle,
     E.battleVfxDebugLabelToggle
   ].filter(Boolean);
@@ -4738,6 +4745,9 @@ function initializeBattleMapVfx() {
       zAxis: E.battleVfxDebugZToggle?.checked !== false,
       scaling: E.battleVfxDebugScaleToggle?.checked !== false,
       sprites: E.battleVfxDebugSpriteToggle?.checked !== false,
+      particles: E.battleVfxDebugParticleToggle?.checked !== false,
+      trails: E.battleVfxDebugTrailToggle?.checked !== false,
+      glows: E.battleVfxDebugGlowToggle?.checked !== false,
       layers: E.battleVfxDebugLayerToggle?.checked === true,
       labels: E.battleVfxDebugLabelToggle?.checked === true
     };
@@ -4769,6 +4779,30 @@ function initializeBattleMapVfx() {
   }
   debugInputs.forEach((input) => input.addEventListener("change", syncVfxDebug));
   syncVfxDebug();
+
+  if (E.battleVfxTestFireballButton) {
+    const isDevelopment = ["localhost", "127.0.0.1", "::1"]
+      .includes(location.hostname) || new URLSearchParams(location.search).has("smokeTest");
+    E.battleVfxTestFireballButton.hidden = !isDevelopment;
+    E.battleVfxTestFireballButton.addEventListener("click", () => {
+      if (!isDevelopment) return;
+      const target = getActiveRulerTarget();
+      const rect = target?.getBoundingClientRect?.();
+      const width = Math.max(240, rect?.width || 720);
+      const height = Math.max(180, rect?.height || 480);
+      battleMapVfxSequences?.play({
+        spellId: "fireball",
+        spellLevel: 3,
+        intensity: 3,
+        damageTypes: ["fire"],
+        deliveryType: "burst",
+        casterPoint: { x: width * .24, y: height * .56 },
+        targetPoint: { x: width * .72, y: height * .56 },
+        geometry: { shape: "sphere", bounds: { width: 160, height: 160 } },
+        affectedTokens: []
+      });
+    });
+  }
 
   if (E.battleVfxModeSelect) {
     E.battleVfxModeSelect.value = mode;
@@ -4887,7 +4921,7 @@ function ensureBattleManagerPolishStyles() {
       position: absolute;
       inset: 0;
       pointer-events: none;
-      z-index: 10;
+      z-index: 300;
     }
 
     .map-tile {
@@ -7105,6 +7139,11 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             motion: options.motion || null,
             shadow: options.shadow ?? false,
             heightScaling: options.heightScaling ?? false,
+            heightGlow: options.heightGlow ?? false,
+            trail: options.trail ?? false,
+            debris: options.debris ?? false,
+            shake: options.shake ?? false,
+            impactPunch: options.impactPunch ?? false,
             attachment: options.attachment || null,
             timeline: options.timeline || null,
             persistent: options.persistent === true,

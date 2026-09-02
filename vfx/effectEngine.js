@@ -1,14 +1,14 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=2d5-animation-20260901";
+} from "./effectRegistry.js?v=2d5-vfx-polish-20260902";
 import {
   createEffectRenderer
-} from "./effectRenderer.js?v=2d5-animation-20260901";
+} from "./effectRenderer.js?v=2d5-vfx-polish-20260902";
 import {
   createPersistentEffectStore,
   MAX_PERSISTENT_LIFETIME_MS
 } from "./persistentEffects.js";
-import { elevationToVisualPixels } from "../battleMap/elevation.js?v=2d5-animation-20260901";
+import { elevationToVisualPixels } from "../battleMap/elevation.js?v=2d5-vfx-polish-20260902";
 import { applyEffectPreset } from "./effectPresets.js";
 import { normalizeEffectLayer } from "./effectLayers.js";
 import {
@@ -162,6 +162,10 @@ export function normalizeEffectRequest(
     effectsMode,
     particles: source.particles || null,
     sprite: source.sprite || null,
+    clips: source.clips && typeof source.clips === "object"
+      ? source.clips
+      : (definition.clips || null),
+    clip: String(source.clip || definition.initialClip || "").trim().toLowerCase(),
     layer: normalizeEffectLayer(source.layer ?? definition.layer,
       source.persistent === true ? "ground" : "airborne"),
     motion,
@@ -176,6 +180,36 @@ export function normalizeEffectRequest(
       : Object.freeze({
           ...(source.heightScaling === true ? {} : (source.heightScaling || {})),
           enabled: source.heightScaling === true || source.heightScaling?.enabled === true
+        }),
+    heightGlow: source.heightGlow === false
+      ? null
+      : Object.freeze({
+          ...(source.heightGlow === true ? {} : (source.heightGlow || {})),
+          enabled: source.heightGlow === true || source.heightGlow?.enabled === true
+        }),
+    trail: source.trail === false
+      ? null
+      : Object.freeze({
+          ...(source.trail === true ? {} : (source.trail || {})),
+          enabled: source.trail === true || source.trail?.enabled === true
+        }),
+    debris: source.debris === false
+      ? null
+      : Object.freeze({
+          ...(source.debris === true ? {} : (source.debris || {})),
+          enabled: source.debris === true || source.debris?.enabled === true
+        }),
+    shake: source.shake === false
+      ? null
+      : Object.freeze({
+          ...(source.shake === true ? {} : (source.shake || {})),
+          enabled: source.shake === true || source.shake?.enabled === true
+        }),
+    impactPunch: source.impactPunch === false
+      ? null
+      : Object.freeze({
+          ...(source.impactPunch === true ? {} : (source.impactPunch || {})),
+          enabled: source.impactPunch === true || source.impactPunch?.enabled === true
         }),
     attachment: source.attachment && typeof source.attachment === "object"
       ? Object.freeze({
@@ -319,11 +353,52 @@ export function createEffectEngine({
     return true;
   }
 
+  function runEffectEvent(record, event) {
+    if (!records.has(record.effect.id)) return;
+    if (event.type === "layer" && event.layer) {
+      try {
+        renderer.update?.(record.effect.id, { layer: event.layer });
+      } catch {
+        // Layer changes are optional presentation events.
+      }
+    }
+    if (event.type === "clip" && event.clip) {
+      try {
+        renderer.update?.(record.effect.id, { clip: event.clip });
+      } catch {
+        // Clip changes cannot affect spell resolution.
+      }
+    }
+    if (event.type === "spawn" && event.effect) {
+      const anchor = record.effect.endPosition ||
+        record.effect.position || record.effect.startPosition;
+      play({
+        position: anchor,
+        elevation: record.effect.endElevation ?? record.effect.elevation,
+        ...event.effect,
+        metadata: {
+          ...record.effect.metadata,
+          ...(event.effect.metadata || {}),
+          parentEffectId: record.effect.id,
+          timelineEventId: event.id,
+          clipName: event.clipName || ""
+        }
+      });
+    }
+    try {
+      renderer.notifyTimelineEvent?.(record.effect.id, event);
+    } catch {
+      // Debug adapters cannot interrupt cleanup.
+    }
+  }
+
   function startRecord(record) {
     if (!records.has(record.effect.id)) return;
     record.delayTimer = null;
     try {
-      renderer.render(record.effect);
+      renderer.render(record.effect, {
+        onClipEvent: (event) => runEffectEvent(record, event)
+      });
       record.phase = "active";
     } catch {
       cancel(record.effect.id, "render-failed");
@@ -346,34 +421,7 @@ export function createEffectEngine({
       let handle = null;
       const runEvent = () => {
         if (handle !== null) record.eventTimers.delete(handle);
-        if (!records.has(record.effect.id)) return;
-        if (event.type === "layer" && event.layer) {
-          try {
-            renderer.update?.(record.effect.id, { layer: event.layer });
-          } catch {
-            // Layer changes are optional presentation events.
-          }
-        }
-        if (event.type === "spawn" && event.effect) {
-          const anchor = record.effect.endPosition ||
-            record.effect.position || record.effect.startPosition;
-          play({
-            position: anchor,
-            elevation: record.effect.endElevation ?? record.effect.elevation,
-            ...event.effect,
-            metadata: {
-              ...record.effect.metadata,
-              ...(event.effect.metadata || {}),
-              parentEffectId: record.effect.id,
-              timelineEventId: event.id
-            }
-          });
-        }
-        try {
-          renderer.notifyTimelineEvent?.(record.effect.id, event);
-        } catch {
-          // Debug adapters cannot interrupt cleanup.
-        }
+        runEffectEvent(record, event);
       };
       if (event.atMilliseconds === 0) {
         runEvent();

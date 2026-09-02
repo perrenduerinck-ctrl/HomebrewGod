@@ -8,13 +8,15 @@ export const EFFECT_LAYER_ORDER = Object.freeze([
 ]);
 
 export const EFFECT_LAYERS = Object.freeze({
-  ground: Object.freeze({ id: "ground", zIndex: 2000 }),
-  shadows: Object.freeze({ id: "shadows", zIndex: 3000 }),
-  tokens: Object.freeze({ id: "tokens", zIndex: 4000 }),
-  airborne: Object.freeze({ id: "airborne", zIndex: 5000 }),
-  overhead: Object.freeze({ id: "overhead", zIndex: 6000 }),
-  ui: Object.freeze({ id: "ui", zIndex: 7000 })
+  ground: Object.freeze({ id: "ground", zIndex: 100 }),
+  shadows: Object.freeze({ id: "shadows", zIndex: 200 }),
+  tokens: Object.freeze({ id: "tokens", zIndex: 300 }),
+  airborne: Object.freeze({ id: "airborne", zIndex: 400 }),
+  overhead: Object.freeze({ id: "overhead", zIndex: 500 }),
+  ui: Object.freeze({ id: "ui", zIndex: 600 })
 });
+
+export const MAP_DEPTH_Z_INDEX = 0;
 
 const cleanLayer = (value) => String(value || "")
   .trim()
@@ -38,6 +40,16 @@ export function getDepthSortValue({
   elevation = 0
 } = {}) {
   const definition = getEffectLayer(layer);
+  return definition.zIndex * 1000 + getLocalDepthSortValue({
+    y, z, elevation
+  });
+}
+
+export function getLocalDepthSortValue({
+  y = 0,
+  z = 0,
+  elevation = 0
+} = {}) {
   const safeY = Number.isFinite(Number(y)) ? Number(y) : 0;
   const safeZ = Number.isFinite(Number(z)) ? Number(z) : 0;
   const safeElevation = Number.isFinite(Number(elevation))
@@ -46,7 +58,7 @@ export function getDepthSortValue({
   const localDepth = Math.max(0, Math.min(899, Math.round(
     safeY - safeZ * 0.2 + safeElevation * 0.02
   )));
-  return definition.zIndex + localDepth;
+  return localDepth;
 }
 
 export function getTokenDepthSortValue({ y = 0, elevation = 0 } = {}) {

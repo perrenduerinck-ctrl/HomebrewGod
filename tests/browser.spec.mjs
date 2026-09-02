@@ -2960,8 +2960,10 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
         if (node.nodeType !== 1 || !node.matches(".hg-map-vfx-effect")) continue;
         const sprite = node.querySelector(".hg-vfx-sprite");
         window.__TIER_RENDERED__.push({type:node.dataset.effectType,
-          columns:Number(node.dataset.spriteColumns), rows:Number(node.dataset.spriteRows),
-          frameCount:Number(node.dataset.spriteFrames),
+          columns:Number(node.dataset.spriteColumns || sprite?.dataset.spriteColumns),
+          rows:Number(node.dataset.spriteRows || sprite?.dataset.spriteRows),
+          frameCount:Number(node.dataset.spriteFrames || sprite?.dataset.spriteFrames),
+          clip:sprite?.dataset.vfxClip || "",
           path:node.classList.contains("has-path"), size:sprite?.style.backgroundSize,
           image:sprite?.style.backgroundImage, blend:getComputedStyle(node).mixBlendMode,
           angle:parseFloat(node.style.getPropertyValue("--hg-vfx-path-rotation")),
@@ -2977,7 +2979,7 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
   });
   const rendered = () => page.evaluate(() => window.__TIER_RENDERED__);
   for (const [spell, role, grid, full, reduced] of [
-    ["fireball", "tier-fire-burst", 5, 4, 2],
+    ["fireball", "fireball-clip-sprite", 6, 10, 9],
     ["cloudkill", "tier-poison-cloud", 5, 2, 1],
     ["stinking-cloud", "tier-poison-comet-cloud", 5, 2, 1],
     ["cone-of-cold", "tier-cold-cone", 5, 3, 2],
@@ -3010,11 +3012,19 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
         await expect(ui.overlay).toHaveCSS("opacity", "1", {timeout:5000});
       }
       const effects = await rendered();
-      expect(effects.length, spell + " " + mode).toBe(count);
+      if (spell === "fireball" && mode !== "off") {
+        expect(effects.length, spell + " " + mode).toBeGreaterThanOrEqual(count);
+        expect(effects.length, spell + " " + mode).toBeLessThanOrEqual(count + 3);
+      } else {
+        expect(effects.length, spell + " " + mode).toBe(count);
+      }
       expect(effects.every(e => e.particles === 0 ||
-        e.type === "fire-smoke" && e.particles <= 24)).toBe(true);
+        ["fire-smoke", "fire-explosion", "fire-embers"].includes(e.type) &&
+          e.particles <= 24)).toBe(true);
       if (count) {
-        const effect = effects.find(e => e.type === role);
+        const effect = spell === "fireball"
+          ? effects.find(e => e.type === role && e.clip === "impact")
+          : effects.find(e => e.type === role);
         if (grid < 6) expect(effect.size).toBe(`${160*grid}px ${160*grid}px`);
         else {
           expect(effect.columns).toBe(6); expect(effect.rows).toBe(6);
@@ -3045,7 +3055,7 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
-test("Fireball uses fake Z, airborne depth, a ground shadow and live debug state", async ({ page }) => {
+test("Fireball clip composition uses fake Z, frame events, shadow, trails and aftermath", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   await useMapTool(page, "#battleVfxDebugEnabledToggle", "check");
@@ -3054,11 +3064,21 @@ test("Fireball uses fake Z, airborne depth, a ground shadow and live debug state
   await ui.point(450, 220);
   await ui.play.click();
 
-  const flight = page.locator('[data-effect-type="tier-fire-flight"]');
+  const charge = page.locator(
+    '[data-effect-type="fireball-clip-sprite"][data-initial-clip="charge"]'
+  );
+  await expect(charge).toBeVisible();
+  await expect(charge.locator('[data-vfx-clip="charge"]')).toBeVisible();
+
+  const flight = page.locator(
+    '[data-effect-type="fireball-clip-sprite"][data-initial-clip="travel"]'
+  );
   await expect(flight).toBeVisible();
   await page.waitForFunction(() => {
-    const effect = document.querySelector('[data-effect-type="tier-fire-flight"]');
-    return Number(effect?.dataset.vfxZ || 0) > 24;
+    const effect = document.querySelector(
+      '[data-effect-type="fireball-clip-sprite"][data-initial-clip="travel"]'
+    );
+    return Number(effect?.dataset.vfxZ || 0) > 20;
   });
 
   const snapshot = await flight.evaluate((effect) => {
@@ -3072,25 +3092,129 @@ test("Fireball uses fake Z, airborne depth, a ground shadow and live debug state
       scale: Number.parseFloat(effect.style.getPropertyValue("--hg-vfx-scale")),
       layer: effect.dataset.effectLayer,
       shadowY: Number.parseFloat(shadow?.style.top || "NaN"),
-      shadowOpacity: Number.parseFloat(shadow?.style.opacity || "NaN")
+      shadowOpacity: Number.parseFloat(shadow?.style.opacity || "NaN"),
+      effectContainer: effect.parentElement?.dataset.effectLayerContainer,
+      shadowContainer: shadow?.parentElement?.dataset.effectLayerContainer,
+      trailCount: effect.parentElement?.querySelectorAll(".hg-vfx-motion-trail").length || 0,
+      smokeTrailCount: effect.parentElement?.querySelectorAll(
+        ".hg-vfx-motion-trail.has-smoke"
+      ).length || 0
     };
   });
   expect(snapshot.layer).toBe("airborne");
-  expect(snapshot.z).toBeGreaterThan(24);
+  expect(snapshot.z).toBeGreaterThan(10);
   expect(snapshot.screenY).toBeCloseTo(snapshot.worldY - snapshot.z, 1);
-  expect(snapshot.scale).toBeGreaterThan(1);
-  expect(snapshot.shadowY).toBeCloseTo(snapshot.worldY, 1);
+  expect(snapshot.scale).toBeGreaterThan(.5);
+  expect(snapshot.shadowY).toBeGreaterThan(snapshot.worldY);
+  expect(snapshot.shadowY - snapshot.worldY).toBeLessThan(6);
   expect(snapshot.shadowOpacity).toBeGreaterThan(0);
   expect(snapshot.shadowOpacity).toBeLessThan(.58);
+  expect(snapshot.effectContainer).toBe("airborne");
+  expect(snapshot.shadowContainer).toBe("shadows");
+  expect(snapshot.trailCount).toBeGreaterThan(0);
+  expect(snapshot.smokeTrailCount).toBeGreaterThan(0);
 
   const debug = await page.evaluate(() =>
     window.__HOMEBREW_GOD_RELEASE_TEST__.getVfxDebugState()
   );
   expect(debug.options.enabled).toBe(true);
   expect(debug.effects.some((effect) =>
-    effect.layer === "airborne" && effect.z > 24
+    effect.layer === "airborne" && effect.z > 10 && effect.clip === "travel"
   )).toBe(true);
-  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
+  await expect(flight).toHaveCount(0, { timeout: 2500 });
+  const burst = page.locator(
+    '[data-effect-type="fireball-clip-sprite"][data-initial-clip="impact"]'
+  );
+  await expect(burst).toBeVisible();
+  const impactSprite = burst.locator('[data-vfx-clip="impact"]');
+  await expect(impactSprite).toBeVisible();
+  expect(await impactSprite.evaluate((element) => (
+    getComputedStyle(element).backgroundImage
+  ))).toContain("fire-cast-6x6.png");
+  await expect(page.locator('[data-effect-type="fire-shock-ring"]')).toBeVisible();
+  const impactLayers = await page.evaluate(() => Object.fromEntries([
+    "fire-shock-ring", "fire-debris-burst", "fireball-clip-sprite"
+  ].map((type) => {
+    const effect = document.querySelector(`[data-effect-type="${type}"]`);
+    return [type, effect?.parentElement?.dataset.effectLayerContainer || ""];
+  })));
+  expect(impactLayers).toEqual({
+    "fire-shock-ring": "ground",
+    "fire-debris-burst": "airborne",
+    "fireball-clip-sprite": "airborne"
+  });
+  expect(await page.locator(".hg-vfx-debris").count()).toBeLessThanOrEqual(16);
+  const aftermath = page.locator(
+    '[data-effect-type="fireball-clip-sprite"][data-initial-clip="aftermath"]'
+  );
+  await expect(aftermath).toBeVisible();
+  await expect(page.locator('[data-effect-type="fire-smoke"]')).toBeVisible();
+  const scorch = page.locator('[data-effect-type="fire-scorch"]');
+  await expect(scorch).toBeVisible();
+  await expect(scorch).toHaveAttribute("data-effect-layer", "ground");
+  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 6500 });
+});
+
+test("attached effects track 0/20/40 elevation once and ground anchors stay under tokens", async ({ page }) => {
+  await page.goto("?smokeTest=1&release=vfx-attachment-depth-20260902", {
+    waitUntil: "domcontentloaded"
+  });
+  await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle"));
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+  await page.evaluate(() => {
+    const token = document.createElement("div");
+    token.className = "hg-token";
+    token.dataset.tokenId = "vfx-elevation-token";
+    Object.assign(token.style, {
+      position: "absolute", left: "240px", top: "200px",
+      width: "40px", height: "40px"
+    });
+    document.getElementById("tokenLayer").appendChild(token);
+  });
+
+  for (const visualZ of [0, 20, 40]) {
+    await page.evaluate((z) => {
+      const token = document.querySelector('[data-token-id="vfx-elevation-token"]');
+      token.dataset.visualZ = String(z);
+      token.style.top = `${200 - z}px`;
+    }, visualZ);
+    const played = await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.playVfxTest({
+      type: "procedural-pulse",
+      duration: 180,
+      attachment: { tokenId: "vfx-elevation-token", position: "centered" },
+      layer: "airborne"
+    }));
+    const effect = page.locator(`[data-effect-id="${played.id}"]`);
+    await expect(effect).toBeVisible();
+    const state = await effect.evaluate((element) => ({
+      z: Number(element.dataset.vfxZ),
+      worldY: Number(element.dataset.vfxY),
+      screenY: Number.parseFloat(element.style.top),
+      layer: element.parentElement?.dataset.effectLayerContainer
+    }));
+    expect(state.z).toBeCloseTo(visualZ, 1);
+    expect(state.worldY).toBeCloseTo(220, 1);
+    expect(state.screenY).toBeCloseTo(220 - visualZ, 1);
+    expect(state.layer).toBe("airborne");
+    await expect(effect).toHaveCount(0, { timeout: 1500 });
+  }
+
+  const under = await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.playVfxTest({
+    type: "procedural-pulse",
+    duration: 180,
+    attachment: { tokenId: "vfx-elevation-token", position: "under" },
+    layer: "ground"
+  }));
+  const underEffect = page.locator(`[data-effect-id="${under.id}"]`);
+  await expect(underEffect).toBeVisible();
+  const underState = await underEffect.evaluate((element) => ({
+    screenY: Number.parseFloat(element.style.top),
+    layer: element.parentElement?.dataset.effectLayerContainer
+  }));
+  expect(underState.layer).toBe("ground");
+  expect(underState.screenY).toBeGreaterThan(180);
+  await expect(underEffect).toHaveCount(0, { timeout: 1500 });
 });
 
 test("compact map menus preserve viewport space, keyboard access and locked previews", async ({ page }) => {
@@ -3412,7 +3536,7 @@ test("storm profiles render full-line lightning and area-local hail with bounded
           sprite: Boolean(node.querySelector(".hg-vfx-sprite")),
           stones: node.querySelectorAll(".hg-storm-hailstone").length,
           bursts: node.querySelectorAll(".hg-storm-ice-burst").length,
-          blend: getComputedStyle(node.parentElement).mixBlendMode });
+          blend: getComputedStyle(node).mixBlendMode });
       }
     });
     for (const layer of document.querySelectorAll(".hg-map-vfx-layer, .hg-map-vfx-light-layer")) {
@@ -4159,7 +4283,22 @@ test(
     expect(presentation).toEqual({
       ariaHidden: "true",
       pointerEvents: "none",
-      zIndex: "50"
+      zIndex: "400"
+    });
+    const depthStack = await page.evaluate(() => ({
+      layers: Object.fromEntries(Array.from(document.querySelectorAll(
+        ".hg-map-vfx-depth-layer"
+      ), (element) => [element.dataset.effectLayerContainer,
+        Number(getComputedStyle(element).zIndex)])),
+      tokens: Number(getComputedStyle(document.getElementById("tokenLayer")).zIndex),
+      sameHost: Array.from(document.querySelectorAll(".hg-map-vfx-depth-layer"))
+        .every((element) => element.parentElement === document.getElementById("tokenLayer").parentElement)
+    }));
+    expect(depthStack).toEqual({
+      layers: { ground: 100, shadows: 200, tokens: 300,
+        airborne: 400, overhead: 500, ui: 600 },
+      tokens: 300,
+      sameHost: true
     });
 
     await page.evaluate(() => {
@@ -4235,6 +4374,16 @@ test(
       "--hg-vfx-scale",
       "1.25"
     );
+    await page.locator("#zoomResetButton").click();
+    await page.locator("#zoomOutButton").click();
+    await page.locator("#zoomOutButton").click();
+    await expect(zoomEffect).toHaveCSS("--hg-vfx-scale", "0.5");
+    await page.locator("#zoomResetButton").click();
+    for (let index = 0; index < 4; index += 1) {
+      await page.locator("#zoomInButton").click();
+    }
+    await expect(zoomEffect).toHaveCSS("--hg-vfx-scale", "2");
+    await page.locator("#zoomResetButton").click();
 
     const spritePlayed = await page.evaluate(() => window
       .__HOMEBREW_GOD_RELEASE_TEST__
@@ -4255,7 +4404,7 @@ test(
     );
     await expect(spriteEffect).toHaveCSS(
       "--hg-vfx-scale",
-      "1.5"
+      "1.2"
     );
     await expect(spriteEffect).toHaveCSS(
       "--hg-vfx-rotation",

@@ -5,8 +5,17 @@ export const MOTION_25D_TYPES = Object.freeze([
   "lob",
   "falling",
   "rising",
-  "hovering",
-  "homing"
+  "hovering"
+]);
+
+export const MOTION_25D_EASINGS = Object.freeze([
+  "linear",
+  "ease-in",
+  "ease-out",
+  "ease-in-out",
+  "fast-out",
+  "impact",
+  "float"
 ]);
 
 export const ROTATION_25D_MODES = Object.freeze([
@@ -35,9 +44,11 @@ export function normalizeMotion25d(raw = {}, defaults = {}) {
   const source = raw === true ? {} : (raw || {});
   const fallback = defaults || {};
   const requestedType = clean(source.type || fallback.type || "stationary");
-  const type = MOTION_25D_TYPES.includes(requestedType)
-    ? requestedType
-    : "stationary";
+  // Homing is deliberately not approximated with a straight line. Callers can
+  // update a live target themselves; otherwise the safe fallback is straight.
+  const type = requestedType === "homing"
+    ? "straight"
+    : (MOTION_25D_TYPES.includes(requestedType) ? requestedType : "stationary");
   const requestedRotation = clean(
     source.rotationMode || source.rotation ||
     fallback.rotationMode || fallback.rotation || "fixed"
@@ -59,8 +70,14 @@ export function normalizeMotion25d(raw = {}, defaults = {}) {
       source.hoverCycles,
       finiteNumber(fallback.hoverCycles, 1)
     ), 0, 20),
+    arcPower: clamp(finiteNumber(
+      source.arcPower,
+      finiteNumber(fallback.arcPower, 1)
+    ), 0.25, 4),
     speed: clamp(finiteNumber(source.speed, finiteNumber(fallback.speed, 0)), 0, 10000),
-    easing: clean(source.easing || fallback.easing || "linear"),
+    easing: MOTION_25D_EASINGS.includes(clean(
+      source.easing || fallback.easing || "linear"
+    )) ? clean(source.easing || fallback.easing || "linear") : "linear",
     rotationMode,
     rotationOffset: clamp(finiteNumber(
       source.rotationOffset,
@@ -79,15 +96,21 @@ export function normalizeMotion25d(raw = {}, defaults = {}) {
   });
 }
 
-function ease(progress, name) {
-  if (name === "ease-in") return progress * progress;
-  if (name === "ease-out") return 1 - (1 - progress) ** 2;
+export function applyMotionEasing(progress, name = "linear") {
+  const value = clamp(finiteNumber(progress, 0), 0, 1);
+  if (name === "ease-in") return value * value;
+  if (name === "ease-out") return 1 - (1 - value) ** 2;
   if (name === "ease-in-out") {
-    return progress < 0.5
-      ? 2 * progress * progress
-      : 1 - (-2 * progress + 2) ** 2 / 2;
+    return value < 0.5
+      ? 2 * value * value
+      : 1 - (-2 * value + 2) ** 2 / 2;
   }
-  return progress;
+  if (name === "fast-out") return 1 - (1 - value) ** 3;
+  if (name === "impact") return value < 0.72
+    ? (value / 0.72) ** 1.5 * 0.88
+    : 0.88 + (value - 0.72) / 0.28 * 0.12;
+  if (name === "float") return value * value * (3 - 2 * value);
+  return value;
 }
 
 function customRotationAt(keyframes, progress, fallback) {
@@ -130,7 +153,7 @@ export function calculateMotion25d({
 } = {}) {
   const normalized = normalizeMotion25d(motion);
   const rawProgress = clamp(finiteNumber(progress, 0), 0, 1);
-  const travelProgress = ease(rawProgress, normalized.easing);
+  const travelProgress = applyMotionEasing(rawProgress, normalized.easing);
   const startX = finiteNumber(start?.x);
   const startY = finiteNumber(start?.y);
   const endX = finiteNumber(end?.x, startX);
@@ -139,7 +162,7 @@ export function calculateMotion25d({
   let z = linearZ;
 
   if (normalized.type === "arc") {
-    z += Math.sin(rawProgress * Math.PI) * normalized.maxZ;
+    z += Math.sin(rawProgress * Math.PI) ** normalized.arcPower * normalized.maxZ;
   } else if (normalized.type === "lob") {
     z += Math.sin(rawProgress * Math.PI) ** 0.72 * normalized.maxZ;
   } else if (normalized.type === "falling") {
@@ -197,12 +220,15 @@ export function calculateShadow25d(z, raw = {}) {
   const options = raw === true ? {} : (raw || {});
   const fadeDistance = Math.max(1, finiteNumber(options.fadeDistance, 180));
   const shrinkDistance = Math.max(1, finiteNumber(options.shrinkDistance, 260));
+  const elevationRatio = clamp(Math.abs(finiteNumber(z)) / fadeDistance, 0, 1);
   return Object.freeze({
     opacity: clamp(
       finiteNumber(options.opacity, 0.55) * (1 - Math.abs(z) / fadeDistance),
       0,
       1
     ),
-    scale: clamp(1 - Math.abs(z) / shrinkDistance, 0.18, 1)
+    scale: clamp(1 - Math.abs(z) / shrinkDistance, 0.18, 1),
+    offsetX: finiteNumber(options.offsetX, 0) * elevationRatio,
+    offsetY: finiteNumber(options.offsetY, 0) * elevationRatio
   });
 }

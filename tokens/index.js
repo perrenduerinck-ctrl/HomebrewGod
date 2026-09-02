@@ -12,7 +12,7 @@ import {
   getTokenElevation,
   normalizeElevation,
   elevationToVisualPixels
-} from "../battleMap/elevation.js?v=2d5-animation-20260901";
+} from "../battleMap/elevation.js?v=2d5-vfx-polish-20260902";
 import { getTokenDepthSortValue } from "../vfx/effectLayers.js";
 
 export function createTokenSystem(options) {
@@ -640,7 +640,7 @@ export function createTokenSystem(options) {
         width: 100%;
         height: 100%;
         pointer-events: none;
-        z-index: 4000;
+        z-index: 300;
       }
 
       .hg-map-scale-preview {
@@ -1493,7 +1493,7 @@ export function createTokenSystem(options) {
     T.tokenLayer.style.width = "100%";
     T.tokenLayer.style.height = "100%";
     T.tokenLayer.style.pointerEvents = "none";
-    T.tokenLayer.style.zIndex = "4000";
+    T.tokenLayer.style.zIndex = "300";
 
     return T.tokenLayer;
   }

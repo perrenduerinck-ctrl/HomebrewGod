@@ -9,8 +9,8 @@
 
   <title>Homebrew God</title>
 
-<link rel="stylesheet" href="./assets/styles/app.css?v=2d5-animation-20260901">
-<link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-animation-20260901">
+<link rel="stylesheet" href="./assets/styles/app.css?v=2d5-vfx-polish-20260902">
+<link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-vfx-polish-20260902">
 </head>
 
 <body>
@@ -483,9 +483,13 @@
           <label><input id="battleVfxDebugZToggle" type="checkbox" checked> Z axis</label>
           <label><input id="battleVfxDebugScaleToggle" type="checkbox" checked> Height scale</label>
           <label><input id="battleVfxDebugSpriteToggle" type="checkbox" checked> Sprite animation</label>
+          <label><input id="battleVfxDebugParticleToggle" type="checkbox" checked> Particles</label>
+          <label><input id="battleVfxDebugTrailToggle" type="checkbox" checked> Trails</label>
+          <label><input id="battleVfxDebugGlowToggle" type="checkbox" checked> Height glow</label>
           <label><input id="battleVfxDebugLayerToggle" type="checkbox"> Layers</label>
           <label><input id="battleVfxDebugLabelToggle" type="checkbox"> Labels</label>
         </div>
+        <button id="battleVfxTestFireballButton" type="button" hidden>Test Fireball</button>
         <pre id="battleVfxDebugReadout">No active effects.</pre>
       </fieldset>
 
@@ -1015,7 +1019,7 @@
     {
       "imports": {
         "./battleMap/templateGeometry.js": "./battleMap/templateGeometry.js?v=unified-preview-20260829",
-        "./tokens/index.js": "./tokens/index.js?v=2d5-animation-20260901",
+        "./tokens/index.js": "./tokens/index.js?v=2d5-vfx-polish-20260902",
         "./shared/realtimeListeners.js": "./shared/realtimeListeners.js?v=priority10-20260822",
         "./monsters/creator.js": "./monsters/creator.js?v=priority10-20260822",
         "./shared/securityPersistence.js": "./shared/securityPersistence.js?v=priority10-20260822",
@@ -1053,7 +1057,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=2d5-animation-20260901"
+    src="./app.js?v=2d5-vfx-polish-20260902"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

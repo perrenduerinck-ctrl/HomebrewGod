@@ -48,6 +48,31 @@ cleaner sheet will be needed before animating that variant. It is not used now.
 The normal and additive layers share engine caps, resize, Off/Reduced settings,
 and cleanup. No extra persistent effects or gameplay state are created.
 
+## Clip-based asset standard
+
+New showcase impacts prefer 6×6 atlases (36 frames at 24–30 fps), while
+projectile, buff/debuff, aura and smoke loops normally use only the 8–24 frames
+their motion requires. Grid dimensions remain metadata: 4×4, 5×5, 6×4, 4×3,
+6×7 and measured custom atlases all remain supported.
+
+`vfx/vfxAssetManifest.js` is the central clip registry. A spell may define any
+subset of `charge`, `release`, `travel`, `impact`, `aftermath`, and `persistent`.
+World movement, fake Z, easing, shadows and trails remain separate engine data;
+sprite frames animate the object rather than carrying it across the map.
+
+Migration is incremental:
+
+- `keep`: already suitable.
+- `upgrade-later`: acceptable 4×4/5×5 artwork.
+- `replace`: visibly choppy or structurally unsuitable.
+- `6x6-premium`: showcase spell artwork.
+
+Fireball is the first complete composition. Its charge/release/travel/impact
+windows play through one reusable clip controller, while the engine separately
+adds arc motion, perspective, a moving shadow, ember trail, impact flash,
+shockwave, debris, smoke, embers and a temporary scorch mark. Assets are loaded
+when a clip is about to play and retained in a small recently-used cache.
+
 ## Buff and debuff status batch
 
 The 20 unique 5×5 atlases in `status/` are the owner's unchanged 1254×1254

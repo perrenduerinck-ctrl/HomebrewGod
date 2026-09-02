@@ -28,6 +28,7 @@ export function normalizeEffectTimeline(events = [], duration = 0) {
           progress,
           atMilliseconds: Math.round(progress * safeDuration),
           layer: clean(event?.layer),
+          clip: clean(event?.clip || event?.nextClip),
           effect: event?.effect && typeof event.effect === "object"
             ? Object.freeze({ ...event.effect })
             : null,

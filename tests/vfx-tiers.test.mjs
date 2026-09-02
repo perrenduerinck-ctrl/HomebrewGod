@@ -15,6 +15,7 @@ import { createSpriteAnimator, getSpriteFrameStyle, normalizeSpriteOptions } fro
 import { createSpellTemplateInstruction } from "../battleMap/spellTemplates.js";
 import { createSpellPreviewSession } from "../battleMap/spellPreview.js";
 import { STORM_EFFECT_DEFINITIONS } from "../vfx/stormEffects.js";
+import { getVfxClipSources } from "../vfx/vfxAssetManifest.js";
 
 const ids = [...TIER_SPELL_PROFILES.map(p => p.spellId), "fireball", "ice-storm"];
 function harness(mode = "full", fail = false) {
@@ -152,17 +153,26 @@ test("preview and cast stay bounded, independent of target count, with complete 
       const before = JSON.stringify(event);
       assert.equal(h.system.play(event).ok, true, id); h.finish();
       counts[mode] = h.requests.length;
-      assert.ok(h.requests.length <= (id === "fireball" ? 4 : 3), id);
+      assert.ok(h.requests.length <= (id === "fireball" ? 10 : 3), id);
       assert.ok(h.requests.every(e => !e.affectedTokenId && !e.persistent &&
-        (e.particles?.count === 0 || e.metadata?.role === "fireball-smoke" &&
-          e.particles?.count <= 8)), id);
+        (e.particles == null || e.particles?.count === 0 || ["fireball-smoke", "fireball-core-explosion",
+          "fireball-aftermath-embers"]
+          .includes(e.metadata?.role) && e.particles?.count <= 14)), id);
       assert.equal(JSON.stringify(event), before);
       assert.equal(h.tasks.size, 0); assert.equal(h.visible.size, 0);
       assert.equal(h.system.getState().activeCount, 0); assert.equal(h.engine.getState().activeCount, 0);
       for (const e of h.requests.filter(e => e.definition.kind === "sprite")) {
-        assert.equal(e.definition.sprite.columns,
-          e.definition.id.startsWith("status-") ? 5 : getSpellSpriteTier(spell.level).columns, id);
-        assert.ok(getCantripSpritePaths(id).includes(e.definition.sprite.src), "selected-only preload: " + id);
+        const sprite = e.definition.sprite || e.clips?.[e.clip];
+        if (id === "fireball") {
+          assert.ok([4, 5, 6].includes(sprite.columns), id);
+        } else {
+          assert.equal(sprite.columns,
+            e.definition.id.startsWith("status-") ? 5 : getSpellSpriteTier(spell.level).columns, id);
+        }
+        assert.ok([
+          ...getCantripSpritePaths(id),
+          ...getVfxClipSources(id)
+        ].includes(sprite.src), "selected-only preload: " + id);
       }
     }
     assert.equal(counts.off, 0);

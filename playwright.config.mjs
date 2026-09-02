@@ -36,13 +36,15 @@ export default defineConfig({
       localBaseUrl,
     browserName: "chromium",
     headless: true,
-    launchOptions:
-      browserExecutablePath
+    launchOptions: {
+      args: ["--mute-audio"],
+      ...(browserExecutablePath
         ? {
             executablePath:
               browserExecutablePath
           }
-        : {},
+        : {})
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure"
   },

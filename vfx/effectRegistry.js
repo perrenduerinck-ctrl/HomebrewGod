@@ -1,6 +1,6 @@
 import {
   FIRE_EFFECT_DEFINITIONS
-} from "./fireEffects.js?v=2d5-animation-20260901";
+} from "./fireEffects.js?v=2d5-vfx-polish-20260902";
 import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=status-sprites-20260831";
 import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=status-sprites-20260831";
 import { STORM_EFFECT_DEFINITIONS } from "./stormEffects.js?v=status-sprites-20260831";
