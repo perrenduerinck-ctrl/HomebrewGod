@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -14,8 +13,6 @@ import {
 import { createVfxClipController } from "../vfx/clipController.js";
 import { createEffectEngine } from "../vfx/effectEngine.js";
 import { createEffectRegistry } from "../vfx/effectRegistry.js";
-
-const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 
 function sprite({ columns, rows, frameCount = columns * rows, atlas } = {}) {
   return {
@@ -63,8 +60,6 @@ test("the central Fireball manifest points to real bounded clip assets", () => {
   assert.equal(clips.travel.framesPerSecond, 24);
   assert.equal(clips.impact.framesPerSecond, 30);
   assert.equal(clips.aftermath.framesPerSecond, 16);
-  assert.equal(repositoryRoot.endsWith("HomebrewGod-large-lists\\") ||
-    repositoryRoot.endsWith("HomebrewGod-large-lists/"), true);
 });
 
 test("one clip controller reuses its element, emits frame events and cancels old RAF work", () => {
