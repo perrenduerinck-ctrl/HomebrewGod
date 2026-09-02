@@ -1355,6 +1355,16 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 }
 
 .hg-vfx-fireball-clip-sprite
+  .hg-vfx-clip-sprite[data-vfx-clip="impact"] {
+  transform-origin: center;
+  animation:
+    hg-vfx-fireball-impact-expand
+    var(--hg-vfx-duration)
+    cubic-bezier(.14, .84, .26, 1)
+    both;
+}
+
+.hg-vfx-fireball-clip-sprite
   .hg-vfx-clip-sprite[data-vfx-clip="aftermath"] {
   filter:
     saturate(.82)
@@ -1907,6 +1917,13 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 @keyframes hg-vfx-fire-shock-ring {
   0% { opacity: .96; transform: translate(-50%, -50%) scale(.18); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+}
+
+@keyframes hg-vfx-fireball-impact-expand {
+  0% { opacity: .12; transform: translate(-50%, -50%) scale(.22); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(.48); }
+  48% { opacity: 1; transform: translate(-50%, -50%) scale(.9); }
+  100% { opacity: .92; transform: translate(-50%, -50%) scale(1.04); }
 }
 
 /* The 2.5D runtime moves the effect shell once per animation frame. Existing

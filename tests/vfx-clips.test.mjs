@@ -60,6 +60,8 @@ test("the central Fireball manifest points to real bounded clip assets", () => {
   assert.equal(clips.travel.framesPerSecond, 24);
   assert.equal(clips.impact.framesPerSecond, 30);
   assert.equal(clips.aftermath.framesPerSecond, 16);
+  assert.match(clips.impact.src, /fireball-impact-alpha-6x6\.png$/);
+  assert.equal(clips.aftermath.src, clips.impact.src);
 });
 
 test("one clip controller reuses its element, emits frame events and cancels old RAF work", () => {

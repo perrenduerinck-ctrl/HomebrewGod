@@ -1,4 +1,4 @@
-import { getVfxClipSet } from "./vfxAssetManifest.js?v=clip-vfx-20260902";
+import { getVfxClipSet } from "./vfxAssetManifest.js?v=fireball-blend-20260902";
 
 export const FIRE_EFFECT_IDS = Object.freeze([
   "fire-glow",
@@ -271,20 +271,20 @@ function makeFireballCastingSequence() {
     phases: {
       charge: { duration: 300, effects: [
         effect(FIREBALL_CLIP_EFFECT_ID, "caster", { duration: 300,
-          clip: "charge", scale: .62, particles: { count: 0 },
+          clip: "charge", scale: .38, particles: { count: 0 },
           role: "fireball-charge-clip", heightGlow: { enabled: true } }),
         { ...effect("fire-glow", "caster", { duration: 300, scale: .5,
           particles: { count: 0 }, role: "fireball-charge-glow" }), fullOnly: true }
       ] },
       release: { duration: 140, effects: [
         effect(FIREBALL_CLIP_EFFECT_ID, "caster", { duration: 140,
-          clip: "release", scale: .78, particles: { count: 0 },
+          clip: "release", scale: .44, particles: { count: 0 },
           role: "fireball-release-clip",
           impactPunch: { enabled: true, amount: .12, durationRatio: .55 } })
       ] },
       travel: { duration: 480, effects: [
         effect(FIREBALL_CLIP_EFFECT_ID, "path", { duration: 480,
-          clip: "travel", scale: .5,
+          clip: "travel", scale: .32,
           particles: { count: 0 }, role: "fireball-projectile",
           preset: "projectile", layer: "airborne",
           motion: { type: "arc", maxZ: 88, arcPower: 1.22,
@@ -298,8 +298,7 @@ function makeFireballCastingSequence() {
       ] },
       impact: { duration: 900, effects: [
         effect(FIREBALL_CLIP_EFFECT_ID, "target", { duration: 900,
-          clip: "impact",
-          geometryScaleBasePixels: 160, particles: { count: 0 },
+          clip: "impact", scale: .86, particles: { count: 0 },
           role: "fireball-impact-clip",
           impactPunch: { enabled: true, amount: .16, durationRatio: .18 } }),
         effect("fire-explosion", "target", { duration: 480, scale: 1.12,
@@ -312,7 +311,7 @@ function makeFireballCastingSequence() {
       ] },
       aftermath: { duration: 1400, effects: [
         effect(FIREBALL_CLIP_EFFECT_ID, "target", { duration: 750,
-          clip: "aftermath", scale: 1, opacity: .72,
+          clip: "aftermath", scale: .7, opacity: .72,
           particles: { count: 0 }, role: "fireball-aftermath-clip" }),
         effect("fire-embers", "target", { duration: 920, scale: 1.05,
           particles: { count: 8, distance: 54, size: 3 },

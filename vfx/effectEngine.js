@@ -1,9 +1,9 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=2d5-vfx-polish-20260902";
+} from "./effectRegistry.js?v=fireball-blend-20260902";
 import {
   createEffectRenderer
-} from "./effectRenderer.js?v=2d5-vfx-polish-20260902";
+} from "./effectRenderer.js?v=fireball-blend-20260902";
 import {
   createPersistentEffectStore,
   MAX_PERSISTENT_LIFETIME_MS

@@ -30,7 +30,11 @@ const deepFreeze = (value) => {
   return Object.freeze(value);
 };
 
-const FIREBALL_FIRE_IMPACT = "./assets/vfx/tiers7-9/fire-cast-6x6.png";
+// The source 6x6 sheet is opaque RGB. This alpha-unmatted copy preserves its
+// additive color while making black pixels truly transparent inside isolated
+// depth-layer stacking contexts.
+const FIREBALL_FIRE_IMPACT =
+  "./assets/vfx/tiers7-9/fireball-impact-alpha-6x6.png";
 
 export const VFX_ASSET_MANIFEST = deepFreeze({
   fireball: {

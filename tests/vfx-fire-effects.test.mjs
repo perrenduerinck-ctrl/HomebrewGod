@@ -411,10 +411,14 @@ test("Fireball composes named clips, 2.5D travel, impact layers and aftermath", 
   assert.equal(requests[3].trail.enabled, true);
   assert.equal(requests[3].heightGlow.enabled, true);
   assert.equal(requests[3].shadow.enabled, true);
+  assert.equal(requests[0].scale, .38);
+  assert.equal(requests[2].scale, .44);
+  assert.equal(requests[3].scale, .32);
   assert.equal(requests[4].clip, "impact");
-  assert.equal(requests[4].scale, 3.2);
+  assert.equal(requests[4].scale, .86);
   assert.equal(requests[6].debris.count, 10);
   assert.equal(requests[7].clip, "aftermath");
+  assert.equal(requests[7].scale, .7);
   assert.equal(requests[9].layer, "ground");
   assert.equal(requests[9].persistent, false);
   assert.ok(requests.every(r => !r.affectedTokenId));

@@ -1,7 +1,7 @@
 import { createParticleDescriptors } from "./particles.js";
 import { createSpriteAnimator } from "./spriteAnimator.js?v=2d5-vfx-polish-20260902";
-import { createVfxClipController } from "./clipController.js?v=clip-vfx-20260902";
-import { createVfxAssetCache } from "./vfxAssetManifest.js?v=clip-vfx-20260902";
+import { createVfxClipController } from "./clipController.js?v=fireball-blend-20260902";
+import { createVfxAssetCache } from "./vfxAssetManifest.js?v=fireball-blend-20260902";
 import {
   calculateHeightScale,
   calculateMotion25d,
@@ -460,6 +460,10 @@ export function createEffectRenderer({
   function appendSprite(element, effect, hooks = {}) {
     if (effect.clips && Object.keys(effect.clips).length) {
       const sprite = createElement(documentRef, "hg-vfx-sprite hg-vfx-clip-sprite");
+      if (effect.definition.blendMode) {
+        sprite.style.mixBlendMode = effect.definition.blendMode;
+        sprite.dataset.vfxBlendMode = effect.definition.blendMode;
+      }
       element.appendChild(sprite);
       return createVfxClipController({
         element: sprite,
@@ -485,6 +489,10 @@ export function createEffectRenderer({
         frames * 1000 / Math.max(1, effect.duration));
     }
     const sprite = createElement(documentRef, "hg-vfx-sprite");
+    if (effect.definition.blendMode) {
+      sprite.style.mixBlendMode = effect.definition.blendMode;
+      sprite.dataset.vfxBlendMode = effect.definition.blendMode;
+    }
     element.appendChild(sprite);
     const animator = createSpriteAnimator({ element: sprite, options: spriteOptions, manual: true });
     animator.start();
@@ -513,6 +521,7 @@ export function createEffectRenderer({
     element.style.opacity = String(effect.opacity);
     if (effect.definition.blendMode) {
       element.style.mixBlendMode = effect.definition.blendMode;
+      element.dataset.vfxBlendMode = effect.definition.blendMode;
     }
     setCssNumber(element, "--hg-vfx-rotation", effect.rotation, "deg");
     setCssNumber(element, "--hg-vfx-duration", effect.duration, "ms");

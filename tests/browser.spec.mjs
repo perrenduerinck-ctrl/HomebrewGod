@@ -3077,10 +3077,34 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
       scorchLayer: "",
       maxDebris: 0,
       layers: {},
+      clips: {},
       sample: null
     };
     const stopAt = performance.now() + 5000;
     const sampleTravel = () => {
+      for (const clipEffect of document.querySelectorAll(
+        '[data-effect-type="fireball-clip-sprite"]'
+      )) {
+        const sprite = clipEffect.querySelector(".hg-vfx-clip-sprite");
+        const clip = clipEffect.dataset.initialClip || sprite?.dataset.vfxClip || "";
+        if (!clip || state.clips[clip]) continue;
+        const effectStyle = getComputedStyle(clipEffect);
+        const spriteStyle = sprite ? getComputedStyle(sprite) : null;
+        state.clips[clip] = {
+          activeClip: sprite?.dataset.vfxClip || "",
+          outerBlend: effectStyle.mixBlendMode,
+          outerInlineBlend: clipEffect.style.mixBlendMode,
+          spriteBlend: spriteStyle?.mixBlendMode || "",
+          spriteInlineBlend: sprite?.style.mixBlendMode || "",
+          source: spriteStyle?.backgroundImage || "",
+          layer: clipEffect.parentElement?.dataset.effectLayerContainer || "",
+          scale: Number.parseFloat(
+            clipEffect.style.getPropertyValue("--hg-vfx-scale") || "1"
+          ),
+          frameWidth: Number.parseFloat(spriteStyle?.width || "0"),
+          animationName: spriteStyle?.animationName || ""
+        };
+      }
       const effect = document.querySelector(
         '[data-effect-type="fireball-clip-sprite"][data-initial-clip="travel"]'
       );
@@ -3172,7 +3196,8 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
   expect(snapshot.layer).toBe("airborne");
   expect(snapshot.z).toBeGreaterThan(10);
   expect(snapshot.screenY).toBeCloseTo(snapshot.worldY - snapshot.z, 1);
-  expect(snapshot.scale).toBeGreaterThan(.5);
+  expect(snapshot.scale).toBeGreaterThan(.32);
+  expect(snapshot.scale).toBeLessThan(.42);
   expect(snapshot.shadowY).toBeGreaterThan(snapshot.worldY);
   expect(snapshot.shadowY - snapshot.worldY).toBeLessThan(6);
   expect(snapshot.shadowOpacity).toBeGreaterThan(0);
@@ -3189,7 +3214,7 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
     return state?.impactSeen && state.shockSeen && state.maxDebris > 0;
   });
   const impactState = await page.evaluate(() => window.__FIREBALL_TRAVEL_SAMPLE__);
-  expect(impactState.impactImage).toContain("fire-cast-6x6.png");
+  expect(impactState.impactImage).toContain("fireball-impact-alpha-6x6.png");
   const impactLayers = impactState.layers;
   expect(impactLayers).toEqual({
     "fire-shock-ring": "ground",
@@ -3203,7 +3228,108 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
   });
   const aftermathState = await page.evaluate(() => window.__FIREBALL_TRAVEL_SAMPLE__);
   expect(aftermathState.scorchLayer).toBe("ground");
+  expect(Object.keys(aftermathState.clips).sort()).toEqual([
+    "aftermath", "charge", "impact", "release", "travel"
+  ]);
+  for (const clip of Object.values(aftermathState.clips)) {
+    expect(clip.activeClip).toBeTruthy();
+    expect(clip.outerBlend).toBe("screen");
+    expect(clip.outerInlineBlend).toBe("screen");
+    expect(clip.spriteBlend).toBe("screen");
+    expect(clip.spriteInlineBlend).toBe("screen");
+    expect(clip.layer).toBe("airborne");
+  }
+  expect(aftermathState.clips.impact.source)
+    .toContain("fireball-impact-alpha-6x6.png");
+  expect(aftermathState.clips.aftermath.source)
+    .toContain("fireball-impact-alpha-6x6.png");
+  expect(aftermathState.clips.impact.animationName)
+    .toContain("hg-vfx-fireball-impact-expand");
+  expect(aftermathState.clips.charge.frameWidth * aftermathState.clips.charge.scale)
+    .toBeLessThanOrEqual(66);
+  expect(aftermathState.clips.release.frameWidth * aftermathState.clips.release.scale)
+    .toBeLessThanOrEqual(82);
+  expect(aftermathState.clips.travel.frameWidth * aftermathState.clips.travel.scale)
+    .toBeLessThanOrEqual(66);
+  expect(aftermathState.clips.impact.frameWidth * aftermathState.clips.impact.scale)
+    .toBeLessThanOrEqual(160);
   await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 6500 });
+});
+
+test("Fireball screen blending survives clip transitions and depth-layer moves", async ({ page }) => {
+  await page.goto("?smokeTest=1&release=fireball-blend-20260902", {
+    waitUntil: "domcontentloaded"
+  });
+  await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle"));
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+
+  const played = await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.playVfxTest({
+    type: "fireball-clip-sprite",
+    clip: "charge",
+    duration: 1100,
+    scale: .5,
+    layer: "airborne",
+    timeline: [
+      { id: "release", type: "clip", clip: "release", atMilliseconds: 160 },
+      { id: "travel", type: "clip", clip: "travel", atMilliseconds: 300 },
+      { id: "move-ground", type: "layer", layer: "ground", atMilliseconds: 300 },
+      { id: "impact", type: "clip", clip: "impact", atMilliseconds: 480 },
+      { id: "move-overhead", type: "layer", layer: "overhead", atMilliseconds: 640 },
+      { id: "aftermath", type: "clip", clip: "aftermath", atMilliseconds: 760 }
+    ]
+  }));
+  expect(played.ok).toBe(true);
+
+  await page.evaluate((id) => {
+    const state = window.__FIREBALL_BLEND_TRANSITIONS__ = { id, samples: [] };
+    let prior = "";
+    const sample = () => {
+      const effect = document.querySelector(`[data-effect-id="${CSS.escape(id)}"]`);
+      if (!effect) return;
+      const sprite = effect.querySelector(".hg-vfx-clip-sprite");
+      const clip = sprite?.dataset.vfxClip || "";
+      const layer = effect.parentElement?.dataset.effectLayerContainer || "";
+      const key = `${clip}:${layer}`;
+      if (clip && key !== prior) {
+        prior = key;
+        state.samples.push({
+          clip,
+          layer,
+          outerBlend: getComputedStyle(effect).mixBlendMode,
+          outerInlineBlend: effect.style.mixBlendMode,
+          spriteBlend: getComputedStyle(sprite).mixBlendMode,
+          spriteInlineBlend: sprite.style.mixBlendMode,
+          source: getComputedStyle(sprite).backgroundImage
+        });
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }, played.id);
+
+  await page.waitForFunction(() => {
+    const samples = window.__FIREBALL_BLEND_TRANSITIONS__?.samples || [];
+    return samples.some(({ clip, layer }) => clip === "aftermath" && layer === "overhead");
+  });
+  const samples = await page.evaluate(() => window.__FIREBALL_BLEND_TRANSITIONS__.samples);
+  for (const expectedClip of ["charge", "release", "travel", "impact", "aftermath"]) {
+    expect(samples.some(({ clip }) => clip === expectedClip)).toBe(true);
+  }
+  expect(samples.some(({ clip, layer }) => clip === "travel" && layer === "ground"))
+    .toBe(true);
+  expect(samples.some(({ clip, layer }) => clip === "impact" && layer === "overhead"))
+    .toBe(true);
+  for (const sample of samples) {
+    expect(sample.outerBlend).toBe("screen");
+    expect(sample.outerInlineBlend).toBe("screen");
+    expect(sample.spriteBlend).toBe("screen");
+    expect(sample.spriteInlineBlend).toBe("screen");
+  }
+  expect(samples.find(({ clip }) => clip === "impact")?.source)
+    .toContain("fireball-impact-alpha-6x6.png");
+  await expect(page.locator(`[data-effect-id="${played.id}"]`))
+    .toHaveCount(0, { timeout: 2500 });
 });
 
 test("attached effects track 0/20/40 elevation once and ground anchors stay under tokens", async ({ page }) => {

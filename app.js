@@ -74,7 +74,7 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=2d5-vfx-polish-20260902";
+} from "./vfx/effectEngine.js?v=fireball-blend-20260902";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,7 +82,7 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=2d5-vfx-polish-20260902";
+} from "./vfx/castingSequence.js?v=fireball-blend-20260902";
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=status-sprites-20260831";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=status-sprites-20260831";
 import {
@@ -7134,6 +7134,8 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
               options.particles || null,
             sprite:
               options.sprite || null,
+            clip:
+              options.clip || "",
             preset: options.preset || "",
             layer: options.layer || "",
             motion: options.motion || null,
