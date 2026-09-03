@@ -3131,6 +3131,95 @@ test("all level-two spells are available and representative buffs, utility, and 
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("all level-three spells are available and representative transformations, wards, and areas render cleanly", async ({ page }, testInfo) => {
+  const ui = await openDmSpellPreview(page);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+
+  const optionIds = await page.locator(
+    '#spellTemplateSelect optgroup[label="Level 3"] option'
+  ).evaluateAll(options => options.map(option => option.value));
+  expect(optionIds).toHaveLength(42);
+  expect(new Set(optionIds).size).toBe(42);
+
+  async function play(spellId, effectType, screenshotName, targetX = 450) {
+    await ui.select(spellId);
+    await ui.point(240, 220);
+    if (!(await ui.state()).preview?.previewLocked) await ui.point(targetX, 220);
+    expect((await ui.state()).preview?.previewLocked).toBe(true);
+    await expect(ui.play).toBeEnabled();
+    await ui.play.click();
+    const effect = page.locator(`[data-effect-type="${effectType}"]`).first();
+    await expect(effect).toBeVisible();
+    await page.waitForTimeout(400);
+    const snapshot = await effect.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      const sprite = node.querySelector(".hg-vfx-sprite");
+      return {
+        profileId: node.dataset.profileId || "",
+        family: node.dataset.vfxFamily || "",
+        variant: node.dataset.variant || "",
+        statusGroup: node.dataset.statusGroup || "",
+        statusSprite: node.dataset.statusSprite || "",
+        layer: node.parentElement?.dataset.effectLayerContainer || "",
+        blend: getComputedStyle(node).mixBlendMode,
+        spriteBlend: sprite ? getComputedStyle(sprite).mixBlendMode : "",
+        width: rect.width,
+        height: rect.height
+      };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`${screenshotName}.png`) });
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
+    return snapshot;
+  }
+
+  const hope = await play("beacon-of-hope", "status-buff-blessing", "level-three-beacon");
+  expect(hope).toMatchObject({ statusGroup: "buff", statusSprite: "blessing",
+    blend: "screen", spriteBlend: "screen" });
+  expect(hope.width).toBeLessThanOrEqual(150);
+  expect(hope.layer).not.toBe("lighting");
+
+  const dead = await play("animate-dead", "profile-glyph", "level-three-animate-dead", 310);
+  expect(dead).toMatchObject({ profileId: "animate-dead", family: "target-impact", variant: "skull" });
+  expect(dead.width).toBeLessThanOrEqual(150);
+  expect(dead.layer).not.toBe("lighting");
+
+  const pattern = await play("hypnotic-pattern", "profile-glyph", "level-three-hypnotic-pattern");
+  expect(pattern).toMatchObject({ profileId: "hypnotic-pattern", family: "target-impact", variant: "spiral" });
+  expect(pattern.layer).not.toBe("lighting");
+
+  await ui.select("magic-circle");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cylinder");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("10");
+  await expect(page.locator("#templateHeightInput")).toHaveValue("20");
+  const circle = await play("magic-circle", "profile-glyph", "level-three-magic-circle", 310);
+  expect(circle).toMatchObject({ profileId: "magic-circle", family: "ground-effect", variant: "ward" });
+  expect(circle.width).toBeLessThanOrEqual(260);
+  expect(circle.layer).not.toBe("lighting");
+
+  await ui.select("fear");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cone");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("30");
+  const fear = await play("fear", "profile-mist", "level-three-fear");
+  expect(fear).toMatchObject({ profileId: "fear", family: "cone" });
+  expect(fear.layer).not.toBe("lighting");
+
+  await ui.select("tiny-hut");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("sphere");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("10");
+  const hut = await play("tiny-hut", "profile-glyph", "level-three-tiny-hut");
+  expect(hut).toMatchObject({ profileId: "tiny-hut", family: "ground-effect", variant: "shield" });
+  expect(hut.width).toBeLessThanOrEqual(260);
+  expect(hut.layer).not.toBe("lighting");
+
+  await ui.select("wind-wall");
+  await expect(ui.status).toContainText("wall preview anchor");
+  const wind = await play("wind-wall", "profile-wind", "level-three-wind-wall");
+  expect(wind).toMatchObject({ profileId: "wind-wall", family: "line" });
+  expect(wind.layer).not.toBe("lighting");
+
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("tier sprite batch uses the correct grids, bounded modes, path alignment and cleanup", async ({ page }, testInfo) => {
   const ui = await openDmSpellPreview(page);
   await page.evaluate(() => {

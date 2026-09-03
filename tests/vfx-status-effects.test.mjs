@@ -132,7 +132,13 @@ test("known buff/debuff spells select status art while leaving semantics externa
     "prayer-of-healing": "status-buff-regeneration",
     "protection-from-poison": "status-buff-elemental-ward",
     "see-invisibility": "status-buff-truesight",
-    "spider-climb": "status-buff-haste"
+    "spider-climb": "status-buff-haste",
+    "beacon-of-hope": "status-buff-blessing",
+    fly: "status-buff-haste",
+    "mass-healing-word": "status-buff-regeneration",
+    nondetection: "status-buff-barrier",
+    revivify: "status-buff-regeneration",
+    "water-breathing": "status-buff-elemental-ward"
   };
   for (const [spellId, effectId] of Object.entries(mappings)) {
     const profile = getSpellVfxProfile(spellId);

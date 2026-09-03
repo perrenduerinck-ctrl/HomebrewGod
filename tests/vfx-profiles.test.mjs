@@ -18,7 +18,8 @@ import { createSpellPreviewSession } from "../battleMap/spellPreview.js";
 const cantrips = DEFAULT_SPELLS.filter((s) => s.level === 0);
 const levelOne = DEFAULT_SPELLS.filter((s) => s.level === 1);
 const levelTwo = DEFAULT_SPELLS.filter((s) => s.level === 2);
-const catalogVfxSpells = [...cantrips, ...levelOne, ...levelTwo];
+const levelThree = DEFAULT_SPELLS.filter((s) => s.level === 3);
+const catalogVfxSpells = [...cantrips, ...levelOne, ...levelTwo, ...levelThree];
 const registry = createDefaultCastingSequenceRegistry();
 const effects = createDefaultEffectRegistry();
 const bespoke = ["fire-bolt", "ray-of-frost", "frostbite", "eldritch-blast", "shocking-grasp", "sacred-flame"];
@@ -181,7 +182,60 @@ test("every level-two spell has intentional, valid, asset-safe VFX and a Play Pr
   );
 });
 
-test("cantrip through level-two bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
+test("every level-three spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
+  assert.equal(levelThree.length, 42);
+  assert.equal(SPELL_VFX_PROFILES.filter(profile =>
+    levelThree.some(spell => spell.id === profile.spellId)).length, 41);
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const options = html.match(/<optgroup label="Level 3">([\s\S]*?)<\/optgroup>/)[1];
+  const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(ids.sort(), levelThree.map(spell => spell.id).sort());
+
+  for (const spell of levelThree) {
+    const before = JSON.stringify(spell);
+    const profile = getSpellVfxProfile(spell.id);
+    assert.ok(profile || spell.id === "fireball", spell.id);
+    const event = createSpellVfxEvent({ spell, preview: true,
+      casterPoint: { x: 100, y: 100 }, targetPoint: { x: 150, y: 100 } });
+    const definition = registry.resolve(event);
+    assert.ok(definition.match.spellIds.includes(spell.id), spell.id);
+    assert.equal(definition.source,
+      ["fireball", "lightning-bolt"].includes(spell.id) ? "sequence" : "profile",
+      spell.id);
+    assert.ok(definition.totalDuration > 0 &&
+      definition.totalDuration <= MAX_CASTING_SEQUENCE_DURATION_MS, spell.id);
+    for (const type of getProfileEffectIds(profile)) {
+      assert.ok(effects.has(type), `${spell.id}: ${type}`);
+    }
+    const realInstruction = createSpellTemplateInstruction(spell);
+    const instruction = createSpellTemplateInstruction(spell, {
+      allowTouchPreview: true, vfxPreview: profile?.preview
+    });
+    assert.equal(instruction.supported, true, spell.id);
+    const session = createSpellPreviewSession({ spell, instruction,
+      getMetrics: () => ({ pixelsPerSquare: 50, feetPerSquare: 5 }) });
+    session.pickPoint({ x: 100, y: 100 });
+    if (!session.getState().previewLocked) session.pickPoint({ x: 150, y: 100 });
+    assert.equal(session.getState().canPlay, true, spell.id);
+    assert.deepEqual(createSpellTemplateInstruction(spell), realInstruction);
+    assert.equal(JSON.stringify(spell), before);
+  }
+
+  assert.deepEqual(
+    ["fear", "daylight", "magic-circle", "speak-with-plants", "tiny-hut"].map(id => {
+      const instruction = createSpellTemplateInstruction(DEFAULT_SPELLS.find(s => s.id === id));
+      return [instruction.templateShape, instruction.sizeFeet, instruction.heightFeet];
+    }),
+    [["cone", 30, 0], ["sphere", 60, 120], ["cylinder", 10, 20],
+      ["sphere", 30, 60], ["sphere", 10, 20]]
+  );
+  const windWall = DEFAULT_SPELLS.find(s => s.id === "wind-wall");
+  assert.equal(createSpellTemplateInstruction(windWall).supported, false);
+  assert.equal(createSpellTemplateInstruction(windWall, { allowTouchPreview: true,
+    vfxPreview: getSpellVfxProfile("wind-wall").preview }).supported, true);
+});
+
+test("cantrip through level-three bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
   for (const mode of ["full", "reduced", "off"]) {
     const scheduler = clock(), rendered = new Map(), requests = [];
     const engine = createEffectEngine({ scheduler, mode,
