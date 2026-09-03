@@ -146,7 +146,15 @@ test("known buff/debuff spells select status art while leaving semantics externa
     "freedom-of-movement": "status-buff-haste",
     "locate-creature": "status-buff-truesight",
     "resilient-sphere": "status-buff-barrier",
-    stoneskin: "status-buff-armor"
+    stoneskin: "status-buff-armor",
+    contagion: "status-debuff-poison",
+    "dispel-evil-and-good": "status-buff-elemental-ward",
+    "dominate-person": "status-debuff-ominous-eye",
+    dream: "status-debuff-sleep",
+    "greater-restoration": "status-buff-regeneration",
+    "hold-monster": "status-debuff-entangle",
+    "raise-dead": "status-buff-regeneration",
+    scrying: "status-buff-truesight"
   };
   for (const [spellId, effectId] of Object.entries(mappings)) {
     const profile = getSpellVfxProfile(spellId);

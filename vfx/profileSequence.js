@@ -1,4 +1,4 @@
-import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=level-four-spells-20260903";
+import { defineSpellVfxProfile, vfxNumber } from "./spellVfxProfiles.js?v=level-five-spells-20260903";
 
 // Pure compiler: no DOM, timers, characters, rolls, or persistence. The existing
 // sequence system owns scheduling and the existing engine owns all cleanup.

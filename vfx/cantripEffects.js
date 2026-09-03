@@ -1,11 +1,11 @@
 // User-supplied art is shared by spell-specific, presentation-only sequences.
 // Single images are oriented in CSS; sheets are 4x4, read left-to-right.
-import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=level-four-spells-20260903";
+import { getSpellVfxProfile, getProfileEffectIds } from "./spellVfxProfiles.js?v=level-five-spells-20260903";
 const asset = (name) => `./assets/vfx/cantrips/${name}.png`;
 import { getStormSpritePaths } from "./stormEffects.js?v=status-sprites-20260831";
 import { LIGHTNING_5X5_ASSET } from "./lightning5x5.js?v=status-sprites-20260831";
 import { getTierSpritePaths } from "./tierEffects.js?v=status-sprites-20260831";
-import { getStatusSpritePaths } from "./statusEffects.js?v=level-four-spells-20260903";
+import { getStatusSpritePaths } from "./statusEffects.js?v=level-five-spells-20260903";
 
 function sprite(id, file, { sheet = false, className, angle = 0, tipX = 50, tipY = 50 } = {}) {
   return Object.freeze({

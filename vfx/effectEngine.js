@@ -1,6 +1,6 @@
 import {
   createDefaultEffectRegistry
-} from "./effectRegistry.js?v=level-four-spells-20260903";
+} from "./effectRegistry.js?v=level-five-spells-20260903";
 import {
   createEffectRenderer
 } from "./effectRenderer.js?v=fireball-blend-20260902";
