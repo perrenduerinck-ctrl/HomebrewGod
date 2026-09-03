@@ -2970,6 +2970,8 @@ test("all level-one spells are available and representative status and utility p
     await ui.play.click();
     const effect = page.locator(`[data-effect-type="${effectType}"]`).first();
     await expect(effect).toBeVisible();
+    // Capture the readable middle of the animation rather than its tiny first frame.
+    await page.waitForTimeout(400);
     const snapshot = await effect.evaluate(node => {
       const sprite = node.querySelector(".hg-vfx-sprite");
       const rect = node.getBoundingClientRect();
@@ -3048,6 +3050,83 @@ test("all level-one spells are available and representative status and utility p
   expect(fog.width).toBeLessThanOrEqual(420);
   expect(fog.height).toBeLessThanOrEqual(420);
   expect(fog.layer).not.toBe("lighting");
+
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
+test("all level-two spells are available and representative buffs, utility, and areas render cleanly", async ({ page }, testInfo) => {
+  const ui = await openDmSpellPreview(page);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+
+  const optionIds = await page.locator(
+    '#spellTemplateSelect optgroup[label="Level 2"] option'
+  ).evaluateAll(options => options.map(option => option.value));
+  expect(optionIds).toHaveLength(54);
+  expect(new Set(optionIds).size).toBe(54);
+
+  async function play(spellId, effectType, screenshotName, targetX = 450) {
+    await ui.select(spellId);
+    await ui.point(240, 220);
+    if (!(await ui.state()).preview?.previewLocked) await ui.point(targetX, 220);
+    expect((await ui.state()).preview?.previewLocked).toBe(true);
+    await expect(ui.play).toBeEnabled();
+    await ui.play.click();
+    const effect = page.locator(`[data-effect-type="${effectType}"]`).first();
+    await expect(effect).toBeVisible();
+    // Capture the readable middle of the animation rather than its tiny first frame.
+    await page.waitForTimeout(400);
+    const snapshot = await effect.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      const sprite = node.querySelector(".hg-vfx-sprite");
+      return {
+        profileId: node.dataset.profileId || "",
+        family: node.dataset.vfxFamily || "",
+        variant: node.dataset.variant || "",
+        statusGroup: node.dataset.statusGroup || "",
+        statusSprite: node.dataset.statusSprite || "",
+        layer: node.parentElement?.dataset.effectLayerContainer || "",
+        blend: getComputedStyle(node).mixBlendMode,
+        spriteBlend: sprite ? getComputedStyle(sprite).mixBlendMode : "",
+        width: rect.width,
+        height: rect.height
+      };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`${screenshotName}.png`) });
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
+    return snapshot;
+  }
+
+  const aid = await play("aid", "status-buff-power-up", "level-two-aid");
+  expect(aid).toMatchObject({ statusGroup: "buff", statusSprite: "power-up",
+    blend: "screen", spriteBlend: "screen" });
+  expect(aid.width).toBeLessThanOrEqual(140);
+  expect(aid.layer).not.toBe("lighting");
+
+  const lock = await play("arcane-lock", "profile-glyph", "level-two-arcane-lock", 280);
+  expect(lock).toMatchObject({ profileId: "arcane-lock", family: "touch", variant: "lock" });
+  expect(lock.width).toBeLessThanOrEqual(140);
+  expect(lock.layer).not.toBe("lighting");
+
+  await ui.select("darkness");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("sphere");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("15");
+  const darkness = await play("darkness", "profile-mist", "level-two-darkness");
+  expect(darkness).toMatchObject({ profileId: "darkness", family: "ground-effect" });
+  expect(darkness.width).toBeLessThanOrEqual(340);
+  expect(darkness.layer).not.toBe("lighting");
+
+  await ui.select("web");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cube");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("20");
+  const web = await play("web", "profile-glyph", "level-two-web");
+  expect(web).toMatchObject({ profileId: "web", family: "ground-effect", variant: "web" });
+  expect(web.width).toBeLessThanOrEqual(440);
+  expect(web.layer).not.toBe("lighting");
+
+  const weapon = await play("spiritual-weapon", "profile-blades", "level-two-spiritual-weapon");
+  expect(weapon).toMatchObject({ profileId: "spiritual-weapon", family: "target-impact" });
+  expect(weapon.width).toBeLessThanOrEqual(160);
+  expect(weapon.layer).not.toBe("lighting");
 
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });

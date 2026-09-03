@@ -3,7 +3,7 @@
 Scope: the app's current 2014 catalog, not every published D&D spell or
 user-created spell. Counts are checked by `tests/vfx-cantrips.test.mjs`.
 Intentional shared profiles count as mapped; generic delivery fallbacks do not.
-The current cantrip and level 1 tiers are complete. The owner-supplied atlas
+The current cantrip, level 1, and level 2 tiers are complete. The owner-supplied atlas
 batch adds 12 selected level 1–2 profiles, 19 selected level 3–6 profiles, and
 28 selected level 7–9 profiles. Other spells still use their existing generic
 presentation; dropdown presence is not full-tier completion.
@@ -12,15 +12,15 @@ presentation; dropdown presence is not full-tier completion.
 | --- | ---: | ---: | ---: |
 | Cantrips | 45 | 45 | 0 |
 | 1 | 49 | 49 | 0 |
-| 2 | 54 | 5 | 49 |
-| 3 | 42 | 6 | 36 |
+| 2 | 54 | 54 | 0 |
+| 3 | 42 | 10 | 32 |
 | 4 | 31 | 5 | 26 |
 | 5 | 37 | 3 | 34 |
-| 6 | 31 | 8 | 23 |
-| 7 | 20 | 9 | 11 |
+| 6 | 31 | 9 | 22 |
+| 7 | 20 | 10 | 10 |
 | 8 | 16 | 10 | 6 |
 | 9 | 15 | 9 | 6 |
-| **Total** | **340** | **149** | **191** |
+| **Total** | **340** | **204** | **136** |
 
 ## Existing bespoke overrides (preserved)
 
@@ -65,6 +65,20 @@ These 39 cantrips use small glyphs, hands, ripples, auras, leaves, swarms,
 weapon arcs and shared elemental sprites. Utility magic does not use an
 explosion fallback. 340 spells do not require 340 different sprite sheets.
 
+## Completed level 2 batch
+
+All 54 level 2 spells now have intentional compositions. The 46 additions cover
+buffs and debuffs, touch and self magic, utility glyphs, movement effects,
+summons, projectiles, and exact area geometry. Arcane Lock, Augury, Hold Person,
+Rope Trick, Web, and Zone of Truth use dedicated lock, eye, chain, portal, and
+web glyph variants. Darkness, Calm Emotions, Gust of Wind, Spike Growth, Web,
+and Zone of Truth fit their catalog templates without changing those templates.
+
+Status art is reused for effects such as Aid, Barkskin, Darkvision, Lesser
+Restoration, Protection from Poison, and Spider Climb. Every composition is a
+short preview only; no condition, movement, healing, summon, or spell resource
+is applied by the VFX system.
+
 ## Bulk pipeline
 
 `vfx/spellVfxProfiles.js` contains the immutable configuration records.
@@ -85,15 +99,15 @@ authoritative, validate every referenced effect/asset, and use `specialOptions`
 for presentation variants. Optional `preview` placement settings apply only to
 DM VFX previews, never real casting rules. Unknown spells keep their fallback.
 
-Tests programmatically validate all 45 catalog cantrips, referenced assets,
+Tests programmatically validate all 45 catalog cantrips and all level 1–2 spells, referenced assets,
 sequence normalization, placement, levels, caps, Full/Reduced/Off and cleanup.
 A small browser sample covers projectile, target impact, touch, beam, utility,
 ground and weapon compositions, alongside the existing sprite regressions.
 
-Further work starts with the remaining level 2 spells and the other unmapped
+Further work starts with the remaining level 3 spells and the other unmapped
 catalog tiers. Multi-beam Eldritch Blast and real weapon attachments remain
-future enhancements; all 45 cantrips and all 49 level 1 spells already have
-intentional preview compositions.
+future enhancements; all 45 cantrips, all 49 level 1 spells, and all 54 level 2
+spells already have intentional preview compositions.
 
 ## Optional art upgrades (not blockers)
 

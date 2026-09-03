@@ -118,7 +118,21 @@ test("known buff/debuff spells select status art while leaving semantics externa
     jump: "status-buff-haste",
     longstrider: "status-buff-haste",
     "protection-from-evil-and-good": "status-buff-elemental-ward",
-    sanctuary: "status-buff-shield"
+    sanctuary: "status-buff-shield",
+    aid: "status-buff-power-up",
+    barkskin: "status-buff-armor",
+    "blindness-deafness": "status-debuff-ominous-eye",
+    "branding-smite": "status-buff-radiant-weapon",
+    darkvision: "status-buff-truesight",
+    "detect-thoughts": "status-buff-truesight",
+    "find-traps": "status-buff-truesight",
+    "lesser-restoration": "status-buff-regeneration",
+    "locate-animals-or-plants": "status-buff-truesight",
+    "locate-object": "status-buff-truesight",
+    "prayer-of-healing": "status-buff-regeneration",
+    "protection-from-poison": "status-buff-elemental-ward",
+    "see-invisibility": "status-buff-truesight",
+    "spider-climb": "status-buff-haste"
   };
   for (const [spellId, effectId] of Object.entries(mappings)) {
     const profile = getSpellVfxProfile(spellId);

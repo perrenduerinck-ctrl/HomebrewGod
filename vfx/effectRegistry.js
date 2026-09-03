@@ -1,12 +1,12 @@
 import {
   FIRE_EFFECT_DEFINITIONS
 } from "./fireEffects.js?v=fireball-blend-20260902";
-import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=level-one-spells-20260902";
-import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=status-sprites-20260831";
+import { CANTRIP_EFFECT_DEFINITIONS } from "./cantripEffects.js?v=level-two-spells-20260903";
+import { PROFILE_EFFECT_DEFINITIONS } from "./profileEffects.js?v=level-two-spells-20260903";
 import { STORM_EFFECT_DEFINITIONS } from "./stormEffects.js?v=status-sprites-20260831";
 import { LIGHTNING_5X5_EFFECTS } from "./lightning5x5.js?v=status-sprites-20260831";
 import { TIER_EFFECT_DEFINITIONS } from "./tierEffects.js?v=status-sprites-20260831";
-import { STATUS_EFFECT_DEFINITIONS } from "./statusEffects.js?v=level-one-spells-20260902";
+import { STATUS_EFFECT_DEFINITIONS } from "./statusEffects.js?v=level-two-spells-20260903";
 
 const EFFECT_KINDS = Object.freeze([
   "procedural",

@@ -17,7 +17,8 @@ import { createSpellPreviewSession } from "../battleMap/spellPreview.js";
 
 const cantrips = DEFAULT_SPELLS.filter((s) => s.level === 0);
 const levelOne = DEFAULT_SPELLS.filter((s) => s.level === 1);
-const catalogVfxSpells = [...cantrips, ...levelOne];
+const levelTwo = DEFAULT_SPELLS.filter((s) => s.level === 2);
+const catalogVfxSpells = [...cantrips, ...levelOne, ...levelTwo];
 const registry = createDefaultCastingSequenceRegistry();
 const effects = createDefaultEffectRegistry();
 const bespoke = ["fire-bolt", "ray-of-frost", "frostbite", "eldritch-blast", "shocking-grasp", "sacred-flame"];
@@ -133,7 +134,54 @@ test("every level-one spell has intentional, valid, asset-safe VFX and a Play Pr
   }
 });
 
-test("cantrip and level-one bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
+test("every level-two spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
+  assert.equal(levelTwo.length, 54);
+  assert.equal(SPELL_VFX_PROFILES.filter(profile =>
+    levelTwo.some(spell => spell.id === profile.spellId)).length, 54);
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const options = html.match(/<optgroup label="Level 2">([\s\S]*?)<\/optgroup>/)[1];
+  const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(ids.sort(), levelTwo.map(spell => spell.id).sort());
+
+  for (const spell of levelTwo) {
+    const before = JSON.stringify(spell);
+    const profile = getSpellVfxProfile(spell.id);
+    assert.ok(profile, spell.id);
+    const event = createSpellVfxEvent({ spell, preview: true,
+      casterPoint: { x: 100, y: 100 }, targetPoint: { x: 150, y: 100 } });
+    const definition = registry.resolve(event);
+    assert.equal(definition.source, "profile", spell.id);
+    assert.ok(definition.match.spellIds.includes(spell.id), spell.id);
+    assert.ok(definition.totalDuration > 0 &&
+      definition.totalDuration <= MAX_CASTING_SEQUENCE_DURATION_MS, spell.id);
+    for (const type of getProfileEffectIds(profile)) {
+      assert.ok(effects.has(type), `${spell.id}: ${type}`);
+    }
+    const realInstruction = createSpellTemplateInstruction(spell);
+    const instruction = createSpellTemplateInstruction(spell, {
+      allowTouchPreview: true, vfxPreview: profile.preview
+    });
+    assert.equal(instruction.supported, true, spell.id);
+    const session = createSpellPreviewSession({ spell, instruction,
+      getMetrics: () => ({ pixelsPerSquare: 50, feetPerSquare: 5 }) });
+    session.pickPoint({ x: 100, y: 100 });
+    if (!session.getState().previewLocked) session.pickPoint({ x: 150, y: 100 });
+    assert.equal(session.getState().canPlay, true, spell.id);
+    assert.deepEqual(createSpellTemplateInstruction(spell), realInstruction);
+    assert.equal(JSON.stringify(spell), before);
+  }
+
+  assert.equal(createSpellTemplateInstruction(DEFAULT_SPELLS.find(s => s.id === "darkness")).sizeFeet, 15);
+  assert.deepEqual(
+    ["gust-of-wind", "spike-growth", "web", "zone-of-truth"].map(id => {
+      const instruction = createSpellTemplateInstruction(DEFAULT_SPELLS.find(s => s.id === id));
+      return [instruction.templateShape, instruction.sizeFeet, instruction.widthFeet];
+    }),
+    [["line", 60, 10], ["cylinder", 20, 5], ["cube", 20, 20], ["sphere", 15, 5]]
+  );
+});
+
+test("cantrip through level-two bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
   for (const mode of ["full", "reduced", "off"]) {
     const scheduler = clock(), rendered = new Map(), requests = [];
     const engine = createEffectEngine({ scheduler, mode,
@@ -211,7 +259,13 @@ test("utility profiles use small non-explosion compositions and geometry stays p
     "mending", "mold-earth", "shape-water", "gust", "druidcraft", "prestidigitation", "thaumaturgy",
     "alarm", "comprehend-languages", "create-or-destroy-water", "detect-magic", "disguise-self",
     "find-familiar", "floating-disk", "fog-cloud", "grease", "identify", "illusory-script",
-    "purify-food-and-drink", "silent-image", "speak-with-animals", "unseen-servant"]) {
+    "purify-food-and-drink", "silent-image", "speak-with-animals", "unseen-servant",
+    "alter-self", "animal-messenger", "arcane-lock", "arcanists-magic-aura", "augury",
+    "blur", "calm-emotions", "darkness", "detect-thoughts", "enthrall", "find-steed",
+    "find-traps", "gentle-repose", "gust-of-wind", "invisibility", "knock", "levitate",
+    "locate-animals-or-plants", "locate-object", "magic-mouth", "mirror-image", "misty-step",
+    "pass-without-trace", "rope-trick", "see-invisibility", "spike-growth", "suggestion",
+    "web", "zone-of-truth"]) {
     const profile = getSpellVfxProfile(id);
     assert.ok(getProfileEffectIds(profile).every(type =>
       type.startsWith("profile-") || type.startsWith("status-buff-") ||
