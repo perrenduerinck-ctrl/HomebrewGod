@@ -74,7 +74,7 @@ import {
 import {
   createBattleMapEffectEngine,
   normalizeEffectsMode
-} from "./vfx/effectEngine.js?v=fireball-blend-20260902";
+} from "./vfx/effectEngine.js?v=level-one-spells-20260902";
 import {
   createSpellVfxEvent,
   inferSpellVfxDeliveryType,
@@ -82,9 +82,9 @@ import {
 } from "./vfx/castEvent.js?v=unified-preview-20260829";
 import {
   createCastingSequenceSystem
-} from "./vfx/castingSequence.js?v=fireball-blend-20260902";
+} from "./vfx/castingSequence.js?v=level-one-spells-20260902";
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=status-sprites-20260831";
-import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=status-sprites-20260831";
+import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=level-one-spells-20260902";
 import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";

@@ -1,29 +1,30 @@
 // Owner-supplied buff/debuff atlases. These are presentation-only effects;
 // applying one never mutates conditions, rolls, hit points, or combat rules.
+const asset = (path) => `${path}?v=restored-20260902`;
 export const STATUS_SPRITE_ASSETS = Object.freeze({
   debuff: Object.freeze({
-    poison: "./assets/vfx/status/debuffs/poison.png",
-    chill: "./assets/vfx/status/debuffs/chill.png",
-    silence: "./assets/vfx/status/debuffs/silence.png",
-    sleep: "./assets/vfx/status/debuffs/sleep.png",
-    confusion: "./assets/vfx/status/debuffs/confusion.png",
-    "hostile-flame": "./assets/vfx/status/debuffs/hostile-flame.png",
-    "ominous-eye": "./assets/vfx/status/debuffs/ominous-eye.png",
-    "power-down": "./assets/vfx/status/debuffs/power-down.png",
-    entangle: "./assets/vfx/status/debuffs/entangle.png",
-    shock: "./assets/vfx/status/debuffs/shock.png"
+    poison: asset("./assets/vfx/status/debuffs/poison.png"),
+    chill: asset("./assets/vfx/status/debuffs/chill.png"),
+    silence: asset("./assets/vfx/status/debuffs/silence.png"),
+    sleep: asset("./assets/vfx/status/debuffs/sleep.png"),
+    confusion: asset("./assets/vfx/status/debuffs/confusion.png"),
+    "hostile-flame": asset("./assets/vfx/status/debuffs/hostile-flame.png"),
+    "ominous-eye": asset("./assets/vfx/status/debuffs/ominous-eye.png"),
+    "power-down": asset("./assets/vfx/status/debuffs/power-down.png"),
+    entangle: asset("./assets/vfx/status/debuffs/entangle.png"),
+    shock: asset("./assets/vfx/status/debuffs/shock.png")
   }),
   buff: Object.freeze({
-    blessing: "./assets/vfx/status/buffs/blessing.png",
-    haste: "./assets/vfx/status/buffs/haste.png",
-    shield: "./assets/vfx/status/buffs/shield.png",
-    regeneration: "./assets/vfx/status/buffs/regeneration.png",
-    "elemental-ward": "./assets/vfx/status/buffs/elemental-ward.png",
-    "radiant-weapon": "./assets/vfx/status/buffs/radiant-weapon.png",
-    barrier: "./assets/vfx/status/buffs/barrier.png",
-    truesight: "./assets/vfx/status/buffs/truesight.png",
-    armor: "./assets/vfx/status/buffs/armor.png",
-    "power-up": "./assets/vfx/status/buffs/power-up.png"
+    blessing: asset("./assets/vfx/status/buffs/blessing.png"),
+    haste: asset("./assets/vfx/status/buffs/haste.png"),
+    shield: asset("./assets/vfx/status/buffs/shield.png"),
+    regeneration: asset("./assets/vfx/status/buffs/regeneration.png"),
+    "elemental-ward": asset("./assets/vfx/status/buffs/elemental-ward.png"),
+    "radiant-weapon": asset("./assets/vfx/status/buffs/radiant-weapon.png"),
+    barrier: asset("./assets/vfx/status/buffs/barrier.png"),
+    truesight: asset("./assets/vfx/status/buffs/truesight.png"),
+    armor: asset("./assets/vfx/status/buffs/armor.png"),
+    "power-up": asset("./assets/vfx/status/buffs/power-up.png")
   })
 });
 

@@ -1,11 +1,36 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync, readFileSync } from "node:fs";
+import { inflateSync } from "node:zlib";
 import { createDefaultEffectRegistry } from "../vfx/effectRegistry.js";
 import { getSpellVfxProfile } from "../vfx/spellVfxProfiles.js";
 import { getCantripSpritePaths } from "../vfx/cantripEffects.js";
 import { getSpriteFrameStyle, normalizeSpriteOptions } from "../vfx/spriteAnimator.js";
 import { STATUS_EFFECT_DEFINITIONS, STATUS_SPRITE_ASSETS } from "../vfx/statusEffects.js";
+
+function assertCompletePng(png, label) {
+  let offset = 8;
+  let foundIend = false;
+  const compressed = [];
+  while (offset < png.length) {
+    assert.ok(offset + 12 <= png.length, `${label}: complete PNG chunk header`);
+    const length = png.readUInt32BE(offset);
+    const type = png.subarray(offset + 4, offset + 8).toString("ascii");
+    const end = offset + 12 + length;
+    assert.ok(end <= png.length, `${label}: complete ${type || "unknown"} chunk`);
+    if (type === "IDAT") compressed.push(png.subarray(offset + 8, offset + 8 + length));
+    offset = end;
+    if (type === "IEND") {
+      assert.equal(length, 0, `${label}: valid IEND chunk`);
+      foundIend = true;
+      break;
+    }
+  }
+  assert.equal(foundIend, true, `${label}: has IEND chunk`);
+  assert.equal(offset, png.length, `${label}: no truncated or trailing PNG data`);
+  assert.ok(compressed.length > 0, `${label}: has image data`);
+  assert.ok(inflateSync(Buffer.concat(compressed)).length > 0, `${label}: image data decodes`);
+}
 
 test("buff and debuff atlases are distinct, complete, and registered", () => {
   assert.equal(Object.keys(STATUS_SPRITE_ASSETS.buff).length, 10);
@@ -22,6 +47,7 @@ test("buff and debuff atlases are distinct, complete, and registered", () => {
     const png = readFileSync(new URL("../" + effect.sprite.src, import.meta.url));
     assert.equal(png.subarray(1, 4).toString(), "PNG");
     assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1254, 1254]);
+    assertCompletePng(png, effect.sprite.src);
     assert.equal(paths.has(effect.sprite.src), false, "duplicate source atlas");
     paths.add(effect.sprite.src);
   }
@@ -71,7 +97,28 @@ test("known buff/debuff spells select status art while leaving semantics externa
     "bestow-curse": "status-debuff-ominous-eye",
     "ray-of-enfeeblement": "status-debuff-power-down",
     entangle: "status-debuff-entangle",
-    "power-word-stun": "status-debuff-shock"
+    "power-word-stun": "status-debuff-shock",
+    command: "status-debuff-power-down",
+    "comprehend-languages": "status-buff-truesight",
+    "cure-wounds": "status-buff-regeneration",
+    "detect-evil-and-good": "status-buff-truesight",
+    "detect-magic": "status-buff-truesight",
+    "detect-poison-and-disease": "status-buff-truesight",
+    "divine-favor": "status-buff-radiant-weapon",
+    "expeditious-retreat": "status-buff-haste",
+    "faerie-fire": "status-debuff-ominous-eye",
+    "false-life": "status-buff-barrier",
+    "feather-fall": "status-buff-blessing",
+    goodberry: "status-buff-regeneration",
+    "healing-word": "status-buff-regeneration",
+    heroism: "status-buff-power-up",
+    "hideous-laughter": "status-debuff-confusion",
+    "hunters-mark": "status-debuff-ominous-eye",
+    identify: "status-buff-truesight",
+    jump: "status-buff-haste",
+    longstrider: "status-buff-haste",
+    "protection-from-evil-and-good": "status-buff-elemental-ward",
+    sanctuary: "status-buff-shield"
   };
   for (const [spellId, effectId] of Object.entries(mappings)) {
     const profile = getSpellVfxProfile(spellId);

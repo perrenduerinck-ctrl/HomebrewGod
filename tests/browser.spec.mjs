@@ -2951,6 +2951,107 @@ async function openDmSpellPreview(page) {
   return { overlay, play, reset, status, select, point, state };
 }
 
+test("all level-one spells are available and representative status and utility previews render cleanly", async ({ page }, testInfo) => {
+  const ui = await openDmSpellPreview(page);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+
+  const optionIds = await page.locator(
+    '#spellTemplateSelect optgroup[label="Level 1"] option'
+  ).evaluateAll(options => options.map(option => option.value));
+  expect(optionIds).toHaveLength(49);
+  expect(new Set(optionIds).size).toBe(49);
+
+  async function placeAndPlay(spellId, effectType, screenshotName, targetX = 450) {
+    await ui.select(spellId);
+    await ui.point(240, 220);
+    if (!(await ui.state()).preview?.previewLocked) await ui.point(targetX, 220);
+    expect((await ui.state()).preview?.previewLocked).toBe(true);
+    await expect(ui.play).toBeEnabled();
+    await ui.play.click();
+    const effect = page.locator(`[data-effect-type="${effectType}"]`).first();
+    await expect(effect).toBeVisible();
+    const snapshot = await effect.evaluate(node => {
+      const sprite = node.querySelector(".hg-vfx-sprite");
+      const rect = node.getBoundingClientRect();
+      return {
+        effectType: node.dataset.effectType || "",
+        profileId: node.dataset.profileId || "",
+        family: node.dataset.vfxFamily || "",
+        statusGroup: node.dataset.statusGroup || "",
+        statusSprite: node.dataset.statusSprite || "",
+        layer: node.parentElement?.dataset.effectLayerContainer || "",
+        outerBlend: getComputedStyle(node).mixBlendMode,
+        outerInlineBlend: node.style.mixBlendMode,
+        spriteBlend: sprite ? getComputedStyle(sprite).mixBlendMode : "",
+        spriteInlineBlend: sprite?.style.mixBlendMode || "",
+        image: sprite ? getComputedStyle(sprite).backgroundImage : "",
+        width: rect.width,
+        height: rect.height
+      };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`${screenshotName}.png`) });
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
+    return snapshot;
+  }
+
+  const healing = await placeAndPlay(
+    "cure-wounds", "status-buff-regeneration", "level-one-cure-wounds", 280
+  );
+  expect(healing).toMatchObject({
+    effectType: "status-buff-regeneration",
+    statusGroup: "buff",
+    statusSprite: "regeneration",
+    outerBlend: "screen",
+    outerInlineBlend: "screen",
+    spriteBlend: "screen",
+    spriteInlineBlend: "screen"
+  });
+  expect(healing.image).toContain("regeneration.png?v=restored-20260902");
+  expect(healing.width).toBeLessThanOrEqual(140);
+  expect(healing.height).toBeLessThanOrEqual(140);
+  expect(["ground", "airborne", "overhead"]).toContain(healing.layer);
+
+  const mark = await placeAndPlay(
+    "hunters-mark", "status-debuff-ominous-eye", "level-one-hunters-mark"
+  );
+  expect(mark).toMatchObject({
+    effectType: "status-debuff-ominous-eye",
+    statusGroup: "debuff",
+    statusSprite: "ominous-eye",
+    outerBlend: "screen",
+    outerInlineBlend: "screen",
+    spriteBlend: "screen",
+    spriteInlineBlend: "screen"
+  });
+  expect(mark.image).toContain("ominous-eye.png?v=restored-20260902");
+  expect(mark.width).toBeLessThanOrEqual(140);
+  expect(mark.height).toBeLessThanOrEqual(140);
+  expect(["ground", "airborne", "overhead"]).toContain(mark.layer);
+
+  await ui.select("alarm");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cube");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("20");
+  await expect(ui.status).toContainText("Alarm · Range 30 feet · 20-ft cube");
+  await ui.point(240, 220);
+  await ui.point(450, 220);
+  await ui.play.click();
+  await expect(page.locator('[data-effect-type="profile-glyph"]')).toBeVisible();
+  await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
+
+  await ui.select("fog-cloud");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("sphere");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("20");
+  await expect(ui.status).toContainText("Fog Cloud · Range 120 feet · 20-ft radius");
+  const fog = await placeAndPlay("fog-cloud", "profile-mist", "level-one-fog-cloud");
+  expect(fog.profileId).toBe("fog-cloud");
+  expect(fog.family).toBe("ground-effect");
+  expect(fog.width).toBeLessThanOrEqual(420);
+  expect(fog.height).toBeLessThanOrEqual(420);
+  expect(fog.layer).not.toBe("lighting");
+
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("tier sprite batch uses the correct grids, bounded modes, path alignment and cleanup", async ({ page }, testInfo) => {
   const ui = await openDmSpellPreview(page);
   await page.evaluate(() => {

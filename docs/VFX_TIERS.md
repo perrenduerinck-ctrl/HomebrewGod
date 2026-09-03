@@ -3,15 +3,15 @@
 Scope: the app's current 2014 catalog, not every published D&D spell or
 user-created spell. Counts are checked by `tests/vfx-cantrips.test.mjs`.
 Intentional shared profiles count as mapped; generic delivery fallbacks do not.
-The current cantrip tier is complete. The owner-supplied atlas batch adds
-12 selected level 1–2 profiles, 19 selected level 3–6 profiles, and 28 selected
-level 7–9 profiles. Other spells
-still use their existing generic presentation; dropdown presence is not full-tier completion.
+The current cantrip and level 1 tiers are complete. The owner-supplied atlas
+batch adds 12 selected level 1–2 profiles, 19 selected level 3–6 profiles, and
+28 selected level 7–9 profiles. Other spells still use their existing generic
+presentation; dropdown presence is not full-tier completion.
 
 | Spell level | Catalog spells | Intentional VFX mappings | Remaining |
 | --- | ---: | ---: | ---: |
 | Cantrips | 45 | 45 | 0 |
-| 1 | 49 | 7 | 42 |
+| 1 | 49 | 49 | 0 |
 | 2 | 54 | 5 | 49 |
 | 3 | 42 | 6 | 36 |
 | 4 | 31 | 5 | 26 |
@@ -20,7 +20,7 @@ still use their existing generic presentation; dropdown presence is not full-tie
 | 7 | 20 | 9 | 11 |
 | 8 | 16 | 10 | 6 |
 | 9 | 15 | 9 | 6 |
-| **Total** | **340** | **107** | **233** |
+| **Total** | **340** | **149** | **191** |
 
 ## Existing bespoke overrides (preserved)
 
@@ -90,9 +90,10 @@ sequence normalization, placement, levels, caps, Full/Reduced/Off and cleanup.
 A small browser sample covers projectile, target impact, touch, beam, utility,
 ground and weapon compositions, alongside the existing sprite regressions.
 
-Further work: the 42 remaining level 1 spells and other unmapped catalog spells.
-Multi-beam Eldritch Blast and real weapon attachments remain future enhancements;
-all 45 cantrips already have intentional preview compositions.
+Further work starts with the remaining level 2 spells and the other unmapped
+catalog tiers. Multi-beam Eldritch Blast and real weapon attachments remain
+future enhancements; all 45 cantrips and all 49 level 1 spells already have
+intentional preview compositions.
 
 ## Optional art upgrades (not blockers)
 

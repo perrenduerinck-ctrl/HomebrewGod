@@ -2,8 +2,8 @@ import {
   FIRE_CASTING_SEQUENCE_DEFINITIONS
 } from "./fireEffects.js?v=fireball-blend-20260902";
 import { CANTRIP_CASTING_SEQUENCE_DEFINITIONS } from "./cantripEffects.js?v=status-sprites-20260831";
-import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=status-sprites-20260831";
-import { compileSpellVfxProfile } from "./profileSequence.js?v=status-sprites-20260831";
+import { SPELL_VFX_PROFILES, defineSpellVfxProfile } from "./spellVfxProfiles.js?v=level-one-spells-20260902";
+import { compileSpellVfxProfile } from "./profileSequence.js?v=level-one-spells-20260902";
 import { LIGHTNING_5X5_SEQUENCE } from "./lightning5x5.js?v=status-sprites-20260831";
 
 import { createSpellAudioPlayer, normalizeSoundCue } from "./spellAudio.js?v=status-sprites-20260831";

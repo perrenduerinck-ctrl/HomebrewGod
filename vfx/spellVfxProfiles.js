@@ -2,7 +2,8 @@
 // not another animation engine. Fire Bolt/Fireball and the first five sprite
 // cantrips remain higher-priority bespoke overrides in castingSequence.js.
 import { LIGHTNING_BOLT_SOUND, normalizeSoundCue } from "./spellAudio.js?v=lightning-sound-20260830";
-import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=status-sprites-20260831";
+import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=level-one-spells-20260902";
+import { LEVEL_ONE_SPELL_PROFILES } from "./levelOneSpellProfiles.js?v=level-one-spells-20260902";
 export const SPELL_VFX_FAMILIES = Object.freeze([
   "projectile-impact", "target-impact", "beam", "line", "cone", "burst",
   "aura", "self", "touch", "weapon-strike", "ground-effect", "utility-glyph",
@@ -80,6 +81,7 @@ const ground = { mode: "target", rangeFeet: 60, shape: "cube", sizeFeet: 5, labe
 
 export const SPELL_VFX_PROFILES = Object.freeze([
   ...TIER_SPELL_PROFILES.map(defineSpellVfxProfile),
+  ...LEVEL_ONE_SPELL_PROFILES.map(defineSpellVfxProfile),
   p("lightning-bolt", "Lightning Bolt", "line", "storm-lightning-impact", {
     sound: LIGHTNING_BOLT_SOUND,
     damageType: "lightning", casterEffect: "storm-lightning-charge",
