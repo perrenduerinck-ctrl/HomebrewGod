@@ -3,7 +3,7 @@
 Scope: the app's current 2014 catalog, not every published D&D spell or
 user-created spell. Counts are checked by `tests/vfx-cantrips.test.mjs`.
 Intentional shared profiles count as mapped; generic delivery fallbacks do not.
-The current cantrip and level 1–3 tiers are complete. The owner-supplied atlas
+The current cantrip and level 1–4 tiers are complete. The owner-supplied atlas
 batch adds 12 selected level 1–2 profiles, 19 selected level 3–6 profiles, and
 28 selected level 7–9 profiles. Other spells still use their existing generic
 presentation; dropdown presence is not full-tier completion.
@@ -14,13 +14,13 @@ presentation; dropdown presence is not full-tier completion.
 | 1 | 49 | 49 | 0 |
 | 2 | 54 | 54 | 0 |
 | 3 | 42 | 42 | 0 |
-| 4 | 31 | 5 | 26 |
+| 4 | 31 | 31 | 0 |
 | 5 | 37 | 3 | 34 |
 | 6 | 31 | 9 | 22 |
 | 7 | 20 | 10 | 10 |
 | 8 | 16 | 10 | 6 |
 | 9 | 15 | 9 | 6 |
-| **Total** | **340** | **236** | **104** |
+| **Total** | **340** | **262** | **78** |
 
 ## Existing bespoke overrides (preserved)
 
@@ -93,6 +93,19 @@ drawing is not yet supported by the map template editor; its real 50-foot wall
 data remains unchanged. Fireball and Lightning Bolt retain their bespoke
 clip-based and storm sequences.
 
+## Completed level 4 batch
+
+All 31 level 4 spells now have intentional compositions. The 26 additions cover
+conjuration, planar travel, transformation, divination, protection, terrain,
+water, stone, and fire. Elemental, paw, and chest glyphs distinguish summons,
+beast magic, and Secret Chest without substituting arbitrary explosions.
+
+Arcane Eye, Black Tentacles, Control Water, Fire Shield, Hallucinatory Terrain,
+and Private Sanctum preserve their catalog geometry. Wall of Fire uses a labeled
+point anchor because freeform wall drawing is not yet supported by the template
+editor; its real 60-by-20-foot wall data remains unchanged. Ice Storm retains
+its dedicated fitted storm composition.
+
 ## Bulk pipeline
 
 `vfx/spellVfxProfiles.js` contains the immutable configuration records.
@@ -113,15 +126,16 @@ authoritative, validate every referenced effect/asset, and use `specialOptions`
 for presentation variants. Optional `preview` placement settings apply only to
 DM VFX previews, never real casting rules. Unknown spells keep their fallback.
 
-Tests programmatically validate all 45 catalog cantrips and all level 1–3 spells, referenced assets,
+Tests programmatically validate all 45 catalog cantrips and all level 1–4 spells, referenced assets,
 sequence normalization, placement, levels, caps, Full/Reduced/Off and cleanup.
 A small browser sample covers projectile, target impact, touch, beam, utility,
 ground and weapon compositions, alongside the existing sprite regressions.
 
-Further work starts with the remaining level 4 spells and the other unmapped
+Further work starts with the remaining level 5 spells and the other unmapped
 catalog tiers. Multi-beam Eldritch Blast and real weapon attachments remain
 future enhancements; all 45 cantrips, all 49 level 1 spells, and all 54 level 2
-spells, plus all 42 level 3 spells, already have intentional preview compositions.
+spells, plus all 42 level 3 spells and all 31 level 4 spells, already have
+intentional preview compositions.
 
 ## Optional art upgrades (not blockers)
 

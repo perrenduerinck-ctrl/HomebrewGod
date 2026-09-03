@@ -3220,6 +3220,102 @@ test("all level-three spells are available and representative transformations, w
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("all level-four spells are available and representative summons, transformations, wards, and walls render cleanly", async ({ page }, testInfo) => {
+  const ui = await openDmSpellPreview(page);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+
+  const optionIds = await page.locator(
+    '#spellTemplateSelect optgroup[label="Level 4"] option'
+  ).evaluateAll(options => options.map(option => option.value));
+  expect(optionIds).toHaveLength(31);
+  expect(new Set(optionIds).size).toBe(31);
+
+  async function play(spellId, effectType, screenshotName, targetX = 450, captureDelay = 400) {
+    await ui.select(spellId);
+    await ui.point(240, 220);
+    if (!(await ui.state()).preview?.previewLocked) await ui.point(targetX, 220);
+    expect((await ui.state()).preview?.previewLocked).toBe(true);
+    await expect(ui.play).toBeEnabled();
+    await ui.play.click();
+    const effect = page.locator(`[data-effect-type="${effectType}"]`).first();
+    await expect(effect).toBeVisible();
+    await page.waitForTimeout(captureDelay);
+    const snapshot = await effect.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      const sprite = node.querySelector(".hg-vfx-sprite");
+      return {
+        profileId: node.dataset.profileId || "",
+        family: node.dataset.vfxFamily || "",
+        variant: node.dataset.variant || "",
+        statusGroup: node.dataset.statusGroup || "",
+        statusSprite: node.dataset.statusSprite || "",
+        layer: node.parentElement?.dataset.effectLayerContainer || "",
+        blend: getComputedStyle(node).mixBlendMode,
+        spriteBlend: sprite ? getComputedStyle(sprite).mixBlendMode : "",
+        width: rect.width,
+        height: rect.height
+      };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`${screenshotName}.png`) });
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
+    return snapshot;
+  }
+
+  const tentacles = await play(
+    "black-tentacles", "status-debuff-entangle", "level-four-black-tentacles", 310
+  );
+  expect(tentacles).toMatchObject({ statusGroup: "debuff", statusSprite: "entangle",
+    blend: "screen", spriteBlend: "screen" });
+  expect(tentacles.width).toBeLessThanOrEqual(340);
+  expect(tentacles.layer).not.toBe("lighting");
+
+  const banishment = await play("banishment", "profile-glyph", "level-four-banishment");
+  expect(banishment).toMatchObject({ profileId: "banishment", family: "target-impact",
+    variant: "portal" });
+  expect(banishment.layer).not.toBe("lighting");
+
+  const elementals = await play(
+    "conjure-minor-elementals", "profile-glyph", "level-four-elementals"
+  );
+  expect(elementals).toMatchObject({ profileId: "conjure-minor-elementals",
+    family: "utility-glyph", variant: "elements" });
+  expect(elementals.layer).not.toBe("lighting");
+
+  const polymorph = await play("polymorph", "profile-glyph", "level-four-polymorph");
+  expect(polymorph).toMatchObject({ profileId: "polymorph", family: "target-impact",
+    variant: "paw" });
+  expect(polymorph.layer).not.toBe("lighting");
+
+  await ui.select("private-sanctum");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cube");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("100");
+  const sanctum = await play(
+    "private-sanctum", "profile-glyph", "level-four-private-sanctum", 310
+  );
+  expect(sanctum).toMatchObject({ profileId: "private-sanctum", family: "ground-effect",
+    variant: "lock" });
+  expect(sanctum.width).toBeLessThanOrEqual(1000);
+  expect(sanctum.layer).not.toBe("lighting");
+
+  const shield = await play(
+    "fire-shield", "status-buff-elemental-ward", "level-four-fire-shield", 310
+  );
+  expect(shield).toMatchObject({ statusGroup: "buff", statusSprite: "elemental-ward",
+    blend: "screen", spriteBlend: "screen" });
+  expect(shield.width).toBeLessThanOrEqual(160);
+  expect(shield.layer).not.toBe("lighting");
+
+  await ui.select("wall-of-fire");
+  await expect(ui.status).toContainText("wall preview anchor");
+  const wall = await play("wall-of-fire", "profile-fire-wall", "level-four-wall-of-fire", 450, 160);
+  expect(wall.width).toBeGreaterThan(100);
+  expect(wall.height).toBeGreaterThan(30);
+  expect(wall.blend).toBe("screen");
+  expect(wall.layer).not.toBe("lighting");
+
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("tier sprite batch uses the correct grids, bounded modes, path alignment and cleanup", async ({ page }, testInfo) => {
   const ui = await openDmSpellPreview(page);
   await page.evaluate(() => {

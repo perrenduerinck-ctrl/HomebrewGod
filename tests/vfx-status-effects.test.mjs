@@ -138,7 +138,15 @@ test("known buff/debuff spells select status art while leaving semantics externa
     "mass-healing-word": "status-buff-regeneration",
     nondetection: "status-buff-barrier",
     revivify: "status-buff-regeneration",
-    "water-breathing": "status-buff-elemental-ward"
+    "water-breathing": "status-buff-elemental-ward",
+    "black-tentacles": "status-debuff-entangle",
+    compulsion: "status-debuff-confusion",
+    "dominate-beast": "status-debuff-ominous-eye",
+    "fire-shield": "status-buff-elemental-ward",
+    "freedom-of-movement": "status-buff-haste",
+    "locate-creature": "status-buff-truesight",
+    "resilient-sphere": "status-buff-barrier",
+    stoneskin: "status-buff-armor"
   };
   for (const [spellId, effectId] of Object.entries(mappings)) {
     const profile = getSpellVfxProfile(spellId);

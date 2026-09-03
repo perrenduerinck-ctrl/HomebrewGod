@@ -1557,6 +1557,36 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   clip-path: polygon(0 50%, 100% 0, 100% 100%);
   animation: hg-profile-beam var(--hg-vfx-duration) ease-out both;
 }
+.hg-map-vfx-effect.hg-vfx-profile-fire-wall.has-path {
+  height: 64px;
+  border-radius: 0;
+  overflow: visible;
+  transform:
+    translateY(-100%)
+    rotate(calc(var(--hg-vfx-path-rotation, 0deg) + var(--hg-vfx-rotation)))
+    scaleY(var(--hg-vfx-scale));
+  transform-origin: 0 100%;
+}
+.hg-vfx-profile-fire-wall.has-path::before {
+  inset: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse at 10% 100%, #fffbd1 0 4%, #ffc72e 12%, #ff4d09 30%, transparent 56%),
+    radial-gradient(ellipse at 36% 100%, #fff5a1 0 4%, #ffae18 13%, #e92c05 32%, transparent 58%),
+    radial-gradient(ellipse at 63% 100%, #fffbd1 0 4%, #ffc72e 12%, #ff4d09 30%, transparent 56%),
+    radial-gradient(ellipse at 88% 100%, #fff5a1 0 4%, #ffae18 13%, #e92c05 32%, transparent 58%),
+    linear-gradient(0deg, #ff3b08cc, #ff9d1a99 48%, transparent 88%);
+  clip-path: polygon(0 100%, 0 48%, 7% 22%, 13% 55%, 21% 5%, 29% 51%, 38% 18%, 47% 58%, 55% 0, 64% 50%, 73% 14%, 82% 56%, 91% 8%, 100% 47%, 100% 100%);
+  filter: drop-shadow(0 0 7px #ff861f) drop-shadow(0 0 13px #ff3b08aa);
+  animation: hg-profile-fire-wall var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-fire-wall.has-path::after {
+  inset: 42% 0 0;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #ff521144, #ffd45acc 45%, #ff521144);
+  filter: blur(5px);
+  animation: hg-profile-fire-wall-glow var(--hg-vfx-duration) ease-out both;
+}
 @keyframes hg-profile-bloom {
   0% { opacity: 0; transform: scale(0.2); }
   25% { opacity: 0.75; }
@@ -1906,6 +1936,15 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
       translate(-50%, -50%)
       scale(-0.12, 0.12);
   }
+}
+@keyframes hg-profile-fire-wall {
+  0% { opacity: 0; transform: scaleY(.12); transform-origin: 50% 100%; }
+  22%, 72% { opacity: 1; transform: scaleY(1); transform-origin: 50% 100%; }
+  100% { opacity: 0; transform: scaleY(.72); transform-origin: 50% 100%; }
+}
+@keyframes hg-profile-fire-wall-glow {
+  0%, 100% { opacity: 0; transform: scaleX(.6); }
+  30%, 75% { opacity: .95; transform: scaleX(1); }
 }
 
 @keyframes hg-vfx-fire-impact-flash {

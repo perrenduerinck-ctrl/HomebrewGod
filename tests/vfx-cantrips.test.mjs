@@ -143,6 +143,7 @@ test("tier inventory remains accurate and distinguishes dedicated sequences from
   assert.equal(dedicated.filter((spell) => spell.level === 1).length, 49);
   assert.equal(dedicated.filter((spell) => spell.level === 2).length, 54);
   assert.equal(dedicated.filter((spell) => spell.level === 3).length, 42);
-  assert.equal(dedicated.length, 236);
+  assert.equal(dedicated.filter((spell) => spell.level === 4).length, 31);
+  assert.equal(dedicated.length, 262);
   assert.deepEqual([7,8,9].map(level => dedicated.filter(s => s.level === level).length), [10,10,9]);
 });
