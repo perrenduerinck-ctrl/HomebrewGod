@@ -433,11 +433,195 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   box-shadow: 0 16px 40px #000a;
 }
 
-#battleToolsMenu { order: 1; }
-#battleManagerBar { order: 2; }
+#battleCampaignTimePanel { order: 1; }
+#battleToolsMenu { order: 2; }
+#battleManagerBar { order: 3; }
 #spellCastingPanel { order: 3; flex: 1 0 100%; max-height: 42dvh; overflow: auto; }
 #battleToolsPanel #battleInfoLine { overflow-wrap: anywhere; font-size: 12px; }
 #battleToolsPanel > p:last-child { margin-bottom: 0; }
+
+.campaignTimeCard {
+  overflow: visible;
+}
+
+.campaignTimeHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.campaignTimeHeading h2 {
+  margin: 2px 0 10px;
+}
+
+.campaignTimeEyebrow {
+  color: #9db2ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.campaignTimePauseBadge {
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 202, 91, .45);
+  border-radius: 999px;
+  color: #ffe59f;
+  background: rgba(98, 64, 10, .35);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.campaignTimeReadout {
+  display: grid;
+  gap: 3px;
+}
+
+.campaignTimeReadout > strong {
+  color: #d8e0ff;
+  font-size: 14px;
+}
+
+.campaignTimeReadout time {
+  color: #fff;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(25px, 4vw, 38px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-shadow: 0 0 18px rgba(94, 139, 255, .45);
+}
+
+.campaignCombatTime {
+  margin: 5px 0 0;
+  color: #cbd5ff;
+  font-size: 13px;
+}
+
+.campaignTimeDmDisclosure {
+  margin-top: 14px;
+}
+
+.campaignTimeDmDisclosure > summary {
+  cursor: pointer;
+  color: #d8dcff;
+  font-weight: 700;
+}
+
+.campaignTimeControls {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.campaignTimeButtonGrid,
+.campaignTimeCombatControls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(112px, 1fr));
+  gap: 7px;
+}
+
+.campaignTimeControls button {
+  width: auto;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.campaignTimeControls fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(126, 145, 232, .28);
+  border-radius: 12px;
+  background: rgba(5, 9, 22, .38);
+}
+
+.campaignTimeControls legend {
+  padding: 0 6px;
+  color: #cbd4ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.campaignTimeInputGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(82px, 1fr));
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.campaignTimeExactGrid {
+  grid-template-columns: repeat(4, minmax(72px, 1fr));
+}
+
+.campaignTimeInputGrid label {
+  display: grid;
+  gap: 4px;
+  color: #aeb9df;
+  font-size: 11px;
+}
+
+.campaignTimeInputGrid input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.campaignTimeStatus {
+  min-height: 18px;
+  margin: 0;
+  color: #bdc9ee;
+  font-size: 12px;
+}
+
+#battleCampaignTimePanel > summary {
+  white-space: nowrap;
+}
+
+#battleCampaignTimePanel > summary strong {
+  color: #fff;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#battleTopBar .campaignTimeToolbarPanel {
+  left: auto;
+  width: min(680px, 100%);
+}
+
+#battleTopBar .campaignTimeToolbarPanel h2 {
+  margin: 2px 0 8px;
+  font-size: 18px;
+}
+
+#battleTopBar .campaignTimeToolbarPanel .campaignCombatTime,
+#battleTopBar .campaignTimeToolbarPanel .campaignTimeStatus {
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+@media (max-width: 720px) {
+  .campaignTimeButtonGrid,
+  .campaignTimeCombatControls,
+  .campaignTimeExactGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .campaignTimeInputGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #battleCampaignTimePanel > summary strong {
+    display: none;
+  }
+}
 
 #battleMapSurface {
   position: relative;

@@ -89,6 +89,21 @@ import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
 import {
+  DAY,
+  HOUR,
+  LONG_REST_SECONDS,
+  MINUTE,
+  SHORT_REST_SECONDS,
+  TIME_EVENTS,
+  TIME_MODES,
+  applyTimeCommand,
+  createTimeSystem,
+  getTimeComponents,
+  normalizeTimeState,
+  timeStatesEqual,
+  toRoomTimeFields
+} from "./timeSystem.js?v=campaign-time-20260904";
+import {
   MAX_SECURE_IMAGE_BYTES,
   createPersistenceMonitor,
   friendlyServiceError,
@@ -521,6 +536,553 @@ function addOptionalEventListener(element, eventName, handler) {
   }
 }
 
+// =====================================================
+// APP SECTION 4A — CENTRAL CAMPAIGN / WORLD TIME
+// Firestore stores one authoritative room clock. The module owns all math.
+// =====================================================
+
+const campaignTimeSystem = createTimeSystem({
+  canMutate: function () {
+    return currentIsDM === true;
+  },
+  commit: commitCampaignTimeCommand
+});
+
+function formatCampaignDuration(seconds) {
+  const total = Math.max(
+    0,
+    Math.floor(Number(seconds) || 0)
+  );
+
+  if (total === 1) {
+    return "1 second";
+  }
+
+  return `${total} seconds`;
+}
+
+function setCampaignTimeStatus(message) {
+  document.querySelectorAll(
+    "[data-time-status]"
+  ).forEach((element) => {
+    text(element, message || "");
+  });
+}
+
+function setCampaignTimeControlsBusy(isBusy) {
+  document.querySelectorAll(
+    "[data-time-dm-controls] button, " +
+      "[data-time-dm-controls] input"
+  ).forEach((element) => {
+    element.disabled = isBusy === true;
+  });
+}
+
+function renderCampaignTime(state) {
+  const safeState = normalizeTimeState(
+    state
+  );
+  const current = getTimeComponents(
+    safeState
+  );
+  const isCombat =
+    safeState.timeMode ===
+      TIME_MODES.COMBAT;
+  const modeLabel = isCombat
+    ? "Combat"
+    : "Exploration";
+  const dateLabel =
+    `Week ${current.week} · ` +
+    `Day ${current.day} — ` +
+    current.weekday;
+  const clockLabel = [
+    current.hour,
+    current.minute,
+    current.second
+  ].map((part) => {
+    return String(part).padStart(2, "0");
+  }).join(":");
+  const combatRound =
+    safeState.combatRoundsCompleted + 1;
+  const combatElapsed =
+    safeState.combatRoundsCompleted * 6;
+
+  document.querySelectorAll(
+    "[data-time-mode-label]"
+  ).forEach((element) => {
+    text(element, modeLabel);
+  });
+  document.querySelectorAll(
+    "[data-time-date]"
+  ).forEach((element) => {
+    text(element, dateLabel);
+  });
+  document.querySelectorAll(
+    "[data-time-clock]"
+  ).forEach((element) => {
+    text(element, clockLabel);
+    element.setAttribute(
+      "datetime",
+      clockLabel
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-summary]"
+  ).forEach((element) => {
+    text(
+      element,
+      `Day ${current.day} · ${clockLabel}`
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-paused]"
+  ).forEach((element) => {
+    element.classList.toggle(
+      "hidden",
+      !safeState.timePaused
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-combat]"
+  ).forEach((element) => {
+    element.classList.toggle(
+      "hidden",
+      !isCombat
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-round]"
+  ).forEach((element) => {
+    text(element, String(combatRound));
+  });
+  document.querySelectorAll(
+    "[data-time-combat-elapsed]"
+  ).forEach((element) => {
+    text(
+      element,
+      formatCampaignDuration(
+        combatElapsed
+      )
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-dm-controls]"
+  ).forEach((element) => {
+    element.classList.toggle(
+      "hidden",
+      currentIsDM !== true
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-start-combat]"
+  ).forEach((element) => {
+    element.classList.toggle(
+      "hidden",
+      isCombat
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-complete-round], " +
+      "[data-time-end-combat]"
+  ).forEach((element) => {
+    element.classList.toggle(
+      "hidden",
+      !isCombat
+    );
+  });
+  document.querySelectorAll(
+    "[data-time-toggle-pause]"
+  ).forEach((element) => {
+    text(
+      element,
+      safeState.timePaused
+        ? "Resume"
+        : "Pause"
+    );
+  });
+}
+
+async function commitCampaignTimeCommand(
+  command,
+  context
+) {
+  if (
+    !currentRoomCode &&
+    window.__HOMEBREW_GOD_SMOKE__
+  ) {
+    return applyTimeCommand(
+      context.previousState,
+      command
+    );
+  }
+
+  if (
+    !currentRoomCode ||
+    !currentUser ||
+    currentIsDM !== true
+  ) {
+    throw new Error(
+      "Only the room DM can change campaign time."
+    );
+  }
+
+  const roomCode = currentRoomCode;
+  const userUid = currentUser.uid;
+  const roomRef = doc(
+    db,
+    "rooms",
+    roomCode
+  );
+  let committedState = null;
+
+  await runTransaction(
+    db,
+    async function (transaction) {
+      const roomSnapshot =
+        await transaction.get(roomRef);
+
+      if (!roomSnapshot.exists()) {
+        throw new Error("Room not found.");
+      }
+
+      const latestRoom =
+        roomSnapshot.data() || {};
+
+      if (latestRoom.dmUid !== userUid) {
+        throw new Error(
+          "Only the room DM can change campaign time."
+        );
+      }
+
+      const previousState =
+        normalizeTimeState(latestRoom);
+      const nextState = applyTimeCommand(
+        previousState,
+        command
+      );
+      committedState = nextState;
+
+      if (
+        timeStatesEqual(
+          previousState,
+          nextState
+        )
+      ) {
+        return;
+      }
+
+      transaction.update(roomRef, {
+        ...toRoomTimeFields(nextState),
+        updatedAt: serverTimestamp()
+      });
+    }
+  );
+
+  if (
+    currentRoomCode === roomCode &&
+    currentRoomData
+  ) {
+    currentRoomData = {
+      ...currentRoomData,
+      ...toRoomTimeFields(
+        committedState
+      )
+    };
+  }
+
+  return committedState;
+}
+
+function readTimeInput(
+  panel,
+  selector,
+  {
+    fallback = 0,
+    minimum = 0,
+    maximum = Number.MAX_SAFE_INTEGER
+  } = {}
+) {
+  const value = Number(
+    panel?.querySelector(selector)?.value
+  );
+
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(
+    maximum,
+    Math.max(
+      minimum,
+      Math.floor(value)
+    )
+  );
+}
+
+async function runCampaignTimeMutation(
+  action,
+  successMessage
+) {
+  setCampaignTimeControlsBusy(true);
+  setCampaignTimeStatus("Saving campaign time…");
+
+  try {
+    await action();
+    setCampaignTimeStatus(
+      successMessage ||
+        "Campaign time saved."
+    );
+  } catch (error) {
+    setCampaignTimeStatus(
+      error?.message ||
+        "Campaign time could not be changed."
+    );
+  } finally {
+    setCampaignTimeControlsBusy(false);
+  }
+}
+
+function initializeCampaignTimeControls() {
+  document.querySelectorAll(
+    "[data-time-advance-seconds]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        const seconds = Number(
+          button.dataset
+            .timeAdvanceSeconds
+        ) || 0;
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .advanceSeconds(seconds),
+          "Campaign time advanced."
+        );
+      }
+    );
+  });
+
+  document.querySelectorAll(
+    "[data-time-rest]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        const isLongRest =
+          button.dataset.timeRest ===
+            "long";
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .advanceSeconds(
+              isLongRest
+                ? LONG_REST_SECONDS
+                : SHORT_REST_SECONDS
+            ),
+          isLongRest
+            ? "Long rest completed: +8 hours."
+            : "Short rest completed: +1 hour."
+        );
+      }
+    );
+  });
+
+  document.querySelectorAll(
+    "[data-time-toggle-pause]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .togglePaused(),
+          "Campaign clock pause state saved."
+        );
+      }
+    );
+  });
+
+  document.querySelectorAll(
+    "[data-time-custom-advance]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        const panel = button.closest(
+          "[data-time-panel]"
+        );
+        const seconds =
+          (readTimeInput(
+            panel,
+            "[data-time-custom-days]"
+          ) * DAY) +
+          (readTimeInput(
+            panel,
+            "[data-time-custom-hours]"
+          ) * HOUR) +
+          (readTimeInput(
+            panel,
+            "[data-time-custom-minutes]"
+          ) * MINUTE);
+
+        if (seconds <= 0) {
+          setCampaignTimeStatus(
+            "Enter at least one minute to advance."
+          );
+          return;
+        }
+
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .advanceSeconds(seconds),
+          "Custom campaign time advanced."
+        );
+      }
+    );
+  });
+
+  document.querySelectorAll(
+    "[data-time-set-exact]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        const panel = button.closest(
+          "[data-time-panel]"
+        );
+        const exactTime = {
+          week: readTimeInput(
+            panel,
+            "[data-time-exact-week]",
+            { fallback: 1, minimum: 1 }
+          ),
+          dayOfWeek: readTimeInput(
+            panel,
+            "[data-time-exact-day]",
+            {
+              fallback: 1,
+              minimum: 1,
+              maximum: 7
+            }
+          ),
+          hour: readTimeInput(
+            panel,
+            "[data-time-exact-hour]",
+            { maximum: 23 }
+          ),
+          minute: readTimeInput(
+            panel,
+            "[data-time-exact-minute]",
+            { maximum: 59 }
+          )
+        };
+
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .setExactDateTime(exactTime),
+          "Exact campaign time saved."
+        );
+      }
+    );
+  });
+
+  document.querySelectorAll(
+    "[data-time-start-combat]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .startCombatTime(),
+          "Combat time started."
+        );
+      }
+    );
+  });
+
+  document.querySelectorAll(
+    "[data-time-complete-round]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .advanceCombatRound(),
+          "Full round completed: +6 seconds."
+        );
+      }
+    );
+  });
+
+  document.querySelectorAll(
+    "[data-time-end-combat]"
+  ).forEach((button) => {
+    button.addEventListener(
+      "click",
+      function () {
+        runCampaignTimeMutation(
+          () => campaignTimeSystem
+            .endCombatTime(),
+          "Combat ended without extra time."
+        );
+      }
+    );
+  });
+}
+
+function connectCampaignTimeCombatEvents() {
+  const runIfDm = (
+    action,
+    successMessage
+  ) => {
+    if (currentIsDM !== true) {
+      return;
+    }
+    runCampaignTimeMutation(
+      action,
+      successMessage
+    );
+  };
+
+  document.addEventListener(
+    TIME_EVENTS.COMBAT_START,
+    function () {
+      runIfDm(
+        () => campaignTimeSystem
+          .startCombatTime(),
+        "Combat time started."
+      );
+    }
+  );
+  document.addEventListener(
+    TIME_EVENTS.COMBAT_ROUND_COMPLETE,
+    function () {
+      runIfDm(
+        () => campaignTimeSystem
+          .advanceCombatRound(),
+        "Full round completed: +6 seconds."
+      );
+    }
+  );
+  document.addEventListener(
+    TIME_EVENTS.COMBAT_END,
+    function () {
+      runIfDm(
+        () => campaignTimeSystem
+          .endCombatTime(),
+        "Combat ended without extra time."
+      );
+    }
+  );
+}
+
+campaignTimeSystem.subscribe(
+  renderCampaignTime
+);
+initializeCampaignTimeControls();
+connectCampaignTimeCombatEvents();
+
 function normalizeRoomCode(code) {
   return String(code || "").trim().toUpperCase();
 }
@@ -681,6 +1243,9 @@ function setDmControlsVisible(isVisible) {
   }
 
   updateSpellPreviewVfxControls();
+  renderCampaignTime(
+    campaignTimeSystem.getState()
+  );
 }
 
 function normalizeCurrentMapData(mapData) {
@@ -781,6 +1346,7 @@ async function showLoggedOut() {
   currentMapId = null;
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
+  campaignTimeSystem.applySnapshot({});
 }
 
 function showLoggedIn(user) {
@@ -1129,6 +1695,9 @@ async function createRoom() {
         currentMap: null,
         puzzleTiles: [],
         activePuzzleTileKey: null,
+        ...toRoomTimeFields(
+          normalizeTimeState({})
+        ),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -1298,6 +1867,9 @@ function openRoom(roomCode, screenToShow = "room") {
 
     currentRoomData = room;
     currentIsDM = room.dmUid === currentUser.uid;
+    campaignTimeSystem.applyRoomSnapshot(
+      room
+    );
 
     text(E.currentRoomNameText, room.roomName || "Unnamed Room");
     text(E.roomCodeText, cleanCode);
@@ -1362,6 +1934,7 @@ async function leaveCurrentRoomView() {
   currentMapId = null;
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
+  campaignTimeSystem.applySnapshot({});
 
   setDmControlsVisible(false);
 
@@ -7188,6 +7761,24 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
           );
           syncBattleManagerVisibility();
           return currentIsDM;
+        },
+
+      setCampaignTimeTestState:
+        function (state) {
+          return campaignTimeSystem
+            .applySnapshot(state || {});
+        },
+
+      getCampaignTimeTestState:
+        function () {
+          return campaignTimeSystem
+            .getState();
+        },
+
+      advanceCampaignTimeForTest:
+        function (seconds) {
+          return campaignTimeSystem
+            .advanceSeconds(seconds);
         },
 
       getSpellPreviewVfxState:

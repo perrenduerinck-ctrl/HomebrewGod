@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-    <link rel="stylesheet" href="./assets/styles/app.css?v=fireball-blend-20260902">
+    <link rel="stylesheet" href="./assets/styles/app.css?v=campaign-time-20260904">
 <link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-vfx-polish-20260902">
 </head>
 
@@ -114,6 +114,74 @@
       <p><b>Your Role:</b> <span id="yourRoleText"></span></p>
     </section>
 
+    <section
+      id="roomCampaignTimeCard"
+      class="box campaignTimeCard"
+      data-time-panel
+    >
+      <div class="campaignTimeHeading">
+        <div>
+          <span class="campaignTimeEyebrow" data-time-mode-label>Exploration</span>
+          <h2>Campaign Time</h2>
+        </div>
+        <span class="campaignTimePauseBadge hidden" data-time-paused>Paused</span>
+      </div>
+
+      <div class="campaignTimeReadout" aria-live="polite">
+        <strong data-time-date>Week 1 · Day 1 — Monday</strong>
+        <time data-time-clock datetime="00:00:00">00:00:00</time>
+        <p class="campaignCombatTime hidden" data-time-combat>
+          Round <b data-time-round>1</b>
+          · Elapsed combat time:
+          <b data-time-combat-elapsed>0 seconds</b>
+        </p>
+      </div>
+
+      <details class="campaignTimeDmDisclosure hidden" data-time-dm-controls>
+        <summary>DM time controls</summary>
+        <div class="campaignTimeControls">
+          <div class="campaignTimeButtonGrid" aria-label="Advance campaign time">
+            <button type="button" data-time-advance-seconds="60">+1 minute</button>
+            <button type="button" data-time-advance-seconds="600">+10 minutes</button>
+            <button type="button" data-time-advance-seconds="3600">+1 hour</button>
+            <button type="button" data-time-advance-seconds="28800">+8 hours</button>
+            <button type="button" data-time-advance-seconds="86400">+1 day</button>
+            <button type="button" data-time-rest="short">Short Rest</button>
+            <button type="button" data-time-rest="long">Long Rest</button>
+            <button type="button" data-time-toggle-pause>Pause</button>
+          </div>
+
+          <fieldset>
+            <legend>Custom advance</legend>
+            <div class="campaignTimeInputGrid">
+              <label>Days <input type="number" min="0" step="1" value="0" data-time-custom-days></label>
+              <label>Hours <input type="number" min="0" step="1" value="0" data-time-custom-hours></label>
+              <label>Minutes <input type="number" min="0" step="1" value="0" data-time-custom-minutes></label>
+            </div>
+            <button type="button" data-time-custom-advance>Advance custom time</button>
+          </fieldset>
+
+          <fieldset>
+            <legend>Set exact date and time</legend>
+            <div class="campaignTimeInputGrid campaignTimeExactGrid">
+              <label>Week <input type="number" min="1" step="1" value="1" data-time-exact-week></label>
+              <label>Day (1–7) <input type="number" min="1" max="7" step="1" value="1" data-time-exact-day></label>
+              <label>Hour <input type="number" min="0" max="23" step="1" value="0" data-time-exact-hour></label>
+              <label>Minute <input type="number" min="0" max="59" step="1" value="0" data-time-exact-minute></label>
+            </div>
+            <button type="button" data-time-set-exact>Set exact time</button>
+          </fieldset>
+
+          <div class="campaignTimeCombatControls">
+            <button type="button" data-time-start-combat>Start Combat</button>
+            <button type="button" class="hidden" data-time-complete-round>Complete Round (+6s)</button>
+            <button type="button" class="hidden" data-time-end-combat>End Combat</button>
+          </div>
+          <p class="status campaignTimeStatus" data-time-status></p>
+        </div>
+      </details>
+    </section>
+
     <section class="box">
       <h2>Players In Room</h2>
       <div id="playersList">No players in the room right now.</div>
@@ -195,6 +263,76 @@
       <button id="playSpellPreviewVfxButton" class="hidden" type="button" disabled>Play Preview VFX</button>
       <button id="resetSpellPreviewButton" class="hidden" type="button" disabled>Reset Preview</button>
     </div>
+
+    <details
+      id="battleCampaignTimePanel"
+      class="battleToolbarMenu campaignTimeMenu"
+      data-time-panel
+    >
+      <summary>
+        <span data-time-mode-label>Exploration</span>
+        <strong data-time-summary>Day 1 · 00:00:00</strong>
+      </summary>
+      <div class="battleToolbarPanel campaignTimeToolbarPanel">
+        <div class="campaignTimeHeading">
+          <div>
+            <span class="campaignTimeEyebrow" data-time-mode-label>Exploration</span>
+            <h2>Campaign Time</h2>
+          </div>
+          <span class="campaignTimePauseBadge hidden" data-time-paused>Paused</span>
+        </div>
+        <div class="campaignTimeReadout" aria-live="polite">
+          <strong data-time-date>Week 1 · Day 1 — Monday</strong>
+          <time data-time-clock datetime="00:00:00">00:00:00</time>
+          <p class="campaignCombatTime hidden" data-time-combat>
+            Round <b data-time-round>1</b>
+            · Elapsed combat time:
+            <b data-time-combat-elapsed>0 seconds</b>
+          </p>
+        </div>
+
+        <div class="campaignTimeControls hidden" data-time-dm-controls>
+          <div class="campaignTimeButtonGrid" aria-label="Advance campaign time">
+            <button type="button" data-time-advance-seconds="60">+1 minute</button>
+            <button type="button" data-time-advance-seconds="600">+10 minutes</button>
+            <button type="button" data-time-advance-seconds="3600">+1 hour</button>
+            <button type="button" data-time-advance-seconds="28800">+8 hours</button>
+            <button type="button" data-time-advance-seconds="86400">+1 day</button>
+            <button type="button" data-time-rest="short">Short Rest</button>
+            <button type="button" data-time-rest="long">Long Rest</button>
+            <button type="button" data-time-toggle-pause>Pause</button>
+          </div>
+
+          <fieldset>
+            <legend>Custom advance</legend>
+            <div class="campaignTimeInputGrid">
+              <label>Days <input type="number" min="0" step="1" value="0" data-time-custom-days></label>
+              <label>Hours <input type="number" min="0" step="1" value="0" data-time-custom-hours></label>
+              <label>Minutes <input type="number" min="0" step="1" value="0" data-time-custom-minutes></label>
+            </div>
+            <button type="button" data-time-custom-advance>Advance custom time</button>
+          </fieldset>
+
+          <fieldset>
+            <legend>Set exact date and time</legend>
+            <div class="campaignTimeInputGrid campaignTimeExactGrid">
+              <label>Week <input type="number" min="1" step="1" value="1" data-time-exact-week></label>
+              <label>Day (1–7) <input type="number" min="1" max="7" step="1" value="1" data-time-exact-day></label>
+              <label>Hour <input type="number" min="0" max="23" step="1" value="0" data-time-exact-hour></label>
+              <label>Minute <input type="number" min="0" max="59" step="1" value="0" data-time-exact-minute></label>
+            </div>
+            <button type="button" data-time-set-exact>Set exact time</button>
+          </fieldset>
+
+          <div class="campaignTimeCombatControls">
+            <button type="button" data-time-start-combat>Start Combat</button>
+            <button type="button" class="hidden" data-time-complete-round>Complete Round (+6s)</button>
+            <button type="button" class="hidden" data-time-end-combat>End Combat</button>
+          </div>
+          <p class="status campaignTimeStatus" data-time-status></p>
+        </div>
+      </div>
+    </details>
 
     <details id="battleToolsMenu" class="battleToolbarMenu">
       <summary>Map tools</summary>
@@ -1275,7 +1413,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=complete-spell-vfx-20260903"
+    src="./app.js?v=campaign-time-20260904"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>
