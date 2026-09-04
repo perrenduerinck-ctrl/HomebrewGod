@@ -1588,7 +1588,10 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   animation: hg-profile-fire-wall-glow var(--hg-vfx-duration) ease-out both;
 }
 .hg-map-vfx-effect.hg-vfx-profile-force-wall.has-path,
-.hg-map-vfx-effect.hg-vfx-profile-stone-wall.has-path {
+.hg-map-vfx-effect.hg-vfx-profile-stone-wall.has-path,
+.hg-map-vfx-effect.hg-vfx-profile-blade-wall.has-path,
+.hg-map-vfx-effect.hg-vfx-profile-ice-wall.has-path,
+.hg-map-vfx-effect.hg-vfx-profile-thorn-wall.has-path {
   height: 68px;
   border-radius: 0;
   overflow: visible;
@@ -1637,6 +1640,60 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   background: linear-gradient(90deg, transparent, #b9996b99 18% 82%, transparent);
   filter: blur(4px);
   animation: hg-profile-fire-wall-glow var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-blade-wall.has-path::before {
+  inset: 0;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(105deg, transparent 0 10px, #ffffff 11px 13px, #8ba6c9 14px 18px, transparent 19px 27px),
+    linear-gradient(0deg, #89a7c455, transparent 76%);
+  clip-path: polygon(0 100%, 0 75%, 5% 13%, 9% 72%, 15% 0, 20% 76%, 26% 18%, 31% 72%, 38% 2%, 44% 78%, 51% 12%, 57% 73%, 64% 0, 70% 76%, 77% 16%, 83% 71%, 90% 3%, 95% 74%, 100% 22%, 100% 100%);
+  filter: drop-shadow(0 0 5px #bce6ff) drop-shadow(0 0 10px #627da9aa);
+  animation: hg-profile-wall-rise var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-blade-wall.has-path::after {
+  inset: 62% 0 2%;
+  border-radius: 50%;
+  border-top: 3px solid #e5f7ff;
+  box-shadow: 0 0 9px #9fcfff;
+  animation: hg-profile-force-wall-glow var(--hg-vfx-duration) linear both;
+}
+.hg-vfx-profile-ice-wall.has-path::before {
+  inset: 0;
+  border-radius: 0;
+  border-bottom: 4px solid #dffaff;
+  background:
+    linear-gradient(112deg, transparent 0 19%, #efffffaa 21%, transparent 24% 47%, #9eeaff8c 50%, transparent 54% 73%, #ffffff99 76%, transparent 80%),
+    linear-gradient(0deg, #2e80d8cc, #baf6ffb8 68%, #f3ffffdd);
+  clip-path: polygon(0 100%, 0 48%, 5% 20%, 11% 43%, 18% 2%, 24% 49%, 31% 15%, 38% 46%, 46% 0, 53% 50%, 61% 18%, 69% 45%, 77% 4%, 85% 50%, 92% 13%, 100% 43%, 100% 100%);
+  filter: drop-shadow(0 0 7px #8de8ff) drop-shadow(0 0 13px #4d8ff5aa);
+  animation: hg-profile-wall-rise var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-ice-wall.has-path::after {
+  inset: 12% 2% 4%;
+  border-radius: 0;
+  background:
+    linear-gradient(73deg, transparent 0 29%, #eaffffb8 30% 31%, transparent 32% 65%, #d7ffff8c 66% 67%, transparent 68%),
+    linear-gradient(-68deg, transparent 0 38%, #d7ffff99 39% 40%, transparent 41%);
+  animation: hg-profile-force-wall-glow var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-thorn-wall.has-path::before {
+  inset: 0;
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(68deg, transparent 0 9px, #264514 10px 14px, #78a938 15px 18px, transparent 19px 29px),
+    repeating-linear-gradient(-58deg, transparent 0 13px, #3e6c20 14px 18px, transparent 19px 34px),
+    linear-gradient(0deg, #192d0fdd, #5d8a2c88 70%, transparent);
+  clip-path: polygon(0 100%, 0 38%, 5% 16%, 10% 49%, 17% 5%, 23% 43%, 31% 13%, 38% 51%, 46% 2%, 54% 46%, 63% 10%, 70% 52%, 78% 4%, 86% 44%, 94% 12%, 100% 39%, 100% 100%);
+  filter: drop-shadow(0 4px 4px #000b);
+  animation: hg-profile-stone-wall var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-thorn-wall.has-path::after {
+  inset: 15% 0 5%;
+  border-radius: 0;
+  background: repeating-linear-gradient(103deg, transparent 0 17px, #d3eb7b 18px 20px, transparent 21px 35px);
+  opacity: .65;
+  animation: hg-profile-force-wall-glow var(--hg-vfx-duration) ease-out both;
 }
 @keyframes hg-profile-bloom {
   0% { opacity: 0; transform: scale(0.2); }

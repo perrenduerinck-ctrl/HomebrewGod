@@ -3420,6 +3420,113 @@ test("all level-five spells are available and representative control, summoning,
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("all level-six spells are available and representative wards, travel, restoration, and walls render cleanly", async ({ page }, testInfo) => {
+  const ui = await openDmSpellPreview(page);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+
+  const optionIds = await page.locator(
+    '#spellTemplateSelect optgroup[label="Level 6"] option'
+  ).evaluateAll(options => options.map(option => option.value));
+  expect(optionIds).toHaveLength(31);
+  expect(new Set(optionIds).size).toBe(31);
+
+  async function play(spellId, effectType, screenshotName, targetX = 450, captureDelay = 400) {
+    await ui.select(spellId);
+    await ui.point(240, 220);
+    if (!(await ui.state()).preview?.previewLocked) await ui.point(targetX, 220);
+    expect((await ui.state()).preview?.previewLocked).toBe(true);
+    await expect(ui.play).toBeEnabled();
+    await ui.play.click();
+    const effect = page.locator(`[data-effect-type="${effectType}"]`).first();
+    await expect(effect).toBeVisible();
+    await page.waitForTimeout(captureDelay);
+    const snapshot = await effect.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      const sprite = node.querySelector(".hg-vfx-sprite");
+      return {
+        profileId: node.dataset.profileId || "",
+        family: node.dataset.vfxFamily || "",
+        variant: node.dataset.variant || "",
+        statusGroup: node.dataset.statusGroup || "",
+        statusSprite: node.dataset.statusSprite || "",
+        layer: node.parentElement?.dataset.effectLayerContainer || "",
+        blend: getComputedStyle(node).mixBlendMode,
+        spriteBlend: sprite ? getComputedStyle(sprite).mixBlendMode : "",
+        width: rect.width,
+        height: rect.height
+      };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`${screenshotName}.png`) });
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 5000 });
+    return snapshot;
+  }
+
+  await ui.select("blade-barrier");
+  await expect(ui.status).toContainText("wall preview anchor");
+  const blades = await play(
+    "blade-barrier", "profile-blade-wall", "level-six-blade-barrier", 450, 180
+  );
+  expect(blades.width).toBeGreaterThan(100);
+  expect(blades.height).toBeGreaterThan(30);
+  expect(blades.blend).toBe("screen");
+  expect(blades.layer).not.toBe("lighting");
+
+  const fey = await play("conjure-fey", "profile-glyph", "level-six-conjure-fey");
+  expect(fey).toMatchObject({ profileId: "conjure-fey", family: "utility-glyph",
+    variant: "wings" });
+  expect(fey.layer).not.toBe("lighting");
+
+  const heal = await play("heal", "status-buff-regeneration", "level-six-heal");
+  expect(heal).toMatchObject({ statusGroup: "buff", statusSprite: "regeneration",
+    blend: "screen", spriteBlend: "screen" });
+  expect(heal.layer).not.toBe("lighting");
+
+  await ui.select("move-earth");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cone");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("40");
+  const earth = await play("move-earth", "profile-stones", "level-six-move-earth");
+  expect(earth).toMatchObject({ profileId: "move-earth", family: "cone" });
+  expect(earth.layer).not.toBe("lighting");
+
+  await ui.select("programmed-illusion");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cube");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("30");
+  const illusion = await play(
+    "programmed-illusion", "profile-shimmer", "level-six-programmed-illusion", 310
+  );
+  expect(illusion).toMatchObject({ profileId: "programmed-illusion",
+    family: "ground-effect" });
+  expect(illusion.width).toBeLessThanOrEqual(1000);
+  expect(illusion.layer).not.toBe("lighting");
+
+  const recall = await play("word-of-recall", "profile-glyph", "level-six-word-of-recall", 280);
+  expect(recall).toMatchObject({ profileId: "word-of-recall", family: "ground-effect",
+    variant: "portal" });
+  expect(recall.layer).not.toBe("lighting");
+
+  await ui.select("wall-of-ice");
+  await expect(ui.status).toContainText("wall preview anchor");
+  const iceWall = await play(
+    "wall-of-ice", "profile-ice-wall", "level-six-wall-of-ice", 450, 180
+  );
+  expect(iceWall.width).toBeGreaterThan(100);
+  expect(iceWall.height).toBeGreaterThan(30);
+  expect(iceWall.blend).toBe("screen");
+  expect(iceWall.layer).not.toBe("lighting");
+
+  await ui.select("wall-of-thorns");
+  await expect(ui.status).toContainText("wall preview anchor");
+  const thornWall = await play(
+    "wall-of-thorns", "profile-thorn-wall", "level-six-wall-of-thorns", 450, 180
+  );
+  expect(thornWall.width).toBeGreaterThan(100);
+  expect(thornWall.height).toBeGreaterThan(30);
+  expect(thornWall.blend).toBe("normal");
+  expect(thornWall.layer).not.toBe("lighting");
+
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("tier sprite batch uses the correct grids, bounded modes, path alignment and cleanup", async ({ page }, testInfo) => {
   const ui = await openDmSpellPreview(page);
   await page.evaluate(() => {

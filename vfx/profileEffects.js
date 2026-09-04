@@ -35,7 +35,12 @@ const GLYPHS = Object.freeze({
   objects: "M7 11H25V29H7Z M39 7 57 16 48 34 30 25Z M10 39 28 34 35 53 17 59Z M40 41H57V58H40Z",
   tree: "M29 58V38H21L13 30 20 20 19 11 30 4 38 12 47 13 51 25 45 36H36V58Z M21 58H45",
   book: "M7 12Q21 8 31 17V56Q21 47 7 51Z M57 12Q43 8 33 17V56Q43 47 57 51Z M32 17V56",
-  mind: "M15 47Q5 35 13 25Q10 11 25 10Q33 0 42 11Q57 12 52 27Q61 39 49 48Q39 61 28 52Q19 58 15 47Z M22 21Q33 13 42 22 M20 32Q32 24 45 33 M24 43Q33 36 41 43"
+  mind: "M15 47Q5 35 13 25Q10 11 25 10Q33 0 42 11Q57 12 52 27Q61 39 49 48Q39 61 28 52Q19 58 15 47Z M22 21Q33 13 42 22 M20 32Q32 24 45 33 M24 43Q33 36 41 43",
+  wings: "M31 34Q20 9 4 12Q5 34 26 41 M33 34Q44 9 60 12Q59 34 38 41 M29 31Q32 25 35 31V55H29Z",
+  path: "M7 52Q17 37 28 43Q41 50 55 28 M47 28H55V36 M10 56H23 M31 56H45 M32 8 38 20 32 27 26 20Z",
+  feast: "M9 31Q32 51 55 31Q52 56 32 58Q12 56 9 31Z M6 27H58 M18 18Q21 8 25 18 M31 18Q34 5 37 18 M44 18Q47 8 51 18",
+  music: "M20 11V45Q12 39 7 45Q3 52 12 56Q22 57 25 48V22L50 17V39Q42 33 37 39Q33 46 42 50Q52 51 55 42V6Z",
+  jar: "M19 7H45V15L50 24V52Q50 59 43 59H21Q14 59 14 52V24L19 15Z M19 18H45 M17 30Q32 24 47 30 M24 7V3H40V7"
 });
 const HAND = "M18 36V17Q18 11 23 13V30 9Q23 3 28 7V29 5Q28 0 33 5V29 10Q33 5 38 10V31 18Q38 13 43 18V39L49 33Q55 29 57 35L45 55Q41 61 31 61Q21 61 16 51L7 34Q5 29 10 28Q13 28 18 36Z";
 const LEAF = "M9 53Q1 14 55 8Q60 54 9 53Z M9 53 46 18 M23 39V24 M34 29H45";
@@ -81,6 +86,9 @@ export const PROFILE_EFFECT_DEFINITIONS = Object.freeze([
   procedural("fire-wall", { blendMode: "screen" }),
   procedural("force-wall", { blendMode: "screen" }),
   procedural("stone-wall"),
+  procedural("blade-wall", { blendMode: "screen" }),
+  procedural("ice-wall", { blendMode: "screen" }),
+  procedural("thorn-wall"),
   procedural("hand", { path: HAND }), procedural("leaves", { path: LEAF }),
   procedural("swarm", { count: 8 }), procedural("lights", { count: 4 }),
   procedural("stones", { count: 3 }), procedural("blades", { count: 6 })

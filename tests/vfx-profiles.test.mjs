@@ -21,7 +21,9 @@ const levelTwo = DEFAULT_SPELLS.filter((s) => s.level === 2);
 const levelThree = DEFAULT_SPELLS.filter((s) => s.level === 3);
 const levelFour = DEFAULT_SPELLS.filter((s) => s.level === 4);
 const levelFive = DEFAULT_SPELLS.filter((s) => s.level === 5);
-const catalogVfxSpells = [...cantrips, ...levelOne, ...levelTwo, ...levelThree, ...levelFour, ...levelFive];
+const levelSix = DEFAULT_SPELLS.filter((s) => s.level === 6);
+const catalogVfxSpells = [...cantrips, ...levelOne, ...levelTwo, ...levelThree,
+  ...levelFour, ...levelFive, ...levelSix];
 const registry = createDefaultCastingSequenceRegistry();
 const effects = createDefaultEffectRegistry();
 const bespoke = ["fire-bolt", "ray-of-frost", "frostbite", "eldritch-blast", "shocking-grasp", "sacred-flame"];
@@ -348,7 +350,68 @@ test("every level-five spell has intentional, valid, asset-safe VFX and a Play P
   }
 });
 
-test("cantrip through level-five bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
+test("every level-six spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
+  assert.equal(levelSix.length, 31);
+  assert.equal(SPELL_VFX_PROFILES.filter(profile =>
+    levelSix.some(spell => spell.id === profile.spellId)).length, 31);
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const options = html.match(/<optgroup label="Level 6">([\s\S]*?)<\/optgroup>/)[1];
+  const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(ids.sort(), levelSix.map(spell => spell.id).sort());
+
+  for (const spell of levelSix) {
+    const before = JSON.stringify(spell);
+    const profile = getSpellVfxProfile(spell.id);
+    assert.ok(profile, spell.id);
+    const event = createSpellVfxEvent({ spell, preview: true,
+      casterPoint: { x: 100, y: 100 }, targetPoint: { x: 150, y: 100 } });
+    const definition = registry.resolve(event);
+    assert.equal(definition.source, "profile", spell.id);
+    assert.ok(definition.match.spellIds.includes(spell.id), spell.id);
+    assert.ok(definition.totalDuration > 0 &&
+      definition.totalDuration <= MAX_CASTING_SEQUENCE_DURATION_MS, spell.id);
+    for (const type of getProfileEffectIds(profile)) {
+      assert.ok(effects.has(type), `${spell.id}: ${type}`);
+    }
+    const realInstruction = createSpellTemplateInstruction(spell);
+    const instruction = createSpellTemplateInstruction(spell, {
+      allowTouchPreview: true, vfxPreview: profile.preview
+    });
+    assert.equal(instruction.supported, true, spell.id);
+    const session = createSpellPreviewSession({ spell, instruction,
+      getMetrics: () => ({ pixelsPerSquare: 50, feetPerSquare: 5 }) });
+    session.pickPoint({ x: 100, y: 100 });
+    if (!session.getState().previewLocked) session.pickPoint({ x: 150, y: 100 });
+    assert.equal(session.getState().canPlay, true, spell.id);
+    assert.deepEqual(createSpellTemplateInstruction(spell), realInstruction);
+    assert.equal(JSON.stringify(spell), before);
+  }
+
+  assert.deepEqual(
+    ["circle-of-death", "disintegrate", "forbiddance", "freezing-sphere",
+      "globe-of-invulnerability", "guards-and-wards", "move-earth",
+      "programmed-illusion", "sunbeam", "wall-of-ice", "word-of-recall"].map(id => {
+      const instruction = createSpellTemplateInstruction(DEFAULT_SPELLS.find(s => s.id === id));
+      return [instruction.templateShape, instruction.sizeFeet, instruction.heightFeet];
+    }),
+    [["sphere", 60, 120], ["cube", 10, 10], ["cube", 1000, 1000],
+      ["sphere", 60, 120], ["sphere", 10, 20], ["cube", 1000, 1000],
+      ["cone", 40, 0], ["cube", 30, 30], ["line", 60, 0],
+      ["sphere", 10, 20], ["sphere", 5, 10]]
+  );
+  for (const [id, rangeText] of [["blade-barrier", "90 feet (wall preview anchor)"],
+    ["wall-of-ice", "120 feet (wall preview anchor)"],
+    ["wall-of-thorns", "120 feet (wall preview anchor)"]]) {
+    const spell = DEFAULT_SPELLS.find(s => s.id === id);
+    const real = createSpellTemplateInstruction(spell);
+    const preview = createSpellTemplateInstruction(spell, { allowTouchPreview: true,
+      vfxPreview: getSpellVfxProfile(id).preview });
+    assert.equal(preview.rangeText, rangeText);
+    assert.deepEqual(createSpellTemplateInstruction(spell), real);
+  }
+});
+
+test("cantrip through level-six bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
   for (const mode of ["full", "reduced", "off"]) {
     const scheduler = clock(), rendered = new Map(), requests = [];
     const engine = createEffectEngine({ scheduler, mode,

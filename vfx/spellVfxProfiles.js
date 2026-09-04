@@ -2,12 +2,13 @@
 // not another animation engine. Fire Bolt/Fireball and the first five sprite
 // cantrips remain higher-priority bespoke overrides in castingSequence.js.
 import { LIGHTNING_BOLT_SOUND, normalizeSoundCue } from "./spellAudio.js?v=lightning-sound-20260830";
-import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=level-five-spells-20260903";
-import { LEVEL_ONE_SPELL_PROFILES } from "./levelOneSpellProfiles.js?v=level-five-spells-20260903";
-import { LEVEL_TWO_SPELL_PROFILES } from "./levelTwoSpellProfiles.js?v=level-five-spells-20260903";
-import { LEVEL_THREE_SPELL_PROFILES } from "./levelThreeSpellProfiles.js?v=level-five-spells-20260903";
-import { LEVEL_FOUR_SPELL_PROFILES } from "./levelFourSpellProfiles.js?v=level-five-spells-20260903";
-import { LEVEL_FIVE_SPELL_PROFILES } from "./levelFiveSpellProfiles.js?v=level-five-spells-20260903";
+import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=level-six-spells-20260903";
+import { LEVEL_ONE_SPELL_PROFILES } from "./levelOneSpellProfiles.js?v=level-six-spells-20260903";
+import { LEVEL_TWO_SPELL_PROFILES } from "./levelTwoSpellProfiles.js?v=level-six-spells-20260903";
+import { LEVEL_THREE_SPELL_PROFILES } from "./levelThreeSpellProfiles.js?v=level-six-spells-20260903";
+import { LEVEL_FOUR_SPELL_PROFILES } from "./levelFourSpellProfiles.js?v=level-six-spells-20260903";
+import { LEVEL_FIVE_SPELL_PROFILES } from "./levelFiveSpellProfiles.js?v=level-six-spells-20260903";
+import { LEVEL_SIX_SPELL_PROFILES } from "./levelSixSpellProfiles.js?v=level-six-spells-20260903";
 export const SPELL_VFX_FAMILIES = Object.freeze([
   "projectile-impact", "target-impact", "beam", "line", "cone", "burst",
   "aura", "self", "touch", "weapon-strike", "ground-effect", "utility-glyph",
@@ -90,6 +91,7 @@ export const SPELL_VFX_PROFILES = Object.freeze([
   ...LEVEL_THREE_SPELL_PROFILES.map(defineSpellVfxProfile),
   ...LEVEL_FOUR_SPELL_PROFILES.map(defineSpellVfxProfile),
   ...LEVEL_FIVE_SPELL_PROFILES.map(defineSpellVfxProfile),
+  ...LEVEL_SIX_SPELL_PROFILES.map(defineSpellVfxProfile),
   p("lightning-bolt", "Lightning Bolt", "line", "storm-lightning-impact", {
     sound: LIGHTNING_BOLT_SOUND,
     damageType: "lightning", casterEffect: "storm-lightning-charge",

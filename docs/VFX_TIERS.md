@@ -3,7 +3,7 @@
 Scope: the app's current 2014 catalog, not every published D&D spell or
 user-created spell. Counts are checked by `tests/vfx-cantrips.test.mjs`.
 Intentional shared profiles count as mapped; generic delivery fallbacks do not.
-The current cantrip and level 1–5 tiers are complete. The owner-supplied atlas
+The current cantrip and level 1–6 tiers are complete. The owner-supplied atlas
 batch adds 12 selected level 1–2 profiles, 19 selected level 3–6 profiles, and
 28 selected level 7–9 profiles. Other spells still use their existing generic
 presentation; dropdown presence is not full-tier completion.
@@ -16,11 +16,11 @@ presentation; dropdown presence is not full-tier completion.
 | 3 | 42 | 42 | 0 |
 | 4 | 31 | 31 | 0 |
 | 5 | 37 | 37 | 0 |
-| 6 | 31 | 9 | 22 |
+| 6 | 31 | 31 | 0 |
 | 7 | 20 | 10 | 10 |
 | 8 | 16 | 10 | 6 |
 | 9 | 15 | 9 | 6 |
-| **Total** | **340** | **296** | **44** |
+| **Total** | **340** | **318** | **22** |
 
 ## Existing bespoke overrides (preserved)
 
@@ -120,6 +120,21 @@ Wall of Force and Wall of Stone use labeled point anchors because freeform wall
 drawing is not yet supported; their real spell data remains unchanged. Both
 walls render as upright depth-layer effects rather than a global light overlay.
 
+## Completed level 6 batch
+
+All 31 level 6 spells now have intentional compositions. The 22 additions cover
+major wards, undead and planar summons, transformation, divination, healing,
+travel, illusion, terrain, and persistent barriers. Wing, path, feast, music,
+and jar glyphs distinguish utility magic without substituting damage effects.
+
+Circle of Death, Disintegrate, Forbiddance, Freezing Sphere, Globe of
+Invulnerability, Guards and Wards, Move Earth, Programmed Illusion, Sunbeam,
+Wall of Ice, and Word of Recall preserve their catalog geometry. Blade Barrier,
+Wall of Ice, and Wall of Thorns use bounded upright wall previews with labeled
+anchors where the basic template editor cannot express their freeform walls.
+The walls remain in the normal depth-layer system and do not use a global light
+overlay.
+
 ## Bulk pipeline
 
 `vfx/spellVfxProfiles.js` contains the immutable configuration records.
@@ -140,16 +155,16 @@ authoritative, validate every referenced effect/asset, and use `specialOptions`
 for presentation variants. Optional `preview` placement settings apply only to
 DM VFX previews, never real casting rules. Unknown spells keep their fallback.
 
-Tests programmatically validate all 45 catalog cantrips and all level 1–5 spells, referenced assets,
+Tests programmatically validate all 45 catalog cantrips and all level 1–6 spells, referenced assets,
 sequence normalization, placement, levels, caps, Full/Reduced/Off and cleanup.
 A small browser sample covers projectile, target impact, touch, beam, utility,
 ground and weapon compositions, alongside the existing sprite regressions.
 
-Further work starts with the remaining level 6 spells and the other unmapped
+Further work starts with the remaining level 7 spells and the other unmapped
 catalog tiers. Multi-beam Eldritch Blast and real weapon attachments remain
 future enhancements; all 45 cantrips, all 49 level 1 spells, and all 54 level 2
-spells, plus all 42 level 3 spells, all 31 level 4 spells, and all 37 level 5
-spells, already have intentional preview compositions.
+spells, plus all 42 level 3 spells, all 31 level 4 spells, all 37 level 5 spells,
+and all 31 level 6 spells, already have intentional preview compositions.
 
 ## Optional art upgrades (not blockers)
 
