@@ -22,8 +22,11 @@ const levelThree = DEFAULT_SPELLS.filter((s) => s.level === 3);
 const levelFour = DEFAULT_SPELLS.filter((s) => s.level === 4);
 const levelFive = DEFAULT_SPELLS.filter((s) => s.level === 5);
 const levelSix = DEFAULT_SPELLS.filter((s) => s.level === 6);
+const levelSeven = DEFAULT_SPELLS.filter((s) => s.level === 7);
+const levelEight = DEFAULT_SPELLS.filter((s) => s.level === 8);
+const levelNine = DEFAULT_SPELLS.filter((s) => s.level === 9);
 const catalogVfxSpells = [...cantrips, ...levelOne, ...levelTwo, ...levelThree,
-  ...levelFour, ...levelFive, ...levelSix];
+  ...levelFour, ...levelFive, ...levelSix, ...levelSeven, ...levelEight, ...levelNine];
 const registry = createDefaultCastingSequenceRegistry();
 const effects = createDefaultEffectRegistry();
 const bespoke = ["fire-bolt", "ray-of-frost", "frostbite", "eldritch-blast", "shocking-grasp", "sacred-flame"];
@@ -78,9 +81,12 @@ test("every catalog cantrip has intentional, valid, asset-safe, bounded VFX and 
       }
     }
   }
-  // Unsupported utility/wall spells must not receive arbitrary explosions.
+  // High-level utility and wall spells use intentional non-explosion profiles.
   for (const spell of DEFAULT_SPELLS.filter(s => ["prismatic-wall", "mirage-arcane", "clone"].includes(s.id))) {
-    assert.equal(getSpellVfxProfile(spell.id), null);
+    const profile = getSpellVfxProfile(spell.id);
+    assert.ok(profile, spell.id);
+    assert.ok(getProfileEffectIds(profile).every(type =>
+      type.startsWith("profile-") || type.startsWith("status-") || type === "storm-cloud"), spell.id);
   }
 });
 
@@ -411,7 +417,66 @@ test("every level-six spell has intentional, valid, asset-safe VFX and a Play Pr
   }
 });
 
-test("cantrip through level-six bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
+test("every level-seven through level-nine spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  for (const [level, spells] of [[7, levelSeven], [8, levelEight], [9, levelNine]]) {
+    const expected = { 7: 20, 8: 16, 9: 15 }[level];
+    assert.equal(spells.length, expected);
+    assert.equal(SPELL_VFX_PROFILES.filter(profile =>
+      spells.some(spell => spell.id === profile.spellId)).length, expected);
+    const options = html.match(new RegExp(`<optgroup label="Level ${level}">([\\s\\S]*?)<\\/optgroup>`))[1];
+    const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
+    assert.deepEqual(ids.sort(), spells.map(spell => spell.id).sort());
+
+    for (const spell of spells) {
+      const before = JSON.stringify(spell);
+      const profile = getSpellVfxProfile(spell.id);
+      assert.ok(profile, spell.id);
+      const event = createSpellVfxEvent({ spell, preview: true,
+        casterPoint: { x: 100, y: 100 }, targetPoint: { x: 150, y: 100 } });
+      const definition = registry.resolve(event);
+      assert.equal(definition.source, "profile", spell.id);
+      assert.ok(definition.match.spellIds.includes(spell.id), spell.id);
+      assert.ok(definition.totalDuration > 0 &&
+        definition.totalDuration <= MAX_CASTING_SEQUENCE_DURATION_MS, spell.id);
+      for (const type of getProfileEffectIds(profile)) {
+        assert.ok(effects.has(type), `${spell.id}: ${type}`);
+      }
+      const realInstruction = createSpellTemplateInstruction(spell);
+      const instruction = createSpellTemplateInstruction(spell, {
+        allowTouchPreview: true, vfxPreview: profile.preview
+      });
+      assert.equal(instruction.supported, true, spell.id);
+      const session = createSpellPreviewSession({ spell, instruction,
+        getMetrics: () => ({ pixelsPerSquare: 50, feetPerSquare: 5 }) });
+      session.pickPoint({ x: 100, y: 100 });
+      if (!session.getState().previewLocked) session.pickPoint({ x: 150, y: 100 });
+      assert.equal(session.getState().canPlay, true, spell.id);
+      assert.deepEqual(createSpellTemplateInstruction(spell), realInstruction);
+      assert.equal(JSON.stringify(spell), before);
+    }
+  }
+
+  assert.deepEqual(
+    ["magnificent-mansion", "mirage-arcane", "prismatic-spray", "symbol",
+      "antipathy-sympathy"].map(id => {
+      const instruction = createSpellTemplateInstruction(DEFAULT_SPELLS.find(s => s.id === id));
+      return [instruction.templateShape, instruction.sizeFeet, instruction.heightFeet];
+    }),
+    [["cube", 5, 5], ["cube", 1000, 1000], ["cone", 60, 0],
+      ["cube", 10, 10], ["cube", 200, 200]]
+  );
+  const prismaticWall = DEFAULT_SPELLS.find(s => s.id === "prismatic-wall");
+  const realWall = createSpellTemplateInstruction(prismaticWall);
+  assert.equal(realWall.supported, false);
+  const previewWall = createSpellTemplateInstruction(prismaticWall, {
+    allowTouchPreview: true, vfxPreview: getSpellVfxProfile("prismatic-wall").preview
+  });
+  assert.equal(previewWall.rangeText, "60 feet (wall preview anchor)");
+  assert.deepEqual(createSpellTemplateInstruction(prismaticWall), realWall);
+});
+
+test("complete catalog bulk playback in Full / Reduced / Off preserves events, respects caps, and leaves no timers", () => {
   for (const mode of ["full", "reduced", "off"]) {
     const scheduler = clock(), rendered = new Map(), requests = [];
     const engine = createEffectEngine({ scheduler, mode,

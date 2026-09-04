@@ -3527,6 +3527,113 @@ test("all level-six spells are available and representative wards, travel, resto
   expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
+test("all level-seven through level-nine spells are available and representative transformations, restoration, weather, and prismatic effects render cleanly", async ({ page }, testInfo) => {
+  const ui = await openDmSpellPreview(page);
+  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
+
+  for (const [level, expected] of [[7, 20], [8, 16], [9, 15]]) {
+    const optionIds = await page.locator(
+      `#spellTemplateSelect optgroup[label="Level ${level}"] option`
+    ).evaluateAll(options => options.map(option => option.value));
+    expect(optionIds).toHaveLength(expected);
+    expect(new Set(optionIds).size).toBe(expected);
+  }
+
+  async function play(spellId, effectType, screenshotName, targetX = 450, captureDelay = 400) {
+    await ui.select(spellId);
+    await ui.point(240, 220);
+    if (!(await ui.state()).preview?.previewLocked) await ui.point(targetX, 220);
+    expect((await ui.state()).preview?.previewLocked).toBe(true);
+    await expect(ui.play).toBeEnabled();
+    await ui.play.click();
+    const effect = page.locator(`[data-effect-type="${effectType}"]`).first();
+    await expect(effect).toBeVisible();
+    await page.waitForTimeout(captureDelay);
+    const snapshot = await effect.evaluate(node => {
+      const rect = node.getBoundingClientRect();
+      const sprite = node.querySelector(".hg-vfx-sprite");
+      return {
+        effectType: node.dataset.effectType || "",
+        profileId: node.dataset.profileId || "",
+        family: node.dataset.vfxFamily || "",
+        variant: node.dataset.variant || "",
+        statusGroup: node.dataset.statusGroup || "",
+        statusSprite: node.dataset.statusSprite || "",
+        layer: node.parentElement?.dataset.effectLayerContainer || "",
+        blend: getComputedStyle(node).mixBlendMode,
+        spriteBlend: sprite ? getComputedStyle(sprite).mixBlendMode : "",
+        width: rect.width,
+        height: rect.height
+      };
+    });
+    await page.screenshot({ path: testInfo.outputPath(`${screenshotName}.png`) });
+    await expect(page.locator(".hg-map-vfx-effect")).toHaveCount(0, { timeout: 6000 });
+    return snapshot;
+  }
+
+  await ui.select("mirage-arcane");
+  await expect(page.locator("#templateShapeSelect")).toHaveValue("cube");
+  await expect(page.locator("#templateSizeInput")).toHaveValue("1000");
+  const mirage = await play("mirage-arcane", "profile-shimmer", "level-seven-mirage", 310);
+  expect(mirage).toMatchObject({ profileId: "mirage-arcane", family: "ground-effect" });
+  expect(mirage.width).toBeLessThanOrEqual(1000);
+  expect(mirage.layer).not.toBe("lighting");
+
+  const spray = await play(
+    "prismatic-spray", "profile-prismatic-cone", "level-seven-prismatic-spray", 450, 150
+  );
+  expect(spray).toMatchObject({ profileId: "prismatic-spray", family: "cone", blend: "screen" });
+  expect(spray.width).toBeGreaterThan(100);
+  expect(spray.layer).not.toBe("lighting");
+
+  const resurrection = await play(
+    "resurrection", "status-buff-regeneration", "level-seven-resurrection", 280
+  );
+  expect(resurrection).toMatchObject({ statusGroup: "buff", statusSprite: "regeneration",
+    blend: "screen", spriteBlend: "screen" });
+  expect(resurrection.layer).not.toBe("lighting");
+
+  const animals = await play("animal-shapes", "profile-glyph", "level-eight-animal-shapes");
+  expect(animals).toMatchObject({ profileId: "animal-shapes", family: "target-impact",
+    variant: "paw" });
+  expect(animals.layer).not.toBe("lighting");
+
+  const weather = await play("control-weather", "profile-weather", "level-eight-control-weather");
+  expect(weather).toMatchObject({ effectType: "profile-weather", profileId: "control-weather",
+    family: "self", blend: "screen" });
+  expect(weather.width).toBeLessThanOrEqual(220);
+  expect(weather.layer).not.toBe("lighting");
+
+  const mind = await play("mind-blank", "status-buff-barrier", "level-eight-mind-blank", 280);
+  expect(mind).toMatchObject({ statusGroup: "buff", statusSprite: "barrier",
+    blend: "screen", spriteBlend: "screen" });
+  expect(mind.layer).not.toBe("lighting");
+
+  const astral = await play("astral-projection", "profile-glyph", "level-nine-astral", 310);
+  expect(astral).toMatchObject({ profileId: "astral-projection", family: "aura",
+    variant: "astral" });
+  expect(astral.layer).not.toBe("lighting");
+
+  await ui.select("prismatic-wall");
+  await expect(ui.status).toContainText("wall preview anchor");
+  const wall = await play(
+    "prismatic-wall", "profile-prismatic-wall", "level-nine-prismatic-wall", 450, 180
+  );
+  expect(wall.width).toBeGreaterThan(100);
+  expect(wall.height).toBeGreaterThan(30);
+  expect(wall.blend).toBe("screen");
+  expect(wall.layer).not.toBe("lighting");
+
+  const polymorph = await play(
+    "true-polymorph", "profile-glyph", "level-nine-true-polymorph", 430
+  );
+  expect(polymorph).toMatchObject({ profileId: "true-polymorph", family: "target-impact",
+    variant: "transmute" });
+  expect(polymorph.layer).not.toBe("lighting");
+
+  expect(await page.evaluate(() => window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
+});
+
 test("tier sprite batch uses the correct grids, bounded modes, path alignment and cleanup", async ({ page }, testInfo) => {
   const ui = await openDmSpellPreview(page);
   await page.evaluate(() => {

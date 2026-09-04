@@ -40,7 +40,13 @@ const GLYPHS = Object.freeze({
   path: "M7 52Q17 37 28 43Q41 50 55 28 M47 28H55V36 M10 56H23 M31 56H45 M32 8 38 20 32 27 26 20Z",
   feast: "M9 31Q32 51 55 31Q52 56 32 58Q12 56 9 31Z M6 27H58 M18 18Q21 8 25 18 M31 18Q34 5 37 18 M44 18Q47 8 51 18",
   music: "M20 11V45Q12 39 7 45Q3 52 12 56Q22 57 25 48V22L50 17V39Q42 33 37 39Q33 46 42 50Q52 51 55 42V6Z",
-  jar: "M19 7H45V15L50 24V52Q50 59 43 59H21Q14 59 14 52V24L19 15Z M19 18H45 M17 30Q32 24 47 30 M24 7V3H40V7"
+  jar: "M19 7H45V15L50 24V52Q50 59 43 59H21Q14 59 14 52V24L19 15Z M19 18H45 M17 30Q32 24 47 30 M24 7V3H40V7",
+  door: "M13 58V18Q13 5 32 5Q51 5 51 18V58Z M21 58V20Q21 13 32 13Q43 13 43 20V58 M36 35A2 2 0 1 0 36 39A2 2 0 1 0 36 35 M8 58H56",
+  mirror: "M32 4Q49 4 52 32Q49 60 32 60Q15 60 12 32Q15 4 32 4Z M32 12Q23 18 21 33Q23 48 32 52 M38 15Q46 23 45 34Q44 42 39 48",
+  twins: "M22 9A9 9 0 1 0 22 27A9 9 0 1 0 22 9 M42 9A9 9 0 1 0 42 27A9 9 0 1 0 42 9 M6 57Q8 34 22 34Q31 35 32 46Q33 35 42 34Q56 34 58 57Z",
+  magnet: "M10 8V37Q10 56 32 56Q54 56 54 37V8H42V37Q42 44 32 44Q22 44 22 37V8Z M10 18H22 M42 18H54",
+  astral: "M32 4 38 23 58 31 38 39 32 59 25 39 6 31 25 23Z M9 55Q25 45 41 52Q51 56 59 45",
+  transmute: "M14 21Q22 8 39 10L48 4V20L39 14Q25 12 19 25 M50 43Q42 56 25 54L16 60V44L25 50Q39 52 45 39 M24 28 32 20 40 28 32 36Z"
 });
 const HAND = "M18 36V17Q18 11 23 13V30 9Q23 3 28 7V29 5Q28 0 33 5V29 10Q33 5 38 10V31 18Q38 13 43 18V39L49 33Q55 29 57 35L45 55Q41 61 31 61Q21 61 16 51L7 34Q5 29 10 28Q13 28 18 36Z";
 const LEAF = "M9 53Q1 14 55 8Q60 54 9 53Z M9 53 46 18 M23 39V24 M34 29H45";
@@ -89,6 +95,9 @@ export const PROFILE_EFFECT_DEFINITIONS = Object.freeze([
   procedural("blade-wall", { blendMode: "screen" }),
   procedural("ice-wall", { blendMode: "screen" }),
   procedural("thorn-wall"),
+  procedural("prismatic-cone", { blendMode: "screen" }),
+  procedural("prismatic-wall", { blendMode: "screen" }),
+  procedural("weather", { blendMode: "screen" }),
   procedural("hand", { path: HAND }), procedural("leaves", { path: LEAF }),
   procedural("swarm", { count: 8 }), procedural("lights", { count: 4 }),
   procedural("stones", { count: 3 }), procedural("blades", { count: 6 })

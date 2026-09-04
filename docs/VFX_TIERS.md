@@ -3,10 +3,10 @@
 Scope: the app's current 2014 catalog, not every published D&D spell or
 user-created spell. Counts are checked by `tests/vfx-cantrips.test.mjs`.
 Intentional shared profiles count as mapped; generic delivery fallbacks do not.
-The current cantrip and level 1–6 tiers are complete. The owner-supplied atlas
+The complete cantrip and level 1–9 catalog now has intentional VFX. The owner-supplied atlas
 batch adds 12 selected level 1–2 profiles, 19 selected level 3–6 profiles, and
-28 selected level 7–9 profiles. Other spells still use their existing generic
-presentation; dropdown presence is not full-tier completion.
+28 selected level 7–9 profiles. The remaining spells use deliberate shared
+compositions rather than generic damage fallbacks.
 
 | Spell level | Catalog spells | Intentional VFX mappings | Remaining |
 | --- | ---: | ---: | ---: |
@@ -17,10 +17,10 @@ presentation; dropdown presence is not full-tier completion.
 | 4 | 31 | 31 | 0 |
 | 5 | 37 | 37 | 0 |
 | 6 | 31 | 31 | 0 |
-| 7 | 20 | 10 | 10 |
-| 8 | 16 | 10 | 6 |
-| 9 | 15 | 9 | 6 |
-| **Total** | **340** | **318** | **22** |
+| 7 | 20 | 20 | 0 |
+| 8 | 16 | 16 | 0 |
+| 9 | 15 | 15 | 0 |
+| **Total** | **340** | **340** | **0** |
 
 ## Existing bespoke overrides (preserved)
 
@@ -135,6 +135,21 @@ anchors where the basic template editor cannot express their freeform walls.
 The walls remain in the normal depth-layer system and do not use a global light
 overlay.
 
+## Completed levels 7–9 batch
+
+All 51 level 7–9 spells now have intentional compositions. The final 22 additions
+cover celestial summoning, ethereal and astral travel, large-scale illusion,
+resurrection, transformation, weather control, wards, cloning, foresight, and
+prismatic magic. Door, mirror, twin, magnet, astral, and transmutation glyphs
+keep high-level utility magic distinct without assigning arbitrary explosions.
+
+Magnificent Mansion, Mirage Arcane, Prismatic Spray, Symbol, and
+Antipathy/Sympathy preserve their catalog geometry. Prismatic Wall uses a
+labeled point anchor because the basic template editor cannot express its
+90-by-30-foot wall; its real wall data remains unchanged. Prismatic Spray and
+Prismatic Wall use dedicated multicolor depth-layer effects with screen blending,
+not a global light overlay.
+
 ## Bulk pipeline
 
 `vfx/spellVfxProfiles.js` contains the immutable configuration records.
@@ -155,16 +170,14 @@ authoritative, validate every referenced effect/asset, and use `specialOptions`
 for presentation variants. Optional `preview` placement settings apply only to
 DM VFX previews, never real casting rules. Unknown spells keep their fallback.
 
-Tests programmatically validate all 45 catalog cantrips and all level 1–6 spells, referenced assets,
+Tests programmatically validate all 340 catalog spells, referenced assets,
 sequence normalization, placement, levels, caps, Full/Reduced/Off and cleanup.
 A small browser sample covers projectile, target impact, touch, beam, utility,
 ground and weapon compositions, alongside the existing sprite regressions.
 
-Further work starts with the remaining level 7 spells and the other unmapped
-catalog tiers. Multi-beam Eldritch Blast and real weapon attachments remain
-future enhancements; all 45 cantrips, all 49 level 1 spells, and all 54 level 2
-spells, plus all 42 level 3 spells, all 31 level 4 spells, all 37 level 5 spells,
-and all 31 level 6 spells, already have intentional preview compositions.
+No catalog spell remains unmapped. Multi-beam Eldritch Blast and real weapon
+attachments remain future enhancements; every current 2014 catalog spell has
+an intentional preview composition.
 
 ## Optional art upgrades (not blockers)
 
@@ -178,7 +191,8 @@ and all 31 level 6 spells, already have intentional preview compositions.
 
 Art policy follows the spell's base level: 4×4/16 frames for levels 0–2,
 5×5/25 for levels 3–6, and 6×6/36 for levels 7–9. Thirteen upper-tier sheets
-are supplied, with 28 intentional high-level mappings; other fallbacks remain.
+are supplied, with 28 sprite-driven high-level mappings; the other high-level
+spells use intentional shared compositions.
 Do not relabel a 4×4 or 5×5 sheet as 6×6. Keep consistent centers and cell
 padding, no labels/grid lines, and preferably transparent backgrounds.
 See `SPRITE_ATLAS_BATCH.md` for assets, mappings, budgets and verification.

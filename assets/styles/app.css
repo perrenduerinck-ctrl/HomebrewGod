@@ -1489,6 +1489,31 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   animation-name: hg-profile-swirl;
 }
 .hg-vfx-profile-wind::after { inset: 25%; animation-direction: reverse; }
+.hg-vfx-profile-weather {
+  mix-blend-mode: screen;
+}
+.hg-vfx-profile-weather::before {
+  inset: 12% -8% 28%;
+  border-radius: 50% 55% 42% 48%;
+  background:
+    radial-gradient(ellipse at 23% 61%, #8cb5dc 0 20%, transparent 22%),
+    radial-gradient(ellipse at 46% 38%, #647fa8 0 31%, transparent 33%),
+    radial-gradient(ellipse at 72% 57%, #426189 0 27%, transparent 29%),
+    linear-gradient(0deg, #172a4ce8, #7d96bc99);
+  filter: drop-shadow(0 0 8px #5aaeff) drop-shadow(0 8px 5px #0008);
+  animation: hg-profile-weather-cloud var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-weather::after {
+  inset: 45% 7% 1%;
+  border-radius: 0;
+  background: repeating-linear-gradient(113deg,
+    transparent 0 13px, #d8f8ff 14px 16px, #5ca8ff 17px 19px, transparent 20px 35px);
+  clip-path: polygon(8% 0, 24% 0, 16% 42%, 31% 42%, 5% 100%, 13% 55%, 0 55%,
+    42% 0, 57% 0, 49% 38%, 64% 38%, 38% 100%, 46% 52%, 34% 52%,
+    74% 0, 91% 0, 82% 40%, 98% 40%, 68% 100%, 77% 53%, 64% 53%);
+  filter: drop-shadow(0 0 7px #9eeaff);
+  animation: hg-profile-weather-lightning var(--hg-vfx-duration) steps(2, end) both;
+}
 .hg-vfx-profile-splash::before {
   background: currentColor;
   clip-path: polygon(50% 0,60% 28%,85% 5%,75% 35%,100% 50%,73% 63%,90% 92%,59% 78%,48% 100%,35% 73%,5% 88%,25% 60%,0 41%,31% 34%,15% 5%,44% 23%);
@@ -1557,6 +1582,27 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   clip-path: polygon(0 50%, 100% 0, 100% 100%);
   animation: hg-profile-beam var(--hg-vfx-duration) ease-out both;
 }
+.hg-vfx-profile-prismatic-cone.has-path {
+  height: calc(var(--hg-vfx-path-length) * 0.8);
+  mix-blend-mode: screen;
+}
+.hg-vfx-profile-prismatic-cone.has-path::before {
+  inset: 0;
+  border-radius: 0;
+  background: linear-gradient(90deg,
+    #ffffff 0 4%, #ff355e 17%, #ff9d2e 30%, #fff35a 42%,
+    #58ff8c 55%, #45d9ff 68%, #6878ff 81%, #ef63ff 94%, transparent 100%);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+  filter: drop-shadow(0 0 7px #ffffff) drop-shadow(0 0 13px #8585ff);
+  animation: hg-profile-beam var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-prismatic-cone.has-path::after {
+  inset: 12% 4%;
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 12px, #ffffffaa 13px 14px);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+  animation: hg-profile-beam var(--hg-vfx-duration) ease-out both;
+}
 .hg-map-vfx-effect.hg-vfx-profile-fire-wall.has-path {
   height: 64px;
   border-radius: 0;
@@ -1591,7 +1637,8 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-map-vfx-effect.hg-vfx-profile-stone-wall.has-path,
 .hg-map-vfx-effect.hg-vfx-profile-blade-wall.has-path,
 .hg-map-vfx-effect.hg-vfx-profile-ice-wall.has-path,
-.hg-map-vfx-effect.hg-vfx-profile-thorn-wall.has-path {
+.hg-map-vfx-effect.hg-vfx-profile-thorn-wall.has-path,
+.hg-map-vfx-effect.hg-vfx-profile-prismatic-wall.has-path {
   height: 68px;
   border-radius: 0;
   overflow: visible;
@@ -1693,6 +1740,27 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   border-radius: 0;
   background: repeating-linear-gradient(103deg, transparent 0 17px, #d3eb7b 18px 20px, transparent 21px 35px);
   opacity: .65;
+  animation: hg-profile-force-wall-glow var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-prismatic-wall.has-path::before {
+  inset: 0;
+  border-radius: 4px 4px 0 0;
+  border: 2px solid #ffffff;
+  background: linear-gradient(90deg,
+    #ff2c55 0 13%, #ff8a2b 13% 26%, #fff34f 26% 39%,
+    #53f57b 39% 52%, #42d8ff 52% 65%, #5575ff 65% 78%,
+    #dc5cff 78% 90%, #ffffff 90% 100%);
+  box-shadow: 0 0 11px #ffffff, inset 0 0 18px #ffffffa3;
+  filter: drop-shadow(0 0 8px #7ddcff) drop-shadow(0 0 14px #d85cffaa);
+  opacity: .84;
+  animation: hg-profile-wall-rise var(--hg-vfx-duration) ease-out both;
+}
+.hg-vfx-profile-prismatic-wall.has-path::after {
+  inset: 8% 1% 3%;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(112deg, transparent 0 19px, #ffffffaa 20px 22px, transparent 23px 39px),
+    linear-gradient(0deg, #ffffff7a, transparent 38% 62%, #ffffff9c);
   animation: hg-profile-force-wall-glow var(--hg-vfx-duration) ease-out both;
 }
 @keyframes hg-profile-bloom {
@@ -2044,6 +2112,15 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
       translate(-50%, -50%)
       scale(-0.12, 0.12);
   }
+}
+@keyframes hg-profile-weather-cloud {
+  0% { opacity: 0; transform: translateY(-16px) scale(.65); }
+  24%, 70% { opacity: .92; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(8px) scale(1.08); }
+}
+@keyframes hg-profile-weather-lightning {
+  0%, 18%, 44%, 72%, 100% { opacity: 0; }
+  20%, 24%, 46%, 51%, 74%, 80% { opacity: 1; }
 }
 @keyframes hg-profile-fire-wall {
   0% { opacity: 0; transform: scaleY(.12); transform-origin: 50% 100%; }

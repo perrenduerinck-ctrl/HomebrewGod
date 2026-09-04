@@ -156,7 +156,11 @@ test("known buff/debuff spells select status art while leaving semantics externa
     "raise-dead": "status-buff-regeneration",
     scrying: "status-buff-truesight",
     "flesh-to-stone": "status-buff-armor",
-    heal: "status-buff-regeneration"
+    heal: "status-buff-regeneration",
+    resurrection: "status-buff-regeneration",
+    "mind-blank": "status-buff-barrier",
+    foresight: "status-buff-truesight",
+    "true-resurrection": "status-buff-regeneration"
   };
   for (const [spellId, effectId] of Object.entries(mappings)) {
     const profile = getSpellVfxProfile(spellId);
