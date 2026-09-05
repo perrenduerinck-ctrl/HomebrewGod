@@ -434,9 +434,10 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 }
 
 #battleCampaignTimePanel { order: 1; }
-#battleToolsMenu { order: 2; }
-#battleManagerBar { order: 3; }
-#spellCastingPanel { order: 3; flex: 1 0 100%; max-height: 42dvh; overflow: auto; }
+#battleInitiativePanel { order: 2; }
+#battleToolsMenu { order: 3; }
+#battleManagerBar { order: 4; }
+#spellCastingPanel { order: 4; flex: 1 0 100%; max-height: 42dvh; overflow: auto; }
 #battleToolsPanel #battleInfoLine { overflow-wrap: anywhere; font-size: 12px; }
 #battleToolsPanel > p:last-child { margin-bottom: 0; }
 
@@ -607,6 +608,173 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   background: none;
 }
 
+#battleInitiativePanel > summary {
+  white-space: nowrap;
+}
+
+#battleInitiativePanel > summary strong {
+  color: #fff;
+  font-size: 12px;
+}
+
+#battleTopBar .initiativeToolbarPanel {
+  left: auto;
+  width: min(590px, 100%);
+}
+
+.initiativeHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.initiativeHeading h2 {
+  margin: 2px 0 8px;
+  font-size: 19px;
+}
+
+.initiativeCurrentLabel {
+  max-width: 55%;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 211, 105, .42);
+  border-radius: 999px;
+  color: #fff0bd;
+  background: rgba(102, 71, 8, .3);
+  font-size: 11px;
+  text-align: right;
+}
+
+.initiativeList {
+  display: grid;
+  gap: 5px;
+  max-height: min(42dvh, 410px);
+  margin: 4px 0 10px;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.initiativeCombatant {
+  display: grid;
+  grid-template-columns: 58px minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 6px 8px;
+  border: 1px solid rgba(126, 145, 232, .2);
+  border-radius: 11px;
+  background: rgba(5, 9, 22, .46);
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.initiativeCombatant.is-current {
+  border-color: rgba(255, 211, 105, .75);
+  background: linear-gradient(90deg, rgba(112, 76, 8, .48), rgba(31, 28, 43, .7));
+  box-shadow: inset 3px 0 #ffd86b, 0 0 16px rgba(255, 199, 66, .12);
+}
+
+.initiativeCombatant input {
+  width: 58px;
+  min-width: 0;
+  margin: 0;
+  padding: 5px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.initiativeCombatant input[readonly] {
+  border-color: transparent;
+  color: #fff;
+  background: transparent;
+}
+
+.initiativeIdentity {
+  display: grid;
+  min-width: 0;
+}
+
+.initiativeIdentity strong,
+.initiativeIdentity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.initiativeIdentity small {
+  color: #9ca9ce;
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.initiativeTurnMarker {
+  color: #adb8dc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+}
+
+.initiativeCombatant.is-current .initiativeTurnMarker {
+  color: #ffe69a;
+}
+
+.initiativeRowActions,
+.initiativeAddRow,
+.initiativeTurnControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.initiativeRowActions button {
+  min-width: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 3px 6px;
+}
+
+.initiativeDmControls {
+  display: grid;
+  gap: 8px;
+}
+
+.initiativeAddRow select {
+  flex: 1 1 190px;
+  min-width: 0;
+  margin: 0;
+}
+
+.initiativeAddRow button,
+.initiativeTurnControls button {
+  width: auto;
+  min-height: 38px;
+  margin: 0;
+  padding: 7px 10px;
+}
+
+.initiativeTurnControls [data-initiative-action="next"] {
+  flex: 1 1 150px;
+  border-color: rgba(255, 213, 99, .45);
+  background: #614710;
+}
+
+#battleTopBar .initiativeStatus {
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+}
+
+.initiativeEmptyState {
+  padding: 15px;
+  border: 1px dashed rgba(126, 145, 232, .3);
+  border-radius: 10px;
+  color: #aeb9dc;
+  text-align: center;
+}
+
 @media (max-width: 720px) {
   .campaignTimeButtonGrid,
   .campaignTimeCombatControls,
@@ -621,12 +789,97 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   #battleCampaignTimePanel > summary strong {
     display: none;
   }
+
+  #battleInitiativePanel > summary strong {
+    display: none;
+  }
+
+  .initiativeCombatant {
+    grid-template-columns: 54px minmax(90px, 1fr) auto;
+  }
+
+  .initiativeRowActions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
 }
 
 #battleMapSurface {
   position: relative;
   flex: 1;
   min-height: 0;
+}
+
+.hg-map-lighting-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  border-radius: 18px;
+  pointer-events: none !important;
+  user-select: none;
+  background: transparent;
+  opacity: 1;
+  transition: background 1.5s ease, opacity 1.5s ease;
+}
+
+.hg-map-lighting-layer[data-day-phase="dawn"] {
+  background:
+    linear-gradient(180deg, rgba(64, 91, 168, .14), transparent 42%),
+    linear-gradient(100deg, rgba(255, 157, 75, .19), rgba(255, 215, 149, .05) 45%, transparent 72%);
+  mix-blend-mode: soft-light;
+}
+
+.hg-map-lighting-layer[data-day-phase="day"] {
+  background: rgba(255, 248, 224, .015);
+  mix-blend-mode: soft-light;
+}
+
+.hg-map-lighting-layer[data-day-phase="dusk"] {
+  background:
+    linear-gradient(180deg, rgba(23, 14, 57, .2), rgba(32, 12, 42, .31)),
+    linear-gradient(100deg, rgba(255, 126, 43, .15), transparent 58%);
+  mix-blend-mode: multiply;
+}
+
+.hg-map-lighting-layer[data-day-phase="night"] {
+  background:
+    linear-gradient(180deg, rgba(4, 12, 45, .36), rgba(0, 7, 27, .52)),
+    radial-gradient(circle at 72% 18%, rgba(73, 130, 210, .11), transparent 32%);
+  mix-blend-mode: multiply;
+}
+
+#battleMapImage {
+  transition: opacity .65s ease;
+}
+
+.hg-map-variant-crossfade {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  pointer-events: none !important;
+  opacity: 1;
+  transition: opacity .65s ease;
+}
+
+.hg-token.hg-token-current-turn {
+  outline: 3px solid rgba(255, 225, 121, .98);
+  outline-offset: 5px;
+  box-shadow: 0 0 0 2px rgba(69, 45, 0, .78), 0 0 26px rgba(255, 205, 65, .95);
+  animation: hg-current-turn-pulse 1.35s ease-in-out infinite alternate;
+}
+
+@keyframes hg-current-turn-pulse {
+  from {
+    outline-color: rgba(255, 225, 121, .72);
+  }
+  to {
+    outline-color: #fff3b8;
+    box-shadow: 0 0 0 2px rgba(69, 45, 0, .78), 0 0 36px rgba(255, 219, 94, 1);
+  }
 }
 
 #battleMapScreen #battleMapViewer,

@@ -106,6 +106,7 @@ for (
     "battleMap",
     "characterCreator",
     "characterSheet",
+    "combat",
     "data",
     "monsters",
     "shared",

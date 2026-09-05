@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-    <link rel="stylesheet" href="./assets/styles/app.css?v=campaign-time-20260904">
+    <link rel="stylesheet" href="./assets/styles/app.css?v=initiative-time-20260905">
 <link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-vfx-polish-20260902">
 </head>
 
@@ -330,6 +330,45 @@
             <button type="button" class="hidden" data-time-end-combat>End Combat</button>
           </div>
           <p class="status campaignTimeStatus" data-time-status></p>
+        </div>
+      </div>
+    </details>
+
+    <details
+      id="battleInitiativePanel"
+      class="battleToolbarMenu initiativeMenu"
+      data-initiative-panel
+    >
+      <summary>
+        <span>Initiative</span>
+        <strong data-initiative-summary>0 combatants</strong>
+      </summary>
+      <div class="battleToolbarPanel initiativeToolbarPanel">
+        <div class="initiativeHeading">
+          <div>
+            <span class="campaignTimeEyebrow">Encounter</span>
+            <h2 data-initiative-round>Initiative</h2>
+          </div>
+          <b class="initiativeCurrentLabel" data-initiative-current>Combat has not started.</b>
+        </div>
+
+        <ol class="initiativeList" data-initiative-list aria-label="Initiative order"></ol>
+
+        <div class="initiativeDmControls hidden" data-initiative-dm-controls>
+          <div class="initiativeAddRow">
+            <select data-initiative-add-select aria-label="Battle-map token to add">
+              <option value="">No available map tokens</option>
+            </select>
+            <button type="button" data-initiative-action="add">Add Combatant</button>
+            <button type="button" data-initiative-action="roll-all">Roll All</button>
+          </div>
+          <div class="initiativeTurnControls">
+            <button type="button" data-initiative-action="start">Start Combat</button>
+            <button type="button" class="hidden" data-initiative-action="previous">Previous Turn</button>
+            <button type="button" class="hidden" data-initiative-action="next">Next Turn</button>
+            <button type="button" class="hidden" data-initiative-action="end">End Combat</button>
+          </div>
+          <p class="status initiativeStatus" data-initiative-status></p>
         </div>
       </div>
     </details>
@@ -1413,7 +1452,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=campaign-time-20260904"
+    src="./app.js?v=initiative-time-20260905"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
 </body>

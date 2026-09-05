@@ -176,6 +176,19 @@ test("ten completed rounds advance one minute and ending mid-round adds nothing"
   );
 });
 
+test("rewinding an accidentally completed combat round restores six seconds", async () => {
+  const clock = createTimeSystem({
+    initialState: { worldTime: 100 }
+  });
+  await clock.startCombatTime();
+  await clock.advanceCombatRound();
+  await clock.rewindCombatRound();
+  assert.equal(clock.getWorldTime(), 100);
+  assert.equal(clock.getCombatRound(), 1);
+  await clock.rewindCombatRound();
+  assert.equal(clock.getWorldTime(), 100);
+});
+
 test("combat start and end are idempotent and never create extra writes", async () => {
   let commitCount = 0;
   const clock = createTimeSystem({

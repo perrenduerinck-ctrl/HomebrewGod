@@ -343,6 +343,21 @@ export function applyTimeCommand(
       combatRoundsCompleted:
         state.combatRoundsCompleted + 1
     };
+  } else if (type === "rewind-combat-round") {
+    if (
+      state.timeMode === TIME_MODES.COMBAT &&
+      state.combatRoundsCompleted > 0
+    ) {
+      next = {
+        ...state,
+        worldTime: Math.max(
+          0,
+          state.worldTime - COMBAT_ROUND_SECONDS
+        ),
+        combatRoundsCompleted:
+          state.combatRoundsCompleted - 1
+      };
+    }
   } else {
     throw new Error(
       `Unknown campaign time command: ${type || "empty"}`
@@ -561,6 +576,9 @@ export function createTimeSystem({
     }),
     advanceCombatRound: () => execute({
       type: "advance-combat-round"
+    }),
+    rewindCombatRound: () => execute({
+      type: "rewind-combat-round"
     }),
     getCombatRound: () =>
       state.timeMode === TIME_MODES.COMBAT

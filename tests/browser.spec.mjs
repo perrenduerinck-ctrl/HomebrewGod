@@ -4348,7 +4348,10 @@ test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-saf
     const main = (await rendered()).find(e => e.type === "lightning5-main");
     expect(main.size).toBe("800px 800px"); expect(main.children).toBe(1);
     expect(main.src).toContain("lightning-bolt-main-5x5.png");
-    expect(main.rotation).toBeCloseTo(angle, 2);
+    const angleDelta = Math.abs(
+      ((((main.rotation - angle) + 180) % 360) + 360) % 360 - 180
+    );
+    expect(angleDelta).toBeLessThan(0.005);
     expect(main.artAngle).toBeCloseTo(-135, 2);
     expect(main.artX).toBeCloseTo(-80, 2); expect(main.artY).toBeCloseTo(-80, 2);
     expect(main.x).toBeCloseTo(locked.previewCasterPoint.x, 0);

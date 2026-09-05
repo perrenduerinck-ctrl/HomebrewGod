@@ -102,7 +102,20 @@ import {
   normalizeTimeState,
   timeStatesEqual,
   toRoomTimeFields
-} from "./timeSystem.js?v=campaign-time-20260904";
+} from "./timeSystem.js?v=initiative-time-20260905";
+import {
+  applyInitiativeCommand,
+  createInitiativeSystem,
+  initiativeStatesEqual,
+  normalizeInitiativeState,
+  toRoomInitiativeFields
+} from "./combat/initiativeSystem.js?v=initiative-time-20260905";
+import {
+  createInitiativePanel
+} from "./combat/initiativePanel.js?v=initiative-time-20260905";
+import {
+  createMapLighting
+} from "./battleMap/mapLighting.js?v=initiative-time-20260905";
 import {
   MAX_SECURE_IMAGE_BYTES,
   createPersistenceMonitor,
@@ -303,6 +316,7 @@ const E = {
   battleManagerBar: $("battleManagerBar"),
   battleManagerInner: $("battleManagerInner"),
   battleMapSurface: $("battleMapSurface"),
+  battleInitiativePanel: $("battleInitiativePanel"),
 
   // Puzzle map
   puzzleMapControls: $("puzzleMapControls"),
@@ -385,6 +399,9 @@ const appRealtimeListeners =
 let activeMainScreenName = "";
 
 let tokenSystem = null;
+let initiativeSystem = null;
+let initiativePanelSystem = null;
+let battleMapLighting = null;
 let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
 let characterCreatorModulePromise = null;
@@ -472,6 +489,7 @@ function initializeBattleMapToolbar() {
         battleMapTemplates?.refresh();
         renderActiveSpellPreviewPlacement();
         battleMapVfx?.refresh();
+        battleMapLighting?.refresh();
       });
     });
     observer.observe(E.battleMapSurface);
@@ -548,6 +566,32 @@ const campaignTimeSystem = createTimeSystem({
   commit: commitCampaignTimeCommand
 });
 
+if (E.battleMapSurface) {
+  battleMapLighting = createMapLighting({
+    surface: E.battleMapSurface,
+    mapImage: E.battleMapImage
+  });
+}
+
+initiativeSystem = createInitiativeSystem({
+  canMutate: function () {
+    return currentIsDM === true;
+  },
+  commit: commitInitiativeCommand,
+  onCombatStart: function () {
+    return campaignTimeSystem.startCombatTime();
+  },
+  onRoundComplete: function () {
+    return campaignTimeSystem.advanceCombatRound();
+  },
+  onRoundRevert: function () {
+    return campaignTimeSystem.rewindCombatRound();
+  },
+  onCombatEnd: function () {
+    return campaignTimeSystem.endCombatTime();
+  }
+});
+
 function formatCampaignDuration(seconds) {
   const total = Math.max(
     0,
@@ -588,6 +632,9 @@ function renderCampaignTime(state) {
   const isCombat =
     safeState.timeMode ===
       TIME_MODES.COMBAT;
+  const initiativeCombatActive =
+    initiativeSystem?.getState()
+      .combatActive === true;
   const modeLabel = isCombat
     ? "Combat"
     : "Exploration";
@@ -682,12 +729,20 @@ function renderCampaignTime(state) {
     );
   });
   document.querySelectorAll(
-    "[data-time-complete-round], " +
-      "[data-time-end-combat]"
+    "[data-time-complete-round]"
   ).forEach((element) => {
     element.classList.toggle(
       "hidden",
-      !isCombat
+      !isCombat || initiativeCombatActive
+    );
+    element.disabled = initiativeCombatActive;
+  });
+  document.querySelectorAll(
+    "[data-time-end-combat]"
+  ).forEach((element) => {
+    element.classList.toggle(
+      "hidden",
+      !isCombat || initiativeCombatActive
     );
   });
   document.querySelectorAll(
@@ -791,6 +846,93 @@ async function commitCampaignTimeCommand(
   }
 
   return committedState;
+}
+
+async function commitInitiativeCommand(
+  command,
+  context
+) {
+  if (
+    !currentRoomCode &&
+    window.__HOMEBREW_GOD_SMOKE__
+  ) {
+    return {
+      state: context.previewState,
+      effects: context.previewEffects
+    };
+  }
+
+  if (
+    !currentRoomCode ||
+    !currentUser ||
+    currentIsDM !== true
+  ) {
+    throw new Error(
+      "Only the room DM can change initiative."
+    );
+  }
+
+  const roomCode = currentRoomCode;
+  const userUid = currentUser.uid;
+  const roomRef = doc(db, "rooms", roomCode);
+  let committedResult = null;
+
+  await runTransaction(
+    db,
+    async function (transaction) {
+      const roomSnapshot =
+        await transaction.get(roomRef);
+
+      if (!roomSnapshot.exists()) {
+        throw new Error("Room not found.");
+      }
+
+      const latestRoom = roomSnapshot.data() || {};
+      if (latestRoom.dmUid !== userUid) {
+        throw new Error(
+          "Only the room DM can change initiative."
+        );
+      }
+
+      const previousState =
+        normalizeInitiativeState(latestRoom);
+      committedResult = applyInitiativeCommand(
+        previousState,
+        command
+      );
+
+      if (
+        initiativeStatesEqual(
+          previousState,
+          committedResult.state
+        )
+      ) {
+        return;
+      }
+
+      transaction.update(roomRef, {
+        ...toRoomInitiativeFields(
+          committedResult.state
+        ),
+        updatedAt: serverTimestamp()
+      });
+    }
+  );
+
+  if (
+    currentRoomCode === roomCode &&
+    currentRoomData &&
+    committedResult
+  ) {
+    currentRoomData = {
+      ...currentRoomData,
+      ...toRoomInitiativeFields(
+        committedResult.state
+      )
+    };
+  }
+
+  return committedResult;
 }
 
 function readTimeInput(
@@ -1078,7 +1220,19 @@ function connectCampaignTimeCombatEvents() {
 }
 
 campaignTimeSystem.subscribe(
-  renderCampaignTime
+  function (state) {
+    renderCampaignTime(state);
+    battleMapLighting?.applyWorldTime(
+      state.worldTime
+    );
+  }
+);
+initiativeSystem.subscribe(
+  function () {
+    renderCampaignTime(
+      campaignTimeSystem.getState()
+    );
+  }
 );
 initializeCampaignTimeControls();
 connectCampaignTimeCombatEvents();
@@ -1246,6 +1400,9 @@ function setDmControlsVisible(isVisible) {
   renderCampaignTime(
     campaignTimeSystem.getState()
   );
+  initiativePanelSystem?.render(
+    initiativeSystem.getState()
+  );
 }
 
 function normalizeCurrentMapData(mapData) {
@@ -1266,6 +1423,23 @@ function normalizeCurrentMapData(mapData) {
   if (mapData.puzzleTileKey) {
     normalizedMap.puzzleTileKey = mapData.puzzleTileKey;
   }
+
+  const timeVariants =
+    mapData.timeVariants ||
+    mapData.timeOfDayVariants ||
+    null;
+  if (timeVariants && typeof timeVariants === "object") {
+    normalizedMap.timeVariants = {
+      ...timeVariants
+    };
+  }
+
+  ["dawn", "day", "dusk", "night"].forEach((phase) => {
+    const field = `${phase}Url`;
+    if (mapData[field]) {
+      normalizedMap[field] = mapData[field];
+    }
+  });
 
   return normalizedMap;
 }
@@ -1347,6 +1521,7 @@ async function showLoggedOut() {
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   campaignTimeSystem.applySnapshot({});
+  initiativeSystem.applySnapshot({});
 }
 
 function showLoggedIn(user) {
@@ -1698,6 +1873,9 @@ async function createRoom() {
         ...toRoomTimeFields(
           normalizeTimeState({})
         ),
+        ...toRoomInitiativeFields(
+          normalizeInitiativeState({})
+        ),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -1870,6 +2048,9 @@ function openRoom(roomCode, screenToShow = "room") {
     campaignTimeSystem.applyRoomSnapshot(
       room
     );
+    initiativeSystem.applyRoomSnapshot(
+      room
+    );
 
     text(E.currentRoomNameText, room.roomName || "Unnamed Room");
     text(E.roomCodeText, cleanCode);
@@ -1935,6 +2116,7 @@ async function leaveCurrentRoomView() {
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   campaignTimeSystem.applySnapshot({});
+  initiativeSystem.applySnapshot({});
 
   setDmControlsVisible(false);
 
@@ -3122,6 +3304,7 @@ function showSharedMap(currentMap) {
 
     text(E.noBattleMapText, "No battle map loaded yet.");
     E.noBattleMapText.style.display = "block";
+    battleMapLighting?.setMap(null);
 
     return;
   }
@@ -3142,6 +3325,7 @@ function showSharedMap(currentMap) {
     (!E.roomMapPreviewImage || E.roomMapPreviewImage.getAttribute("src")) &&
     E.battleMapImage.getAttribute("src")
   ) {
+    battleMapLighting?.setMap(map);
     return;
   }
 
@@ -3195,6 +3379,7 @@ function showSharedMap(currentMap) {
   };
 
   E.battleMapImage.src = imageUrl;
+  battleMapLighting?.setMap(map);
 }
 
 addOptionalEventListener(E.uploadRoomMapButton, "click", async function () {
@@ -6990,6 +7175,20 @@ if (!tokenSystem) {
   });
 }
 
+if (!initiativePanelSystem && E.battleInitiativePanel) {
+  initiativePanelSystem = createInitiativePanel({
+    root: E.battleInitiativePanel,
+    system: initiativeSystem,
+    getTokens: function () {
+      return tokenSystem?.getRoomTokens?.() || [];
+    },
+    getIsDm: function () {
+      return currentIsDM === true;
+    },
+    tokenRoot: E.battleMapSurface || document
+  });
+}
+
 
 // =====================================================
 // APP SECTION 13 — BATTLE MAP / CREATOR TAB NAVIGATION
@@ -7028,6 +7227,7 @@ function showAnyMainScreen(screenName) {
     battleMapRuler?.refresh();
     battleMapTemplates?.refresh();
     battleMapVfx?.refresh();
+    battleMapLighting?.refresh();
   }
 
   syncRealtimeListenersForScreen(screenName);
@@ -7779,6 +7979,48 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
         function (seconds) {
           return campaignTimeSystem
             .advanceSeconds(seconds);
+        },
+
+      setInitiativeTestState:
+        function (state) {
+          return initiativeSystem
+            .applySnapshot(state || {});
+        },
+
+      getInitiativeTestState:
+        function () {
+          return initiativeSystem.getState();
+        },
+
+      addInitiativeCombatantForTest:
+        function (combatant) {
+          return initiativeSystem
+            .addCombatant(combatant);
+        },
+
+      startInitiativeForTest:
+        function () {
+          return initiativeSystem.startCombat();
+        },
+
+      nextInitiativeTurnForTest:
+        function () {
+          return initiativeSystem.nextTurn();
+        },
+
+      previousInitiativeTurnForTest:
+        function () {
+          return initiativeSystem.previousTurn();
+        },
+
+      endInitiativeForTest:
+        function () {
+          return initiativeSystem.endCombat();
+        },
+
+      getMapLightingTestState:
+        function () {
+          return battleMapLighting?.getState() || null;
         },
 
       getSpellPreviewVfxState:
