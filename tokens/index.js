@@ -14,6 +14,7 @@ import {
   elevationToVisualPixels
 } from "../battleMap/elevation.js?v=2d5-vfx-polish-20260902";
 import { getTokenDepthSortValue } from "../vfx/effectLayers.js";
+import { calculateAbilityModifier } from "../shared/abilityMath.js";
 
 export function createTokenSystem(options) {
   const deps = {
@@ -39,7 +40,9 @@ export function createTokenSystem(options) {
     getPuzzleTiles: options.getPuzzleTiles,
     getActivePuzzleTile: options.getActivePuzzleTile,
     getPuzzleViewMode: options.getPuzzleViewMode,
-    buildMapFromRoomFields: options.buildMapFromRoomFields
+    buildMapFromRoomFields: options.buildMapFromRoomFields,
+    removeTokenFromInitiative:
+      options.removeTokenFromInitiative
   };
 
   const realtimeListeners =
@@ -282,6 +285,35 @@ export function createTokenSystem(options) {
       )
     );
 
+    const dexterity = Math.max(
+      0,
+      Math.round(
+        safeNumber(
+          character?.abilities?.scores?.dex ??
+          character?.abilities?.dexterity ??
+          character?.abilities?.dex,
+          10
+        )
+      )
+    );
+
+    const calculatedInitiative =
+      character?.combat?.initiative ??
+      character?.calculated?.initiative ??
+      character?.initiative;
+    const initiativeBonus = Math.round(
+      Number.isFinite(Number(calculatedInitiative))
+        ? Number(calculatedInitiative)
+        : calculateAbilityModifier(dexterity)
+    );
+
+    const ownerUid = String(
+      character?.ownerUid ??
+      character?.owner?.uid ??
+      character?.userUid ??
+      ""
+    ).trim() || null;
+
     const mediumSize =
       getMediumSize(roomData || {});
 
@@ -297,7 +329,10 @@ export function createTokenSystem(options) {
         ),
       currentHp,
       maximumHp,
-      armorClass
+      armorClass,
+      dexterity,
+      initiativeBonus,
+      ownerUid
     };
   }
 
@@ -321,6 +356,10 @@ export function createTokenSystem(options) {
       size: fields.pixelSize,
       armorClass: fields.armorClass,
       ac: fields.armorClass,
+      dexterity: fields.dexterity,
+      initiativeBonus:
+        fields.initiativeBonus,
+      ownerUid: fields.ownerUid,
       currentHp: fields.currentHp,
       maxHp: fields.maximumHp,
       hp: {
@@ -334,7 +373,11 @@ export function createTokenSystem(options) {
       sourceType: "character",
       linkedCharacter: {
         id: fields.characterId,
-        hpAuthority: "character"
+        hpAuthority: "character",
+        dexterity: fields.dexterity,
+        initiativeBonus:
+          fields.initiativeBonus,
+        ownerUid: fields.ownerUid
       }
     };
   }
@@ -386,6 +429,34 @@ export function createTokenSystem(options) {
       )
     );
 
+    const dexterity = Math.max(
+      0,
+      Math.round(
+        safeNumber(
+          monster?.abilities?.dex ??
+          monster?.abilities?.dexterity ??
+          monster?.dexterity ??
+          monster?.stats?.dex,
+          10
+        )
+      )
+    );
+    const explicitInitiative =
+      monster?.initiativeBonus ??
+      monster?.initiative?.bonus ??
+      monster?.combat?.initiativeBonus ??
+      monster?.combat?.initiative;
+    const initiativeBonus = Math.round(
+      Number.isFinite(Number(explicitInitiative))
+        ? Number(explicitInitiative)
+        : calculateAbilityModifier(dexterity)
+    );
+    const ownerUid = String(
+      monster?.ownerUid ??
+      monster?.owner?.uid ??
+      ""
+    ).trim() || null;
+
     const mediumSize =
       getMediumSize(roomData || {});
 
@@ -410,6 +481,9 @@ export function createTokenSystem(options) {
         ),
       armorClass,
       ac: armorClass,
+      dexterity,
+      initiativeBonus,
+      ownerUid,
       currentHp: maximumHp,
       maxHp: maximumHp,
       hp: {
@@ -422,7 +496,10 @@ export function createTokenSystem(options) {
       sourceType: "monster",
       linkedMonster: {
         id: monsterId,
-        hpAuthority: "token"
+        hpAuthority: "token",
+        dexterity,
+        initiativeBonus,
+        ownerUid
       }
     };
   }
@@ -1224,6 +1301,30 @@ export function createTokenSystem(options) {
       },
       armorClass,
       ac: armorClass,
+      dexterity: Math.max(
+        0,
+        Math.round(
+          safeNumber(
+            token.dexterity ??
+            token.linkedCharacter?.dexterity ??
+            token.linkedMonster?.dexterity,
+            10
+          )
+        )
+      ),
+      initiativeBonus: Math.round(
+        safeNumber(
+          token.initiativeBonus ??
+          token.linkedCharacter?.initiativeBonus ??
+          token.linkedMonster?.initiativeBonus,
+          0
+        )
+      ),
+      ownerUid:
+        token.ownerUid ??
+        token.linkedCharacter?.ownerUid ??
+        token.linkedMonster?.ownerUid ??
+        null,
       elevation,
       elevationFeet: elevation,
       linkedCharacterId:
@@ -2255,6 +2356,107 @@ export function createTokenSystem(options) {
     };
   }
 
+  async function syncLinkedMonsterTokens(monster) {
+    const roomCode = deps.getCurrentRoomCode
+      ? deps.getCurrentRoomCode()
+      : null;
+    const roomData = deps.getCurrentRoomData
+      ? deps.getCurrentRoomData()
+      : null;
+    const monsterId = getLinkedMonsterId(monster);
+
+    if (!roomCode || !monsterId) {
+      return {
+        monsterId,
+        updatedCount: 0
+      };
+    }
+
+    if (
+      typeof deps.getDocs !== "function" ||
+      typeof deps.query !== "function" ||
+      typeof deps.where !== "function"
+    ) {
+      throw new Error(
+        "Linked-token synchronization is missing its Firestore query tools."
+      );
+    }
+
+    const linkedTokensSnapshot = await deps.getDocs(
+      deps.query(
+        deps.collection(
+          deps.db,
+          "rooms",
+          roomCode,
+          "tokens"
+        ),
+        deps.where(
+          "linkedMonsterId",
+          "==",
+          monsterId
+        )
+      )
+    );
+    const linkedTokenDocuments = Array.isArray(
+      linkedTokensSnapshot?.docs
+    )
+      ? linkedTokensSnapshot.docs
+      : [];
+
+    if (!linkedTokenDocuments.length) {
+      return {
+        monsterId,
+        updatedCount: 0
+      };
+    }
+
+    const updatePatch = {
+      ...buildMonsterLinkedTokenPatch(
+        monster,
+        roomData || {}
+      ),
+      updatedAtMillis: Date.now(),
+      updatedAt: deps.serverTimestamp()
+    };
+
+    await Promise.all(
+      linkedTokenDocuments.map((tokenDocument) => (
+        deps.updateDoc(
+          tokenDocument.ref ||
+          deps.doc(
+            deps.db,
+            "rooms",
+            roomCode,
+            "tokens",
+            tokenDocument.id
+          ),
+          updatePatch
+        )
+      ))
+    );
+
+    tokenCache = tokenCache.map((token) => {
+      if (
+        String(
+          token?.linkedMonsterId ||
+          token?.linkedMonster?.id ||
+          ""
+        ).trim() !== monsterId
+      ) {
+        return token;
+      }
+      return normalizeToken({
+        ...token,
+        ...updatePatch
+      });
+    });
+
+    return {
+      monsterId,
+      updatedCount: linkedTokenDocuments.length
+    };
+  }
+
   async function updateTokenElevation(
     tokenId,
     nextElevation
@@ -2330,6 +2532,13 @@ export function createTokenSystem(options) {
 
       if (!confirm("Delete this token? This does not delete the image from Cloudinary.")) {
         return;
+      }
+
+      if (
+        typeof deps.removeTokenFromInitiative ===
+        "function"
+      ) {
+        await deps.removeTokenFromInitiative(tokenId);
       }
 
       await deps.deleteDoc(
@@ -2542,6 +2751,7 @@ export function createTokenSystem(options) {
     loadCharacterLinkedToken,
     getRoomTokens,
     syncLinkedCharacterTokens,
+    syncLinkedMonsterTokens,
     updateTokenElevation,
     deleteToken,
     saveTokenScale,

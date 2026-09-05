@@ -64,7 +64,7 @@ import {
 } from "../shared/securityPersistence.js";
 
 import { createCharacterCatalogs } from "./catalogs.js";
-import { createCharacterPersistence } from "./persistence.js";
+import { createCharacterPersistence } from "./persistence.js?v=initiative-reliability-20260905";
 import { runCharacterCreatorSelfTests } from "./selfTests.js";
 import {
   getProgressionValueByLevel,
@@ -3285,6 +3285,7 @@ export function createCharacterCreator(options = {}) {
       ...empty,
 
       id: raw.id || null,
+      ownerUid: cleanString(raw.ownerUid),
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       rulesetId: ACTIVE_RULESET.id,
       rulesEdition: ACTIVE_RULESET.edition,

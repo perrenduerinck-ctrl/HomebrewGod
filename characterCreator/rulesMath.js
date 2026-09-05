@@ -2,6 +2,9 @@ import {
   createDerivedSignature,
   createScopedDerivedCache
 } from "./derivedCache.js";
+import {
+  calculateAbilityModifier as calculateSharedAbilityModifier
+} from "../shared/abilityMath.js";
 
 const rulesMathCache = createScopedDerivedCache({
   maximumEntriesPerScope: 128
@@ -614,8 +617,8 @@ export function calculateAbilityModifier(
   return rulesMathCache.get(
     "ability-modifier",
     cleanScore,
-    () => Math.floor(
-      (cleanScore - 10) / 2
+    () => calculateSharedAbilityModifier(
+      cleanScore
     )
   );
 }

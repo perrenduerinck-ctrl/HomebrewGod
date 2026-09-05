@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("initiative panel controls a full round, time, token highlight, and lighting", async ({ page }) => {
   await page.goto(
-    "?smokeTest=1&release=initiative-time-20260905",
+    "?smokeTest=1&release=initiative-reliability-20260905",
     { waitUntil: "domcontentloaded" }
   );
 
@@ -87,6 +87,18 @@ test("initiative panel controls a full round, time, token highlight, and lightin
   await expect(page.locator(
     "#battleCampaignTimePanel [data-time-complete-round]"
   )).toBeHidden();
+  await expect(page.locator('.hg-token[data-token-id="goblin"]')).toHaveClass(/hg-token-current-turn/);
+
+  await panel.locator('[data-initiative-action="next"]').click();
+  await expect(panel.locator("[data-initiative-current]")).toContainText("Perren");
+  await panel
+    .locator('.initiativeCombatant[data-token-id="hero"] [data-initiative-action="remove"]')
+    .click();
+  await expect(panel.locator("[data-initiative-round]")).toHaveText("Round 3");
+  await expect(panel.locator("[data-initiative-current]")).toContainText("Goblin");
+  expect(await page.evaluate(() => (
+    window.__HOMEBREW_GOD_RELEASE_TEST__.getCampaignTimeTestState().worldTime
+  ))).toBe(startTime + 12);
   await expect(page.locator('.hg-token[data-token-id="goblin"]')).toHaveClass(/hg-token-current-turn/);
 
   const lighting = await page.evaluate(() => {

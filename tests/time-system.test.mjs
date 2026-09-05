@@ -189,6 +189,36 @@ test("rewinding an accidentally completed combat round restores six seconds", as
   assert.equal(clock.getWorldTime(), 100);
 });
 
+test("canonical round synchronization reconciles the counter and elapsed seconds", () => {
+  const synchronized = applyTimeCommand(
+    {
+      worldTime: 300,
+      timeMode: TIME_MODES.COMBAT,
+      combatStartedAt: 300,
+      combatRoundsCompleted: 0
+    },
+    {
+      type: "synchronize-combat-rounds",
+      combatRoundsCompleted: 4
+    }
+  );
+  assert.equal(synchronized.worldTime, 324);
+  assert.equal(
+    synchronized.combatRoundsCompleted,
+    4
+  );
+
+  const rewound = applyTimeCommand(
+    synchronized,
+    {
+      type: "synchronize-combat-rounds",
+      combatRoundsCompleted: 1
+    }
+  );
+  assert.equal(rewound.worldTime, 306);
+  assert.equal(rewound.combatRoundsCompleted, 1);
+});
+
 test("combat start and end are idempotent and never create extra writes", async () => {
   let commitCount = 0;
   const clock = createTimeSystem({

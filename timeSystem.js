@@ -358,6 +358,42 @@ export function applyTimeCommand(
           state.combatRoundsCompleted - 1
       };
     }
+  } else if (type === "synchronize-combat-rounds") {
+    if (
+      state.timeMode !==
+      TIME_MODES.COMBAT
+    ) {
+      throw new Error(
+        "Combat rounds can only be synchronized while combat time is active."
+      );
+    }
+    const combatRoundsCompleted =
+      normalizeInteger(
+        command.combatRoundsCompleted,
+        state.combatRoundsCompleted
+      );
+    const roundDifference =
+      combatRoundsCompleted -
+      state.combatRoundsCompleted;
+    next = {
+      ...state,
+      worldTime:
+        roundDifference >= 0
+          ? addWorldSeconds(
+              state.worldTime,
+              roundDifference *
+                COMBAT_ROUND_SECONDS
+            )
+          : Math.max(
+              0,
+              state.worldTime +
+                (
+                  roundDifference *
+                  COMBAT_ROUND_SECONDS
+                )
+            ),
+      combatRoundsCompleted
+    };
   } else {
     throw new Error(
       `Unknown campaign time command: ${type || "empty"}`

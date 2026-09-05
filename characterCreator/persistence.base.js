@@ -1151,7 +1151,11 @@ export function createCharacterPersistence(context) {
             ...character,
             id: savedId,
             docId: savedId,
-            firestoreDocumentId: savedId
+            firestoreDocumentId: savedId,
+            ownerUid:
+              firestorePayload.ownerUid ||
+              character.ownerUid ||
+              null
           });
         } catch (tokenSyncError) {
           linkedTokenSyncWarning =

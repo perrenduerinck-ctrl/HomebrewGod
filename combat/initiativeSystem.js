@@ -25,7 +25,9 @@ function readDexterity(token = {}) {
       token.abilities?.dexterity ??
       token.abilities?.dex ??
       token.stats?.dexterity ??
-      token.stats?.dex,
+      token.stats?.dex ??
+      token.linkedCharacter?.dexterity ??
+      token.linkedMonster?.dexterity,
     10,
     0,
     99
@@ -36,7 +38,9 @@ function readInitiativeBonus(token = {}, dexterity = 10) {
   const explicit =
     token.initiativeBonus ??
     token.initiative?.bonus ??
-    token.combat?.initiativeBonus;
+    token.combat?.initiativeBonus ??
+    token.linkedCharacter?.initiativeBonus ??
+    token.linkedMonster?.initiativeBonus;
 
   if (Number.isFinite(Number(explicit))) {
     return finiteInteger(
@@ -76,8 +80,61 @@ export function combatantFromToken(token = {}) {
       token.ownerUid ??
       token.ownerId ??
       token.linkedCharacter?.ownerUid ??
+      token.linkedMonster?.ownerUid ??
       null
   });
+}
+
+export function prepareInitiativeCommand(
+  currentState,
+  command = {},
+  {
+    rollDie = () =>
+      1 + Math.floor(Math.random() * 20)
+  } = {}
+) {
+  const prepared = { ...command };
+  if (
+    cleanText(prepared.type) !==
+      "roll-initiative" ||
+    prepared.rollsByTokenId
+  ) {
+    return prepared;
+  }
+
+  const state = normalizeInitiativeState(
+    currentState
+  );
+  const requestedIds = Array.isArray(
+    prepared.tokenIds
+  )
+    ? new Set(prepared.tokenIds.map(cleanText))
+    : null;
+  const rollsByTokenId = {};
+
+  state.initiativeOrder.forEach((combatant) => {
+    if (
+      requestedIds &&
+      !requestedIds.has(combatant.tokenId)
+    ) {
+      return;
+    }
+    rollsByTokenId[combatant.tokenId] =
+      finiteInteger(
+        rollDie(combatant),
+        1,
+        1,
+        20
+      );
+  });
+
+  return {
+    ...prepared,
+    tokenIds: Array.isArray(prepared.tokenIds)
+      ? [...prepared.tokenIds]
+      : Object.keys(rollsByTokenId),
+    rollsByTokenId
+  };
 }
 
 export function normalizeCombatant(value = {}) {
@@ -290,13 +347,23 @@ export function applyInitiativeCommand(
       next = stateWithOrder(state, order);
       effects.push("combat-ended");
     } else if (state.combatActive && removingCurrent) {
-      const nextIndex = index >= order.length ? 0 : index;
+      const crossedRoundBoundary =
+        index >= order.length;
+      const nextIndex = crossedRoundBoundary
+        ? 0
+        : index;
       next = {
         ...state,
+        roundNumber:
+          state.roundNumber +
+          (crossedRoundBoundary ? 1 : 0),
         initiativeOrder: order,
         currentTurnIndex: nextIndex,
         currentCombatantId: order[nextIndex].tokenId
       };
+      if (crossedRoundBoundary) {
+        effects.push("round-completed");
+      }
     } else {
       next = stateWithOrder(state, order);
     }
@@ -309,8 +376,12 @@ export function applyInitiativeCommand(
       if (requestedIds && !requestedIds.has(entry.tokenId)) {
         return { ...entry };
       }
+      const fixedRoll =
+        command.rollsByTokenId?.[entry.tokenId];
       const roll = finiteInteger(
-        rollDie(entry),
+        Number.isFinite(Number(fixedRoll))
+          ? fixedRoll
+          : rollDie(entry),
         1,
         1,
         20
@@ -512,9 +583,15 @@ export function createInitiativeSystem({
     if (!canMutate()) throw new InitiativePermissionError();
 
     const previousState = getState();
+    const preparedCommand =
+      prepareInitiativeCommand(
+        previousState,
+        command,
+        { rollDie }
+      );
     const preview = applyInitiativeCommand(
       previousState,
-      command,
+      preparedCommand,
       { rollDie }
     );
     if (
@@ -526,7 +603,7 @@ export function createInitiativeSystem({
 
     const committed = typeof commit === "function"
       ? await commit(
-          { ...command },
+          preparedCommand,
           {
             previousState,
             previewState: preview.state,
@@ -541,7 +618,7 @@ export function createInitiativeSystem({
       : preview.effects;
 
     state = normalizeInitiativeState(committedState);
-    notify(command.type);
+    notify(preparedCommand.type);
     await runEffects(effects);
     return getState();
   }

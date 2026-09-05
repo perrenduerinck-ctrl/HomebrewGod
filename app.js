@@ -36,7 +36,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=2d5-vfx-polish-20260902";
+import { createTokenSystem } from "./tokens/index.js?v=initiative-reliability-20260905";
 import {
   createMapRuler,
   formatMapDistance,
@@ -102,20 +102,21 @@ import {
   normalizeTimeState,
   timeStatesEqual,
   toRoomTimeFields
-} from "./timeSystem.js?v=initiative-time-20260905";
+} from "./timeSystem.js?v=initiative-reliability-20260905";
 import {
-  applyInitiativeCommand,
   createInitiativeSystem,
-  initiativeStatesEqual,
   normalizeInitiativeState,
   toRoomInitiativeFields
-} from "./combat/initiativeSystem.js?v=initiative-time-20260905";
+} from "./combat/initiativeSystem.js?v=initiative-reliability-20260905";
+import {
+  buildInitiativeRoomTransition
+} from "./combat/initiativeTimeIntegration.js?v=initiative-reliability-20260905";
 import {
   createInitiativePanel
-} from "./combat/initiativePanel.js?v=initiative-time-20260905";
+} from "./combat/initiativePanel.js?v=initiative-reliability-20260905";
 import {
   createMapLighting
-} from "./battleMap/mapLighting.js?v=initiative-time-20260905";
+} from "./battleMap/mapLighting.js?v=initiative-reliability-20260905";
 import {
   MAX_SECURE_IMAGE_BYTES,
   createPersistenceMonitor,
@@ -875,7 +876,7 @@ async function commitInitiativeCommand(
   const roomCode = currentRoomCode;
   const userUid = currentUser.uid;
   const roomRef = doc(db, "rooms", roomCode);
-  let committedResult = null;
+  let committedTransition = null;
 
   await runTransaction(
     db,
@@ -894,26 +895,21 @@ async function commitInitiativeCommand(
         );
       }
 
-      const previousState =
-        normalizeInitiativeState(latestRoom);
-      committedResult = applyInitiativeCommand(
-        previousState,
+      committedTransition =
+        buildInitiativeRoomTransition(
+        latestRoom,
         command
       );
 
       if (
-        initiativeStatesEqual(
-          previousState,
-          committedResult.state
-        )
+        !committedTransition.initiativeChanged &&
+        !committedTransition.timeChanged
       ) {
         return;
       }
 
       transaction.update(roomRef, {
-        ...toRoomInitiativeFields(
-          committedResult.state
-        ),
+        ...committedTransition.roomFields,
         updatedAt: serverTimestamp()
       });
     }
@@ -922,17 +918,23 @@ async function commitInitiativeCommand(
   if (
     currentRoomCode === roomCode &&
     currentRoomData &&
-    committedResult
+    committedTransition
   ) {
     currentRoomData = {
       ...currentRoomData,
-      ...toRoomInitiativeFields(
-        committedResult.state
-      )
+      ...committedTransition.roomFields
     };
+    campaignTimeSystem.applyRoomSnapshot(
+      committedTransition.timeState
+    );
   }
 
-  return committedResult;
+  return committedTransition
+    ? {
+        state: committedTransition.state,
+        effects: []
+      }
+    : null;
 }
 
 function readTimeInput(
@@ -7168,6 +7170,22 @@ if (!tokenSystem) {
       return currentIsDM;
     },
 
+    removeTokenFromInitiative:
+      async function (tokenId) {
+        const initiativeState =
+          initiativeSystem?.getState?.();
+        const isInInitiative =
+          initiativeState?.initiativeOrder?.some(
+            (combatant) =>
+              combatant.tokenId === tokenId
+          );
+        if (isInInitiative) {
+          await initiativeSystem.removeCombatant(
+            tokenId
+          );
+        }
+      },
+
     getPuzzleTiles,
     getActivePuzzleTile,
     getPuzzleViewMode,
@@ -7273,7 +7291,7 @@ async function initCharacterCreatorSystem() {
 
   if (!characterCreatorModulePromise) {
     characterCreatorModulePromise = import(
-      "./characterCreator/index.js?v=dm-preview-class-state-20260829"
+      "./characterCreator/index.js"
     );
   }
 
@@ -7461,6 +7479,23 @@ async function initMonsterCreatorSystem() {
       }
 
       return tokenSystem.createMonsterLinkedToken(
+        monster
+      );
+    },
+
+    syncLinkedMonsterTokens: function (monster) {
+      if (
+        !tokenSystem ||
+        typeof tokenSystem.syncLinkedMonsterTokens !==
+          "function"
+      ) {
+        return {
+          monsterId: monster?.id || null,
+          updatedCount: 0
+        };
+      }
+
+      return tokenSystem.syncLinkedMonsterTokens(
         monster
       );
     },

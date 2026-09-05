@@ -208,6 +208,7 @@ export function normalizeMonsterRecord(rawMonster) {
 
   const normalized = {
     ...DEFAULT_MONSTER,
+    ownerUid: normalizeText(source.ownerUid),
     name: normalizeText(source.name),
     size: normalizeChoice(
       source.size,
@@ -1065,6 +1066,7 @@ export function createMonsterCreator(config) {
         buildMonsterDocument(
           existingMonster
         );
+      let saveStatus = "Monster saved.";
 
       if (selectedMonsterId) {
         const validatedDocument =
@@ -1099,13 +1101,40 @@ export function createMonsterCreator(config) {
               config.serverTimestamp()
           }
         );
-        setStatus("Monster updated.");
+        saveStatus = "Monster updated.";
       } else {
         await createMonsterDocument(
           monsterData
         );
-        setStatus("Monster saved.");
       }
+
+      if (
+        typeof config.syncLinkedMonsterTokens ===
+        "function"
+      ) {
+        try {
+          await config.syncLinkedMonsterTokens({
+            ...monsterData,
+            id: selectedMonsterId,
+            docId: selectedMonsterId,
+            firestoreDocumentId:
+              selectedMonsterId,
+            ownerUid:
+              existingMonster?.ownerUid ||
+              monsterData.ownerUid ||
+              getMutationIdentity().roomDmUid
+          });
+        } catch (tokenSyncError) {
+          console.warn(
+            "Could not refresh monster-linked tokens:",
+            tokenSyncError
+          );
+          saveStatus +=
+            " Linked token refresh failed; the monster itself was still saved.";
+        }
+      }
+
+      setStatus(saveStatus);
 
       return selectedMonsterId;
     } catch (error) {

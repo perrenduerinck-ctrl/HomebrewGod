@@ -17,7 +17,7 @@ const basePersistencePath =
     "/persistenceGuard.js"
   )
     ? "./persistence.js?source=priority8-20260728"
-    : "./persistence.base.js?source=priority8-20260728";
+    : "./persistence.base.js?source=initiative-reliability-20260905";
 const {
   createCharacterPersistence:
     createBaseCharacterPersistence
