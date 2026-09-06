@@ -2,6 +2,7 @@ import {
   expect,
   test
 } from "@playwright/test";
+import "./vfx-migration.browser.mjs";
 
 async function openMapTools(page) {
   const menu = page.locator("#battleToolsMenu");

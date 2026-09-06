@@ -285,7 +285,7 @@ export function createSpriteAnimator({
     }
   }
 
-  function start() {
+  function start(timestamp = null) {
     if (
       running ||
       destroyed ||
@@ -296,7 +296,7 @@ export function createSpriteAnimator({
     ) return false;
     running = true;
     completed = false;
-    startedAt = null;
+    startedAt = timestamp === null ? null : finiteNumber(timestamp);
     applyFrame(normalized.startFrame);
     if (!manual) {
       frameHandle = schedule(tick);

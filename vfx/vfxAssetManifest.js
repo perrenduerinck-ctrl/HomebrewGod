@@ -1,4 +1,5 @@
 import { EPIC_ATLAS_BOUNDS } from "./tierEffects.js?v=status-sprites-20260831";
+import { getVfxAssetVersions, resolveVfxClipDefinition } from "./assetVersions.js";
 
 export const VFX_CLIP_NAMES = Object.freeze([
   "charge",
@@ -13,7 +14,9 @@ export const VFX_ASSET_CLASSES = Object.freeze({
   KEEP: "keep",
   UPGRADE_LATER: "upgrade-later",
   REPLACE: "replace",
-  PREMIUM_6X6: "6x6-premium"
+  PREMIUM_6X6: "6x6-premium",
+  REPLACE_WITH_6X6: "replace",
+  ALREADY_MODERN: "6x6-premium"
 });
 
 export const VFX_ASSET_STANDARDS = Object.freeze({
@@ -36,10 +39,27 @@ const deepFreeze = (value) => {
 const FIREBALL_FIRE_IMPACT =
   "./assets/vfx/tiers7-9/fireball-impact-alpha-6x6.png";
 
+const FIREBALL_LEGACY_IMPACT = {
+  src: "./assets/vfx/fire/fire-impact-spritesheet.png",
+  frameCount: 16, columns: 4, rows: 4,
+  frameWidth: 160, frameHeight: 160, framesPerSecond: 18,
+  startFrame: 0, endFrame: 15, loop: false, loops: 1
+};
+
+function fireballVersion(modern6x6, legacy = FIREBALL_LEGACY_IMPACT) {
+  return { preferred: "modern6x6", legacy: {
+    ...legacy,
+    // Preserve composition cues at the same progress through either sheet.
+    events: (modern6x6.events || []).map(({ frame, ...event }) => ({
+      ...event, progress: frame / (modern6x6.endFrame - modern6x6.startFrame)
+    }))
+  }, modern6x6 };
+}
+
 export const VFX_ASSET_MANIFEST = deepFreeze({
   fireball: {
     classification: VFX_ASSET_CLASSES.PREMIUM_6X6,
-    notes: "Clip migration showcase; motion remains code-driven.",
+    notes: "Existing alpha 6x6 Fireball preferred; original 4x4 remains the fallback. Motion remains code-driven.",
     clips: {
       charge: {
         src: "./assets/vfx/fire/fire-impact-spritesheet.png",
@@ -88,7 +108,7 @@ export const VFX_ASSET_MANIFEST = deepFreeze({
         loop: true,
         loops: 1
       },
-      impact: {
+      impact: fireballVersion({
         src: FIREBALL_FIRE_IMPACT,
         frameCount: 36,
         columns: 6,
@@ -120,8 +140,8 @@ export const VFX_ASSET_MANIFEST = deepFreeze({
             metadata: { role: "fireball-frame-smoke" }
           } }
         ]
-      },
-      aftermath: {
+      }),
+      aftermath: fireballVersion({
         src: FIREBALL_FIRE_IMPACT,
         frameCount: 36,
         columns: 6,
@@ -134,7 +154,7 @@ export const VFX_ASSET_MANIFEST = deepFreeze({
         endFrame: 35,
         loop: false,
         loops: 1
-      }
+      }, { ...FIREBALL_LEGACY_IMPACT, startFrame: 10, endFrame: 15, framesPerSecond: 8 })
     }
   }
 });
@@ -222,23 +242,44 @@ export function validateVfxAssetManifest(manifest = VFX_ASSET_MANIFEST, options 
       if (!VFX_CLIP_NAMES.includes(clipName)) {
         errors.push(`${spellId}.${clipName}: unsupported clip name`);
       }
-      errors.push(...validateVfxClipDefinition(clip, { ...options, spellId, clipName }));
+      const versions = getVfxAssetVersions(clip);
+      if (!versions) {
+        errors.push(...validateVfxClipDefinition(clip, { ...options, spellId, clipName }));
+        return;
+      }
+      if (!["legacy", "modern6x6"].includes(versions.preferred)) {
+        errors.push(`${spellId}.${clipName}: preferred must be legacy or modern6x6`);
+      }
+      if (!versions.legacy) errors.push(`${spellId}.${clipName}: legacy fallback is required`);
+      for (const version of ["legacy", "modern6x6"]) {
+        const candidate = versions[version];
+        if (!candidate) continue;
+        errors.push(...validateVfxClipDefinition(candidate, {
+          ...options, spellId, clipName: `${clipName}.${version}`
+        }));
+        if (version === "modern6x6" && (candidate.columns !== 6 || candidate.rows !== 6 ||
+            candidate.frameCount !== 36)) {
+          errors.push(`${spellId}.${clipName}.${version}: upgraded sheets must be 6x6 / 36 frames`);
+        }
+      }
     });
   });
   return Object.freeze(errors);
 }
 
-export function getVfxClipSet(id) {
-  return VFX_ASSET_MANIFEST[String(id || "").trim().toLowerCase()]?.clips || null;
+export function getVfxClipSet(id, options = {}) {
+  const clips = VFX_ASSET_MANIFEST[String(id || "").trim().toLowerCase()]?.clips;
+  return clips ? Object.freeze(Object.fromEntries(Object.entries(clips).map(([name, clip]) =>
+    [name, resolveVfxClipDefinition(clip, options)]))) : null;
 }
 
-export function getVfxClip(id, clipName) {
-  return getVfxClipSet(id)?.[String(clipName || "").trim().toLowerCase()] || null;
+export function getVfxClip(id, clipName, options = {}) {
+  return getVfxClipSet(id, options)?.[String(clipName || "").trim().toLowerCase()] || null;
 }
 
-export function getVfxClipSources(id) {
-  const clips = getVfxClipSet(id) || {};
-  return Object.freeze([...new Set(Object.values(clips).map(({ src }) => src).filter(Boolean))]);
+export function getVfxClipSources(id, options = {}) {
+  const clips = getVfxClipSet(id, options) || {};
+  return Object.freeze([...new Set(Object.values(clips).map(clip => clip?.src).filter(Boolean))]);
 }
 
 export function createVfxAssetCache({
@@ -263,21 +304,25 @@ export function createVfxAssetCache({
       onError(`${label}: unable to create image loader for ${key}`);
       return Promise.resolve(false);
     }
+    const entry = { image, promise: null, status: "loading" };
     const promise = new Promise((resolve) => {
-      image.onload = () => resolve(true);
+      image.onload = () => { entry.status = "loaded"; resolve(true); };
       image.onerror = () => {
+        entry.status = "failed";
         onError(`${label}: unable to load sprite source ${key}`);
         resolve(false);
       };
     });
-    cache.set(key, { image, promise });
+    entry.promise = promise;
+    cache.set(key, entry);
     while (cache.size > maximum) cache.delete(cache.keys().next().value);
-    image.src = key;
+    try { image.src = key; } catch { image.onerror(); }
     return promise;
   }
 
   return Object.freeze({
     clear: () => cache.clear(),
+    getStatus: (src) => cache.get(String(src || "").trim())?.status || "unknown",
     getState: () => Object.freeze({ size: cache.size, sources: Object.freeze([...cache.keys()]) }),
     preload
   });

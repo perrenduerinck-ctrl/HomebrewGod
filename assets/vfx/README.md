@@ -73,6 +73,41 @@ adds arc motion, perspective, a moving shadow, ember trail, impact flash,
 shockwave, debris, smoke, embers and a temporary scorch mark. Assets are loaded
 when a clip is about to play and retained in a small recently-used cache.
 
+### Legacy + modern asset selection
+
+Fireball's impact and aftermath now retain explicit `legacy` and `modern6x6`
+definitions with `preferred: "modern6x6"`. This migration reuses the existing
+transparent `fireball-impact-alpha-6x6.png`; it does not redraw or delete artwork.
+The original 4×4 fire sheet remains registered for other spells as well as fallback.
+Charge, release and travel keep their existing clip definitions.
+
+`getVfxClipSet()` still returns flat sprite options for existing consumers, with
+version metadata retained for playback. The clip controller warms only the chosen
+effect's versioned sheets and shows its legacy clip while modern artwork loads.
+When the modern image is ready it switches the same element at matching progress.
+A missing, invalid-grid or disabled modern entry, or a failed image request, uses
+legacy. Late requests cannot revive a stopped/destroyed effect or replace a newer
+clip. Keep all geometry, frame ranges, events and timing inside each version;
+never apply a modern grid to legacy pixels.
+
+On localhost only, use `?vfxAssets=auto`, `?vfxAssets=legacy`, or
+`?vfxAssets=modern6x6` to compare playback. Force Modern still falls back if needed.
+Normal player hosts ignore this query option. There is no player-facing control.
+
+`vfx/vfxMigrationManifest.js` inventories every current PNG using the live effect
+definitions plus reserved artwork. Its four labels are KEEP, UPGRADE LATER,
+REPLACE WITH 6×6, and ALREADY MODERN. The classification plans work; it does not
+alter mappings or mark every existing 6×6 sheet as visually approved.
+
+To migrate another major clip, retain its legacy definition, add a separate
+6-column/6-row/36-frame entry, set the preference, then test that one effect and
+its missing-image fallback. Keep other phases and spell mappings unchanged.
+
+Validation: `node tests/vfx-clips.test.mjs` includes migration unit tests.
+`node node_modules/@playwright/test/cli.js test tests/browser.spec.mjs --grep
+"Fireball"` includes real PNG loading, failed-image fallback, 2.5D composition,
+alpha checks and a screenshot comparing the modern and legacy impact windows.
+
 ## Buff and debuff status batch
 
 The 20 unique 5×5 atlases in `status/` are the owner's unchanged 1254×1254
