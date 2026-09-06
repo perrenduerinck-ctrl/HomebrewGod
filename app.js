@@ -36,7 +36,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=initiative-reliability-20260905";
+import { createTokenSystem } from "./tokens/index.js?v=movement-system-20260905";
 import {
   createMapRuler,
   formatMapDistance,
@@ -102,18 +102,30 @@ import {
   normalizeTimeState,
   timeStatesEqual,
   toRoomTimeFields
-} from "./timeSystem.js?v=initiative-reliability-20260905";
+} from "./timeSystem.js?v=movement-system-20260905";
 import {
   createInitiativeSystem,
   normalizeInitiativeState,
   toRoomInitiativeFields
-} from "./combat/initiativeSystem.js?v=initiative-reliability-20260905";
+} from "./combat/initiativeSystem.js?v=movement-system-20260905";
 import {
   buildInitiativeRoomTransition
-} from "./combat/initiativeTimeIntegration.js?v=initiative-reliability-20260905";
+} from "./combat/initiativeTimeIntegration.js?v=movement-system-20260905";
 import {
   createInitiativePanel
-} from "./combat/initiativePanel.js?v=initiative-reliability-20260905";
+} from "./combat/initiativePanel.js?v=movement-system-20260905";
+import {
+  canControlToken,
+  confirmPendingMovement,
+  createMovementSystem,
+  createPendingMovement,
+  getTokenMovementMode,
+  synchronizeMovementState,
+  toRoomMovementFields
+} from "./combat/movementSystem.js?v=movement-system-20260905";
+import {
+  createMovementPanel
+} from "./combat/movementPanel.js?v=movement-system-20260905";
 import {
   createMapLighting
 } from "./battleMap/mapLighting.js?v=initiative-reliability-20260905";
@@ -402,6 +414,8 @@ let activeMainScreenName = "";
 let tokenSystem = null;
 let initiativeSystem = null;
 let initiativePanelSystem = null;
+let movementSystem = null;
+let movementPanelSystem = null;
 let battleMapLighting = null;
 let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
@@ -591,6 +605,22 @@ initiativeSystem = createInitiativeSystem({
   onCombatEnd: function () {
     return campaignTimeSystem.endCombatTime();
   }
+});
+
+movementSystem = createMovementSystem({
+  getInitiativeState: function () {
+    return initiativeSystem?.getState?.() || {};
+  },
+  getTokens: function () {
+    return tokenSystem?.getRoomTokens?.() || [];
+  },
+  getUserUid: function () {
+    return currentUser?.uid || "";
+  },
+  getIsDm: function () {
+    return currentIsDM === true;
+  },
+  commit: commitMovementCommand
 });
 
 function formatCampaignDuration(seconds) {
@@ -903,7 +933,8 @@ async function commitInitiativeCommand(
 
       if (
         !committedTransition.initiativeChanged &&
-        !committedTransition.timeChanged
+        !committedTransition.timeChanged &&
+        !committedTransition.movementChanged
       ) {
         return;
       }
@@ -935,6 +966,100 @@ async function commitInitiativeCommand(
         effects: []
       }
     : null;
+}
+
+async function commitMovementCommand(command, context) {
+  if (!currentRoomCode && window.__HOMEBREW_GOD_SMOKE__) {
+    tokenSystem?.applyConfirmedPosition?.(
+      command.tokenId,
+      command.endPosition
+    );
+    return { state: context.previewState };
+  }
+
+  if (!currentRoomCode || !currentUser) {
+    throw new Error("Open a room before confirming movement.");
+  }
+
+  const roomCode = currentRoomCode;
+  const userUid = currentUser.uid;
+  const roomRef = doc(db, "rooms", roomCode);
+  const tokenRef = doc(db, "rooms", roomCode, "tokens", command.tokenId);
+  let committedState = null;
+
+  await runTransaction(db, async function (transaction) {
+    const [roomSnapshot, tokenSnapshot] = await Promise.all([
+      transaction.get(roomRef),
+      transaction.get(tokenRef)
+    ]);
+    if (!roomSnapshot.exists()) throw new Error("Room not found.");
+    if (!tokenSnapshot.exists()) throw new Error("The active token no longer exists.");
+
+    const latestRoom = roomSnapshot.data() || {};
+    const token = {
+      ...tokenSnapshot.data(),
+      id: tokenSnapshot.id
+    };
+    const isDm = latestRoom.dmUid === userUid;
+    if (!canControlToken(token, { isDm, userUid })) {
+      throw new Error("You do not control that token.");
+    }
+    if (command.force === true && !isDm) {
+      throw new Error("Only the DM can force movement.");
+    }
+
+    const initiative = normalizeInitiativeState(latestRoom);
+    if (
+      initiative.combatActive !== true ||
+      initiative.currentCombatantId !== command.tokenId
+    ) {
+      throw new Error("Only the current combatant can use turn movement.");
+    }
+    const latestMovement = synchronizeMovementState(
+      latestRoom,
+      initiative,
+      { activeToken: token, tokenExists: true }
+    );
+    if (latestMovement.movementTurnKey !== command.turnKey) {
+      throw new Error("That movement preview belongs to an expired turn.");
+    }
+    const positionChanged =
+      Math.abs(Number(token.x) - Number(command.startPosition?.x)) > 0.001 ||
+      Math.abs(Number(token.y) - Number(command.startPosition?.y)) > 0.001;
+    if (positionChanged) {
+      throw new Error("The token moved on another client. Preview the move again.");
+    }
+
+    const withPending = createPendingMovement(latestMovement, command);
+    committedState = confirmPendingMovement(withPending, {
+      force: command.force === true
+    });
+    const now = Date.now();
+    transaction.update(tokenRef, {
+      x: command.endPosition.x,
+      y: command.endPosition.y,
+      movedAtMillis: now,
+      updatedAtMillis: now,
+      updatedAt: serverTimestamp()
+    });
+    transaction.update(roomRef, {
+      ...toRoomMovementFields(committedState),
+      updatedAt: serverTimestamp()
+    });
+  });
+
+  if (currentRoomCode === roomCode && committedState) {
+    const fields = toRoomMovementFields(committedState);
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      ...fields
+    };
+    tokenSystem?.applyConfirmedPosition?.(
+      command.tokenId,
+      command.endPosition
+    );
+  }
+  return { state: committedState };
 }
 
 function readTimeInput(
@@ -2051,6 +2176,9 @@ function openRoom(roomCode, screenToShow = "room") {
       room
     );
     initiativeSystem.applyRoomSnapshot(
+      room
+    );
+    movementSystem?.applyRoomSnapshot(
       room
     );
 
@@ -7170,6 +7298,36 @@ if (!tokenSystem) {
       return currentIsDM;
     },
 
+    getCurrentUserUid: function () {
+      return currentUser?.uid || "";
+    },
+
+    getTokenMovementMode: function (token) {
+      return getTokenMovementMode(
+        token,
+        initiativeSystem?.getState?.() || {},
+        {
+          isDm: currentIsDM,
+          userUid: currentUser?.uid || ""
+        }
+      );
+    },
+
+    previewTokenMovement: function (preview) {
+      return movementSystem.previewMove(preview);
+    },
+
+    getPendingMovement: function () {
+      return movementSystem?.getState?.().pendingMovement || null;
+    },
+
+    getMovementMeasurementOptions: function () {
+      return {
+        pixelsPerSquare: getBattleMapGridPixelSize(),
+        feetPerSquare: getRulerFeetPerSquare()
+      };
+    },
+
     removeTokenFromInitiative:
       async function (tokenId) {
         const initiativeState =
@@ -7206,6 +7364,43 @@ if (!initiativePanelSystem && E.battleInitiativePanel) {
     tokenRoot: E.battleMapSurface || document
   });
 }
+
+if (!movementPanelSystem && E.battleInitiativePanel) {
+  const movementRoot = E.battleInitiativePanel.querySelector(
+    "[data-movement-panel]"
+  );
+  if (movementRoot) {
+    movementPanelSystem = createMovementPanel({
+      root: movementRoot,
+      system: movementSystem,
+      getIsDm: function () {
+        return currentIsDM === true;
+      },
+      getMapElement: function () {
+        return tokenSystem?.getTokenContainerForCurrentView?.() || null;
+      },
+      onCancel: function () {
+        tokenSystem?.cancelPendingMovement?.();
+      }
+    });
+  }
+}
+
+initiativeSystem.subscribe(function () {
+  const hadPending = Boolean(
+    movementSystem?.getState?.().pendingMovement
+  );
+  if (currentRoomData) {
+    movementSystem?.applyRoomSnapshot(currentRoomData);
+  } else {
+    movementSystem?.sync();
+  }
+  if (hadPending && !movementSystem?.getState?.().pendingMovement) {
+    tokenSystem?.cancelPendingMovement?.();
+  } else if ((tokenSystem?.getRoomTokens?.() || []).length > 0) {
+    tokenSystem?.render?.(currentRoomData || {});
+  }
+});
 
 
 // =====================================================
@@ -8025,6 +8220,35 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       getInitiativeTestState:
         function () {
           return initiativeSystem.getState();
+        },
+
+      setMovementTestTokens:
+        function (tokens) {
+          currentRoomData = {
+            ...(currentRoomData || {}),
+            currentMap: {
+              id: "movement-test-map",
+              name: "Movement test map",
+              url: "data:image/gif;base64,R0lGODlhAQABAAAAACw="
+            },
+            tokenMediumSize: 64
+          };
+          const result = tokenSystem?.setRoomTokensForTest?.(tokens) || [];
+          movementSystem?.sync();
+          tokenSystem?.render?.(currentRoomData);
+          return result;
+        },
+
+      getMovementTestState:
+        function () {
+          return movementSystem?.getState?.() || null;
+        },
+
+      cancelMovementForTest:
+        function () {
+          const state = movementSystem?.cancelPreview?.();
+          tokenSystem?.cancelPendingMovement?.();
+          return state;
         },
 
       addInitiativeCombatantForTest:

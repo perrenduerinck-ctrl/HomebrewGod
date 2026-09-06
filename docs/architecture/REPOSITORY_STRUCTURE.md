@@ -11,13 +11,14 @@ Homebrew God keeps runtime code, game data, tests, documentation, and static ass
 | Character Sheet | `characterSheet/` | Playable sheet UI, gameplay state, and sheet persistence |
 | Monster Creator | `monsters/` | Monster creation and monster persistence |
 | Battle Map | `battleMap/` | Measurement, targeting templates, casting sessions, elevation, and token collision |
+| Combat systems | `combat/` | Initiative, turn-based movement state, and their compact battle-manager presentation |
 | Token system | `tokens/` | Token state, synchronization, and token interactions |
 | Visual effects | `vfx/` | Presentation-only cast sequencing, effect lifecycle, procedural fire visuals, damage-type visual identities, rendering, particles, sprites, and persistent visuals |
 | Shared code | `shared/` | Realtime-listener lifecycle and security-aware persistence used by multiple features |
 | Game data | `data/` | Built-in classes, subclasses, feats, spells, species/background content, and the 2014 ruleset |
 | Static assets | `assets/` | Styles and future images or static media |
 
-The application shell still owns Battle Map room lifecycle and DOM wiring. Reusable measurement, targeting, collision, and visual-effect behavior stays in the `battleMap/` and `vfx/` modules so it can be tested without owning game state.
+The application shell still owns Battle Map room lifecycle and DOM wiring. Initiative and movement rules remain in `combat/`; movement delegates distance calculation to `battleMap/measurement.js` and position interaction to `tokens/`. Reusable measurement, targeting, collision, and visual-effect behavior stays in the `battleMap/` and `vfx/` modules so it can be tested without owning game state.
 
 ## Tests and documentation
 

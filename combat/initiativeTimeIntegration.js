@@ -11,6 +11,12 @@ import {
   timeStatesEqual,
   toRoomTimeFields
 } from "../timeSystem.js";
+import {
+  movementStatesEqual,
+  normalizeMovementState,
+  synchronizeMovementState,
+  toRoomMovementFields
+} from "./movementSystem.js?v=movement-system-20260905";
 
 function hasEffect(effects, effect) {
   return Array.isArray(effects) && effects.includes(effect);
@@ -74,11 +80,30 @@ export function buildInitiativeRoomTransition(
     initiativeResult.state,
     initiativeResult.effects
   );
+  const previousMovementState = normalizeMovementState(room);
+  const activeCombatant = initiativeResult.state.initiativeOrder.find(
+    (combatant) => (
+      combatant.tokenId === initiativeResult.state.currentCombatantId
+    )
+  );
+  // Previous Turn deliberately starts a valid, fresh budget for the
+  // restored actor. Token positions are not rewound in this first version.
+  const movementState = synchronizeMovementState(
+    previousMovementState,
+    initiativeResult.state,
+    {
+      activeToken: activeCombatant || null,
+      baseSpeed: activeCombatant?.baseSpeed,
+      tokenExists:
+        !initiativeResult.state.combatActive || Boolean(activeCombatant)
+    }
+  );
 
   return Object.freeze({
     state: initiativeResult.state,
     effects: [...initiativeResult.effects],
     timeState,
+    movementState,
     initiativeChanged: !initiativeStatesEqual(
       previousInitiativeState,
       initiativeResult.state
@@ -87,11 +112,17 @@ export function buildInitiativeRoomTransition(
       previousTimeState,
       timeState
     ),
+    movementChanged: !movementStatesEqual(
+      previousMovementState,
+      movementState,
+      { persistedOnly: true }
+    ),
     roomFields: {
       ...toRoomInitiativeFields(
         initiativeResult.state
       ),
-      ...toRoomTimeFields(timeState)
+      ...toRoomTimeFields(timeState),
+      ...toRoomMovementFields(movementState)
     }
   });
 }

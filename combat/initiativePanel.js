@@ -37,7 +37,9 @@ export function createInitiativePanel({
 
   function setBusy(value) {
     busy = value === true;
-    root.querySelectorAll("button, input, select").forEach((element) => {
+    root.querySelectorAll(
+      "[data-initiative-action], [data-initiative-value], [data-initiative-add-select]"
+    ).forEach((element) => {
       if (element.closest("summary")) return;
       element.disabled = busy || getIsDm() !== true;
     });

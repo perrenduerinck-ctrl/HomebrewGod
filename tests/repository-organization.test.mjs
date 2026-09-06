@@ -61,6 +61,8 @@ test("runtime areas, data, assets, tests, and documentation have explicit homes"
     "characterSheet/index.js",
     "combat/initiativePanel.js",
     "combat/initiativeSystem.js",
+    "combat/movementPanel.js",
+    "combat/movementSystem.js",
     "data/defaultClasses.js",
     "data/defaultSpells.js",
     "data/ruleset2014.js",

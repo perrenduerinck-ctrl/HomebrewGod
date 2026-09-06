@@ -1,3 +1,8 @@
+import {
+  normalizeBaseMovementSpeed,
+  readTokenBaseSpeed
+} from "./movementSystem.js?v=movement-system-20260905";
+
 const MAX_INITIATIVE = 999;
 const MIN_INITIATIVE = -999;
 
@@ -76,6 +81,7 @@ export function combatantFromToken(token = {}) {
     initiativeBonus,
     totalInitiative: initiativeBonus,
     dexterity,
+    baseSpeed: readTokenBaseSpeed(token),
     ownerUid:
       token.ownerUid ??
       token.ownerId ??
@@ -177,6 +183,9 @@ export function normalizeCombatant(value = {}) {
       10,
       0,
       99
+    ),
+    baseSpeed: normalizeBaseMovementSpeed(
+      value.baseSpeed ?? value.movementSpeed
     ),
     ownerUid: cleanText(value.ownerUid) || null
   });

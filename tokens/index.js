@@ -15,6 +15,11 @@ import {
 } from "../battleMap/elevation.js?v=2d5-vfx-polish-20260902";
 import { getTokenDepthSortValue } from "../vfx/effectLayers.js";
 import { calculateAbilityModifier } from "../shared/abilityMath.js";
+import {
+  measureMovementDistance,
+  normalizeBaseMovementSpeed,
+  readTokenBaseSpeed
+} from "../combat/movementSystem.js?v=movement-system-20260905";
 
 export function createTokenSystem(options) {
   const deps = {
@@ -36,6 +41,13 @@ export function createTokenSystem(options) {
     getCurrentRoomData: options.getCurrentRoomData,
     setCurrentRoomData: options.setCurrentRoomData,
     getCurrentIsDM: options.getCurrentIsDM,
+    getCurrentUserUid: options.getCurrentUserUid,
+    getTokenMovementMode: options.getTokenMovementMode,
+    previewTokenMovement: options.previewTokenMovement,
+    getPendingMovement: options.getPendingMovement,
+    confirmFreeTokenPosition: options.confirmFreeTokenPosition,
+    getMovementMeasurementOptions:
+      options.getMovementMeasurementOptions,
 
     getPuzzleTiles: options.getPuzzleTiles,
     getActivePuzzleTile: options.getActivePuzzleTile,
@@ -70,6 +82,7 @@ export function createTokenSystem(options) {
 
   let tokenRoomCode = null;
   let tokenCache = [];
+  let tokenTestMode = false;
 
 
 // =====================================================
@@ -89,6 +102,7 @@ export function createTokenSystem(options) {
     tokenTypeSelect: null,
     tokenSizeSelect: null,
     tokenElevationInput: null,
+    tokenMovementSpeedInput: null,
     tokenImageUploadInput: null,
     addTokenButton: null,
     tokenBuilderStatus: null,
@@ -110,6 +124,7 @@ export function createTokenSystem(options) {
     T.tokenTypeSelect = $("tokenTypeSelect");
     T.tokenSizeSelect = $("tokenSizeSelect");
     T.tokenElevationInput = $("tokenElevationInput");
+    T.tokenMovementSpeedInput = $("tokenMovementSpeedInput");
     T.tokenImageUploadInput = $("tokenImageUploadInput");
     T.addTokenButton = $("addTokenButton");
     T.tokenBuilderStatus = $("tokenBuilderStatus");
@@ -313,6 +328,13 @@ export function createTokenSystem(options) {
       character?.userUid ??
       ""
     ).trim() || null;
+    const movementSpeed = normalizeBaseMovementSpeed(
+      character?.combat?.baseSpeed?.walk ??
+      character?.combat?.speed?.walk ??
+      character?.walkingSpeed ??
+      character?.speed?.walk ??
+      character?.speed
+    );
 
     const mediumSize =
       getMediumSize(roomData || {});
@@ -332,6 +354,7 @@ export function createTokenSystem(options) {
       armorClass,
       dexterity,
       initiativeBonus,
+      movementSpeed,
       ownerUid
     };
   }
@@ -359,6 +382,8 @@ export function createTokenSystem(options) {
       dexterity: fields.dexterity,
       initiativeBonus:
         fields.initiativeBonus,
+      movementSpeed: fields.movementSpeed,
+      baseSpeed: fields.movementSpeed,
       ownerUid: fields.ownerUid,
       currentHp: fields.currentHp,
       maxHp: fields.maximumHp,
@@ -377,6 +402,8 @@ export function createTokenSystem(options) {
         dexterity: fields.dexterity,
         initiativeBonus:
           fields.initiativeBonus,
+        movementSpeed: fields.movementSpeed,
+        walkingSpeed: fields.movementSpeed,
         ownerUid: fields.ownerUid
       }
     };
@@ -456,6 +483,12 @@ export function createTokenSystem(options) {
       monster?.owner?.uid ??
       ""
     ).trim() || null;
+    const movementSpeed = normalizeBaseMovementSpeed(
+      monster?.movementSpeed ??
+      monster?.walkingSpeed ??
+      monster?.speed?.walk ??
+      monster?.speed
+    );
 
     const mediumSize =
       getMediumSize(roomData || {});
@@ -483,6 +516,8 @@ export function createTokenSystem(options) {
       ac: armorClass,
       dexterity,
       initiativeBonus,
+      movementSpeed,
+      baseSpeed: movementSpeed,
       ownerUid,
       currentHp: maximumHp,
       maxHp: maximumHp,
@@ -499,6 +534,8 @@ export function createTokenSystem(options) {
         hpAuthority: "token",
         dexterity,
         initiativeBonus,
+        movementSpeed,
+        walkingSpeed: movementSpeed,
         ownerUid
       }
     };
@@ -608,6 +645,13 @@ export function createTokenSystem(options) {
       }
 
       #tokenElevationInput {
+        width: 82px !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        text-align: center;
+      }
+
+      #tokenMovementSpeedInput {
         width: 82px !important;
         max-width: 100% !important;
         margin: 0 !important;
@@ -1039,6 +1083,7 @@ export function createTokenSystem(options) {
         #tokenSizeSelect,
         #tokenNameInput,
         #tokenElevationInput,
+        #tokenMovementSpeedInput,
         #tokenImageUploadInput {
           display: block !important;
           width: 100% !important;
@@ -1116,6 +1161,20 @@ export function createTokenSystem(options) {
             ));
         }
       );
+    }
+
+    if (
+      T.tokenMovementSpeedInput &&
+      T.tokenMovementSpeedInput.dataset
+        .homebrewGodMovementSpeedConnected !== "yes"
+    ) {
+      T.tokenMovementSpeedInput.dataset
+        .homebrewGodMovementSpeedConnected = "yes";
+      T.tokenMovementSpeedInput.addEventListener("change", function () {
+        T.tokenMovementSpeedInput.value = String(
+          normalizeBaseMovementSpeed(T.tokenMovementSpeedInput.value)
+        );
+      });
     }
   }
 
@@ -1320,6 +1379,8 @@ export function createTokenSystem(options) {
           0
         )
       ),
+      movementSpeed: readTokenBaseSpeed(token),
+      baseSpeed: readTokenBaseSpeed(token),
       ownerUid:
         token.ownerUid ??
         token.linkedCharacter?.ownerUid ??
@@ -1420,9 +1481,12 @@ export function createTokenSystem(options) {
 
   function startTokenListenerForRoom(roomCode) {
     if (!roomCode) {
+      if (tokenTestMode) return;
       stopTokenListener();
       return;
     }
+
+    tokenTestMode = false;
 
     if (
       realtimeListeners.has(
@@ -1659,6 +1723,9 @@ export function createTokenSystem(options) {
     }
 
     const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
+    const pendingMovement = deps.getPendingMovement
+      ? deps.getPendingMovement()
+      : null;
 
     const visibleTokens = getRoomTokens().filter(function (token) {
       return tokenMatchesCurrentView(token, safeRoom);
@@ -1694,7 +1761,16 @@ export function createTokenSystem(options) {
         )}px`
       );
 
-      positionTokenElement(tokenEl, token, safeRoom);
+      const renderedToken =
+        pendingMovement?.tokenId === token.id &&
+        pendingMovement?.endPosition
+          ? {
+              ...token,
+              x: pendingMovement.endPosition.x,
+              y: pendingMovement.endPosition.y
+            }
+          : token;
+      positionTokenElement(tokenEl, renderedToken, safeRoom);
 
       if (token.imageUrl) {
         const img = document.createElement("img");
@@ -1766,11 +1842,22 @@ export function createTokenSystem(options) {
         tokenEl.appendChild(stats);
       }
 
-      if (isDM) {
+      const movementMode = deps.getTokenMovementMode
+        ? deps.getTokenMovementMode(token)
+        : (isDM ? "free" : "blocked");
+      tokenEl.dataset.movementMode = movementMode;
+      tokenEl.classList.toggle(
+        "hg-token-movable",
+        movementMode !== "blocked"
+      );
+
+      if (movementMode !== "blocked") {
         tokenEl.addEventListener("pointerdown", function (event) {
           startTokenDrag(event, token, tokenEl);
         });
+      }
 
+      if (isDM) {
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
         deleteButton.className = "hg-token-delete";
@@ -1949,6 +2036,9 @@ export function createTokenSystem(options) {
       const elevation = normalizeElevation(
         T.tokenElevationInput?.value
       );
+      const movementSpeed = normalizeBaseMovementSpeed(
+        T.tokenMovementSpeedInput?.value
+      );
 
       if (T.tokenElevationInput) {
         T.tokenElevationInput.value =
@@ -1983,6 +2073,8 @@ export function createTokenSystem(options) {
         creatureSize: sizeCategory,
         elevation,
         elevationFeet: elevation,
+        movementSpeed,
+        baseSpeed: movementSpeed,
         size: Math.round(mediumSize * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
         sheetId: null,
         display: {
@@ -2014,6 +2106,10 @@ export function createTokenSystem(options) {
 
       if (T.tokenElevationInput) {
         T.tokenElevationInput.value = "0";
+      }
+
+      if (T.tokenMovementSpeedInput) {
+        T.tokenMovementSpeedInput.value = "30";
       }
 
       setStatus(sizeCategoryLabel(sizeCategory) + " token added.");
@@ -2561,9 +2657,22 @@ export function createTokenSystem(options) {
 
   async function saveTokenPosition(tokenId, x, y) {
     const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
-    const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
+    const token = tokenCache.find((entry) => entry.id === tokenId);
+    const movementMode = deps.getTokenMovementMode
+      ? deps.getTokenMovementMode(token)
+      : ((deps.getCurrentIsDM?.() === true) ? "free" : "blocked");
 
-    if (!roomCode || !isDM || !tokenId) {
+    if (!roomCode || movementMode !== "free" || !tokenId) {
+      return;
+    }
+
+    if (typeof deps.confirmFreeTokenPosition === "function") {
+      await deps.confirmFreeTokenPosition({
+        token,
+        tokenId,
+        x: clampPercent(x),
+        y: clampPercent(y)
+      });
       return;
     }
 
@@ -2580,9 +2689,11 @@ export function createTokenSystem(options) {
   }
 
   function startTokenDrag(event, token, tokenEl) {
-    const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
+    const movementMode = deps.getTokenMovementMode
+      ? deps.getTokenMovementMode(token)
+      : ((deps.getCurrentIsDM?.() === true) ? "free" : "blocked");
 
-    if (!isDM) {
+    if (movementMode === "blocked") {
       return;
     }
 
@@ -2631,7 +2742,9 @@ export function createTokenSystem(options) {
       currentX: clampPercent(token.x),
       currentY: clampPercent(token.y),
       rectWidth: Math.max(1, rect.width),
-      rectHeight: Math.max(1, rect.height)
+      rectHeight: Math.max(1, rect.height),
+      mode: movementMode,
+      elevation: getTokenElevation(token)
     };
 
     tokenEl.classList.add("hg-token-dragging");
@@ -2664,6 +2777,43 @@ export function createTokenSystem(options) {
     };
 
     positionTokenElement(drag.tokenEl, fakeTokenForPosition, fakeRoomForPosition);
+
+    if (
+      drag.mode === "tracked" &&
+      typeof deps.previewTokenMovement === "function"
+    ) {
+      const startPoint = {
+        x: drag.rectWidth * drag.startX / 100,
+        y: drag.rectHeight * drag.startY / 100,
+        elevation: drag.elevation
+      };
+      const endPoint = {
+        x: drag.rectWidth * drag.currentX / 100,
+        y: drag.rectHeight * drag.currentY / 100,
+        elevation: drag.elevation
+      };
+      const measurement = measureMovementDistance(
+        startPoint,
+        endPoint,
+        deps.getMovementMeasurementOptions
+          ? deps.getMovementMeasurementOptions(drag.tokenId)
+          : {}
+      );
+      deps.previewTokenMovement({
+        tokenId: drag.tokenId,
+        startPosition: {
+          x: drag.startX,
+          y: drag.startY,
+          elevation: drag.elevation
+        },
+        endPosition: {
+          x: drag.currentX,
+          y: drag.currentY,
+          elevation: drag.elevation
+        },
+        distanceFeet: measurement.feet
+      });
+    }
   }
 
   async function handleTokenPointerUp() {
@@ -2683,6 +2833,11 @@ export function createTokenSystem(options) {
         } catch (error) {
           // Safe to ignore.
         }
+      }
+
+      if (drag.mode === "tracked") {
+        setStatus("Movement preview ready. Confirm or cancel the move.");
+        return;
       }
 
       await saveTokenPosition(drag.tokenId, drag.currentX, drag.currentY);
@@ -2714,6 +2869,45 @@ export function createTokenSystem(options) {
     activeTokenDrag = null;
 
     render(deps.getCurrentRoomData ? deps.getCurrentRoomData() : lastRenderedRoom || {});
+  }
+
+  function cancelPendingMovement() {
+    cancelTokenDrag();
+    render(
+      deps.getCurrentRoomData
+        ? deps.getCurrentRoomData()
+        : lastRenderedRoom || {}
+    );
+  }
+
+  function applyConfirmedPosition(tokenId, position) {
+    const cachedToken = tokenCache.find((token) => token.id === tokenId);
+    if (cachedToken && position) {
+      cachedToken.x = clampPercent(position.x);
+      cachedToken.y = clampPercent(position.y);
+      if (position.elevation !== undefined) {
+        cachedToken.elevation = normalizeElevation(position.elevation);
+        cachedToken.elevationFeet = cachedToken.elevation;
+      }
+    }
+    render(
+      deps.getCurrentRoomData
+        ? deps.getCurrentRoomData()
+        : lastRenderedRoom || {}
+    );
+  }
+
+  function setRoomTokensForTest(tokens) {
+    tokenTestMode = true;
+    tokenCache = (Array.isArray(tokens) ? tokens : []).map((token) => (
+      normalizeToken(token)
+    ));
+    render(
+      deps.getCurrentRoomData
+        ? deps.getCurrentRoomData()
+        : lastRenderedRoom || {}
+    );
+    return getRoomTokens();
   }
 
 
@@ -2755,6 +2949,11 @@ export function createTokenSystem(options) {
     updateTokenElevation,
     deleteToken,
     saveTokenScale,
+    saveTokenPosition,
+    cancelPendingMovement,
+    applyConfirmedPosition,
+    getTokenContainerForCurrentView,
+    setRoomTokensForTest,
     startTokenListenerForRoom,
     stopTokenListener,
     getListenerSnapshot: function () {

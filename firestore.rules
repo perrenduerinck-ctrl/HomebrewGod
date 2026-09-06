@@ -32,6 +32,102 @@ service cloud.firestore {
       return /databases/$(database)/documents/rooms/$(roomCode)/players/$(uid);
     }
 
+    function tokenPath(roomCode, tokenId) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/tokens/$(tokenId);
+    }
+
+    function ownsRoomToken(roomCode, tokenId) {
+      return signedIn()
+        && exists(tokenPath(roomCode, tokenId))
+        && get(tokenPath(roomCode, tokenId)).data.get('ownerUid', '')
+          == request.auth.uid;
+    }
+
+    function tokenMovementFieldsOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'x',
+        'y',
+        'movedAtMillis',
+        'updatedAtMillis',
+        'updatedAt'
+      ]);
+    }
+
+    function tokenIsCurrentOrExploring(roomCode, tokenId) {
+      return roomData(roomCode)
+          .get('initiativeState', {})
+          .get('combatActive', false) != true
+        || roomData(roomCode)
+          .get('initiativeState', {})
+          .get('currentCombatantId', '') == tokenId;
+    }
+
+    function trackedTokenMoveIsConfirmed(roomCode, tokenId) {
+      let room = roomData(roomCode);
+      let initiative = room.get('initiativeState', {});
+      let previous = room.get('movementState', {});
+      let movement = getAfter(roomPath(roomCode)).data
+        .get('movementState', {});
+      let position = movement.get('lastConfirmedPosition', {});
+      return initiative.get('combatActive', false) != true
+        || (
+          initiative.get('currentCombatantId', '') == tokenId
+          && movement.get('activeTokenId', '') == tokenId
+          && movement.get('movementTurnKey', '')
+            == previous.get('movementTurnKey', '')
+          && movement.get('movementRemaining', 101)
+            < previous.get('movementRemaining', 0)
+          && movement.get('movementSpent', -1)
+            > previous.get('movementSpent', 100)
+          && request.resource.data.x == position.get('x', -1)
+          && request.resource.data.y == position.get('y', -1)
+        );
+    }
+
+    function validPlayerMovementRoomUpdate(roomCode) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let movement = request.resource.data.get('movementState', {});
+      let previous = resource.data.get('movementState', {});
+      let initiative = resource.data.get('initiativeState', {});
+      let tokenId = movement.get('activeTokenId', '');
+      let position = movement.get('lastConfirmedPosition', {});
+      return isRoomMember(roomCode)
+        && changed.hasOnly(['movementState', 'updatedAt'])
+        && initiative.get('combatActive', false) == true
+        && tokenId == initiative.get('currentCombatantId', '')
+        && ownsRoomToken(roomCode, tokenId)
+        && movement.get('combatActive', false) == true
+        && movement.get('movementTurnKey', '')
+          == previous.get('movementTurnKey', '')
+        && movement.get('activeTokenId', '')
+          == previous.get('activeTokenId', '')
+        && movement.get('baseSpeed', -1) >= 0
+        && movement.get('baseSpeed', 101) <= 100
+        && movement.get('baseSpeed', -1)
+          == previous.get('baseSpeed', -2)
+        && movement.get('movementRemaining', -1) >= 0
+        && movement.get('movementRemaining', 101)
+          <= movement.get('baseSpeed', 0)
+        && movement.get('movementRemaining', 101)
+          < previous.get('movementRemaining', 0)
+        && movement.get('movementSpent', -1) >= 0
+        && movement.get('movementSpent', -1)
+          > previous.get('movementSpent', 100)
+        && previous.get('movementRemaining', 0)
+          - movement.get('movementRemaining', 0)
+          == movement.get('movementSpent', 0)
+            - previous.get('movementSpent', 0)
+        && movement.get('movementRemaining', 0)
+          + movement.get('movementSpent', 0)
+          == movement.get('baseSpeed', -1)
+        && movement.get('lastMoveForced', true) == false
+        && movement.get('movementOverage', -1) == 0
+        && getAfter(tokenPath(roomCode, tokenId)).data.x
+          == position.get('x', -1)
+        && getAfter(tokenPath(roomCode, tokenId)).data.y
+          == position.get('y', -1);
+    }
+
     function isRoomMember(roomCode) {
       return signedIn()
         && (
@@ -76,9 +172,12 @@ service cloud.firestore {
         if isRoomMember(roomCode);
 
       allow update:
-        if isRoomDm(roomCode)
-        && request.resource.data.get('dmUid', resource.data.dmUid)
-          == resource.data.dmUid;
+        if (
+          isRoomDm(roomCode)
+          && request.resource.data.get('dmUid', resource.data.dmUid)
+            == resource.data.dmUid
+        )
+        || validPlayerMovementRoomUpdate(roomCode);
 
       allow delete:
         if isRoomDm(roomCode);
@@ -224,8 +323,19 @@ service cloud.firestore {
       match /tokens/{tokenId} {
         allow read:
           if isRoomMember(roomCode);
-        allow create, update, delete:
+        allow create, delete:
           if isRoomDm(roomCode);
+        allow update:
+          if isRoomDm(roomCode)
+          || (
+            isRoomMember(roomCode)
+            && resource.data.get('ownerUid', '') == request.auth.uid
+            && request.resource.data.get('ownerUid', '')
+              == resource.data.get('ownerUid', '')
+            && tokenMovementFieldsOnly()
+            && tokenIsCurrentOrExploring(roomCode, tokenId)
+            && trackedTokenMoveIsConfirmed(roomCode, tokenId)
+          );
       }
 
       match /classes/{classId} {

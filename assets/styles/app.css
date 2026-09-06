@@ -775,6 +775,156 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   text-align: center;
 }
 
+.movementPanel {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(91, 201, 255, .3);
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(7, 31, 54, .86), rgba(8, 13, 29, .9));
+}
+
+.movementPanel[hidden] {
+  display: none;
+}
+
+.movementHeading,
+.movementNumbers {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.movementHeading > span {
+  color: #7bdcff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.movementHeading strong {
+  flex: 1;
+  color: #fff;
+}
+
+.movementHeading small,
+.movementNumbers small {
+  color: #a9b8d8;
+}
+
+.movementMeter {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+}
+
+.movementMeter span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #20a7ff, #66f0d0);
+  box-shadow: 0 0 10px rgba(66, 211, 255, .5);
+  transition: width .18s ease;
+}
+
+.movementNumbers b,
+.movementPreview {
+  font-size: 12px;
+}
+
+.movementPreview {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px 10px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+}
+
+.movementOverage {
+  color: #ff8d8d;
+}
+
+.movementActions {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+
+.movementActions button {
+  width: auto;
+  min-height: 31px;
+  margin: 0;
+  padding: 5px 9px;
+}
+
+.movementForceButton {
+  border-color: rgba(255, 91, 91, .55) !important;
+  background: rgba(109, 20, 30, .8) !important;
+}
+
+#battleTopBar .movementStatus {
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 11px;
+}
+
+.hg-movement-preview-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 460;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hg-movement-preview-line,
+.hg-movement-preview-dot,
+.hg-movement-preview-label {
+  position: absolute;
+}
+
+.hg-movement-preview-line {
+  height: 3px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #57ddff 0 10px, transparent 10px 15px);
+  box-shadow: 0 0 10px rgba(73, 218, 255, .8);
+  transform-origin: 0 50%;
+}
+
+.hg-movement-preview-dot {
+  width: 13px;
+  height: 13px;
+  border: 3px solid #d7f7ff;
+  border-radius: 50%;
+  background: #138dc9;
+  box-shadow: 0 0 12px #55dfff;
+  transform: translate(-50%, -50%);
+}
+
+.hg-movement-preview-label {
+  padding: 3px 7px;
+  border: 1px solid rgba(120, 228, 255, .72);
+  border-radius: 999px;
+  color: #effcff;
+  background: rgba(3, 18, 32, .9);
+  font-size: 11px;
+  font-weight: 900;
+  transform: translate(-50%, calc(-50% - 13px));
+}
+
+.hg-movement-preview-layer.is-over-budget .hg-movement-preview-line {
+  background: repeating-linear-gradient(90deg, #ff666d 0 10px, transparent 10px 15px);
+  box-shadow: 0 0 10px rgba(255, 69, 79, .8);
+}
+
 @media (max-width: 720px) {
   .campaignTimeButtonGrid,
   .campaignTimeCombatControls,
