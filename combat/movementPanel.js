@@ -1,7 +1,7 @@
 import {
   DEFAULT_BASE_MOVEMENT_SPEED,
   normalizeMovementState
-} from "./movementSystem.js?v=movement-system-20260905";
+} from "./movementSystem.js?v=movement-robustness-20260906";
 import {
   formatMapDistance
 } from "../battleMap/measurement.js?v=stage8-20260826";

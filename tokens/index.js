@@ -19,7 +19,7 @@ import {
   measureMovementDistance,
   normalizeBaseMovementSpeed,
   readTokenBaseSpeed
-} from "../combat/movementSystem.js?v=movement-system-20260905";
+} from "../combat/movementSystem.js?v=movement-robustness-20260906";
 
 export function createTokenSystem(options) {
   const deps = {

@@ -431,7 +431,7 @@ export function createMovementSystem({
     const activeToken = findToken(initiative.currentCombatantId);
     const next = synchronizeMovementState(value, initiative, {
       activeToken,
-      tokenExists: true
+      tokenExists: Boolean(activeToken)
     });
     const changed = !movementStatesEqual(state, next);
     state = next;
@@ -444,7 +444,7 @@ export function createMovementSystem({
     const activeToken = findToken(initiative.currentCombatantId);
     let next = synchronizeMovementState(value, initiative, {
       activeToken,
-      tokenExists: true
+      tokenExists: Boolean(activeToken)
     });
     const localPending = state.pendingMovement;
     const sameConfirmedState =

@@ -36,7 +36,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=movement-system-20260905";
+import { createTokenSystem } from "./tokens/index.js?v=movement-robustness-20260906";
 import {
   createMapRuler,
   formatMapDistance,
@@ -102,18 +102,18 @@ import {
   normalizeTimeState,
   timeStatesEqual,
   toRoomTimeFields
-} from "./timeSystem.js?v=movement-system-20260905";
+} from "./timeSystem.js?v=movement-robustness-20260906";
 import {
   createInitiativeSystem,
   normalizeInitiativeState,
   toRoomInitiativeFields
-} from "./combat/initiativeSystem.js?v=movement-system-20260905";
+} from "./combat/initiativeSystem.js?v=movement-robustness-20260906";
 import {
   buildInitiativeRoomTransition
-} from "./combat/initiativeTimeIntegration.js?v=movement-system-20260905";
+} from "./combat/initiativeTimeIntegration.js?v=movement-robustness-20260906";
 import {
   createInitiativePanel
-} from "./combat/initiativePanel.js?v=movement-system-20260905";
+} from "./combat/initiativePanel.js?v=movement-robustness-20260906";
 import {
   canControlToken,
   confirmPendingMovement,
@@ -122,10 +122,10 @@ import {
   getTokenMovementMode,
   synchronizeMovementState,
   toRoomMovementFields
-} from "./combat/movementSystem.js?v=movement-system-20260905";
+} from "./combat/movementSystem.js?v=movement-robustness-20260906";
 import {
   createMovementPanel
-} from "./combat/movementPanel.js?v=movement-system-20260905";
+} from "./combat/movementPanel.js?v=movement-robustness-20260906";
 import {
   createMapLighting
 } from "./battleMap/mapLighting.js?v=initiative-reliability-20260905";
@@ -970,6 +970,10 @@ async function commitInitiativeCommand(
 
 async function commitMovementCommand(command, context) {
   if (!currentRoomCode && window.__HOMEBREW_GOD_SMOKE__) {
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      ...toRoomMovementFields(context.previewState)
+    };
     tokenSystem?.applyConfirmedPosition?.(
       command.tokenId,
       command.endPosition
@@ -7385,6 +7389,16 @@ if (!movementPanelSystem && E.battleInitiativePanel) {
     });
   }
 }
+
+document.addEventListener(
+  "homebrewgod:tokens-rendered",
+  function () {
+    movementSystem?.sync(
+      currentRoomData || movementSystem.getState(),
+      "tokens-rendered"
+    );
+  }
+);
 
 initiativeSystem.subscribe(function () {
   const hadPending = Boolean(

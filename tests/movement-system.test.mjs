@@ -161,6 +161,36 @@ test("an unrelated same-turn room snapshot preserves a local unconfirmed preview
   assert.equal(system.getState().movementRemaining, 30);
 });
 
+test("controller synchronization clears a missing active token and restores after token load", () => {
+  const hero = { id: "hero", ownerUid: "owner", x: 20, y: 10, movementSpeed: 30 };
+  const persisted = toRoomMovementFields(
+    confirmPendingMovement(preview(fresh(), 10, 20))
+  );
+  let tokens = [hero];
+  const system = createMovementSystem({
+    initialState: persisted,
+    getInitiativeState: () => initiative(),
+    getTokens: () => tokens,
+    getUserUid: () => "owner"
+  });
+  system.sync(persisted);
+  assert.equal(system.getState().movementRemaining, 20);
+
+  tokens = [];
+  system.sync(persisted);
+  assert.equal(system.getState().combatActive, false);
+  assert.equal(system.getState().activeTokenId, null);
+
+  tokens = [hero];
+  system.sync(persisted, "tokens-rendered");
+  assert.equal(system.getState().activeTokenId, "hero");
+  assert.equal(system.getState().movementRemaining, 20);
+
+  tokens = [];
+  system.applyRoomSnapshot(persisted);
+  assert.equal(system.getState().activeTokenId, null);
+});
+
 test("initiative transitions atomically switch budgets and Previous Turn resets without position undo", () => {
   const order = [
     { tokenId: "hero", name: "Hero", baseSpeed: 30 },

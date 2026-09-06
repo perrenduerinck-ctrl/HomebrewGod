@@ -16,7 +16,7 @@ import {
   normalizeMovementState,
   synchronizeMovementState,
   toRoomMovementFields
-} from "./movementSystem.js?v=movement-system-20260905";
+} from "./movementSystem.js?v=movement-robustness-20260906";
 
 function hasEffect(effects, effect) {
   return Array.isArray(effects) && effects.includes(effect);

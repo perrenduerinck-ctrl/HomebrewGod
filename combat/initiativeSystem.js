@@ -1,7 +1,7 @@
 import {
   normalizeBaseMovementSpeed,
   readTokenBaseSpeed
-} from "./movementSystem.js?v=movement-system-20260905";
+} from "./movementSystem.js?v=movement-robustness-20260906";
 
 const MAX_INITIATIVE = 999;
 const MIN_INITIATIVE = -999;
