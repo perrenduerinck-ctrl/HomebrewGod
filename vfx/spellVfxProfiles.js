@@ -13,7 +13,7 @@ import { HIGH_LEVEL_SPELL_PROFILES } from "./highLevelSpellProfiles.js?v=complet
 export const SPELL_VFX_FAMILIES = Object.freeze([
   "projectile-impact", "target-impact", "beam", "line", "cone", "burst",
   "aura", "self", "touch", "weapon-strike", "ground-effect", "utility-glyph",
-  "utility-hand", "utility-ripple"
+  "utility-hand", "utility-ripple", "weather"
 ]);
 
 const id = (value) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, "");

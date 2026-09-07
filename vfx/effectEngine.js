@@ -110,9 +110,7 @@ export function normalizeEffectRequest(
       fallback: 900
     }),
     0,
-    effectsMode === "reduced"
-      ? 1000
-      : MAX_EFFECT_DURATION_MS
+    MAX_EFFECT_DURATION_MS
   );
   const delay = clamp(
     finiteNumber(source.delay) ?? 0,
@@ -152,6 +150,9 @@ export function normalizeEffectRequest(
       1
     ),
     duration,
+    hitStopMs: effectsMode === "full" ? clamp(finiteNumber(source.hitStopMs) ?? 0, 0, 90) : 0,
+    importance: source.importance === "secondary" ? "secondary"
+      : source.importance === "core" || definition.kind === "sprite" ? "core" : "normal",
     delay,
     elevation,
     startElevation,
@@ -199,7 +200,7 @@ export function normalizeEffectRequest(
           ...(source.debris === true ? {} : (source.debris || {})),
           enabled: source.debris === true || source.debris?.enabled === true
         }),
-    shake: source.shake === false
+    shake: effectsMode !== "full" || source.shake === false
       ? null
       : Object.freeze({
           ...(source.shake === true ? {} : (source.shake || {})),
@@ -407,7 +408,7 @@ export function createEffectEngine({
 
     const lifetime = record.effect.persistent
       ? record.effect.persistentLifetime
-      : record.effect.duration;
+      : record.effect.duration + record.effect.hitStopMs;
     if (record.effect.persistent) {
       try {
         persistentStore.add(record.effect, {
@@ -427,7 +428,7 @@ export function createEffectEngine({
         runEvent();
       } else {
         try {
-          handle = scheduler.setTimeout(runEvent, event.atMilliseconds);
+          handle = scheduler.setTimeout(runEvent, event.atMilliseconds + record.effect.hitStopMs);
           record.eventTimers.add(handle);
         } catch {
           // A missed presentation event does not invalidate the parent effect.
@@ -483,13 +484,6 @@ export function createEffectEngine({
       });
     }
 
-    while (records.size >= maximum) {
-      cancel(
-        records.keys().next().value,
-        "capacity"
-      );
-    }
-
     const id = `vfx-${nextId++}`;
     const effect = normalizeEffectRequest(
       request,
@@ -499,6 +493,20 @@ export function createEffectEngine({
         mode: effectsMode
       }
     );
+    while (records.size >= maximum) {
+      const active = Array.from(records.values());
+      const secondary = active.find(item => item.effect.importance === "secondary");
+      if (effect.importance === "secondary" && !secondary) {
+        return Object.freeze({ ok: true, skipped: true, reason: "secondary-budget" });
+      }
+      const victim = secondary || active.find(item => item.effect.importance !== "core");
+      if (!victim && effect.importance === "core") {
+        // Reserve the hard limit for existing core animations; callers can retry.
+        return Object.freeze({ ok: true, skipped: true, reason: "core-capacity" });
+      }
+      if (!victim) return Object.freeze({ ok: true, skipped: true, reason: "effect-budget" });
+      cancel(victim.effect.id, "capacity");
+    }
     const record = {
       effect,
       phase: effect.delay > 0

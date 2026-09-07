@@ -40,7 +40,7 @@ for (const { mode, failModern, version } of [
     await expect(sprite).toHaveAttribute("data-sprite-columns", version === "legacy" ? "4" : "6");
     const before = await sprite.evaluate(element => element.style.backgroundPosition);
     await expect.poll(() => sprite.evaluate(element => element.style.backgroundPosition)).not.toBe(before);
-    expect(await sprite.evaluate(element => getComputedStyle(element).mixBlendMode)).toBe("screen");
+    expect(await sprite.evaluate(element => getComputedStyle(element).mixBlendMode)).toBe(version === "modern6x6" ? "normal" : "screen");
     await effect.screenshot({ path: testInfo.outputPath(`fireball-${version}.png`) });
     await expect(sprite).toHaveAttribute("data-vfx-clip", "aftermath");
     await expect(sprite).toHaveAttribute("data-vfx-asset-version", version);

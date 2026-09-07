@@ -77,18 +77,23 @@ test("4x4, 5x5, 6x7, single frames and partial atlases retain playback options",
   animator.destroy();
 });
 
-test("cold modern load shows legacy, then changes sheets without resetting progress or events", async () => {
+test("cold modern load locks legacy for the whole clip; the next play uses decoded modern", async () => {
   const f = fixture();
   await f.finish("old.png", true);
   assert.match(f.element.style.backgroundImage, /old\.png/);
   f.seek(300);
   assert.equal(f.events.filter(event => event.id === "burst").length, 1);
   await f.finish("new.png", true);
-  assert.match(f.element.style.backgroundImage, /new\.png/);
-  assert.equal(f.element.dataset.spriteFrames, "36");
-  assert.equal(f.controller.getState().currentFrame, 10);
+  assert.match(f.element.style.backgroundImage, /old\.png/);
+  assert.equal(f.element.dataset.spriteFrames, "16");
+  assert.equal(f.controller.getState().currentFrame, 4);
   f.seek(700);
   assert.equal(f.events.filter(event => event.id === "burst").length, 1);
+  f.controller.playClip("impact");
+  assert.match(f.element.style.backgroundImage, /new\.png/);
+  assert.equal(f.element.dataset.spriteFrames, "36");
+  f.seek(1000);
+  assert.equal(f.events.filter(event => event.id === "burst").length, 2);
   f.controller.destroy();
 });
 

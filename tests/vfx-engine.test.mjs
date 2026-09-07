@@ -165,7 +165,7 @@ test("effect requests normalize every shared visual property", () => {
   assert.equal(effect.scale, 20);
   assert.equal(effect.rotation, 3600);
   assert.equal(effect.opacity, 0);
-  assert.equal(effect.duration, 1000);
+  assert.equal(effect.duration, 60000);
   assert.equal(effect.delay, 0);
   assert.equal(effect.elevation, 1000);
   assert.equal(effect.startElevation, -1000);
@@ -442,6 +442,7 @@ test("single images and sprite sheets share bounded sprite animation options", (
     }),
     {
       src: "",
+      anchor: "center", artAngle: 0, blendMode: null,
       frameWidth: 64,
       frameHeight: 64,
       frameCount: 15,

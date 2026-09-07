@@ -2,6 +2,8 @@
 // the existing sequence/renderer/engine; these definitions only draw visuals.
 import { getTierSpriteAsset, getTierFrameWindow } from "./tierEffects.js?v=status-sprites-20260831";
 import { normalizeSpriteOptions, getSpriteFrameStyle } from "./spriteAnimator.js?v=2d5-vfx-polish-20260902";
+import { getVersionedSprite } from "./spriteReplacements.js";
+import { getVfxAssetMode, resolveVfxClipDefinition } from "./assetVersions.js";
 export const STORM_ASSETS = Object.freeze({
   charge: "./assets/vfx/storms/lightning-charge.png",
   impact: "./assets/vfx/storms/lightning-impact.png",
@@ -62,7 +64,7 @@ export function stormParticleLayout(count) {
   });
 }
 
-function hail({ document, element, effect }) {
+function hail({ document, element, effect, assetCache }) {
   const reduced = effect.effectsMode === "reduced";
   const count = reduced ? 7 : Math.min(32, 18 + effect.intensity * 4);
   stormParticleLayout(count).forEach((point, index) => {
@@ -76,15 +78,23 @@ function hail({ document, element, effect }) {
     element.appendChild(stone);
   });
   const animations = [];
-  const sprite = normalizeSpriteOptions({ ...getTierSpriteAsset("cold", 4),
-    frameWidth: 160, frameHeight: 160 });
-  const [first, last] = getTierFrameWindow("cold", 4, "burst");
+  const [legacyFirst, legacyLast] = getTierFrameWindow("cold", 4, "burst");
+  const versions = getVersionedSprite("tier-cold-burst", { ...getTierSpriteAsset("cold", 4),
+    frameWidth: 160, frameHeight: 160, startFrame: legacyFirst, endFrame: legacyLast, blendMode: "screen" });
+  const mode = getVfxAssetMode();
+  if (mode !== "legacy") assetCache?.preload?.(versions.modern6x6.src, "Ice Storm frost");
+  const selected = resolveVfxClipDefinition(versions, { mode,
+    assetAvailable: src => src === versions.legacy.src || assetCache?.getStatus?.(src) === "loaded" });
+  const sprite = normalizeSpriteOptions(selected);
+  const [first, last] = [sprite.startFrame, sprite.endFrame];
   stormParticleLayout(reduced ? 2 : 7).forEach((point, index) => {
     const burst = document.createElement("i");
     burst.className = "hg-storm-ice-burst";
     burst.style.left = point.x + "%";
     burst.style.top = point.y + "%";
-    burst.style.backgroundImage = `url(${JSON.stringify(STORM_ASSETS.ice)})`;
+    burst.style.backgroundImage = `url(${JSON.stringify(sprite.src)})`;
+    burst.style.mixBlendMode = sprite.blendMode;
+    burst.dataset.vfxAssetVersion = selected.assetVersion;
     burst.style.backgroundSize = `${sprite.frameWidth * sprite.columns}px ${sprite.frameHeight * sprite.rows}px`;
     burst.style.backgroundPosition = getSpriteFrameStyle(sprite, first).backgroundPosition;
     burst.style.setProperty("--storm-delay", 0.12 + index * 0.055);

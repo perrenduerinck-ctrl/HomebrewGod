@@ -1,0 +1,3148 @@
+[
+  {
+    "source": "assets/vfx/modern6x6/acid-cast-6x6.png",
+    "sha256": "821e4f589e1c8e9148039aa8afb05ff7030a6cd575b470f5e0027416aae522a5",
+    "width": 1254,
+    "height": 1254,
+    "transparent": 0.73511,
+    "lowAlpha": 0.0,
+    "opaqueBlack": 0.0,
+    "fullyOpaque": false,
+    "frames": [
+      {
+        "index": 0,
+        "empty": false,
+        "center": [
+          0.5565,
+          0.6626
+        ],
+        "brightness": 0.0117,
+        "edgeCoverage": 0.0
+      },
+      {
+        "index": 1,
+        "empty": false,
+        "center": [
+          0.5383,
+          0.6725
+        ],
+        "brightness": 0.0347,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0207,
+        "brightnessJump": 0.023
+      },
+      {
+        "index": 2,
+        "empty": false,
+        "center": [
+          0.5,
+          0.6604
+        ],
+        "brightness": 0.0519,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0402,
+        "brightnessJump": 0.0172
+      },
+      {
+        "index": 3,
+        "empty": false,
+        "center": [
+          0.4436,
+          0.6488
+        ],
+        "brightness": 0.069,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0576,
+        "brightnessJump": 0.0171
+      },
+      {
+        "index": 4,
+        "empty": false,
+        "center": [
+          0.3716,
+          0.6354
+        ],
+        "brightness": 0.1003,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0732,
+        "brightnessJump": 0.0313
+      },
+      {
+        "index": 5,
+        "empty": false,
+        "center": [
+          0.3156,
+          0.6268
+        ],
+        "brightness": 0.1306,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0567,
+        "brightnessJump": 0.0303
+      },
+      {
+        "index": 6,
+        "empty": false,
+        "center": [
+          0.5221,
+          0.6195
+        ],
+        "brightness": 0.0705,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2067,
+        "brightnessJump": 0.0601
+      },
+      {
+        "index": 7,
+        "empty": false,
+        "center": [
+          0.4923,
+          0.6196
+        ],
+        "brightness": 0.0763,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0298,
+        "brightnessJump": 0.0058
+      },
+      {
+        "index": 8,
+        "empty": false,
+        "center": [
+          0.4602,
+          0.6129
+        ],
+        "brightness": 0.0928,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0328,
+        "brightnessJump": 0.0165
+      },
+      {
+        "index": 9,
+        "empty": false,
+        "center": [
+          0.4302,
+          0.5977
+        ],
+        "brightness": 0.1064,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0336,
+        "brightnessJump": 0.0136
+      },
+      {
+        "index": 10,
+        "empty": false,
+        "center": [
+          0.3901,
+          0.5881
+        ],
+        "brightness": 0.1192,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0413,
+        "brightnessJump": 0.0128
+      },
+      {
+        "index": 11,
+        "empty": false,
+        "center": [
+          0.3493,
+          0.5826
+        ],
+        "brightness": 0.1347,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0412,
+        "brightnessJump": 0.0155
+      },
+      {
+        "index": 12,
+        "empty": false,
+        "center": [
+          0.5464,
+          0.6229
+        ],
+        "brightness": 0.1083,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2011,
+        "brightnessJump": 0.0264
+      },
+      {
+        "index": 13,
+        "empty": false,
+        "center": [
+          0.5178,
+          0.6323
+        ],
+        "brightness": 0.1127,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0301,
+        "brightnessJump": 0.0044
+      },
+      {
+        "index": 14,
+        "empty": false,
+        "center": [
+          0.4844,
+          0.6262
+        ],
+        "brightness": 0.1181,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.034,
+        "brightnessJump": 0.0054
+      },
+      {
+        "index": 15,
+        "empty": false,
+        "center": [
+          0.4372,
+          0.61
+        ],
+        "brightness": 0.1315,
+        "edgeCoverage": 0.0024,
+        "centerJump": 0.0499,
+        "brightnessJump": 0.0134
+      },
+      {
+        "index": 16,
+        "empty": false,
+        "center": [
+          0.3959,
+          0.6014
+        ],
+        "brightness": 0.1462,
+        "edgeCoverage": 0.0311,
+        "centerJump": 0.0423,
+        "brightnessJump": 0.0147
+      },
+      {
+        "index": 17,
+        "empty": false,
+        "center": [
+          0.3616,
+          0.5847
+        ],
+        "brightness": 0.157,
+        "edgeCoverage": 0.0371,
+        "centerJump": 0.0381,
+        "brightnessJump": 0.0108
+      },
+      {
+        "index": 18,
+        "empty": false,
+        "center": [
+          0.5355,
+          0.5433
+        ],
+        "brightness": 0.1225,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1787,
+        "brightnessJump": 0.0345
+      },
+      {
+        "index": 19,
+        "empty": false,
+        "center": [
+          0.5128,
+          0.5641
+        ],
+        "brightness": 0.1015,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0307,
+        "brightnessJump": 0.021
+      },
+      {
+        "index": 20,
+        "empty": false,
+        "center": [
+          0.4859,
+          0.5539
+        ],
+        "brightness": 0.1177,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0288,
+        "brightnessJump": 0.0162
+      },
+      {
+        "index": 21,
+        "empty": false,
+        "center": [
+          0.4554,
+          0.567
+        ],
+        "brightness": 0.1145,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0332,
+        "brightnessJump": 0.0032
+      },
+      {
+        "index": 22,
+        "empty": false,
+        "center": [
+          0.4034,
+          0.584
+        ],
+        "brightness": 0.1065,
+        "edgeCoverage": 0.0191,
+        "centerJump": 0.0547,
+        "brightnessJump": 0.008
+      },
+      {
+        "index": 23,
+        "empty": false,
+        "center": [
+          0.3658,
+          0.5874
+        ],
+        "brightness": 0.1083,
+        "edgeCoverage": 0.0239,
+        "centerJump": 0.0378,
+        "brightnessJump": 0.0018
+      },
+      {
+        "index": 24,
+        "empty": false,
+        "center": [
+          0.5452,
+          0.4302
+        ],
+        "brightness": 0.0998,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2385,
+        "brightnessJump": 0.0085
+      },
+      {
+        "index": 25,
+        "empty": false,
+        "center": [
+          0.5128,
+          0.4404
+        ],
+        "brightness": 0.0886,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0339,
+        "brightnessJump": 0.0112
+      },
+      {
+        "index": 26,
+        "empty": false,
+        "center": [
+          0.4858,
+          0.4504
+        ],
+        "brightness": 0.0757,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0288,
+        "brightnessJump": 0.0129
+      },
+      {
+        "index": 27,
+        "empty": false,
+        "center": [
+          0.4417,
+          0.4547
+        ],
+        "brightness": 0.0674,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0443,
+        "brightnessJump": 0.0083
+      },
+      {
+        "index": 28,
+        "empty": false,
+        "center": [
+          0.398,
+          0.4729
+        ],
+        "brightness": 0.0545,
+        "edgeCoverage": 0.0096,
+        "centerJump": 0.0473,
+        "brightnessJump": 0.0129
+      },
+      {
+        "index": 29,
+        "empty": false,
+        "center": [
+          0.3472,
+          0.475
+        ],
+        "brightness": 0.0478,
+        "edgeCoverage": 0.0084,
+        "centerJump": 0.0508,
+        "brightnessJump": 0.0067
+      },
+      {
+        "index": 30,
+        "empty": false,
+        "center": [
+          0.5322,
+          0.3441
+        ],
+        "brightness": 0.0259,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2266,
+        "brightnessJump": 0.0219
+      },
+      {
+        "index": 31,
+        "empty": false,
+        "center": [
+          0.5154,
+          0.3735
+        ],
+        "brightness": 0.018,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0338,
+        "brightnessJump": 0.0079
+      },
+      {
+        "index": 32,
+        "empty": false,
+        "center": [
+          0.4896,
+          0.3953
+        ],
+        "brightness": 0.0118,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0338,
+        "brightnessJump": 0.0062
+      },
+      {
+        "index": 33,
+        "empty": false,
+        "center": [
+          0.4597,
+          0.4078
+        ],
+        "brightness": 0.0077,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0324,
+        "brightnessJump": 0.0041
+      },
+      {
+        "index": 34,
+        "empty": false,
+        "center": [
+          0.4056,
+          0.4165
+        ],
+        "brightness": 0.0036,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0548,
+        "brightnessJump": 0.0041
+      },
+      {
+        "index": 35,
+        "empty": false,
+        "center": [
+          0.3506,
+          0.4213
+        ],
+        "brightness": 0.0025,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0552,
+        "brightnessJump": 0.0011
+      }
+    ],
+    "review": {
+      "emptyFrames": [],
+      "edgeFrames": [],
+      "centerJumps": [
+        6,
+        12,
+        24,
+        30
+      ]
+    }
+  },
+  {
+    "source": "assets/vfx/modern6x6/cold-cast-6x6.png",
+    "sha256": "b42883c73b8e42a371bcf1731c766684a98246de0cb0e385cbbec7b2e454ef02",
+    "width": 1254,
+    "height": 1254,
+    "transparent": 0.59506,
+    "lowAlpha": 0.0,
+    "opaqueBlack": 0.0,
+    "fullyOpaque": false,
+    "frames": [
+      {
+        "index": 0,
+        "empty": false,
+        "center": [
+          0.4629,
+          0.6014
+        ],
+        "brightness": 0.0193,
+        "edgeCoverage": 0.0
+      },
+      {
+        "index": 1,
+        "empty": false,
+        "center": [
+          0.4737,
+          0.6123
+        ],
+        "brightness": 0.0413,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0154,
+        "brightnessJump": 0.022
+      },
+      {
+        "index": 2,
+        "empty": false,
+        "center": [
+          0.4203,
+          0.6047
+        ],
+        "brightness": 0.0844,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.054,
+        "brightnessJump": 0.0431
+      },
+      {
+        "index": 3,
+        "empty": false,
+        "center": [
+          0.3743,
+          0.5931
+        ],
+        "brightness": 0.1179,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0473,
+        "brightnessJump": 0.0335
+      },
+      {
+        "index": 4,
+        "empty": false,
+        "center": [
+          0.3599,
+          0.5733
+        ],
+        "brightness": 0.1806,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0245,
+        "brightnessJump": 0.0627
+      },
+      {
+        "index": 5,
+        "empty": false,
+        "center": [
+          0.3883,
+          0.5646
+        ],
+        "brightness": 0.2808,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0297,
+        "brightnessJump": 0.1002
+      },
+      {
+        "index": 6,
+        "empty": false,
+        "center": [
+          0.4399,
+          0.6509
+        ],
+        "brightness": 0.1983,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1005,
+        "brightnessJump": 0.0825
+      },
+      {
+        "index": 7,
+        "empty": false,
+        "center": [
+          0.4387,
+          0.6458
+        ],
+        "brightness": 0.2096,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0052,
+        "brightnessJump": 0.0113
+      },
+      {
+        "index": 8,
+        "empty": false,
+        "center": [
+          0.4098,
+          0.6352
+        ],
+        "brightness": 0.2224,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0309,
+        "brightnessJump": 0.0128
+      },
+      {
+        "index": 9,
+        "empty": false,
+        "center": [
+          0.358,
+          0.6245
+        ],
+        "brightness": 0.242,
+        "edgeCoverage": 0.0323,
+        "centerJump": 0.0529,
+        "brightnessJump": 0.0196
+      },
+      {
+        "index": 10,
+        "empty": false,
+        "center": [
+          0.3485,
+          0.6063
+        ],
+        "brightness": 0.3129,
+        "edgeCoverage": 0.0526,
+        "centerJump": 0.0206,
+        "brightnessJump": 0.0709
+      },
+      {
+        "index": 11,
+        "empty": false,
+        "center": [
+          0.4547,
+          0.5801
+        ],
+        "brightness": 0.3387,
+        "edgeCoverage": 0.0048,
+        "centerJump": 0.1094,
+        "brightnessJump": 0.0258
+      },
+      {
+        "index": 12,
+        "empty": false,
+        "center": [
+          0.4997,
+          0.6256
+        ],
+        "brightness": 0.2566,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.064,
+        "brightnessJump": 0.0821
+      },
+      {
+        "index": 13,
+        "empty": false,
+        "center": [
+          0.5197,
+          0.639
+        ],
+        "brightness": 0.3051,
+        "edgeCoverage": 0.0371,
+        "centerJump": 0.0241,
+        "brightnessJump": 0.0485
+      },
+      {
+        "index": 14,
+        "empty": false,
+        "center": [
+          0.4782,
+          0.6281
+        ],
+        "brightness": 0.3079,
+        "edgeCoverage": 0.0311,
+        "centerJump": 0.043,
+        "brightnessJump": 0.0028
+      },
+      {
+        "index": 15,
+        "empty": false,
+        "center": [
+          0.4335,
+          0.6281
+        ],
+        "brightness": 0.3413,
+        "edgeCoverage": 0.0622,
+        "centerJump": 0.0447,
+        "brightnessJump": 0.0334
+      },
+      {
+        "index": 16,
+        "empty": false,
+        "center": [
+          0.4069,
+          0.6153
+        ],
+        "brightness": 0.3041,
+        "edgeCoverage": 0.0634,
+        "centerJump": 0.0295,
+        "brightnessJump": 0.0372
+      },
+      {
+        "index": 17,
+        "empty": false,
+        "center": [
+          0.4615,
+          0.6103
+        ],
+        "brightness": 0.3132,
+        "edgeCoverage": 0.0706,
+        "centerJump": 0.0548,
+        "brightnessJump": 0.0091
+      },
+      {
+        "index": 18,
+        "empty": false,
+        "center": [
+          0.5006,
+          0.6328
+        ],
+        "brightness": 0.2581,
+        "edgeCoverage": 0.0443,
+        "centerJump": 0.0451,
+        "brightnessJump": 0.0551
+      },
+      {
+        "index": 19,
+        "empty": false,
+        "center": [
+          0.5221,
+          0.6219
+        ],
+        "brightness": 0.2514,
+        "edgeCoverage": 0.0742,
+        "centerJump": 0.0241,
+        "brightnessJump": 0.0067
+      },
+      {
+        "index": 20,
+        "empty": false,
+        "center": [
+          0.5011,
+          0.6287
+        ],
+        "brightness": 0.2315,
+        "edgeCoverage": 0.0179,
+        "centerJump": 0.0221,
+        "brightnessJump": 0.0199
+      },
+      {
+        "index": 21,
+        "empty": false,
+        "center": [
+          0.4726,
+          0.6241
+        ],
+        "brightness": 0.2089,
+        "edgeCoverage": 0.0562,
+        "centerJump": 0.0289,
+        "brightnessJump": 0.0226
+      },
+      {
+        "index": 22,
+        "empty": false,
+        "center": [
+          0.4348,
+          0.6353
+        ],
+        "brightness": 0.1775,
+        "edgeCoverage": 0.0682,
+        "centerJump": 0.0394,
+        "brightnessJump": 0.0314
+      },
+      {
+        "index": 23,
+        "empty": false,
+        "center": [
+          0.4625,
+          0.6083
+        ],
+        "brightness": 0.1085,
+        "edgeCoverage": 0.0718,
+        "centerJump": 0.0387,
+        "brightnessJump": 0.069
+      },
+      {
+        "index": 24,
+        "empty": false,
+        "center": [
+          0.5115,
+          0.6337
+        ],
+        "brightness": 0.1495,
+        "edgeCoverage": 0.0478,
+        "centerJump": 0.0552,
+        "brightnessJump": 0.041
+      },
+      {
+        "index": 25,
+        "empty": false,
+        "center": [
+          0.5216,
+          0.6256
+        ],
+        "brightness": 0.1167,
+        "edgeCoverage": 0.0335,
+        "centerJump": 0.0129,
+        "brightnessJump": 0.0328
+      },
+      {
+        "index": 26,
+        "empty": false,
+        "center": [
+          0.4792,
+          0.6187
+        ],
+        "brightness": 0.0736,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0429,
+        "brightnessJump": 0.0431
+      },
+      {
+        "index": 27,
+        "empty": false,
+        "center": [
+          0.4506,
+          0.6264
+        ],
+        "brightness": 0.062,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0297,
+        "brightnessJump": 0.0116
+      },
+      {
+        "index": 28,
+        "empty": false,
+        "center": [
+          0.4481,
+          0.6386
+        ],
+        "brightness": 0.0658,
+        "edgeCoverage": 0.0084,
+        "centerJump": 0.0125,
+        "brightnessJump": 0.0038
+      },
+      {
+        "index": 29,
+        "empty": false,
+        "center": [
+          0.4309,
+          0.6076
+        ],
+        "brightness": 0.0239,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0354,
+        "brightnessJump": 0.0419
+      },
+      {
+        "index": 30,
+        "empty": false,
+        "center": [
+          0.5028,
+          0.5603
+        ],
+        "brightness": 0.0154,
+        "edgeCoverage": 0.0156,
+        "centerJump": 0.086,
+        "brightnessJump": 0.0085
+      },
+      {
+        "index": 31,
+        "empty": false,
+        "center": [
+          0.4651,
+          0.5351
+        ],
+        "brightness": 0.0085,
+        "edgeCoverage": 0.0024,
+        "centerJump": 0.0453,
+        "brightnessJump": 0.0069
+      },
+      {
+        "index": 32,
+        "empty": false,
+        "center": [
+          0.5148,
+          0.5534
+        ],
+        "brightness": 0.0037,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0529,
+        "brightnessJump": 0.0048
+      },
+      {
+        "index": 33,
+        "empty": false,
+        "center": [
+          0.5002,
+          0.4957
+        ],
+        "brightness": 0.0005,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0595,
+        "brightnessJump": 0.0032
+      },
+      {
+        "index": 34,
+        "empty": false,
+        "center": [
+          0.4515,
+          0.5074
+        ],
+        "brightness": 0.0006,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0501,
+        "brightnessJump": 0.0001
+      },
+      {
+        "index": 35,
+        "empty": false,
+        "center": [
+          0.4856,
+          0.5264
+        ],
+        "brightness": 0.0002,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0391,
+        "brightnessJump": 0.0004
+      }
+    ],
+    "review": {
+      "emptyFrames": [],
+      "edgeFrames": [],
+      "centerJumps": []
+    }
+  },
+  {
+    "source": "assets/vfx/modern6x6/lightning-bolt-main-6x6.png",
+    "sha256": "7f833a8baa7436c6ba25779c20a7ba5be67f5238281ebb1e7b71df56c60d7271",
+    "width": 1254,
+    "height": 1254,
+    "transparent": 0.75604,
+    "lowAlpha": 0.0,
+    "opaqueBlack": 0.0,
+    "fullyOpaque": false,
+    "frames": [
+      {
+        "index": 0,
+        "empty": false,
+        "center": [
+          0.5355,
+          0.5752
+        ],
+        "brightness": 0.0524,
+        "edgeCoverage": 0.0
+      },
+      {
+        "index": 1,
+        "empty": false,
+        "center": [
+          0.5406,
+          0.565
+        ],
+        "brightness": 0.0801,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0114,
+        "brightnessJump": 0.0277
+      },
+      {
+        "index": 2,
+        "empty": false,
+        "center": [
+          0.5138,
+          0.5665
+        ],
+        "brightness": 0.0977,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0268,
+        "brightnessJump": 0.0176
+      },
+      {
+        "index": 3,
+        "empty": false,
+        "center": [
+          0.4633,
+          0.55
+        ],
+        "brightness": 0.1197,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0531,
+        "brightnessJump": 0.022
+      },
+      {
+        "index": 4,
+        "empty": false,
+        "center": [
+          0.4332,
+          0.5085
+        ],
+        "brightness": 0.1392,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0513,
+        "brightnessJump": 0.0195
+      },
+      {
+        "index": 5,
+        "empty": false,
+        "center": [
+          0.4308,
+          0.5135
+        ],
+        "brightness": 0.1406,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0056,
+        "brightnessJump": 0.0014
+      },
+      {
+        "index": 6,
+        "empty": false,
+        "center": [
+          0.491,
+          0.5646
+        ],
+        "brightness": 0.0975,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.079,
+        "brightnessJump": 0.0431
+      },
+      {
+        "index": 7,
+        "empty": false,
+        "center": [
+          0.4218,
+          0.554
+        ],
+        "brightness": 0.1049,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.07,
+        "brightnessJump": 0.0074
+      },
+      {
+        "index": 8,
+        "empty": false,
+        "center": [
+          0.4475,
+          0.5405
+        ],
+        "brightness": 0.1225,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0291,
+        "brightnessJump": 0.0176
+      },
+      {
+        "index": 9,
+        "empty": false,
+        "center": [
+          0.4197,
+          0.5318
+        ],
+        "brightness": 0.1202,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0292,
+        "brightnessJump": 0.0023
+      },
+      {
+        "index": 10,
+        "empty": false,
+        "center": [
+          0.4173,
+          0.5237
+        ],
+        "brightness": 0.1344,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0084,
+        "brightnessJump": 0.0142
+      },
+      {
+        "index": 11,
+        "empty": false,
+        "center": [
+          0.4261,
+          0.5103
+        ],
+        "brightness": 0.1399,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.016,
+        "brightnessJump": 0.0055
+      },
+      {
+        "index": 12,
+        "empty": false,
+        "center": [
+          0.4955,
+          0.5001
+        ],
+        "brightness": 0.128,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0702,
+        "brightnessJump": 0.0119
+      },
+      {
+        "index": 13,
+        "empty": false,
+        "center": [
+          0.4651,
+          0.4958
+        ],
+        "brightness": 0.1253,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0307,
+        "brightnessJump": 0.0027
+      },
+      {
+        "index": 14,
+        "empty": false,
+        "center": [
+          0.4582,
+          0.4935
+        ],
+        "brightness": 0.137,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0073,
+        "brightnessJump": 0.0117
+      },
+      {
+        "index": 15,
+        "empty": false,
+        "center": [
+          0.4087,
+          0.502
+        ],
+        "brightness": 0.1376,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0503,
+        "brightnessJump": 0.0006
+      },
+      {
+        "index": 16,
+        "empty": false,
+        "center": [
+          0.3773,
+          0.4988
+        ],
+        "brightness": 0.1343,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0315,
+        "brightnessJump": 0.0033
+      },
+      {
+        "index": 17,
+        "empty": false,
+        "center": [
+          0.3611,
+          0.5048
+        ],
+        "brightness": 0.1333,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0174,
+        "brightnessJump": 0.001
+      },
+      {
+        "index": 18,
+        "empty": false,
+        "center": [
+          0.4681,
+          0.4574
+        ],
+        "brightness": 0.1267,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1171,
+        "brightnessJump": 0.0066
+      },
+      {
+        "index": 19,
+        "empty": false,
+        "center": [
+          0.4521,
+          0.4584
+        ],
+        "brightness": 0.1341,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.016,
+        "brightnessJump": 0.0074
+      },
+      {
+        "index": 20,
+        "empty": false,
+        "center": [
+          0.4218,
+          0.4594
+        ],
+        "brightness": 0.1497,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0304,
+        "brightnessJump": 0.0156
+      },
+      {
+        "index": 21,
+        "empty": false,
+        "center": [
+          0.3983,
+          0.463
+        ],
+        "brightness": 0.1685,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0237,
+        "brightnessJump": 0.0188
+      },
+      {
+        "index": 22,
+        "empty": false,
+        "center": [
+          0.3996,
+          0.4589
+        ],
+        "brightness": 0.1838,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0043,
+        "brightnessJump": 0.0153
+      },
+      {
+        "index": 23,
+        "empty": false,
+        "center": [
+          0.4082,
+          0.4689
+        ],
+        "brightness": 0.1724,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0131,
+        "brightnessJump": 0.0114
+      },
+      {
+        "index": 24,
+        "empty": false,
+        "center": [
+          0.4858,
+          0.41
+        ],
+        "brightness": 0.0662,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0974,
+        "brightnessJump": 0.1062
+      },
+      {
+        "index": 25,
+        "empty": false,
+        "center": [
+          0.4896,
+          0.4016
+        ],
+        "brightness": 0.0542,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0092,
+        "brightnessJump": 0.012
+      },
+      {
+        "index": 26,
+        "empty": false,
+        "center": [
+          0.4518,
+          0.4042
+        ],
+        "brightness": 0.0395,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0378,
+        "brightnessJump": 0.0147
+      },
+      {
+        "index": 27,
+        "empty": false,
+        "center": [
+          0.422,
+          0.4175
+        ],
+        "brightness": 0.0264,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0326,
+        "brightnessJump": 0.0131
+      },
+      {
+        "index": 28,
+        "empty": false,
+        "center": [
+          0.4,
+          0.4161
+        ],
+        "brightness": 0.0181,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0221,
+        "brightnessJump": 0.0083
+      },
+      {
+        "index": 29,
+        "empty": false,
+        "center": [
+          0.3848,
+          0.4572
+        ],
+        "brightness": 0.0078,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0439,
+        "brightnessJump": 0.0103
+      },
+      {
+        "index": 30,
+        "empty": false,
+        "center": [
+          0.5016,
+          0.3315
+        ],
+        "brightness": 0.0076,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1717,
+        "brightnessJump": 0.0002
+      },
+      {
+        "index": 31,
+        "empty": false,
+        "center": [
+          0.4997,
+          0.3222
+        ],
+        "brightness": 0.0045,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0095,
+        "brightnessJump": 0.0031
+      },
+      {
+        "index": 32,
+        "empty": false,
+        "center": [
+          0.4533,
+          0.3417
+        ],
+        "brightness": 0.004,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0503,
+        "brightnessJump": 0.0005
+      },
+      {
+        "index": 33,
+        "empty": false,
+        "center": [
+          0.4421,
+          0.3784
+        ],
+        "brightness": 0.0023,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0383,
+        "brightnessJump": 0.0017
+      },
+      {
+        "index": 34,
+        "empty": false,
+        "center": [
+          0.3695,
+          0.362
+        ],
+        "brightness": 0.001,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0744,
+        "brightnessJump": 0.0013
+      },
+      {
+        "index": 35,
+        "empty": false,
+        "center": [
+          0.3865,
+          0.3068
+        ],
+        "brightness": 0.0006,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0577,
+        "brightnessJump": 0.0004
+      }
+    ],
+    "review": {
+      "emptyFrames": [],
+      "edgeFrames": [],
+      "centerJumps": []
+    }
+  },
+  {
+    "source": "assets/vfx/modern6x6/lightning-impact-6x6.png",
+    "sha256": "68724a68d09ac9eecd5be54842ffe42ba5cb77dba56213a75e1e60fb7f30fc03",
+    "width": 1254,
+    "height": 1254,
+    "transparent": 0.75517,
+    "lowAlpha": 0.0,
+    "opaqueBlack": 0.0,
+    "fullyOpaque": false,
+    "frames": [
+      {
+        "index": 0,
+        "empty": false,
+        "center": [
+          0.6154,
+          0.6346
+        ],
+        "brightness": 0.0185,
+        "edgeCoverage": 0.0
+      },
+      {
+        "index": 1,
+        "empty": false,
+        "center": [
+          0.5566,
+          0.6308
+        ],
+        "brightness": 0.0316,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.059,
+        "brightnessJump": 0.0131
+      },
+      {
+        "index": 2,
+        "empty": false,
+        "center": [
+          0.497,
+          0.6233
+        ],
+        "brightness": 0.0671,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.06,
+        "brightnessJump": 0.0355
+      },
+      {
+        "index": 3,
+        "empty": false,
+        "center": [
+          0.4749,
+          0.6178
+        ],
+        "brightness": 0.0934,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0228,
+        "brightnessJump": 0.0263
+      },
+      {
+        "index": 4,
+        "empty": false,
+        "center": [
+          0.4186,
+          0.6164
+        ],
+        "brightness": 0.1297,
+        "edgeCoverage": 0.0024,
+        "centerJump": 0.0563,
+        "brightnessJump": 0.0363
+      },
+      {
+        "index": 5,
+        "empty": false,
+        "center": [
+          0.3709,
+          0.613
+        ],
+        "brightness": 0.1867,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0478,
+        "brightnessJump": 0.057
+      },
+      {
+        "index": 6,
+        "empty": false,
+        "center": [
+          0.6123,
+          0.6015
+        ],
+        "brightness": 0.0254,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2417,
+        "brightnessJump": 0.1613
+      },
+      {
+        "index": 7,
+        "empty": false,
+        "center": [
+          0.5593,
+          0.5991
+        ],
+        "brightness": 0.036,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0531,
+        "brightnessJump": 0.0106
+      },
+      {
+        "index": 8,
+        "empty": false,
+        "center": [
+          0.5056,
+          0.6005
+        ],
+        "brightness": 0.0545,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0537,
+        "brightnessJump": 0.0185
+      },
+      {
+        "index": 9,
+        "empty": false,
+        "center": [
+          0.4648,
+          0.5892
+        ],
+        "brightness": 0.0821,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0423,
+        "brightnessJump": 0.0276
+      },
+      {
+        "index": 10,
+        "empty": false,
+        "center": [
+          0.4134,
+          0.5912
+        ],
+        "brightness": 0.1102,
+        "edgeCoverage": 0.0132,
+        "centerJump": 0.0515,
+        "brightnessJump": 0.0281
+      },
+      {
+        "index": 11,
+        "empty": false,
+        "center": [
+          0.3504,
+          0.586
+        ],
+        "brightness": 0.1383,
+        "edgeCoverage": 0.0132,
+        "centerJump": 0.0632,
+        "brightnessJump": 0.0281
+      },
+      {
+        "index": 12,
+        "empty": false,
+        "center": [
+          0.6,
+          0.5865
+        ],
+        "brightness": 0.0731,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2496,
+        "brightnessJump": 0.0652
+      },
+      {
+        "index": 13,
+        "empty": false,
+        "center": [
+          0.5642,
+          0.5851
+        ],
+        "brightness": 0.0862,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0358,
+        "brightnessJump": 0.0131
+      },
+      {
+        "index": 14,
+        "empty": false,
+        "center": [
+          0.5082,
+          0.5801
+        ],
+        "brightness": 0.1076,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0562,
+        "brightnessJump": 0.0214
+      },
+      {
+        "index": 15,
+        "empty": false,
+        "center": [
+          0.4646,
+          0.5892
+        ],
+        "brightness": 0.1539,
+        "edgeCoverage": 0.0048,
+        "centerJump": 0.0446,
+        "brightnessJump": 0.0463
+      },
+      {
+        "index": 16,
+        "empty": false,
+        "center": [
+          0.4217,
+          0.5935
+        ],
+        "brightness": 0.2031,
+        "edgeCoverage": 0.0646,
+        "centerJump": 0.0431,
+        "brightnessJump": 0.0492
+      },
+      {
+        "index": 17,
+        "empty": false,
+        "center": [
+          0.3487,
+          0.5842
+        ],
+        "brightness": 0.2357,
+        "edgeCoverage": 0.0718,
+        "centerJump": 0.0735,
+        "brightnessJump": 0.0326
+      },
+      {
+        "index": 18,
+        "empty": false,
+        "center": [
+          0.597,
+          0.5176
+        ],
+        "brightness": 0.1346,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.257,
+        "brightnessJump": 0.1011
+      },
+      {
+        "index": 19,
+        "empty": false,
+        "center": [
+          0.5484,
+          0.5238
+        ],
+        "brightness": 0.1551,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.049,
+        "brightnessJump": 0.0205
+      },
+      {
+        "index": 20,
+        "empty": false,
+        "center": [
+          0.5006,
+          0.5241
+        ],
+        "brightness": 0.1665,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0478,
+        "brightnessJump": 0.0114
+      },
+      {
+        "index": 21,
+        "empty": false,
+        "center": [
+          0.4506,
+          0.5226
+        ],
+        "brightness": 0.1714,
+        "edgeCoverage": 0.0036,
+        "centerJump": 0.05,
+        "brightnessJump": 0.0049
+      },
+      {
+        "index": 22,
+        "empty": false,
+        "center": [
+          0.3995,
+          0.5248
+        ],
+        "brightness": 0.1672,
+        "edgeCoverage": 0.0084,
+        "centerJump": 0.0511,
+        "brightnessJump": 0.0042
+      },
+      {
+        "index": 23,
+        "empty": false,
+        "center": [
+          0.3501,
+          0.5301
+        ],
+        "brightness": 0.1398,
+        "edgeCoverage": 0.0179,
+        "centerJump": 0.0497,
+        "brightnessJump": 0.0274
+      },
+      {
+        "index": 24,
+        "empty": false,
+        "center": [
+          0.6065,
+          0.4505
+        ],
+        "brightness": 0.0634,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2684,
+        "brightnessJump": 0.0764
+      },
+      {
+        "index": 25,
+        "empty": false,
+        "center": [
+          0.5497,
+          0.4498
+        ],
+        "brightness": 0.0488,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0568,
+        "brightnessJump": 0.0146
+      },
+      {
+        "index": 26,
+        "empty": false,
+        "center": [
+          0.4981,
+          0.4461
+        ],
+        "brightness": 0.0415,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0517,
+        "brightnessJump": 0.0073
+      },
+      {
+        "index": 27,
+        "empty": false,
+        "center": [
+          0.4503,
+          0.4411
+        ],
+        "brightness": 0.0307,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0481,
+        "brightnessJump": 0.0108
+      },
+      {
+        "index": 28,
+        "empty": false,
+        "center": [
+          0.3933,
+          0.4377
+        ],
+        "brightness": 0.0187,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0571,
+        "brightnessJump": 0.012
+      },
+      {
+        "index": 29,
+        "empty": false,
+        "center": [
+          0.3361,
+          0.4457
+        ],
+        "brightness": 0.0074,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0577,
+        "brightnessJump": 0.0113
+      },
+      {
+        "index": 30,
+        "empty": false,
+        "center": [
+          0.5822,
+          0.3686
+        ],
+        "brightness": 0.0059,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2578,
+        "brightnessJump": 0.0015
+      },
+      {
+        "index": 31,
+        "empty": false,
+        "center": [
+          0.5293,
+          0.378
+        ],
+        "brightness": 0.0041,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0536,
+        "brightnessJump": 0.0018
+      },
+      {
+        "index": 32,
+        "empty": false,
+        "center": [
+          0.4802,
+          0.3759
+        ],
+        "brightness": 0.003,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0492,
+        "brightnessJump": 0.0011
+      },
+      {
+        "index": 33,
+        "empty": false,
+        "center": [
+          0.421,
+          0.3726
+        ],
+        "brightness": 0.0021,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0592,
+        "brightnessJump": 0.0009
+      },
+      {
+        "index": 34,
+        "empty": false,
+        "center": [
+          0.3688,
+          0.3694
+        ],
+        "brightness": 0.0012,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0523,
+        "brightnessJump": 0.0009
+      },
+      {
+        "index": 35,
+        "empty": false,
+        "center": [
+          0.3129,
+          0.3608
+        ],
+        "brightness": 0.0006,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0565,
+        "brightnessJump": 0.0006
+      }
+    ],
+    "review": {
+      "emptyFrames": [],
+      "edgeFrames": [],
+      "centerJumps": [
+        6,
+        12,
+        18,
+        24,
+        30
+      ]
+    }
+  },
+  {
+    "source": "assets/vfx/modern6x6/meteor-impact-6x6.png",
+    "sha256": "bdec158d759700ff1f883f67e76e9561553ec4fba159f30878450fb3bd7b0208",
+    "width": 1254,
+    "height": 1254,
+    "transparent": 0.68948,
+    "lowAlpha": 0.0,
+    "opaqueBlack": 0.0,
+    "fullyOpaque": false,
+    "frames": [
+      {
+        "index": 0,
+        "empty": false,
+        "center": [
+          0.5237,
+          0.5564
+        ],
+        "brightness": 0.0103,
+        "edgeCoverage": 0.0
+      },
+      {
+        "index": 1,
+        "empty": false,
+        "center": [
+          0.4954,
+          0.5923
+        ],
+        "brightness": 0.028,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0457,
+        "brightnessJump": 0.0177
+      },
+      {
+        "index": 2,
+        "empty": false,
+        "center": [
+          0.4385,
+          0.5759
+        ],
+        "brightness": 0.0509,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0593,
+        "brightnessJump": 0.0229
+      },
+      {
+        "index": 3,
+        "empty": false,
+        "center": [
+          0.5423,
+          0.5911
+        ],
+        "brightness": 0.1438,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1049,
+        "brightnessJump": 0.0929
+      },
+      {
+        "index": 4,
+        "empty": false,
+        "center": [
+          0.515,
+          0.5536
+        ],
+        "brightness": 0.1515,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0463,
+        "brightnessJump": 0.0077
+      },
+      {
+        "index": 5,
+        "empty": false,
+        "center": [
+          0.5072,
+          0.5719
+        ],
+        "brightness": 0.2016,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0199,
+        "brightnessJump": 0.0501
+      },
+      {
+        "index": 6,
+        "empty": false,
+        "center": [
+          0.5283,
+          0.5928
+        ],
+        "brightness": 0.1586,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0297,
+        "brightnessJump": 0.043
+      },
+      {
+        "index": 7,
+        "empty": false,
+        "center": [
+          0.4857,
+          0.5629
+        ],
+        "brightness": 0.1687,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0521,
+        "brightnessJump": 0.0101
+      },
+      {
+        "index": 8,
+        "empty": false,
+        "center": [
+          0.461,
+          0.5923
+        ],
+        "brightness": 0.2083,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0384,
+        "brightnessJump": 0.0396
+      },
+      {
+        "index": 9,
+        "empty": false,
+        "center": [
+          0.5287,
+          0.5894
+        ],
+        "brightness": 0.2339,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0677,
+        "brightnessJump": 0.0256
+      },
+      {
+        "index": 10,
+        "empty": false,
+        "center": [
+          0.5302,
+          0.5737
+        ],
+        "brightness": 0.2336,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0158,
+        "brightnessJump": 0.0003
+      },
+      {
+        "index": 11,
+        "empty": false,
+        "center": [
+          0.4821,
+          0.5962
+        ],
+        "brightness": 0.1934,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0531,
+        "brightnessJump": 0.0402
+      },
+      {
+        "index": 12,
+        "empty": false,
+        "center": [
+          0.5266,
+          0.5783
+        ],
+        "brightness": 0.1789,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.048,
+        "brightnessJump": 0.0145
+      },
+      {
+        "index": 13,
+        "empty": false,
+        "center": [
+          0.5141,
+          0.5765
+        ],
+        "brightness": 0.1777,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0126,
+        "brightnessJump": 0.0012
+      },
+      {
+        "index": 14,
+        "empty": false,
+        "center": [
+          0.4647,
+          0.583
+        ],
+        "brightness": 0.1491,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0499,
+        "brightnessJump": 0.0286
+      },
+      {
+        "index": 15,
+        "empty": false,
+        "center": [
+          0.4914,
+          0.5814
+        ],
+        "brightness": 0.1457,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0268,
+        "brightnessJump": 0.0034
+      },
+      {
+        "index": 16,
+        "empty": false,
+        "center": [
+          0.4911,
+          0.5898
+        ],
+        "brightness": 0.1394,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0083,
+        "brightnessJump": 0.0063
+      },
+      {
+        "index": 17,
+        "empty": false,
+        "center": [
+          0.4352,
+          0.5381
+        ],
+        "brightness": 0.0604,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0761,
+        "brightnessJump": 0.079
+      },
+      {
+        "index": 18,
+        "empty": false,
+        "center": [
+          0.5211,
+          0.512
+        ],
+        "brightness": 0.0992,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0897,
+        "brightnessJump": 0.0388
+      },
+      {
+        "index": 19,
+        "empty": false,
+        "center": [
+          0.4896,
+          0.507
+        ],
+        "brightness": 0.092,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0318,
+        "brightnessJump": 0.0072
+      },
+      {
+        "index": 20,
+        "empty": false,
+        "center": [
+          0.4595,
+          0.5482
+        ],
+        "brightness": 0.0842,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.051,
+        "brightnessJump": 0.0078
+      },
+      {
+        "index": 21,
+        "empty": false,
+        "center": [
+          0.4765,
+          0.5514
+        ],
+        "brightness": 0.0642,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0173,
+        "brightnessJump": 0.02
+      },
+      {
+        "index": 22,
+        "empty": false,
+        "center": [
+          0.4944,
+          0.5748
+        ],
+        "brightness": 0.0461,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0295,
+        "brightnessJump": 0.0181
+      },
+      {
+        "index": 23,
+        "empty": false,
+        "center": [
+          0.4633,
+          0.5436
+        ],
+        "brightness": 0.0142,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.044,
+        "brightnessJump": 0.0319
+      },
+      {
+        "index": 24,
+        "empty": false,
+        "center": [
+          0.5104,
+          0.4541
+        ],
+        "brightness": 0.0693,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1012,
+        "brightnessJump": 0.0551
+      },
+      {
+        "index": 25,
+        "empty": false,
+        "center": [
+          0.5046,
+          0.4678
+        ],
+        "brightness": 0.0628,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0149,
+        "brightnessJump": 0.0065
+      },
+      {
+        "index": 26,
+        "empty": false,
+        "center": [
+          0.4625,
+          0.5116
+        ],
+        "brightness": 0.0421,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0608,
+        "brightnessJump": 0.0207
+      },
+      {
+        "index": 27,
+        "empty": false,
+        "center": [
+          0.4983,
+          0.5386
+        ],
+        "brightness": 0.0201,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0448,
+        "brightnessJump": 0.022
+      },
+      {
+        "index": 28,
+        "empty": false,
+        "center": [
+          0.4811,
+          0.5416
+        ],
+        "brightness": 0.0072,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0174,
+        "brightnessJump": 0.0129
+      },
+      {
+        "index": 29,
+        "empty": false,
+        "center": [
+          0.4836,
+          0.5296
+        ],
+        "brightness": 0.0025,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0123,
+        "brightnessJump": 0.0047
+      },
+      {
+        "index": 30,
+        "empty": false,
+        "center": [
+          0.5074,
+          0.38
+        ],
+        "brightness": 0.0089,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1514,
+        "brightnessJump": 0.0064
+      },
+      {
+        "index": 31,
+        "empty": false,
+        "center": [
+          0.5069,
+          0.4016
+        ],
+        "brightness": 0.0071,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0216,
+        "brightnessJump": 0.0018
+      },
+      {
+        "index": 32,
+        "empty": false,
+        "center": [
+          0.5038,
+          0.4476
+        ],
+        "brightness": 0.0048,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0461,
+        "brightnessJump": 0.0023
+      },
+      {
+        "index": 33,
+        "empty": false,
+        "center": [
+          0.5518,
+          0.4967
+        ],
+        "brightness": 0.0028,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0687,
+        "brightnessJump": 0.002
+      },
+      {
+        "index": 34,
+        "empty": false,
+        "center": [
+          0.5208,
+          0.7815
+        ],
+        "brightness": 0.0004,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2865,
+        "brightnessJump": 0.0024
+      },
+      {
+        "index": 35,
+        "empty": false,
+        "center": [
+          0.6634,
+          0.7327
+        ],
+        "brightness": 0.0005,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1507,
+        "brightnessJump": 0.0001
+      }
+    ],
+    "review": {
+      "emptyFrames": [],
+      "edgeFrames": [],
+      "centerJumps": [
+        34
+      ]
+    }
+  },
+  {
+    "source": "assets/vfx/modern6x6/necrotic-cast-6x6.png",
+    "sha256": "6d7746df6051a454b96e80292bac1cfd1495fab23a5db13b82d07b4d3a1e993e",
+    "width": 1254,
+    "height": 1254,
+    "transparent": 0.78677,
+    "lowAlpha": 0.0,
+    "opaqueBlack": 0.0,
+    "fullyOpaque": false,
+    "frames": [
+      {
+        "index": 0,
+        "empty": false,
+        "center": [
+          0.5716,
+          0.5854
+        ],
+        "brightness": 0.0046,
+        "edgeCoverage": 0.0
+      },
+      {
+        "index": 1,
+        "empty": false,
+        "center": [
+          0.5573,
+          0.5898
+        ],
+        "brightness": 0.0112,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0149,
+        "brightnessJump": 0.0066
+      },
+      {
+        "index": 2,
+        "empty": false,
+        "center": [
+          0.5517,
+          0.5877
+        ],
+        "brightness": 0.0263,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0061,
+        "brightnessJump": 0.0151
+      },
+      {
+        "index": 3,
+        "empty": false,
+        "center": [
+          0.5345,
+          0.6023
+        ],
+        "brightness": 0.0327,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0226,
+        "brightnessJump": 0.0064
+      },
+      {
+        "index": 4,
+        "empty": false,
+        "center": [
+          0.5492,
+          0.5927
+        ],
+        "brightness": 0.0388,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0176,
+        "brightnessJump": 0.0061
+      },
+      {
+        "index": 5,
+        "empty": false,
+        "center": [
+          0.3977,
+          0.5777
+        ],
+        "brightness": 0.0459,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1523,
+        "brightnessJump": 0.0071
+      },
+      {
+        "index": 6,
+        "empty": false,
+        "center": [
+          0.4665,
+          0.6236
+        ],
+        "brightness": 0.0428,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0827,
+        "brightnessJump": 0.0031
+      },
+      {
+        "index": 7,
+        "empty": false,
+        "center": [
+          0.4758,
+          0.617
+        ],
+        "brightness": 0.0446,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0114,
+        "brightnessJump": 0.0018
+      },
+      {
+        "index": 8,
+        "empty": false,
+        "center": [
+          0.4789,
+          0.6154
+        ],
+        "brightness": 0.0474,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0035,
+        "brightnessJump": 0.0028
+      },
+      {
+        "index": 9,
+        "empty": false,
+        "center": [
+          0.4732,
+          0.6011
+        ],
+        "brightness": 0.0582,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0154,
+        "brightnessJump": 0.0108
+      },
+      {
+        "index": 10,
+        "empty": false,
+        "center": [
+          0.4364,
+          0.603
+        ],
+        "brightness": 0.0603,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0369,
+        "brightnessJump": 0.0021
+      },
+      {
+        "index": 11,
+        "empty": false,
+        "center": [
+          0.4256,
+          0.5888
+        ],
+        "brightness": 0.0777,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0178,
+        "brightnessJump": 0.0174
+      },
+      {
+        "index": 12,
+        "empty": false,
+        "center": [
+          0.56,
+          0.6646
+        ],
+        "brightness": 0.0603,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1543,
+        "brightnessJump": 0.0174
+      },
+      {
+        "index": 13,
+        "empty": false,
+        "center": [
+          0.5814,
+          0.6152
+        ],
+        "brightness": 0.0812,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0539,
+        "brightnessJump": 0.0209
+      },
+      {
+        "index": 14,
+        "empty": false,
+        "center": [
+          0.547,
+          0.6162
+        ],
+        "brightness": 0.0745,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0345,
+        "brightnessJump": 0.0067
+      },
+      {
+        "index": 15,
+        "empty": false,
+        "center": [
+          0.5028,
+          0.5903
+        ],
+        "brightness": 0.0791,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0512,
+        "brightnessJump": 0.0046
+      },
+      {
+        "index": 16,
+        "empty": false,
+        "center": [
+          0.4429,
+          0.5823
+        ],
+        "brightness": 0.0814,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0604,
+        "brightnessJump": 0.0023
+      },
+      {
+        "index": 17,
+        "empty": false,
+        "center": [
+          0.4433,
+          0.5832
+        ],
+        "brightness": 0.0863,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.001,
+        "brightnessJump": 0.0049
+      },
+      {
+        "index": 18,
+        "empty": false,
+        "center": [
+          0.5389,
+          0.6592
+        ],
+        "brightness": 0.0611,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1222,
+        "brightnessJump": 0.0252
+      },
+      {
+        "index": 19,
+        "empty": false,
+        "center": [
+          0.5847,
+          0.646
+        ],
+        "brightness": 0.0604,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0476,
+        "brightnessJump": 0.0007
+      },
+      {
+        "index": 20,
+        "empty": false,
+        "center": [
+          0.554,
+          0.66
+        ],
+        "brightness": 0.0515,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0337,
+        "brightnessJump": 0.0089
+      },
+      {
+        "index": 21,
+        "empty": false,
+        "center": [
+          0.5142,
+          0.6503
+        ],
+        "brightness": 0.0527,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0409,
+        "brightnessJump": 0.0012
+      },
+      {
+        "index": 22,
+        "empty": false,
+        "center": [
+          0.4612,
+          0.653
+        ],
+        "brightness": 0.052,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0531,
+        "brightnessJump": 0.0007
+      },
+      {
+        "index": 23,
+        "empty": false,
+        "center": [
+          0.446,
+          0.6566
+        ],
+        "brightness": 0.052,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0156,
+        "brightnessJump": 0.0
+      },
+      {
+        "index": 24,
+        "empty": false,
+        "center": [
+          0.5371,
+          0.6317
+        ],
+        "brightness": 0.0311,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0945,
+        "brightnessJump": 0.0209
+      },
+      {
+        "index": 25,
+        "empty": false,
+        "center": [
+          0.5593,
+          0.6554
+        ],
+        "brightness": 0.0286,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0324,
+        "brightnessJump": 0.0025
+      },
+      {
+        "index": 26,
+        "empty": false,
+        "center": [
+          0.5594,
+          0.6502
+        ],
+        "brightness": 0.0259,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0051,
+        "brightnessJump": 0.0027
+      },
+      {
+        "index": 27,
+        "empty": false,
+        "center": [
+          0.5103,
+          0.6647
+        ],
+        "brightness": 0.027,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0512,
+        "brightnessJump": 0.0011
+      },
+      {
+        "index": 28,
+        "empty": false,
+        "center": [
+          0.4534,
+          0.6697
+        ],
+        "brightness": 0.0249,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0571,
+        "brightnessJump": 0.0021
+      },
+      {
+        "index": 29,
+        "empty": false,
+        "center": [
+          0.4389,
+          0.6842
+        ],
+        "brightness": 0.0172,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0205,
+        "brightnessJump": 0.0077
+      },
+      {
+        "index": 30,
+        "empty": false,
+        "center": [
+          0.5413,
+          0.4505
+        ],
+        "brightness": 0.0018,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2552,
+        "brightnessJump": 0.0154
+      },
+      {
+        "index": 31,
+        "empty": false,
+        "center": [
+          0.5755,
+          0.4556
+        ],
+        "brightness": 0.0022,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0346,
+        "brightnessJump": 0.0004
+      },
+      {
+        "index": 32,
+        "empty": false,
+        "center": [
+          0.5559,
+          0.4798
+        ],
+        "brightness": 0.0006,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0312,
+        "brightnessJump": 0.0016
+      },
+      {
+        "index": 33,
+        "empty": false,
+        "center": [
+          0.5249,
+          0.4687
+        ],
+        "brightness": 0.0005,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.033,
+        "brightnessJump": 0.0001
+      },
+      {
+        "index": 34,
+        "empty": false,
+        "center": [
+          0.4495,
+          0.4842
+        ],
+        "brightness": 0.0006,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.077,
+        "brightnessJump": 0.0001
+      },
+      {
+        "index": 35,
+        "empty": false,
+        "center": [
+          0.4071,
+          0.4748
+        ],
+        "brightness": 0.0004,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0434,
+        "brightnessJump": 0.0002
+      }
+    ],
+    "review": {
+      "emptyFrames": [],
+      "edgeFrames": [],
+      "centerJumps": [
+        30
+      ]
+    }
+  },
+  {
+    "source": "assets/vfx/modern6x6/poison-cast-6x6.png",
+    "sha256": "3087e71281a16119b90d1daab05064cfb223b9b083027c68bba7aaad9b754bb8",
+    "width": 1254,
+    "height": 1254,
+    "transparent": 0.75007,
+    "lowAlpha": 0.0,
+    "opaqueBlack": 0.0,
+    "fullyOpaque": false,
+    "frames": [
+      {
+        "index": 0,
+        "empty": false,
+        "center": [
+          0.6047,
+          0.6305
+        ],
+        "brightness": 0.0174,
+        "edgeCoverage": 0.0
+      },
+      {
+        "index": 1,
+        "empty": false,
+        "center": [
+          0.5885,
+          0.6215
+        ],
+        "brightness": 0.0293,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0185,
+        "brightnessJump": 0.0119
+      },
+      {
+        "index": 2,
+        "empty": false,
+        "center": [
+          0.5725,
+          0.6337
+        ],
+        "brightness": 0.045,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0201,
+        "brightnessJump": 0.0157
+      },
+      {
+        "index": 3,
+        "empty": false,
+        "center": [
+          0.4923,
+          0.6472
+        ],
+        "brightness": 0.0502,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0814,
+        "brightnessJump": 0.0052
+      },
+      {
+        "index": 4,
+        "empty": false,
+        "center": [
+          0.4097,
+          0.6145
+        ],
+        "brightness": 0.0681,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0888,
+        "brightnessJump": 0.0179
+      },
+      {
+        "index": 5,
+        "empty": false,
+        "center": [
+          0.3649,
+          0.5975
+        ],
+        "brightness": 0.1001,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0479,
+        "brightnessJump": 0.032
+      },
+      {
+        "index": 6,
+        "empty": false,
+        "center": [
+          0.4576,
+          0.6336
+        ],
+        "brightness": 0.0672,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0995,
+        "brightnessJump": 0.0329
+      },
+      {
+        "index": 7,
+        "empty": false,
+        "center": [
+          0.3954,
+          0.6159
+        ],
+        "brightness": 0.0826,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0647,
+        "brightnessJump": 0.0154
+      },
+      {
+        "index": 8,
+        "empty": false,
+        "center": [
+          0.3492,
+          0.6229
+        ],
+        "brightness": 0.0855,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0467,
+        "brightnessJump": 0.0029
+      },
+      {
+        "index": 9,
+        "empty": false,
+        "center": [
+          0.3387,
+          0.621
+        ],
+        "brightness": 0.0947,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0106,
+        "brightnessJump": 0.0092
+      },
+      {
+        "index": 10,
+        "empty": false,
+        "center": [
+          0.3201,
+          0.6195
+        ],
+        "brightness": 0.0982,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0187,
+        "brightnessJump": 0.0035
+      },
+      {
+        "index": 11,
+        "empty": false,
+        "center": [
+          0.3086,
+          0.6261
+        ],
+        "brightness": 0.1027,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0133,
+        "brightnessJump": 0.0045
+      },
+      {
+        "index": 12,
+        "empty": false,
+        "center": [
+          0.5472,
+          0.5071
+        ],
+        "brightness": 0.0692,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.2666,
+        "brightnessJump": 0.0335
+      },
+      {
+        "index": 13,
+        "empty": false,
+        "center": [
+          0.5008,
+          0.5041
+        ],
+        "brightness": 0.0806,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0465,
+        "brightnessJump": 0.0114
+      },
+      {
+        "index": 14,
+        "empty": false,
+        "center": [
+          0.469,
+          0.5127
+        ],
+        "brightness": 0.0955,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0329,
+        "brightnessJump": 0.0149
+      },
+      {
+        "index": 15,
+        "empty": false,
+        "center": [
+          0.4459,
+          0.5015
+        ],
+        "brightness": 0.0934,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0257,
+        "brightnessJump": 0.0021
+      },
+      {
+        "index": 16,
+        "empty": false,
+        "center": [
+          0.4052,
+          0.5008
+        ],
+        "brightness": 0.1111,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0407,
+        "brightnessJump": 0.0177
+      },
+      {
+        "index": 17,
+        "empty": false,
+        "center": [
+          0.3741,
+          0.4969
+        ],
+        "brightness": 0.1312,
+        "edgeCoverage": 0.0024,
+        "centerJump": 0.0313,
+        "brightnessJump": 0.0201
+      },
+      {
+        "index": 18,
+        "empty": false,
+        "center": [
+          0.5352,
+          0.4472
+        ],
+        "brightness": 0.1143,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1686,
+        "brightnessJump": 0.0169
+      },
+      {
+        "index": 19,
+        "empty": false,
+        "center": [
+          0.5049,
+          0.4421
+        ],
+        "brightness": 0.114,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0307,
+        "brightnessJump": 0.0003
+      },
+      {
+        "index": 20,
+        "empty": false,
+        "center": [
+          0.4668,
+          0.4357
+        ],
+        "brightness": 0.1237,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0387,
+        "brightnessJump": 0.0097
+      },
+      {
+        "index": 21,
+        "empty": false,
+        "center": [
+          0.444,
+          0.4353
+        ],
+        "brightness": 0.1298,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0227,
+        "brightnessJump": 0.0061
+      },
+      {
+        "index": 22,
+        "empty": false,
+        "center": [
+          0.4122,
+          0.4363
+        ],
+        "brightness": 0.1197,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0318,
+        "brightnessJump": 0.0101
+      },
+      {
+        "index": 23,
+        "empty": false,
+        "center": [
+          0.3868,
+          0.4212
+        ],
+        "brightness": 0.1353,
+        "edgeCoverage": 0.0012,
+        "centerJump": 0.0296,
+        "brightnessJump": 0.0156
+      },
+      {
+        "index": 24,
+        "empty": false,
+        "center": [
+          0.5277,
+          0.3597
+        ],
+        "brightness": 0.0701,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1537,
+        "brightnessJump": 0.0652
+      },
+      {
+        "index": 25,
+        "empty": false,
+        "center": [
+          0.4941,
+          0.3628
+        ],
+        "brightness": 0.0538,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0337,
+        "brightnessJump": 0.0163
+      },
+      {
+        "index": 26,
+        "empty": false,
+        "center": [
+          0.4489,
+          0.3558
+        ],
+        "brightness": 0.0461,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0458,
+        "brightnessJump": 0.0077
+      },
+      {
+        "index": 27,
+        "empty": false,
+        "center": [
+          0.4245,
+          0.3474
+        ],
+        "brightness": 0.0419,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0258,
+        "brightnessJump": 0.0042
+      },
+      {
+        "index": 28,
+        "empty": false,
+        "center": [
+          0.394,
+          0.3548
+        ],
+        "brightness": 0.0287,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0314,
+        "brightnessJump": 0.0132
+      },
+      {
+        "index": 29,
+        "empty": false,
+        "center": [
+          0.3792,
+          0.3545
+        ],
+        "brightness": 0.022,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0148,
+        "brightnessJump": 0.0067
+      },
+      {
+        "index": 30,
+        "empty": false,
+        "center": [
+          0.5322,
+          0.3009
+        ],
+        "brightness": 0.0102,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.1621,
+        "brightnessJump": 0.0118
+      },
+      {
+        "index": 31,
+        "empty": false,
+        "center": [
+          0.4986,
+          0.3159
+        ],
+        "brightness": 0.0064,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0368,
+        "brightnessJump": 0.0038
+      },
+      {
+        "index": 32,
+        "empty": false,
+        "center": [
+          0.4794,
+          0.3112
+        ],
+        "brightness": 0.0041,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0198,
+        "brightnessJump": 0.0023
+      },
+      {
+        "index": 33,
+        "empty": false,
+        "center": [
+          0.443,
+          0.3344
+        ],
+        "brightness": 0.0025,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0431,
+        "brightnessJump": 0.0016
+      },
+      {
+        "index": 34,
+        "empty": false,
+        "center": [
+          0.4239,
+          0.3608
+        ],
+        "brightness": 0.002,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0326,
+        "brightnessJump": 0.0005
+      },
+      {
+        "index": 35,
+        "empty": false,
+        "center": [
+          0.385,
+          0.3885
+        ],
+        "brightness": 0.001,
+        "edgeCoverage": 0.0,
+        "centerJump": 0.0478,
+        "brightnessJump": 0.001
+      }
+    ],
+    "review": {
+      "emptyFrames": [],
+      "edgeFrames": [],
+      "centerJumps": [
+        12
+      ]
+    }
+  }
+]

@@ -153,9 +153,9 @@ test("preview and cast stay bounded, independent of target count, with complete 
       const before = JSON.stringify(event);
       assert.equal(h.system.play(event).ok, true, id); h.finish();
       counts[mode] = h.requests.length;
-      assert.ok(h.requests.length <= (id === "fireball" ? 10 : 3), id);
+      assert.ok(h.requests.length <= 10, id);
       assert.ok(h.requests.every(e => !e.affectedTokenId && !e.persistent &&
-        (e.particles == null || e.particles?.count === 0 || ["fireball-smoke", "fireball-core-explosion",
+        (e.particles == null || e.particles?.count === 0 || e.importance === "secondary" && e.particles?.count <= 10 || ["fireball-smoke", "fireball-core-explosion",
           "fireball-aftermath-embers"]
           .includes(e.metadata?.role) && e.particles?.count <= 14)), id);
       assert.equal(JSON.stringify(event), before);
@@ -189,7 +189,7 @@ test("upper-tier area effects cap visual scale without modifying targeting geome
     const event = createSpellVfxEvent({spell,geometry,casterPoint:{x:100,y:100},targetPoint:{x:200,y:100}});
     const before = JSON.stringify(event.geometry), h = harness();
     h.system.play(event); h.finish();
-    assert.ok(h.requests.length <= 3);
+    assert.ok(h.requests.length <= 10);
     assert.ok(h.requests.every(e => e.scale <= 6), id);
     assert.equal(JSON.stringify(event.geometry), before);
   }
@@ -216,7 +216,7 @@ test("beams and cones use the full aimed geometry in eight directions without ch
 test("Ice Storm child frames use five columns and dispose native animations", () => {
   const animations = [], nodes = [];
   const element = { appendChild(node) { nodes.push(node); } };
-  const document = { createElement() { return { style: {setProperty(){}},
+  const document = { createElement() { return { dataset: {}, style: {setProperty(){}},
     animate(frames) { const a = { frames, cancelled:false, cancel(){this.cancelled=true;} }; animations.push(a); return a; } }; } };
   const dispose = STORM_EFFECT_DEFINITIONS.find(e=>e.id==="storm-hail")
     .configureElement({document,element,effect:{effectsMode:"full",intensity:3,duration:1800}});

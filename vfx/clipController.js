@@ -51,6 +51,8 @@ export function createVfxClipController({
   cancelFrame = globalThis.cancelAnimationFrame,
   now = () => globalThis.performance?.now?.() ?? Date.now(),
   manual = false,
+  duration = null,
+  playbackRate = 1,
   onEvent = () => {},
   onComplete = () => {}
 } = {}) {
@@ -102,20 +104,24 @@ export function createVfxClipController({
     firedEvents = new Set();
     startedAt = now();
 
-    function install(selected, preserveProgress = false) {
-      const timestamp = now();
-      const previousDuration = activeClip
-        ? (activeClip.endFrame - activeClip.startFrame + 1) / activeClip.framesPerSecond * 1000 : 0;
-      const progress = preserveProgress && previousDuration > 0
-        ? Math.max(0, timestamp - startedAt) / previousDuration : 0;
-      const clip = selected.assetVersions ? normalizeVfxClips({ [nextName]: {
+    function install(selected) {
+      let clip = selected.assetVersions ? normalizeVfxClips({ [nextName]: {
         ...selected, assetVersions: undefined
       } })[nextName] : selected;
-      if (preserveProgress && !clip.loop && progress >= 1) return;
+      clip = { ...clip, framesPerSecond: clamp(duration > 0
+        ? (clip.endFrame - clip.startFrame + 1) * 1000 / duration
+        : clip.framesPerSecond * playbackRate, 1, 60) };
       animator?.destroy?.();
       activeClip = clip;
-      if (preserveProgress) startedAt = timestamp - progress *
-        (clip.endFrame - clip.startFrame + 1) / clip.framesPerSecond * 1000;
+      if (element.parentElement?.classList.contains("hg-map-vfx-effect")) {
+        element.parentElement.style.setProperty("--hg-tier-art-angle", `${clip.artAngle}deg`);
+      }
+      if (clip.blendMode) {
+        element.style.mixBlendMode = clip.blendMode;
+        if (element.parentElement?.classList.contains("hg-map-vfx-effect")) {
+          element.parentElement.style.mixBlendMode = clip.blendMode;
+        }
+      }
       element.dataset.vfxClip = nextName;
       element.dataset.vfxAssetVersion = selected.assetVersion || "legacy";
       element.dataset.spriteColumns = String(clip.columns);
@@ -139,11 +145,10 @@ export function createVfxClipController({
         }
       });
       animator.start(startedAt);
-      if (preserveProgress) animator.seek(timestamp);
     }
 
-    // A cold modern request displays the legacy sheet while it loads. Switching
-    // sheets preserves timeline progress, frame events, scale and the same node.
+    // Lock the selected art for the whole clip. A cold modern sheet is warmed
+    // for the next playback; changing an explosion mid-flight causes a visible pop.
     const legacy = desired.assetVersion === "modern6x6" && assetCache
       ? resolveVfxClipDefinition(definition, { mode: "legacy", assetAvailable: available }) : null;
     const waiting = legacy?.assetVersion === "legacy" &&
@@ -151,15 +156,7 @@ export function createVfxClipController({
     install(waiting ? legacy : desired);
     if (assetCache) {
       if (waiting) preload(legacy.src, `VFX clip ${nextName} legacy`);
-      preload(desired.src, `VFX clip ${nextName}`).then((loaded) => {
-        if (destroyed || playback !== revision) return;
-        if (loaded && waiting) install(desired, true);
-        else if (!loaded && !waiting && desired.assetVersion === "modern6x6") {
-          const fallback = resolveVfxClipDefinition(definition, { mode: "legacy",
-            assetAvailable: src => src !== desired.src && available(src) });
-          if (fallback) { preload(fallback.src, `VFX clip ${nextName} legacy`); install(fallback, true); }
-        }
-      });
+      preload(desired.src, `VFX clip ${nextName}`);
     }
     return true;
   }

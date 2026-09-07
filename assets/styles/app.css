@@ -2781,7 +2781,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 
   .hg-map-vfx-depth-layer[data-effects-mode="reduced"]
     :is(.hg-map-vfx-effect, .hg-vfx-particle) {
-    animation-duration: 180ms !important;
+    animation-duration: var(--hg-vfx-duration, 900ms) !important;
     animation-delay: 0ms !important;
   }
 
@@ -2793,7 +2793,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
     .hg-vfx-pulse::before,
   .hg-map-vfx-layer[data-effects-mode="reduced"]
     .hg-vfx-pulse::after {
-    animation-duration: 180ms !important;
+    animation-duration: var(--hg-vfx-duration, 900ms) !important;
     animation-delay: 0ms !important;
   }
 
@@ -2805,9 +2805,16 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
     .hg-vfx-fire-explosion::before,
   .hg-map-vfx-layer[data-effects-mode="reduced"]
     .hg-vfx-fire-explosion::after {
-    animation-duration: 180ms !important;
+    animation-duration: var(--hg-vfx-duration, 900ms) !important;
     animation-delay: 0ms !important;
   }
+}
+
+.hg-map-vfx-effect.is-vfx-hit-stopped,
+.hg-map-vfx-effect.is-vfx-hit-stopped *,
+.hg-map-vfx-effect.is-vfx-hit-stopped::before,
+.hg-map-vfx-effect.is-vfx-hit-stopped::after {
+  animation-play-state: paused !important;
 }
 
 .hg-map-ruler-layer {

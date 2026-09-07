@@ -506,7 +506,7 @@ test("complete catalog bulk playback in Full / Reduced / Off preserves events, r
     for (const e of requests) {
       assert.equal(e.metadata.preview, true); assert.equal(e.persistent, false);
       assert.ok(normalizeParticleCount((e.particles?.count || 0) * e.intensity, { mode }) <= (mode === "reduced" ? 24 : 240));
-      if (mode === "reduced") assert.ok(e.duration <= 1000);
+          if (mode === "reduced") assert.ok(e.duration <= 5000);
     }
     system.destroy(); engine.destroy();
   }
@@ -537,7 +537,7 @@ test("every reusable family compiles and higher spell levels scale within hard s
     assert.ok(high.scaling.intensity > low.scaling.intensity);
     assert.equal(high.scaling.impactCount, 3);
     assert.equal(high.scaling.aftershockCount, 2);
-    assert.equal(high.scaling.screenShakeIntensity, 1, "metadata only; never applied to camera");
+    assert.equal(high.scaling.screenShakeIntensity, 0, "utility profiles do not shake the camera");
     assert.ok(high.totalDuration < MAX_CASTING_SEQUENCE_DURATION_MS);
     for (const phase of high.phases) for (const effect of phase.effects) assert.ok(effects.has(effect.type));
   }

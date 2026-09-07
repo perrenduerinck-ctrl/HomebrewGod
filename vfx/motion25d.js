@@ -224,10 +224,13 @@ export function calculateShadow25d(z, raw = {}) {
   return Object.freeze({
     opacity: clamp(
       finiteNumber(options.opacity, 0.55) * (1 - Math.abs(z) / fadeDistance),
-      0,
+      clamp(finiteNumber(options.minimumOpacity, 0), 0, finiteNumber(options.opacity, .55)),
       1
     ),
-    scale: clamp(1 - Math.abs(z) / shrinkDistance, 0.18, 1),
+    scale: clamp(1 - Math.abs(z) / shrinkDistance,
+      clamp(finiteNumber(options.minimumScale, .18), .01, 1), 1),
+    blur: clamp(finiteNumber(options.blur, 3) +
+      finiteNumber(options.heightBlur, 4) * elevationRatio, 0, 24),
     offsetX: finiteNumber(options.offsetX, 0) * elevationRatio,
     offsetY: finiteNumber(options.offsetY, 0) * elevationRatio
   });

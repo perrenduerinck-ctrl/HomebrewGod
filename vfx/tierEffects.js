@@ -1,5 +1,5 @@
 // Owner-supplied sheets; keep pixels intact and select windows in the player.
-// Tiers refer to the spell's base level, not an upcast slot.
+// LEGACY ONLY: remade assets select their own 6x6 grid regardless of spell level.
 export function getSpellSpriteTier(level) {
   if (level === null || level === "" || typeof level === "boolean") return null;
   const n = Number(level);
@@ -88,18 +88,23 @@ function sheet(theme, role, level) {
     sprite: Object.freeze({ ...getTierSpriteAsset(theme, level),
       ...(level >= 7 ? { atlas: { width: 1254, height: 1254, ...EPIC_ATLAS_BOUNDS[theme] } } : {}),
       frameWidth: 160, frameHeight: theme === "acid-ground" ? 128 : 160, startFrame, endFrame,
+      artAngle: -135, anchor: role === "flight" ? "projectile-center" : "impact-center",
       framesPerSecond: 20, fitDuration: true, loop: false, removeOnComplete: true }),
-    configureElement({ document, element }) {
+    configureElement({ document, element, effect }) {
       element.dataset.spriteTheme = theme;
       element.dataset.spriteRole = role;
-      element.dataset.spriteTier = level >= 7 ? "epic" : level >= 3 ? "tier" : "lesser";
+      const sprite = element.querySelector(".hg-vfx-sprite");
+      element.dataset.spriteTier = sprite?.dataset.vfxAssetVersion === "modern6x6"
+        ? "modern6x6" : level >= 7 ? "epic" : level >= 3 ? "tier" : "lesser";
       const grid = getSpellSpriteTier(level);
-      element.dataset.spriteColumns = String(grid.columns);
-      element.dataset.spriteRows = String(grid.rows);
-      element.dataset.spriteFrames = String(grid.frameCount);
+      element.dataset.spriteColumns = sprite?.dataset.spriteColumns || String(grid.columns);
+      element.dataset.spriteRows = sprite?.dataset.spriteRows || String(grid.rows);
+      element.dataset.spriteFrames = sprite?.dataset.spriteFrames || String(grid.frameCount);
       // The projectile head is southwest, so -135 degrees points it right.
       // Only the renderer rotates that right-facing path into map direction.
-      element.style.setProperty("--hg-tier-art-angle", "-135deg");
+      if (!element.style.getPropertyValue("--hg-tier-art-angle")) {
+        element.style.setProperty("--hg-tier-art-angle", `${effect?.sprite?.artAngle ?? effect?.definition.sprite.artAngle ?? -135}deg`);
+      }
       if (role === "beam" || role === "cone") {
         const stage = document.createElement("div");
         stage.className = "hg-tier-stage";

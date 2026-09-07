@@ -1,5 +1,6 @@
 import { EPIC_ATLAS_BOUNDS } from "./tierEffects.js?v=status-sprites-20260831";
 import { getVfxAssetVersions, resolveVfxClipDefinition } from "./assetVersions.js";
+import { resolveVfxAlphaSource } from "./alphaAssets.js";
 
 export const VFX_CLIP_NAMES = Object.freeze([
   "charge",
@@ -22,9 +23,9 @@ export const VFX_ASSET_CLASSES = Object.freeze({
 export const VFX_ASSET_STANDARDS = Object.freeze({
   major: Object.freeze({ columns: 6, rows: 6, frameCount: 36,
     framesPerSecond: Object.freeze([24, 30]) }),
-  projectile: Object.freeze({ minimumFrames: 8, maximumFrames: 20, loop: true }),
-  status: Object.freeze({ minimumFrames: 12, maximumFrames: 24, loop: true }),
-  persistent: Object.freeze({ minimumFrames: 12, maximumFrames: 24, loop: true })
+  projectile: Object.freeze({ columns: 6, rows: 6, frameCount: 36, loop: true }),
+  status: Object.freeze({ columns: 6, rows: 6, frameCount: 36, loop: true }),
+  persistent: Object.freeze({ columns: 6, rows: 6, frameCount: 36, loop: true })
 });
 
 const deepFreeze = (value) => {
@@ -40,6 +41,7 @@ const FIREBALL_FIRE_IMPACT =
   "./assets/vfx/tiers7-9/fireball-impact-alpha-6x6.png";
 
 const FIREBALL_LEGACY_IMPACT = {
+  blendMode: "screen", anchor: "impact-center", artAngle: 0,
   src: "./assets/vfx/fire/fire-impact-spritesheet.png",
   frameCount: 16, columns: 4, rows: 4,
   frameWidth: 160, frameHeight: 160, framesPerSecond: 18,
@@ -47,6 +49,7 @@ const FIREBALL_LEGACY_IMPACT = {
 };
 
 function fireballVersion(modern6x6, legacy = FIREBALL_LEGACY_IMPACT) {
+  modern6x6 = { blendMode: "normal", anchor: "impact-center", artAngle: 0, ...modern6x6 };
   return { preferred: "modern6x6", legacy: {
     ...legacy,
     // Preserve composition cues at the same progress through either sheet.
@@ -56,7 +59,16 @@ function fireballVersion(modern6x6, legacy = FIREBALL_LEGACY_IMPACT) {
   }, modern6x6 };
 }
 
-export const VFX_ASSET_MANIFEST = deepFreeze({
+function versionUnmigratedClips(manifest) {
+  for (const spell of Object.values(manifest)) for (const [name, clip] of Object.entries(spell.clips)) {
+    if (!getVfxAssetVersions(clip)) spell.clips[name] = {
+      preferred: "modern6x6", legacy: { blendMode: "screen", ...clip }, modern6x6: null
+    };
+  }
+  return manifest;
+}
+
+export const VFX_ASSET_MANIFEST = deepFreeze(versionUnmigratedClips({
   fireball: {
     classification: VFX_ASSET_CLASSES.PREMIUM_6X6,
     notes: "Existing alpha 6x6 Fireball preferred; original 4x4 remains the fallback. Motion remains code-driven.",
@@ -157,7 +169,7 @@ export const VFX_ASSET_MANIFEST = deepFreeze({
       }, { ...FIREBALL_LEGACY_IMPACT, startFrame: 10, endFrame: 15, framesPerSecond: 8 })
     }
   }
-});
+}));
 
 const finiteNumber = (value) => {
   const parsed = Number(value);
@@ -306,7 +318,15 @@ export function createVfxAssetCache({
     }
     const entry = { image, promise: null, status: "loading" };
     const promise = new Promise((resolve) => {
-      image.onload = () => { entry.status = "loaded"; resolve(true); };
+      image.onload = async () => {
+        try {
+          if (typeof image.decode === "function") {
+            entry.status = "decoding";
+            await image.decode();
+          }
+          entry.status = "loaded"; resolve(true);
+        } catch { image.onerror(); }
+      };
       image.onerror = () => {
         entry.status = "failed";
         onError(`${label}: unable to load sprite source ${key}`);
@@ -316,7 +336,7 @@ export function createVfxAssetCache({
     entry.promise = promise;
     cache.set(key, entry);
     while (cache.size > maximum) cache.delete(cache.keys().next().value);
-    try { image.src = key; } catch { image.onerror(); }
+    try { image.src = resolveVfxAlphaSource(key); } catch { image.onerror(); }
     return promise;
   }
 

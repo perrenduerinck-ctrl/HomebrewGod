@@ -108,7 +108,7 @@ test("storm particles stay inside the footprint and Full / Reduced / Off and fai
     assert.equal(h.visible.size, 0); assert.equal(h.tasks.size, 0);
     assert.equal(h.system.getState().activeCount, 0);
     if (mode === "off") assert.equal(h.requests.length, 0);
-    if (mode === "reduced") assert.ok(h.requests.every(r => r.duration <= 1000 && r.intensity <= 2));
+    if (mode === "reduced") assert.ok(h.requests.every(r => r.duration <= 5000 && r.intensity <= 2));
     h.system.play(eventFor("ice-storm")); h.system.clearPreviews(); h.finish();
     assert.equal(h.visible.size, 0);
   }

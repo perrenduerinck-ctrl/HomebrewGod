@@ -1,4 +1,7 @@
 import { createParticleDescriptors } from "./particles.js";
+import { getVersionedSprite } from "./spriteReplacements.js";
+export const MAX_DYNAMIC_VFX_NODES = 320;
+export const MAX_PARTICLES_TOTAL = 192;
 import { createSpriteAnimator } from "./spriteAnimator.js?v=2d5-vfx-polish-20260902";
 import { createVfxClipController } from "./clipController.js?v=fireball-blend-20260902";
 import { createVfxAssetCache } from "./vfxAssetManifest.js?v=fireball-blend-20260902";
@@ -51,6 +54,7 @@ function setCssNumber(element, name, value, unit = "") {
 
 export function resolveAttachmentGroundPoint({
   tokenRect,
+  bodyRect = null,
   overlayRect,
   visualZ = 0,
   mapScale = 1,
@@ -59,11 +63,17 @@ export function resolveAttachmentGroundPoint({
   cycles = 1,
   progress = 0
 } = {}) {
-  const scaledVisualZ = finiteNumber(visualZ) * finiteNumber(mapScale, 1);
+  const worldZ = position === "under" ? 0 : finiteNumber(visualZ);
+  // Production keeps the parent on the ground and raises only its children.
+  // Measuring the body also handles hosts that already apply their own zoom.
+  const screenZ = position === "under" ? 0 : bodyRect
+    ? finiteNumber(tokenRect?.top) + finiteNumber(tokenRect?.height) / 2 -
+      finiteNumber(bodyRect.top) - finiteNumber(bodyRect.height) / 2
+    : worldZ * finiteNumber(mapScale, 1);
   let x = finiteNumber(tokenRect?.left) + finiteNumber(tokenRect?.width) / 2 -
     finiteNumber(overlayRect?.left);
   let y = finiteNumber(tokenRect?.top) + finiteNumber(tokenRect?.height) / 2 -
-    finiteNumber(overlayRect?.top) + scaledVisualZ;
+    finiteNumber(overlayRect?.top);
   if (position === "under") y += finiteNumber(tokenRect?.height) * 0.42;
   if (position === "above") y -= finiteNumber(tokenRect?.height) * 0.62;
   if (position === "overhead") y -= finiteNumber(tokenRect?.height) * 0.95;
@@ -72,7 +82,7 @@ export function resolveAttachmentGroundPoint({
     x += Math.cos(angle) * finiteNumber(radius, 36) * finiteNumber(mapScale, 1);
     y += Math.sin(angle) * finiteNumber(radius, 36) * finiteNumber(mapScale, 1) * 0.45;
   }
-  return Object.freeze({ x, y, z: scaledVisualZ });
+  return Object.freeze({ x, y, z: worldZ, worldZ, screenZ });
 }
 
 export function createEffectRenderer({
@@ -130,20 +140,30 @@ export function createEffectRenderer({
   let bounds = { width: 1, height: 1 };
   let mapScale = 1;
   let activeTarget = surface;
+  let geometryRevision = 0;
+  const attachmentGeometry = new Map();
+  const metrics = { layoutReads: 0, pathWrites: 0, frames: 0, frameMsTotal: 0, frameMsMax: 0 };
 
   function getDynamicNodeCount() {
     let count = 0;
     records.forEach((record) => {
-      count += record.trailPoints.length + record.debrisParticles.length;
+      count += record.trailPoints.length + record.debrisParticles.length +
+        (record.particleCount || 0) + (record.secondaryCount || 0);
     });
     return count;
   }
+
+  const dynamicLimit = effect => effect.effectsMode === "reduced" ? 96 : MAX_DYNAMIC_VFX_NODES;
+  const particleCount = () => Array.from(records.values())
+    .reduce((sum, record) => sum + (record.particleCount || 0), 0);
 
   function ensureFrame() {
     if (frameHandle === null && records.size) frameHandle = scheduleFrame(renderFrame);
   }
 
   function syncBounds() {
+    geometryRevision++;
+    attachmentGeometry.clear();
     let target = surface;
     let requestedScale = 1;
     try { target = getTargetElement() || surface; } catch { target = surface; }
@@ -153,6 +173,10 @@ export function createEffectRenderer({
     const canContainLayers = !/^(IMG|CANVAS|VIDEO|SVG)$/i.test(target.tagName || "");
     const layerHost = canContainLayers ? target : (target.parentElement || surface);
     const hostRect = layerHost.getBoundingClientRect();
+    // Puzzle boards can themselves be transformed. Cancel inherited zoom on
+    // screen-coordinate layers so projection applies map scale exactly once.
+    const hostScaleX = layerHost.offsetWidth > 0 ? hostRect.width / layerHost.offsetWidth : 1;
+    const hostScaleY = layerHost.offsetHeight > 0 ? hostRect.height / layerHost.offsetHeight : 1;
     const width = Math.max(1, targetRect.width || surfaceRect.width);
     const height = Math.max(1, targetRect.height || surfaceRect.height);
     mapScale = clamp(finiteNumber(requestedScale, 1), 0.05, 20);
@@ -162,11 +186,13 @@ export function createEffectRenderer({
     }
     const layerLeft = target === layerHost
       ? 0
-      : targetRect.left - hostRect.left + finiteNumber(layerHost.scrollLeft);
+      : (targetRect.left - hostRect.left) / (hostScaleX || 1) + finiteNumber(layerHost.scrollLeft);
     const layerTop = target === layerHost
       ? 0
-      : targetRect.top - hostRect.top + finiteNumber(layerHost.scrollTop);
+      : (targetRect.top - hostRect.top) / (hostScaleY || 1) + finiteNumber(layerHost.scrollTop);
     for (const layer of layerElements) {
+      layer.style.transformOrigin = "0 0";
+      layer.style.transform = `scale(${1 / (hostScaleX || 1)}, ${1 / (hostScaleY || 1)})`;
       layer.style.left = `${layerLeft}px`;
       layer.style.top = `${layerTop}px`;
       layer.style.width = `${width}px`;
@@ -184,6 +210,10 @@ export function createEffectRenderer({
 
   function configurePath(record, start, end) {
     if (!start || !end) return;
+    const key = [start.x, start.y, end.x, end.y, mapScale].join(":");
+    if (record.pathKey === key) return;
+    record.pathKey = key;
+    metrics.pathWrites++;
     const deltaX = end.x - start.x;
     const deltaY = end.y - start.y;
     const length = Math.hypot(deltaX, deltaY);
@@ -203,11 +233,20 @@ export function createEffectRenderer({
     let token = null;
     try { token = getTokenElement(requested.tokenId); } catch { token = null; }
     if (!token?.getBoundingClientRect) return null;
-    const tokenRect = token.getBoundingClientRect();
-    const overlayRect = record.container.getBoundingClientRect();
+    const body = token.querySelector?.(":scope > img, :scope > .hg-token-fallback") || null;
+    const key = [geometryRevision, token.style.cssText, token.className,
+      token.dataset.visualZ, body?.style.cssText, record.layer].join("|");
+    const cacheKey = `${requested.tokenId}:${record.layer}`;
+    let geometry = attachmentGeometry.get(cacheKey);
+    if (!geometry || geometry.token !== token || geometry.body !== body || geometry.key !== key) {
+      geometry = { key, token, body, tokenRect: token.getBoundingClientRect(),
+        bodyRect: body?.getBoundingClientRect?.() || null,
+        overlayRect: record.container.getBoundingClientRect() };
+      metrics.layoutReads += body ? 3 : 2;
+      attachmentGeometry.set(cacheKey, geometry);
+    }
     return resolveAttachmentGroundPoint({
-      tokenRect,
-      overlayRect,
+      ...geometry,
       visualZ: token.dataset.visualZ,
       mapScale,
       position: requested.position,
@@ -244,7 +283,7 @@ export function createEffectRenderer({
     const prior = record.lastTrailSample;
     const spacing = clamp(finiteNumber(options.spacing, 12), 2, 96) * mapScale;
     const interval = clamp(finiteNumber(options.interval, 28), 12, 180);
-    if (prior && getDynamicNodeCount() < 320 && (
+    if (prior && getDynamicNodeCount() < dynamicLimit(record.effect) && (
       Math.hypot(point.x - prior.x, point.y - prior.y) >= spacing ||
       timestamp - finiteNumber(record.lastTrailAt, 0) >= interval
     )) {
@@ -254,7 +293,7 @@ export function createEffectRenderer({
       trail.style.top = `${prior.y}px`;
       trail.style.mixBlendMode = record.element.style.mixBlendMode;
       setCssNumber(trail, "--hg-vfx-trail-size",
-        clamp(finiteNumber(options.size, 18), 2, 96) * mapScale, "px");
+        clamp(finiteNumber(options.size, 18), 2, 96), "px");
       record.container.appendChild(trail);
       record.trailPoints.push({ element: trail, bornAt: timestamp });
       while (record.trailPoints.length > maximum) {
@@ -272,7 +311,7 @@ export function createEffectRenderer({
     }
     const count = Math.min(
       Math.round(clamp(finiteNumber(options.count, 8), 0, 16)),
-      Math.max(0, 320 - getDynamicNodeCount())
+      Math.max(0, dynamicLimit(record.effect) - getDynamicNodeCount())
     );
     const speed = clamp(finiteNumber(options.speed, 105), 8, 600);
     return Array.from({ length: count }, (_, index) => {
@@ -337,12 +376,16 @@ export function createEffectRenderer({
       shakeY += Math.cos(elapsed * .27 + record.effect.id.length) * amplitude * .65;
     });
     surface.classList.toggle("hg-vfx-screen-shake", Math.abs(shakeX) + Math.abs(shakeY) > .05);
-    setCssNumber(surface, "--hg-vfx-shake-x", shakeX, "px");
-    setCssNumber(surface, "--hg-vfx-shake-y", shakeY, "px");
+    setCssNumber(surface, "--hg-vfx-shake-x", clamp(shakeX, -6, 6), "px");
+    setCssNumber(surface, "--hg-vfx-shake-y", clamp(shakeY, -6, 6), "px");
   }
 
   function positionRecord(record, timestamp) {
     const effect = record.effect;
+    const elapsed = Math.max(0, timestamp - record.startedAt);
+    const pause = Math.min(elapsed, effect.hitStopMs || 0);
+    record.element.classList.toggle("is-vfx-hit-stopped", elapsed < (effect.hitStopMs || 0));
+    timestamp -= pause;
     const position = projectPoint(record.position, bounds.width, bounds.height);
     const start = projectPoint(record.start, bounds.width, bounds.height);
     const end = projectPoint(record.end, bounds.width, bounds.height);
@@ -353,19 +396,22 @@ export function createEffectRenderer({
     const attached = resolveAttachment(record, progress);
     const motionStart = attached || start || anchor;
     const motionEnd = attached || end || anchor;
-    const state = calculateMotion25d({ progress, start: motionStart, end: motionEnd,
+    const toWorld = (point) => ({ x: point.x / mapScale, y: point.y / mapScale });
+    const state = calculateMotion25d({ progress, start: toWorld(motionStart), end: toWorld(motionEnd),
       motion: effect.motion, baseRotation: effect.rotation });
     const uses25d = Boolean(attached) || effect.motion.type !== "stationary" ||
       effect.motion.startZ !== 0 || effect.motion.endZ !== 0 || effect.motion.maxZ !== 0;
-    const attachedZ = attached
-      ? attached.z + (state.z - effect.motion.startZ) * mapScale
-      : state.z * mapScale;
-    const z = debugOptions.zAxis && uses25d ? attachedZ : 0;
-    const x = uses25d ? state.x : (start && end ? start.x : anchor.x);
-    const groundY = uses25d ? state.y : (start && end ? start.y : anchor.y);
-    const screenY = groundY - z;
+    const worldZ = debugOptions.zAxis && uses25d
+      ? (attached ? attached.worldZ + state.z - effect.motion.startZ : state.z) : 0;
+    const screenZ = debugOptions.zAxis && uses25d
+      ? (attached ? attached.screenZ + (state.z - effect.motion.startZ) * mapScale
+        : worldZ * mapScale) : 0;
+    const x = uses25d ? state.x * mapScale : (start && end ? start.x : anchor.x);
+    const groundY = uses25d ? state.y * mapScale : (start && end ? start.y : anchor.y);
+    const worldY = groundY / mapScale;
+    const screenY = groundY - screenZ;
     const heightScale = debugOptions.scaling
-      ? calculateHeightScale(z, effect.heightScaling) : 1;
+      ? calculateHeightScale(worldZ, effect.heightScaling) : 1;
     const punchDuration = clamp(finiteNumber(
       effect.impactPunch?.durationRatio, .2
     ), .05, .6);
@@ -380,17 +426,20 @@ export function createEffectRenderer({
     record.element.style.left = `${x}px`;
     record.element.style.top = `${screenY}px`;
     record.element.style.zIndex = String(getLocalDepthSortValue({
-      y: groundY, z, elevation: effect.elevation
+      y: worldY, z: worldZ, elevation: effect.elevation
     }));
     record.element.dataset.effectLayer = record.layer;
     record.element.dataset.elevation = String(effect.elevation);
     record.element.dataset.vfxX = String(Math.round(x * 100) / 100);
     record.element.dataset.vfxY = String(Math.round(groundY * 100) / 100);
-    record.element.dataset.vfxZ = String(Math.round(z * 100) / 100);
+    record.element.dataset.vfxZ = String(Math.round(worldZ * 100) / 100);
+    record.element.dataset.vfxWorldZ = String(worldZ);
+    record.element.dataset.vfxScreenZ = String(screenZ);
+    record.element.dataset.vfxHeightScale = String(heightScale);
     record.element.dataset.vfxProgress = String(Math.round(progress * 1000) / 1000);
     setCssNumber(record.element, "--hg-vfx-scale", visualScale);
     const heightGlow = effect.heightGlow?.enabled
-      ? clamp(Math.abs(z) / Math.max(1, finiteNumber(effect.motion.maxZ, 80)), 0, 1)
+      ? clamp(Math.abs(worldZ) / Math.max(1, finiteNumber(effect.motion.maxZ, 80)), 0, 1)
       : 0;
     setCssNumber(record.element, "--hg-vfx-height-glow", heightGlow);
     setCssNumber(record.element, "--hg-vfx-height-glow-radius", 5 + heightGlow * 9, "px");
@@ -405,47 +454,59 @@ export function createEffectRenderer({
       record.element.style.opacity = String(effect.opacity * clamp(fade, 0, 1));
     }
     if (record.shadow) {
-      const shadow = calculateShadow25d(z, effect.shadow);
+      const shadow = calculateShadow25d(worldZ, effect.shadow);
       record.shadow.hidden = !debugOptions.shadows;
       record.shadow.style.left = `${x + shadow.offsetX * mapScale}px`;
       record.shadow.style.top = `${groundY + shadow.offsetY * mapScale}px`;
       record.shadow.style.opacity = String(shadow.opacity);
+      record.shadow.style.filter = `blur(${shadow.blur * mapScale}px)`;
+      record.shadow.dataset.shadowRatio = String(shadow.scale);
       record.shadow.style.transform =
         `translate(-50%, -50%) scale(${shadow.scale * mapScale})`;
       record.shadow.style.zIndex = String(getLocalDepthSortValue({
-        y: groundY, z: 0
+        y: worldY, z: 0
       }));
     }
     updateMotionTrail(record, timestamp, { x, y: screenY });
     updateDebris(record, timestamp, { x, y: groundY });
-    updateZLine(record, { x, screenY, groundY, z });
+    updateZLine(record, { x, screenY, groundY, z: screenZ });
     if (debugOptions.sprites) record.animator?.seek?.(timestamp);
     const animationState = record.animator?.getState?.();
     record.current = Object.freeze({
-      id: effect.id, type: effect.type, x, y: groundY, screenY, z, progress,
+      id: effect.id, type: effect.type, x, y: groundY, worldY, screenY,
+      z: worldZ, worldZ, screenZ, heightScale, progress,
       frame: animationState?.currentFrame ?? null,
       clip: animationState?.clipName || "",
       layer: record.layer
     });
     if (record.debugLabel) {
       record.debugLabel.textContent = `${effect.id} · ${record.layer}\n` +
-        `X ${x.toFixed(1)} Y ${groundY.toFixed(1)} Z ${z.toFixed(1)}\n` +
+        `X ${x.toFixed(1)} Y ${worldY.toFixed(1)} Z ${worldZ.toFixed(1)}\n` +
         `${Math.round(progress * 100)}% · ${record.current.clip || "sprite"} ` +
         `F ${record.current.frame ?? "-"}`;
     }
   }
 
   function renderFrame(timestamp) {
+    const frameStart = globalThis.performance?.now?.() ?? Date.now();
     frameHandle = null;
     records.forEach((record) => positionRecord(record, timestamp));
     applyScreenShake(timestamp);
+    const elapsed = (globalThis.performance?.now?.() ?? Date.now()) - frameStart;
+    metrics.frames++; metrics.frameMsTotal += elapsed;
+    metrics.frameMsMax = Math.max(metrics.frameMsMax, elapsed);
     ensureFrame();
   }
 
   function appendParticles(element, effect) {
     const options = { ...(effect.definition.particles || {}), ...(effect.particles || {}) };
     options.count = finiteNumber(options.count) * effect.intensity;
-    createParticleDescriptors(options, { mode: effect.effectsMode }).forEach((particle) => {
+    const available = Math.max(0, Math.min(
+      (effect.effectsMode === "reduced" ? 48 : MAX_PARTICLES_TOTAL) - particleCount(),
+      dynamicLimit(effect) - getDynamicNodeCount()
+    ));
+    const particles = createParticleDescriptors(options, { mode: effect.effectsMode }).slice(0, available);
+    particles.forEach((particle) => {
       const node = createElement(documentRef, "hg-vfx-particle");
       setCssNumber(node, "--hg-vfx-particle-x", particle.x, "px");
       setCssNumber(node, "--hg-vfx-particle-y", particle.y, "px");
@@ -455,6 +516,7 @@ export function createEffectRenderer({
       setCssNumber(node, "--hg-vfx-particle-opacity", particle.opacity);
       element.appendChild(node);
     });
+    return particles.length;
   }
 
   function appendSprite(element, effect, hooks = {}) {
@@ -474,13 +536,23 @@ export function createEffectRenderer({
         cancelFrame: stopFrame,
         now,
         manual: true,
+        playbackRate: effect.effectsMode === "reduced" ? 1 / .9 : 1,
         onEvent: (event) => {
           element.dataset.lastClipEvent = event.id;
           hooks.onClipEvent?.(event);
         }
       });
     }
-    const spriteOptions = { ...(effect.definition.sprite || {}), ...(effect.sprite || {}) };
+    const spriteOptions = { blendMode: effect.definition.blendMode,
+      ...(effect.definition.sprite || {}), ...(effect.sprite || {}) };
+    const versions = getVersionedSprite(effect.type, spriteOptions);
+    if (versions.modern6x6) {
+      const sprite = createElement(documentRef, "hg-vfx-sprite hg-vfx-clip-sprite");
+      element.appendChild(sprite);
+      return createVfxClipController({ element: sprite, clips: { main: versions }, initialClip: "main",
+        assetCache: clipAssetCache, manual: true, now, duration: effect.duration,
+        requestFrame: scheduleFrame, cancelFrame: stopFrame });
+    }
     if (effect.definition.className === "cantrip-impact-sprite" ||
         spriteOptions.fitDuration === true) {
       const frames = (spriteOptions.endFrame ?? spriteOptions.frameCount - 1) -
@@ -535,13 +607,13 @@ export function createEffectRenderer({
       end: makeResponsivePoint(effect.endPosition, bounds.width, bounds.height),
       animator: null, shadow: null, debugLabel: null, zLine: null, current: null,
       trailPoints: [], lastTrailSample: null, lastTrailAt: 0,
-      debrisParticles: [],
+      debrisParticles: [], particleCount: 0, secondaryCount: 0,
       dispose: null, startedAt: now()
     };
     if (effect.definition.kind === "sprite") {
       record.animator = appendSprite(element, effect, hooks);
     }
-    else appendParticles(element, effect);
+    else record.particleCount = appendParticles(element, effect);
     if (debugOptions.labels) {
       record.debugLabel = createElement(documentRef, "hg-vfx-debug-label");
       element.appendChild(record.debugLabel);
@@ -556,8 +628,13 @@ export function createEffectRenderer({
     record.debrisParticles = createDebris(record);
     positionRecord(record, record.startedAt);
     try {
-      const dispose = effect.definition.configureElement?.({ document: documentRef, effect, element });
+      const dispose = effect.definition.configureElement?.({ document: documentRef, effect, element, assetCache: clipAssetCache });
       if (typeof dispose === "function") record.dispose = dispose;
+      // Profile scatter, embers and hail are secondary children as well.
+      const details = Array.from(element.querySelectorAll?.("i") || []);
+      const available = Math.max(0, dynamicLimit(effect) - getDynamicNodeCount());
+      details.slice(available).forEach(node => node.remove());
+      record.secondaryCount = Math.min(details.length, available);
     } catch (error) {
       remove(effect.id);
       throw error;
@@ -569,6 +646,8 @@ export function createEffectRenderer({
   function remove(id) {
     const record = records.get(String(id || ""));
     if (!record) return false;
+    const tokenId = record.effect.attachment?.tokenId || record.effect.metadata.affectedTokenId;
+    if (tokenId) attachmentGeometry.delete(`${tokenId}:${record.layer}`);
     record.animator?.destroy?.();
     record.dispose?.();
     record.shadow?.remove();
@@ -621,7 +700,7 @@ export function createEffectRenderer({
     return Object.freeze({ ...debugOptions });
   }
 
-  function clear() { Array.from(records.keys()).forEach(remove); }
+  function clear() { Array.from(records.keys()).forEach(remove); attachmentGeometry.clear(); }
 
   function connect() {
     if (connected) return overlay;
@@ -654,6 +733,12 @@ export function createEffectRenderer({
   return Object.freeze({
     clear, connect, destroy,
     getDebugState: () => Object.freeze({
+      complexity: Object.freeze({ activeEffects: records.size, dynamicNodes: getDynamicNodeCount(),
+        particles: particleCount(),
+        sprites: Array.from(records.values()).filter(record => record.animator).length,
+        statuses: Array.from(records.values()).filter(record => record.effect.persistent).length }),
+      metrics: Object.freeze({ ...metrics,
+        frameMsAverage: metrics.frameMsTotal / Math.max(1, metrics.frames) }),
       options: Object.freeze({ ...debugOptions }),
       effects: Object.freeze(Array.from(records.values())
         .map((record) => record.current).filter(Boolean))

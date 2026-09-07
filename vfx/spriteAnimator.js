@@ -1,3 +1,4 @@
+import { resolveVfxAlphaSource } from "./alphaAssets.js";
 export const MAX_SPRITE_FRAMES = 240;
 
 const finiteNumber = (value) => {
@@ -90,6 +91,10 @@ export function normalizeSpriteOptions(
   return Object.freeze({
     ...(atlas ? { atlas } : {}),
     src: String(options.src || "").trim(),
+    blendMode: ["normal", "screen", "plus-lighter"].includes(options.blendMode) ? options.blendMode : null,
+    artAngle: clamp(finiteNumber(options.artAngle) ?? 0, -360, 360),
+    anchor: ["center", "bottom-center", "projectile-center", "impact-center", "ground-contact"].includes(options.anchor)
+      ? options.anchor : "center",
     frameWidth: clamp(
       Math.round(
         finiteNumber(options.frameWidth) ?? 64
@@ -209,9 +214,11 @@ export function createSpriteAnimator({
   let lastAppliedFrame = -1;
 
   element.style.backgroundImage = normalized.src
-    ? `url(${JSON.stringify(normalized.src)})`
+    ? `url(${JSON.stringify(resolveVfxAlphaSource(normalized.src))})`
     : "none";
   element.style.backgroundRepeat = "no-repeat";
+  if (normalized.blendMode) element.style.mixBlendMode = normalized.blendMode;
+  element.style.transformOrigin = ["bottom-center", "ground-contact"].includes(normalized.anchor) ? "50% 100%" : "50% 50%";
   element.style.backgroundSize =
     `${normalized.frameWidth * normalized.columns}px ` +
     `${normalized.frameHeight * normalized.rows}px`;

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><base href="/">
+<title>Seven sprite replacements</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:24px;background:#142431;color:#e8f1f7;font:15px system-ui}h1{font-size:25px;margin:0 0 8px}p{color:#b5ccdc;line-height:1.5;max-width:950px}nav{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0}button,select{padding:8px;background:#2d4558;color:white;border:1px solid #627c90;border-radius:6px}main{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:16px}article{border:1px solid #415c70;border-radius:10px;overflow:hidden;background:#213748}h2{font-size:17px;margin:12px 14px}.stage{height:210px;display:grid;place-items:center;isolation:isolate;background:var(--map,#ecdcc1)}.info{padding:10px 14px;font-size:12px;min-height:44px}.sprite{background-repeat:no-repeat}summary{padding:10px 14px;cursor:pointer}.sheet{width:100%;display:block;background:var(--map,#ecdcc1)}@media(max-width:850px){main{grid-template-columns:repeat(2,minmax(180px,1fr))}}
+</style>
+<h1>Seven sprite replacements</h1><p>Transparent 6 × 6 animation sheets. Switch backgrounds and compare the preserved legacy artwork. Meteor is reserved artwork. Playback uses each sheet’s own frame metadata.</p>
+<nav><label>Background <select id="background"><option value="#ecdcc1">Light map</option><option value="#456caf">Blue map</option><option value="#182c34">Dark map</option><option value="#ffffff">White</option><option value="#000000">Black</option></select></label><label>Artwork <select id="version"><option value="modern">New 6 × 6</option><option value="legacy">Legacy</option></select></label><button id="play">Pause</button><label>Progress <input id="frame" type="range" min="0" max="35" value="0"></label></nav><main></main>
+<script type="module">
+import {createSpriteAnimator} from '/vfx/spriteAnimator.js';
+import {MODERN_SPRITE_ASSETS} from '/vfx/spriteReplacements.js';
+const titles={lightningImpact:'Lightning impact',lightningBolt:'Lightning Bolt',meteorImpact:'Meteor impact',cold:'Cold / ice',acid:'Acid',poison:'Poison',necrotic:'Necrotic'};
+const players=[];let playing=true,elapsed=0,last=performance.now();
+const slider=document.querySelector('#frame'),play=document.querySelector('#play');
+for(const [id,asset] of Object.entries(MODERN_SPRITE_ASSETS)){
+ const card=document.createElement('article');card.innerHTML=`<h2>${titles[id]}</h2><div class="stage"><div class="sprite"></div></div><div class="info"></div><details><summary>Sprite sheet</summary><img class="sheet" alt="${titles[id]} sheet"></details>`;document.querySelector('main').append(card);
+ players.push({id,asset,card});
+}
+function setup(){for(const p of players){p.animator?.destroy();const modern=document.querySelector('#version').value==='modern';const grid=['lightningImpact','meteorImpact'].includes(p.id)?4:5;
+ const options=modern?p.asset:{src:p.asset.original,columns:grid,rows:grid,frameCount:grid*grid};
+ p.animator=createSpriteAnimator({element:p.card.querySelector('.sprite'),manual:true,options:{...options,frameWidth:170,frameHeight:170,framesPerSecond:18,loop:true,removeOnComplete:false}});p.count=options.frameCount;p.animator.start(0);p.card.querySelector('img').src=options.src;
+} render();}
+function render(){const progress=Math.floor(elapsed*18/1000)%36;slider.value=progress;for(const p of players){const frame=Math.min(p.count-1,Math.floor(progress/36*p.count));p.animator.seek((frame+.001)/18*1000);p.card.querySelector('.info').textContent=`Frame ${frame+1} / ${p.count}${p.id==='meteorImpact'?' · reserved artwork':''}`;}}
+document.querySelector('#background').onchange=e=>document.documentElement.style.setProperty('--map',e.target.value);document.querySelector('#version').onchange=setup;
+play.onclick=()=>{playing=!playing;play.textContent=playing?'Pause':'Play';};slider.oninput=()=>{playing=false;play.textContent='Play';elapsed=Number(slider.value)/18*1000+.01;render();};
+setup();window.spriteReviewReady=Promise.all([...document.images].map(im=>im.decode()));
+requestAnimationFrame(function tick(now){if(playing){elapsed+=now-last;render();}last=now;requestAnimationFrame(tick);});
+</script></html>

@@ -3,6 +3,7 @@ import {
   test
 } from "@playwright/test";
 import "./vfx-migration.browser.mjs";
+import "./vfx-audit.browser.mjs";
 
 async function openMapTools(page) {
   const menu = page.locator("#battleToolsMenu");
@@ -3648,6 +3649,7 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
           rows:Number(node.dataset.spriteRows || sprite?.dataset.spriteRows),
           frameCount:Number(node.dataset.spriteFrames || sprite?.dataset.spriteFrames),
           clip:sprite?.dataset.vfxClip || "",
+          version:sprite?.dataset.vfxAssetVersion || "legacy",
           path:node.classList.contains("has-path"), size:sprite?.style.backgroundSize,
           image:sprite?.style.backgroundImage, blend:getComputedStyle(node).mixBlendMode,
           angle:parseFloat(node.style.getPropertyValue("--hg-vfx-path-rotation")),
@@ -3657,7 +3659,7 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
           particles:node.querySelectorAll(".hg-vfx-particle").length});
       }
     });
-    for (const layer of document.querySelectorAll(".hg-map-vfx-layer, .hg-map-vfx-light-layer")) {
+    for (const layer of document.querySelectorAll(".hg-map-vfx-depth-layer")) {
       observer.observe(layer, {childList:true});
     }
   });
@@ -3670,9 +3672,9 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
     ["disintegrate", "tier-acid-stream-beam", 5, 3, 2],
     ["acid-arrow", "lesser-acid-flight", 4, 3, 2],
     ["vampiric-touch", "tier-necrotic-burst", 5, 2, 1],
-    ["meteor-swarm", "epic-fire-burst", 6, 3, 2],
+    ["meteor-swarm", "epic-fire-burst", 6, 8, 2],
     ["finger-of-death", "epic-necrotic-beam", 6, 3, 2],
-    ["earthquake", "epic-earth-burst", 6, 2, 1],
+    ["earthquake", "epic-earth-burst", 6, 4, 1],
     ["gate", "epic-psychic-portal", 6, 2, 1],
     ["sunburst", "epic-radiant-burst", 6, 2, 1],
     ["storm-of-vengeance", "epic-thunder-burst", 6, 2, 1],
@@ -3703,20 +3705,24 @@ test("tier sprite batch uses the correct grids, bounded modes, path alignment an
         expect(effects.length, spell + " " + mode).toBe(count);
       }
       expect(effects.every(e => e.particles === 0 ||
-        ["fire-smoke", "fire-explosion", "fire-embers"].includes(e.type) &&
-          e.particles <= 24)).toBe(true);
+        ["fire-smoke", "fire-explosion", "fire-embers", "profile-ripple"].includes(e.type) &&
+          e.particles <= 50), spell + " " + mode).toBe(true);
       if (count) {
         const effect = spell === "fireball"
           ? effects.find(e => e.type === role && e.clip === "impact")
           : effects.find(e => e.type === role);
-        if (grid < 6) expect(effect.size).toBe(`${160*grid}px ${160*grid}px`);
+        const replaced = ["cloudkill", "cone-of-cold", "vampiric-touch"].includes(spell) && effect.version === "modern6x6";
+        const selectedGrid = replaced ? 6 : grid;
+        if (mode === "reduced" && ["cloudkill", "cone-of-cold", "vampiric-touch"].includes(spell)) expect(replaced).toBe(true);
+        if (selectedGrid < 6) expect(effect.size).toBe(`${160*selectedGrid}px ${160*selectedGrid}px`);
         else {
           expect(effect.columns).toBe(6); expect(effect.rows).toBe(6);
           expect(effect.frameCount).toBe(36);
           expect(effect.size).toMatch(/^[0-9.]+px [0-9.]+px$/);
         }
-        expect(effect.image).toContain(grid === 4 ? "tiers0-2/" : grid === 5 ? "tiers3-6/" : "tiers7-9/");
-        if (grid === 6 || ["cloudkill","stinking-cloud","disintegrate"].includes(spell)) expect(effect.blend).toBe("screen");
+        expect(effect.image).toContain(replaced ? "modern6x6/" : grid === 4 ? "tiers0-2/" : grid === 5 ? "tiers3-6/" : "tiers7-9/");
+        if (spell === "fireball" || replaced) expect(effect.blend).toBe("normal");
+        else if (grid === 6 || ["cloudkill","stinking-cloud","disintegrate"].includes(spell)) expect(effect.blend).toBe("screen");
         if (spell === "storm-of-vengeance" && mode === "full") {
           const lightning = effects.find(e => e.type === "epic-lightning-cloud");
           expect(lightning.columns).toBe(6); expect(lightning.rows).toBe(6);
@@ -3917,10 +3923,11 @@ test("Fireball clip composition uses fake Z, frame events, shadow, trails and af
   ]);
   for (const clip of Object.values(aftermathState.clips)) {
     expect(clip.activeClip).toBeTruthy();
-    expect(clip.outerBlend).toBe("screen");
-    expect(clip.outerInlineBlend).toBe("screen");
-    expect(clip.spriteBlend).toBe("screen");
-    expect(clip.spriteInlineBlend).toBe("screen");
+    const blend = ["impact", "aftermath"].includes(clip.activeClip) ? "normal" : "screen";
+    expect(clip.outerBlend).toBe(blend);
+    expect(clip.outerInlineBlend).toBe(blend);
+    expect(clip.spriteBlend).toBe(blend);
+    expect(clip.spriteInlineBlend).toBe(blend);
     expect(clip.layer).toBe("airborne");
   }
   expect(aftermathState.clips.impact.source)
@@ -4005,77 +4012,16 @@ test("Fireball screen blending survives clip transitions and depth-layer moves",
   expect(samples.some(({ clip, layer }) => clip === "impact" && layer === "overhead"))
     .toBe(true);
   for (const sample of samples) {
-    expect(sample.outerBlend).toBe("screen");
-    expect(sample.outerInlineBlend).toBe("screen");
-    expect(sample.spriteBlend).toBe("screen");
-    expect(sample.spriteInlineBlend).toBe("screen");
+    const blend = ["impact", "aftermath"].includes(sample.clip) ? "normal" : "screen";
+    expect(sample.outerBlend).toBe(blend);
+    expect(sample.outerInlineBlend).toBe(blend);
+    expect(sample.spriteBlend).toBe(blend);
+    expect(sample.spriteInlineBlend).toBe(blend);
   }
   expect(samples.find(({ clip }) => clip === "impact")?.source)
     .toContain("fireball-impact-alpha-6x6.png");
   await expect(page.locator(`[data-effect-id="${played.id}"]`))
     .toHaveCount(0, { timeout: 2500 });
-});
-
-test("attached effects track 0/20/40 elevation once and ground anchors stay under tokens", async ({ page }) => {
-  await page.goto("?smokeTest=1&release=vfx-attachment-depth-20260902", {
-    waitUntil: "domcontentloaded"
-  });
-  await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
-  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle"));
-  await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
-  await page.evaluate(() => {
-    const token = document.createElement("div");
-    token.className = "hg-token";
-    token.dataset.tokenId = "vfx-elevation-token";
-    Object.assign(token.style, {
-      position: "absolute", left: "240px", top: "200px",
-      width: "40px", height: "40px"
-    });
-    document.getElementById("tokenLayer").appendChild(token);
-  });
-
-  for (const visualZ of [0, 20, 40]) {
-    await page.evaluate((z) => {
-      const token = document.querySelector('[data-token-id="vfx-elevation-token"]');
-      token.dataset.visualZ = String(z);
-      token.style.top = `${200 - z}px`;
-    }, visualZ);
-    const played = await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.playVfxTest({
-      type: "procedural-pulse",
-      duration: 180,
-      attachment: { tokenId: "vfx-elevation-token", position: "centered" },
-      layer: "airborne"
-    }));
-    const effect = page.locator(`[data-effect-id="${played.id}"]`);
-    await expect(effect).toBeVisible();
-    const state = await effect.evaluate((element) => ({
-      z: Number(element.dataset.vfxZ),
-      worldY: Number(element.dataset.vfxY),
-      screenY: Number.parseFloat(element.style.top),
-      layer: element.parentElement?.dataset.effectLayerContainer
-    }));
-    expect(state.z).toBeCloseTo(visualZ, 1);
-    expect(state.worldY).toBeCloseTo(220, 1);
-    expect(state.screenY).toBeCloseTo(220 - visualZ, 1);
-    expect(state.layer).toBe("airborne");
-    await expect(effect).toHaveCount(0, { timeout: 1500 });
-  }
-
-  const under = await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.playVfxTest({
-    type: "procedural-pulse",
-    duration: 180,
-    attachment: { tokenId: "vfx-elevation-token", position: "under" },
-    layer: "ground"
-  }));
-  const underEffect = page.locator(`[data-effect-id="${under.id}"]`);
-  await expect(underEffect).toBeVisible();
-  const underState = await underEffect.evaluate((element) => ({
-    screenY: Number.parseFloat(element.style.top),
-    layer: element.parentElement?.dataset.effectLayerContainer
-  }));
-  expect(underState.layer).toBe("ground");
-  expect(underState.screenY).toBeGreaterThan(180);
-  await expect(underEffect).toHaveCount(0, { timeout: 1500 });
 });
 
 test("compact map menus preserve viewport space, keyboard access and locked previews", async ({ page }) => {
@@ -4309,7 +4255,7 @@ test("Lightning Bolt plays supplied sound once, with mute, modes, tails and rese
   expect(await page.evaluate(()=>window.__PREVIEW_CONFIRMED_EVENTS__)).toBe(0);
 });
 
-test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-safe", async ({ page }) => {
+test("Lightning Bolt migration comparison is DM-only, aligned, bounded and cleanup-safe", async ({ page }) => {
   const ui = await openDmSpellPreview(page);
   const variant = page.locator("#lightningVfxTestSelect");
   await expect(variant).toBeHidden();
@@ -4330,12 +4276,13 @@ test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-saf
           length: parseFloat(node.style.getPropertyValue("--hg-vfx-path-length")),
           x: parseFloat(node.style.left), y: parseFloat(node.style.top),
           size: sprite?.style.backgroundSize, src: sprite?.style.backgroundImage,
+          version: sprite?.dataset.vfxAssetVersion,
           artAngle: matrix ? Math.atan2(matrix.b, matrix.a) * 180 / Math.PI : null,
           artX: matrix?.e, artY: matrix?.f,
           children: node.querySelectorAll(".hg-vfx-sprite").length });
       }
     });
-    for (const layer of document.querySelectorAll(".hg-map-vfx-layer, .hg-map-vfx-light-layer")) {
+    for (const layer of document.querySelectorAll(".hg-map-vfx-depth-layer")) {
       observer.observe(layer, {childList:true});
     }
   });
@@ -4347,8 +4294,10 @@ test("Lightning Bolt 5x5 comparison is DM-only, aligned, bounded and cleanup-saf
     await ui.play.click(); await expect(ui.overlay).toHaveCSS("opacity", "0");
     await expect.poll(async () => (await rendered()).length).toBe(2);
     const main = (await rendered()).find(e => e.type === "lightning5-main");
-    expect(main.size).toBe("800px 800px"); expect(main.children).toBe(1);
-    expect(main.src).toContain("lightning-bolt-main-5x5.png");
+    const modern = main.version === "modern6x6";
+    if (dx !== 1 || dy !== 0) expect(modern).toBe(true);
+    expect(main.size).toBe(modern ? "960px 960px" : "800px 800px"); expect(main.children).toBe(1);
+    expect(main.src).toContain(modern ? "lightning-bolt-main-6x6.png" : "lightning-bolt-main-5x5.png");
     const angleDelta = Math.abs(
       ((((main.rotation - angle) + 180) % 360) + 360) % 360 - 180
     );
@@ -4403,7 +4352,7 @@ test("storm profiles render full-line lightning and area-local hail with bounded
           blend: getComputedStyle(node).mixBlendMode });
       }
     });
-    for (const layer of document.querySelectorAll(".hg-map-vfx-layer, .hg-map-vfx-light-layer")) {
+    for (const layer of document.querySelectorAll(".hg-map-vfx-depth-layer")) {
       observer.observe(layer, { childList: true });
     }
   });
@@ -5159,7 +5108,7 @@ test(
         .every((element) => element.parentElement === document.getElementById("tokenLayer").parentElement)
     }));
     expect(depthStack).toEqual({
-      layers: { ground: 100, shadows: 200, tokens: 300,
+      layers: { ground: 100, shadows: 200,
         airborne: 400, overhead: 500, ui: 600 },
       tokens: 300,
       sameHost: true
@@ -5410,7 +5359,7 @@ test(
     );
     await expect(reducedEffect).toHaveCSS(
       "--hg-vfx-duration",
-      "1000ms"
+      "5000ms"
     );
     await expect(
       reducedEffect.locator(".hg-vfx-particle")

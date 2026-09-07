@@ -4,7 +4,8 @@ export const EFFECT_PRESETS = freeze({
   projectile: freeze({
     layer: "airborne",
     motion: freeze({ type: "arc", maxZ: 96, rotationMode: "direction" }),
-    shadow: freeze({ enabled: true, opacity: 0.52 }),
+    shadow: freeze({ enabled: true, opacity: 0.52, minimumOpacity: .07, minimumScale: .2,
+      blur: 2, heightBlur: 5 }),
     heightScaling: freeze({ enabled: true, amount: 0.0022, maximum: 1.35 })
   }),
   explosion: freeze({
@@ -55,6 +56,7 @@ export function applyEffectPreset(request = {}) {
   return {
     ...preset,
     ...request,
+    layer: request.layer || preset.layer,
     motion: { ...(preset.motion || {}), ...(request.motion || {}) },
     shadow: request.shadow === false
       ? false

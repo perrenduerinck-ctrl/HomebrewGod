@@ -1,7 +1,6 @@
 export const EFFECT_LAYER_ORDER = Object.freeze([
   "ground",
   "shadows",
-  "tokens",
   "airborne",
   "overhead",
   "ui"
@@ -10,20 +9,22 @@ export const EFFECT_LAYER_ORDER = Object.freeze([
 export const EFFECT_LAYERS = Object.freeze({
   ground: Object.freeze({ id: "ground", zIndex: 100 }),
   shadows: Object.freeze({ id: "shadows", zIndex: 200 }),
-  tokens: Object.freeze({ id: "tokens", zIndex: 300 }),
   airborne: Object.freeze({ id: "airborne", zIndex: 400 }),
   overhead: Object.freeze({ id: "overhead", zIndex: 500 }),
   ui: Object.freeze({ id: "ui", zIndex: 600 })
 });
 
 export const MAP_DEPTH_Z_INDEX = 0;
+export const REAL_TOKEN_LAYER_Z_INDEX = 300;
 
 const cleanLayer = (value) => String(value || "")
   .trim()
   .toLowerCase();
 
 export function normalizeEffectLayer(value, fallback = "airborne") {
-  const requested = cleanLayer(value);
+  // Compatibility alias: token-attached VFX render just above the real token
+  // layer. There is no second sibling container competing with #tokenLayer.
+  const requested = cleanLayer(value) === "tokens" ? "airborne" : cleanLayer(value);
   if (EFFECT_LAYERS[requested]) return requested;
   const safeFallback = cleanLayer(fallback);
   return EFFECT_LAYERS[safeFallback] ? safeFallback : "airborne";

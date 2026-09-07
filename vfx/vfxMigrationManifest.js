@@ -1,10 +1,12 @@
 import { createDefaultEffectRegistry } from "./effectRegistry.js";
 import { VFX_ASSET_CLASSES, VFX_ASSET_MANIFEST } from "./vfxAssetManifest.js";
 import { getVfxAssetVersions } from "./assetVersions.js";
+import { VFX_ALPHA_COPIES } from "./alphaAssets.js";
+import { MODERN_SPRITE_ASSETS, MODERN_SPRITE_REPLACEMENTS } from "./spriteReplacements.js";
 
 export const VFX_MIGRATION_PRIORITY = Object.freeze([
-  "fireball", "lightning-bolt", "ice-frost", "acid", "poison-necrotic",
-  "healing", "buffs", "debuffs", "remaining"
+  "fireball", "lightning-bolt", "ice-frost", "acid", "poison", "necrotic",
+  "radiant", "force", "thunder", "psychic", "healing", "buffs", "debuffs", "remaining"
 ]);
 
 export const VFX_MIGRATION_LABELS = Object.freeze({
@@ -15,6 +17,10 @@ export const VFX_MIGRATION_LABELS = Object.freeze({
 });
 
 function classify(src, frameCount) {
+  if (src.includes("/modern6x6/")) return {
+    classification: VFX_ASSET_CLASSES.ALREADY_MODERN,
+    reason: "Reviewed 36-frame alpha replacement; original remains available as fallback."
+  };
   if (src.endsWith("fireball-impact-alpha-6x6.png")) return {
     classification: VFX_ASSET_CLASSES.ALREADY_MODERN,
     reason: "Fireball showcase: existing alpha 6x6 sheet, with explicit legacy fallback."
@@ -29,7 +35,7 @@ function classify(src, frameCount) {
   if (frameCount === 1 || src.includes("/status/") || src.includes("fire-impact-spritesheet")) return {
     classification: VFX_ASSET_CLASSES.KEEP,
     reason: src.includes("fire-impact-spritesheet") ? "Retained Fireball fallback and shared legacy fire sheet."
-      : "Existing projectile/status role does not require a 36-frame showcase upgrade."
+      : "Keep the original for compatibility; animated replacements still require 6x6."
   };
   return {
     classification: VFX_ASSET_CLASSES.UPGRADE_LATER,
@@ -44,7 +50,12 @@ function buildInventory() {
   const add = (clip, reference) => {
     if (!clip?.src) return;
     const src = clip.src.split("?")[0];
-    const entry = assets.get(src) || { src, ...classify(src, clip.frameCount), references: [] };
+    const entry = assets.get(src) || { src, ...classify(src, clip.frameCount),
+      frameCount: clip.frameCount, columns: clip.columns, rows: clip.rows, atlas: clip.atlas,
+      legacyStatus: "KEEP_AS_FALLBACK",
+      modernReplacementStatus: src.endsWith("fireball-impact-alpha-6x6.png")
+        ? "READY" : clip.frameCount === 1 ? "STATIC_REVIEW" : "NEEDS_6X6",
+      references: [] };
     entry.references.push(reference);
     assets.set(src, entry);
   };
@@ -67,7 +78,29 @@ function buildInventory() {
     "library/meteor-projectile": 1, "library/meteor-impact": 16,
     "library/lightning-spear": 1, "library/lightning-storm-impact": 16,
     "library/ice-spear": 1, "library/ice-burst": 16, "library/radiant-spear": 1
-  })) add({ src: `./assets/vfx/${name}.png`, frameCount }, "reserved-artwork");
+  })) add({ src: `./assets/vfx/${name}.png`, frameCount,
+    columns: frameCount === 16 ? 4 : 1, rows: frameCount === 16 ? 4 : 1 }, "reserved-artwork");
+  for (const [original, copy] of Object.entries(VFX_ALPHA_COPIES)) {
+    const entry = assets.get(original);
+    assets.set(copy, { ...entry, src: copy, original,
+      classification: VFX_ASSET_CLASSES.KEEP, legacyStatus: "KEEP_AS_FALLBACK",
+      modernReplacementStatus: "NEEDS_6X6",
+      reason: "Alpha-only compatibility copy; original grid and motion are unchanged.",
+      references: [`alpha-copy:${original}`] });
+  }
+  for (const [name, clip] of Object.entries(MODERN_SPRITE_ASSETS)) {
+    add(clip, name === "meteorImpact" ? "reserved-artwork.modern6x6" : `${name}.modern6x6`);
+    const current = assets.get(clip.src);
+    current.modernReplacementStatus = "READY";
+    current.original = clip.original;
+    const previous = assets.get(clip.original);
+    if (previous) {
+      previous.modernReplacementStatus = "READY";
+      previous.replacement = clip.src;
+      previous.reason = "Retained legacy fallback for reviewed 6x6 alpha replacement.";
+    }
+  }
+  for (const [id, clip] of Object.entries(MODERN_SPRITE_REPLACEMENTS)) add(clip, `${id}.modern6x6`);
   return Object.freeze(Object.fromEntries([...assets].sort(([a], [b]) => a.localeCompare(b))
     .map(([src, entry]) => [src, Object.freeze({ ...entry,
       references: Object.freeze(entry.references) })])));

@@ -94,7 +94,7 @@ test("movement, scale, rotation and shadow helpers cover reusable 2.5D modes", (
   }), 1.2);
   assert.deepEqual(calculateShadow25d(90, {
     opacity: 0.6, fadeDistance: 180, shrinkDistance: 180
-  }), { opacity: 0.3, scale: 0.5, offsetX: 0, offsetY: 0 });
+  }), { opacity: 0.3, scale: 0.5, blur: 5, offsetX: 0, offsetY: 0 });
   assert.equal(resolveMotionDuration({
     speed: 100,
     start: { x: 0, y: 0 },
@@ -102,7 +102,7 @@ test("movement, scale, rotation and shadow helpers cover reusable 2.5D modes", (
   }), 1000);
 });
 
-test("token attachments recover ground Y so elevation is projected exactly once", () => {
+test("token parents remain on the ground while attachments follow the raised body", () => {
   const point = resolveAttachmentGroundPoint({
     tokenRect: { left: 100, top: 140, width: 40, height: 40 },
     overlayRect: { left: 20, top: 30 },
@@ -110,21 +110,30 @@ test("token attachments recover ground Y so elevation is projected exactly once"
     mapScale: 1.5
   });
   assert.equal(point.x, 100);
-  assert.equal(point.y, 166);
-  assert.equal(point.z, 36);
-  assert.equal(point.y - point.z, 130);
+  assert.equal(point.y, 130);
+  assert.equal(point.worldZ, 24);
+  assert.equal(point.screenZ, 36);
+  assert.equal(point.y - point.screenZ, 94);
+  const under = resolveAttachmentGroundPoint({
+    tokenRect: { left: 100, top: 140, width: 40, height: 40 },
+    overlayRect: { left: 20, top: 30 }, visualZ: 24, position: "under"
+  });
+  assert.equal(under.worldZ, 0);
+  assert.equal(under.screenZ, 0);
+  assert.equal(under.y, 146.8);
 });
 
 test("effect layers and presets remain explicit and reusable", () => {
   assert.deepEqual(EFFECT_LAYER_ORDER, [
-    "ground", "shadows", "tokens", "airborne", "overhead", "ui"
+    "ground", "shadows", "airborne", "overhead", "ui"
   ]);
   assert.deepEqual(Object.fromEntries(EFFECT_LAYER_ORDER.map((layer) => [
     layer, EFFECT_LAYERS[layer].zIndex
-  ])), { ground: 100, shadows: 200, tokens: 300,
+  ])), { ground: 100, shadows: 200,
     airborne: 400, overhead: 500, ui: 600 });
   assert.equal(normalizeEffectLayer("OVERHEAD"), "overhead");
   assert.equal(normalizeEffectLayer("unknown"), "airborne");
+  assert.equal(normalizeEffectLayer("tokens"), "airborne");
   assert.ok(getDepthSortValue({ layer: "ground", y: 900 }) <
     getDepthSortValue({ layer: "airborne", y: 0 }));
   const projectile = applyEffectPreset({

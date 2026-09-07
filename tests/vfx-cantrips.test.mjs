@@ -113,7 +113,7 @@ test("Effects Off never starts a sequence; Reduced remains bounded and cleans up
   assert.equal(reduced.system.getState().activeCount, 16);
   reduced.finish();
   assert.equal(reduced.system.getState().activeCount, 0);
-  assert.ok(reduced.requests.every((r) => r.duration <= 480));
+  assert.ok(reduced.requests.every((r) => r.duration <= 720));
 });
 
 test("Shocking Grasp supports a bounded five-foot DM preview without changing real casting", () => {

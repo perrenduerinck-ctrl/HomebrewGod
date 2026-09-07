@@ -48,7 +48,7 @@ test("both Lightning Bolt variants sound once at discharge in preview and confir
   for(const preview of [true,false]) for(const variant of ["5x5","4x4"]) for(const mode of ["full","reduced","off"]) {
     const h=harness(mode),event=bolt(preview),before=JSON.stringify(event);
     h.system.play(event,variant==="4x4"?{sequenceId:"profile-lightning-bolt"}:{});
-    const delay=Math.round((variant==="5x5"?328:420)*(mode==="reduced"?.6:1));
+    const delay=Math.round((variant==="5x5"?328:420)*(mode==="reduced"?.9:1));
     h.advance(delay-1); assert.equal(h.stats().plays,0);
     h.advance(1); assert.equal(h.stats().plays,mode==="off"?0:1);
     if(mode!=="off") {assert.equal(h.media.volume,mode==="reduced"?.39:.6);assert.equal(h.media.loop,false);}

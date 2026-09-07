@@ -105,6 +105,8 @@ function normalizeSequenceEffect(effect = {}) {
 
   return Object.freeze({
     type,
+    importance: ["core", "secondary"].includes(effect.importance) ? effect.importance : "normal",
+    hitStopMs: boundedNumber(effect.hitStopMs, 0, 0, 90),
     preset: cleanId(effect.preset),
     anchor: CASTING_SEQUENCE_ANCHORS.includes(requestedAnchor)
       ? requestedAnchor
@@ -501,7 +503,7 @@ function getTimingScale(effectEngine) {
   try {
     const mode = effectEngine.getState?.().mode;
     if (mode === "off") return 0;
-    if (mode === "reduced") return 0.6;
+    if (mode === "reduced") return 0.9;
   } catch {
     // A missing state adapter should not prevent presentation.
   }
@@ -596,6 +598,8 @@ function makeEffectRequest({
     rotation: effect.rotation,
     opacity: effect.opacity,
     duration,
+    importance: effect.importance,
+    hitStopMs: timingScale === 1 ? effect.hitStopMs : 0,
     intensity,
     particles: effect.particles,
     sprite: effect.sprite,
