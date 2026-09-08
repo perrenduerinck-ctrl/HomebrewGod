@@ -3010,7 +3010,7 @@ test("all level-one spells are available and representative status and utility p
     spriteBlend: "screen",
     spriteInlineBlend: "screen"
   });
-  expect(healing.image).toContain("regeneration.png?v=restored-20260902");
+  expect(healing.image).toContain("/assets/vfx/alpha-compat/status/buffs/regeneration.png");
   expect(healing.width).toBeLessThanOrEqual(140);
   expect(healing.height).toBeLessThanOrEqual(140);
   expect(["ground", "airborne", "overhead"]).toContain(healing.layer);
@@ -3027,7 +3027,7 @@ test("all level-one spells are available and representative status and utility p
     spriteBlend: "screen",
     spriteInlineBlend: "screen"
   });
-  expect(mark.image).toContain("ominous-eye.png?v=restored-20260902");
+  expect(mark.image).toContain("/assets/vfx/alpha-compat/status/debuffs/ominous-eye.png");
   expect(mark.width).toBeLessThanOrEqual(140);
   expect(mark.height).toBeLessThanOrEqual(140);
   expect(["ground", "airborne", "overhead"]).toContain(mark.layer);
@@ -4156,17 +4156,20 @@ test("profile preview sample covers projectile, impact, touch, beam, utility, gr
   await useMapTool(page, "#battleVfxModeSelect", "selectOption", "full");
   await page.evaluate(() => {
     window.__PROFILE_SAMPLE__ = [];
-    new MutationObserver((records) => {
+    const observer = new MutationObserver((records) => {
       for (const record of records) for (const node of record.addedNodes) {
         if (node.nodeType !== 1 || !node.matches(".hg-map-vfx-effect")) continue;
         window.__PROFILE_SAMPLE__.push({ type: node.dataset.effectType,
+          layer: node.parentElement?.dataset.effectLayerContainer,
           path: node.classList.contains("has-path"),
           glyph: Boolean(node.querySelector("svg path")),
           x: parseFloat(node.style.left), y: parseFloat(node.style.top),
           length: parseFloat(node.style.getPropertyValue("--hg-vfx-path-length")),
           rotation: parseFloat(node.style.getPropertyValue("--hg-vfx-path-rotation")) });
       }
-    }).observe(document.querySelector(".hg-map-vfx-layer"), { childList: true });
+    });
+    document.querySelectorAll(".hg-map-vfx-depth-layer").forEach(layer =>
+      observer.observe(layer, { childList: true }));
   });
   for (const [spell, type, path, glyph] of [
     ["acid-splash", "lesser-acid-flight", true, false],
@@ -4190,6 +4193,7 @@ test("profile preview sample covers projectile, impact, touch, beam, utility, gr
     const rendered = await page.evaluate((type) =>
       window.__PROFILE_SAMPLE__.find(e => e.type === type), type);
     expect(rendered.path).toBe(path); expect(rendered.glyph).toBe(glyph);
+    if (spell === "create-bonfire") expect(rendered.layer).toBe("ground");
     const event = (await ui.state()).event;
     expect(event.preview).toBe(true); expect(event.casterTokenId).toBe("");
     if (path) {
