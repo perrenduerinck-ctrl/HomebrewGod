@@ -84,6 +84,7 @@ import {
   createCastingSequenceSystem
 } from "./vfx/castingSequence.js?v=complete-spell-vfx-20260903";
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=complete-spell-vfx-20260903";
+import { createCombatSpriteTestControls } from "./vfx/combatSpriteTest.js";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=complete-spell-vfx-20260903";
 import {
   createRealtimeListenerRegistry
@@ -383,6 +384,7 @@ let battleMapRuler = null;
 let battleMapTemplates = null;
 let battleMapVfx = null;
 let battleMapVfxSequences = null;
+let battleMapCombatVfx = null;
 const BATTLE_VFX_MODE_STORAGE_KEY =
   "homebrewGodBattleVfxMode";
 let activeSpellTemplateInstruction = null;
@@ -1437,6 +1439,7 @@ function syncRealtimeListenersForScreen(
 ) {
   if (activeMainScreenName === "battle" && screenName !== "battle") {
     battleMapVfxSequences?.clear("screen-change");
+    battleMapCombatVfx?.clear();
   }
   activeMainScreenName = screenName;
 
@@ -5612,6 +5615,10 @@ function initializeBattleMapVfx() {
   battleMapVfxSequences =
     createBattleMapCastingSequences(battleMapVfx);
   battleMapVfx.connect();
+  battleMapCombatVfx = createCombatSpriteTestControls({
+    container: document.getElementById("combatVfxTestControl"),
+    surface: E.battleMapSurface, engine: battleMapVfx
+  });
 
   E.battleVfxSoundToggle?.addEventListener("change", () => {
     battleMapVfxSequences?.setSoundEnabled(E.battleVfxSoundToggle.checked);
@@ -5711,6 +5718,7 @@ function initializeBattleMapVfx() {
           selectedMode
         );
         if (selectedMode === "off") {
+          battleMapCombatVfx?.clear();
           battleMapVfxSequences?.clear(
             "effects-off"
           );
@@ -7886,6 +7894,7 @@ window.addEventListener("pagehide", function () {
     E.battleVfxDebugEnabledToggle.dispatchEvent(new Event("change"));
   }
   battleMapVfx?.destroy();
+  battleMapCombatVfx?.destroy();
   removeActivePlayerSession();
 });
 

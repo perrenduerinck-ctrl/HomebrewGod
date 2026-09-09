@@ -3,6 +3,7 @@ import { VFX_ASSET_CLASSES, VFX_ASSET_MANIFEST } from "./vfxAssetManifest.js";
 import { getVfxAssetVersions } from "./assetVersions.js";
 import { VFX_ALPHA_COPIES } from "./alphaAssets.js";
 import { MODERN_SPRITE_ASSETS, MODERN_SPRITE_REPLACEMENTS } from "./spriteReplacements.js";
+import { COMBAT_ANIMATIONS } from "./combatEffects.js";
 
 export const VFX_MIGRATION_PRIORITY = Object.freeze([
   "fireball", "lightning-bolt", "ice-frost", "acid", "poison", "necrotic",
@@ -101,6 +102,11 @@ function buildInventory() {
     }
   }
   for (const [id, clip] of Object.entries(MODERN_SPRITE_REPLACEMENTS)) add(clip, `${id}.modern6x6`);
+  for (const [id, clip] of Object.entries(COMBAT_ANIMATIONS)) {
+    add(clip, `combat.${id}`);
+    Object.assign(assets.get(clip.src), { classification: VFX_ASSET_CLASSES.KEEP,
+      modernReplacementStatus: "READY", reason: "Owner-supplied 36-frame combat test; original alpha preserved, grid gutters cropped during playback." });
+  }
   return Object.freeze(Object.fromEntries([...assets].sort(([a], [b]) => a.localeCompare(b))
     .map(([src, entry]) => [src, Object.freeze({ ...entry,
       references: Object.freeze(entry.references) })])));

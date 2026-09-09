@@ -343,6 +343,13 @@ export function createVfxAssetCache({
   return Object.freeze({
     clear: () => cache.clear(),
     getStatus: (src) => cache.get(String(src || "").trim())?.status || "unknown",
+    getDimensions: (src) => {
+      const entry = cache.get(String(src || "").trim());
+      const width = entry?.image?.naturalWidth || entry?.image?.width;
+      const height = entry?.image?.naturalHeight || entry?.image?.height;
+      return entry?.status === "loaded" && width > 0 && height > 0
+        ? Object.freeze({ width, height }) : null;
+    },
     getState: () => Object.freeze({ size: cache.size, sources: Object.freeze([...cache.keys()]) }),
     preload
   });
