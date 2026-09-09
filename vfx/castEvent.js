@@ -264,6 +264,8 @@ export function createSpellVfxEvent({
   spell = {},
   spellId = spell?.id,
   spellName = spell?.name,
+  animationId = spell?.animationId,
+  animations = spell?.animations,
   casterToken = null,
   casterTokenId = casterToken?.id,
   casterPoint = null,
@@ -301,6 +303,11 @@ export function createSpellVfxEvent({
 
   return Object.freeze({
     schemaVersion: SPELL_VFX_EVENT_SCHEMA_VERSION,
+    ...(cleanText(animationId, "", 120) ? { animationId: cleanText(animationId, "", 120) } : {}),
+    ...(animations && typeof animations === "object" ? { animations: Object.freeze(Object.fromEntries(
+      ["cast", "travel", "impact", "sustain", "end"].filter(key => cleanText(animations[key], "", 120))
+        .map(key => [key, cleanText(animations[key], "", 120)])
+    )) } : {}),
     preview: preview === true,
     spellId: cleanText(spellId, "", 160),
     spellName: cleanText(spellName, "Spell", 160) || "Spell",

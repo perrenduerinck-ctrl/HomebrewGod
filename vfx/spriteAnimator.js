@@ -35,7 +35,7 @@ export function normalizeSpriteOptions(
     columns = clamp(
       Math.round(requestedColumns),
       1,
-      frameCount
+      options.preserveGrid === true ? MAX_SPRITE_FRAMES : frameCount
     );
     rows = clamp(
       Math.round(
@@ -43,7 +43,7 @@ export function normalizeSpriteOptions(
         Math.ceil(frameCount / columns)
       ),
       Math.ceil(frameCount / columns),
-      frameCount
+      options.preserveGrid === true ? MAX_SPRITE_FRAMES : frameCount
     );
   } else if (requestedRows !== null) {
     rows = clamp(
@@ -89,6 +89,7 @@ export function normalizeSpriteOptions(
     : null;
 
   return Object.freeze({
+    ...(options.preserveGrid === true ? { preserveGrid: true } : {}),
     ...(atlas ? { atlas } : {}),
     src: String(options.src || "").trim(),
     blendMode: ["normal", "screen", "plus-lighter"].includes(options.blendMode) ? options.blendMode : null,

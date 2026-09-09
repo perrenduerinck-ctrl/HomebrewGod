@@ -13,8 +13,9 @@ is written by the animation. **Clear combat effects**, Effects Off, leaving the
 battle screen and page teardown cancel pending and active combat effects.
 
 Change **FPS** (18, 24, 30 or 36) and **Scale** directly in the test control.
-Defaults are `fps: 30`, `size: 160`, `scale: 1` in
-`vfx/combatEffects.js`, under `COMBAT_ANIMATIONS["melee.swordSlash"]`.
+The test controls default to `fps: 30` and `scale: 1`. The shared sword definition
+is `SWORD_SLASH_ANIMATION` in `vfx/animationBuiltins.js`; the player defaults to
+`size: 160`. These test controls override the definition's FPS/scale for each test.
 At 30 FPS, all 36 frames take 1.2 seconds. Size is the longest frame dimension in
 map pixels before scale and map zoom; aspect ratio and the 50%/50% pivot remain fixed.
 The debug checkbox adds center, bounds and angle. The existing **Live readout**
@@ -71,9 +72,13 @@ The adapter uses the existing sprite animator and shared renderer RAF. The
 engine owns delay/cleanup timers. Effects use the existing airborne layer above
 tokens and below map UI, with normal alpha blending and no pointer events.
 Image failures report a useful console message without starting playback.
-Invalid grid overrides also fail before loading. Grids follow the existing player
-limits: at most 240 frames, with each grid dimension no larger than the frame count;
+Invalid grid overrides also fail before loading. Grids allow at most 240 played
+frames, including partial sheets with unused cells and fewer frames than columns;
 decoded sheets must fit within 16384 × 16384 pixels and have cells at least 4 pixels wide/high.
+
+The combat API now delegates to `vfx/animationPlayer.js`. **Map tools → Animations**
+can assign another library ID to the Sword slash test for the current page session.
+See `docs/ANIMATION_LIBRARY.md` for the universal library, editor and persistence limits.
 
 ## Files
 

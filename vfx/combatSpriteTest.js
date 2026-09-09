@@ -1,8 +1,8 @@
 import { createCombatEffectSystem, getCombatActorPoint } from "./combatEffects.js";
 
 export function createCombatSpriteTestControls({ container, surface, engine,
-  location = globalThis.location } = {}) {
-  const player = createCombatEffectSystem({ engine });
+  location = globalThis.location, library, bindings } = {}) {
+  const player = createCombatEffectSystem({ engine, library, bindings });
   const enabled = ["localhost", "127.0.0.1", "::1"].includes(location?.hostname) ||
     /(?:^|[?&])(?:vfxTest|smokeTest)=1(?:&|$)/.test(location?.search || "");
   if (!container || !enabled) return player;
@@ -62,7 +62,7 @@ export function createCombatSpriteTestControls({ container, surface, engine,
     const menu = container.closest("#battleToolsMenu");
     if (result.ok && menu) menu.open = false;
     if (revision === currentRevision) field("status").textContent = result.ok
-      ? `36 frames · ${fps} FPS · ${(36 / fps).toFixed(2)} seconds`
+      ? `${result.handles[0].effect.sprite.frameCount} frames · ${fps} FPS · ${(result.handles[0].effect.duration / 1000).toFixed(2)} seconds`
       : result.reason === "effects-off" ? "Effects are off. Choose Full or Reduced to test."
       : `Sword slash unavailable (${result.reason || "effect limit"}).`;
   }

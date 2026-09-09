@@ -92,7 +92,7 @@ test("decode gating, failed images and cancellation never create late combat eff
   assert.equal((await pending).reason, "cancelled"); assert.equal(f.visible.size, 0);
   const broken = fixture({ preload: async () => false });
   assert.equal((await broken.player.playCombatEffect("swordSlash")).ok, false);
-  assert.match(broken.errors[0], /Unable to load combat sprite/);
+  assert.match(broken.errors[0], /Unable to load animation sprite/);
   assert.equal(broken.timers.size, 0);
   f.player.destroy(); f.engine.destroy(); broken.player.destroy(); broken.engine.destroy();
 });
@@ -101,7 +101,7 @@ test("invalid combat grids fail before loading and leave the engine usable", asy
   let loads = 0;
   const f = fixture({ preload: async () => { loads++; return true; } });
   for (const options of [{ columns: 0 }, { rows: 1.5 }, { frameCount: 37 },
-    { src: " " }, { columns: 1000000000 }, { frameCount: 1 }]) {
+    { src: " " }, { columns: 1000000000 }, { frameCount: 0 }]) {
     const result = await f.player.playCombatEffect("swordSlash", null, null, options);
     assert.equal(result.reason, "sprite-unavailable");
   }
@@ -110,7 +110,7 @@ test("invalid combat grids fail before loading and leave the engine usable", asy
   assert.equal(f.timers.size, 0);
   const definitions = f.engine.registry.list().length;
   assert.throws(() => createCombatEffectSystem({ engine: f.engine, assetCache: f.cache,
-    animations: { broken: { ...COMBAT_ANIMATIONS["melee.swordSlash"], columns: 0 } } }), /Invalid sprite grid/);
+    animations: { broken: { ...COMBAT_ANIMATIONS["melee.swordSlash"], columns: 0 } } }), /Columns/);
   assert.equal(f.engine.registry.list().length, definitions);
   assert.equal((await f.player.playCombatEffect("swordSlash")).ok, true);
   assert.equal(loads, 1);

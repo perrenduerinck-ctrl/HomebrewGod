@@ -2435,6 +2435,39 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 }
 
 .hg-vfx-combat-sprite, .hg-vfx-combat-sprite * { pointer-events: none; }
+.hg-vfx-animation-sprite, .hg-vfx-animation-sprite * { pointer-events: none; }
+.hg-vfx-animation-sprite { border-radius: 0; }
+.hg-animation-debug { color: #ffdf60; white-space: nowrap; font: 11px monospace; }
+.hg-animation-library {
+  width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 40px);
+  padding: 24px; border: 1px solid #555d91; border-radius: 16px;
+  background: #171b30; color: #eef0ff; box-shadow: 0 24px 80px #0009;
+}
+.hg-animation-library::backdrop { background: #060817b8; }
+.hg-animation-library [hidden] { display: none !important; }
+.hg-animation-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.hg-animation-heading h2 { margin: 0 0 6px; }
+.hg-animation-heading p { margin: 0; color: #bdc5e5; }
+.hg-animation-session { padding: 10px 12px; background: #232940; border-radius: 8px; font-size: 13px; }
+.hg-animation-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.hg-animation-library label { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; font-size: 14px; }
+.hg-animation-library :is(input, select) { box-sizing: border-box; width: 100%; min-width: 0; margin: 0; }
+.hg-animation-library select { padding: 8px; border: 1px solid #39436f; border-radius: 8px; background: #101528; color: #eef0ff; }
+.hg-animation-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.hg-animation-library button { min-height: 36px; white-space: normal; }
+.hg-animation-hint { color: #bdc5e5; font-size: 13px; }
+.hg-animation-preview { position: relative; height: 240px; overflow: hidden; border: 1px solid #4a526e; border-radius: 12px;
+  background-color: #30364b; background-image: conic-gradient(#3c435b 25%, transparent 0 50%, #3c435b 0 75%, transparent 0); background-size: 24px 24px; }
+.hg-animation-preview .hg-map-vfx-layer { z-index: 1; }
+.hg-animation-preview-options, .hg-animation-custom-grid { display: flex; gap: 12px; }
+.hg-animation-preview-options > label, .hg-animation-custom-grid > label { flex: 1; min-width: 0; }
+.hg-animation-form-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 18px; }
+.hg-animation-library form { margin-top: 20px; padding-top: 12px; border-top: 1px solid #4a526e; }
+.hg-animation-library [data-animation-status] { margin-bottom: 0; color: #d0e5ff; }
+@media (max-width: 640px) {
+  .hg-animation-library { padding: 16px; }
+  .hg-animation-columns, .hg-animation-form-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+}
 .hg-vfx-combat-sprite { border-radius: 0; }
 .hg-vfx-combat-sprite .hg-vfx-sprite { overflow: hidden; }
 .hg-vfx-combat-sprite.hg-combat-debug { outline: 1px dashed #ffdf60; }

@@ -150,6 +150,7 @@ export function normalizeEffectRequest(
       1
     ),
     duration,
+    untilCancelled: source.untilCancelled === true && source.sprite?.loop === true,
     hitStopMs: effectsMode === "full" ? clamp(finiteNumber(source.hitStopMs) ?? 0, 0, 90) : 0,
     importance: source.importance === "secondary" ? "secondary"
       : source.importance === "core" || definition.kind === "sprite" ? "core" : "normal",
@@ -350,6 +351,7 @@ export function createEffectEngine({
     }
     record.phase = reason;
     records.delete(record.effect.id);
+    try { record.onFinish?.(reason); } catch { /* Completion observers are presentation-only. */ }
     emitState();
     return true;
   }
@@ -439,7 +441,7 @@ export function createEffectEngine({
     // Do not leave an unowned cleanup timer behind in that case.
     if (!records.has(record.effect.id)) return;
     try {
-      record.cleanupTimer = scheduler.setTimeout(
+      record.cleanupTimer = record.effect.untilCancelled ? null : scheduler.setTimeout(
         () => cancel(record.effect.id, "completed"),
         lifetime
       );
@@ -450,7 +452,7 @@ export function createEffectEngine({
     emitState();
   }
 
-  function play(request = {}) {
+  function play(request = {}, { onFinish } = {}) {
     if (destroyed) {
       return Object.freeze({
         ok: false,
@@ -509,6 +511,7 @@ export function createEffectEngine({
     }
     const record = {
       effect,
+      onFinish,
       phase: effect.delay > 0
         ? "pending"
         : "starting",

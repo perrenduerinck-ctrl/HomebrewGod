@@ -85,6 +85,7 @@ import {
 } from "./vfx/castingSequence.js?v=complete-spell-vfx-20260903";
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=complete-spell-vfx-20260903";
 import { createCombatSpriteTestControls } from "./vfx/combatSpriteTest.js";
+import { createAnimationWorkspace } from "./vfx/animationWorkspace.js";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=complete-spell-vfx-20260903";
 import {
   createRealtimeListenerRegistry
@@ -385,6 +386,7 @@ let battleMapTemplates = null;
 let battleMapVfx = null;
 let battleMapVfxSequences = null;
 let battleMapCombatVfx = null;
+let battleMapAnimations = null;
 const BATTLE_VFX_MODE_STORAGE_KEY =
   "homebrewGodBattleVfxMode";
 let activeSpellTemplateInstruction = null;
@@ -487,6 +489,7 @@ function initializeBattleMapToolbar() {
     for (const menu of menus) if (menu.open && !menu.contains(event.target)) menu.open = false;
   });
   window.addEventListener("keydown", event => {
+    if (document.getElementById("animationLibraryDialog")?.open) return;
     if (event.key === "Escape" && menus.some(menu => menu.open)) {
       event.preventDefault();
       // Dismiss the menu, not the map's current targeting session.
@@ -1440,6 +1443,7 @@ function syncRealtimeListenersForScreen(
   if (activeMainScreenName === "battle" && screenName !== "battle") {
     battleMapVfxSequences?.clear("screen-change");
     battleMapCombatVfx?.clear();
+    battleMapAnimations?.clear();
   }
   activeMainScreenName = screenName;
 
@@ -5582,16 +5586,19 @@ function setStoredBattleMapVfxMode(mode) {
 }
 
 function createBattleMapCastingSequences(effectEngine) {
+  battleMapAnimations ||= createAnimationWorkspace({ engine: effectEngine });
+  let legacyCount = 0, assignedCount = 0;
+  const showState = () => E.battleMapSurface?.classList.toggle("is-playing-spell-vfx", legacyCount + assignedCount > 0);
   const sequences = createCastingSequenceSystem({
     effectEngine,
     onStateChange(state) {
       // Opacity hides the shape, labels, range line and caster/target markers.
       // Keep the hit layer and locked geometry intact throughout playback.
-      E.battleMapSurface?.classList.toggle("is-playing-spell-vfx", state.activeCount > 0);
+      legacyCount = state.activeCount; showState();
     }
   });
   sequences.setSoundEnabled(E.battleVfxSoundToggle?.checked !== false);
-  return sequences;
+  return battleMapAnimations.wrapSequences(sequences, count => { assignedCount = count; showState(); });
 }
 
 function initializeBattleMapVfx() {
@@ -5617,7 +5624,8 @@ function initializeBattleMapVfx() {
   battleMapVfx.connect();
   battleMapCombatVfx = createCombatSpriteTestControls({
     container: document.getElementById("combatVfxTestControl"),
-    surface: E.battleMapSurface, engine: battleMapVfx
+    surface: E.battleMapSurface, engine: battleMapVfx,
+    library: battleMapAnimations.library, bindings: battleMapAnimations.bindings
   });
 
   E.battleVfxSoundToggle?.addEventListener("change", () => {
@@ -5719,6 +5727,7 @@ function initializeBattleMapVfx() {
         );
         if (selectedMode === "off") {
           battleMapCombatVfx?.clear();
+          battleMapAnimations?.clear();
           battleMapVfxSequences?.clear(
             "effects-off"
           );
@@ -7895,6 +7904,7 @@ window.addEventListener("pagehide", function () {
   }
   battleMapVfx?.destroy();
   battleMapCombatVfx?.destroy();
+  battleMapAnimations?.destroy();
   removeActivePlayerSession();
 });
 
