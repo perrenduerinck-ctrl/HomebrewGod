@@ -144,5 +144,10 @@ test("spell assignments are optional, replace only visuals, and restore legacy p
   assert.equal(oldPlays, 3); assert.equal(f.visible.size, 0);
   const spell = Object.freeze({ id: "test", name: "Test", animationId: "test_sheet", animations: Object.freeze({ impact: "test_sheet" }) });
   const cast = createSpellVfxEvent({ spell }); assert.equal(cast.animationId, "test_sheet"); assert.ok(Object.isFrozen(cast.animations));
+  f.engine.setMode("off");
+  assert.deepEqual(adapter.play(event), { ok: true, skipped: true, reason: "effects-off" });
+  bindings.setAnimation("spell:fireball", null);
+  assert.deepEqual(adapter.play(event), { ok: true, skipped: true, reason: "effects-off" });
+  assert.equal(oldPlays, 3); assert.equal(f.visible.size, 0);
   adapter.destroy(); f.destroy();
 });

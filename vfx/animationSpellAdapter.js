@@ -9,7 +9,8 @@ export function createAnimationSpellAdapter({ legacy, player, library, bindings,
   }
   function play(event = {}, options = {}) {
     if (destroyed) return { ok: false, skipped: true, reason: "sequence-system-destroyed" };
-    if (player.getMode() === "off") return { ok: false, skipped: true, reason: "effects-off" };
+    // Preserve the casting-sequence contract: Off is an intentional successful skip.
+    if (player.getMode() === "off") return { ok: true, skipped: true, reason: "effects-off" };
     const reference = event.animationId ? { animationId: event.animationId } :
       event.animations ? { animations: event.animations } : bindings.getAssignment(`spell:${event.spellId}`);
     if (!reference || options.sequenceId) return legacy.play(event, options);
