@@ -1,93 +1,26 @@
-// Serializable appearance data only. Rules, damage and targeting never belong here.
-export const ANIMATION_CATEGORIES = Object.freeze([
-  "Magic", "Fire", "Cold", "Lightning", "Healing", "Buff", "Debuff", "Sword", "Axe",
-  "Spear", "Bow", "Projectile", "Impact", "Monster", "Environment", "Other"
-]);
-export const MAX_ANIMATION_FRAMES = 240;
-export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-const freeze = value => {
-  if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); }
-  return value;
-};
-const text = (value, limit = 120) => String(value ?? "").trim().slice(0, limit);
-function numeric(value, fallback, min, max, label, integer = false) {
-  const n = value === undefined ? fallback : Number(value);
-  if (value === null || value === "" || !Number.isFinite(n) || n < min || n > max || (integer && !Number.isInteger(n))) {
-    throw new Error(`${label} must be ${integer ? "a whole number" : "a number"} between ${min} and ${max}.`);
-  }
-  return n;
-}
-export function normalizeAnimation(input = {}) {
-  const id = text(input.id);
-  if (!/^[a-z][\w.-]{0,119}$/i.test(id)) throw new Error("Choose a valid animation ID.");
-  const name = text(input.name);
-  if (!name) throw new Error("Give the animation a name.");
-  const sprite = String(input.sprite ?? "").trim();
-  if (!sprite) throw new Error("Choose a sprite sheet first.");
-  if (sprite.length > MAX_UPLOAD_BYTES * 1.4) throw new Error("The sprite sheet is too large (8 MB maximum).");
-  if (/^data:/i.test(sprite)) {
-    if (!/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(sprite)) throw new Error("Use a PNG, JPEG or WebP sprite sheet.");
-  } else if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(sprite) && !/^https?:\/\//i.test(sprite)) {
-    throw new Error("Use a local asset path or an HTTP(S) image URL.");
-  }
-  const columns = numeric(input.grid?.columns, 1, 1, 240, "Columns", true);
-  const rows = numeric(input.grid?.rows, 1, 1, 240, "Rows", true);
-  const frameCount = numeric(input.frameCount, columns * rows, 1, Math.min(columns * rows, MAX_ANIMATION_FRAMES), "Frame count", true);
-  const playback = input.playback ?? (input.loop === true ? "loop" : "once");
-  if (!["once", "loop"].includes(playback)) throw new Error("Choose Once or Loop playback.");
-  let atlas = null;
-  if (input.atlas) {
-    const a = input.atlas;
-    const width = numeric(a.width, undefined, 1, 16384, "Atlas width");
-    const height = numeric(a.height, undefined, 1, 16384, "Atlas height");
-    for (const [axis, count, extent] of [["columns", columns, width], ["rows", rows, height]]) {
-      if (!Array.isArray(a[axis]) || a[axis].length !== count + 1 || !a[axis].every((n, i) =>
-        Number.isFinite(n) && n >= 0 && n <= extent && (!i || n - a[axis][i - 1] >= 4))) {
-        throw new Error("The measured sprite cells do not match this grid.");
-      }
-    }
-    atlas = { width, height, columns: [...a.columns], rows: [...a.rows] };
-  }
-  const ownership = input.ownership || { kind: "user", scope: "session", ownerId: null };
-  if (!["builtin", "user"].includes(ownership.kind) || !["global", "session", "user", "room"].includes(ownership.scope)) {
-    throw new Error("Invalid animation ownership.");
-  }
-  return freeze({ version: 1, id, name, category: text(input.category || "Other", 48),
-    tags: [...new Set((Array.isArray(input.tags) ? input.tags : []).map(t => text(t, 48)).filter(Boolean))].slice(0, 24),
-    sprite, grid: { columns, rows }, frameCount,
-    fps: numeric(input.fps, 24, 1, 60, "FPS"),
-    scale: numeric(input.scale, 1, .1, 8, "Scale"),
-    size: numeric(input.size, 160, 8, 1024, "Display size"),
-    rotation: numeric(input.rotation, 0, -3600, 3600, "Rotation"),
-    offsetX: numeric(input.offsetX, 0, -10000, 10000, "Horizontal offset"),
-    offsetY: numeric(input.offsetY, 0, -10000, 10000, "Vertical offset"),
-    anchorX: numeric(input.anchorX, .5, 0, 1, "Horizontal pivot"),
-    anchorY: numeric(input.anchorY, .5, 0, 1, "Vertical pivot"),
-    flipX: input.flipX === true, flipY: input.flipY === true,
-    playback, loop: playback === "loop", sound: input.sound == null ? null : { src: text(input.sound.src, 1024) },
-    inset: numeric(input.inset ?? input.atlas?.inset, 0, 0, 64, "Cell inset", true), atlas,
-    blendMode: ["normal", "screen", "plus-lighter"].includes(input.blendMode) ? input.blendMode : "normal",
-    ownership: { kind: ownership.kind, scope: ownership.scope, ownerId: ownership.ownerId == null ? null : text(ownership.ownerId) }
-  });
-}
+import { normalizeAnimation, mergeAnimationDefinition, freezeAnimation as freeze, animationText as text } from "./animationDefinition.js";
+export { normalizeAnimation, normalizeAnimationDefinition, mergeAnimationDefinition, ANIMATION_TYPES, ANIMATION_TAGS, ANIMATION_CATEGORIES, MAX_ANIMATION_FRAMES, MAX_UPLOAD_BYTES } from "./animationDefinition.js";
 
 export function createAnimationLibrary({ builtins = [], idFactory = () => `custom_${globalThis.crypto.randomUUID()}` } = {}) {
-  const entries = new Map(), originals = new Map(), listeners = new Set();
+  const entries = new Map(), originals = new Map(), listeners = new Set(), usage = new Map();
+  let order = 0;
+  const stats = id => usage.get(id) || { favorite: false, used: 0, recent: 0, created: 0 };
   const emit = () => { for (const fn of listeners) { try { fn(); } catch { /* UI observers cannot change data. */ } } };
   function put(animation) {
     if (!entries.has(animation.id) && entries.size >= 5000) throw new Error("This library is full (5,000 definitions).");
     // Bound embedded uploads without counting shared sheets repeatedly.
-    const sheets = new Set([...entries.values()].filter(a => a.id !== animation.id).map(a => a.sprite));
-    sheets.add(animation.sprite);
+    const sheets = new Set([...entries.values()].filter(a => a.id !== animation.id).flatMap(a => [a.sprite, a.sound?.src || ""]));
+    sheets.add(animation.sprite); sheets.add(animation.sound?.src || "");
     if ([...sheets].reduce((sum, src) => sum + (src.startsWith("data:") ? src.length : 0), 0) > 48 * 1024 * 1024) {
       throw new Error("This session's uploaded sheets are full. Remove an unused custom animation first.");
     }
+    if (!usage.has(animation.id)) usage.set(animation.id, { ...stats(animation.id), created: ++order });
     entries.set(animation.id, animation); emit(); return animation;
   }
   for (const definition of builtins) {
     const a = normalizeAnimation({ ...definition, ownership: { kind: "builtin", scope: "global", ownerId: null } });
     if (entries.has(a.id)) throw new Error(`Duplicate built-in animation ID: ${a.id}`);
-    entries.set(a.id, a); originals.set(a.id, a);
+    entries.set(a.id, a); originals.set(a.id, a); usage.set(a.id, { ...stats(a.id), created: ++order });
   }
   function getAnimation(id) { return entries.get(id) || null; }
   function requireAnimation(id) {
@@ -101,12 +34,7 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
   }
   function updateAnimation(id, changes) {
     const old = requireAnimation(id);
-    const resetCrop = (changes.sprite !== undefined && changes.sprite !== old.sprite) ||
-      (changes.grid && (changes.grid.columns !== undefined && changes.grid.columns !== old.grid.columns ||
-        changes.grid.rows !== undefined && changes.grid.rows !== old.grid.rows));
-    const playback = changes.playback ?? (changes.loop === undefined ? old.playback : changes.loop ? "loop" : "once");
-    return put(normalizeAnimation({ ...old, ...(resetCrop ? { atlas: null, inset: 0 } : {}), ...changes,
-      grid: { ...old.grid, ...changes.grid }, playback, id: old.id, ownership: old.ownership }));
+    return put(mergeAnimationDefinition(old, { ...changes, id: old.id, ownership: old.ownership }));
   }
   function duplicateAnimation(id) {
     const a = requireAnimation(id);
@@ -114,17 +42,26 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
   }
   function deleteAnimation(id) {
     if (requireAnimation(id).ownership.kind === "builtin") throw new Error("Built-in animations cannot be deleted. Duplicate one to customize it.");
-    entries.delete(id); emit(); return true;
+    entries.delete(id); usage.delete(id); emit(); return true;
   }
   function resetAnimation(id) {
     if (!originals.has(id)) throw new Error("Only built-in animations have original settings.");
     return put(originals.get(id));
   }
   return Object.freeze({ getAnimation, registerAnimation, updateAnimation, duplicateAnimation, deleteAnimation, resetAnimation,
+    getUsage: id => Object.freeze({ ...stats(id) }),
+    toggleFavorite(id) { requireAnimation(id); const next = { ...stats(id), favorite: !stats(id).favorite }; usage.set(id, next); emit(); return next.favorite; },
+    markUsed(id) { if (!entries.has(id)) return; usage.set(id, { ...stats(id), used: stats(id).used + 1, recent: ++order }); emit(); },
+    query({ search = "", type = "", tags = "", origin = "", favorites = false, recent = false, sort = "name" } = {}) {
+      const words = `${search} ${tags}`.toLowerCase().split(/[\s,]+/).filter(Boolean);
+      return [...entries.values()].filter(a => (!type || a.type === type) && (!origin || a.ownership.kind === origin) &&
+        (!favorites || stats(a.id).favorite) && (!recent || stats(a.id).recent > 0) && words.every(w => `${a.name} ${a.description} ${a.type} ${a.tags.join(" ")} ${a.id}`.toLowerCase().includes(w)))
+        .sort((a, b) => (sort === "newest" ? stats(b.id).created - stats(a.id).created : sort === "used" ? stats(b.id).used - stats(a.id).used : recent ? stats(b.id).recent - stats(a.id).recent : 0) || a.name.localeCompare(b.name));
+    },
     list: () => [...entries.values()], getAnimationsByCategory: category => [...entries.values()].filter(a => a.category.toLowerCase() === category.toLowerCase()),
     searchAnimations: query => {
       const words = text(query).toLowerCase().split(/\s+/).filter(Boolean);
-      return [...entries.values()].filter(a => words.every(w => `${a.name} ${a.category} ${a.tags.join(" ")} ${a.id}`.toLowerCase().includes(w)));
+      return [...entries.values()].filter(a => words.every(w => `${a.name} ${a.description} ${a.type} ${a.category} ${a.tags.join(" ")} ${a.id}`.toLowerCase().includes(w)));
     },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     exportAnimation: id => ({ version: 1, type: "homebrewgod-animation", animation: JSON.parse(JSON.stringify(requireAnimation(id))) }),

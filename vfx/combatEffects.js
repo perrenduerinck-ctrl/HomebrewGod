@@ -35,7 +35,7 @@ export function resolveCombatPlacement(attacker, target, { overlayRect, position
 
 // Compatibility/placement adapter. All preparation and playback use the shared player.
 export function createCombatEffectSystem({ engine, assetCache, animations = COMBAT_ANIMATIONS,
-  library = createAnimationLibrary(), bindings, onError } = {}) {
+  library = createAnimationLibrary(), bindings, onError, isSoundEnabled } = {}) {
   const catalog = new Map();
   const swordId = library.getAnimation("sword_slash_01") ? "sword_slash_01" : "melee.swordSlash";
   function register(id, options = {}) {
@@ -50,7 +50,7 @@ export function createCombatEffectSystem({ engine, assetCache, animations = COMB
     if (id === "melee.swordSlash" && swordId === "sword_slash_01") catalog.set(id, options);
     else register(id, options);
   });
-  const player = createAnimationPlayer({ engine, library, assetCache, onError });
+  const player = createAnimationPlayer({ engine, library, assetCache, onError, isSoundEnabled });
   const lookup = id => ["swordSlash", "melee.swordSlash"].includes(id)
     ? bindings?.getAssignment("attack:sword-slash")?.animationId || swordId : id;
   function overrides(options = {}) {
@@ -76,8 +76,10 @@ export function createCombatEffectSystem({ engine, assetCache, animations = COMB
         metadata: { combatAnimation: typeof step === "string" ? step : step.animation } };
     }), { resolvePlacement(settings) {
       placement = placementOptions();
-      return { x: placement.position.x, y: placement.position.y, rotation: placement.angle +
-        number(settings.rotationOffset, library.getAnimation(settings.animationId)?.rotation || 0) + number(settings.rotation, 0) };
+      return { x: placement.position.x, y: placement.position.y,
+        sourcePoint: placement.attacker, targetPoint: placement.target,
+        getSourcePoint: () => placementOptions().attacker, getTargetPoint: () => placementOptions().target,
+        rotation: number(settings.rotationOffset, library.getAnimation(settings.animationId)?.rotation || 0) + number(settings.rotation, 0) };
     } });
     return { ...result, placement };
   }

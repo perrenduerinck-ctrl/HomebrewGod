@@ -150,7 +150,7 @@ export function normalizeEffectRequest(
       1
     ),
     duration,
-    untilCancelled: source.untilCancelled === true && source.sprite?.loop === true,
+    untilCancelled: source.untilCancelled === true && (source.sprite?.loop === true || definition.allowIndefinite === true),
     hitStopMs: effectsMode === "full" ? clamp(finiteNumber(source.hitStopMs) ?? 0, 0, 90) : 0,
     importance: source.importance === "secondary" ? "secondary"
       : source.importance === "core" || definition.kind === "sprite" ? "core" : "normal",
@@ -398,6 +398,7 @@ export function createEffectEngine({
   function startRecord(record) {
     if (!records.has(record.effect.id)) return;
     record.delayTimer = null;
+    record.timerStartedAt = scheduler.now();
     try {
       renderer.render(record.effect, {
         onClipEvent: (event) => runEffectEvent(record, event)
@@ -443,7 +444,7 @@ export function createEffectEngine({
     try {
       record.cleanupTimer = record.effect.untilCancelled ? null : scheduler.setTimeout(
         () => cancel(record.effect.id, "completed"),
-        lifetime
+        record.remainingLifetime ?? lifetime
       );
     } catch {
       cancel(record.effect.id, "timer-failed");
@@ -516,6 +517,10 @@ export function createEffectEngine({
         ? "pending"
         : "starting",
       createdAt: scheduler.now(),
+      timerStartedAt: scheduler.now(),
+      remainingDelay: effect.delay,
+      remainingLifetime: effect.persistent ? effect.persistentLifetime : effect.duration + effect.hitStopMs,
+      pausedPhase: null,
       delayTimer: null,
       cleanupTimer: null,
       eventTimers: new Set()
@@ -541,8 +546,39 @@ export function createEffectEngine({
       skipped: !records.has(id),
       id,
       effect,
-      cancel: () => cancel(id)
+      cancel: () => cancel(id),
+      pause: () => pause(id),
+      resume: () => resume(id)
     });
+  }
+
+  // Opt-in controls for the animation player. Legacy event timelines are untouched.
+  function pause(id) {
+    const record = records.get(id);
+    if (!record || record.pausedPhase || !record.effect.definition.canPause) return false;
+    record.pausedPhase = record.phase;
+    const elapsed = Math.max(0, scheduler.now() - record.timerStartedAt);
+    if (record.delayTimer !== null) {
+      scheduler.clearTimeout(record.delayTimer); record.delayTimer = null;
+      record.remainingDelay = Math.max(0, record.remainingDelay - elapsed);
+    } else {
+      if (record.cleanupTimer !== null) { scheduler.clearTimeout(record.cleanupTimer); record.cleanupTimer = null; }
+      record.remainingLifetime = Math.max(0, record.remainingLifetime - elapsed);
+      renderer.setPaused?.(id, true);
+    }
+    record.phase = "paused"; emitState(); return true;
+  }
+  function resume(id) {
+    const record = records.get(id);
+    if (!record?.pausedPhase) return false;
+    const phase = record.pausedPhase; record.pausedPhase = null; record.phase = phase;
+    record.timerStartedAt = scheduler.now();
+    if (phase === "pending") record.delayTimer = scheduler.setTimeout(() => startRecord(record), record.remainingDelay);
+    else {
+      renderer.setPaused?.(id, false);
+      if (!record.effect.untilCancelled) record.cleanupTimer = scheduler.setTimeout(() => cancel(id, "completed"), record.remainingLifetime);
+    }
+    emitState(); return true;
   }
 
   function clear(reason = "cleared") {
@@ -596,6 +632,7 @@ export function createEffectEngine({
     getDebugState: () => renderer.getDebugState?.() || null,
     getState,
     play,
+    pause, resume,
     refresh: () => {
       try {
         renderer.refresh?.();

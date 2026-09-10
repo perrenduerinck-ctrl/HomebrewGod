@@ -8,6 +8,8 @@ import { createEffectEngine } from "../vfx/effectEngine.js";
 import { createSpriteAnimator, getSpriteFrameStyle } from "../vfx/spriteAnimator.js";
 import { createSpellVfxEvent } from "../vfx/castEvent.js";
 import { getAnimationActions } from "../vfx/animationWorkspace.js";
+import { normalizeAnimationDefinition, mergeAnimationDefinition } from "../vfx/animationDefinition.js";
+import { animationFrames, animationTiming, sampleAnimation, chooseAnimationVariation } from "../vfx/animationPlayback.js";
 
 const definition = { id: "test_sheet", name: "Sheet", sprite: "test.png", grid: { columns: 6, rows: 6 }, frameCount: 36 };
 test("the assignment selector includes dedicated spell sequences as well as profiles and the sword test", () => {
@@ -150,4 +152,74 @@ test("spell assignments are optional, replace only visuals, and restore legacy p
   assert.deepEqual(adapter.play(event), { ok: true, skipped: true, reason: "effects-off" });
   assert.equal(oldPlays, 3); assert.equal(f.visible.size, 0);
   adapter.destroy(); f.destroy();
+});
+
+test("upgraded definitions accept nested settings and legacy edits without losing collapsed values", () => {
+  const old = normalizeAnimationDefinition({ ...definition, fps: 18, loop: true, scale: 2 });
+  assert.equal(old.timing.fps, 18); assert.equal(old.timing.loopCount, 0); assert.equal(old.appearance.opacity, 1);
+  const advanced = mergeAnimationDefinition(old, { description: "A directional spear", type: "Weapon Attack", tags: ["Spear", "melee", "SPEAR", "custom tag"],
+    playback: { mode: "pingpong", fps: 30, speed: .5, loopCount: 3, startDelay: .2, endDelay: .3 },
+    transform: { scaleX: 2, scaleY: .5, lockProportions: false, rotation: 45, anchorY: 1 },
+    appearance: { tint: "#3366ff", opacity: .4, blendMode: "multiply", fadeOut: .3 },
+    layers: [{ animationId: "future_glow", at: 100 }], events: [{ frame: 18, type: "animation", animationId: "future_hit" }] });
+  assert.equal(advanced.fps, 30); assert.equal(advanced.playback, "pingpong"); assert.equal(advanced.rotation, 45); assert.equal(advanced.anchorY, 1);
+  assert.deepEqual(advanced.tags, ["spear", "melee", "custom tag"]); assert.equal(advanced.blendMode, "multiply");
+  const renamed = mergeAnimationDefinition(advanced, { name: "Only rename", fps: 12 });
+  assert.equal(renamed.timing.fps, 12); assert.equal(renamed.appearance.tint, "#3366ff"); assert.equal(renamed.transform.scaleX, 2); assert.equal(renamed.events[0].animationId, "future_hit");
+  assert.ok(Object.isFrozen(renamed.appearance)); assert.ok(Object.isFrozen(renamed.layers[0]));
+  assert.throws(() => mergeAnimationDefinition(renamed, { appearance: { tint: "url(secret)" } }), /tint/);
+  assert.throws(() => mergeAnimationDefinition(renamed, { timing: { speed: 0 } }), /speed/);
+});
+
+test("range and custom frame playback honor reversal, ping pong, speed and finite loops", async () => {
+  const f = fixture();
+  f.library.updateAnimation("test_sheet", { grid: { columns: 8, rows: 8 }, frames: { start: 42, end: 45, count: 4, reverse: true }, playback: "pingpong", timing: { speed: .5, loopCount: 2 }, fps: 20 });
+  const d = f.library.getAnimation("test_sheet"); assert.deepEqual(animationFrames(d), [45, 44, 43, 42, 43, 44]);
+  const played = await f.player.playAnimation(d.id); assert.ok(played.ok); const options = played.handles[0].effect.sprite;
+  const element = { style: {}, remove() {} }, animator = createSpriteAnimator({ element, options, manual: true }); animator.start(0);
+  const seen = [];
+  for (let i = 0; i < 12; i++) { animator.seek(i * 100 + 1); seen.push(animator.getState().currentFrame); }
+  assert.deepEqual(seen, [45,44,43,42,43,44,45,44,43,42,43,44]);
+  assert.equal(animator.getState().options.columns, 8); assert.equal(animator.getState().options.rows, 8);
+  f.advance(1201); assert.equal(f.visible.size, 0); assert.equal(f.timers.size, 0);
+  const custom = mergeAnimationDefinition(d, { frames: { sequence: [1, 7, 9], reverse: false }, playback: "once" });
+  assert.deepEqual(animationFrames(custom), [1, 7, 9]); f.destroy();
+});
+
+test("preview pause freezes start delays and completion timers, including hold-last cleanup", async () => {
+  const f = fixture(); f.library.updateAnimation("test_sheet", { fps: 36, timing: { startDelay: .2, endDelay: .1 } });
+  const played = await f.player.playAnimation("test_sheet"); f.advance(100); played.pause(); f.advance(10000);
+  assert.equal(f.visible.size, 0); assert.equal(f.timers.size, 0); played.resume(); f.advance(99); assert.equal(f.visible.size, 0);
+  f.advance(1); assert.equal(f.visible.size, 1); f.advance(400); played.pause(); f.advance(10000); assert.equal(f.visible.size, 1); assert.equal(f.timers.size, 0);
+  played.resume(); f.advance(699); assert.equal(f.visible.size, 1); f.advance(1); assert.equal(f.visible.size, 0);
+  assert.deepEqual(await played.finished, ["completed"]);
+  f.library.updateAnimation("test_sheet", { playback: "hold", timing: { startDelay: 0 } });
+  const hold = await f.player.playAnimation("test_sheet"); f.advance(100000); assert.equal(f.visible.size, 1); assert.equal(f.timers.size, 0);
+  hold.cancel(); assert.equal(f.visible.size, 0); assert.deepEqual(await hold.finished, ["cancelled"]); f.destroy();
+});
+
+test("source orientation, travel offsets, arcs and fades are deterministic presentation geometry", () => {
+  const d = normalizeAnimation({ ...definition, behavior: "projectile", direction: { mode: "face-target", sourceDirection: "up" },
+    projectile: { speed: 100, startOffset: 10, endOffset: 20, arcHeight: 30 }, appearance: { opacity: .8, fadeIn: .2, fadeOut: .2 },
+    variation: { rotation: 10, scale: .1, offsetX: 5, offsetY: 7, speed: .05 } });
+  const before = JSON.stringify(d), variation = chooseAnimationVariation(d, () => .5);
+  const points = { source: { x: 0, y: 100 }, target: { x: 100, y: 100 }, map: { x: 0, y: 0 } };
+  const timing = animationTiming(d, variation, points.source, points.target);
+  assert.equal(timing.travel, 700);
+  const start = sampleAnimation(d, 0, points, variation, timing), middle = sampleAnimation(d, 350, points, variation, timing), end = sampleAnimation(d, 700, points, variation, timing);
+  assert.equal(start.x, 10); assert.equal(start.opacity, 0); assert.equal(middle.x, 45); assert.equal(middle.y, 70); assert.equal(middle.rotation, 90); assert.equal(middle.opacity, .8); assert.equal(end.x, 80); assert.equal(end.opacity, 0);
+  assert.equal(JSON.stringify(d), before);
+  const fixed = mergeAnimationDefinition(d, { behavior: "static", rotation: 12, direction: { mode: "fixed" }, placement: { spawnAt: "source" } });
+  assert.equal(sampleAnimation(fixed, 350, points, variation, timing).rotation, 12);
+  const beam = mergeAnimationDefinition(fixed, { behavior: "beam" }); const state = sampleAnimation(beam, 350, points, variation, timing); assert.equal(state.x, 50); assert.equal(state.distance, 100);
+});
+
+test("library filters, favorites and recent selections stay separate from animation definitions", () => {
+  const library = createAnimationLibrary({ builtins: BUILTIN_ANIMATIONS });
+  const copy = library.duplicateAnimation("fireball_explosion_01"), snapshot = JSON.stringify(copy);
+  library.toggleFavorite(copy.id); library.markUsed(copy.id); library.markUsed("sword_slash_01"); library.markUsed(copy.id);
+  assert.deepEqual(library.query({ type: "Explosion", tags: "fire", origin: "user", favorites: true }).map(a => a.id), [copy.id]);
+  assert.equal(library.query({ recent: true })[0].id, copy.id); assert.equal(library.query({ sort: "used" })[0].id, copy.id);
+  assert.equal(JSON.stringify(library.getAnimation(copy.id)), snapshot);
+  const imported = library.importAnimation(library.exportAnimation(copy.id)); assert.equal(imported.appearance.tint, null); assert.equal(library.getUsage(imported.id).favorite, false);
 });

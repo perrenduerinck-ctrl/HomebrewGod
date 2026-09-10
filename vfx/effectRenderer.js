@@ -382,6 +382,7 @@ export function createEffectRenderer({
 
   function positionRecord(record, timestamp) {
     const effect = record.effect;
+    timestamp = (record.pausedAt ?? timestamp) - record.pausedMilliseconds;
     const elapsed = Math.max(0, timestamp - record.startedAt);
     const pause = Math.min(elapsed, effect.hitStopMs || 0);
     record.element.classList.toggle("is-vfx-hit-stopped", elapsed < (effect.hitStopMs || 0));
@@ -472,12 +473,22 @@ export function createEffectRenderer({
     updateZLine(record, { x, screenY, groundY, z: screenZ });
     if (debugOptions.sprites) record.animator?.seek?.(timestamp);
     const animationState = record.animator?.getState?.();
+    const custom = effect.definition.updateElement?.({ element: record.element, effect,
+      elapsed: Math.max(0, timestamp - record.startedAt), mapScale, bounds, frame: animationState?.currentFrame,
+      getActorPoint(tokenId) {
+        const token = getTokenElement(tokenId); if (!token) return null;
+        const body = token.querySelector?.(":scope > img, :scope > .hg-token-fallback") || token;
+        const rect = body.getBoundingClientRect(), origin = overlay.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2 - origin.left, y: rect.top + rect.height / 2 - origin.top };
+      }
+    });
     record.current = Object.freeze({
       id: effect.id, type: effect.type, x, y: groundY, worldY, screenY,
       z: worldZ, worldZ, screenZ, heightScale, progress,
       frame: animationState?.currentFrame ?? null,
       clip: animationState?.clipName || "",
-      layer: record.layer
+      layer: record.layer,
+      ...(custom || {})
     });
     if (record.debugLabel) {
       record.debugLabel.textContent = `${effect.id} · ${record.layer}\n` +
@@ -608,7 +619,7 @@ export function createEffectRenderer({
       animator: null, shadow: null, debugLabel: null, zLine: null, current: null,
       trailPoints: [], lastTrailSample: null, lastTrailAt: 0,
       debrisParticles: [], particleCount: 0, secondaryCount: 0,
-      dispose: null, startedAt: now()
+      dispose: null, startedAt: now(), pausedAt: null, pausedMilliseconds: 0
     };
     if (effect.definition.kind === "sprite") {
       record.animator = appendSprite(element, effect, hooks);
@@ -749,6 +760,13 @@ export function createEffectRenderer({
     notifyTimelineEvent: (id, event) => {
       const element = records.get(String(id || ""))?.element;
       if (element) element.dataset.lastTimelineEvent = event.id;
+    },
+    setPaused(id, paused) {
+      const record = records.get(id); if (!record) return false;
+      if (paused && record.pausedAt === null) record.pausedAt = now();
+      else if (!paused && record.pausedAt !== null) { record.pausedMilliseconds += now() - record.pausedAt; record.pausedAt = null; }
+      record.effect.metadata.animationRuntime?.onPause?.(paused);
+      positionRecord(record, now()); return true;
     },
     refresh: syncBounds, remove, render, setDebugOptions, setMode, update
   });

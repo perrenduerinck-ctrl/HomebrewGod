@@ -20,7 +20,7 @@ export function normalizeSpriteOptions(
       finiteNumber(options.frameCount) ?? 1
     ),
     1,
-    MAX_SPRITE_FRAMES
+    options.preserveGrid === true ? MAX_SPRITE_FRAMES * MAX_SPRITE_FRAMES : MAX_SPRITE_FRAMES
   );
   const requestedColumns = finiteNumber(
     options.columns
@@ -92,7 +92,11 @@ export function normalizeSpriteOptions(
     ...(options.preserveGrid === true ? { preserveGrid: true } : {}),
     ...(atlas ? { atlas } : {}),
     src: String(options.src || "").trim(),
-    blendMode: ["normal", "screen", "plus-lighter"].includes(options.blendMode) ? options.blendMode : null,
+    blendMode: ["normal", "screen", "plus-lighter", "multiply"].includes(options.blendMode) ? options.blendMode : null,
+    ...(Array.isArray(options.frameSequence) && options.frameSequence.length > 0 && options.frameSequence.length <= 480 &&
+      options.frameSequence.every(n => Number.isInteger(n) && n >= 0 && n < frameCount)
+      ? { frameSequence: Object.freeze([...options.frameSequence]) } : {}),
+    ...(options.playbackRate === undefined ? {} : { playbackRate: clamp(finiteNumber(options.playbackRate) ?? 1, .0001, 64) }),
     artAngle: clamp(finiteNumber(options.artAngle) ?? 0, -360, 360),
     anchor: ["center", "bottom-center", "projectile-center", "impact-center", "ground-contact"].includes(options.anchor)
       ? options.anchor : "center",
@@ -201,12 +205,13 @@ export function createSpriteAnimator({
   const cancel = typeof cancelFrame === "function"
     ? cancelFrame
     : fallbackCancel;
+  const sequence = normalized.frameSequence || Array.from({ length: normalized.endFrame - normalized.startFrame + 1 }, (_, i) => i + normalized.startFrame);
   const totalFrames =
     normalized.loop
       ? Infinity
-      : (normalized.endFrame - normalized.startFrame + 1) * normalized.loops;
-  const playbackFrames = normalized.endFrame - normalized.startFrame + 1;
-  const frameDuration = 1000 / normalized.framesPerSecond;
+      : sequence.length * normalized.loops;
+  const playbackFrames = sequence.length;
+  const frameDuration = 1000 / (normalized.framesPerSecond * (normalized.playbackRate ?? 1));
   let frameHandle = null;
   let startedAt = null;
   let running = false;
@@ -266,7 +271,7 @@ export function createSpriteAnimator({
     );
 
     if (absoluteFrame >= totalFrames) {
-      applyFrame(normalized.endFrame);
+      applyFrame(sequence[sequence.length - 1]);
       stop();
       completed = true;
       if (normalized.removeOnComplete) {
@@ -286,7 +291,7 @@ export function createSpriteAnimator({
     }
 
     applyFrame(
-      normalized.startFrame + absoluteFrame % playbackFrames
+      sequence[absoluteFrame % playbackFrames]
     );
     if (scheduleNext && !manual) {
       frameHandle = schedule(tick);
@@ -305,7 +310,7 @@ export function createSpriteAnimator({
     running = true;
     completed = false;
     startedAt = timestamp === null ? null : finiteNumber(timestamp);
-    applyFrame(normalized.startFrame);
+    applyFrame(sequence[0]);
     if (!manual) {
       frameHandle = schedule(tick);
     }

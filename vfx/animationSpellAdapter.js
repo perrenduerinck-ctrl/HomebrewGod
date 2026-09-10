@@ -23,7 +23,10 @@ export function createAnimationSpellAdapter({ legacy, player, library, bindings,
     while (active.size >= 16) cancel(active.values().next().value);
     active.set(record.id, record); emit();
     const ready = player.playSequence(ids.map(animationId => ({ animationId, duration: 5000 })), {
-      x: point.x, y: point.y, elevation: event.targetElevation || 0, signal: record.controller.signal
+      x: point.x, y: point.y, sourcePoint: event.casterPoint || point, targetPoint: event.targetPoint || point,
+      sourceElevation: event.casterElevation || 0, targetElevation: event.targetElevation || 0,
+      sourceTokenId: event.casterTokenId, targetTokenId: event.affectedTokens?.[0]?.tokenId || event.affectedTokens?.[0]?.id,
+      elevation: event.targetElevation || 0, signal: record.controller.signal
     }).then(result => {
       if (!active.has(record.id)) { result.cancel?.(); return result; }
       record.result = result;

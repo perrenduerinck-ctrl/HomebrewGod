@@ -486,6 +486,9 @@ function initializeBattleMapToolbar() {
     });
   }
   document.addEventListener("pointerdown", event => {
+    // The animation dialog is outside the toolbar so its collapsible sections
+    // do not become toolbar menus. Keep the launching menu while editing.
+    if (document.getElementById("animationLibraryDialog")?.open) return;
     for (const menu of menus) if (menu.open && !menu.contains(event.target)) menu.open = false;
   });
   window.addEventListener("keydown", event => {
@@ -5625,7 +5628,8 @@ function initializeBattleMapVfx() {
   battleMapCombatVfx = createCombatSpriteTestControls({
     container: document.getElementById("combatVfxTestControl"),
     surface: E.battleMapSurface, engine: battleMapVfx,
-    library: battleMapAnimations.library, bindings: battleMapAnimations.bindings
+    library: battleMapAnimations.library, bindings: battleMapAnimations.bindings,
+    isSoundEnabled: () => E.battleVfxSoundToggle?.checked !== false
   });
 
   E.battleVfxSoundToggle?.addEventListener("change", () => {

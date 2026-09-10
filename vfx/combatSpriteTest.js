@@ -1,8 +1,8 @@
 import { createCombatEffectSystem, getCombatActorPoint } from "./combatEffects.js";
 
 export function createCombatSpriteTestControls({ container, surface, engine,
-  location = globalThis.location, library, bindings } = {}) {
-  const player = createCombatEffectSystem({ engine, library, bindings });
+  location = globalThis.location, library, bindings, isSoundEnabled } = {}) {
+  const player = createCombatEffectSystem({ engine, library, bindings, isSoundEnabled });
   const enabled = ["localhost", "127.0.0.1", "::1"].includes(location?.hostname) ||
     /(?:^|[?&])(?:vfxTest|smokeTest)=1(?:&|$)/.test(location?.search || "");
   if (!container || !enabled) return player;

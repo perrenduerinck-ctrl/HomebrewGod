@@ -18,10 +18,11 @@ export function getAnimationActions() {
 export function createAnimationWorkspace({ engine, document = globalThis.document }) {
   const library = createAnimationLibrary({ builtins: BUILTIN_ANIMATIONS });
   const bindings = createAnimationBindings({ library });
-  const player = createAnimationPlayer({ engine, library });
+  const isSoundEnabled = () => document.getElementById("battleVfxSoundToggle")?.checked !== false;
+  const player = createAnimationPlayer({ engine, library, isSoundEnabled });
   const editor = createAnimationEditor({ dialog: document.getElementById("animationLibraryDialog"),
     button: document.getElementById("animationLibraryButton"), library, bindings,
-    actions: getAnimationActions() });
+    actions: getAnimationActions(), isSoundEnabled });
   return Object.freeze({ library, bindings, player,
     wrapSequences: (legacy, onStateChange) => createAnimationSpellAdapter({ legacy, player, library, bindings, onStateChange }),
     clear() { player.clear(); editor.close(); },
