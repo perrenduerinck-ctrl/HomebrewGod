@@ -37,9 +37,18 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
     if (entries.has(a.id)) throw new Error("That animation ID already exists. Update or duplicate it instead.");
     return put(a);
   }
+  function hydrateAnimation(input) {
+    const a = normalizeAnimation(input);
+    const current = entries.get(a.id);
+    if (current?.ownership.kind === "builtin") return current;
+    return put(a);
+  }
   function updateAnimation(id, changes) {
     const old = requireAnimation(id);
-    return put(mergeAnimationDefinition(old, { ...changes, id: old.id, ownership: old.ownership, revision: old.revision + 1 }));
+    const promotedOwnership = old.ownership.kind === "user" && old.ownership.scope === "session" && changes?.ownership?.scope === "user"
+      ? changes.ownership
+      : old.ownership;
+    return put(mergeAnimationDefinition(old, { ...changes, id: old.id, ownership: promotedOwnership, revision: old.revision + 1 }));
   }
   function duplicateAnimation(id) {
     const a = requireAnimation(id);
@@ -58,7 +67,7 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
     if (!originals.has(id)) throw new Error("Only built-in animations have original settings.");
     return put(originals.get(id));
   }
-  return Object.freeze({ getAnimation, registerAnimation, updateAnimation, duplicateAnimation, deleteAnimation, resetAnimation,
+  return Object.freeze({ getAnimation, registerAnimation, hydrateAnimation, updateAnimation, duplicateAnimation, deleteAnimation, resetAnimation,
     getAnimationUsage,
     trackReferences(key, reference) { references.set(key, reference); return () => references.delete(key); },
     setContext(context = {}) { ownerId = context.ownerId || null; roomId = context.roomId || null; emit(); },

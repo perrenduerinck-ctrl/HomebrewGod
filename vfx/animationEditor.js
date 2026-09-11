@@ -5,13 +5,14 @@ import { createAnimationSelector } from "./animationBrowser.js";
 import { animationFormMarkup, writeAnimationFields, readAnimationFields } from "./animationEditorFields.js";
 import { ANIMATION_PRESETS } from "./animationPlayback.js";
 import { inspectAnimationSprite, spriteCheckSummary } from "./animationSpriteCheck.js";
+import { createAnimationPreviewStage } from "./animationPreviewStage.js";
 export { createAnimationSelector } from "./animationBrowser.js";
 
-export function createAnimationEditor({ dialog, button, library, bindings, actions = [], isSoundEnabled }) {
+export function createAnimationEditor({ dialog, button, library, bindings, actions = [], isSoundEnabled, persistence = null }) {
   if (!dialog || !button) return { stop() {}, close() {}, destroy() {} };
   dialog.innerHTML = `<div class="hg-animation-heading"><div><span class="hg-animation-eyebrow">HOMEBREW GOD · VFX STUDIO</span><h2 id="animationLibraryTitle">Animation Creator</h2>
     <p>Find an effect. Make it yours.</p></div><button data-animation-close type="button" aria-label="Close animations">Close</button></div>
-    <p class="hg-animation-session">Session workspace · Custom animations, favorites and assignments reset when you reload.</p>
+    <p class="hg-animation-session" data-animation-session>Personal animations sync after sign-in. Favorites and temporary action assignments remain session-only.</p>
     <div class="hg-animation-columns"><section class="hg-animation-settings"><div data-animation-browser-panel>
     <div data-animation-chooser></div><div class="hg-animation-buttons"><button data-animation-edit type="button">Edit settings</button><button data-animation-duplicate type="button">Duplicate / Remix</button>
     <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-delete type="button">Delete custom</button></div>
@@ -38,27 +39,23 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <p data-animation-status role="status"></p>`;
   const field = name => dialog.querySelector(`[data-animation-${name}]`), status = message => { field("status").textContent = message; };
   const surface = field("preview"), previewEngine = createBattleMapEffectEngine({ surface }), preview = createAnimationPlayer({ engine: previewEngine, library, isSoundEnabled, onError: () => {} });
-  let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, imageInfo = null, destroyed = false, playback = null, paused = false;
+  let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, draftSpriteFile = null, imageInfo = null, destroyed = false, playback = null, paused = false;
   let external = null, deleteId = null;
-  const points = { source: { x: .24, y: .52 }, target: { x: .76, y: .52 } };
   const listeners = [], on = (element, event, fn) => { element.addEventListener(event, fn); listeners.push(() => element.removeEventListener(event, fn)); };
   const safely = fn => async event => { try { await fn(event); } catch (e) { status(e.message || "The animation could not be updated."); } };
-  function positionTokens() { for (const key of ["source", "target"]) { field(key).style.left = `${points[key].x * 100}%`; field(key).style.top = `${points[key].y * 100}%`; } }
-  positionTokens();
-  for (const key of ["source", "target"]) {
-    const node = field(key); let dragging = null;
-    on(node, "pointerdown", event => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); dragging = event.pointerId; node.setPointerCapture(event.pointerId); });
-    on(node, "pointermove", event => {
-      if (event.pointerId !== dragging) return; event.preventDefault(); event.stopPropagation(); const rect = surface.getBoundingClientRect();
-      points[key] = { x: Math.max(.06, Math.min(.94, (event.clientX - rect.left) / rect.width)), y: Math.max(.12, Math.min(.85, (event.clientY - rect.top) / rect.height)) }; positionTokens();
-    });
-    on(node, "pointerup", event => { if (dragging === event.pointerId) { node.releasePointerCapture(event.pointerId); dragging = null; } });
-    on(node, "pointercancel", () => { dragging = null; });
-    on(node, "keydown", event => {
-      const delta = { ArrowLeft: [-.025, 0], ArrowRight: [.025, 0], ArrowUp: [0, -.04], ArrowDown: [0, .04] }[event.key];
-      if (!delta) return; event.preventDefault(); event.stopPropagation(); points[key].x = Math.max(.06, Math.min(.94, points[key].x + delta[0])); points[key].y = Math.max(.12, Math.min(.85, points[key].y + delta[1])); positionTokens();
-    });
-  }
+  const previewStage = createAnimationPreviewStage({
+    surface,
+    source: field("source"),
+    target: field("target"),
+    swapButton: field("swap-tokens"),
+    resetButton: field("reset-tokens"),
+    distanceSelect: field("distance"),
+    widthFeet: 150,
+  });
+  const persistenceUnsubscribe = persistence?.subscribe?.(state => {
+    field("session").textContent = state.message;
+    field("session").dataset.state = state.state;
+  }) || (() => {});
   function stop() { previewRevision++; preview.clear(); playback = null; paused = false; field("pause").textContent = "Pause"; field("preview-info").textContent = "Preview stopped."; }
   function selected() { return library.getAnimation(chooser.getSelectedId()); }
   function selectionChanged() {
@@ -88,7 +85,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     catch (error) { if (!destroyed && current === inspectionRevision) { imageInfo = null; field("sheet-stats").textContent = error.message; status(error.message); } }
   }
   function openEditor(a = null) {
-    stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; imageInfo = null;
+    stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; draftSpriteFile = null; imageInfo = null;
     field("form").hidden = false; field("browser-panel").hidden = true; field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
     writeAnimationFields(field, a); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
     field("sound-info").textContent = draftSound ? "Current sound retained." : "No sound";
@@ -108,8 +105,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     if (!definition) throw new Error("Choose an animation first.");
     if (fromDraft) { field("preview-fps").value = definition.fps; field("preview-scale").value = definition.scale; }
     const result = await preview.previewAnimation(definition, {
-      x: surface.clientWidth / 2, y: surface.clientHeight / 2, source: field("source"), target: field("target"),
-      grid: { pixelsPerFoot: surface.clientWidth / 150 },
+      ...previewStage.getContext({ debugPoints: field("show-points").checked }),
       debugPoints: field("show-points").checked, previewSpeed: Number(field("slow").value),
       ...(fromDraft ? {} : { fps: Number(field("preview-fps").value), scale: Number(field("preview-scale").value) }),
       onFrame: state => { if (current === previewRevision) { const text = `Frame ${state.frame + 1} / ${definition.grid.columns * definition.grid.rows}`; if (field("frame-readout").textContent !== text) field("frame-readout").textContent = text; } }
@@ -127,7 +123,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("The file could not be read.")); reader.readAsDataURL(file); });
   }
   function finishExternal(id = null) { const request = external; external = null; request?.resolve(id); field("external").hidden = true; field("assignment").hidden = false; }
-  on(button, "click", () => { finishExternal(); dialog.showModal(); selectionChanged(); assignmentInfo(); });
+  on(button, "click", safely(async () => { finishExternal(); dialog.showModal(); selectionChanged(); assignmentInfo(); await persistence?.load?.(); }));
   on(field("close"), "click", () => dialog.close());
   on(dialog, "keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); dialog.close(); } });
   on(dialog, "close", () => { finishExternal(); stop(); editRevision++; inspectionRevision++; });
@@ -141,7 +137,13 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("custom"), "click", () => openEditor());
   on(field("edit"), "click", safely(() => { if (!selected()) throw new Error("Choose an animation first."); openEditor(selected()); }));
   on(field("duplicate"), "click", safely(() => { const a = library.duplicateAnimation(chooser.getSelectedId()); chooser.select(a.id); openEditor(a); status("Created a separate custom remix."); }));
-  function removeAnimation(options = {}) { library.deleteAnimation(deleteId, options); field("delete-warning").hidden = true; deleteId = null; selectionChanged(); assignmentInfo(); status("Custom animation removed. References updated."); }
+  async function removeAnimation(options = {}) {
+    const removedId = deleteId;
+    library.deleteAnimation(removedId, options);
+    try { await persistence?.deleteAnimation?.(removedId); }
+    catch (error) { console.warn("The saved animation could not be deleted.", error); }
+    field("delete-warning").hidden = true; deleteId = null; selectionChanged(); assignmentInfo(); status("Custom animation removed. References updated.");
+  }
   on(field("delete"), "click", safely(() => {
     deleteId = chooser.getSelectedId(); const used = library.getAnimationUsage(deleteId);
     if (!used.length) return removeAnimation();
@@ -180,7 +182,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     if (!["image/png", "image/webp", "image/jpeg"].includes(file.type)) throw new Error("Choose a PNG, WebP or JPEG sprite sheet.");
     const current = ++editRevision, data = await readFile(file);
     if (destroyed || current !== editRevision) return;
-    draftSource = data; imageInfo = null; field("file-info").textContent = file.name; field("upload-thumbnail").src = data; field("upload-thumbnail").hidden = false; status("Sheet loaded. Checking its cells and transparency…"); syncControls(); await inspect(data);
+    draftSource = data; draftSpriteFile = file; imageInfo = null; field("file-info").textContent = file.name; field("upload-thumbnail").src = data; field("upload-thumbnail").hidden = false; status("Sheet loaded. Checking its cells and transparency…"); syncControls(); await inspect(data);
   }
   on(field("file"), "change", safely(() => loadSprite(field("file").files[0])));
   on(field("upload-zone"), "dragover", event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; });
@@ -201,28 +203,31 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("show-bounds"), "change", () => { surface.classList.toggle("show-animation-bounds", field("show-bounds").checked); });
   on(field("show-pivot"), "change", () => { surface.classList.toggle("show-animation-pivot", field("show-pivot").checked); });
   on(field("show-points"), "change", safely(() => { if (playback) return playCurrent(); }));
-  on(field("swap-tokens"), "click", () => { [points.source, points.target] = [points.target, points.source]; positionTokens(); });
   on(field("distance"), "change", () => {
     const feet = field("distance").value === "adjacent" ? 5 : Number(field("distance").value);
-    const ratio = Math.min(.8, feet / 150); points.source = { x: (1 - ratio) / 2, y: .52 }; points.target = { x: (1 + ratio) / 2, y: .52 }; positionTokens();
-    status(`Preview scale: ${Math.round(surface.clientWidth / 150 * 5)} px per 5 ft. Visual distance only.`);
+    previewStage.setDistance(feet);
+    status(`Preview scale: ${Math.round(previewStage.getState().pixelsPerFoot * 5)} px per 5 ft. Visual distance only.`);
   });
   for (const node of dialog.querySelectorAll("[data-animation-quick]")) on(node, "click", safely(() => {
     const key = node.dataset.animationQuick, a = field("form").hidden ? selected() : draft();
     const mode = { source: "SOURCE", target: "TARGET", projectile: "SOURCE_TO_TARGET", melee: "SOURCE_TOWARD_TARGET", beam: "MIDPOINT", aura: "SOURCE" }[key];
     return play(mergeAnimationDefinition(a, { behavior: ["projectile", "beam", "melee"].includes(key) ? key : "static", placement: { mode, followSource: key === "aura", followTarget: false }, direction: { mode: "face-target" }, ...(key === "aura" ? { playback: "loop" } : {}) }), true);
   }));
-  on(field("reset-tokens"), "click", () => { points.source = { x: .24, y: .52 }; points.target = { x: .76, y: .52 }; positionTokens(); });
   on(field("form"), "submit", safely(async event => {
     event.preventDefault(); const a = draft(), current = ++editRevision; await preview.prepareAnimation(a);
     if (destroyed || current !== editRevision) return;
-    const saved = editId ? library.updateAnimation(editId, a) : library.registerAnimation({ ...a, id: undefined });
+    const prepared = draftBase?.ownership.kind === "builtin"
+      ? { definition: a, asset: null, persistent: false }
+      : await persistence?.prepareAnimation?.(a, { spriteFile: draftSpriteFile }) || { definition: a, asset: null, persistent: false };
+    if (destroyed || current !== editRevision) return;
+    const saved = editId ? library.updateAnimation(editId, prepared.definition) : library.registerAnimation({ ...prepared.definition, id: undefined });
+    if (prepared.persistent) await persistence.saveAnimation(saved, { asset: prepared.asset });
     if (external) { finishExternal(saved.id); dialog.close(); return; }
-    chooser.select(saved.id); assignmentInfo(); status("Animation saved for this session. Select an action and choose Change animation to assign it.");
+    chooser.select(saved.id); assignmentInfo(); status(prepared.persistent ? "Animation saved to your personal library. Select an action to assign it." : "Animation saved for this session. Sign in to sync it.");
   }));
   selectionChanged(); assignmentInfo();
-  return { stop, openForSlot({ slot = "impact", mode = "choose", animationId } = {}) {
-      finishExternal(); if (!dialog.open) dialog.showModal(); selectionChanged();
+  return { stop, async openForSlot({ slot = "impact", mode = "choose", animationId } = {}) {
+      finishExternal(); if (!dialog.open) dialog.showModal(); selectionChanged(); await persistence?.load?.();
       field("external").hidden = false; field("assignment").hidden = true; field("external-label").textContent = `Choose an animation for ${slot}.`;
       if (animationId && library.getAnimation(animationId)) chooser.select(animationId);
       const promise = new Promise(resolve => { external = { resolve }; });
@@ -230,5 +235,5 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       if (mode === "remix" && selected()) { const a = library.duplicateAnimation(selected().id); chooser.select(a.id); openEditor(a); }
       return promise;
     }, close() { if (dialog.open) dialog.close(); else stop(); },
-    destroy() { if (destroyed) return; destroyed = true; editRevision++; inspectionRevision++; stop(); if (dialog.open) dialog.close(); chooser.destroy(); preview.destroy(); previewEngine.destroy(); listeners.forEach(remove => remove()); } };
+    destroy() { if (destroyed) return; destroyed = true; editRevision++; inspectionRevision++; stop(); if (dialog.open) dialog.close(); chooser.destroy(); previewStage.destroy(); persistenceUnsubscribe(); preview.destroy(); previewEngine.destroy(); listeners.forEach(remove => remove()); } };
 }

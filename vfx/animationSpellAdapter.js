@@ -2,6 +2,32 @@
 // Unassigned, missing and failed custom assets fall back to the legacy sequence.
 import { createAnimationSequenceController } from "./animationSequence.js";
 import { getSpellAnimationDependencies } from "./animationReferences.js";
+
+export function buildSpellAnimationContext(event = {}, options = {}) {
+  const point = event.targetPoint || event.casterPoint || { x: 0, y: 0 };
+  const hasExplicitTarget = Object.prototype.hasOwnProperty.call(event, "targetTokenId");
+  const targetTokenId = hasExplicitTarget ? event.targetTokenId || null :
+    ["self", "aura"].includes(event.deliveryType) ? event.casterTokenId :
+      event.geometry && !["point", "single"].includes(event.geometry.shape) ? null :
+        event.affectedTokens?.[0]?.tokenId || event.affectedTokens?.[0]?.id || null;
+  return {
+    x: point.x,
+    y: point.y,
+    sourcePoint: event.casterPoint || point,
+    targetPoint: event.targetPoint || point,
+    sourceElevation: event.casterElevation || 0,
+    targetElevation: event.targetElevation || 0,
+    sourceTokenId: event.casterTokenId || null,
+    targetTokenId,
+    elevation: event.targetElevation || 0,
+    grid: options.grid || { pixelsPerFoot: event.geometry?.pixelsPerFoot, coordinateSpace: "layer" },
+    debugPoints: options.debugPoints === true,
+    onEvent: options.onEvent,
+    maximumDuration: Number(options.maximumDuration) || (event.preview ? 5000 : 8000),
+    ...(options.duration ? { duration: options.duration } : {}),
+  };
+}
+
 export function createAnimationSpellAdapter({ legacy, player, library, bindings, onStateChange = () => {} }) {
   const sequence = createAnimationSequenceController({ player });
   const active = new Map(); let nextId = 0, destroyed = false;
@@ -19,24 +45,18 @@ export function createAnimationSpellAdapter({ legacy, player, library, bindings,
     if (!reference || options.sequenceId) return legacy.play(event, options);
     const ids = getSpellAnimationDependencies(reference);
     if (!ids.length || ids.some(id => !library.getAnimation(id))) return legacy.play(event, options);
-    // Bounded presentation-only playback even when a user assigns a looping aura.
-    const point = event.targetPoint || event.casterPoint || { x: 0, y: 0 };
     const record = { id: `animation-cast-${++nextId}`, event, controller: new AbortController() };
     while (active.size >= 16) cancel(active.values().next().value);
     active.set(record.id, record); emit();
-    const context = {
-      x: point.x, y: point.y, sourcePoint: event.casterPoint || point, targetPoint: event.targetPoint || point,
-      sourceElevation: event.casterElevation || 0, targetElevation: event.targetElevation || 0,
-      sourceTokenId: event.casterTokenId,
-      // An AOE center is a map point, not the first affected token.
-      targetTokenId: ["self", "aura"].includes(event.deliveryType) ? event.casterTokenId :
-        event.geometry && !["point", "single"].includes(event.geometry.shape) ? null : event.affectedTokens?.[0]?.tokenId || event.affectedTokens?.[0]?.id,
-      elevation: event.targetElevation || 0, signal: record.controller.signal,
-      grid: options.grid || { pixelsPerFoot: event.geometry?.pixelsPerFoot, coordinateSpace: "layer" },
-      onEvent: options.onEvent
-    };
-    const ready = (reference.animationId ? player.playSequence(ids.map(animationId => ({ animationId, duration: 5000 })), context) :
-      sequence.playAnimationSequence({ ...context, animations: reference.animations })).then(result => {
+    const hasSustain = Boolean(reference.animations?.sustain);
+    const context = { ...buildSpellAnimationContext(event, {
+      ...options,
+      ...(event.preview && hasSustain && !options.duration ? { duration: { unit: "seconds", value: 2 } } : {}),
+    }), signal: record.controller.signal };
+    const run = reference.animationId
+      ? player.playSequence(ids.map(animationId => ({ animationId, duration: context.maximumDuration })), context)
+      : sequence.playAnimationSequence({ ...context, animations: reference.animations });
+    const ready = Promise.resolve(run).then(result => {
       if (!active.has(record.id)) { result.cancel?.(); return result; }
       record.result = result;
       if (!result.ok) {
@@ -47,6 +67,13 @@ export function createAnimationSpellAdapter({ legacy, player, library, bindings,
         }
       } else result.finished.finally(() => { active.delete(record.id); emit(); });
       return result;
+    }).catch(error => {
+      active.delete(record.id); emit();
+      if (!record.controller.signal.aborted) {
+        record.fallback = legacy.play(event, options);
+        return record.fallback;
+      }
+      return { ok: false, reason: "cancelled", error };
     });
     return { ok: true, id: record.id, ready, cancel: () => cancel(record), animationId: reference.animationId || null };
   }

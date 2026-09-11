@@ -29,7 +29,8 @@ export function createSpellPreviewSession({
       x: point.x,
       y: point.y,
       xRatio: Number.isFinite(point.xRatio) ? point.xRatio : null,
-      yRatio: Number.isFinite(point.yRatio) ? point.yRatio : null
+      yRatio: Number.isFinite(point.yRatio) ? point.yRatio : null,
+      tokenId: point.tokenId ? String(point.tokenId).slice(0, 160) : null
     });
   }
 
@@ -85,8 +86,14 @@ export function createSpellPreviewSession({
     return Object.freeze({
       spellId: spell.id,
       previewCasterPoint,
+      previewCasterTokenId: previewCasterPoint?.tokenId || null,
       previewCasterElevation,
       previewTargetPoint,
+      previewTargetTokenId: selfCentered
+        ? previewCasterPoint?.tokenId || null
+        : instruction.singleTarget
+          ? previewTargetPoint?.tokenId || null
+          : null,
       previewTargetElevation,
       previewLocked: locked,
       inRange,
@@ -131,6 +138,49 @@ export function createSpellPreviewSession({
   }
 
   return Object.freeze({ getState, pickPoint, aimAt, reset });
+}
+
+// The old click-targeting controller ends here. This boundary creates the same
+// normalized source/target contract consumed by real spell casts and the shared
+// animation sequence player. AOE centers intentionally remain map points.
+export function buildSpellAnimationPreviewContext({ spell, state, grid = null } = {}) {
+  if (!spell || !state?.previewCasterPoint || !state?.previewTargetPoint) {
+    throw new TypeError("A ready spell preview is required.");
+  }
+  const selfTarget = String(state.previewInstruction?.targetType || "").toLowerCase() === "self" && !state.directional;
+  const targetTokenId = selfTarget
+    ? state.previewCasterTokenId || null
+    : state.previewInstruction?.singleTarget
+      ? state.previewTargetTokenId || null
+      : null;
+  const source = Object.freeze({
+    tokenId: state.previewCasterTokenId || null,
+    point: state.previewCasterPoint,
+    elevation: state.previewCasterElevation,
+    anchor: "center",
+  });
+  const target = Object.freeze({
+    tokenId: targetTokenId,
+    point: state.previewTargetPoint,
+    elevation: state.previewTargetElevation,
+    anchor: targetTokenId ? "center" : "map-point",
+  });
+  return Object.freeze({
+    spell,
+    casterTokenId: source.tokenId,
+    casterPoint: source.point,
+    casterElevation: source.elevation,
+    targetTokenId: target.tokenId,
+    targetPoint: target.point,
+    targetElevation: target.elevation,
+    geometry: state.previewGeometry,
+    affectedTokens: target.tokenId ? [{ id: target.tokenId, center: target.point, elevation: target.elevation }] : [],
+    deliveryType: state.previewInstruction.deliveryType,
+    source,
+    target,
+    grid,
+    preview: true,
+  });
 }
 
 export function formatSpellPreviewStatus(state) {

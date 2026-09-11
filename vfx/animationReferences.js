@@ -1,7 +1,7 @@
 export const ANIMATION_SLOTS = Object.freeze(["cast", "travel", "impact", "sustain", "end"]);
 const id = value => typeof value === "string" && /^[a-z][\w.-]{0,119}$/i.test(value) ? value : null;
 const clone = value => JSON.parse(JSON.stringify(value));
-const overrideKeys = ["fps", "scale", "rotation", "offsetX", "offsetY", "anchorX", "anchorY", "flipX", "flipY", "tint", "speedMultiplier", "scaleMultiplier", "opacityMultiplier", "rotationOffset", "appearance", "timing", "transform", "direction", "placement", "projectile", "beam", "behavior", "area"];
+const overrideKeys = ["fps", "scale", "rotation", "offsetX", "offsetY", "anchorX", "anchorY", "flipX", "flipY", "tint", "speedMultiplier", "scaleMultiplier", "opacityMultiplier", "rotationOffset", "projectileSpeedMultiplier", "appearance", "timing", "transform", "direction", "placement", "projectile", "beam", "behavior", "area"];
 export function normalizeSpellAnimationReference(value) {
   if (value == null || value === "") return null;
   const raw = typeof value === "string" ? { animationId: value } : value;

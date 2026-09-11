@@ -120,7 +120,8 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
       scale: definition.scale * finite(overrides.scaleMultiplier, 1, "Scale multiplier"),
       rotation: definition.rotation + finite(overrides.rotationOffset, 0, "Rotation offset"),
       appearance: { opacity: definition.appearance.opacity * finite(overrides.opacityMultiplier, 1, "Opacity multiplier") },
-      timing: { speed: definition.timing.speed * finite(overrides.speedMultiplier, 1, "Speed multiplier") }
+      timing: { speed: definition.timing.speed * finite(overrides.speedMultiplier, 1, "Speed multiplier") },
+      projectile: { speed: definition.projectile.speed * finite(overrides.projectileSpeedMultiplier, 1, "Projectile speed multiplier") }
     });
     if (!await cache.preload(definition.sprite, "Animation")) throw new Error(`Unable to load animation sprite: ${definition.name}.`);
     const dimensions = cache.getDimensions(definition.sprite);

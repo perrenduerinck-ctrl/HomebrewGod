@@ -273,6 +273,7 @@ export function createSpellVfxEvent({
   casterPoint = null,
   casterElevation = casterToken?.elevation,
   targetPoint = null,
+  targetTokenId = null,
   targetElevation = null,
   geometry = null,
   affectedTokens = [],
@@ -319,6 +320,7 @@ export function createSpellVfxEvent({
       geometry: normalizedGeometry,
       deliveryType: normalizedDeliveryType
     }),
+    ...(cleanText(targetTokenId, "", 160) ? { targetTokenId: cleanText(targetTokenId, "", 160) } : {}),
     targetElevation: normalizeElevation(
       targetElevation,
       normalizedGeometry?.elevationFeet ?? casterElevation

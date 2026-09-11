@@ -2438,12 +2438,27 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-vfx-animation-sprite, .hg-vfx-animation-sprite * { pointer-events: none; }
 .hg-vfx-animation-sprite { border-radius: 0; }
 .hg-animation-debug { color: #ffdf60; white-space: nowrap; font: 11px monospace; }
-.hg-spell-animation-panel { width: min(760px, calc(100vw - 40px)); max-height: 90vh; overflow: auto; padding: 24px; border: 1px solid #657093; border-radius: 16px; color: #eef2ff; background: #111827; font: 14px system-ui; }
+.hg-spell-animation-panel { --animation-accent: #b7a7ff; width: min(900px, calc(100vw - 40px)); max-height: 90vh; overflow: auto; padding: 24px; border: 1px solid #657093; border-radius: 16px; color: #eef2ff; background: #111827; font: 14px system-ui; }
 .hg-spell-animation-panel::backdrop { background: #020617a8; }
 .hg-spell-animation-panel section { border: 1px solid #334155; padding: 14px; border-radius: 10px; margin: 12px 0; }
 .hg-spell-animation-panel label { display: inline-flex; flex-direction: column; gap: 5px; margin: 8px; }
 .hg-spell-animation-panel button, .hg-spell-animation-panel select, .hg-spell-animation-panel input { max-width: 100%; padding: 8px; background: #202c43; color: #eef2ff; border: 1px solid #566580; border-radius: 6px; }
 .hg-spell-animation-panel [data-spell-save] { background: #b8a5fa; color: #111827; }
+.hg-spell-animation-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.hg-spell-animation-heading h2 { margin: 5px 0 0; }
+.hg-spell-animation-stage-flow { display: grid; grid-template-columns: repeat(9, auto); align-items: stretch; gap: 7px; margin: 18px 0; }
+.hg-spell-animation-panel section.hg-spell-animation-stage-card { min-width: 0; margin: 0; padding: 10px; background: #172137; }
+.hg-spell-animation-stage-card[data-empty="true"] { border-style: dashed; opacity: .82; }
+.hg-spell-animation-stage-card h3, .hg-spell-animation-stage-card p { margin: 4px 0; overflow-wrap: anywhere; }
+.hg-spell-animation-card-main { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 9px; align-items: center; min-height: 54px; }
+.hg-spell-animation-thumb { display: grid; place-items: center; width: 48px; height: 48px; overflow: hidden; border-radius: 9px; background: radial-gradient(circle, #43547a, #172137); background-position: center; background-repeat: no-repeat; background-size: cover; color: #cfc6ff; font-weight: 800; }
+.hg-spell-animation-thumb.has-image span { opacity: 0; }
+.hg-spell-animation-stage-card .hg-animation-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hg-spell-animation-stage-card .hg-animation-buttons button { padding: 6px; font-size: 10px; }
+.hg-spell-animation-stage-arrow { display: grid; place-items: center; color: #9584d4; font-size: 18px; }
+.hg-spell-animation-overrides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hg-spell-animation-overrides label { min-width: 0; margin: 5px; font-size: 11px; }
+.hg-spell-animation-preview { height: 240px; margin-top: 8px; }
 .hg-animation-library {
   --animation-accent: #b7a7ff; box-sizing: border-box;
   width: min(1160px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px);
@@ -2483,8 +2498,8 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-animation-preview[data-background="grid"] { background-color: #1e273b; background-image: linear-gradient(#4d627a55 1px, transparent 1px), linear-gradient(90deg, #4d627a55 1px, transparent 1px); background-size: 32px 32px; }
 .hg-animation-preview[data-background="map"] { background-color: #464c3c; background-image: radial-gradient(ellipse at 80% 20%, #77936666, transparent 55%), radial-gradient(ellipse at 15% 75%, #31272099, transparent 50%), linear-gradient(#a9ac8033 1px, transparent 1px), linear-gradient(90deg, #a9ac8033 1px, transparent 1px); background-size: auto, auto, 40px 40px, 40px 40px; }
 .hg-animation-stage-line { position: absolute; left: 12%; right: 12%; top: 52%; border-top: 1px dashed #74809b77; pointer-events: none; }
-.hg-animation-library button.hg-animation-dummy { position: absolute; z-index: 5; width: 44px; height: 44px; padding: 0; border-radius: 50%; transform: translate(-50%, -50%); touch-action: none; cursor: grab; box-shadow: 0 4px 10px #0008; background: #153e57; border: 2px solid #6fcff5; }
-.hg-animation-library button.hg-animation-target { background: #4b2940; border-color: #ff9bab; }
+:is(.hg-animation-library, .hg-spell-animation-panel) button.hg-animation-dummy { position: absolute; z-index: 5; width: 44px; height: 44px; padding: 0; border-radius: 50%; transform: translate(-50%, -50%); touch-action: none; cursor: grab; box-shadow: 0 4px 10px #0008; background: #153e57; border: 2px solid #6fcff5; }
+:is(.hg-animation-library, .hg-spell-animation-panel) button.hg-animation-target { background: #4b2940; border-color: #ff9bab; }
 .hg-animation-dummy span { font-size: 18px; font-weight: 800; }
 .hg-animation-dummy small { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 2px 6px; border-radius: 4px; background: #0b1424d9; color: #e1eafd; font-size: 10px; pointer-events: none; }
 .hg-animation-frame-readout { position: absolute; z-index: 100; bottom: 10px; left: 10px; padding: 4px 8px; border-radius: 4px; background: #060b19d9; color: #d8e4ff; font: 11px monospace; pointer-events: none; }
@@ -2546,6 +2561,8 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   .hg-animation-columns { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .hg-animation-preview-panel { position: static; }
   .hg-animation-library [data-animation-status] { bottom: -16px; }
+  .hg-spell-animation-stage-flow { grid-template-columns: minmax(0, 1fr); }
+  .hg-spell-animation-stage-arrow { min-height: 18px; }
 }
 @media (max-width: 400px) {
   .hg-animation-heading h2 { font-size: 23px; }

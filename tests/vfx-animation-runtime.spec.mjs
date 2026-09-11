@@ -39,7 +39,6 @@ test("spell creation uploads an animation in place, stores stage IDs, preserves 
   await creator.locator("[data-animation-file]").setInputFiles({name:"impact.png",mimeType:"image/png",buffer:Buffer.from(data,"base64")});
   await creator.getByRole("button",{name:"Save Animation",exact:true}).click();await expect(creator).not.toBeVisible();
   await expect(panel.locator('[data-spell-animation-slot="impact"]')).toContainText("Prismatic impact");
-  await panel.locator("[data-spell-animation-add]").selectOption("travel");
   await panel.locator('[data-spell-animation-slot="travel"] [data-slot-action="choose"]').click();await creator.locator("[data-animation-select]").selectOption("sword_slash_01");await creator.locator("[data-animation-use-selected]").click();
   await panel.screenshot({path:"output/vfx/combat-sprite-test/spell-animation-panel.png"});
   await panel.locator("[data-spell-play]").click();await expect(panel.locator(".hg-map-vfx-effect")).not.toHaveCount(0);await panel.locator("[data-spell-stop]").click();
@@ -56,7 +55,7 @@ test("spell creation uploads an animation in place, stores stage IDs, preserves 
   expect(usage.id).toMatch(/^custom_/);expect(usage.usage.some(x=>x.name==="Prismatic test spell")).toBe(true);expect(errors).toEqual([]);
   await panel.locator('[data-spell-animation-slot="travel"] [data-slot-action="clear"]').click();
   await panel.locator("[data-spell-save]").click(); await expect(panel).not.toBeVisible(); await edit.click();
-  await expect(panel.locator('[data-spell-animation-slot="travel"]')).toHaveCount(0);
+  await expect(panel.locator('[data-spell-animation-slot="travel"]')).toContainText("No animation");
   await panel.locator("[data-spell-cancel]").click();
   await page.evaluate(async id=>{const {getAnimationSession}=await import("/vfx/animationWorkspace.js");void getAnimationSession(document).editor.openForSlot({animationId:id});},usage.id);
   await creator.locator("[data-animation-delete]").click();

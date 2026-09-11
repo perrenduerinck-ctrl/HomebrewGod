@@ -79,12 +79,25 @@ Closing the dialog, Escape, leaving the map and Effects Off clear the preview.
 
 ## Ownership and persistence
 
-This version remains **session-based**. Uploads, definition edits, assignments,
-favorites and usage history reset on reload, as the UI states. The standalone
-library does not write Firebase/account/room records. Spell references use the
-existing character save path. Definitions retain
-ownership `{kind, scope, ownerId}` for a future persistence adapter. Built-ins are
-global; normal uploads/remixes are user definitions with session scope.
+Signed-in users keep custom animation definitions at
+`users/{uid}/animations/{animationId}`. The persistence adapter loads those
+records into the in-memory library without changing their stable IDs or revisions.
+Create, edit and Replace Sprite write the normalized definition, ownership,
+`createdAt`, `updatedAt`, and hosted sprite metadata. Replace Sprite retains the
+ID and increments `revision`, so spell references keep working.
+
+Sprite sheets upload to Cloudinary before Firestore is written. Firestore stores
+only the secure hosted URL and asset identity; `data:` URLs are rejected for both
+sprites and sounds. Deleting a definition removes its Firestore record only after
+the library's reference check succeeds. Hosted files are deliberately retained
+until server-side reference checking can prove they are orphaned. A failed or
+offline load shows a warning while built-ins and session edits continue to work.
+
+Favorites, usage history and temporary action assignments remain session-only.
+Spell stage references persist through the existing character save path. Built-ins
+remain global and are never copied to a user's Firestore collection unless the
+user explicitly duplicates one. Security rules restrict each animation collection
+to its owning authenticated user and require hosted asset URLs.
 
 ## Data and API compatibility
 
@@ -228,11 +241,20 @@ without a grid. Manual Scale remains a multiplier. `visualReach` is metadata onl
 ## Spell creation and stages
 
 The Spells step has **Choose, create or upload animations** for a new spell, plus
-an animation button on each saved custom spell. It opens an in-place panel with
-Cast, Travel, Impact, Sustain and End; unused slots remain hidden until added.
-Choose, Preview, Clear, Duplicate/Remix, Create New and Upload New use the same
-session library and creator as the map. Saving an animation assigns its stable ID
-to the active slot. Returning preserves unsaved spell fields.
+an animation button on each saved custom spell. It opens one sequence panel with
+Cast, Travel, Impact, Sustain and End cards connected in playback order. Empty
+optional cards are skipped. Choose/Replace, Preview, Clear, Duplicate/Remix,
+Create New and Upload New use the same persistent library and creator as the map.
+Saving an animation assigns its stable ID to the active slot. Returning preserves
+unsaved spell fields.
+
+Both authoring surfaces use `animationPreviewStage.js` for the draggable Source
+and Target anchors. Stage preview and map spell preview then enter the same
+`animationSequence` → `animationPlayer` → `animationRuntime` path used by a real
+cast. The runtime resolves DOM token bodies at their visible centers, respects
+large/small token bounds and elevation, and re-samples following actors. Preview
+targeting carries Source/Target token IDs when applicable; AOE targeting carries
+its actual selected map center and never substitutes the first affected token.
 
 Spell records store references, never sprite payloads:
 
@@ -248,8 +270,8 @@ animations: {
 mutating the library definition. Legacy single `animationId` remains supported.
 Missing assets show a replacement/clear message; casting falls back to existing
 presentation without blocking gameplay. Custom spell fields persist through the
-existing character save system; uploaded animation assets still require export
-to survive reload until durable library storage is implemented.
+existing character save system, while signed-in custom animation definitions and
+hosted sheets survive reload through the personal library.
 
 `createAnimationSequenceController({player})` exposes `playAnimationSequence` and
 `startEffect`. Pass `animations` slots or ordered `stages` with
@@ -285,8 +307,9 @@ decoding are not implemented; uploads should be static sprite sheets.
 Collections are comma-separated organizational groups, and can overlap.
 `library.setContext({ownerId,roomId})` filters user/room definitions; room scope's
 `ownership.ownerId` identifies its room. Room definitions are never returned in
-other room contexts. This is an in-memory boundary, not durable room storage or
-server authorization. The current UI creates session assets.
+other room contexts. User definitions are hydrated from the authenticated user's
+Firestore collection. Room-scoped durable storage and a shared marketplace remain
+future work.
 
 `getAnimationUsage(id)` includes action bindings and currently tracked custom
 spells. `trackReferences(key,{name,get,replace})` lets other hosts register their
