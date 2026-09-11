@@ -10,6 +10,7 @@ import {
   calculateMotion25d,
   calculateShadow25d
 } from "./motion25d.js";
+import { normalizeAnimationPoint } from "./animationRuntime.js";
 import {
   EFFECT_LAYER_ORDER,
   getEffectLayer,
@@ -476,10 +477,8 @@ export function createEffectRenderer({
     const custom = effect.definition.updateElement?.({ element: record.element, effect,
       elapsed: Math.max(0, timestamp - record.startedAt), mapScale, bounds, frame: animationState?.currentFrame,
       getActorPoint(tokenId) {
-        const token = getTokenElement(tokenId); if (!token) return null;
-        const body = token.querySelector?.(":scope > img, :scope > .hg-token-fallback") || token;
-        const rect = body.getBoundingClientRect(), origin = overlay.getBoundingClientRect();
-        return { x: rect.left + rect.width / 2 - origin.left, y: rect.top + rect.height / 2 - origin.top };
+        const point = normalizeAnimationPoint(tokenId, { layer: overlay, getTokenElement });
+        return point ? { x: point.centerX, y: point.centerY } : null;
       }
     });
     record.current = Object.freeze({
@@ -757,6 +756,7 @@ export function createEffectRenderer({
     getEffectElement: (id) => records.get(String(id || ""))?.element || null,
     getLayerElement: (layer) => depthLayers.get(normalizeEffectLayer(layer)) || null,
     getOverlayElement: () => overlay,
+    getAnimationPoint: input => normalizeAnimationPoint(input, { layer: overlay, getTokenElement }),
     notifyTimelineEvent: (id, event) => {
       const element = records.get(String(id || ""))?.element;
       if (element) element.dataset.lastTimelineEvent = event.id;

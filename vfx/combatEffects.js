@@ -1,6 +1,7 @@
 import { createAnimationLibrary } from "./animationLibrary.js";
 import { createAnimationPlayer } from "./animationPlayer.js";
 import { SWORD_SLASH_ANIMATION } from "./animationBuiltins.js";
+import { normalizeAnimationPoint } from "./animationRuntime.js";
 
 export const COMBAT_ANIMATIONS = Object.freeze({
   "melee.swordSlash": Object.freeze({
@@ -14,14 +15,8 @@ const number = (value, fallback) => Number.isFinite(Number(value)) ? Number(valu
 // body, including elevation; reading them never changes token state or position.
 export function getCombatActorPoint(actor, overlayRect = { left: 0, top: 0 }) {
   if (!actor) return null;
-  if (actor.getBoundingClientRect) {
-    const body = actor.querySelector?.(":scope > img, :scope > .hg-token-fallback") || actor;
-    const rect = body.getBoundingClientRect();
-    return { x: rect.left + rect.width / 2 - overlayRect.left,
-      y: rect.top + rect.height / 2 - overlayRect.top, width: rect.width };
-  }
-  return Number.isFinite(actor.x) && Number.isFinite(actor.y)
-    ? { x: actor.x, y: actor.y, width: number(actor.width, 64) } : null;
+  const point = normalizeAnimationPoint(actor.getBoundingClientRect ? actor : { ...actor, anchor: "center" }, { layerRect: overlayRect });
+  return point ? { x: point.centerX, y: point.centerY, width: point.width || 64 } : null;
 }
 
 export function resolveCombatPlacement(attacker, target, { overlayRect, position } = {}) {

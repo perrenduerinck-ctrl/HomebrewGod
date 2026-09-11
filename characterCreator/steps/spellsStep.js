@@ -12,10 +12,12 @@ import {
 import {
   CREATOR_CATALOG_BATCH_SIZE
 } from "../catalogPagination.js";
+import { replaceAnimationReferences } from "../../vfx/animationReferences.js";
 
 const FEAT_CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
 const SPELLS_STEP_ACTIONS = Object.freeze([
+  "edit-spell-animations",
   "calculate-spellcasting-values",
   "add-custom-spell",
   "toggle-spell-known",
@@ -51,6 +53,7 @@ export function createSpellsStep(
     C,
     addSection16CustomFeature,
     addSection16CustomSpell,
+    markDraftChanged,
     calculateSection16SpellcastingValues,
     formatSection16ProgressionLabel,
     getSection13AbilityName,
@@ -87,6 +90,20 @@ export function createSpellsStep(
 
   const section16SelectedSpellSourceIds =
     new Map();
+  let draftAnimations = {}, animationDraftOwner = null;
+  let animationLibrary = null;
+  function trackAnimationDependencies() {
+    if (!animationLibrary) return;
+    const owner = getCreatorState().draft;
+    for (const spell of owner.magic?.customSpells || []) animationLibrary.trackReferences(`custom-spell:${spell.id}`, {
+      name: spell.name, get: () => getCreatorState().draft === owner ? owner.magic.customSpells.find(s => s.id === spell.id) : null,
+      replace(oldId, newId) {
+        const current = owner.magic.customSpells.find(s => s.id === spell.id); if (!current) return;
+        replaceAnimationReferences(current, oldId, newId);
+        markDraftChanged?.();
+      }
+    });
+  }
   const section16SpellPickerState =
     createCreatorSpellPickerState();
   const section16FeatPickerState = {
@@ -104,6 +121,7 @@ export function createSpellsStep(
 
   function renderStep() {
     const creatorState = getCreatorState();
+    if (animationDraftOwner !== creatorState.draft) { draftAnimations = {}; animationDraftOwner = creatorState.draft; }
     const magic =
       creatorState.draft.magic;
 
@@ -675,6 +693,12 @@ export function createSpellsStep(
         )}
       </div>
 
+      <div class="hg-spell-animation-launch">
+        <h4>Animations · optional</h4>
+        <p data-cc-animation-summary>${escapeHtml(Object.keys(draftAnimations).join(" → ") || "No animation stages")}</p>
+        <button type="button" data-cc-action="edit-spell-animations">Choose, create or upload animations</button>
+      </div>
+
       <div class="hg-character-inline-actions">
         <label>
           <input
@@ -1017,11 +1041,13 @@ export function createSpellsStep(
 
   function handleSection16AddSpell() {
     if (
-      addSection16CustomSpell()
+      addSection16CustomSpell(draftAnimations)
     ) {
       setStatus(
         "Custom spell added."
       );
+      draftAnimations = {};
+      trackAnimationDependencies();
 
       renderCreatorView();
     }
@@ -1319,6 +1345,21 @@ export function createSpellsStep(
       cleanString(context?.action);
 
     switch (action) {
+      case "edit-spell-animations": {
+        const node = findSection16ActionElement(context, "edit-spell-animations");
+        const spellId = node?.dataset?.spellId;
+        const spell = spellId ? getSection16SpellById(spellId) : null;
+        const { openSpellAnimationPanel } = await import("../../vfx/spellAnimationPanel.js");
+        const { getAnimationSession } = await import("../../vfx/animationWorkspace.js");
+        animationLibrary = getAnimationSession(document).library; trackAnimationDependencies();
+        const owner = getCreatorState().draft;
+        const animations = await openSpellAnimationPanel({ animations: spell?.animations || draftAnimations, name: spell?.name || document.getElementById("ccNewSpellName")?.value || "New spell" });
+        if (animations && getCreatorState().draft === owner) {
+          if (spell) { spell.animations = animations; markDraftChanged?.(); trackAnimationDependencies(); renderCreatorView(); }
+          else { draftAnimations = animations; const summary = document.querySelector("[data-cc-animation-summary]"); if (summary) summary.textContent = Object.keys(animations).join(" → ") || "No animation stages"; }
+        }
+        return true;
+      }
       case "calculate-spellcasting-values":
         handleSection16CalculateSpellcasting();
         return true;

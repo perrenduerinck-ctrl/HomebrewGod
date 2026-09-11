@@ -10,7 +10,8 @@ export function createAnimationSelector({ container, library, onSelect = () => {
     <div class="hg-animation-filter-row"><label>Type<select data-animation-type><option value="">All types</option></select></label>
     <label>Sort<select data-animation-sort><option value="name">Name</option><option value="newest">Newest</option><option value="used">Most used</option></select></label></div>
     <details class="hg-animation-filters"><summary>More filters</summary><label>Tags<input data-animation-filter-tags placeholder="fire, sword…"></label>
-    <label>Collection<select data-animation-origin><option value="">Built-in + Custom</option><option value="builtin">Built-in</option><option value="user">Custom</option></select></label>
+    <label>Source<select data-animation-origin><option value="">All available</option><option value="builtin">Built-in</option><option value="user">My animations</option><option value="room">Room animations</option></select></label>
+    <label>Collection<input data-animation-collection placeholder="My fire spells"></label>
     <div class="hg-animation-buttons"><label class="hg-animation-toggle"><input type="checkbox" data-animation-favorites>Favorites</label><label class="hg-animation-toggle"><input type="checkbox" data-animation-recent>Recently used</label></div></details>
     <div data-animation-cards class="hg-animation-cards" aria-label="Animation browser"></div>
     <button type="button" data-animation-more hidden>Show more</button>
@@ -35,7 +36,7 @@ export function createAnimationSelector({ container, library, onSelect = () => {
   function refresh() {
     const current = ++revision; observer?.disconnect();
     const all = library.query({ search: field("search").value, type: field("type").value, tags: field("filter-tags").value,
-      origin: field("origin").value, favorites: field("favorites").checked, recent: field("recent").checked, sort: field("sort").value });
+      origin: field("origin").value, collection: field("collection").value.trim().toLowerCase(), favorites: field("favorites").checked, recent: field("recent").checked, sort: field("sort").value });
     const visible = all.slice(0, limit);
     if (!all.some(a => a.id === selectedId)) selectedId = all[0]?.id || "";
     field("select").replaceChildren(...all.slice(0, 300).map(a => new Option(a.name, a.id))); field("select").value = selectedId;
@@ -65,10 +66,10 @@ export function createAnimationSelector({ container, library, onSelect = () => {
   }
   function select(id, reset = false) {
     selectedId = id;
-    if (reset) { for (const key of ["search", "type", "filter-tags", "origin"]) field(key).value = ""; field("favorites").checked = field("recent").checked = false; }
+    if (reset) { for (const key of ["search", "type", "filter-tags", "origin", "collection"]) field(key).value = ""; field("favorites").checked = field("recent").checked = false; }
     library.markUsed(id); refresh(); onSelect(id);
   }
-  for (const key of ["search", "type", "sort", "filter-tags", "origin", "favorites", "recent"]) on(field(key), ["search", "filter-tags"].includes(key) ? "input" : "change", () => { limit = 24; refresh(); onSelect(selectedId); });
+  for (const key of ["search", "type", "sort", "filter-tags", "origin", "collection", "favorites", "recent"]) on(field(key), ["search", "filter-tags", "collection"].includes(key) ? "input" : "change", () => { limit = 24; refresh(); onSelect(selectedId); });
   on(field("select"), "change", () => select(field("select").value));
   on(field("cards"), "click", event => {
     const favorite = event.target.closest("[data-favorite-animation]"); if (favorite) { const previous = selectedId; library.toggleFavorite(favorite.dataset.favoriteAnimation); if (previous !== selectedId) onSelect(selectedId); return; }

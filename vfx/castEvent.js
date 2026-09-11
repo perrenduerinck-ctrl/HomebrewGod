@@ -1,3 +1,5 @@
+import { normalizeSpellAnimations } from "./animationReferences.js";
+const freezeReferences = value => { if (value && typeof value === "object") { Object.values(value).forEach(freezeReferences); Object.freeze(value); } return value; };
 export const SPELL_VFX_EVENT_SCHEMA_VERSION = 1;
 export const CONFIRMED_SPELL_VFX_EVENT =
   "homebrewgod:spell-cast-confirmed";
@@ -304,10 +306,7 @@ export function createSpellVfxEvent({
   return Object.freeze({
     schemaVersion: SPELL_VFX_EVENT_SCHEMA_VERSION,
     ...(cleanText(animationId, "", 120) ? { animationId: cleanText(animationId, "", 120) } : {}),
-    ...(animations && typeof animations === "object" ? { animations: Object.freeze(Object.fromEntries(
-      ["cast", "travel", "impact", "sustain", "end"].filter(key => cleanText(animations[key], "", 120))
-        .map(key => [key, cleanText(animations[key], "", 120)])
-    )) } : {}),
+    ...(animations && typeof animations === "object" ? { animations: freezeReferences(normalizeSpellAnimations(animations)) } : {}),
     preview: preview === true,
     spellId: cleanText(spellId, "", 160),
     spellName: cleanText(spellName, "Spell", 160) || "Spell",

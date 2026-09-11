@@ -43,14 +43,18 @@ export function sampleAnimation(d, elapsed, { source, target, map }, variation, 
   const endpoint = projectileEndpoints(d, source, target);
   if (d.behavior === "projectile") point = {
     x: endpoint.source.x + (endpoint.target.x - endpoint.source.x) * progress,
-    y: endpoint.source.y + (endpoint.target.y - endpoint.source.y) * progress - 4 * d.projectile.arcHeight * progress * (1 - progress)
+    y: endpoint.source.y + (endpoint.target.y - endpoint.source.y) * progress - (endpoint.distance ? 4 * d.projectile.arcHeight * progress * (1 - progress) : 0)
   };
   if (d.behavior === "beam") point = { x: (source.x + target.x) / 2, y: (source.y + target.y) / 2 };
+  if (["source-to-target", "source-toward-target"].includes(d.placement.spawnAt) && !["projectile", "beam"].includes(d.behavior)) {
+    const distance = Math.hypot(target.x - source.x, target.y - source.y), offset = d.placement.spawnAt === "source-toward-target" ? Math.min(distance, d.placement.towardOffset) : 0;
+    point = { x: source.x + (distance ? (target.x - source.x) * offset / distance : 0), y: source.y + (distance ? (target.y - source.y) * offset / distance : 0) };
+  }
   let dx = target.x - source.x, dy = target.y - source.y;
-  if (d.behavior === "projectile" && timing.travel) dy -= 4 * d.projectile.arcHeight * (1 - 2 * progress);
+  if (d.behavior === "projectile" && timing.travel && (dx || dy)) dy -= 4 * d.projectile.arcHeight * (1 - 2 * progress);
   const facing = Math.atan2(dy, dx) * 180 / Math.PI;
   const sourceAngle = { right: 0, down: 90, left: 180, up: -90 }[d.direction.sourceDirection];
-  const directed = d.direction.mode === "face-target" || d.direction.mode === "face-away" || d.behavior !== "static";
+  const directed = d.direction.mode === "face-target" || d.direction.mode === "face-away" || ["projectile", "beam", "melee"].includes(d.behavior);
   const rotation = d.rotation + variation.rotation + (directed && (dx || dy) ? facing - sourceAngle + (d.direction.mode === "face-away" ? 180 : 0) : 0) + d.motionEffects.spin * elapsed / 1000;
   const pulse = (1 - Math.cos(elapsed / (d.motionEffects.pulsePeriod * 1000) * Math.PI * 2)) / 2;
   const fadeIn = d.appearance.fadeIn ? clamp(elapsed / (d.appearance.fadeIn * 1000), 0, 1) : 1;

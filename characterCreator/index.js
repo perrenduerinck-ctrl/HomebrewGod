@@ -33602,7 +33602,7 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
-  function addSection16CustomSpell() {
+  function addSection16CustomSpell(animations = {}) {
     const name =
       safeDisplayString(
         $("ccNewSpellName")
@@ -33719,6 +33719,7 @@ export function createCharacterCreator(options = {}) {
               : [],
 
           source: "custom",
+          animations: cloneData(animations),
 
           ritual:
             $("ccNewSpellRitual")
@@ -35357,6 +35358,13 @@ export function createCharacterCreator(options = {}) {
 
               <button
                 type="button"
+                data-cc-action="edit-spell-animations"
+                data-spell-id="${escapeHtml(spell.id)}"
+              >
+                Animations
+              </button>
+              <button
+                type="button"
                 data-cc-action="remove-custom-spell"
                 data-spell-id="${escapeHtml(
                   spell.id
@@ -35787,6 +35795,7 @@ export function createCharacterCreator(options = {}) {
     C,
     addSection16CustomFeature,
     addSection16CustomSpell,
+    markDraftChanged,
     calculateSection16SpellcastingValues,
     formatSection16ProgressionLabel,
     getSection13AbilityName,

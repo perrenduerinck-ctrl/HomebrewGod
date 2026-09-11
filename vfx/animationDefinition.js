@@ -8,6 +8,7 @@ export const ANIMATION_TAGS = Object.freeze(("fire cold acid lightning poison ne
 export const ANIMATION_CATEGORIES = Object.freeze(["Magic", "Fire", "Cold", "Lightning", "Healing", "Buff", "Debuff", "Sword", "Axe", "Spear", "Bow", "Projectile", "Impact", "Monster", "Environment", "Other"]);
 export const MAX_ANIMATION_FRAMES = 240;
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+export const ANIMATION_PLACEMENTS = Object.freeze({ source: "SOURCE", target: "TARGET", between: "MIDPOINT", map: "WORLD", "source-to-target": "SOURCE_TO_TARGET", "source-toward-target": "SOURCE_TOWARD_TARGET" });
 export const freezeAnimation = value => {
   if (value && typeof value === "object") { Object.values(value).forEach(freezeAnimation); Object.freeze(value); }
   return value;
@@ -80,27 +81,34 @@ export function normalizeAnimationDefinition(input = {}) {
   if (!["builtin", "user"].includes(ownership.kind) || !["global", "session", "user", "room"].includes(ownership.scope)) throw new Error("Invalid animation ownership.");
   const category = animationText(input.category || input.type || "Other", 48);
   const type = choice(input.type, legacyType(category), ANIMATION_TYPES, "animation type");
-  const behavior = choice(input.behavior, projectile.enabled ? "projectile" : beam.enabled ? "beam" : "static", ["static", "projectile", "beam"], "animation behavior");
+  const behavior = choice(input.behavior, projectile.enabled ? "projectile" : beam.enabled ? "beam" : "static", ["static", "projectile", "beam", "melee", "source-effect", "target-effect", "aura", "ground", "screen", "summon", "attached"], "animation behavior");
+  const spawnAt = placement.mode ? Object.keys(ANIMATION_PLACEMENTS).find(key => ANIMATION_PLACEMENTS[key] === String(placement.mode).toUpperCase()) : placement.spawnAt || ({ melee: "source-toward-target", "source-effect": "source", "target-effect": "target", aura: "source", summon: "target" }[behavior] || "map");
+  if (!spawnAt || !ANIMATION_PLACEMENTS[spawnAt]) throw new Error("Choose a valid placement mode.");
+  const area = input.area || {};
   const sound = input.sound?.src ? { src: asset(input.sound.src, "audio"), volume: num(input.sound.volume, .5, 0, 1, "Sound volume"), startFrame: num(input.sound.startFrame, start, 0, columns * rows - 1, "Sound start frame", true), playbackRate: num(input.sound.playbackRate, 1, .25, 4, "Sound playback rate") } : null;
   const reserved = (value, limit, label) => {
     if (value === undefined) return [];
     if (!Array.isArray(value) || value.length > limit || JSON.stringify(value).length > 16000) throw new Error(`Too many ${label}.`);
     return JSON.parse(JSON.stringify(value));
   };
-  return freezeAnimation({ version: 2, id, name, description: animationText(input.description, 1000), type, category,
+  const events = reserved(input.events, 64, "events");
+  if (events.some(event => !event || typeof event.type !== "string" || !event.type.trim() || event.type.length > 80 || !Number.isInteger(event.frame) || event.frame < 0 || event.frame >= columns * rows)) throw new Error("Each animation event needs a type and a frame inside the sprite sheet.");
+  return freezeAnimation({ version: 2, revision: num(input.revision, 1, 1, 1000000, "Revision", true), id, name, description: animationText(input.description, 1000), type, category,
+    collections: normalizeTags(input.collections),
     tags: normalizeTags(input.tags), sprite, grid: { columns, rows }, frames: { start, end, count, reverse: f.reverse === true, sequence: reserved(f.sequence, 240, "custom frames") },
     // Flat aliases keep the first Animation ID API compatible. Nested input is also accepted.
     frameCount: count, fps: timing.fps, playback: mode, loop: ["loop", "pingpong"].includes(mode) && loopCount === 0, timing,
     ...transform, transform, size: num(input.size, 160, 8, 1024, "Display size"),
-    direction: { mode: choice(direction.mode, "face-target", ["fixed", "face-target", "face-away", "token-facing"], "direction mode"), sourceDirection: choice(direction.sourceDirection, "right", ["up", "right", "down", "left"], "source direction") },
-    placement: { spawnAt: choice(placement.spawnAt, "map", ["source", "target", "between", "map"], "spawn position"), followSource: placement.followSource === true, followTarget: placement.followTarget === true, persist: placement.persist === true, duration: num(placement.duration, 0, 0, 60, "Effect duration") },
+    direction: { mode: choice(direction.mode, "face-target", ["fixed", "face-target", "face-away", "token-facing"], "direction mode"), sourceDirection: choice(direction.sourceDirection?.toLowerCase(), "right", ["up", "right", "down", "left"], "source direction") },
+    placement: { mode: ANIMATION_PLACEMENTS[spawnAt], spawnAt, towardOffset: num(placement.towardOffset, 40, 0, 1000, "Offset toward target"), visualReach: num(placement.visualReach, 0, 0, 1000, "Visual reach"), fixedToMap: placement.fixedToMap === true, followSource: placement.followSource === true, followTarget: placement.followTarget === true, persist: placement.persist === true, duration: num(placement.duration, 0, 0, 60, "Effect duration") },
+    area: { shape: choice(area.shape?.toLowerCase(), "point", ["point", "circle", "cone", "line", "rectangle", "self"], "area shape"), radius: num(area.radius, 0, 0, 1000, "Visual radius"), width: num(area.width, 0, 0, 1000, "Visual width"), length: num(area.length, 0, 0, 1000, "Visual length"), unit: choice(area.unit, "ft", ["ft", "px"], "area unit") },
     behavior,
     projectile: { enabled: behavior === "projectile", speed: num(projectile.speed, 300, 10, 5000, "Travel speed"), startOffset: num(projectile.startOffset, 0, 0, 1000, "Start offset"), endOffset: num(projectile.endOffset, 0, 0, 1000, "End offset"), arcHeight: num(projectile.arcHeight, 0, -1000, 1000, "Arc height") },
     beam: { enabled: behavior === "beam", stretchToTarget: beam.stretchToTarget !== false, thickness: num(beam.thickness, 24, 1, 512, "Beam thickness") },
     appearance, blendMode: appearance.blendMode,
     motionEffects: { spin: num(motion.spin, 0, -1440, 1440, "Spin speed"), pulseScale: num(motion.pulseScale, 0, 0, 1, "Scale pulse"), pulseOpacity: num(motion.pulseOpacity, 0, 0, 1, "Opacity pulse"), pulsePeriod: num(motion.pulsePeriod, 1, .1, 10, "Pulse period") },
     variation: { rotation: num(variation.rotation, 0, 0, 180, "Rotation variation"), scale: num(variation.scale, 0, 0, .9, "Scale variation"), offsetX: num(variation.offsetX, 0, 0, 1000, "Horizontal variation"), offsetY: num(variation.offsetY, 0, 0, 1000, "Vertical variation"), speed: num(variation.speed, 0, 0, .9, "Speed variation") },
-    sound, layers: reserved(input.layers, 16, "layers"), events: reserved(input.events, 64, "events"),
+    sound, layers: reserved(input.layers, 16, "layers"), events,
     inset: num(input.inset ?? input.atlas?.inset, 0, 0, 64, "Cell inset", true), atlas,
     ownership: { kind: ownership.kind, scope: ownership.scope, ownerId: ownership.ownerId == null ? null : animationText(ownership.ownerId) }
   });
@@ -115,7 +123,8 @@ export function mergeAnimationDefinition(original, changes = {}) {
     else if (changes.beam?.enabled === true) result.behavior = "beam";
     else if (changes.projectile?.enabled === false && original.behavior === "projectile" || changes.beam?.enabled === false && original.behavior === "beam") result.behavior = "static";
   }
-  for (const key of ["grid", "frames", "timing", "transform", "direction", "placement", "projectile", "beam", "appearance", "variation", "motionEffects"]) result[key] = { ...original[key], ...changes[key] };
+  for (const key of ["grid", "frames", "timing", "transform", "direction", "placement", "projectile", "beam", "appearance", "variation", "motionEffects", "area"]) result[key] = { ...original[key], ...changes[key] };
+  if (changes.placement?.spawnAt !== undefined && changes.placement?.mode === undefined) result.placement.mode = ANIMATION_PLACEMENTS[changes.placement.spawnAt];
   if (typeof changes.playback === "object") { result.timing = { ...result.timing, ...changes.playback }; result.playback = result.timing.mode; }
   const aliases = { transform: ["scale", "rotation", "offsetX", "offsetY", "anchorX", "anchorY", "flipX", "flipY"], timing: ["fps"], appearance: ["blendMode"] };
   for (const [group, keys] of Object.entries(aliases)) for (const key of keys) {

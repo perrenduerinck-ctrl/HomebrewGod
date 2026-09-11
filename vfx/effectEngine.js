@@ -629,6 +629,7 @@ export function createEffectEngine({
     connect,
     destroy,
     getOverlayElement: () => renderer.getOverlayElement?.() || null,
+    getAnimationPoint: input => renderer.getAnimationPoint?.(input) || null,
     getDebugState: () => renderer.getDebugState?.() || null,
     getState,
     play,

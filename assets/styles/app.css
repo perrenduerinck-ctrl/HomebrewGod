@@ -2438,6 +2438,12 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-vfx-animation-sprite, .hg-vfx-animation-sprite * { pointer-events: none; }
 .hg-vfx-animation-sprite { border-radius: 0; }
 .hg-animation-debug { color: #ffdf60; white-space: nowrap; font: 11px monospace; }
+.hg-spell-animation-panel { width: min(760px, calc(100vw - 40px)); max-height: 90vh; overflow: auto; padding: 24px; border: 1px solid #657093; border-radius: 16px; color: #eef2ff; background: #111827; font: 14px system-ui; }
+.hg-spell-animation-panel::backdrop { background: #020617a8; }
+.hg-spell-animation-panel section { border: 1px solid #334155; padding: 14px; border-radius: 10px; margin: 12px 0; }
+.hg-spell-animation-panel label { display: inline-flex; flex-direction: column; gap: 5px; margin: 8px; }
+.hg-spell-animation-panel button, .hg-spell-animation-panel select, .hg-spell-animation-panel input { max-width: 100%; padding: 8px; background: #202c43; color: #eef2ff; border: 1px solid #566580; border-radius: 6px; }
+.hg-spell-animation-panel [data-spell-save] { background: #b8a5fa; color: #111827; }
 .hg-animation-library {
   --animation-accent: #b7a7ff; box-sizing: border-box;
   width: min(1160px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px);

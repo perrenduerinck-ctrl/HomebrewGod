@@ -8,7 +8,7 @@ a developer query parameter. The existing Animation ID architecture remains:
 ## Browse and assign
 
 The browser shows static sprite thumbnails, names, one primary **Type**, and tags.
-Search names, descriptions or tags; filter by Type, tags, Built-in/Custom,
+Search names, descriptions or tags; filter by Type, tags, Built-in/My/Room,
 Favorites or Recently Used. Sort by Name, Newest or Most Used. Thumbnails load as
 cards enter view; the browser initially shows 24 cards and can show up to 300.
 Search narrows larger libraries. A compact selector remains below the cards.
@@ -80,8 +80,9 @@ Closing the dialog, Escape, leaving the map and Effects Off clear the preview.
 ## Ownership and persistence
 
 This version remains **session-based**. Uploads, definition edits, assignments,
-favorites and usage history reset on reload, as the UI states. No Firebase,
-account, room, character or gameplay records are changed. Definitions retain
+favorites and usage history reset on reload, as the UI states. The standalone
+library does not write Firebase/account/room records. Spell references use the
+existing character save path. Definitions retain
 ownership `{kind, scope, ownerId}` for a future persistence adapter. Built-ins are
 global; normal uploads/remixes are user definitions with session scope.
 
@@ -160,9 +161,10 @@ cycles, 1–60 base FPS, 0.05–8× speed, 0.1–8× scale, and 32 sequence step
 Finite playback must finish within 60 seconds; start/sequence offsets are bounded
 to 10 seconds. Existing engine capacity and Reduced/Off behavior remain in force.
 
-`layers` and `events` are bounded serializable extension data; layered rendering,
-event spawning, screen shake events and a timeline editor are not implemented.
-Face Away and Token Facing are reserved direction modes; the editor exposes Fixed
+`layers` remains bounded extension data. Frame `events` now emit host callbacks;
+they do not spawn gameplay objects or apply damage. Layered rendering, camera
+shake and a timeline editor are not implemented.
+Face Away works through the API; Token Facing is reserved. The editor exposes Fixed
 and Face Target. A marketplace, sharing UI and durable account storage remain out
 of scope.
 
@@ -178,5 +180,123 @@ responsive layout and the earlier spell/melee flows.
 
 ```text
 node --test --test-isolation=none tests/vfx-*.test.mjs
-node node_modules/@playwright/test/cli.js test tests/vfx-animations.spec.mjs tests/vfx-combat.spec.mjs --workers=1
+node node_modules/@playwright/test/cli.js test tests/vfx-animation-runtime.spec.mjs tests/vfx-animations.spec.mjs tests/vfx-combat.spec.mjs --workers=1
 ```
+
+## Shared source and target runtime
+
+`animationRuntime.js` owns point normalization for preview, spells and melee.
+Pass DOM tokens, token objects/IDs with a renderer token resolver, plain centered
+`{x,y}`, rectangular `{x,y,width,height}`, mouse coordinates, or preview dummies.
+Rectangles use their center; visible token bodies include elevation transforms.
+Use `anchor:"center"` for an already-centered rectangle. Explicit world points use
+`coordinateSpace:"world"`; otherwise coordinates are relative to the animation
+layer. Screen/page coordinates pass through `screenToAnimationLayer`.
+
+Definitions describe placement; runtime contexts retain actor references:
+
+```js
+await player.playAnimation("sword_slash_01", {
+  source: casterElement, target: targetElement,
+  placement: { mode: "SOURCE_TOWARD_TARGET", towardOffset: 40, followSource: true },
+  speedMultiplier: 1.25, scaleMultiplier: 1.2, opacityMultiplier: .8,
+  rotationOffset: 10, debugPoints: true
+});
+```
+
+Modes are SOURCE, TARGET, MIDPOINT, WORLD, SOURCE_TO_TARGET and
+SOURCE_TOWARD_TARGET. Old `spawnAt` values remain aliases. Face Target compensates
+for RIGHT/DOWN/LEFT/UP artwork orientation. Self targets keep manual rotation;
+missing targets fall back to source. `followSource`/`followTarget` re-read actors;
+`fixedToMap` retains placement while map bounds change. `targets` prepares a
+multi-target API, with one primary target currently rendered. Explicit target
+points take priority over that list, preserving AOE centers.
+
+Optional debug markers show source, target, connecting path, impact, angle and
+distance in the actual layer. Preview uses this same player with draggable DOM
+dummies, swap/reset, distance presets from adjacent through 120 ft, and six quick
+behavior tests. The preview width represents 150 ft. No independent motion clock
+or alternate preview geometry exists.
+
+Optional `area:{shape:"circle",radius:20,unit:"ft"}` uses
+`grid:{pixelsPerFoot:10}` or `{pixelsPerSquare:50,feetPerSquare:5}`. Grid pixels are
+measured before zoom. Circles/self use diameter; line/cone/rectangle use length
+and width. This sizes artwork without clipping it or changing targeting rules.
+Without a grid, feet metadata leaves manual sizing intact. `unit:"px"` works
+without a grid. Manual Scale remains a multiplier. `visualReach` is metadata only.
+
+## Spell creation and stages
+
+The Spells step has **Choose, create or upload animations** for a new spell, plus
+an animation button on each saved custom spell. It opens an in-place panel with
+Cast, Travel, Impact, Sustain and End; unused slots remain hidden until added.
+Choose, Preview, Clear, Duplicate/Remix, Create New and Upload New use the same
+session library and creator as the map. Saving an animation assigns its stable ID
+to the active slot. Returning preserves unsaved spell fields.
+
+Spell records store references, never sprite payloads:
+
+```js
+animations: {
+  cast: "holy_cast_01",
+  impact: { animationId: "healing_burst_01", overrides: { tint: "#55ffaa", scaleMultiplier: 1.2 } }
+}
+```
+
+`normalizeSpellAnimationReference` accepts strings and objects. The optional
+`overrides` group supports playback, placement and appearance changes without
+mutating the library definition. Legacy single `animationId` remains supported.
+Missing assets show a replacement/clear message; casting falls back to existing
+presentation without blocking gameplay. Custom spell fields persist through the
+existing character save system; uploaded animation assets still require export
+to survive reload until durable library storage is implemented.
+
+`createAnimationSequenceController({player})` exposes `playAnimationSequence` and
+`startEffect`. Pass `animations` slots or ordered `stages` with
+`{slot,animationId,overrides,trigger,delay,waitForCompletion}`. Cast defaults to
+source, Travel to projectile, Impact/End to target and Sustain to following target.
+Default Impact waits for Travel's arrival. Triggers include immediate,
+afterPrevious, onArrival, onImpact, durationStart and durationEnd; delay is in ms.
+Set `waitForCompletion:false` to allow subsequent immediate overlap.
+
+The result exposes `finished`, `pause`, `resume`, `cancel`, `update`, and `end`.
+`duration:{unit:"seconds"|"minutes"|"hours",value}` starts when Sustain begins;
+manual/rounds/turns await the host's `end()`. Turn/time rules remain external.
+Timed sustains are capped at 24 hours. `end()` stops Sustain, plays End and cleans
+up; `cancel()` skips End. Effects Off and renderer teardown release pending stages
+and timers. `getInstances()` exposes active instance IDs, source/target IDs,
+start time and duration. Normal spell casts remain bounded previews of stages;
+host-managed lasting effects opt into this duration API separately.
+
+Events `{frame:19,type:"impact"}` are zero-based and emit once per play, including
+when a slow render skips a frame. `onEvent` receives the event and runtime points;
+`onFrame` also identifies its animation. `SHOW_TOKEN`, sound and camera event
+payloads can be consumed by a future host adapter, but this player never changes
+tokens/HP or automatically triggers camera effects. Start-frame audio still works.
+Orbit, follow-path, automatic summon tokens and camera effects remain future work.
+
+## Asset ownership and dependencies
+
+Drop a PNG/WebP/JPEG sheet on the upload zone or use **Replace Sprite**. Replacement
+preserves the animation ID/settings/assignments and increments `revision`, separate
+from schema `version:2`. No full revert history is stored. GIF and animated WebP
+decoding are not implemented; uploads should be static sprite sheets.
+
+Collections are comma-separated organizational groups, and can overlap.
+`library.setContext({ownerId,roomId})` filters user/room definitions; room scope's
+`ownership.ownerId` identifies its room. Room definitions are never returned in
+other room contexts. This is an in-memory boundary, not durable room storage or
+server authorization. The current UI creates session assets.
+
+`getAnimationUsage(id)` includes action bindings and currently tracked custom
+spells. `trackReferences(key,{name,get,replace})` lets other hosts register their
+records without coupling the library to persistence. Used assets cannot be
+deleted until references are explicitly replaced or removed; the editor presents
+both choices and Cancel. Rename and sprite replacement retain identity.
+`getSpellAnimationDependencies(spell)` prepares spell-only versus spell-plus-assets
+export; dependency packaging and marketplace/sharing are not implemented.
+
+Optional `animationSelection:{mode:"specific"|"random"|"cycle",ids:[...]}` is
+prepared by `normalizeAnimationSelection`/`chooseAnimationSelection`; hosts own
+cycle indices. Dependency discovery/replacement includes these IDs. Automatic
+variant selection in gameplay and a variant editor remain future integration.

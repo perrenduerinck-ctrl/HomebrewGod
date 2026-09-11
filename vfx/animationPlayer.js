@@ -1,7 +1,8 @@
 import { mergeAnimationDefinition } from "./animationLibrary.js";
 import { createVfxAssetCache } from "./vfxAssetManifest.js";
 import { chooseAnimationVariation, animationTiming, sampleAnimation } from "./animationPlayback.js";
-import { elevationToVisualPixels } from "../battleMap/elevation.js";
+import { normalizeAnimationRuntimeContext, animationGeometry, animationAreaSize, animationLayerMetrics, normalizeAnimationGrid } from "./animationRuntime.js";
+import { createAnimationDebug } from "./animationDebug.js";
 
 let nextOwner = 0;
 const failed = (reason, message = "") => ({ ok: false, skipped: true, reason, message });
@@ -21,6 +22,7 @@ function configureElement({ element, effect, document }) {
   sprite.style.transform = `translate(${-m.anchorX * 100}%, ${-m.anchorY * 100}%) scale(${m.flipX ? -1 : 1}, ${m.flipY ? -1 : 1})`;
   element.style.mixBlendMode = effect.sprite.blendMode;
   const runtime = m.animationRuntime, a = runtime.definition.appearance;
+  if (runtime.debugPoints) runtime.debugLayer = createAnimationDebug(element.parentElement);
   let filter = "";
   if (a.tint && a.tintStrength > 0) {
     const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), defs = document.createElementNS(ns, "defs");
@@ -58,28 +60,15 @@ function configureElement({ element, effect, document }) {
     label.textContent = `+ ${Math.round(effect.rotation)}° · ${effect.sprite.framesPerSecond} FPS`;
     element.appendChild(label);
   }
-  return () => { runtime.playSound = null; runtime.onPause = null; runtime.muteSound = null; try { if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); } } catch { /* Continue sprite disposal if media cleanup fails. */ } };
+  return () => { runtime.debugLayer?.destroy(); runtime.playSound = null; runtime.onPause = null; runtime.muteSound = null; try { if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); } } catch { /* Continue sprite disposal if media cleanup fails. */ } };
 }
 
-function updateElement({ element, effect, elapsed, mapScale, bounds, frame, getActorPoint }) {
+function updateElement({ element, effect, elapsed, mapScale, frame }) {
   const runtime = effect.metadata.animationRuntime;
   if (!runtime) return null;
-  const d = runtime.definition, points = { ...runtime.points };
-  // Snapshot locations use the same proportional map coordinates as legacy
-  // effects. Live token providers below already return current overlay pixels.
-  const previousBounds = runtime.bounds;
-  if (previousBounds && bounds.width > 0 && bounds.height > 0) {
-    for (const key of ["source", "target", "map"]) points[key] = {
-      x: points[key].x * bounds.width / previousBounds.width,
-      y: points[key].y * bounds.height / previousBounds.height
-    };
-  }
-  if (bounds.width > 0 && bounds.height > 0) runtime.bounds = { width: bounds.width, height: bounds.height };
-  for (const [key, follow, tokenId, provider] of [["source", d.placement.followSource, runtime.sourceTokenId, runtime.getSourcePoint], ["target", d.placement.followTarget, runtime.targetTokenId, runtime.getTargetPoint]]) {
-    if (!follow) continue;
-    try { const point = provider?.() || (tokenId ? getActorPoint(tokenId) : null); if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) points[key] = point; } catch { /* Retain the last valid visual location. */ }
-  }
+  const d = runtime.definition, points = runtime.context.sample(d.placement);
   runtime.points = points;
+  runtime.debugLayer?.update(animationGeometry(points.source, points.target), d.behavior === "projectile" ? d.projectile.arcHeight : 0);
   const state = sampleAnimation(d, elapsed, points, runtime.variation, runtime.timing);
   element.style.left = `${state.x}px`; element.style.top = `${state.y}px`; element.style.opacity = String(state.opacity);
   element.style.setProperty("--hg-vfx-rotation", `${state.rotation}deg`); element.style.setProperty("--hg-vfx-scale", String(state.scale * mapScale));
@@ -87,6 +76,8 @@ function updateElement({ element, effect, elapsed, mapScale, bounds, frame, getA
   const sprite = element.querySelector(".hg-vfx-sprite");
   if (sprite) {
     let sx = d.transform.lockProportions ? 1 : d.transform.scaleX, sy = d.transform.lockProportions ? 1 : d.transform.scaleY;
+    const areaSize = animationAreaSize(d.area, runtime.grid);
+    if (areaSize) { sx *= areaSize.width / effect.sprite.frameWidth; sy *= areaSize.height / effect.sprite.frameHeight; }
     if (d.behavior === "beam" && d.beam.stretchToTarget) {
       const vertical = ["up", "down"].includes(d.direction.sourceDirection), factor = Math.max(.0001, state.scale * mapScale);
       sx = (vertical ? d.beam.thickness : state.distance) / (effect.sprite.frameWidth * factor);
@@ -96,16 +87,14 @@ function updateElement({ element, effect, elapsed, mapScale, bounds, frame, getA
   }
   if (!runtime.isSoundEnabled() && runtime.playSound) { runtime.muteSound?.(); runtime.playSound = null; runtime.soundStarted = true; }
   if (!runtime.soundStarted && runtime.playSound && elapsed >= runtime.soundAt) { runtime.soundStarted = true; runtime.playSound(); }
-  try { runtime.onFrame?.({ frame, total: d.frameCount, elapsed, ...state }); } catch { /* Preview observers do not control playback. */ }
+  if (!runtime.didArrive && d.behavior === "projectile" && elapsed >= runtime.timing.travel) { runtime.didArrive = true; runtime.arrive?.(); runtime.emit?.({ type: "arrived", target: points.target }); }
+  const sequenceIndex = Math.floor(elapsed * d.fps * runtime.timing.speed / 1000);
+  for (const [index, event] of d.events.entries()) {
+    const at = runtime.timing.frames.indexOf(event.frame);
+    if (at >= 0 && sequenceIndex >= at && !runtime.fired.has(index)) { runtime.fired.add(index); runtime.emit?.({ ...event, source: points.source, target: points.target }); }
+  }
+  try { runtime.onFrame?.({ animationId: d.id, frame, total: d.frameCount, elapsed, ...state, geometry: animationGeometry(points.source, points.target) }); } catch { /* Preview observers do not control playback. */ }
   return { x: state.x, y: state.y, screenY: state.y, frame, rotation: state.rotation };
-}
-
-function resolvePoints(options) {
-  const map = { x: finite(options.x ?? options.position?.x, 0, "X"), y: finite(options.y ?? options.position?.y, 0, "Y") - elevationToVisualPixels(options.elevation || 0) };
-  const liveSource = options.getSourcePoint?.(), liveTarget = options.getTargetPoint?.();
-  const source = liveSource || options.sourcePoint || map;
-  const target = liveTarget || options.targetPoint || { x: options.targetX ?? map.x, y: options.targetY ?? map.y };
-  return { source: { x: finite(source.x, map.x, "Source X"), y: finite(source.y, map.y, "Source Y") - (liveSource ? 0 : elevationToVisualPixels(options.sourceElevation || 0)) }, target: { x: finite(target.x, map.x, "Target X"), y: finite(target.y, map.y, "Target Y") - (liveTarget ? 0 : elevationToVisualPixels(options.targetElevation || 0)) }, map };
 }
 
 // This adapter creates requests for the existing engine/renderer. There is no
@@ -118,11 +107,21 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
   engine.registry.register({ id: effectType, kind: "sprite", className: "animation-sprite", canPause: true, allowIndefinite: true, configureElement, updateElement });
   let revision = 0, destroyed = false;
   const pending = new Set();
+  const resolveContext = options => {
+    engine.connect(); engine.refresh();
+    return normalizeAnimationRuntimeContext(options, { getLayer: () => engine.getOverlayElement(), normalizePoint: input => engine.getAnimationPoint?.(input) });
+  };
 
   async function prepareAnimation(idOrDefinition, overrides = {}) {
     const original = typeof idOrDefinition === "string" ? library.getAnimation(idOrDefinition) : idOrDefinition;
     if (!original) throw new Error("That animation is unavailable. Choose another animation.");
-    const definition = mergeAnimationDefinition(original, overrides);
+    let definition = mergeAnimationDefinition(original, { ...overrides, ...(overrides.tint === undefined ? {} : { appearance: { ...overrides.appearance, tint: overrides.tint } }) });
+    definition = mergeAnimationDefinition(definition, {
+      scale: definition.scale * finite(overrides.scaleMultiplier, 1, "Scale multiplier"),
+      rotation: definition.rotation + finite(overrides.rotationOffset, 0, "Rotation offset"),
+      appearance: { opacity: definition.appearance.opacity * finite(overrides.opacityMultiplier, 1, "Opacity multiplier") },
+      timing: { speed: definition.timing.speed * finite(overrides.speedMultiplier, 1, "Speed multiplier") }
+    });
     if (!await cache.preload(definition.sprite, "Animation")) throw new Error(`Unable to load animation sprite: ${definition.name}.`);
     const dimensions = cache.getDimensions(definition.sprite);
     if (!dimensions || ![dimensions.width, dimensions.height].every(n => Number.isFinite(n) && n > 0 && n <= 16384) ||
@@ -143,9 +142,9 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
     const previewSpeed = finite(overrides.previewSpeed, 1, "Preview speed");
     if (previewSpeed <= 0 || previewSpeed > 4) throw new Error("Preview speed must be between 0 and 4.");
     variation.speed *= previewSpeed;
-    const points = resolvePoints(overrides), timing = animationTiming(definition, variation, points.source, points.target, overrides.duration);
+    const context = resolveContext(overrides), points = context.sample(definition.placement), timing = animationTiming(definition, variation, points.source, points.target, overrides.duration);
     if (definition.sound && !timing.frames.includes(definition.sound.startFrame)) throw new Error("The sound start frame must be in the frames being played.");
-    return { definition, variation, timing, points, dimensions, duration: timing.duration, untilCancelled: timing.indefinite,
+    return { definition, variation, timing, points, context, dimensions, duration: timing.duration, untilCancelled: timing.indefinite,
       sprite: { src: definition.sprite, columns, rows, preserveGrid: true, frameCount: Math.max(definition.frames.end + 1, ...timing.frames.map(n => n + 1)),
         frameWidth: width * factor, frameHeight: height * factor, framesPerSecond: definition.fps,
         startFrame: definition.frames.start, endFrame: definition.frames.end, frameSequence: timing.frames, playbackRate: timing.speed,
@@ -157,7 +156,11 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
   function startRequest(item, options, delay) {
     const { definition: d, sprite, duration, untilCancelled } = item;
     const state = sampleAnimation(d, 0, item.points, item.variation, item.timing);
+    let arrive, impact;
+    const arrived = new Promise(resolve => { arrive = resolve; });
+    const impacted = new Promise(resolve => { impact = resolve; });
     const runtime = { definition: d, points: item.points, variation: item.variation, timing: item.timing,
+      context: item.context, grid: normalizeAnimationGrid(options.grid, animationLayerMetrics(engine.getOverlayElement()).scale), debugPoints: options.debugPoints === true, arrive: () => arrive("arrived"), fired: new Set(), emit: event => { if (event.type === "impact") impact("impact"); try { options.onEvent?.({ ...event, animationId: d.id }); } catch { /* Visual notifications never change game state. */ } },
       getSourcePoint: options.getSourcePoint, getTargetPoint: options.getTargetPoint, sourceTokenId: options.sourceTokenId, targetTokenId: options.targetTokenId, onFrame: options.onFrame, soundStarted: false,
       isSoundEnabled, soundAt: d.sound ? item.timing.frames.indexOf(d.sound.startFrame) * 1000 / (d.fps * item.timing.speed) : Infinity };
     let finish;
@@ -170,7 +173,15 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
         flipX: d.flipX, flipY: d.flipY, debug: options.debug === true, animationRuntime: runtime }
     }, { onFinish: finish });
     if (!handle.ok || handle.skipped) finish(handle.reason || "unavailable");
-    return { ...handle, finished };
+    finished.then(reason => {
+      if (reason === "completed" && d.behavior === "projectile" && !runtime.didArrive) {
+        runtime.didArrive = true;
+        runtime.emit({ type: "arrived", target: runtime.context.sample(d.placement).target });
+      }
+      arrive(reason === "completed" && d.behavior === "projectile" ? "arrived" : reason); impact(reason);
+    });
+    const instance = { instanceId: handle.id, animationId: d.id, sourceId: item.context.source.id, targetId: item.context.target.id, startedAt: Date.now(), duration, get active() { return engine.getState().effects.some(e => e.id === handle.id); } };
+    return { ...handle, finished, arrived, impacted, instance };
   }
 
   async function playSequence(steps, options = {}) {
@@ -197,7 +208,7 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
         }
       }
       for (const item of prepared) {
-        item.points = resolvePoints(item.settings);
+        item.context = resolveContext(item.settings); item.points = item.context.sample(item.definition.placement);
         item.timing = animationTiming(item.definition, item.variation, item.points.source, item.points.target, item.settings.duration);
         item.duration = item.timing.duration; item.untilCancelled = item.timing.indefinite;
       }
@@ -221,7 +232,7 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
       const cancel = () => handles.forEach(h => h.cancel?.());
       options.signal?.addEventListener("abort", cancel, { once: true });
       const finished = Promise.all(handles.map(h => h.finished)).finally(() => options.signal?.removeEventListener("abort", cancel));
-      return { ok: true, handles, cancel, finished, pause: () => handles.forEach(h => h.pause?.()), resume: () => handles.forEach(h => h.resume?.()) };
+      return { ok: true, handles, cancel, finished, arrived: Promise.all(handles.map(h => h.arrived)), impacted: Promise.all(handles.map(h => h.impacted)), instances: handles.map(h => h.instance), pause: () => handles.forEach(h => h.pause?.()), resume: () => handles.forEach(h => h.resume?.()) };
     } catch (error) {
       handles.forEach(h => h.cancel?.());
       onError(`[Animation] ${error.message}`); return failed("sprite-unavailable", error.message);

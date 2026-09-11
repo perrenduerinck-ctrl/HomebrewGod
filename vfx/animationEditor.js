@@ -15,7 +15,9 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <div class="hg-animation-columns"><section class="hg-animation-settings"><div data-animation-browser-panel>
     <div data-animation-chooser></div><div class="hg-animation-buttons"><button data-animation-edit type="button">Edit settings</button><button data-animation-duplicate type="button">Duplicate / Remix</button>
     <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-delete type="button">Delete custom</button></div>
-    <div class="hg-animation-assignment"><label>Assign to<select data-animation-action></select></label><p data-animation-assigned class="hg-animation-hint"></p>
+    <div data-animation-external hidden><p data-animation-external-label></p><button type="button" data-animation-use-selected>Use selected animation</button></div>
+    <div data-animation-delete-warning hidden><p data-animation-delete-message></p><label>Replacement<select data-animation-delete-replacement></select></label><button type="button" data-animation-delete-replace>Replace references and delete</button><button type="button" data-animation-delete-remove>Remove references and delete</button><button type="button" data-animation-delete-cancel>Cancel</button></div>
+    <div class="hg-animation-assignment" data-animation-assignment><label>Assign to<select data-animation-action></select></label><p data-animation-assigned class="hg-animation-hint"></p>
     <div class="hg-animation-buttons"><button data-animation-assign type="button">Change animation</button><button data-animation-reset type="button">Use original effect</button></div></div></div>
     <form data-animation-form hidden>${animationFormMarkup()}</form></section>
     <section class="hg-animation-preview-panel" aria-label="Animation preview"><div class="hg-animation-stage-heading"><h3>Preview Stage</h3><span>Drag the tokens</span></div>
@@ -27,16 +29,20 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <div class="hg-animation-preview-options"><label>Preview FPS<input data-animation-preview-fps type="number" min="1" max="60" value="24"></label><label>Preview scale<input data-animation-preview-scale type="number" min="0.1" max="8" step="0.1" value="1"></label></div>
     <div class="hg-animation-preview-options"><label>Slow motion<select data-animation-slow><option value="1">1×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select></label>
     <label>Background<select data-animation-background><option value="checker">Transparent checkerboard</option><option value="dark">Dark</option><option value="light">Light</option><option value="grid">Grid</option><option value="map">Map-style</option></select></label></div>
-    <details class="hg-animation-preview-tools"><summary>Preview Tools</summary><label class="hg-animation-toggle"><input data-animation-show-frame type="checkbox">Show frame number</label><label class="hg-animation-toggle"><input data-animation-show-bounds type="checkbox">Show bounding box</label><label class="hg-animation-toggle"><input data-animation-show-pivot type="checkbox">Show pivot</label><button type="button" data-animation-reset-tokens>Reset tokens</button></details>
+    <details class="hg-animation-preview-tools"><summary>Preview Tools</summary><label class="hg-animation-toggle"><input data-animation-show-frame type="checkbox">Show frame number</label><label class="hg-animation-toggle"><input data-animation-show-bounds type="checkbox">Show bounding box</label><label class="hg-animation-toggle"><input data-animation-show-pivot type="checkbox">Show pivot</label>
+    <label class="hg-animation-toggle"><input data-animation-show-points type="checkbox">Show source, target, travel path and impact point</label>
+    <label>Test distance<select data-animation-distance><option value="adjacent">Adjacent</option>${[5,10,30,60,120].map(n => `<option value="${n}">${n} ft</option>`).join("")}</select></label>
+    <button type="button" data-animation-swap-tokens>Swap source / target</button><button type="button" data-animation-reset-tokens>Reset tokens</button>
+    <div class="hg-animation-buttons">${[["source","Source Effect"],["target","Target Effect"],["projectile","Projectile"],["melee","Melee Directional"],["beam","Beam"],["aura","Aura"]].map(([key,name]) => `<button type="button" data-animation-quick="${key}">${name}</button>`).join("")}</div></details>
     <p data-animation-preview-info class="hg-animation-hint"></p><p class="hg-animation-hint">Preview controls never change an assignment. Save your settings, then choose an action.</p></section></div>
     <p data-animation-status role="status"></p>`;
   const field = name => dialog.querySelector(`[data-animation-${name}]`), status = message => { field("status").textContent = message; };
   const surface = field("preview"), previewEngine = createBattleMapEffectEngine({ surface }), preview = createAnimationPlayer({ engine: previewEngine, library, isSoundEnabled, onError: () => {} });
   let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, imageInfo = null, destroyed = false, playback = null, paused = false;
+  let external = null, deleteId = null;
   const points = { source: { x: .24, y: .52 }, target: { x: .76, y: .52 } };
   const listeners = [], on = (element, event, fn) => { element.addEventListener(event, fn); listeners.push(() => element.removeEventListener(event, fn)); };
   const safely = fn => async event => { try { await fn(event); } catch (e) { status(e.message || "The animation could not be updated."); } };
-  function point(key) { return { x: points[key].x * surface.clientWidth, y: points[key].y * surface.clientHeight }; }
   function positionTokens() { for (const key of ["source", "target"]) { field(key).style.left = `${points[key].x * 100}%`; field(key).style.top = `${points[key].y * 100}%`; } }
   positionTokens();
   for (const key of ["source", "target"]) {
@@ -89,6 +95,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     const columns = a?.grid.columns || 6, rows = a?.grid.rows || 6;
     field("grid").value = columns === rows && [4,5,6,7,8].includes(columns) ? String(columns) : "custom";
     field("file-info").textContent = a ? "Current sheet retained. Upload to replace it." : "Choose a sheet. Transparent PNG is recommended.";
+    field("upload-thumbnail").hidden = !draftSource; if (draftSource) field("upload-thumbnail").src = draftSource; else field("upload-thumbnail").removeAttribute("src");
     syncControls(); if (draftSource) inspect(draftSource); field("name").focus();
   }
   function draft() {
@@ -101,8 +108,9 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     if (!definition) throw new Error("Choose an animation first.");
     if (fromDraft) { field("preview-fps").value = definition.fps; field("preview-scale").value = definition.scale; }
     const result = await preview.previewAnimation(definition, {
-      x: surface.clientWidth / 2, y: surface.clientHeight / 2, sourcePoint: point("source"), targetPoint: point("target"),
-      getSourcePoint: () => point("source"), getTargetPoint: () => point("target"), previewSpeed: Number(field("slow").value),
+      x: surface.clientWidth / 2, y: surface.clientHeight / 2, source: field("source"), target: field("target"),
+      grid: { pixelsPerFoot: surface.clientWidth / 150 },
+      debugPoints: field("show-points").checked, previewSpeed: Number(field("slow").value),
       ...(fromDraft ? {} : { fps: Number(field("preview-fps").value), scale: Number(field("preview-scale").value) }),
       onFrame: state => { if (current === previewRevision) { const text = `Frame ${state.frame + 1} / ${definition.grid.columns * definition.grid.rows}`; if (field("frame-readout").textContent !== text) field("frame-readout").textContent = text; } }
     });
@@ -118,10 +126,12 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     if (!file.size || file.size > MAX_UPLOAD_BYTES) throw new Error("Choose a file smaller than 8 MB.");
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("The file could not be read.")); reader.readAsDataURL(file); });
   }
-  on(button, "click", () => { dialog.showModal(); selectionChanged(); assignmentInfo(); });
+  function finishExternal(id = null) { const request = external; external = null; request?.resolve(id); field("external").hidden = true; field("assignment").hidden = false; }
+  on(button, "click", () => { finishExternal(); dialog.showModal(); selectionChanged(); assignmentInfo(); });
   on(field("close"), "click", () => dialog.close());
   on(dialog, "keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); dialog.close(); } });
-  on(dialog, "close", () => { stop(); editRevision++; inspectionRevision++; });
+  on(dialog, "close", () => { finishExternal(); stop(); editRevision++; inspectionRevision++; });
+  on(field("use-selected"), "click", safely(() => { const a = selected(); if (!a) throw new Error("Choose an animation first."); finishExternal(a.id); dialog.close(); }));
   on(field("action"), "change", assignmentInfo);
   on(field("assign"), "click", safely(() => {
     const id = chooser.getSelectedId(); if (!library.getAnimation(id)) throw new Error("Choose an animation first.");
@@ -131,7 +141,16 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("custom"), "click", () => openEditor());
   on(field("edit"), "click", safely(() => { if (!selected()) throw new Error("Choose an animation first."); openEditor(selected()); }));
   on(field("duplicate"), "click", safely(() => { const a = library.duplicateAnimation(chooser.getSelectedId()); chooser.select(a.id); openEditor(a); status("Created a separate custom remix."); }));
-  on(field("delete"), "click", safely(() => { library.deleteAnimation(chooser.getSelectedId()); selectionChanged(); assignmentInfo(); status("Custom animation removed. Missing assignments use their original effect."); }));
+  function removeAnimation(options = {}) { library.deleteAnimation(deleteId, options); field("delete-warning").hidden = true; deleteId = null; selectionChanged(); assignmentInfo(); status("Custom animation removed. References updated."); }
+  on(field("delete"), "click", safely(() => {
+    deleteId = chooser.getSelectedId(); const used = library.getAnimationUsage(deleteId);
+    if (!used.length) return removeAnimation();
+    field("delete-warning").hidden = false; field("delete-message").textContent = `This animation is used by ${used.length} abilities: ${used.map(x => x.name).join(", ")}.`;
+    field("delete-replacement").replaceChildren(...library.list().filter(a => a.id !== deleteId).map(a => new Option(a.name, a.id)));
+  }));
+  on(field("delete-replace"), "click", safely(() => removeAnimation({ replaceWith: field("delete-replacement").value })));
+  on(field("delete-remove"), "click", safely(() => removeAnimation({ removeReferences: true })));
+  on(field("delete-cancel"), "click", () => { deleteId = null; field("delete-warning").hidden = true; });
   on(field("editor-cancel"), "click", selectionChanged);
   on(field("form"), "input", syncControls); on(field("form"), "change", syncControls);
   on(field("form"), "click", event => {
@@ -156,13 +175,17 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     const changed = mergeAnimationDefinition(reset, { ...preset, name: settings.name || preset.name });
     writeAnimationFields(field, changed); syncControls(); status(`${preset.name} starting values applied. Every setting can still be changed.`);
   }));
-  on(field("file"), "change", safely(async () => {
-    const file = field("file").files[0]; if (!file) return;
+  async function loadSprite(file) {
+    if (!file) return;
     if (!["image/png", "image/webp", "image/jpeg"].includes(file.type)) throw new Error("Choose a PNG, WebP or JPEG sprite sheet.");
     const current = ++editRevision, data = await readFile(file);
     if (destroyed || current !== editRevision) return;
-    draftSource = data; imageInfo = null; field("file-info").textContent = file.name; status("Sheet loaded. Checking its cells and transparency…"); syncControls(); await inspect(data);
-  }));
+    draftSource = data; imageInfo = null; field("file-info").textContent = file.name; field("upload-thumbnail").src = data; field("upload-thumbnail").hidden = false; status("Sheet loaded. Checking its cells and transparency…"); syncControls(); await inspect(data);
+  }
+  on(field("file"), "change", safely(() => loadSprite(field("file").files[0])));
+  on(field("upload-zone"), "dragover", event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; });
+  on(field("upload-zone"), "drop", safely(event => { event.preventDefault(); return loadSprite(event.dataTransfer.files[0]); }));
+  on(field("replace-sprite"), "click", () => field("file").click());
   on(field("sound-file"), "change", safely(async () => {
     const file = field("sound-file").files[0]; if (!file) return;
     if (!/^audio\/(mpeg|mp3|wav|x-wav|ogg|webm|mp4)$/.test(file.type)) throw new Error("Choose an MP3, WAV, OGG or WebM sound.");
@@ -177,14 +200,35 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("show-frame"), "change", () => { field("frame-readout").hidden = !field("show-frame").checked; });
   on(field("show-bounds"), "change", () => { surface.classList.toggle("show-animation-bounds", field("show-bounds").checked); });
   on(field("show-pivot"), "change", () => { surface.classList.toggle("show-animation-pivot", field("show-pivot").checked); });
+  on(field("show-points"), "change", safely(() => { if (playback) return playCurrent(); }));
+  on(field("swap-tokens"), "click", () => { [points.source, points.target] = [points.target, points.source]; positionTokens(); });
+  on(field("distance"), "change", () => {
+    const feet = field("distance").value === "adjacent" ? 5 : Number(field("distance").value);
+    const ratio = Math.min(.8, feet / 150); points.source = { x: (1 - ratio) / 2, y: .52 }; points.target = { x: (1 + ratio) / 2, y: .52 }; positionTokens();
+    status(`Preview scale: ${Math.round(surface.clientWidth / 150 * 5)} px per 5 ft. Visual distance only.`);
+  });
+  for (const node of dialog.querySelectorAll("[data-animation-quick]")) on(node, "click", safely(() => {
+    const key = node.dataset.animationQuick, a = field("form").hidden ? selected() : draft();
+    const mode = { source: "SOURCE", target: "TARGET", projectile: "SOURCE_TO_TARGET", melee: "SOURCE_TOWARD_TARGET", beam: "MIDPOINT", aura: "SOURCE" }[key];
+    return play(mergeAnimationDefinition(a, { behavior: ["projectile", "beam", "melee"].includes(key) ? key : "static", placement: { mode, followSource: key === "aura", followTarget: false }, direction: { mode: "face-target" }, ...(key === "aura" ? { playback: "loop" } : {}) }), true);
+  }));
   on(field("reset-tokens"), "click", () => { points.source = { x: .24, y: .52 }; points.target = { x: .76, y: .52 }; positionTokens(); });
   on(field("form"), "submit", safely(async event => {
     event.preventDefault(); const a = draft(), current = ++editRevision; await preview.prepareAnimation(a);
     if (destroyed || current !== editRevision) return;
     const saved = editId ? library.updateAnimation(editId, a) : library.registerAnimation({ ...a, id: undefined });
+    if (external) { finishExternal(saved.id); dialog.close(); return; }
     chooser.select(saved.id); assignmentInfo(); status("Animation saved for this session. Select an action and choose Change animation to assign it.");
   }));
   selectionChanged(); assignmentInfo();
-  return { stop, close() { if (dialog.open) dialog.close(); else stop(); },
+  return { stop, openForSlot({ slot = "impact", mode = "choose", animationId } = {}) {
+      finishExternal(); if (!dialog.open) dialog.showModal(); selectionChanged();
+      field("external").hidden = false; field("assignment").hidden = true; field("external-label").textContent = `Choose an animation for ${slot}.`;
+      if (animationId && library.getAnimation(animationId)) chooser.select(animationId);
+      const promise = new Promise(resolve => { external = { resolve }; });
+      if (mode === "create" || mode === "upload") { openEditor(); field("spawn").value = slot === "cast" ? "source" : slot === "travel" ? "source-to-target" : "target"; field("behavior").value = slot === "travel" ? "projectile" : "static"; syncControls(); if (mode === "upload") field("file").click(); }
+      if (mode === "remix" && selected()) { const a = library.duplicateAnimation(selected().id); chooser.select(a.id); openEditor(a); }
+      return promise;
+    }, close() { if (dialog.open) dialog.close(); else stop(); },
     destroy() { if (destroyed) return; destroyed = true; editRevision++; inspectionRevision++; stop(); if (dialog.open) dialog.close(); chooser.destroy(); preview.destroy(); previewEngine.destroy(); listeners.forEach(remove => remove()); } };
 }

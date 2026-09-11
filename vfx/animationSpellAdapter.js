@@ -1,6 +1,9 @@
 // Opt-in Animation ID assignments wrap the existing spell presentation boundary.
 // Unassigned, missing and failed custom assets fall back to the legacy sequence.
+import { createAnimationSequenceController } from "./animationSequence.js";
+import { getSpellAnimationDependencies } from "./animationReferences.js";
 export function createAnimationSpellAdapter({ legacy, player, library, bindings, onStateChange = () => {} }) {
+  const sequence = createAnimationSequenceController({ player });
   const active = new Map(); let nextId = 0, destroyed = false;
   const emit = () => { try { onStateChange(active.size); } catch { /* presentation observer */ } };
   function cancel(record) {
@@ -14,20 +17,26 @@ export function createAnimationSpellAdapter({ legacy, player, library, bindings,
     const reference = event.animationId ? { animationId: event.animationId } :
       event.animations ? { animations: event.animations } : bindings.getAssignment(`spell:${event.spellId}`);
     if (!reference || options.sequenceId) return legacy.play(event, options);
-    const ids = reference.animationId ? [reference.animationId] :
-      ["cast", "travel", "impact", "sustain", "end"].map(stage => reference.animations?.[stage]).filter(Boolean);
+    const ids = getSpellAnimationDependencies(reference);
     if (!ids.length || ids.some(id => !library.getAnimation(id))) return legacy.play(event, options);
     // Bounded presentation-only playback even when a user assigns a looping aura.
     const point = event.targetPoint || event.casterPoint || { x: 0, y: 0 };
     const record = { id: `animation-cast-${++nextId}`, event, controller: new AbortController() };
     while (active.size >= 16) cancel(active.values().next().value);
     active.set(record.id, record); emit();
-    const ready = player.playSequence(ids.map(animationId => ({ animationId, duration: 5000 })), {
+    const context = {
       x: point.x, y: point.y, sourcePoint: event.casterPoint || point, targetPoint: event.targetPoint || point,
       sourceElevation: event.casterElevation || 0, targetElevation: event.targetElevation || 0,
-      sourceTokenId: event.casterTokenId, targetTokenId: event.affectedTokens?.[0]?.tokenId || event.affectedTokens?.[0]?.id,
-      elevation: event.targetElevation || 0, signal: record.controller.signal
-    }).then(result => {
+      sourceTokenId: event.casterTokenId,
+      // An AOE center is a map point, not the first affected token.
+      targetTokenId: ["self", "aura"].includes(event.deliveryType) ? event.casterTokenId :
+        event.geometry && !["point", "single"].includes(event.geometry.shape) ? null : event.affectedTokens?.[0]?.tokenId || event.affectedTokens?.[0]?.id,
+      elevation: event.targetElevation || 0, signal: record.controller.signal,
+      grid: options.grid || { pixelsPerFoot: event.geometry?.pixelsPerFoot, coordinateSpace: "layer" },
+      onEvent: options.onEvent
+    };
+    const ready = (reference.animationId ? player.playSequence(ids.map(animationId => ({ animationId, duration: 5000 })), context) :
+      sequence.playAnimationSequence({ ...context, animations: reference.animations })).then(result => {
       if (!active.has(record.id)) { result.cancel?.(); return result; }
       record.result = result;
       if (!result.ok) {
@@ -47,6 +56,6 @@ export function createAnimationSpellAdapter({ legacy, player, library, bindings,
     clearPreviews() { [...active.values()].filter(r => r.event.preview).forEach(cancel); legacy.clearPreviews(); },
     getState() { const old = legacy.getState(); return { ...old, activeCount: old.activeCount + active.size,
       sequences: [...old.sequences, ...[...active.values()].map(r => ({ id: r.id, definitionId: "animation-id", phase: "animation" }))] }; },
-    destroy() { if (destroyed) return; destroyed = true; [...active.values()].forEach(cancel); legacy.destroy(); }
+    destroy() { if (destroyed) return; destroyed = true; [...active.values()].forEach(cancel); sequence.clear(); legacy.destroy(); }
   });
 }
