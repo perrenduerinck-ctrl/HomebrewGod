@@ -62,8 +62,14 @@ test("Gary Missile uploads, saves with a spell, previews and casts after full re
     await panel.locator(`[data-spell-animation-slot="${slot}"] [data-slot-action="choose"]`).click();
     await field(dialog,'select').selectOption(id);await field(dialog,'use-selected').click();
   }
-  await panel.locator('[data-spell-save]').click();await page.locator('#ccNewSpellKnown').uncheck();
+  await panel.locator('[data-spell-save]').click();
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator('[data-cc-animation-summary]')).toHaveText('cast → travel → impact');
+  await page.locator('#ccNewSpellKnown').uncheck();
   await page.locator('[data-cc-action="add-custom-spell"]').click();
+  // Wait for the workflow result, not just a completed mouse click, before
+  // navigating away from the form and saving its owning character.
+  await expect(page.locator('#characterCreatorStatus')).toContainText('Custom spell added.');
   await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep('basics'));
   await page.locator('#ccCharacterName').fill('Gary Wizard');await page.locator('#characterWizardSaveButton').click();
   const savedSpell=()=>page.evaluate(room=>Object.entries(JSON.parse(localStorage.getItem('acceptance-firestore')||'{}')).filter(([path])=>path.startsWith(`rooms/${room}/characters/`)).flatMap(([,record])=>record.magic?.customSpells||[]).find(s=>s.name==='Gary Fireball Test'),room);
