@@ -1,11 +1,120 @@
-# Animation acceptance and fix pass
+# Animation acceptance and final merge gate
 
 Branch: `ai/spell-preview-persistent-animations`. Main and production deployment
 remain unchanged. This is an automated acceptance/fix pass, not a claim that the
 production Firebase rules, Cloudinary preset, audio device, or live account have
 passed acceptance.
 
-## Test environment
+## Final merge-gate record — 2026-09-12
+
+- Branch: `ai/spell-preview-persistent-animations`.
+- Starting known-good SHA: `90df692ac1fb91d91fa091e56de450ac8bff91d3`.
+- Tested implementation SHA: `5d1273aad0b4f4aa64ea0d8a6c6bf702d6833c5b`.
+  This report is a subsequent documentation-only commit; the implementation SHA
+  identifies the application, tests and staging scripts actually checked.
+- Main remained `0d8a7abc883c445aa58397ce95203f5dd004a524` when checked. No merge,
+  production deployment, Firebase rule change or Cloudinary destruction was run.
+- Work used a disposable checkout, not the user's existing local project.
+  The designated local `Firebase.js` was not edited.
+
+### AUTOMATED ACCEPTANCE
+
+All targeted local suites passed. Headless Microsoft Edge/Playwright ran the
+production application code with test-only Firebase/Auth/Cloudinary transport
+responses where specified. This is not real-service acceptance or a full CI claim.
+
+| Final run | Result |
+| --- | --- |
+| Full `test:unit` | PASS, including spell preview, casting session/sequence and persistence |
+| Full `test:vfx-fire` | PASS, including animation/runtime, 23 persistence, 18 preview-unification and 4 new deletion/account-visibility checks |
+| Full `test:movement` | PASS, 14 checks |
+| `test:animation-staging` | PASS, 2 checks: production/credential rejection and isolated generated-config transformation |
+| Animation acceptance/runtime/editor, replacements and combat browser specs | PASS, 30 checks in one combined run; acceptance spec now has 14 checks |
+| Targeted legacy preview/casting/targeting/elevation/VFX and movement browser regressions | PASS, 9 checks in one combined run |
+| Syntax/import graph | PASS, 245 JS/mJS files; 677 local imports across 260 source files |
+| Data validation and phase audit | PASS; all 20 phase audits |
+| Normal Pages and isolated staging artifacts | PASS; placeholder configuration only, neither deployed |
+| GitHub full CI | NOT VERIFIED; local targeted results do not establish remote CI completion |
+
+The nine browser regressions cover structured spell geometry; the three DM Spell
+Preview workflows; linked-token Confirm Cast exactly once; true elevation-aware
+range; VFX alignment/modes/cleanup; and the two movement browser checks. No existing
+tests were removed or weakened. Browser service doubles do not assert real deployed
+rule enforcement. The new account-switch check drives the app's real Auth callbacks
+with mocked account identities, not real Firebase login credentials.
+
+Screenshot inspection of the actual repository artwork covered the map sword
+slash, paused advanced projectile preview, and the seven replacement sheets on a
+white background. No opaque sheet rectangle or new obvious cell-border regression
+was observed in those samples. These bounded local screenshots do not verify the
+requested complete live artwork matrix or a newly uploaded Gary asset. Existing
+Full/Reduced/Off and fake-Audio cleanup assertions remained green; audible sound,
+real browser autoplay and long-session hardware behavior are not established.
+
+### Changes made in this merge gate
+
+- Persistent deletion always shows: "This animation may also be referenced by
+  saved spells in other rooms. Homebrew God cannot currently verify every remote
+  room reference." This applies even when zero loaded references were found.
+- Choices are Cancel, Remove from My Library and Replace Known References.
+  Cancel writes nothing. Replace changes only known loaded references and keeps
+  the definition, Firestore metadata and hosted sprite; affected characters must
+  be saved. Remove deletes metadata only after remote/application checks succeed,
+  then updates loaded references. Hosted sprites are retained. Existing saved
+  current-room spell guards and failed-delete preservation remain in place.
+- Session-only deletion is explicitly separate: it does not delete persistent
+  metadata or a hosted sprite. Neither choice claims global dependency knowledge.
+- No soft-delete migration was introduced: hiding/archive resolution would add a
+  second lifecycle and schema/rules work. The task explicitly permits retaining
+  metadata deletion with hosted retention and an honest remote warning. Unopened
+  room references can need manual replacement or existing safe legacy fallback.
+- Account-owned unsaved session remixes are now hidden from other accounts as
+  well as persistent definitions. A → B → A restores only the owner's private items.
+- `build:animation-staging` produces a distinct `dist-staging/` with an explicit
+  public staging config, production config/preset guards, source/dirty marker,
+  STAGING badge and disabled production deletion endpoint. Normal `app.js` source
+  and normal Pages artifact bytes remain unchanged.
+- Operator-run real SDK ownership probes and the complete live Gary/failure/
+  artwork/audio/long-session checklist are prepared in [ANIMATION_STAGING.md](ANIMATION_STAGING.md).
+  The probes require a clean staging marker, matching real Auth project and
+  server-only Firestore reads. They were not run against a real service here.
+
+### LIVE ACCEPTANCE
+
+No authorized staging URL, real staging configuration or two signed-in real test
+accounts were supplied/verified for this pass. No production account was used as
+a substitute. The following checks are prepared, **not passed**:
+
+| Required live area | Result / missing evidence |
+| --- | --- |
+| Real Firebase Auth and animation create/read/update/delete | NOT VERIFIED — actual staging operations needed |
+| Deployed Firestore rules: own CRUD, peer read/list/update/delete denial, owner spoof/create/change denial | NOT VERIFIED — two real accounts and actual deployed-rule probe outputs needed |
+| Real unsigned Cloudinary upload | NOT VERIFIED — preset formats/limits, HTTPS secure_url, public_id and image resource_type needed |
+| Upload failures, network interruption, invalid/oversize/over-dimension image and no transient Firestore write | NOT VERIFIED — real error/network/server-record evidence needed |
+| Live Gary Missile saved spell → full reload → Preview and Confirm Cast → stable-ID sprite replacement → reload | NOT VERIFIED — actual Firestore/Cloudinary workflow needed |
+| Actual Gary record identity/owner/scope/settings/revision/timestamps and no embedded/transient fields | NOT VERIFIED — server record inspection needed |
+| Source/Target and Preview/Cast at 100%/150%, resize, elevation, Large/Huge token | NOT VERIFIED — complete live alignment/artwork matrix needed |
+| Real Play/Pause/Resume/Stop/Replay/Off/toggle/close/switch and autoplay refusal | NOT VERIFIED — audible-device lifecycle check needed |
+| Sustained live casts/previews/movement/targets/zoom/resize/melee/aura cleanup | NOT VERIFIED — long-session DOM/instances/sequences/audio/console and available memory/render samples needed |
+| Real logout/login A → B → A and whole-app reload isolation | NOT VERIFIED — live account-switch evidence needed |
+| Live deletion choices and missing remote record/asset safe gameplay fallback | NOT VERIFIED — real-service safety/failure evidence needed |
+
+### Merge recommendation
+
+NOT READY TO MERGE
+
+Exact blockers: an authorized real-service staging environment and two test
+accounts have not been verified; real Firebase CRUD/record inspection/ownership
+rules and Cloudinary uploads/failures have no live evidence; the complete live
+Gary save/reload/cast/replace workflow and account switching are unverified; and
+the requested live artwork, real sound and sustained-session leak/console checks
+remain unperformed. Complete and record those checks before reconsidering merge.
+Unknown remote references remain an explicit limitation, handled conservatively
+by warning, retained hosted assets and fallback—not a claimed global index.
+
+## Previous automated acceptance pass (starting SHA 90df692)
+
+### Test environment
 
 The existing application runs from a disposable checkout in headless Microsoft
 Edge through Playwright. `tests/helpers/animation-services.mjs` replaces only the
@@ -110,13 +219,5 @@ Recorded local results for this pass:
    performance and memory over a longer session. Automated bounded cleanup is
    covered, but long-session GPU/audio/network behavior has not been measured.
 
-Delete safety covers tracked references and the current room's authoritative saved
-spells, not all unopened rooms or simultaneous remote edits. Hosted files are
-intentionally retained because safe orphan cleanup needs server-side reference
-checking. Do not treat this as global cross-room deletion safety. If global safety
-is required before merge, that needs a dependency-index/backend decision rather
-than a cosmetic client-only workaround.
-
-The provided final checklist ends at “34. Move/pan/resi”; pan and resize are covered
-above, but no missing continuation is assumed. Until the live checks pass, this
-branch should remain unmerged and should not be declared production-ready.
+Those historical live prerequisites remain unverified. The final merge-gate
+sections above supersede the previous deletion-policy notes and checklist.
