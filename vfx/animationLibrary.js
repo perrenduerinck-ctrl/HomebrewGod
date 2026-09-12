@@ -5,11 +5,12 @@ export { normalizeAnimation, normalizeAnimationDefinition, mergeAnimationDefinit
 export function createAnimationLibrary({ builtins = [], idFactory = () => `custom_${globalThis.crypto.randomUUID()}` } = {}) {
   const entries = new Map(), originals = new Map(), listeners = new Set(), usage = new Map();
   const references = new Map(); let ownerId = null, roomId = null;
+  const availability = new Map();
   const visible = a => a && (a.ownership.scope !== "room" || roomId && a.ownership.ownerId === roomId) && (a.ownership.scope !== "user" || !a.ownership.ownerId || a.ownership.ownerId === ownerId);
   let order = 0;
   const stats = id => usage.get(id) || { favorite: false, used: 0, recent: 0, created: 0 };
   const emit = () => { for (const fn of listeners) { try { fn(); } catch { /* UI observers cannot change data. */ } } };
-  function put(animation) {
+  function validatePut(animation) {
     if (!entries.has(animation.id) && entries.size >= 5000) throw new Error("This library is full (5,000 definitions).");
     // Bound embedded uploads without counting shared sheets repeatedly.
     const sheets = new Set([...entries.values()].filter(a => a.id !== animation.id).flatMap(a => [a.sprite, a.sound?.src || ""]));
@@ -17,6 +18,11 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
     if ([...sheets].reduce((sum, src) => sum + (src.startsWith("data:") ? src.length : 0), 0) > 48 * 1024 * 1024) {
       throw new Error("This session's uploaded sheets are full. Remove an unused custom animation first.");
     }
+    return animation;
+  }
+  function put(animation) {
+    validatePut(animation);
+    if (entries.get(animation.id)?.sprite !== animation.sprite) availability.delete(animation.id);
     if (!usage.has(animation.id)) usage.set(animation.id, { ...stats(animation.id), created: ++order });
     entries.set(animation.id, animation); emit(); return animation;
   }
@@ -44,33 +50,61 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
     return put(a);
   }
   function updateAnimation(id, changes) {
+    return put(prepareAnimationSave(changes, { animationId: id }));
+  }
+  function prepareAnimationSave(input, { animationId = null } = {}) {
+    if (!animationId) {
+      const scope = input.ownership?.scope || "session";
+      if (scope === "room" && (!roomId || input.ownership.ownerId && input.ownership.ownerId !== roomId)) throw new Error("Select the owning room before adding a room animation.");
+      const candidate = normalizeAnimation({ ...input, id: input.id || idFactory(), ownership: { kind: "user", scope, ownerId: scope === "room" ? roomId : input.ownership?.ownerId ?? ownerId } });
+      if (entries.has(candidate.id)) throw new Error("That animation ID already exists. Update or duplicate it instead.");
+      return validatePut(candidate);
+    }
+    const changes = input;
+    const id = animationId;
     const old = requireAnimation(id);
     const promotedOwnership = old.ownership.kind === "user" && old.ownership.scope === "session" && changes?.ownership?.scope === "user"
       ? changes.ownership
       : old.ownership;
-    return put(mergeAnimationDefinition(old, { ...changes, id: old.id, ownership: promotedOwnership, revision: old.revision + 1 }));
+    return validatePut(mergeAnimationDefinition(old, { ...changes, id: old.id, ownership: promotedOwnership, revision: old.revision + 1 }));
   }
   function duplicateAnimation(id) {
     const a = requireAnimation(id);
     return registerAnimation({ ...a, id: idFactory(), name: `${a.name} copy`, ownership: { scope: "session" } });
   }
   function getAnimationUsage(id) { return [...references].filter(([, ref]) => getSpellAnimationDependencies(ref.get()).includes(id)).map(([key, ref]) => ({ key, name: ref.name || key })); }
-  function deleteAnimation(id, { replaceWith, removeReferences = false } = {}) {
+  function validateDelete(id, { replaceWith, removeReferences = false } = {}) {
     if (requireAnimation(id).ownership.kind === "builtin") throw new Error("Built-in animations cannot be deleted. Duplicate one to customize it.");
     const used = getAnimationUsage(id);
     if (used.length && !replaceWith && !removeReferences) throw new Error(`This animation is used by ${used.length} abilities. Replace or remove its references first.`);
     if (replaceWith) { requireAnimation(replaceWith); if (replaceWith === id) throw new Error("Choose a different replacement animation."); }
+    return used;
+  }
+  function deleteAnimation(id, options = {}) {
+    const used = validateDelete(id, options);
+    const { replaceWith } = options;
     for (const { key } of used) references.get(key).replace(id, replaceWith || null);
-    entries.delete(id); usage.delete(id); emit(); return true;
+    entries.delete(id); usage.delete(id); availability.delete(id); emit(); return true;
   }
   function resetAnimation(id) {
     if (!originals.has(id)) throw new Error("Only built-in animations have original settings.");
     return put(originals.get(id));
   }
   return Object.freeze({ getAnimation, registerAnimation, hydrateAnimation, updateAnimation, duplicateAnimation, deleteAnimation, resetAnimation,
-    getAnimationUsage,
+    getAnimationUsage, prepareAnimationSave, validateDelete,
+    getAvailability: id => availability.get(id) || { available: Boolean(getAnimation(id)), message: "" },
+    setAvailability(id, message = "") {
+      if (!entries.has(id)) return;
+      if (!message) { if (availability.delete(id)) emit(); return; }
+      if (availability.get(id)?.message === message) return;
+      availability.set(id, Object.freeze({ available: false, message })); emit();
+    },
     trackReferences(key, reference) { references.set(key, reference); return () => references.delete(key); },
-    setContext(context = {}) { ownerId = context.ownerId || null; roomId = context.roomId || null; emit(); },
+    setContext(context = {}) {
+      const nextOwner = context.ownerId || null, nextRoom = context.roomId || null;
+      if (ownerId === nextOwner && roomId === nextRoom) return;
+      ownerId = nextOwner; roomId = nextRoom; emit();
+    },
     getContext: () => ({ ownerId, roomId }),
     getCollections: () => [...new Set([...entries.values()].filter(visible).flatMap(a => a.collections))].sort(),
     getUsage: id => Object.freeze({ ...stats(id) }),

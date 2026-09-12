@@ -35,7 +35,8 @@ export function createAnimationPreviewStage({
     source: copyPoint(DEFAULT_POINTS.source, DEFAULT_POINTS.source),
     target: copyPoint(DEFAULT_POINTS.target, DEFAULT_POINTS.target),
   };
-  let stageWidthFeet = Math.max(5, finite(distanceSelect?.value, widthFeet));
+  // Distance is separation between actors, not the width of the entire stage.
+  const stageWidthFeet = Math.max(5, finite(widthFeet, 150));
 
   function listen(node, type, handler, options) {
     if (!node?.addEventListener) return;
@@ -55,6 +56,7 @@ export function createAnimationPreviewStage({
   function move(role, clientX, clientY) {
     const rect = surface.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
+    if (distanceSelect) distanceSelect.value = "custom";
     points[role] = copyPoint({
       xRatio: (clientX - rect.left) / rect.width,
       yRatio: (clientY - rect.top) / rect.height,
@@ -64,6 +66,7 @@ export function createAnimationPreviewStage({
 
   function bindMarker(node, role) {
     listen(node, "pointerdown", (event) => {
+      if (event.button != null && event.button !== 0) return;
       event.preventDefault();
       node.setPointerCapture?.(event.pointerId);
       move(role, event.clientX, event.clientY);
@@ -81,6 +84,7 @@ export function createAnimationPreviewStage({
       }[event.key];
       if (!delta) return;
       event.preventDefault();
+      if (distanceSelect) distanceSelect.value = "custom";
       points[role] = copyPoint({
         xRatio: points[role].xRatio + delta[0],
         yRatio: points[role].yRatio + delta[1],
@@ -90,6 +94,7 @@ export function createAnimationPreviewStage({
   }
 
   function reset() {
+    if (distanceSelect) distanceSelect.value = "custom";
     points.source = copyPoint(DEFAULT_POINTS.source, DEFAULT_POINTS.source);
     points.target = copyPoint(DEFAULT_POINTS.target, DEFAULT_POINTS.target);
     render();
@@ -103,9 +108,13 @@ export function createAnimationPreviewStage({
   }
 
   function setDistance(value) {
-    stageWidthFeet = Math.max(5, finite(value, stageWidthFeet));
+    if (value === "custom") return;
+    const distance = clamp(finite(value === "adjacent" ? 5 : value, 30), 0, stageWidthFeet * 0.9);
+    const separation = distance / stageWidthFeet;
+    points.source = { xRatio: 0.5 - separation / 2, yRatio: 0.5 };
+    points.target = { xRatio: 0.5 + separation / 2, yRatio: 0.5 };
     if (distanceSelect && String(distanceSelect.value) !== String(value)) distanceSelect.value = String(value);
-    onChange(getState());
+    render();
   }
 
   function getState() {
@@ -118,6 +127,7 @@ export function createAnimationPreviewStage({
       height,
       widthFeet: stageWidthFeet,
       pixelsPerFoot: width / stageWidthFeet,
+      distanceFeet: Math.hypot((points.target.xRatio - points.source.xRatio) * width, (points.target.yRatio - points.source.yRatio) * height) / (width / stageWidthFeet),
     };
   }
 

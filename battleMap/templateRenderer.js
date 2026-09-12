@@ -129,10 +129,10 @@ export function createMapTemplateEngine({
     );
 
     overlay.style.left = `${
-      targetRect.left - surfaceRect.left + surface.scrollLeft
+      targetRect.left - surfaceRect.left - (surface.clientLeft || 0) + surface.scrollLeft
     }px`;
     overlay.style.top = `${
-      targetRect.top - surfaceRect.top + surface.scrollTop
+      targetRect.top - surfaceRect.top - (surface.clientTop || 0) + surface.scrollTop
     }px`;
     overlay.style.width = `${width}px`;
     overlay.style.height = `${height}px`;

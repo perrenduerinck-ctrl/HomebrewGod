@@ -1,4 +1,5 @@
 import { normalizeAnimation } from "./animationDefinition.js";
+import { getSpellAnimationDependencies } from "./animationReferences.js";
 
 const DATA_URL_PATTERN = /^data:/i;
 
@@ -22,8 +23,8 @@ function hostedAssetError(label) {
 }
 
 function assertHostedAssets(definition) {
-  if (DATA_URL_PATTERN.test(String(definition.sprite || ""))) throw hostedAssetError("The sprite sheet");
-  if (definition.sound?.src && DATA_URL_PATTERN.test(String(definition.sound.src))) throw hostedAssetError("The sound asset");
+  if (!/^https:\/\//i.test(String(definition.sprite || ""))) throw hostedAssetError("The sprite sheet (secure hosted URL required)");
+  if (definition.sound?.src && !/^https:\/\//i.test(String(definition.sound.src))) throw hostedAssetError("The sound asset (secure hosted URL required)");
 }
 
 function normalizeOwnedAnimation(input, ownerId) {
@@ -47,6 +48,7 @@ export function createAnimationPersistence({
   deleteDoc,
   serverTimestamp,
   uploadSprite,
+  assetBaseUrl = globalThis.document?.baseURI,
   onStatus = () => {},
 } = {}) {
   if (!library) throw new Error("An animation library is required.");
@@ -57,6 +59,7 @@ export function createAnimationPersistence({
   const assets = new Map();
   const subscribers = new Set();
   let lastStatus = { state: "idle", message: "Sign in to sync personal animations." };
+  let contextOwner = null;
 
   const configured = [collection, doc, getDocs, setDoc, deleteDoc].every((item) => typeof item === "function");
   const ownerId = () => String(getUserId?.() || "").trim();
@@ -70,8 +73,23 @@ export function createAnimationPersistence({
 
   function syncLibraryContext() {
     const owner = ownerId();
+    if (owner !== contextOwner) { loadedOwners.clear(); contextOwner = owner; }
     library.setContext?.({ ownerId: owner || null, roomId: getRoomId?.() || null });
     return owner;
+  }
+
+  const assetKey = (owner, id) => `${owner}/${id}`;
+  function requireOwner(owner, input = null) {
+    if (owner !== ownerId() || input?.ownership?.scope === "user" && input.ownership.ownerId !== owner) {
+      throw new Error("Your signed-in account changed. Reopen the animation before saving.");
+    }
+  }
+  function resolveAssets(input) {
+    const resolve = src => {
+      if (!src || DATA_URL_PATTERN.test(src) || /^https?:\/\//i.test(src)) return src;
+      try { return new URL(src, assetBaseUrl).href; } catch { return src; }
+    };
+    return { ...input, sprite: resolve(input.sprite), sound: input.sound ? { ...input.sound, src: resolve(input.sound.src) } : null };
   }
 
   function canPersist() {
@@ -89,6 +107,7 @@ export function createAnimationPersistence({
       publish("loading", "Loading personal animations…");
       try {
         const snapshot = await getDocs(collection(db, "users", owner, "animations"));
+        if (owner !== ownerId()) return { state: "cancelled", message: "Account changed while loading animations." };
         let count = 0;
         for (const entry of snapshotDocuments(snapshot)) {
           try {
@@ -99,8 +118,8 @@ export function createAnimationPersistence({
             }, owner);
             assertHostedAssets(definition);
             library.hydrateAnimation?.(definition);
-            knownIds.add(definition.id);
-            if (record.spriteAsset) assets.set(definition.id, { ...record.spriteAsset });
+            knownIds.add(assetKey(owner, definition.id));
+            if (record.spriteAsset) assets.set(assetKey(owner, definition.id), { ...record.spriteAsset });
             count += 1;
           } catch (error) {
             console.warn("Skipped an invalid saved animation.", error);
@@ -109,6 +128,8 @@ export function createAnimationPersistence({
         loadedOwners.add(owner);
         return publish("ready", count ? `${count} personal animation${count === 1 ? "" : "s"} synced.` : "Personal animations are synced.");
       } catch (error) {
+        if (owner !== ownerId()) return { state: "cancelled", message: "Account changed while loading animations." };
+        loadedOwners.delete(owner);
         return publish("offline", "Personal animations could not be loaded. Built-ins and session edits still work.", error);
       } finally {
         loadingOwners.delete(owner);
@@ -122,17 +143,19 @@ export function createAnimationPersistence({
     const owner = syncLibraryContext();
     if (!owner || !configured) return { definition: normalizeAnimation(input), asset: null, persistent: false };
 
-    let definition = normalizeOwnedAnimation(input, owner);
-    let asset = assets.get(definition.id) || null;
+    requireOwner(owner, input);
+    let definition = normalizeOwnedAnimation(resolveAssets(input), owner);
+    let asset = assets.get(assetKey(owner, definition.id)) || null;
     if (spriteFile) {
       if (typeof uploadSprite !== "function") throw new Error("Sprite uploads are not configured.");
       publish("uploading", "Uploading sprite sheet…");
       let uploaded;
       try { uploaded = await uploadSprite(spriteFile); }
       catch (error) {
-        publish("offline", "The sprite sheet could not be uploaded. Your previous saved animation is unchanged.", error);
+        if (owner === ownerId()) publish("offline", "The sprite sheet could not be uploaded. Your previous saved animation is unchanged.", error);
         throw error;
       }
+      requireOwner(owner);
       const url = String(uploaded?.url || uploaded?.secure_url || "").trim();
       if (!/^https:\/\//i.test(url)) throw new Error("The sprite upload did not return a secure URL.");
       asset = {
@@ -149,7 +172,8 @@ export function createAnimationPersistence({
   async function saveAnimation(input, { asset = null } = {}) {
     const owner = syncLibraryContext();
     if (!configured || !owner) return { ok: false, persistent: false };
-    const definition = normalizeOwnedAnimation(input, owner);
+    requireOwner(owner, input);
+    const definition = normalizeOwnedAnimation(resolveAssets(input), owner);
     assertHostedAssets(definition);
     const stamp = timestamp(serverTimestamp);
     const record = {
@@ -158,33 +182,52 @@ export function createAnimationPersistence({
       ownerId: owner,
       updatedAt: stamp,
     };
-    if (!knownIds.has(definition.id)) record.createdAt = stamp;
-    const spriteAsset = asset || assets.get(definition.id);
+    const key = assetKey(owner, definition.id);
+    if (!knownIds.has(key)) record.createdAt = stamp;
+    const spriteAsset = asset || assets.get(key);
     if (spriteAsset) record.spriteAsset = { ...spriteAsset };
     try { await setDoc(doc(db, "users", owner, "animations", definition.id), record, { merge: true }); }
     catch (error) {
-      publish("offline", "The animation could not be synced. Your session remains usable.", error);
+      if (owner === ownerId()) publish("offline", "The animation could not be synced. Your session remains usable.", error);
       throw error;
     }
-    knownIds.add(definition.id);
-    if (spriteAsset) assets.set(definition.id, { ...spriteAsset });
-    publish("ready", `Saved “${definition.name}” to your personal animation library.`);
+    knownIds.add(key);
+    if (spriteAsset) assets.set(key, { ...spriteAsset });
+    if (owner === ownerId()) publish("ready", `Saved “${definition.name}” to your personal animation library.`);
     return { ok: true, persistent: true, definition };
   }
 
   async function deleteAnimation(animationId) {
     const owner = syncLibraryContext();
     if (!configured || !owner) return { ok: false, persistent: false };
+    requireOwner(owner, library.getAnimation(animationId));
+    // Loaded draft reference tools cannot prove that a saved character is safe.
+    // Recheck the current room's authoritative spell records before deletion.
+    const room = getRoomId?.();
+    if (room) {
+      let snapshot;
+      try { snapshot = await getDocs(collection(db, "rooms", room, "characters")); }
+      catch (error) {
+        if (owner === ownerId()) publish("offline", "Saved spell dependencies could not be checked. The animation was not deleted.", error);
+        throw new Error("Saved spell dependencies could not be checked. Try again when your room is online.");
+      }
+      requireOwner(owner);
+      for (const entry of snapshotDocuments(snapshot)) for (const spell of documentData(entry).magic?.customSpells || []) {
+        if (getSpellAnimationDependencies(spell).includes(String(animationId))) {
+          throw new Error(`Saved spell “${spell.name || "Unnamed spell"}” still uses this animation. Replace or clear its stages and save the character before deleting.`);
+        }
+      }
+    }
     try { await deleteDoc(doc(db, "users", owner, "animations", String(animationId))); }
     catch (error) {
-      publish("offline", "The animation could not be deleted from your account while offline.", error);
+      if (owner === ownerId()) publish("offline", "The animation could not be deleted from your account while offline.", error);
       throw error;
     }
-    knownIds.delete(String(animationId));
+    knownIds.delete(assetKey(owner, animationId));
     // Hosted files are intentionally retained unless a server can prove that no
     // other saved animation references them.
-    assets.delete(String(animationId));
-    publish("ready", "Animation deleted from your personal library.");
+    assets.delete(assetKey(owner, animationId));
+    if (owner === ownerId()) publish("ready", "Animation deleted from your personal library.");
     return { ok: true, persistent: true };
   }
 

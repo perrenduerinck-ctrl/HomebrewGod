@@ -8,6 +8,18 @@ import {
   formatSpellTemplateInstruction
 } from "../battleMap/spellTemplates.js";
 
+test("saved custom spells derive catalog targeting from range without mutating their record", () => {
+  const spell = Object.freeze({ id: "gary-fireball-test", name: "Gary Fireball Test", source: "custom", range: "120 feet", animations: { travel: "gary_missile" } });
+  const instruction = createSpellTemplateInstruction(spell);
+  assert.equal(instruction.supported, true);
+  assert.equal(instruction.singleTarget, true);
+  assert.equal(instruction.sourceTargetType, "creature");
+  assert.equal(instruction.rangeFeet, 120);
+  assert.equal(spell.targeting, undefined);
+  assert.equal(createSpellTemplateInstruction({ ...spell, range: "Special" }).supported, false);
+  assert.equal(createSpellTemplateInstruction({ ...spell, areaOfEffect: { type: "sphere", size: 20 } }).templateShape, "sphere");
+});
+
 test("Fire Bolt uses reusable single-target map placement", () => {
   const instruction = createSpellTemplateInstruction(
     getDefaultSpellById("fire-bolt")

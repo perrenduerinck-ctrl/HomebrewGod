@@ -86,7 +86,7 @@ import {
 } from "./vfx/castingSequence.js?v=complete-spell-vfx-20260903";
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=complete-spell-vfx-20260903";
 import { createCombatSpriteTestControls } from "./vfx/combatSpriteTest.js";
-import { configureAnimationSession, createAnimationWorkspace } from "./vfx/animationWorkspace.js?v=persistent-library-20260911";
+import { configureAnimationSession, createAnimationWorkspace } from "./vfx/animationWorkspace.js";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=complete-spell-vfx-20260903";
 import {
   createRealtimeListenerRegistry
@@ -4671,6 +4671,7 @@ function handleConfirmedSpellVfx({
 } = {}) {
   try {
     const instruction = activeSpellCastingSession?.getState?.().instruction;
+    const directional = ["cone", "line"].includes(instruction?.templateShape);
     const selectedTarget = instruction?.singleTarget ? target?.affectedTokens?.[0] : null;
     const castEvent = createSpellVfxEvent({
       spell,
@@ -4680,10 +4681,12 @@ function handleConfirmedSpellVfx({
         activeSpellCastingCasterPoint,
       casterElevation:
         activeSpellCastingCasterElevationFeet,
-      targetTokenId: instruction?.targetType === "self"
+      targetTokenId: instruction?.targetType === "self" && !directional
         ? casterToken?.id
-        : selectedTarget?.id,
-      targetPoint: selectedTarget?.center || target?.geometry?.anchor,
+        : selectedTarget?.id || null,
+      // Directional geometry is anchored at the caster, not the aiming target.
+      targetPoint: selectedTarget?.center || null,
+      deliveryType: instruction?.singleTarget ? inferSpellVfxDeliveryType({ spell }) : "",
       targetElevation:
         target?.endElevationFeet,
       geometry: target?.geometry,
@@ -4702,7 +4705,7 @@ function handleConfirmedSpellVfx({
       battleMapVfxSequences =
         createBattleMapCastingSequences(vfxEngine);
     }
-    battleMapVfxSequences?.play(castEvent);
+    battleMapVfxSequences?.play(castEvent, { onWarning: message => text(E.templateStatus, message) });
     return castEvent;
   } catch {
     // VFX is presentation-only and cannot change cast resolution.
@@ -4965,7 +4968,7 @@ function playSelectedSpellPreviewVfx() {
     lastSpellPreviewVfxEvent = previewEvent;
     lastSpellPreviewVfxResult = result;
     text(E.templateStatus,
-      result.reason === "effects-off"
+      result.warning ? result.warning : result.reason === "effects-off"
         ? "Preview VFX was not played because Effects is Off."
         : result.ok
           ? `${previewEvent.spellName} preview VFX playing. No cast, roll, damage, HP, slot, or character resource was changed.`
@@ -4973,7 +4976,8 @@ function playSelectedSpellPreviewVfx() {
     );
     result.ready?.then(finalResult => {
       if (lastSpellPreviewVfxResult !== result) return;
-      if (finalResult?.ok === false && !["cancelled", "effects-off"].includes(finalResult.reason)) {
+      if (finalResult?.warning) text(E.templateStatus, finalResult.warning);
+      else if (finalResult?.ok === false && !["cancelled", "effects-off"].includes(finalResult.reason)) {
         text(E.templateStatus, "The custom animation could not play, so the safe legacy preview was used when available.");
       }
     }).catch(() => {
@@ -5307,6 +5311,30 @@ function updateBattleMapTemplateUi(state) {
   );
 }
 
+function getCustomSpellPreviewOptions() {
+  const characters = characterCreatorSystem?.getState?.().characterCache || [];
+  const draft = characterCreatorSystem?.getDraft?.();
+  return [...new Map([...characters, draft].flatMap(character => character?.magic?.customSpells || [])
+    .filter(spell => spell?.id && spell?.name).map(spell => [spell.id, spell])).values()];
+}
+
+function syncCustomSpellPreviewOptions() {
+  if (!E.spellTemplateSelect) return;
+  const spells = getCustomSpellPreviewOptions();
+  const old = E.spellTemplateSelect.querySelector('optgroup[data-custom-spells]');
+  const signature = JSON.stringify(spells.map(spell => [spell.id, spell.name]));
+  if (old?.dataset.signature === signature) return;
+  const selection = E.spellTemplateSelect.value;
+  old?.remove();
+  if (spells.length) {
+    const group = document.createElement("optgroup"); group.label = "Custom spells";
+    group.dataset.customSpells = "true"; group.dataset.signature = signature;
+    for (const spell of spells) group.append(new Option(spell.name, spell.id));
+    E.spellTemplateSelect.append(group);
+  }
+  E.spellTemplateSelect.value = selection;
+}
+
 async function loadSelectedSpellTemplate() {
   if (currentIsDM !== true || spellPreviewLoading) return;
   cancelActiveSpellCasting({
@@ -5339,7 +5367,7 @@ async function loadSelectedSpellTemplate() {
     const { getDefaultSpellById } = await import(
       "./data/defaultSpells.js?v=stage8-20260826"
     );
-    const spell = getDefaultSpellById(spellId);
+    const spell = getCustomSpellPreviewOptions().find(spell => spell.id === spellId) || getDefaultSpellById(spellId);
     if (currentIsDM !== true || E.spellTemplateSelect?.value !== spellId ||
         generation !== spellPreviewGeneration) return;
     const instruction =
@@ -5499,6 +5527,13 @@ function initializeBattleMapTemplates() {
     "click",
     loadSelectedSpellTemplate
   );
+  // The map picker previously contained only SRD spells, hiding saved custom
+  // stage assignments. Reuse the character library/draft, not a second store.
+  $("battleToolsMenu")?.addEventListener("toggle", async event => {
+    if (!event.target.open || currentIsDM !== true) return;
+    try { await initCharacterCreatorSystem(); syncCustomSpellPreviewOptions(); }
+    catch { /* Default spells remain available if character loading fails. */ }
+  });
 
   E.spellTemplateSelect?.addEventListener(
     "change",
@@ -8547,6 +8582,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       beginSpellCast:
         async function ({
           spellId = "fireball",
+          spell: requestedSpell = null,
           characterId =
             "release-test-character",
           characterName =
@@ -8558,7 +8594,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
               "./data/defaultSpells.js?v=stage8-20260826"
             );
           const spell =
-            getDefaultSpellById(
+            requestedSpell || getDefaultSpellById(
               spellId
             );
 

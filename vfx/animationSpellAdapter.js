@@ -30,21 +30,31 @@ export function buildSpellAnimationContext(event = {}, options = {}) {
 
 export function createAnimationSpellAdapter({ legacy, player, library, bindings, onStateChange = () => {} }) {
   const sequence = createAnimationSequenceController({ player });
-  const active = new Map(); let nextId = 0, destroyed = false;
+  const active = new Map(), fallbacks = new Map(); let nextId = 0, destroyed = false;
   const emit = () => { try { onStateChange(active.size); } catch { /* presentation observer */ } };
   function cancel(record) {
     record.controller.abort(); record.result?.cancel?.(); record.fallback?.cancel?.();
-    active.delete(record.id); emit();
+    active.delete(record.id); fallbacks.delete(record.id); emit();
+  }
+  function useFallback(event, options, warning, record = null) {
+    try { options.onWarning?.(warning); options.onEvent?.({ type: "warning", message: warning }); } catch { /* observer */ }
+    const result = { ...legacy.play(event, options), warning };
+    if (record) {
+      record.fallback = result;
+      while (fallbacks.size >= 16) cancel(fallbacks.values().next().value);
+      fallbacks.set(record.id, record);
+    }
+    return result;
   }
   function play(event = {}, options = {}) {
     if (destroyed) return { ok: false, skipped: true, reason: "sequence-system-destroyed" };
     // Preserve the casting-sequence contract: Off is an intentional successful skip.
     if (player.getMode() === "off") return { ok: true, skipped: true, reason: "effects-off" };
-    const reference = event.animationId ? { animationId: event.animationId } :
-      event.animations ? { animations: event.animations } : bindings.getAssignment(`spell:${event.spellId}`);
+    const reference = Object.keys(event.animations || {}).length ? { animations: event.animations } :
+      event.animationId ? { animationId: event.animationId } : bindings.getAssignment(`spell:${event.spellId}`);
     if (!reference || options.sequenceId) return legacy.play(event, options);
     const ids = getSpellAnimationDependencies(reference);
-    if (!ids.length || ids.some(id => !library.getAnimation(id))) return legacy.play(event, options);
+    if (!ids.length || ids.some(id => !library.getAnimation(id))) return useFallback(event, options, "A referenced animation is unavailable. Safe legacy VFX were used when available.");
     const record = { id: `animation-cast-${++nextId}`, event, controller: new AbortController() };
     while (active.size >= 16) cancel(active.values().next().value);
     active.set(record.id, record); emit();
@@ -62,27 +72,25 @@ export function createAnimationSpellAdapter({ legacy, player, library, bindings,
       if (!result.ok) {
         active.delete(record.id); emit();
         if (!["cancelled", "destroyed", "effects-off"].includes(result.reason)) {
-          record.fallback = legacy.play(event, options);
-          return record.fallback;
+          return useFallback(event, options, `${result.message || "The custom sprite is unavailable."} Safe legacy VFX were used when available.`, record);
         }
       } else result.finished.finally(() => { active.delete(record.id); emit(); });
       return result;
     }).catch(error => {
       active.delete(record.id); emit();
       if (!record.controller.signal.aborted) {
-        record.fallback = legacy.play(event, options);
-        return record.fallback;
+        return useFallback(event, options, `${error.message || "The custom animation failed."} Safe legacy VFX were used when available.`, record);
       }
       return { ok: false, reason: "cancelled", error };
     });
     return { ok: true, id: record.id, ready, cancel: () => cancel(record), animationId: reference.animationId || null };
   }
   return Object.freeze({ ...legacy, play,
-    cancel(id, reason) { const record = active.get(id); if (record) { cancel(record); return true; } return legacy.cancel?.(id, reason) || false; },
-    clear(reason) { [...active.values()].forEach(cancel); legacy.clear(reason); },
-    clearPreviews() { [...active.values()].filter(r => r.event.preview).forEach(cancel); legacy.clearPreviews(); },
+    cancel(id, reason) { const record = active.get(id) || fallbacks.get(id); if (record) { cancel(record); return true; } return legacy.cancel?.(id, reason) || false; },
+    clear(reason) { [...active.values(), ...fallbacks.values()].forEach(cancel); legacy.clear(reason); },
+    clearPreviews() { [...active.values(), ...fallbacks.values()].filter(r => r.event.preview).forEach(cancel); legacy.clearPreviews(); },
     getState() { const old = legacy.getState(); return { ...old, activeCount: old.activeCount + active.size,
       sequences: [...old.sequences, ...[...active.values()].map(r => ({ id: r.id, definitionId: "animation-id", phase: "animation" }))] }; },
-    destroy() { if (destroyed) return; destroyed = true; [...active.values()].forEach(cancel); sequence.clear(); legacy.destroy(); }
+    destroy() { if (destroyed) return; destroyed = true; [...active.values(), ...fallbacks.values()].forEach(cancel); sequence.clear(); legacy.destroy(); }
   });
 }

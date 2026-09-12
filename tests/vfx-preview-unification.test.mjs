@@ -85,11 +85,13 @@ test("shared preview reset restores canonical anchors", () => {
   f.stage.destroy();
 });
 
-test("shared preview distance changes visual grid scale without moving gameplay data", () => {
+test("shared preview distance sets exact actor separation without changing grid scale", () => {
   const f = stageFixture();
   f.stage.setDistance(40);
-  assert.equal(f.stage.getContext().grid.pixelsPerFoot, 10);
-  assert.equal(f.stage.getState().widthFeet, 40);
+  const state = f.stage.getState();
+  assert.equal(f.stage.getContext().grid.pixelsPerFoot, 400 / 150);
+  assert.equal(state.widthFeet, 150);
+  assert.ok(Math.abs(Math.hypot(state.target.x - state.source.x, state.target.y - state.source.y) / state.pixelsPerFoot - 40) < 1e-9);
   f.stage.destroy();
 });
 
@@ -146,6 +148,13 @@ test("preview token IDs survive the immutable cast event boundary", () => {
   assert.equal(event.casterTokenId, "caster");
   assert.equal(event.targetTokenId, "target");
   assert.equal(Object.isFrozen(event), true);
+});
+
+test("intentional map targets retain explicit null across cast event normalization", () => {
+  const event = createSpellVfxEvent({ targetTokenId: null, geometry: { shape: "sphere", anchor: { x: 120, y: 140 } }, affectedTokens: [{ id: "inside" }] });
+  assert.equal(Object.hasOwn(event, "targetTokenId"), true);
+  assert.equal(buildSpellAnimationContext(event).targetTokenId, null);
+  assert.equal(Object.hasOwn(createSpellVfxEvent({}), "targetTokenId"), false);
 });
 
 test("animation adapter gives explicit preview target IDs priority over affected tokens", () => {

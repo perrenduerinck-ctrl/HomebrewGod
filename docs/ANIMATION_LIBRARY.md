@@ -177,9 +177,9 @@ to 10 seconds. Existing engine capacity and Reduced/Off behavior remain in force
 `layers` remains bounded extension data. Frame `events` now emit host callbacks;
 they do not spawn gameplay objects or apply damage. Layered rendering, camera
 shake and a timeline editor are not implemented.
-Face Away works through the API; Token Facing is reserved. The editor exposes Fixed
-and Face Target. A marketplace, sharing UI and durable account storage remain out
-of scope.
+Face Away works through the API and spell overrides; Token Facing is reserved.
+The creator exposes Fixed and Face Target. A marketplace and sharing UI remain
+out of scope; signed-in personal animation storage is implemented above.
 
 ## Validation
 
@@ -323,3 +323,28 @@ Optional `animationSelection:{mode:"specific"|"random"|"cycle",ids:[...]}` is
 prepared by `normalizeAnimationSelection`/`chooseAnimationSelection`; hosts own
 cycle indices. Dependency discovery/replacement includes these IDs. Automatic
 variant selection in gameplay and a variant editor remain future integration.
+
+## Acceptance hardening
+
+The creator and spell panel import the same canonical workspace module so their
+library and persistence context cannot split into separate sessions. Saves validate
+and sync before committing visible definitions or spell assignments; failed saves
+keep the previous revision. Remote deletes finish before local references change.
+Delete also rechecks saved spells in the current room: replace/clear those stages
+and save their character before deleting. This is not a global cross-room reference
+index; unopened rooms and concurrent remote edits still need care.
+
+Hosted assets must use HTTPS. Relative built-in URLs resolve against the app origin
+when remixing them into personal storage. Account changes discard stale loads and
+prevent assigning a save from a previous account. Failed sprites are labelled
+unavailable; requests time out, can retry, and release pending work on disposal.
+
+The shared preview stage has a fixed 150-ft width. Distance presets change actual
+Source/Target separation, while drag/keyboard/reset switch the selector to Custom.
+Unedited override controls inherit the animation definition without storing extra
+defaults; clearing placement/direction/fades removes their old overrides.
+
+See [the acceptance report](ANIMATION_ACCEPTANCE.md) for browser coverage and the
+live-service checks required before merging. The acceptance spec is included in
+`npm run test:browser` and uses simulated Firebase/Cloudinary transport, not a
+production account.

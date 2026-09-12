@@ -12,7 +12,7 @@ const hosted = id => ({
   ownership: { kind: "user", scope: "user", ownerId: "user-a" },
 });
 
-function fixture({ owner = "user-a", loadError = null } = {}) {
+function fixture({ owner = "user-a", loadError = null, dependencies = {} } = {}) {
   const records = new Map();
   const writes = [];
   const deletes = [];
@@ -41,9 +41,85 @@ function fixture({ owner = "user-a", loadError = null } = {}) {
       uploads.push(file);
       return { url: `https://res.cloudinary.com/demo/image/upload/${file.name}`, publicId: `animations/${file.name}` };
     },
+    assetBaseUrl: "https://perrenduerinck-ctrl.github.io/HomebrewGod/",
+    ...dependencies,
   });
-  return { library, store, records, writes, deletes, uploads };
+  return { library, store, records, writes, deletes, uploads, setOwner: value => { owner = value; } };
 }
+
+test("built-in remixes resolve relative hosted sprites before persistence and reject insecure URLs", async () => {
+  const f = fixture();
+  const prepared = await f.store.prepareAnimation({ ...hosted("remix"), sprite: "./assets/vfx/library/radiant-spear.png" });
+  assert.equal(prepared.definition.sprite, "https://perrenduerinck-ctrl.github.io/HomebrewGod/assets/vfx/library/radiant-spear.png");
+  await assert.rejects(() => f.store.saveAnimation({ ...hosted("insecure"), sprite: "http://example.test/sprite.png" }), /secure hosted/);
+  assert.equal(f.writes.length, 0);
+});
+
+test("account changes while loading cannot hydrate or publish the previous owner's library", async () => {
+  let resolve;
+  const f = fixture({ dependencies: { getDocs: () => new Promise(done => { resolve = done; }) } });
+  const pending = f.store.load();
+  f.setOwner("user-b"); f.library.setContext({ ownerId: "user-b" });
+  resolve({ docs: [{ id: "private", data: () => hosted("private") }] });
+  assert.equal((await pending).state, "cancelled");
+  f.library.setContext({ ownerId: "user-a" });
+  assert.equal(f.library.getAnimation("private"), null);
+  assert.notEqual(f.store.getStatus().state, "ready");
+});
+
+test("account changes during upload reject saving into the next user's account", async () => {
+  let resolve;
+  const f = fixture({ dependencies: { uploadSprite: () => new Promise(done => { resolve = done; }) } });
+  const pending = f.store.prepareAnimation(hosted("private"), { spriteFile: { name: "new.png" } });
+  f.setOwner("user-b"); resolve({ secure_url: "https://example.test/new.png" });
+  await assert.rejects(() => pending, /account changed/);
+  await assert.rejects(() => f.store.saveAnimation(hosted("private")), /account changed/);
+  assert.equal(f.writes.length, 0);
+});
+
+test("save candidates and delete validation cannot mutate the visible definition or references", () => {
+  const f = fixture(); f.library.setContext({ ownerId: "user-a" });
+  const original = f.library.registerAnimation(hosted("original"));
+  const bindings = createAnimationBindings({ library: f.library });
+  bindings.setAnimation("spell:test", { animations: { travel: "original" } });
+  const candidate = f.library.prepareAnimationSave({ name: "Edited" }, { animationId: original.id });
+  assert.equal(candidate.revision, 2); assert.equal(candidate.id, original.id);
+  assert.equal(f.library.getAnimation(original.id), original);
+  f.library.validateDelete(original.id, { removeReferences: true });
+  assert.equal(bindings.getAssignment("spell:test").animations.travel, original.id);
+  assert.equal(f.library.getAnimation(original.id), original);
+});
+
+test("unchanged library context does not interrupt an open editor or emit spurious changes", () => {
+  const f = fixture(); f.library.setContext({ ownerId: "user-a", roomId: "ROOM" });
+  let changes = 0; f.library.subscribe(() => changes++);
+  f.library.setContext({ ownerId: "user-a", roomId: "ROOM" });
+  assert.equal(changes, 0);
+  f.library.setContext({ ownerId: "user-b", roomId: "ROOM" }); assert.equal(changes, 1);
+});
+
+test("save preflight applies duplicate ID and room ownership checks before remote writes", () => {
+  const f = fixture(); f.library.registerAnimation(hosted("existing"));
+  assert.throws(() => f.library.prepareAnimationSave(hosted("existing")), /ID already exists/);
+  assert.throws(() => f.library.prepareAnimationSave({ ...hosted("room"), ownership: { scope: "room", ownerId: "OTHER" } }), /owning room/);
+  assert.equal(f.writes.length, 0);
+});
+
+test("a previous account's late write failure cannot overwrite the current account's sync status", async () => {
+  let reject;
+  const f = fixture({ dependencies: { setDoc: () => new Promise((_, fail) => { reject = fail; }) } });
+  const pending = f.store.saveAnimation(hosted("private"));
+  f.setOwner("user-b"); await f.store.setContext();
+  const status = f.store.getStatus(); reject(new Error("previous account failed"));
+  await assert.rejects(() => pending, /previous account failed/);
+  assert.deepEqual(f.store.getStatus(), status);
+});
+
+test("saved room spells protect animations even when draft references were never loaded", async () => {
+  const f = fixture({ dependencies: { getDocs: async () => ({ docs: [{ data: () => ({ magic: { customSpells: [{ name: "Saved Fireball", animations: { travel: "protected" } }] } }) }] }) } });
+  await assert.rejects(() => f.store.deleteAnimation("protected"), /Saved Fireball.*save the character/);
+  assert.equal(f.deletes.length, 0);
+});
 
 test("signed-out animation persistence leaves the session library usable", async () => {
   const { library, store, writes } = fixture({ owner: "" });

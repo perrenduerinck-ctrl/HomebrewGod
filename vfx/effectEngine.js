@@ -340,7 +340,7 @@ export function createEffectEngine({
     });
     record.eventTimers.clear();
     try {
-      renderer.remove(record.effect.id);
+      renderer.remove(record.effect.id, reason);
     } catch {
       // Cleanup must continue even if a visual adapter fails.
     }

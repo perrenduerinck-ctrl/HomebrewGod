@@ -297,6 +297,7 @@ export function getVfxClipSources(id, options = {}) {
 export function createVfxAssetCache({
   createImage = () => new globalThis.Image(),
   maximumEntries = 8,
+  loadTimeoutMs = 15000,
   onError = (message) => globalThis.console?.error?.(message)
 } = {}) {
   const cache = new Map();
@@ -305,6 +306,7 @@ export function createVfxAssetCache({
   function preload(src, label = "VFX clip") {
     const key = String(src || "").trim();
     if (!key) return Promise.resolve(false);
+    if (cache.get(key)?.status === "failed") cache.delete(key);
     if (cache.has(key)) {
       const entry = cache.get(key);
       cache.delete(key);
@@ -316,22 +318,29 @@ export function createVfxAssetCache({
       onError(`${label}: unable to create image loader for ${key}`);
       return Promise.resolve(false);
     }
-    const entry = { image, promise: null, status: "loading" };
+    const entry = { image, promise: null, status: "loading", cancel: null };
     const promise = new Promise((resolve) => {
+      let settled = false;
+      const timeout = globalThis.setTimeout(() => finish(false), Math.max(1, Math.min(60000, Number(loadTimeoutMs) || 15000)));
+      function finish(ok, cancelled = false) {
+        if (settled) return;
+        settled = true; globalThis.clearTimeout(timeout);
+        entry.status = ok ? "loaded" : "failed";
+        image.onload = image.onerror = null;
+        if (!ok && !cancelled) onError(`${label}: unable to load sprite source ${key}`);
+        resolve(ok);
+      }
+      entry.cancel = () => finish(false, true);
       image.onload = async () => {
         try {
           if (typeof image.decode === "function") {
             entry.status = "decoding";
             await image.decode();
           }
-          entry.status = "loaded"; resolve(true);
-        } catch { image.onerror(); }
+          finish(true);
+        } catch { finish(false); }
       };
-      image.onerror = () => {
-        entry.status = "failed";
-        onError(`${label}: unable to load sprite source ${key}`);
-        resolve(false);
-      };
+      image.onerror = () => finish(false);
     });
     entry.promise = promise;
     cache.set(key, entry);
@@ -341,7 +350,7 @@ export function createVfxAssetCache({
   }
 
   return Object.freeze({
-    clear: () => cache.clear(),
+    clear: () => { cache.forEach(entry => entry.cancel?.()); cache.clear(); },
     getStatus: (src) => cache.get(String(src || "").trim())?.status || "unknown",
     getDimensions: (src) => {
       const entry = cache.get(String(src || "").trim());

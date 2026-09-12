@@ -123,7 +123,11 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
       timing: { speed: definition.timing.speed * finite(overrides.speedMultiplier, 1, "Speed multiplier") },
       projectile: { speed: definition.projectile.speed * finite(overrides.projectileSpeedMultiplier, 1, "Projectile speed multiplier") }
     });
-    if (!await cache.preload(definition.sprite, "Animation")) throw new Error(`Unable to load animation sprite: ${definition.name}.`);
+    if (!await cache.preload(definition.sprite, "Animation")) {
+      const message = `Unable to load animation sprite: ${definition.name}.`;
+      library.setAvailability?.(definition.id, message); throw new Error(message);
+    }
+    library.setAvailability?.(definition.id);
     const dimensions = cache.getDimensions(definition.sprite);
     if (!dimensions || ![dimensions.width, dimensions.height].every(n => Number.isFinite(n) && n > 0 && n <= 16384) ||
         dimensions.width * dimensions.height > 64 * 1024 * 1024) throw new Error("The image dimensions are unavailable or too large.");

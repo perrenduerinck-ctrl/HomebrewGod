@@ -32,7 +32,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <label>Background<select data-animation-background><option value="checker">Transparent checkerboard</option><option value="dark">Dark</option><option value="light">Light</option><option value="grid">Grid</option><option value="map">Map-style</option></select></label></div>
     <details class="hg-animation-preview-tools"><summary>Preview Tools</summary><label class="hg-animation-toggle"><input data-animation-show-frame type="checkbox">Show frame number</label><label class="hg-animation-toggle"><input data-animation-show-bounds type="checkbox">Show bounding box</label><label class="hg-animation-toggle"><input data-animation-show-pivot type="checkbox">Show pivot</label>
     <label class="hg-animation-toggle"><input data-animation-show-points type="checkbox">Show source, target, travel path and impact point</label>
-    <label>Test distance<select data-animation-distance><option value="adjacent">Adjacent</option>${[5,10,30,60,120].map(n => `<option value="${n}">${n} ft</option>`).join("")}</select></label>
+    <label>Test distance<select data-animation-distance><option value="custom">Custom / drag anchors</option><option value="adjacent">Adjacent</option>${[5,10,30,60,120].map(n => `<option value="${n}">${n} ft</option>`).join("")}</select></label>
     <button type="button" data-animation-swap-tokens>Swap source / target</button><button type="button" data-animation-reset-tokens>Reset tokens</button>
     <div class="hg-animation-buttons">${[["source","Source Effect"],["target","Target Effect"],["projectile","Projectile"],["melee","Melee Directional"],["beam","Beam"],["aura","Aura"]].map(([key,name]) => `<button type="button" data-animation-quick="${key}">${name}</button>`).join("")}</div></details>
     <p data-animation-preview-info class="hg-animation-hint"></p><p class="hg-animation-hint">Preview controls never change an assignment. Save your settings, then choose an action.</p></section></div>
@@ -40,7 +40,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   const field = name => dialog.querySelector(`[data-animation-${name}]`), status = message => { field("status").textContent = message; };
   const surface = field("preview"), previewEngine = createBattleMapEffectEngine({ surface }), preview = createAnimationPlayer({ engine: previewEngine, library, isSoundEnabled, onError: () => {} });
   let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, draftSpriteFile = null, imageInfo = null, destroyed = false, playback = null, paused = false;
-  let external = null, deleteId = null;
+  let external = null, deleteId = null, draftSaveId = null, saving = false;
   const listeners = [], on = (element, event, fn) => { element.addEventListener(event, fn); listeners.push(() => element.removeEventListener(event, fn)); };
   const safely = fn => async event => { try { await fn(event); } catch (e) { status(e.message || "The animation could not be updated."); } };
   const previewStage = createAnimationPreviewStage({
@@ -85,6 +85,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     catch (error) { if (!destroyed && current === inspectionRevision) { imageInfo = null; field("sheet-stats").textContent = error.message; status(error.message); } }
   }
   function openEditor(a = null) {
+    draftSaveId = null;
     stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; draftSpriteFile = null; imageInfo = null;
     field("form").hidden = false; field("browser-panel").hidden = true; field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
     writeAnimationFields(field, a); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
@@ -139,9 +140,12 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("duplicate"), "click", safely(() => { const a = library.duplicateAnimation(chooser.getSelectedId()); chooser.select(a.id); openEditor(a); status("Created a separate custom remix."); }));
   async function removeAnimation(options = {}) {
     const removedId = deleteId;
+    library.validateDelete(removedId, options);
+    if (library.getAnimation(removedId)?.ownership.scope === "user") {
+      const synced = await persistence?.deleteAnimation?.(removedId);
+      if (!synced?.ok) throw new Error("Sign in again before deleting this animation. Its definition and references are unchanged.");
+    }
     library.deleteAnimation(removedId, options);
-    try { await persistence?.deleteAnimation?.(removedId); }
-    catch (error) { console.warn("The saved animation could not be deleted.", error); }
     field("delete-warning").hidden = true; deleteId = null; selectionChanged(); assignmentInfo(); status("Custom animation removed. References updated.");
   }
   on(field("delete"), "click", safely(() => {
@@ -204,9 +208,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("show-pivot"), "change", () => { surface.classList.toggle("show-animation-pivot", field("show-pivot").checked); });
   on(field("show-points"), "change", safely(() => { if (playback) return playCurrent(); }));
   on(field("distance"), "change", () => {
-    const feet = field("distance").value === "adjacent" ? 5 : Number(field("distance").value);
-    previewStage.setDistance(feet);
-    status(`Preview scale: ${Math.round(previewStage.getState().pixelsPerFoot * 5)} px per 5 ft. Visual distance only.`);
+    status(`Preview distance: ${Math.round(previewStage.getState().distanceFeet)} ft. Visual distance only.`);
   });
   for (const node of dialog.querySelectorAll("[data-animation-quick]")) on(node, "click", safely(() => {
     const key = node.dataset.animationQuick, a = field("form").hidden ? selected() : draft();
@@ -214,16 +216,29 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     return play(mergeAnimationDefinition(a, { behavior: ["projectile", "beam", "melee"].includes(key) ? key : "static", placement: { mode, followSource: key === "aura", followTarget: false }, direction: { mode: "face-target" }, ...(key === "aura" ? { playback: "loop" } : {}) }), true);
   }));
   on(field("form"), "submit", safely(async event => {
-    event.preventDefault(); const a = draft(), current = ++editRevision; await preview.prepareAnimation(a);
-    if (destroyed || current !== editRevision) return;
-    const prepared = draftBase?.ownership.kind === "builtin"
-      ? { definition: a, asset: null, persistent: false }
-      : await persistence?.prepareAnimation?.(a, { spriteFile: draftSpriteFile }) || { definition: a, asset: null, persistent: false };
-    if (destroyed || current !== editRevision) return;
-    const saved = editId ? library.updateAnimation(editId, prepared.definition) : library.registerAnimation({ ...prepared.definition, id: undefined });
-    if (prepared.persistent) await persistence.saveAnimation(saved, { asset: prepared.asset });
-    if (external) { finishExternal(saved.id); dialog.close(); return; }
-    chooser.select(saved.id); assignmentInfo(); status(prepared.persistent ? "Animation saved to your personal library. Select an action to assign it." : "Animation saved for this session. Sign in to sync it.");
+    event.preventDefault(); if (saving) return;
+    saving = true;
+    try {
+      const a = draft(), current = ++editRevision; await preview.prepareAnimation(a);
+      if (destroyed || current !== editRevision) return;
+      const prepared = draftBase?.ownership.kind === "builtin"
+        ? { definition: a, asset: null, persistent: false }
+        : await persistence?.prepareAnimation?.(a, { spriteFile: draftSpriteFile }) || { definition: a, asset: null, persistent: false };
+      if (destroyed || current !== editRevision) return;
+      // Validate without changing the visible library or spell references first.
+      const candidate = library.prepareAnimationSave({ ...prepared.definition, ...(editId ? {} : { id: draftSaveId || undefined }) }, { animationId: editId });
+      draftSaveId = candidate.id;
+      if (prepared.persistent) {
+        const synced = await persistence.saveAnimation(candidate, { asset: prepared.asset });
+        if (!synced.ok) throw new Error("Sign in again to save this animation. Your previous animation is unchanged.");
+        if (candidate.ownership.ownerId !== library.getContext().ownerId) throw new Error("Account changed while saving. Reopen the library for your current account before assigning an animation.");
+      }
+      if (destroyed || current !== editRevision) return;
+      const saved = editId ? library.updateAnimation(editId, prepared.definition) : library.registerAnimation(candidate);
+      if (destroyed || current !== editRevision) return;
+      if (external) { finishExternal(saved.id); dialog.close(); return; }
+      chooser.select(saved.id); assignmentInfo(); status(prepared.persistent ? "Animation saved to your personal library. Select an action to assign it." : "Animation saved for this session. Sign in to sync it.");
+    } finally { saving = false; }
   }));
   selectionChanged(); assignmentInfo();
   return { stop, async openForSlot({ slot = "impact", mode = "choose", animationId } = {}) {

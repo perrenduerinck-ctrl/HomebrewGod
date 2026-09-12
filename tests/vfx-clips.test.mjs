@@ -164,3 +164,12 @@ test("the recently-used asset cache stays bounded and loads only requested clips
   assert.deepEqual(requested, ["one.png", "two.png", "three.png"]);
   assert.deepEqual(cache.getState().sources, ["two.png", "three.png"]);
 });
+
+test("hung sprite requests time out and cache disposal releases pending loads", async () => {
+  const errors = [];
+  const cache = createVfxAssetCache({ createImage: () => ({}), loadTimeoutMs: 5, onError: message => errors.push(message) });
+  assert.equal(await cache.preload("hung.png"), false);
+  assert.equal(cache.getStatus("hung.png"), "failed"); assert.equal(errors.length, 1);
+  const pending = cache.preload("cancelled.png"); cache.clear();
+  assert.equal(await pending, false); assert.equal(errors.length, 1); assert.equal(cache.getState().size, 0);
+});

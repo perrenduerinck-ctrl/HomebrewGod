@@ -22,7 +22,7 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
       <button class="hg-animation-dummy hg-animation-source" data-spell-source type="button" aria-label="Source token, drag or use arrow keys"><span>S</span><small>Source</small></button>
       <button class="hg-animation-dummy hg-animation-target" data-spell-target type="button" aria-label="Target token, drag or use arrow keys"><span>T</span><small>Target</small></button>
     </div>
-    <div class="hg-animation-preview-options"><label>Test distance<select data-spell-distance>${[5,10,30,60,120].map(value => `<option value="${value}">${value} ft</option>`).join("")}</select></label><button type="button" data-spell-swap>Swap Source / Target</button><button type="button" data-spell-reset>Reset anchors</button></div>
+    <div class="hg-animation-preview-options"><label>Test distance<select data-spell-distance><option value="custom">Custom / drag anchors</option>${[5,10,30,60,120].map(value => `<option value="${value}">${value} ft</option>`).join("")}</select></label><button type="button" data-spell-swap>Swap Source / Target</button><button type="button" data-spell-reset>Reset anchors</button></div>
     <div class="hg-animation-buttons"><button type="button" class="hg-animation-primary" data-spell-play>▶ Preview all stages</button><button type="button" data-spell-stop>Stop preview</button><button type="button" data-spell-save>Use these stages</button></div>
     <p data-spell-animation-status role="status"></p>`;
   document.body.append(dialog);
@@ -52,26 +52,31 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
     const slot = row?.dataset.spellAnimationSlot;
     if (!slot || !draft[slot]) return;
     const current = normalizeSpellAnimationReference(draft[slot]);
-    const placement = row.querySelector("[data-slot-placement]").value;
-    const direction = row.querySelector("[data-slot-direction]").value;
-    const fadeIn = optionalNumber(row.querySelector("[data-slot-fade-in]"));
-    const fadeOut = optionalNumber(row.querySelector("[data-slot-fade-out]"));
-    current.overrides = {
-      ...current.overrides,
-      scaleMultiplier: Number(row.querySelector("[data-slot-scale]").value),
-      speedMultiplier: Number(row.querySelector("[data-slot-speed]").value),
-      opacityMultiplier: Number(row.querySelector("[data-slot-opacity]").value),
-      rotationOffset: Number(row.querySelector("[data-slot-rotation]").value),
-      offsetX: Number(row.querySelector("[data-slot-offset-x]").value),
-      offsetY: Number(row.querySelector("[data-slot-offset-y]").value),
-      flipX: row.querySelector("[data-slot-flip-x]").checked,
-      flipY: row.querySelector("[data-slot-flip-y]").checked,
-      projectileSpeedMultiplier: Number(row.querySelector("[data-slot-projectile-speed]").value),
-      tint: row.querySelector("[data-slot-tinted]").checked ? row.querySelector("[data-slot-tint]").value : null,
-      ...(placement ? { placement: { mode: placement } } : {}),
-      ...(direction ? { direction: { mode: direction } } : {}),
-      ...((fadeIn != null || fadeOut != null) ? { appearance: { ...(fadeIn != null ? { fadeIn } : {}), ...(fadeOut != null ? { fadeOut } : {}) } } : {}),
+    // Only edited controls become overrides. Opening/saving a panel must not
+    // clear base tint/flips/offsets or discard unexposed nested settings.
+    current.overrides = structuredClone(row.initialOverrides || {});
+    const control = key => row.querySelector(`[data-slot-${key}]`);
+    const changed = key => {
+      const node = control(key);
+      return String(node.type === "checkbox" ? node.checked : node.value) !== node.dataset.initialValue;
     };
+    for (const [key, property] of [["scale","scaleMultiplier"],["speed","speedMultiplier"],["opacity","opacityMultiplier"],["rotation","rotationOffset"],["offset-x","offsetX"],["offset-y","offsetY"],["projectile-speed","projectileSpeedMultiplier"]]) {
+      if (changed(key)) current.overrides[property] = Number(control(key).value);
+    }
+    for (const [key, property] of [["flip-x","flipX"],["flip-y","flipY"]]) if (changed(key)) current.overrides[property] = control(key).checked;
+    if (changed("tinted") || changed("tint")) current.overrides.tint = control("tinted").checked ? control("tint").value : null;
+    for (const key of ["placement","direction"]) if (changed(key)) {
+      const value = control(key).value;
+      const nested = { ...current.overrides[key] };
+      if (value) nested.mode = value; else delete nested.mode;
+      if (Object.keys(nested).length) current.overrides[key] = nested; else delete current.overrides[key];
+    }
+    for (const [key, property] of [["fade-in","fadeIn"],["fade-out","fadeOut"]]) if (changed(key)) {
+      const value = optionalNumber(control(key));
+      const appearance = { ...current.overrides.appearance };
+      if (value != null) appearance[property] = value; else delete appearance[property];
+      if (Object.keys(appearance).length) current.overrides.appearance = appearance; else delete current.overrides.appearance;
+    }
     draft[slot] = current;
   }
 
@@ -92,13 +97,13 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
           <label>Speed ×<input type="number" data-slot-speed min="0.05" max="8" step="0.05" value="${ref?.overrides.speedMultiplier ?? 1}"></label>
           <label>Opacity ×<input type="number" data-slot-opacity min="0" max="1" step="0.05" value="${ref?.overrides.opacityMultiplier ?? 1}"></label>
           <label>Rotation offset<input type="number" data-slot-rotation min="-1080" max="1080" step="1" value="${ref?.overrides.rotationOffset ?? 0}"></label>
-          <label>Offset X<input type="number" data-slot-offset-x min="-1000" max="1000" step="1" value="${ref?.overrides.offsetX ?? 0}"></label>
-          <label>Offset Y<input type="number" data-slot-offset-y min="-1000" max="1000" step="1" value="${ref?.overrides.offsetY ?? 0}"></label>
+          <label>Offset X<input type="number" data-slot-offset-x min="-1000" max="1000" step="1" value="${ref?.overrides.offsetX ?? animation?.offsetX ?? 0}"></label>
+          <label>Offset Y<input type="number" data-slot-offset-y min="-1000" max="1000" step="1" value="${ref?.overrides.offsetY ?? animation?.offsetY ?? 0}"></label>
           <label>Projectile speed ×<input type="number" data-slot-projectile-speed min="0.05" max="8" step="0.05" value="${ref?.overrides.projectileSpeedMultiplier ?? 1}"></label>
           <label>Fade in (seconds)<input type="number" data-slot-fade-in min="0" max="10" step="0.05" value="${ref?.overrides.appearance?.fadeIn ?? ""}"></label>
           <label>Fade out (seconds)<input type="number" data-slot-fade-out min="0" max="10" step="0.05" value="${ref?.overrides.appearance?.fadeOut ?? ""}"></label>
-          <label>Placement<select data-slot-placement><option value="">Animation default</option>${["SOURCE","TARGET","SOURCE_TO_TARGET","SOURCE_TOWARD_TARGET","MIDPOINT","MAP_POINT"].map(value => `<option value="${value}"${ref?.overrides.placement?.mode === value ? " selected" : ""}>${value.replaceAll("_", " ")}</option>`).join("")}</select></label>
-          <label>Direction<select data-slot-direction><option value="">Animation default</option><option value="fixed"${ref?.overrides.direction?.mode === "fixed" ? " selected" : ""}>Fixed</option><option value="face-target"${ref?.overrides.direction?.mode === "face-target" ? " selected" : ""}>Face target</option><option value="face-source"${ref?.overrides.direction?.mode === "face-source" ? " selected" : ""}>Face source</option></select></label>
+          <label>Placement<select data-slot-placement><option value="">Animation default</option>${["SOURCE","TARGET","SOURCE_TO_TARGET","SOURCE_TOWARD_TARGET","MIDPOINT","WORLD"].map(value => `<option value="${value}"${ref?.overrides.placement?.mode === value ? " selected" : ""}>${value.replaceAll("_", " ")}</option>`).join("")}</select></label>
+          <label>Direction<select data-slot-direction><option value="">Animation default</option>${[["fixed","Fixed"],["face-target","Face target"],["face-away","Face away"],["token-facing","Token facing"]].map(([value,label]) => `<option value="${value}"${ref?.overrides.direction?.mode === value ? " selected" : ""}>${label}</option>`).join("")}</select></label>
           <label class="hg-animation-toggle"><input type="checkbox" data-slot-flip-x${ref?.overrides.flipX ? " checked" : ""}>Flip X</label><label class="hg-animation-toggle"><input type="checkbox" data-slot-flip-y${ref?.overrides.flipY ? " checked" : ""}>Flip Y</label>
           <label class="hg-animation-toggle"><input type="checkbox" data-slot-tinted${ref?.overrides.tint ? " checked" : ""}>Tint</label><input type="color" data-slot-tint value="${ref?.overrides.tint || "#ff5500"}">
         </div></details>`;
@@ -110,6 +115,13 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
         thumbnail.classList.add("has-image");
       }
       root.append(row);
+      row.initialOverrides = structuredClone(ref?.overrides || {});
+      for (const [key, property] of [["flip-x","flipX"],["flip-y","flipY"]]) row.querySelector(`[data-slot-${key}]`).checked = ref?.overrides[property] ?? animation?.[property] ?? false;
+      if (ref?.overrides.tint === undefined && animation?.appearance.tint) {
+        row.querySelector("[data-slot-tinted]").checked = true;
+        row.querySelector("[data-slot-tint]").value = animation.appearance.tint;
+      }
+      for (const node of row.querySelectorAll("input,select")) node.dataset.initialValue = String(node.type === "checkbox" ? node.checked : node.value);
       if (index < ANIMATION_SLOTS.length - 1) {
         const arrow = document.createElement("div");
         arrow.className = "hg-spell-animation-stage-arrow";
