@@ -1,0 +1,13 @@
+{
+  "environment": "staging",
+  "firebase": {
+    "apiKey": "YOUR_STAGING_PUBLIC_WEB_API_KEY",
+    "authDomain": "your-staging-project.firebaseapp.com",
+    "projectId": "your-staging-project",
+    "appId": "YOUR_STAGING_FIREBASE_WEB_APP_ID"
+  },
+  "cloudinary": {
+    "cloudName": "YOUR_STAGING_CLOUD",
+    "uploadPreset": "YOUR_STAGING_UNSIGNED_PRESET"
+  }
+}

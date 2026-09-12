@@ -18,6 +18,7 @@ const ignoredDirectories =
   new Set([
     ".git",
     "dist",
+    "dist-staging",
     "node_modules",
     "playwright-report",
     "test-results"

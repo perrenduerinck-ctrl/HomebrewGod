@@ -6,6 +6,7 @@ import { animationFormMarkup, writeAnimationFields, readAnimationFields } from "
 import { ANIMATION_PRESETS } from "./animationPlayback.js";
 import { inspectAnimationSprite, spriteCheckSummary } from "./animationSpriteCheck.js";
 import { createAnimationPreviewStage } from "./animationPreviewStage.js";
+import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
 export { createAnimationSelector } from "./animationBrowser.js";
 
 export function createAnimationEditor({ dialog, button, library, bindings, actions = [], isSoundEnabled, persistence = null }) {
@@ -140,21 +141,35 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("duplicate"), "click", safely(() => { const a = library.duplicateAnimation(chooser.getSelectedId()); chooser.select(a.id); openEditor(a); status("Created a separate custom remix."); }));
   async function removeAnimation(options = {}) {
     const removedId = deleteId;
+    const persistent = library.getAnimation(removedId)?.ownership.scope === "user";
     library.validateDelete(removedId, options);
-    if (library.getAnimation(removedId)?.ownership.scope === "user") {
+    if (persistent) {
       const synced = await persistence?.deleteAnimation?.(removedId);
       if (!synced?.ok) throw new Error("Sign in again before deleting this animation. Its definition and references are unchanged.");
     }
     library.deleteAnimation(removedId, options);
-    field("delete-warning").hidden = true; deleteId = null; selectionChanged(); assignmentInfo(); status("Custom animation removed. References updated.");
+    field("delete-warning").hidden = true; deleteId = null; selectionChanged(); assignmentInfo(); status(persistent
+      ? "Animation removed from My Library. Known loaded references updated; hosted sprite retained. Unopened room references were not verified."
+      : "Session animation removed. Known references updated; no saved metadata or hosted sprite was deleted.");
   }
   on(field("delete"), "click", safely(() => {
     deleteId = chooser.getSelectedId(); const used = library.getAnimationUsage(deleteId);
-    if (!used.length) return removeAnimation();
-    field("delete-warning").hidden = false; field("delete-message").textContent = `This animation is used by ${used.length} abilities: ${used.map(x => x.name).join(", ")}.`;
+    const policy = getAnimationDeletionPolicy(library.getAnimation(deleteId), used);
+    if (!policy.confirm) return removeAnimation();
+    field("delete-warning").hidden = false; field("delete-message").textContent = policy.message;
+    field("delete-remove").textContent = policy.removeLabel;
+    field("delete-replace").textContent = policy.replaceLabel;
+    field("delete-replace").disabled = !policy.canReplace;
     field("delete-replacement").replaceChildren(...library.list().filter(a => a.id !== deleteId).map(a => new Option(a.name, a.id)));
+    if (!field("delete-replacement").options.length) field("delete-replace").disabled = true;
   }));
-  on(field("delete-replace"), "click", safely(() => removeAnimation({ replaceWith: field("delete-replacement").value })));
+  on(field("delete-replace"), "click", safely(() => {
+    const replaceWith = field("delete-replacement").value;
+    if (library.getAnimation(deleteId)?.ownership.scope !== "user") return removeAnimation({ replaceWith });
+    const replaced = library.replaceKnownReferences(deleteId, replaceWith);
+    field("delete-warning").hidden = true; deleteId = null; assignmentInfo();
+    status(`${replaced.length} known loaded references replaced. Save each affected character. Animation metadata and hosted sprite are retained; other rooms were not changed.`);
+  }));
   on(field("delete-remove"), "click", safely(() => removeAnimation({ removeReferences: true })));
   on(field("delete-cancel"), "click", () => { deleteId = null; field("delete-warning").hidden = true; });
   on(field("editor-cancel"), "click", selectionChanged);

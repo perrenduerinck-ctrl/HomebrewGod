@@ -6,7 +6,8 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
   const entries = new Map(), originals = new Map(), listeners = new Set(), usage = new Map();
   const references = new Map(); let ownerId = null, roomId = null;
   const availability = new Map();
-  const visible = a => a && (a.ownership.scope !== "room" || roomId && a.ownership.ownerId === roomId) && (a.ownership.scope !== "user" || !a.ownership.ownerId || a.ownership.ownerId === ownerId);
+  const visible = a => a && (a.ownership.scope !== "room" || roomId && a.ownership.ownerId === roomId) &&
+    (!["user", "session"].includes(a.ownership.scope) || !a.ownership.ownerId || a.ownership.ownerId === ownerId);
   let order = 0;
   const stats = id => usage.get(id) || { favorite: false, used: 0, recent: 0, created: 0 };
   const emit = () => { for (const fn of listeners) { try { fn(); } catch { /* UI observers cannot change data. */ } } };
@@ -86,12 +87,19 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
     for (const { key } of used) references.get(key).replace(id, replaceWith || null);
     entries.delete(id); usage.delete(id); availability.delete(id); emit(); return true;
   }
+  function replaceKnownReferences(id, replaceWith) {
+    requireAnimation(id); requireAnimation(replaceWith);
+    if (id === replaceWith) throw new Error("Choose a different replacement animation.");
+    const known = getAnimationUsage(id);
+    for (const { key } of known) references.get(key).replace(id, replaceWith);
+    emit(); return known;
+  }
   function resetAnimation(id) {
     if (!originals.has(id)) throw new Error("Only built-in animations have original settings.");
     return put(originals.get(id));
   }
   return Object.freeze({ getAnimation, registerAnimation, hydrateAnimation, updateAnimation, duplicateAnimation, deleteAnimation, resetAnimation,
-    getAnimationUsage, prepareAnimationSave, validateDelete,
+    getAnimationUsage, prepareAnimationSave, validateDelete, replaceKnownReferences,
     getAvailability: id => availability.get(id) || { available: Boolean(getAnimation(id)), message: "" },
     setAvailability(id, message = "") {
       if (!entries.has(id)) return;

@@ -368,6 +368,36 @@ test("failed saves and deletes preserve persistent definitions and spell depende
   await field(dialog,'select').selectOption('sword_slash_01');await expect(field(dialog,'delete')).toBeDisabled();
 });
 
+test("persistent removal always warns about unopened rooms; cancel and replacing known references preserve metadata and hosted sprite",async({page})=>{
+  const services=await mockAnimationServices(page);await openBattle(page);await page.locator('#animationLibraryButton').click();const dialog=page.locator('#animationLibraryDialog');
+  await field(dialog,'custom').click();await field(dialog,'name').fill('Remote safety Gary');await field(dialog,'file').setInputFiles({name:'remote-safe.png',mimeType:'image/png',buffer:services.sheet});
+  await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();await expect(field(dialog,'status')).toContainText('personal library');const [record]=await animationRecords(page);
+  const destroyRequests=[];page.on('request',request=>{if(/cloudinary.*delete|deleteCloudinaryAsset/.test(request.url()))destroyRequests.push(request.url());});
+  await field(dialog,'delete').click();await expect(field(dialog,'delete-warning')).toContainText('Homebrew God cannot currently verify every remote room reference.');
+  await expect(field(dialog,'delete-remove')).toHaveText('Remove from My Library');await expect(field(dialog,'delete-replace')).toHaveText('Replace Known References');await expect(field(dialog,'delete-replace')).toBeDisabled();
+  await field(dialog,'delete-cancel').click();expect((await animationRecords(page))).toHaveLength(1);
+  await page.evaluate(async id=>{const {getAnimationSession}=await import('/vfx/animationWorkspace.js');getAnimationSession(document).bindings.setAnimation('spell:known',{animations:{travel:id}});},record.id);
+  await field(dialog,'delete').click();await field(dialog,'delete-replacement').selectOption('cold_burst_01');await field(dialog,'delete-replace').click();
+  await expect(field(dialog,'status')).toContainText('Save each affected character');expect((await animationRecords(page))).toHaveLength(1);
+  const known=await page.evaluate(async()=>{const {getAnimationSession}=await import('/vfx/animationWorkspace.js');const s=getAnimationSession(document);return s.bindings.getAssignment('spell:known').animations.travel;});expect(known).toBe('cold_burst_01');
+  await field(dialog,'delete').click();await expect(field(dialog,'delete-warning')).toContainText('cannot currently verify every remote room');
+  await field(dialog,'delete-remove').click();await expect(field(dialog,'status')).toContainText('hosted sprite retained');expect(await animationRecords(page)).toHaveLength(0);expect(destroyRequests).toEqual([]);
+  const stillHosted=await page.evaluate(url=>new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(image.naturalWidth>0);image.onerror=()=>resolve(false);image.src=url;}),record.sprite);expect(stillHosted).toBe(true);
+});
+
+test("real app account callbacks hide another account's personal definitions and unsaved private remixes, then restore the owner",async({page})=>{
+  const services=await mockAnimationServices(page);await openBattle(page);await page.locator('#animationLibraryButton').click();const dialog=page.locator('#animationLibraryDialog');
+  await field(dialog,'custom').click();await field(dialog,'name').fill('Private Gary A');await field(dialog,'file').setInputFiles({name:'private.png',mimeType:'image/png',buffer:services.sheet});
+  await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();await expect(field(dialog,'status')).toContainText('personal library');const [record]=await animationRecords(page);
+  await field(dialog,'duplicate').click();const remixId=await field(dialog,'select').inputValue();
+  await page.evaluate(()=>window.__ANIMATION_ACCEPTANCE_SWITCH_USER__(null));await page.evaluate(()=>window.__ANIMATION_ACCEPTANCE_SWITCH_USER__('animation-user-b'));
+  await expect.poll(async()=>(await libraryState(page)).context.ownerId).toBe('animation-user-b');
+  expect((await libraryState(page)).animations.some(a=>[record.id,remixId].includes(a.id))).toBe(false);
+  await page.evaluate(()=>window.__ANIMATION_ACCEPTANCE_SWITCH_USER__('animation-acceptance-user'));
+  await expect.poll(async()=>(await libraryState(page)).animations.some(a=>a.id===record.id)).toBe(true);
+  expect((await libraryState(page)).animations.some(a=>a.id===remixId)).toBe(true);
+});
+
 test("missing and failed hosted sprites warn and fall back; offline personal sync cannot break map preview",async({page})=>{
   await mockAnimationServices(page);await openBattle(page);await realTokens(page);
   await page.evaluate(async()=>{

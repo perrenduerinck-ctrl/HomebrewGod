@@ -15,8 +15,10 @@ const root = path.resolve(
   ),
   ".."
 );
+const outputName = process.env.HOMEBREW_BUILD_OUTPUT || "dist";
+if (!["dist", "dist-staging"].includes(outputName)) throw new Error("Unsupported build output directory.");
 const output =
-  path.join(root, "dist");
+  path.join(root, outputName);
 await import(
   "./check-imports.mjs"
 );
@@ -26,7 +28,7 @@ await import(
 
 if (
   path.dirname(output) !== root ||
-  path.basename(output) !== "dist"
+  !["dist", "dist-staging"].includes(path.basename(output))
 ) {
   throw new Error(
     "Refusing to clean an unexpected Pages output path."

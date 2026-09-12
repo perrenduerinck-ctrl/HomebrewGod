@@ -38,9 +38,11 @@ export const onSnapshot=(ref,...args)=>{const next=args.find(x=>typeof x==='func
 export const runTransaction=async (_,fn)=>fn({get:getDoc,set:setDoc,update:updateDoc,delete:deleteDoc});
 export const writeBatch=()=>({set:setDoc,update:updateDoc,delete:deleteDoc,commit:async()=>{}});
 const user={uid:'animation-acceptance-user',email:'acceptance@example.test',displayName:'Acceptance',isAnonymous:false};
-export const onAuthStateChanged=(_,next)=>{setTimeout(()=>next(user),0);return ()=>{}};
-export const signInAnonymously=async()=>({user}),createUserWithEmailAndPassword=signInAnonymously,signInWithEmailAndPassword=signInAnonymously;
-export const signOut=async()=>{},updateProfile=async()=>{};
+const authState=globalThis.__ANIMATION_ACCEPTANCE_AUTH_STATE__ ||= {user,observers:new Set()};
+globalThis.__ANIMATION_ACCEPTANCE_SWITCH_USER__=uid=>{authState.user=uid?{...user,uid}:null;for(const next of authState.observers)next(authState.user);};
+export const onAuthStateChanged=(_,next)=>{authState.observers.add(next);setTimeout(()=>next(authState.user),0);return ()=>authState.observers.delete(next)};
+export const signInAnonymously=async()=>{globalThis.__ANIMATION_ACCEPTANCE_SWITCH_USER__(user.uid);return {user:authState.user}},createUserWithEmailAndPassword=signInAnonymously,signInWithEmailAndPassword=signInAnonymously;
+export const signOut=async()=>{globalThis.__ANIMATION_ACCEPTANCE_SWITCH_USER__(null)},updateProfile=async()=>{};
 `;
 
 export async function mockAnimationServices(page, { room = "" } = {}) {
