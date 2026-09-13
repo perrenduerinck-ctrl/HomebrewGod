@@ -2,6 +2,7 @@ import {
   normalizeTemplateDistance,
   normalizeTemplateHeight
 } from "./templateGeometry.js";
+import { createSpellTargetingData } from "../data/spellTargeting.js";
 
 const SHAPE_MAP = Object.freeze({
   sphere: "sphere",
@@ -37,7 +38,10 @@ function getAreaSize(area, templateShape) {
 }
 
 export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview = false, vfxPreview = null } = {}) {
-  const targeting = spell.targeting;
+  // Saved custom spells retain plain range/area fields. Derive the same
+  // targeting schema used by the catalog at this shared preview/cast boundary.
+  // Explicit targeting remains authoritative; unknown ranges still fail safely.
+  const targeting = spell.targeting || (spell.source === "custom" ? createSpellTargetingData(spell) : null);
   const area = targeting?.area;
   const templateShape = SHAPE_MAP[area?.shape];
   const targetType = cleanText(

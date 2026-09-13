@@ -189,7 +189,7 @@ test("preview source attachments follow dragged tokens and beam stretching spans
   await expect.poll(() => effect.evaluate(el => Number.parseFloat(el.style.left))).toBeGreaterThan(before + 5);
   await field(dialog, "stop").click(); await field(dialog, "preset").selectOption("beam"); await field(dialog, "apply-preset").click(); await field(dialog, "draft-preview").click();
   await expect(effect).toHaveCount(1);
-  const size = await dialog.evaluate(el => { const a = el.querySelector("[data-animation-source]").getBoundingClientRect(), b = el.querySelector("[data-animation-target]").getBoundingClientRect(); const sprite = el.querySelector(".hg-vfx-animation-sprite .hg-vfx-sprite").getBoundingClientRect(); return { distance: Math.abs(b.left - a.left), width: sprite.width, height: sprite.height }; });
+  const size = await dialog.evaluate(el => { const a = el.querySelector("[data-animation-source]").getBoundingClientRect(), b = el.querySelector("[data-animation-target]").getBoundingClientRect(); const sprite = el.querySelector(".hg-vfx-animation-sprite .hg-vfx-sprite"); const matrix = new DOMMatrix(getComputedStyle(sprite).transform); return { distance: Math.hypot(b.left - a.left, b.top - a.top), width: parseFloat(sprite.style.width) * Math.hypot(matrix.a, matrix.b), height: parseFloat(sprite.style.height) * Math.hypot(matrix.c, matrix.d) }; });
   expect(size.width).toBeCloseTo(size.distance, 0); expect(size.height).toBeCloseTo(24, 0);
   await field(dialog, "stop").click(); await expect(effect).toHaveCount(0);
 });

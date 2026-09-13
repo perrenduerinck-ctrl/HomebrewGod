@@ -50,7 +50,7 @@ export function createAnimationSelector({ container, library, onSelect = () => {
       const art = document.createElement("span"); art.className = "hg-animation-thumb";
       const sprite = document.createElement("span"); sprite.dataset.thumbnailId = a.id; art.appendChild(sprite);
       const title = document.createElement("strong"); title.textContent = a.name;
-      const type = document.createElement("small"); type.textContent = `${a.type} · ${a.ownership.kind === "user" ? "Custom" : "Built-in"}`;
+      const type = document.createElement("small"); type.textContent = `${a.type} · ${a.ownership.kind === "user" ? "Custom" : "Built-in"}${library.getAvailability?.(a.id).available === false ? " · Unavailable sprite" : ""}`;
       const tags = document.createElement("span"); tags.className = "hg-animation-card-tags"; tags.textContent = a.tags.slice(0, 3).join(" · ");
       choose.append(art, title, type, tags);
       const favorite = document.createElement("button"); favorite.type = "button"; favorite.className = "hg-animation-favorite"; favorite.dataset.favoriteAnimation = a.id;

@@ -67,8 +67,8 @@ test("the client uses the unsigned Cloudinary upload preset without browser secr
   assert.doesNotMatch(app, /fileBase64/);
   assert.equal(
     app.match(/await uploadMapToCloudinary\(file\)/g)?.length,
-    3,
-    "battle-map and puzzle uploads use the shared unsigned uploader"
+    4,
+    "battle-map, puzzle, portrait, and animation uploads use the shared unsigned uploader"
   );
   assert.match(app, /uploadImage: uploadMapToCloudinary/);
   assert.match(

@@ -186,11 +186,11 @@ export function createEffectRenderer({
       layerElements.forEach((layer) => layerHost.appendChild(layer));
     }
     const layerLeft = target === layerHost
-      ? 0
-      : (targetRect.left - hostRect.left) / (hostScaleX || 1) + finiteNumber(layerHost.scrollLeft);
+      ? -finiteNumber(layerHost.clientLeft)
+      : (targetRect.left - hostRect.left) / (hostScaleX || 1) - finiteNumber(layerHost.clientLeft) + finiteNumber(layerHost.scrollLeft);
     const layerTop = target === layerHost
-      ? 0
-      : (targetRect.top - hostRect.top) / (hostScaleY || 1) + finiteNumber(layerHost.scrollTop);
+      ? -finiteNumber(layerHost.clientTop)
+      : (targetRect.top - hostRect.top) / (hostScaleY || 1) - finiteNumber(layerHost.clientTop) + finiteNumber(layerHost.scrollTop);
     for (const layer of layerElements) {
       layer.style.transformOrigin = "0 0";
       layer.style.transform = `scale(${1 / (hostScaleX || 1)}, ${1 / (hostScaleY || 1)})`;
@@ -653,7 +653,13 @@ export function createEffectRenderer({
     return element;
   }
 
-  function remove(id) {
+  function remove(id, reason) {
+    const ending = records.get(id);
+    // Timed completion can occur between RAFs (notably fast projectiles).
+    // Sample the exact terminal animation frame before arrival/cleanup events.
+    if (reason === "completed" && ending?.effect.metadata.animationRuntime) {
+      positionRecord(ending, ending.startedAt + ending.pausedMilliseconds + ending.effect.duration);
+    }
     const record = records.get(String(id || ""));
     if (!record) return false;
     const tokenId = record.effect.attachment?.tokenId || record.effect.metadata.affectedTokenId;

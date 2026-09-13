@@ -195,7 +195,8 @@
     assert(app.includes('formData.append("file", file)') && app.includes('formData.append("upload_preset", uploadPreset)'), "Unsigned uploads send the file and upload preset as form data.");
     assert(!app.includes("uploadCloudinaryImage"), "Normal browser uploads do not call the Firebase upload function.");
     assert(!app.includes("CLOUDINARY_API_KEY") && !app.includes("CLOUDINARY_API_SECRET"), "Browser code contains no Cloudinary API credentials.");
-    assert((app.match(/await uploadMapToCloudinary\(file\)/g) || []).length === 3, "Battle-map and puzzle uploads share the unsigned uploader.");
+    // Two map routes, puzzle tiles and custom animation sprites use the same uploader.
+    assert((app.match(/await uploadMapToCloudinary\(file\)/g) || []).length === 4, "Battle-map, puzzle and animation uploads share the unsigned uploader.");
     assert(app.includes("uploadImage: uploadMapToCloudinary"), "Token images use the unsigned uploader.");
     assert(/uploadCharacterPortrait:[\s\S]*?return uploadMapToCloudinary\(file\)/.test(app), "Character portraits use the unsigned uploader.");
     assert(app.includes("deleteCloudinaryAsset"), "Authenticated Cloudinary deletion remains available separately.");

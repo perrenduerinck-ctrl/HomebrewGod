@@ -160,6 +160,25 @@ service cloud.firestore {
         allow read, create, update, delete:
           if isSelf(userId);
       }
+
+      match /animations/{animationId} {
+        allow read, delete:
+          if isSelf(userId);
+
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.get('id', '') == animationId
+          && request.resource.data.get('ownerId', '') == userId
+          && request.resource.data.get('ownership', {}).get('scope', '') == 'user'
+          && request.resource.data.get('ownership', {}).get('ownerId', '') == userId
+          && request.resource.data.get('sprite', '') is string
+          && request.resource.data.get('sprite', '').matches('https://.*')
+          && (
+            request.resource.data.get('sound', null) == null
+            || request.resource.data.get('sound', {}).get('src', '') == ''
+            || request.resource.data.get('sound', {}).get('src', '').matches('https://.*')
+          );
+      }
     }
 
     match /rooms/{roomCode} {

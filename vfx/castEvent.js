@@ -273,6 +273,7 @@ export function createSpellVfxEvent({
   casterPoint = null,
   casterElevation = casterToken?.elevation,
   targetPoint = null,
+  targetTokenId = undefined,
   targetElevation = null,
   geometry = null,
   affectedTokens = [],
@@ -319,6 +320,8 @@ export function createSpellVfxEvent({
       geometry: normalizedGeometry,
       deliveryType: normalizedDeliveryType
     }),
+    // Omitted is a legacy event; explicit null means an intentional map point.
+    ...(targetTokenId !== undefined ? { targetTokenId: cleanText(targetTokenId, "", 160) || null } : {}),
     targetElevation: normalizeElevation(
       targetElevation,
       normalizedGeometry?.elevationFeet ?? casterElevation
