@@ -65,7 +65,8 @@ import {
 
 import { createCharacterCatalogs } from "./catalogs.js";
 import { spellAnimationSummary } from "../vfx/spellAnimationSection.js";
-import { createCharacterPersistence } from "./persistence.js?v=initiative-reliability-20260905";
+import { assertPersistentAnimationReferences } from "../vfx/animationReferences.js";
+import { createCharacterPersistence } from "./persistence.js?v=animation-content-ux-20260913";
 import { runCharacterCreatorSelfTests } from "./selfTests.js";
 import {
   getProgressionValueByLevel,
@@ -37374,6 +37375,7 @@ export function createCharacterCreator(options = {}) {
     saveSection18Character, section18SnapshotExists, syncSection18DerivedValues, useSection18ImportedCharacter,
     validateSection18FirestoreRecord, validateSection18NoRemoteConflict
   } = createCharacterPersistence({
+    validateAnimationReferences: record => assertPersistentAnimationReferences(record, { library: options.getAnimationLibrary?.(), allowRoom: true }),
     $, ABILITY_DEFINITIONS, ABILITY_SCORE_METHODS, ACTIVE_RULESET, ADDITIONAL_CANTRIP_COUNT_2014, ADDITIONAL_CANTRIP_EXPECTATIONS_2014,
     ADDITIONAL_CANTRIP_IDS_2014, ARTISAN_TOOL_OPTIONS, BACKGROUND_SCHEMA_VERSION, BUILDER_STEPS, BUILDER_STEP_INDEX, BUILTIN_BACKGROUND_2014_EXPECTATIONS,
     BUILTIN_BACKGROUND_IDS_2014, BUILTIN_SPECIES_2014_EXPECTATIONS, BUILTIN_SPECIES_IDS_2014, BUILTIN_SUBRACE_2014_EXPECTATIONS, C, CHARACTER_BUSY_ACTIONS,

@@ -6,7 +6,7 @@ import { normalizeAnimationDefinition } from "../vfx/animationDefinition.js";
 import { createAnimationLibrary, createAnimationBindings } from "../vfx/animationLibrary.js";
 import { FAMILY_TEMPLATES, inferAnimationFamily } from "../vfx/animationFamilies.js";
 import { normalizeAttackAnimation, attackAnimationToSpellStages, spellStagesToAttackAnimation } from "../vfx/contentAnimationModel.js";
-import { getSpellAnimationDependencies, replaceAnimationReferences } from "../vfx/animationReferences.js";
+import { getSpellAnimationDependencies, replaceAnimationReferences, assertPersistentAnimationReferences } from "../vfx/animationReferences.js";
 import { createSpellAnimationPresentation } from "../vfx/spellAnimationPresentation.js";
 import { createAnimationSpellAdapter } from "../vfx/animationSpellAdapter.js";
 import { renderSpellAnimationSection } from "../vfx/spellAnimationSection.js";
@@ -140,7 +140,7 @@ test("account switches during a save never install the old owner's runtime bindi
   assert.equal(store.get("fireball"), null); assert.equal(f.bindings.getAssignment("spell:fireball"), null);
 });
 test("a replaced loaded presentation is marked unsaved until its normal setup save", async () => {
-  const f = fixture(); f.library.registerAnimation({ ...base, id: "replacement" });
+  const f = fixture(); f.library.registerAnimation({ ...base, id: "replacement", ownership: { scope: "user", ownerId: "a" } });
   await f.store.save("fireball", { impact: "visual" });
   assert.equal(f.library.replaceKnownReferences("visual", "replacement").length, 1);
   assert.equal(f.store.get("fireball").pendingSave, true);
@@ -148,6 +148,32 @@ test("a replaced loaded presentation is marked unsaved until its normal setup sa
   await f.store.save("fireball", f.store.get("fireball").animations);
   assert.equal(f.store.get("fireball").pendingSave, undefined);
   assert.equal(f.docs["users/a"].spellAnimationOverrides.fireball.animations.impact, "replacement");
+});
+
+test("durable presentation rejects unsaved copies and room-only refs before any write", async () => {
+  const f = fixture(), copy = f.library.duplicateAnimation("visual");
+  assert.equal(copy.ownership.scope, "session");
+  await assert.rejects(f.store.save("fireball", { impact: copy.id }), /temporary.*Save Animation/);
+  f.library.setContext({ ownerId: "a", roomId: "room-a" });
+  f.library.registerAnimation({ ...base, id: "room-visual", ownership: { scope: "room", ownerId: "room-a" } });
+  await assert.rejects(f.store.save("fireball", { impact: "room-visual" }), /room-only/);
+  assert.equal(f.writes.length, 0); assert.equal(f.store.get("fireball"), null);
+  f.library.updateAnimation(copy.id, { ownership: { kind: "user", scope: "user", ownerId: "a" } });
+  await f.store.save("fireball", { impact: copy.id });
+  assert.equal(f.docs["users/a"].spellAnimationOverrides.fireball.animations.impact, copy.id);
+});
+
+test("normal content save guards nested spell/attack refs without dropping missing legacy refs or mechanics", () => {
+  const f = fixture(), copy = f.library.duplicateAnimation("visual");
+  const record = { name: "Gary", magic: { customSpells: [{ damage: "8d6", animations: { impact: copy.id } }] } };
+  assert.throws(() => assertPersistentAnimationReferences(record, { library: f.library, allowRoom: true }), /temporary/);
+  const attack = { damage: "1d8", animation: { family: "ranged", stages: { projectile: copy.id } } };
+  assert.throws(() => assertPersistentAnimationReferences(attack, { library: f.library }), /temporary/);
+  f.switchUser(null); assert.doesNotThrow(() => assertPersistentAnimationReferences(record, { library: f.library }));
+  f.switchUser("a"); record.magic.customSpells[0].animations.impact = "old-missing";
+  const original = structuredClone(record);
+  assert.doesNotThrow(() => assertPersistentAnimationReferences(record, { library: f.library }));
+  assert.deepEqual(record, original);
 });
 test("hydrated missing animation uses the unchanged safe legacy spell fallback", async () => {
   const f = fixture(); f.docs["users/a"].spellAnimationOverrides.fireball = { spellId: "fireball", animations: { impact: "missing" } };

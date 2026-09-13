@@ -44,6 +44,27 @@ export function replaceAnimationReferences(spell, oldId, newId) {
   }
 }
 
+// Saving content must not turn a preview/session copy into a dangling durable
+// reference. Missing legacy refs remain editable and use the existing fallback.
+export function assertPersistentAnimationReferences(content, { library, allowMissing = true, allowRoom = false } = {}) {
+  if (!library?.getContext().ownerId) return;
+  const pending = [content], visited = new WeakSet(), ids = new Set();
+  while (pending.length) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object" || visited.has(value)) continue;
+    visited.add(value);
+    for (const animationId of getSpellAnimationDependencies(value)) ids.add(animationId);
+    for (const child of Object.values(value)) if (child && typeof child === "object") pending.push(child);
+  }
+  const reject = message => { throw Object.assign(new Error(message), { code: "animation/unsaved-reference" }); };
+  for (const animationId of ids) {
+    const definition = library.getAnimation(animationId);
+    if (!definition) { if (!allowMissing) throw new Error("The selected animation is unavailable for this account."); continue; }
+    if (definition.ownership.scope === "session") reject(`${definition.name} is temporary. Open Edit settings and Save Animation to your personal library before saving this setup.`);
+    if (definition.ownership.scope === "room" && !allowRoom) reject("Account spell appearance needs an animation saved in your personal library, not a room-only animation.");
+  }
+}
+
 // Optional host-controlled variants. Cycle position belongs to the action,
 // not the reusable immutable appearance definition.
 export function normalizeAnimationSelection(value) {

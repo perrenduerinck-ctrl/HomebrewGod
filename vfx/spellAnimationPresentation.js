@@ -1,4 +1,4 @@
-import { normalizeSpellAnimations, getSpellAnimationDependencies, replaceAnimationReferences } from "./animationReferences.js";
+import { normalizeSpellAnimations, assertPersistentAnimationReferences, replaceAnimationReferences } from "./animationReferences.js";
 const validId = id => typeof id === "string" && /^[a-z][\w-]{0,119}$/i.test(id) && !["constructor", "prototype", "__proto__"].includes(id);
 const copy = value => JSON.parse(JSON.stringify(value));
 
@@ -56,7 +56,7 @@ export function createSpellAnimationPresentation({ db, doc, getDoc, setDoc, serv
     if (!uid) throw new Error("Sign in to save spell presentation overrides.");
     const ready = await load(); if (!ready.ok) throw new Error(ready.message);
     const normalized = normalizeSpellAnimations(animations, { strict: true });
-    for (const id of getSpellAnimationDependencies({ animations: normalized })) if (!library.getAnimation(id)) throw new Error("The selected animation is unavailable for this account.");
+    assertPersistentAnimationReferences({ animations: normalized }, { library, allowMissing: false });
     const proposed = Object.fromEntries([...records].map(([id, record]) => [id, record])); proposed[spellId] = { spellId, animations: normalized };
     if (new TextEncoder().encode(JSON.stringify(proposed)).byteLength > 384 * 1024) throw new Error("Saved spell appearance is full. Clear an unused setup first.");
     if (context() !== uid || generation !== current) throw new Error("Account changed before saving spell appearance.");

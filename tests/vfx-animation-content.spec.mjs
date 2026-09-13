@@ -132,6 +132,48 @@ test("built-in Fireball appearance saves, reloads, casts, clears and isolates ac
   await expect(page.locator('#battleMapSurface [data-effect-type="fireball-clip-sprite"]')).not.toHaveCount(0);
 });
 
+test("temporary remixes cannot become saved spell references and normal character save catches replacements", async ({ page }) => {
+  await mockAnimationServices(page, { room: "UXA-123" }); await battle(page); await creator(page);
+  await page.locator("#ccNewSpellName").fill("Temporary guard spell");
+  const section = page.locator('[data-cc-animation-section=""]');
+  await choose(page, section.locator('[data-content-stage="impact"]'), "cold_burst_01");
+  await page.locator("#ccNewSpellKnown").uncheck(); await page.getByRole("button", { name: "Save Spell", exact: true }).click();
+  const copyId = await page.evaluate(async () => {
+    const { library } = (await import("/vfx/animationWorkspace.js")).getAnimationSession(document);
+    const copy = library.duplicateAnimation("cold_burst_01");
+    // A cancelled remix of an existing secure hosted sheet is still session-only.
+    library.updateAnimation(copy.id, { sprite: "https://res.cloudinary.com/acceptance/image/upload/guard-remix.png" });
+    return copy.id;
+  });
+  await page.locator('[data-cc-action="edit-custom-spell"]').click();
+  await section.locator('[data-content-stage="impact"] [data-animation-action="choose"]').click();
+  const dialog = page.locator("#animationLibraryDialog");
+  await dialog.getByRole("tab", { name: "All", exact: true }).click();
+  await field(dialog, "select").selectOption(copyId); await field(dialog, "use-selected").click();
+  await expect(field(dialog, "status")).toContainText("temporary"); await expect(dialog).toBeVisible();
+  await field(dialog, "close").click();
+  await page.evaluate(async copyId => {
+    const { library } = (await import("/vfx/animationWorkspace.js")).getAnimationSession(document);
+    library.replaceKnownReferences("cold_burst_01", copyId);
+  }, copyId);
+  await page.locator('[data-cc-action="edit-custom-spell"]').click();
+  await page.locator("#ccNewSpellRange").fill("90 feet"); await page.getByRole("button", { name: "Save Spell", exact: true }).click();
+  await expect(page.locator("#characterCreatorStatus")).toContainText("temporary");
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("basics"));
+  await page.locator("#ccCharacterName").fill("Guard Wizard"); await page.locator("#characterWizardSaveButton").click();
+  await expect(page.locator("#characterCreatorStatus")).toContainText("temporary");
+  expect(Object.keys(await records(page)).some(path => path.includes("/characters/"))).toBe(false);
+  // Save the existing hosted sheet; no re-upload is required to promote a remix.
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("spells"));
+  await page.locator('[data-cc-action="edit-custom-spell"]').click();
+  await section.locator('[data-content-stage="impact"] [data-animation-action="choose"]').click();
+  await dialog.getByRole("tab", { name: "All", exact: true }).click(); await field(dialog, "select").selectOption(copyId);
+  await field(dialog, "edit").click(); await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button", { name: "Save Spell", exact: true }).click(); await saveCharacter(page);
+  expect(Object.values(await records(page)).flatMap(x => x.magic?.customSpells || [])[0].animations.impact.animationId).toBe(copyId);
+});
+
 test("reusable attack stage UI writes content refs, not global assignments, and preserves attack mechanics", async ({ page }) => {
   await mockAnimationServices(page, { room: "UXA-123" }); await battle(page);
   await page.evaluate(async () => {

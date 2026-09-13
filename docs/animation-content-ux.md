@@ -18,6 +18,11 @@ Save Spell updates the character draft; the existing character Save/Update Draft
 persists the whole spell, including its animation references, to its owning room.
 No global assignment save is required.
 
+Signed-in content saves reject known temporary/session animation copies: save
+the animation to My Animations first. This also catches references added before
+login at the normal character save. Existing missing legacy refs are preserved
+for safe fallback. Account-wide appearance cannot reference room-only definitions.
+
 Built-in spell cards expose **Animations · account appearance**. The DM map
 spell picker also exposes Spell Animations for its selected built-in spell.
 Save Animation Setup persists only that spell's user appearance in

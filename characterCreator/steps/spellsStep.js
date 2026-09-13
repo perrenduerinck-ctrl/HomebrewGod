@@ -12,7 +12,7 @@ import {
 import {
   CREATOR_CATALOG_BATCH_SIZE
 } from "../catalogPagination.js";
-import { replaceAnimationReferences, normalizeSpellAnimationReference, normalizeSpellAnimations } from "../../vfx/animationReferences.js";
+import { replaceAnimationReferences, normalizeSpellAnimationReference, normalizeSpellAnimations, assertPersistentAnimationReferences } from "../../vfx/animationReferences.js";
 import { renderSpellAnimationSection } from "../../vfx/spellAnimationSection.js";
 
 const FEAT_CATALOG_SEARCH_DEBOUNCE_MS = 250;
@@ -1066,6 +1066,8 @@ export function createSpellsStep(
   }
 
   function handleSection16AddSpell() {
+    try { assertPersistentAnimationReferences({ animations: draftAnimations }, { library: getAnimationLibrary?.() || animationLibrary, allowRoom: true }); }
+    catch (error) { setStatus(error.message, true); return; }
     if (
       addSection16CustomSpell(draftAnimations, editingSpellId)
     ) {

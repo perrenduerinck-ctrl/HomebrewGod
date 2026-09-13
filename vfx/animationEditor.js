@@ -6,6 +6,7 @@ import { animationFormMarkup, writeAnimationFields, readAnimationFields } from "
 import { ANIMATION_PRESETS } from "./animationPlayback.js";
 import { inspectAnimationSprite, spriteCheckSummary } from "./animationSpriteCheck.js";
 import { createAnimationPreviewStage } from "./animationPreviewStage.js";
+import { assertPersistentAnimationReferences } from "./animationReferences.js";
 import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
 import { getFamilyTemplates } from "./animationFamilies.js";
 export { createAnimationSelector } from "./animationBrowser.js";
@@ -139,7 +140,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("close"), "click", () => dialog.close());
   on(dialog, "keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); dialog.close(); } });
   on(dialog, "close", () => { finishExternal(); stop(); editRevision++; inspectionRevision++; });
-  on(field("use-selected"), "click", safely(() => { const a = selected(); if (!a) throw new Error("Choose an animation first."); finishExternal(a.id); dialog.close(); }));
+  on(field("use-selected"), "click", safely(() => { const a = selected(); if (!a) throw new Error("Choose an animation first."); assertPersistentAnimationReferences({ animationId: a.id }, { library, allowRoom: true }); finishExternal(a.id); dialog.close(); }));
   on(field("custom"), "click", openCreator);
   on(field("tool-library"), "click", selectionChanged);
   on(field("tool-creator"), "click", openCreator);
