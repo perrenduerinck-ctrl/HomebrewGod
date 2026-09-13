@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=movement-robustness-20260906">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=animation-content-ux-20260913">
   <link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-vfx-polish-20260902">
 </head>
 
@@ -801,6 +801,8 @@
       <button id="loadSpellTemplateButton" class="hidden" type="button" disabled>
         Target Spell on Map
       </button>
+      <button id="editSpellPresentationButton" type="button" disabled>Spell Animations</button>
+      <span id="spellPresentationStatus" role="status"></span>
       <label id="lightningVfxTestControl" class="battleScaleControl hidden" for="lightningVfxTestSelect">
         <span>Lightning VFX</span>
         <select id="lightningVfxTestSelect">
@@ -897,7 +899,8 @@
         <span>Spell sound</span>
       </label>
 
-      <button id="animationLibraryButton" type="button">Animations</button>
+      <button id="animationLibraryButton" type="button">Animation Library</button>
+      <button id="animationCreatorButton" type="button">Animation Creator</button>
       <fieldset id="battleVfxDebugPanel" class="battleVfxDebugPanel">
         <legend>2.5D Debug</legend>
         <div class="battleVfxDebugOptions">
@@ -1501,13 +1504,24 @@
         "./characterCreator/speciesBackgrounds.js": "./characterCreator/speciesBackgrounds.js?v=phase20-20260727",
         "./characterCreator/spellcasting.js": "./characterCreator/spellcasting.js?v=phase20-20260727",
         "./characterCreator/subclassMechanics.js": "./characterCreator/subclassMechanics.js?v=phase20-20260727",
-        "./characterSheet/gameplayState.js": "./characterSheet/gameplayState.js?v=priority6-20260728"
+        "./characterSheet/gameplayState.js": "./characterSheet/gameplayState.js?v=priority6-20260728",
+        "./characterCreator/index.js": "./characterCreator/index.js?v=animation-content-ux-20260913",
+        "./characterCreator/steps/spellsStep.js": "./characterCreator/steps/spellsStep.js?v=animation-content-ux-20260913",
+        "./characterCreator/steps/spellsStep.js?v=dm-preview-class-state-20260829": "./characterCreator/steps/spellsStep.js?v=animation-content-ux-20260913",
+        "./vfx/animationDefinition.js": "./vfx/animationDefinition.js?v=animation-content-ux-20260913",
+        "./vfx/animationLibrary.js": "./vfx/animationLibrary.js?v=animation-content-ux-20260913",
+        "./vfx/animationReferences.js": "./vfx/animationReferences.js?v=animation-content-ux-20260913",
+        "./vfx/animationBrowser.js": "./vfx/animationBrowser.js?v=animation-content-ux-20260913",
+        "./vfx/animationEditor.js": "./vfx/animationEditor.js?v=animation-content-ux-20260913",
+        "./vfx/animationEditorFields.js": "./vfx/animationEditorFields.js?v=animation-content-ux-20260913",
+        "./vfx/animationWorkspace.js": "./vfx/animationWorkspace.js?v=animation-content-ux-20260913",
+        "./vfx/spellAnimationPanel.js": "./vfx/spellAnimationPanel.js?v=animation-content-ux-20260913"
       }
     }
   </script>
   <script
     type="module"
-    src="./app.js?v=movement-robustness-20260906"
+    src="./app.js?v=animation-content-ux-20260913"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
   <dialog id="animationLibraryDialog" class="hg-animation-library" aria-labelledby="animationLibraryTitle"></dialog>

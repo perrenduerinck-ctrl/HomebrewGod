@@ -12,12 +12,18 @@ import {
 import {
   CREATOR_CATALOG_BATCH_SIZE
 } from "../catalogPagination.js";
-import { replaceAnimationReferences } from "../../vfx/animationReferences.js";
+import { replaceAnimationReferences, normalizeSpellAnimationReference, normalizeSpellAnimations } from "../../vfx/animationReferences.js";
+import { renderSpellAnimationSection } from "../../vfx/spellAnimationSection.js";
 
 const FEAT_CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
 const SPELLS_STEP_ACTIONS = Object.freeze([
   "edit-spell-animations",
+  "edit-builtin-spell-animations",
+  "preview-spell-animations",
+  "spell-animation-stage",
+  "edit-custom-spell",
+  "cancel-custom-spell-edit",
   "calculate-spellcasting-values",
   "add-custom-spell",
   "toggle-spell-known",
@@ -54,6 +60,7 @@ export function createSpellsStep(
     addSection16CustomFeature,
     addSection16CustomSpell,
     markDraftChanged,
+    getAnimationLibrary,
     calculateSection16SpellcastingValues,
     formatSection16ProgressionLabel,
     getSection13AbilityName,
@@ -90,8 +97,19 @@ export function createSpellsStep(
 
   const section16SelectedSpellSourceIds =
     new Map();
-  let draftAnimations = {}, animationDraftOwner = null;
-  let animationLibrary = null;
+  let draftAnimations = {}, animationDraftOwner = null, editingSpellId = null, spellFormDraft = null;
+  let animationLibrary = getAnimationLibrary?.() || null;
+  const formFields = { ccNewSpellName: "name", ccNewSpellLevel: "level", ccNewSpellClassId: "spellcastingSourceId", ccNewSpellSchool: "school", ccNewSpellCastingTime: "castingTime", ccNewSpellRange: "range", ccNewSpellDuration: "duration", ccNewSpellComponents: "components", ccNewSpellDescription: "description", ccNewSpellRitual: "ritual", ccNewSpellConcentration: "concentration", ccNewSpellManualOverride: "manualOverride" };
+  function captureSpellForm(target) {
+    if (!target?.id || !formFields[target.id]) return false;
+    spellFormDraft ||= {};
+    spellFormDraft[formFields[target.id]] = target.type === "checkbox" ? target.checked : target.value;
+    return true;
+  }
+  function refreshDraftAnimationSection() {
+    const section = document.querySelector('[data-cc-animation-section=""]');
+    if (section) section.outerHTML = renderSpellAnimationSection({ animations: draftAnimations, library: animationLibrary });
+  }
   function trackAnimationDependencies() {
     if (!animationLibrary) return;
     const owner = getCreatorState().draft;
@@ -121,7 +139,10 @@ export function createSpellsStep(
 
   function renderStep() {
     const creatorState = getCreatorState();
-    if (animationDraftOwner !== creatorState.draft) { draftAnimations = {}; animationDraftOwner = creatorState.draft; }
+    if (animationDraftOwner !== creatorState.draft) { draftAnimations = {}; editingSpellId = null; spellFormDraft = null; animationDraftOwner = creatorState.draft; }
+    animationLibrary ||= getAnimationLibrary?.() || null;
+    trackAnimationDependencies();
+    const formValue = (property, fallback = "") => spellFormDraft?.[property] ?? fallback;
     const magic =
       creatorState.draft.magic;
 
@@ -605,10 +626,11 @@ export function createSpellsStep(
         class="hg-character-field-grid three"
         style="margin-top: 12px;"
       >
+        <h4 class="hg-character-wide-field">${editingSpellId ? "Edit Custom Spell" : "Create Custom Spell"}</h4>
         ${wizardField(
           "Spell Name",
           "ccNewSpellName",
-          "",
+          formValue("name"),
           {
             placeholder:
               "Crimson Fireball"
@@ -618,30 +640,31 @@ export function createSpellsStep(
         ${wizardSelect(
           "Spell Level",
           "ccNewSpellLevel",
-          0,
+          formValue("level", 0),
           levelChoices
         )}
 
         ${wizardSelect(
           "Class Source",
           "ccNewSpellClassId",
-          spellClassChoices.length === 2
+          formValue("spellcastingSourceId", spellClassChoices.length === 2
             ? spellClassChoices[1].value
-            : "",
-          spellClassChoices
+            : ""),
+          spellClassChoices,
+          { extra: editingSpellId ? "disabled" : "" }
         )}
 
         ${wizardSelect(
           "School",
           "ccNewSpellSchool",
-          "Evocation",
+          formValue("school", "Evocation"),
           schoolChoices
         )}
 
         ${wizardField(
           "Casting Time",
           "ccNewSpellCastingTime",
-          "1 action",
+          formValue("castingTime", "1 action"),
           {
             placeholder:
               "1 action"
@@ -651,7 +674,7 @@ export function createSpellsStep(
         ${wizardField(
           "Range",
           "ccNewSpellRange",
-          "Self",
+          formValue("range", "Self"),
           {
             placeholder:
               "60 feet"
@@ -661,7 +684,7 @@ export function createSpellsStep(
         ${wizardField(
           "Duration",
           "ccNewSpellDuration",
-          "Instantaneous",
+          formValue("duration", "Instantaneous"),
           {
             placeholder:
               "1 minute"
@@ -671,7 +694,7 @@ export function createSpellsStep(
         ${wizardField(
           "Components",
           "ccNewSpellComponents",
-          "",
+          formValue("components"),
           {
             placeholder:
               "V, S, M"
@@ -681,7 +704,7 @@ export function createSpellsStep(
         ${wizardField(
           "Spell Description",
           "ccNewSpellDescription",
-          "",
+          formValue("description"),
           {
             type: "textarea",
 
@@ -693,17 +716,14 @@ export function createSpellsStep(
         )}
       </div>
 
-      <div class="hg-spell-animation-launch">
-        <h4>Animations · optional</h4>
-        <p data-cc-animation-summary>${escapeHtml(Object.keys(draftAnimations).join(" → ") || "No animation stages")}</p>
-        <button type="button" data-cc-action="edit-spell-animations">Choose, create or upload animations</button>
-      </div>
+      ${renderSpellAnimationSection({ animations: draftAnimations, library: animationLibrary })}
 
       <div class="hg-character-inline-actions">
         <label>
           <input
             id="ccNewSpellRitual"
             type="checkbox"
+            ${formValue("ritual", false) ? "checked" : ""}
           >
 
           Ritual
@@ -713,6 +733,7 @@ export function createSpellsStep(
           <input
             id="ccNewSpellConcentration"
             type="checkbox"
+            ${formValue("concentration", false) ? "checked" : ""}
           >
 
           Concentration
@@ -723,6 +744,7 @@ export function createSpellsStep(
             id="ccNewSpellKnown"
             type="checkbox"
             checked
+            ${editingSpellId ? "disabled" : ""}
           >
 
           Start known
@@ -732,6 +754,7 @@ export function createSpellsStep(
           <input
             id="ccNewSpellPrepared"
             type="checkbox"
+            ${editingSpellId ? "disabled" : ""}
           >
 
           Start prepared
@@ -741,6 +764,7 @@ export function createSpellsStep(
           <input
             id="ccNewSpellManualOverride"
             type="checkbox"
+            ${formValue("manualOverride", false) ? "checked" : ""}
           >
 
           Manual spell-level override
@@ -750,8 +774,10 @@ export function createSpellsStep(
           type="button"
           data-cc-action="add-custom-spell"
         >
-          Add Custom Spell
+          Save Spell
         </button>
+        ${editingSpellId ? '<button type="button" data-cc-action="cancel-custom-spell-edit">Cancel Spell Edit</button>' : ""}
+        <p class="small">Save Spell updates this character draft. Then save the character to persist it to the room.</p>
       </div>
 
       <hr>
@@ -1041,12 +1067,13 @@ export function createSpellsStep(
 
   function handleSection16AddSpell() {
     if (
-      addSection16CustomSpell(draftAnimations)
+      addSection16CustomSpell(draftAnimations, editingSpellId)
     ) {
       setStatus(
-        "Custom spell added."
+        editingSpellId ? "Custom spell updated. Animation stages and mechanics preserved." : "Custom spell added."
       );
       draftAnimations = {};
+      editingSpellId = null; spellFormDraft = null;
       trackAnimationDependencies();
 
       renderCreatorView();
@@ -1345,6 +1372,55 @@ export function createSpellsStep(
       cleanString(context?.action);
 
     switch (action) {
+      case "edit-builtin-spell-animations": {
+        try {
+          const id = findSection16ActionElement(context)?.dataset?.spellId;
+          const { getDefaultSpellById } = await import("../../data/defaultSpells.js?v=stage8-20260826");
+          const spell = getDefaultSpellById(id);
+          if (!spell) return true;
+          const { getAnimationSession } = await import("../../vfx/animationWorkspace.js");
+          const session = getAnimationSession(document);
+          if (!session.presentation) throw Error("Sign in to save an account spell appearance.");
+          await session.persistence?.load();
+          const ready = await session.presentation.load(); if (!ready.ok) throw Error(ready.message);
+          const uid = session.library.getContext().ownerId;
+          const { openSpellAnimationPanel } = await import("../../vfx/spellAnimationPanel.js");
+          const result = await openSpellAnimationPanel({ name: spell.name + " · account presentation", animations: session.presentation.get(id)?.animations || {}, saveLabel: "Save Animation Setup",
+            onSave: async stages => { if (session.library.getContext().ownerId !== uid) throw Error("Account changed. Reopen this spell setup."); await session.presentation.save(id, stages); } });
+          if (result) { setStatus("Spell appearance saved for your account. Canonical spell mechanics are unchanged."); renderCreatorView(); }
+        } catch (error) { setStatus(error.message); }
+        return true;
+      }
+      case "edit-custom-spell": {
+        const id = findSection16ActionElement(context)?.dataset?.spellId;
+        const spell = getCreatorState().draft.magic?.customSpells?.find(spell => spell.id === id);
+        if (!spell) return true;
+        editingSpellId = id; spellFormDraft = structuredClone(spell); spellFormDraft.spellcastingSourceId ||= spell.classEntryId || spell.classId || ""; draftAnimations = normalizeSpellAnimations(spell.animations);
+        renderCreatorView();
+        document.getElementById("ccNewSpellName")?.focus();
+        return true;
+      }
+      case "cancel-custom-spell-edit":
+        editingSpellId = null; spellFormDraft = null; draftAnimations = {}; renderCreatorView(); return true;
+      case "spell-animation-stage": {
+        const node = findSection16ActionElement(context), slot = node?.dataset?.animationSlot, operation = node?.dataset?.animationAction;
+        const owner = getCreatorState().draft;
+        const { getAnimationSession } = await import("../../vfx/animationWorkspace.js");
+        const session = getAnimationSession(document); animationLibrary = session.library;
+        if (operation === "preview") {
+          const { openSpellAnimationPanel } = await import("../../vfx/spellAnimationPanel.js");
+          await openSpellAnimationPanel({ name: document.getElementById("ccNewSpellName")?.value || "New spell", animations: { [slot]: draftAnimations[slot] }, previewOnly: true, slots: [slot] });
+          return true;
+        }
+        if (operation === "clear") delete draftAnimations[slot];
+        else {
+          const id = await session.editor.openForSlot({ slot, mode: operation, family: "magic", animationId: normalizeSpellAnimationReference(draftAnimations[slot])?.animationId });
+          if (!id || getCreatorState().draft !== owner) return true;
+          draftAnimations[slot] = normalizeSpellAnimationReference({ animationId: id });
+        }
+        refreshDraftAnimationSection(); return true;
+      }
+      case "preview-spell-animations":
       case "edit-spell-animations": {
         const node = findSection16ActionElement(context, "edit-spell-animations");
         const spellId = node?.dataset?.spellId;
@@ -1353,10 +1429,10 @@ export function createSpellsStep(
         const { getAnimationSession } = await import("../../vfx/animationWorkspace.js");
         animationLibrary = getAnimationSession(document).library; trackAnimationDependencies();
         const owner = getCreatorState().draft;
-        const animations = await openSpellAnimationPanel({ animations: spell?.animations || draftAnimations, name: spell?.name || document.getElementById("ccNewSpellName")?.value || "New spell" });
+        const animations = await openSpellAnimationPanel({ animations: spell?.animations || draftAnimations, name: spell?.name || document.getElementById("ccNewSpellName")?.value || "New spell", previewOnly: action === "preview-spell-animations" });
         if (animations && getCreatorState().draft === owner) {
-          if (spell) { spell.animations = animations; markDraftChanged?.(); trackAnimationDependencies(); renderCreatorView(); }
-          else { draftAnimations = animations; const summary = document.querySelector("[data-cc-animation-summary]"); if (summary) summary.textContent = Object.keys(animations).join(" → ") || "No animation stages"; }
+          if (spell) { spell.animations = animations; if (editingSpellId === spell.id) draftAnimations = normalizeSpellAnimations(animations); markDraftChanged?.(); trackAnimationDependencies(); renderCreatorView(); }
+          else { draftAnimations = animations; refreshDraftAnimationSection(); }
         }
         return true;
       }
@@ -1420,6 +1496,7 @@ export function createSpellsStep(
   }
 
   function handleStepInput(context) {
+    if (captureSpellForm(context?.target)) return true;
     return (
       handleSection16DefaultSpellSearch(
         context
@@ -1431,6 +1508,7 @@ export function createSpellsStep(
   }
 
   function handleStepChange(context) {
+    if (captureSpellForm(context?.target)) return true;
     if (
       handleSection16DefaultSpellSearch(
         context

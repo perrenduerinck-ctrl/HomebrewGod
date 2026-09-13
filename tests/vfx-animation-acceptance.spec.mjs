@@ -46,7 +46,7 @@ test("Gary Missile uploads, saves with a spell, previews and casts after full re
   await page.setViewportSize({width:1280,height:1400});
   const room='ABC-123',services=await mockAnimationServices(page,{room});await openBattle(page,room);
   await page.locator('#animationLibraryButton').click();const dialog=page.locator('#animationLibraryDialog');
-  await field(dialog,'custom').click();await field(dialog,'name').fill('Gary Missile');
+  await field(dialog,'custom').click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click();await field(dialog,'name').fill('Gary Missile');
   await field(dialog,'file').setInputFiles({name:'gary-missile.png',mimeType:'image/png',buffer:services.sheet});
   await field(dialog,'advanced-mode').check();await field(dialog,'behavior').selectOption('projectile');
   // Leave time for separate real-DOM visibility and sprite assertions on a
@@ -133,7 +133,7 @@ test("every spell stage supports Choose, Replace, Preview, Clear, Create, Upload
   for(const slot of ['cast','travel','impact','sustain','end']) {
     const row=panel.locator(`[data-spell-animation-slot="${slot}"]`),action=name=>row.locator(`[data-slot-action="${name}"]`);
     for(const id of ['sword_slash_01','cold_burst_01']) {
-      await action('choose').click();await field(dialog,'select').selectOption(id);await field(dialog,'use-selected').click();
+      await action('choose').click();await dialog.getByRole('tab',{name:'All',exact:true}).click();await field(dialog,'select').selectOption(id);await field(dialog,'use-selected').click();
       await expect(row.locator('[data-slot-name]')).toHaveText(id==='sword_slash_01'?'Sword slash':'Cold burst');
       await expect(action('choose')).toHaveText('Replace');
     }
@@ -149,7 +149,7 @@ test("every spell stage supports Choose, Replace, Preview, Clear, Create, Upload
       await expect(row.locator('[data-slot-name]')).toHaveText(`${slot} ${mode}`);
       const record=(await animationRecords(page)).find(a=>a.name===`${slot} ${mode}`);expect(record.sprite).toMatch(/^https:\/\//);expect(JSON.stringify(record)).not.toContain('data:');
     }
-    await action('choose').click();await field(dialog,'select').selectOption('sword_slash_01');await field(dialog,'use-selected').click();
+    await action('choose').click();await dialog.getByRole('tab',{name:'All',exact:true}).click();await field(dialog,'select').selectOption('sword_slash_01');await field(dialog,'use-selected').click();
     await action('remix').click();await field(dialog,'name').fill(`${slot} sword remix`);
     await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();await expect(dialog).not.toBeVisible();
     const remix=(await animationRecords(page)).find(a=>a.name===`${slot} sword remix`);expect(remix.id).not.toBe('sword_slash_01');expect(remix.sprite).toBe(origin+'assets/vfx/combat/melee/sword-slash-test.png');
@@ -285,7 +285,7 @@ test("signed-in creator uploads, reloads, edits and replaces sprites without cha
   const services=await mockAnimationServices(page);await openBattle(page);
   await expect.poll(async()=>(await libraryState(page)).status?.state).toBe('ready');
   await page.locator('#animationLibraryButton').click();const dialog=page.locator('#animationLibraryDialog');
-  await field(dialog,'custom').click();await field(dialog,'name').fill('Gary Missile');
+  await field(dialog,'custom').click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click();await field(dialog,'name').fill('Gary Missile');
   await field(dialog,'file').setInputFiles({name:'gary.png',mimeType:'image/png',buffer:services.sheet});
   await field(dialog,'fps').fill('36');await field(dialog,'advanced-mode').check();await field(dialog,'behavior').selectOption('projectile');
   await field(dialog,'draft-preview').click();await expect(dialog.locator('.hg-map-vfx-effect')).not.toHaveCount(0);
@@ -354,7 +354,7 @@ test("spell creator uses the signed-in persistent library and saves all stage ID
 
 test("failed saves and deletes preserve persistent definitions and spell dependencies; remixes are independent",async({page})=>{
   const services=await mockAnimationServices(page);await openBattle(page);await page.locator('#animationLibraryButton').click();const dialog=page.locator('#animationLibraryDialog');
-  await field(dialog,'custom').click();await field(dialog,'name').fill('Safe Gary');await field(dialog,'file').setInputFiles({name:'safe.png',mimeType:'image/png',buffer:services.sheet});
+  await field(dialog,'custom').click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click();await field(dialog,'name').fill('Safe Gary');await field(dialog,'file').setInputFiles({name:'safe.png',mimeType:'image/png',buffer:services.sheet});
   await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();await expect(field(dialog,'status')).toContainText('personal library');
   const [original]=await animationRecords(page);await field(dialog,'edit').click();await field(dialog,'fps').fill('52');
   await page.evaluate(()=>localStorage.setItem('acceptance-write-failure','1'));await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();
@@ -378,7 +378,7 @@ test("failed saves and deletes preserve persistent definitions and spell depende
 
 test("persistent removal always warns about unopened rooms; cancel and replacing known references preserve metadata and hosted sprite",async({page})=>{
   const services=await mockAnimationServices(page);await openBattle(page);await page.locator('#animationLibraryButton').click();const dialog=page.locator('#animationLibraryDialog');
-  await field(dialog,'custom').click();await field(dialog,'name').fill('Remote safety Gary');await field(dialog,'file').setInputFiles({name:'remote-safe.png',mimeType:'image/png',buffer:services.sheet});
+  await field(dialog,'custom').click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click();await field(dialog,'name').fill('Remote safety Gary');await field(dialog,'file').setInputFiles({name:'remote-safe.png',mimeType:'image/png',buffer:services.sheet});
   await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();await expect(field(dialog,'status')).toContainText('personal library');const [record]=await animationRecords(page);
   const destroyRequests=[];page.on('request',request=>{if(/cloudinary.*delete|deleteCloudinaryAsset/.test(request.url()))destroyRequests.push(request.url());});
   await field(dialog,'delete').click();await expect(field(dialog,'delete-warning')).toContainText('Homebrew God cannot currently verify every remote room reference.');
@@ -395,7 +395,7 @@ test("persistent removal always warns about unopened rooms; cancel and replacing
 
 test("real app account callbacks hide another account's personal definitions and unsaved private remixes, then restore the owner",async({page})=>{
   const services=await mockAnimationServices(page);await openBattle(page);await page.locator('#animationLibraryButton').click();const dialog=page.locator('#animationLibraryDialog');
-  await field(dialog,'custom').click();await field(dialog,'name').fill('Private Gary A');await field(dialog,'file').setInputFiles({name:'private.png',mimeType:'image/png',buffer:services.sheet});
+  await field(dialog,'custom').click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click();await field(dialog,'name').fill('Private Gary A');await field(dialog,'file').setInputFiles({name:'private.png',mimeType:'image/png',buffer:services.sheet});
   await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();await expect(field(dialog,'status')).toContainText('personal library');const [record]=await animationRecords(page);
   await field(dialog,'duplicate').click();const remixId=await field(dialog,'select').inputValue();
   await page.evaluate(()=>window.__ANIMATION_ACCEPTANCE_SWITCH_USER__(null));await page.evaluate(()=>window.__ANIMATION_ACCEPTANCE_SWITCH_USER__('animation-user-b'));

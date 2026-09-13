@@ -107,7 +107,7 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
       if (availability.get(id)?.message === message) return;
       availability.set(id, Object.freeze({ available: false, message })); emit();
     },
-    trackReferences(key, reference) { references.set(key, reference); return () => references.delete(key); },
+    trackReferences(key, reference) { references.set(key, reference); return () => { if (references.get(key) === reference) references.delete(key); }; },
     setContext(context = {}) {
       const nextOwner = context.ownerId || null, nextRoom = context.roomId || null;
       if (ownerId === nextOwner && roomId === nextRoom) return;
@@ -118,9 +118,9 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
     getUsage: id => Object.freeze({ ...stats(id) }),
     toggleFavorite(id) { requireAnimation(id); const next = { ...stats(id), favorite: !stats(id).favorite }; usage.set(id, next); emit(); return next.favorite; },
     markUsed(id) { if (!entries.has(id)) return; usage.set(id, { ...stats(id), used: stats(id).used + 1, recent: ++order }); emit(); },
-    query({ search = "", type = "", tags = "", origin = "", collection = "", favorites = false, recent = false, sort = "name" } = {}) {
+    query({ search = "", type = "", family = "", subtype = "", tags = "", origin = "", collection = "", favorites = false, recent = false, sort = "name" } = {}) {
       const words = `${search} ${tags}`.toLowerCase().split(/[\s,]+/).filter(Boolean);
-      return [...entries.values()].filter(a => visible(a) && (!collection || a.collections.includes(collection)) && (!type || a.type === type) && (!origin || (origin === "room" ? a.ownership.scope === "room" : origin === "user" ? a.ownership.kind === "user" && a.ownership.scope !== "room" : a.ownership.kind === origin)) &&
+      return [...entries.values()].filter(a => visible(a) && (!family || a.family === family) && (!subtype || a.subtype === subtype) && (!collection || a.collections.includes(collection)) && (!type || a.type === type) && (!origin || (origin === "room" ? a.ownership.scope === "room" : origin === "user" ? a.ownership.kind === "user" && a.ownership.scope !== "room" : a.ownership.kind === origin)) &&
         (!favorites || stats(a.id).favorite) && (!recent || stats(a.id).recent > 0) && words.every(w => `${a.name} ${a.description} ${a.type} ${a.tags.join(" ")} ${a.id}`.toLowerCase().includes(w)))
         .sort((a, b) => (sort === "newest" ? stats(b.id).created - stats(a.id).created : sort === "used" ? stats(b.id).used - stats(a.id).used : recent ? stats(b.id).recent - stats(a.id).recent : 0) || a.name.localeCompare(b.name));
     },
@@ -141,19 +141,20 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
 // Separate presentation assignments. Export this map alongside user definitions
 // when persistence is attached; do not merge it into combat rules or spell stats.
 export function createAnimationBindings({ library } = {}) {
-  const assignments = new Map();
-  function setAnimation(key, reference) {
+  const assignments = new Map(), tracked = new Map();
+  function setAnimation(key, reference, { allowUnavailable = false, trackReference = true } = {}) {
     if (typeof key !== "string" || !key.trim() || key.length > 200) throw new Error("Choose an action to assign.");
-    if (reference == null || reference === "") { assignments.delete(key); return null; }
+    if (reference == null || reference === "") { tracked.get(key)?.(); tracked.delete(key); assignments.delete(key); return null; }
     const ref = typeof reference === "string" ? { animationId: reference } : reference;
     const stages = ref.animations ? normalizeSpellAnimations(ref.animations, { strict: true }) : null;
     if (!ref.animationId && (!stages || !Object.keys(stages).length)) throw new Error("Choose an animation first.");
     for (const id of getSpellAnimationDependencies({ animationId: ref.animationId, animations: stages })) {
-      if (!library.getAnimation(id)) throw new Error("The assigned animation is unavailable.");
+      if (!allowUnavailable && !library.getAnimation(id)) throw new Error("The assigned animation is unavailable.");
     }
     const value = freeze({ ...(ref.animationId ? { animationId: ref.animationId } : {}), ...(stages ? { animations: stages } : {}) });
     assignments.set(key, value);
-    library.trackReferences(`binding:${key}`, { name: key, get: () => assignments.get(key), replace(oldId, newId) { const copy = JSON.parse(JSON.stringify(assignments.get(key) || {})); replaceAnimationReferences(copy, oldId, newId); assignments.set(key, freeze(copy)); } });
+    tracked.get(key)?.(); tracked.delete(key);
+    if (trackReference) tracked.set(key, library.trackReferences(`binding:${key}`, { name: key, get: () => assignments.get(key), replace(oldId, newId) { const copy = JSON.parse(JSON.stringify(assignments.get(key) || {})); replaceAnimationReferences(copy, oldId, newId); assignments.set(key, freeze(copy)); } }));
     return value;
   }
   return Object.freeze({ setAnimation, getAssignment: key => assignments.get(key) || null,

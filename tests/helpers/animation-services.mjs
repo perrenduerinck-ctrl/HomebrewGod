@@ -24,12 +24,16 @@ export const getDocs=async ref=>{
  if(ref.endsWith('/animations')&&localStorage.getItem('acceptance-offline'))throw Error('offline');
  return list(ref);
 };
-export const setDoc=async (ref,data,{merge=false}={})=>{
+export const setDoc=async (ref,data,{merge=false,mergeFields}={})=>{
+ if(data.spellAnimationOverrides&&localStorage.getItem('acceptance-presentation-write-failure'))throw Error('permission denied');
  if(ref.includes('/animations/')) {
   if(localStorage.getItem('acceptance-write-failure'))throw Error('permission denied');
   if(!/^https:\/\//.test(data.sprite)||JSON.stringify(data).includes('data:'))throw Error('invalid hosted asset');
  }
- const all=records();all[ref]=merge?{...all[ref],...data}:data;localStorage.setItem(key,JSON.stringify(all));notify(ref);
+ const all=records();
+ if(mergeFields){all[ref] ||= {};for(const field of mergeFields){const parts=field.split('.');let target=all[ref],source=data;for(const part of parts.slice(0,-1)){target[part] ||= {};target=target[part];source=source[part];}target[parts.at(-1)]=source[parts.at(-1)];}}
+ else all[ref]=merge?{...all[ref],...data}:data;
+ localStorage.setItem(key,JSON.stringify(all));notify(ref);
 };
 export const updateDoc=(r,d)=>setDoc(r,d,{merge:true});
 export const addDoc=async (r,d)=>{const ref=r+'/'+crypto.randomUUID();await setDoc(ref,d);return {id:ref.split('/').at(-1)}};

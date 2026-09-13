@@ -64,6 +64,7 @@ import {
 } from "../shared/securityPersistence.js";
 
 import { createCharacterCatalogs } from "./catalogs.js";
+import { spellAnimationSummary } from "../vfx/spellAnimationSection.js";
 import { createCharacterPersistence } from "./persistence.js?v=initiative-reliability-20260905";
 import { runCharacterCreatorSelfTests } from "./selfTests.js";
 import {
@@ -33602,7 +33603,9 @@ export function createCharacterCreator(options = {}) {
     return true;
   }
 
-  function addSection16CustomSpell(animations = {}) {
+  function addSection16CustomSpell(animations = {}, editingSpellId = null) {
+    const existing = editingSpellId ? getSection16CustomSpells().find(spell => spell.id === editingSpellId) : null;
+    if (editingSpellId && !existing) { alert("That custom spell is no longer available."); return false; }
     const name =
       safeDisplayString(
         $("ccNewSpellName")
@@ -33662,7 +33665,8 @@ export function createCharacterCreator(options = {}) {
     const spell =
       normalizeSection16Spell(
         {
-          id: makeSafeId(
+          ...cloneData(existing || {}),
+          id: existing?.id || makeSafeId(
             `${name}-${Date.now()}-${Math.random()}`,
             "custom-spell"
           ),
@@ -33737,6 +33741,11 @@ export function createCharacterCreator(options = {}) {
         "custom"
       );
 
+    if (existing) {
+      Object.assign(existing, spell);
+      markDraftChanged();
+      return true;
+    }
     const startKnown =
       $("ccNewSpellKnown")
         ?.checked === true;
@@ -34655,6 +34664,8 @@ export function createCharacterCreator(options = {}) {
                 <button type="button" data-cc-action="toggle-default-spell-details" data-spell-id="${escapeHtml(spell.id)}">
                   ${pickerState.expandedSpellIds.has(spell.id) ? "Hide" : "Show"} Spell Details
                 </button>
+                <p class="small">Account animation: ${escapeHtml(spellAnimationSummary(options.getSpellAnimationPresentation?.()?.get(spell.id)?.animations))}</p>
+                <button type="button" data-cc-action="edit-builtin-spell-animations" data-spell-id="${escapeHtml(spell.id)}">Animations · account appearance</button>
 
                 ${pickerState.expandedSpellIds.has(spell.id) ? `<p class="small">
                   <b>Casting Time:</b>
@@ -35361,8 +35372,11 @@ export function createCharacterCreator(options = {}) {
                 data-cc-action="edit-spell-animations"
                 data-spell-id="${escapeHtml(spell.id)}"
               >
-                Animations
+                ${Object.keys(spell.animations || {}).length ? "Animations" : "Add Animation"}
               </button>
+              <button type="button" data-cc-action="edit-custom-spell" data-spell-id="${escapeHtml(spell.id)}">Edit Spell</button>
+              <button type="button" data-cc-action="preview-spell-animations" data-spell-id="${escapeHtml(spell.id)}">Preview</button>
+              <p class="hg-content-animation-saved">Animation: ${escapeHtml(spellAnimationSummary(spell.animations))} · saved with this spell</p>
               <button
                 type="button"
                 data-cc-action="remove-custom-spell"
@@ -35790,6 +35804,7 @@ export function createCharacterCreator(options = {}) {
   }
 
   const spellsStep = createSpellsStep({
+    getAnimationLibrary: options.getAnimationLibrary,
     sharedServices: sharedStepServices,
     ABILITY_DEFINITIONS,
     C,

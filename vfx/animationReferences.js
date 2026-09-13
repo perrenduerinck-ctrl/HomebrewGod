@@ -25,7 +25,8 @@ export function normalizeSpellAnimations(value, { strict = false } = {}) {
 }
 export function getSpellAnimationDependencies(spell) {
   const variants = Array.isArray(spell?.animationSelection?.ids) ? spell.animationSelection.ids : [];
-  return [...new Set([id(spell?.animationId), ...variants.map(id), ...Object.values(normalizeSpellAnimations(spell?.animations)).map(ref => typeof ref === "string" ? ref : ref.animationId)].filter(Boolean))];
+  const attackStages = Object.values(spell?.animation?.stages || {}).map(ref => id(typeof ref === "string" ? ref : ref?.animationId));
+  return [...new Set([id(spell?.animationId), ...attackStages, ...variants.map(id), ...Object.values(normalizeSpellAnimations(spell?.animations)).map(ref => typeof ref === "string" ? ref : ref.animationId)].filter(Boolean))];
 }
 export function replaceAnimationReferences(spell, oldId, newId) {
   if (newId != null && !id(newId)) throw new Error("Choose a valid replacement Animation ID.");
@@ -35,6 +36,11 @@ export function replaceAnimationReferences(spell, oldId, newId) {
     if ((typeof ref === "string" ? ref : ref?.animationId) !== oldId) continue;
     if (!newId) delete spell.animations[slot];
     else spell.animations[slot] = typeof ref === "string" ? newId : { ...ref, animationId: newId };
+  }
+  for (const [slot, ref] of Object.entries(spell.animation?.stages || {})) {
+    if ((typeof ref === "string" ? ref : ref?.animationId) !== oldId) continue;
+    if (!newId) delete spell.animation.stages[slot];
+    else spell.animation.stages[slot] = typeof ref === "string" ? newId : { ...ref, animationId: newId };
   }
 }
 

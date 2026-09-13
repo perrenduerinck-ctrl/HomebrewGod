@@ -7,20 +7,21 @@ import { ANIMATION_PRESETS } from "./animationPlayback.js";
 import { inspectAnimationSprite, spriteCheckSummary } from "./animationSpriteCheck.js";
 import { createAnimationPreviewStage } from "./animationPreviewStage.js";
 import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
+import { getFamilyTemplates } from "./animationFamilies.js";
 export { createAnimationSelector } from "./animationBrowser.js";
 
 export function createAnimationEditor({ dialog, button, library, bindings, actions = [], isSoundEnabled, persistence = null }) {
   if (!dialog || !button) return { stop() {}, close() {}, destroy() {} };
-  dialog.innerHTML = `<div class="hg-animation-heading"><div><span class="hg-animation-eyebrow">HOMEBREW GOD · VFX STUDIO</span><h2 id="animationLibraryTitle">Animation Creator</h2>
-    <p>Find an effect. Make it yours.</p></div><button data-animation-close type="button" aria-label="Close animations">Close</button></div>
-    <p class="hg-animation-session" data-animation-session>Personal animations sync after sign-in. Favorites and temporary action assignments remain session-only.</p>
+  dialog.innerHTML = `<div class="hg-animation-heading"><div><span class="hg-animation-eyebrow">HOMEBREW GOD · VFX STUDIO</span><h2 id="animationLibraryTitle">Animation Library</h2>
+    <p data-animation-tool-description>My saved visual effects.</p></div><button data-animation-close type="button" aria-label="Close animations">Close</button></div>
+    <nav class="hg-animation-tool-nav" aria-label="Animation tools"><button type="button" data-animation-tool-library>Animation Library</button><button type="button" data-animation-tool-creator>Animation Creator</button></nav>
+    <p class="hg-animation-session" data-animation-session>Personal animations sync after sign-in.</p>
     <div class="hg-animation-columns"><section class="hg-animation-settings"><div data-animation-browser-panel>
     <div data-animation-chooser></div><div class="hg-animation-buttons"><button data-animation-edit type="button">Edit settings</button><button data-animation-duplicate type="button">Duplicate / Remix</button>
     <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-delete type="button">Delete custom</button></div>
     <div data-animation-external hidden><p data-animation-external-label></p><button type="button" data-animation-use-selected>Use selected animation</button></div>
     <div data-animation-delete-warning hidden><p data-animation-delete-message></p><label>Replacement<select data-animation-delete-replacement></select></label><button type="button" data-animation-delete-replace>Replace references and delete</button><button type="button" data-animation-delete-remove>Remove references and delete</button><button type="button" data-animation-delete-cancel>Cancel</button></div>
-    <div class="hg-animation-assignment" data-animation-assignment><label>Assign to<select data-animation-action></select></label><p data-animation-assigned class="hg-animation-hint"></p>
-    <div class="hg-animation-buttons"><button data-animation-assign type="button">Change animation</button><button data-animation-reset type="button">Use original effect</button></div></div></div>
+    </div><section data-animation-family-choice hidden><h3>Choose an animation family</h3><p>Behavior templates over the same animation engine.</p><div class="hg-animation-family-choice">${[["melee", "Melee", "Close-range physical attacks."], ["ranged", "Ranged", "Physical attacks that travel to a target."], ["magic", "Magic", "Spell and magical effects."]].map(([family, label, description]) => `<button type="button" aria-label="${label}" data-create-family="${family}"><strong>${label}</strong><span>${description}</span></button>`).join("")}</div></section>
     <form data-animation-form hidden>${animationFormMarkup()}</form></section>
     <section class="hg-animation-preview-panel" aria-label="Animation preview"><div class="hg-animation-stage-heading"><h3>Preview Stage</h3><span>Drag the tokens</span></div>
     <div data-animation-preview class="hg-animation-preview" data-background="checker">
@@ -36,7 +37,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <label>Test distance<select data-animation-distance><option value="custom">Custom / drag anchors</option><option value="adjacent">Adjacent</option>${[5,10,30,60,120].map(n => `<option value="${n}">${n} ft</option>`).join("")}</select></label>
     <button type="button" data-animation-swap-tokens>Swap source / target</button><button type="button" data-animation-reset-tokens>Reset tokens</button>
     <div class="hg-animation-buttons">${[["source","Source Effect"],["target","Target Effect"],["projectile","Projectile"],["melee","Melee Directional"],["beam","Beam"],["aura","Aura"]].map(([key,name]) => `<button type="button" data-animation-quick="${key}">${name}</button>`).join("")}</div></details>
-    <p data-animation-preview-info class="hg-animation-hint"></p><p class="hg-animation-hint">Preview controls never change an assignment. Save your settings, then choose an action.</p></section></div>
+    <p data-animation-preview-info class="hg-animation-hint"></p><p class="hg-animation-hint">Preview only. Choose animation stages in the spell or attack editor; save them with that content.</p></section></div>
     <p data-animation-status role="status"></p>`;
   const field = name => dialog.querySelector(`[data-animation-${name}]`), status = message => { field("status").textContent = message; };
   const surface = field("preview"), previewEngine = createBattleMapEffectEngine({ surface }), preview = createAnimationPlayer({ engine: previewEngine, library, isSoundEnabled, onError: () => {} });
@@ -59,18 +60,24 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   }) || (() => {});
   function stop() { previewRevision++; preview.clear(); playback = null; paused = false; field("pause").textContent = "Pause"; field("preview-info").textContent = "Preview stopped."; }
   function selected() { return library.getAnimation(chooser.getSelectedId()); }
+  function showTool(tool) {
+    dialog.dataset.animationTool = tool;
+    dialog.querySelector('#animationLibraryTitle').textContent = tool === "creator" ? "Animation Creator" : "Animation Library";
+    field("tool-description").textContent = tool === "creator" ? "Make or edit a visual effect." : "My saved visual effects.";
+    dialog.setAttribute("aria-label", tool === "creator" ? "Animation Creator" : "Animation Library");
+  }
   function selectionChanged() {
-    stop(); editRevision++; inspectionRevision++; field("form").hidden = true; field("browser-panel").hidden = false;
+    stop(); editRevision++; inspectionRevision++; field("form").hidden = true; field("family-choice").hidden = true; field("browser-panel").hidden = false; showTool("library");
     const a = selected(); field("delete").disabled = !a || a.ownership.kind === "builtin";
     if (!a) { field("preview-info").textContent = "Choose an animation to preview."; return; }
     field("preview-fps").value = a.fps; field("preview-scale").value = a.scale;
     field("preview-info").textContent = `${a.grid.columns} × ${a.grid.rows} · ${a.frameCount} frames · ${a.type}`;
   }
   const chooser = createAnimationSelector({ container: field("chooser"), library, onSelect: selectionChanged });
-  field("action").replaceChildren(...actions.map(a => new Option(a.name, a.key)));
-  function assignmentInfo() { const id = bindings.getAssignment(field("action").value)?.animationId; field("assigned").textContent = id ? `Assigned: ${library.getAnimation(id)?.name || "Unavailable animation"}` : "Assigned: original effect"; }
+  function assignmentInfo() { /* Assignment authority lives in the content editor, not this library. */ }
   function syncControls() {
     field("form").dataset.advanced = String(field("advanced-mode").checked);
+    field("subtype-control").hidden = field("family").value !== "magic";
     field("custom-grid").hidden = field("grid").value !== "custom";
     field("axis-scale").hidden = field("lock").checked;
     field("projectile-fields").hidden = field("behavior").value !== "projectile"; field("beam-fields").hidden = field("behavior").value !== "beam";
@@ -85,11 +92,13 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     try { const result = await inspectAnimationSprite(src); if (!destroyed && current === inspectionRevision) { imageInfo = result; syncControls(); } }
     catch (error) { if (!destroyed && current === inspectionRevision) { imageInfo = null; field("sheet-stats").textContent = error.message; status(error.message); } }
   }
-  function openEditor(a = null) {
+  function familyTemplates() { field("family-template").replaceChildren(...getFamilyTemplates(field("family").value).map(template => new Option(template.name, template.id))); }
+  function openEditor(a = null, family = a?.family || "magic") {
     draftSaveId = null;
     stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; draftSpriteFile = null; imageInfo = null;
-    field("form").hidden = false; field("browser-panel").hidden = true; field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
-    writeAnimationFields(field, a); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
+    field("form").hidden = false; field("family-choice").hidden = true; field("browser-panel").hidden = true; showTool("creator"); field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
+    const initial = a || normalizeAnimation({ ...getFamilyTemplates(family)[0], id: "draft_preview", sprite: "draft.png", grid: { columns: 6, rows: 6 }, frameCount: 36 });
+    writeAnimationFields(field, initial); familyTemplates(); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
     field("sound-info").textContent = draftSound ? "Current sound retained." : "No sound";
     const columns = a?.grid.columns || 6, rows = a?.grid.rows || 6;
     field("grid").value = columns === rows && [4,5,6,7,8].includes(columns) ? String(columns) : "custom";
@@ -97,6 +106,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("upload-thumbnail").hidden = !draftSource; if (draftSource) field("upload-thumbnail").src = draftSource; else field("upload-thumbnail").removeAttribute("src");
     syncControls(); if (draftSource) inspect(draftSource); field("name").focus();
   }
+  function openCreator() { stop(); editRevision++; inspectionRevision++; showTool("creator"); field("browser-panel").hidden = true; field("form").hidden = true; field("family-choice").hidden = false; }
   function draft() {
     const changes = readAnimationFields(field); changes.sound = draftSound ? { ...changes.sound, src: draftSound } : null;
     changes.sprite = draftSource; changes.id = editId || "draft_preview";
@@ -124,19 +134,28 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     if (!file.size || file.size > MAX_UPLOAD_BYTES) throw new Error("Choose a file smaller than 8 MB.");
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("The file could not be read.")); reader.readAsDataURL(file); });
   }
-  function finishExternal(id = null) { const request = external; external = null; request?.resolve(id); field("external").hidden = true; field("assignment").hidden = false; }
+  function finishExternal(id = null) { const request = external; external = null; request?.resolve(id); field("external").hidden = true; }
   on(button, "click", safely(async () => { finishExternal(); dialog.showModal(); selectionChanged(); assignmentInfo(); await persistence?.load?.(); }));
   on(field("close"), "click", () => dialog.close());
   on(dialog, "keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); dialog.close(); } });
   on(dialog, "close", () => { finishExternal(); stop(); editRevision++; inspectionRevision++; });
   on(field("use-selected"), "click", safely(() => { const a = selected(); if (!a) throw new Error("Choose an animation first."); finishExternal(a.id); dialog.close(); }));
-  on(field("action"), "change", assignmentInfo);
-  on(field("assign"), "click", safely(() => {
-    const id = chooser.getSelectedId(); if (!library.getAnimation(id)) throw new Error("Choose an animation first.");
-    bindings.setAnimation(field("action").value, id); library.markUsed(id); assignmentInfo(); status("Animation changed for this session.");
+  on(field("custom"), "click", openCreator);
+  on(field("tool-library"), "click", selectionChanged);
+  on(field("tool-creator"), "click", openCreator);
+  on(field("family-choice"), "click", event => { const family = event.target.closest('[data-create-family]')?.dataset.createFamily; if (family) openEditor(null, family); });
+  on(field("family"), "change", () => { familyTemplates(); syncControls(); });
+  on(field("apply-family-template"), "click", safely(() => {
+    const template = getFamilyTemplates(field("family").value).find(template => template.id === field("family-template").value);
+    if (!template) throw new Error("Choose a family template.");
+    const { id, ...settings } = template;
+    const current = readAnimationFields(field);
+    const base = normalizeAnimation({ ...current, id: editId || "draft_preview", sprite: draftSource || "draft.png" });
+    writeAnimationFields(field, mergeAnimationDefinition(base, { playback: "once", timing: { loopCount: 1 }, ...settings, name: current.name || template.name }));
+    syncControls(); status(template.name + " defaults applied. Advanced settings can override behavior.");
   }));
-  on(field("reset"), "click", safely(() => { bindings.setAnimation(field("action").value, null); assignmentInfo(); status("Original effect restored."); }));
-  on(field("custom"), "click", () => openEditor());
+  const creatorButton = dialog.ownerDocument.getElementById("animationCreatorButton");
+  if (creatorButton) on(creatorButton, "click", safely(async () => { finishExternal(); if (!dialog.open) dialog.showModal(); openCreator(); await persistence?.load?.(); }));
   on(field("edit"), "click", safely(() => { if (!selected()) throw new Error("Choose an animation first."); openEditor(selected()); }));
   on(field("duplicate"), "click", safely(() => { const a = library.duplicateAnimation(chooser.getSelectedId()); chooser.select(a.id); openEditor(a); status("Created a separate custom remix."); }));
   async function removeAnimation(options = {}) {
@@ -168,7 +187,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     if (library.getAnimation(deleteId)?.ownership.scope !== "user") return removeAnimation({ replaceWith });
     const replaced = library.replaceKnownReferences(deleteId, replaceWith);
     field("delete-warning").hidden = true; deleteId = null; assignmentInfo();
-    status(`${replaced.length} known loaded references replaced. Save each affected character. Animation metadata and hosted sprite are retained; other rooms were not changed.`);
+    status(`${replaced.length} known loaded references replaced. Save each affected character and account spell presentation setup. Animation metadata and hosted sprite are retained; other rooms were not changed.`);
   }));
   on(field("delete-remove"), "click", safely(() => removeAnimation({ removeReferences: true })));
   on(field("delete-cancel"), "click", () => { deleteId = null; field("delete-warning").hidden = true; });
@@ -252,16 +271,16 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       const saved = editId ? library.updateAnimation(editId, prepared.definition) : library.registerAnimation(candidate);
       if (destroyed || current !== editRevision) return;
       if (external) { finishExternal(saved.id); dialog.close(); return; }
-      chooser.select(saved.id); assignmentInfo(); status(prepared.persistent ? "Animation saved to your personal library. Select an action to assign it." : "Animation saved for this session. Sign in to sync it.");
+      chooser.select(saved.id); assignmentInfo(); status(prepared.persistent ? "Animation saved to your personal library. Choose its stages in a spell or attack editor." : "Animation saved for this session. Sign in to sync it.");
     } finally { saving = false; }
   }));
   selectionChanged(); assignmentInfo();
-  return { stop, async openForSlot({ slot = "impact", mode = "choose", animationId } = {}) {
+  return { stop, openCreator, async openForSlot({ slot = "impact", mode = "choose", animationId, family = "magic" } = {}) {
       finishExternal(); if (!dialog.open) dialog.showModal(); selectionChanged(); await persistence?.load?.();
-      field("external").hidden = false; field("assignment").hidden = true; field("external-label").textContent = `Choose an animation for ${slot}.`;
+      chooser.setFamily(family); field("external").hidden = false; field("external-label").textContent = `Choose an animation for ${slot}.`;
       if (animationId && library.getAnimation(animationId)) chooser.select(animationId);
       const promise = new Promise(resolve => { external = { resolve }; });
-      if (mode === "create" || mode === "upload") { openEditor(); field("spawn").value = slot === "cast" ? "source" : slot === "travel" ? "source-to-target" : "target"; field("behavior").value = slot === "travel" ? "projectile" : "static"; syncControls(); if (mode === "upload") field("file").click(); }
+      if (mode === "create" || mode === "upload") { openEditor(null, family); if (family !== "melee") { field("spawn").value = slot === "cast" ? "source" : slot === "travel" ? "source-to-target" : "target"; field("behavior").value = slot === "travel" ? "projectile" : "static"; if (family === "magic") field("subtype").value = ({ cast: "cast", travel: "projectile", impact: "impact", sustain: "sustain", end: "end" })[slot] || "custom"; } syncControls(); if (mode === "upload") field("file").click(); }
       if (mode === "remix" && selected()) { const a = library.duplicateAnimation(selected().id); chooser.select(a.id); openEditor(a); }
       return promise;
     }, close() { if (dialog.open) dialog.close(); else stop(); },

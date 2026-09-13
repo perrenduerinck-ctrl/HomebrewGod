@@ -6,6 +6,7 @@ import { createAnimationSpellAdapter } from "./animationSpellAdapter.js";
 import { createAnimationPersistence } from "./animationPersistence.js";
 import { SPELL_VFX_PROFILES } from "./spellVfxProfiles.js";
 import { createDefaultCastingSequenceRegistry } from "./castingSequence.js";
+import { createSpellAnimationPresentation } from "./spellAnimationPresentation.js";
 
 export function getAnimationActions() {
   const spells = new Map(SPELL_VFX_PROFILES.map(p => [p.spellId, p.label]));
@@ -30,11 +31,12 @@ export function getAnimationSession(document = globalThis.document) {
   const persistence = options.persistence
     ? createAnimationPersistence({ library, ...options.persistence })
     : null;
+  const presentation = options.presentation ? createSpellAnimationPresentation({ library, bindings, ...options.presentation }) : null;
   const isSoundEnabled = () => document.getElementById("battleVfxSoundToggle")?.checked !== false;
   const editor = createAnimationEditor({ dialog: document.getElementById("animationLibraryDialog"),
     button: document.getElementById("animationLibraryButton"), library, bindings,
     actions: getAnimationActions(), isSoundEnabled, persistence });
-  const session = { library, bindings, editor, isSoundEnabled, persistence }; sessions.set(document, session); return session;
+  const session = { library, bindings, editor, isSoundEnabled, persistence, presentation }; sessions.set(document, session); return session;
 }
 
 export function createAnimationWorkspace({ engine, document = globalThis.document, persistence: persistenceOptions = null }) {
