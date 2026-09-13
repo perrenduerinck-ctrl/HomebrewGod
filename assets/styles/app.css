@@ -119,6 +119,13 @@ input::placeholder {
   color: #91a0db;
 }
 
+/* Native checkbox focus must not inherit text-field padding and move actions
+   between pointer-down and pointer-up (Chromium reapplies those dimensions). */
+#characterCreatorScreen input[type="checkbox"] {
+  padding: 0;
+  border: 0;
+}
+
 button {
   padding: 10px 15px;
   margin: 5px 5px 5px 0;
