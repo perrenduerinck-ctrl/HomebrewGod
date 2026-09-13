@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+test.use({ actionTimeout: 20000 });
 
 test("real shared renderer aligns tokens, projectiles and beams through map zoom, pan and self targeting", async ({ page }) => {
   await page.goto("?smokeTest=1");
@@ -39,7 +40,7 @@ test("spell creation uploads an animation in place, stores stage IDs, preserves 
   await creator.locator("[data-animation-file]").setInputFiles({name:"impact.png",mimeType:"image/png",buffer:Buffer.from(data,"base64")});
   await creator.getByRole("button",{name:"Save Animation",exact:true}).click();await expect(creator).not.toBeVisible();
   await expect(panel.locator('[data-spell-animation-slot="impact"]')).toContainText("Prismatic impact");
-  await panel.locator('[data-spell-animation-slot="travel"] [data-slot-action="choose"]').click();await creator.locator("[data-animation-select]").selectOption("sword_slash_01");await creator.locator("[data-animation-use-selected]").click();
+  await panel.locator('[data-spell-animation-slot="travel"] [data-slot-action="choose"]').click();await creator.getByRole("tab",{name:"All",exact:true}).click();await creator.locator("[data-animation-select]").selectOption("sword_slash_01");await creator.locator("[data-animation-use-selected]").click();
   await panel.screenshot({path:"output/vfx/combat-sprite-test/spell-animation-panel.png"});
   await panel.locator("[data-spell-play]").click();await expect(panel.locator(".hg-map-vfx-effect")).not.toHaveCount(0);await panel.locator("[data-spell-stop]").click();
   await panel.locator("[data-spell-save]").click();await expect(panel).not.toBeVisible();
