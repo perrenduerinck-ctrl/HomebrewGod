@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { mockAnimationServices, animationRecords } from "./helpers/animation-services.mjs";
+test.use({ actionTimeout: 20000 });
 
 async function openBattle(page, room = "", appUrl = "") {
   await page.goto(`${appUrl}?smokeTest=1&vfxTest=1${room ? `&room=${room}&view=battle` : ""}`, { waitUntil: "domcontentloaded" });
@@ -373,7 +374,7 @@ test("failed saves and deletes preserve persistent definitions and spell depende
   expect((await usage()).binding.animations.travel).toBe(copyId);expect((await animationRecords(page)).some(a=>a.id===copyId)).toBe(true);
   await page.evaluate(()=>localStorage.removeItem('acceptance-delete-failure'));await field(dialog,'delete-remove').click();await expect(field(dialog,'status')).toContainText('removed');
   expect((await usage()).exists).toBe(false);expect((await usage()).binding.animations.travel).toBeUndefined();
-  await field(dialog,'select').selectOption('sword_slash_01');await expect(field(dialog,'delete')).toBeDisabled();
+  await dialog.getByRole('tab',{name:'Melee',exact:true}).click();await field(dialog,'select').selectOption('sword_slash_01');await expect(field(dialog,'delete')).toBeDisabled();
 });
 
 test("persistent removal always warns about unopened rooms; cancel and replacing known references preserve metadata and hosted sprite",async({page})=>{
