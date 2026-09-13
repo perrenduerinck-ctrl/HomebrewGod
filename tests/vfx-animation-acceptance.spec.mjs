@@ -49,7 +49,9 @@ test("Gary Missile uploads, saves with a spell, previews and casts after full re
   await field(dialog,'custom').click();await field(dialog,'name').fill('Gary Missile');
   await field(dialog,'file').setInputFiles({name:'gary-missile.png',mimeType:'image/png',buffer:services.sheet});
   await field(dialog,'advanced-mode').check();await field(dialog,'behavior').selectOption('projectile');
-  await field(dialog,'fps').fill('60');await field(dialog,'travel-speed').fill('1000');
+  // Leave time for separate real-DOM visibility and sprite assertions on a
+  // shared CI runner; a 1000 px/s projectile can expire between protocol calls.
+  await field(dialog,'fps').fill('60');await field(dialog,'travel-speed').fill('100');
   await dialog.locator('[data-section="direction"] > summary').click();
   await field(dialog,'facing').selectOption('face-target');
   await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();

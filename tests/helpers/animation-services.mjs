@@ -7,7 +7,13 @@ const key='acceptance-firestore';
 const records=()=>JSON.parse(localStorage.getItem(key)||'{}');
 const path=(...p)=>p.filter(x=>typeof x==='string').join('/');
 const subscriptions=new Set();
-const notify=ref=>{for(const sub of subscriptions)if(ref===sub.ref||ref.startsWith(sub.ref+'/'))queueMicrotask(sub.emit);};
+// Document listeners observe that document only, not writes to descendants.
+// Collection listeners observe their immediate documents, not subcollections.
+const notify=ref=>{for(const sub of subscriptions){
+ const isDocument=sub.ref.split('/').length%2===0;
+ const matches=isDocument?ref===sub.ref:ref.startsWith(sub.ref+'/')&&!ref.slice(sub.ref.length+1).includes('/');
+ if(matches)queueMicrotask(sub.emit);
+}};
 const snapshot=(ref)=>({id:ref.split('/').at(-1),metadata:{hasPendingWrites:false,fromCache:false},exists:()=>Boolean(records()[ref]),data:()=>records()[ref]});
 const list=(ref)=>{const docs=Object.keys(records()).filter(p=>p.startsWith(ref+'/')&&!p.slice(ref.length+1).includes('/')).map(snapshot);return {docs,empty:!docs.length,size:docs.length,metadata:{hasPendingWrites:false,fromCache:false},forEach:fn=>docs.forEach(fn),docChanges:()=>docs.map(doc=>({type:'added',doc}))};};
 export const initializeApp=()=>({}), getFirestore=()=>({}), getAuth=()=>({});
