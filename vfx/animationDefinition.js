@@ -1,3 +1,4 @@
+import { ANIMATION_FAMILIES, MAGIC_SUBTYPES, inferAnimationFamily, inferMagicSubtype } from "./animationFamilies.js";
 // Appearance metadata only. Types, tags and events never resolve game rules.
 export const ANIMATION_TYPES = Object.freeze([
   "Spell Effect", "Melee Attack", "Projectile", "Impact", "Explosion", "Beam", "Aura",
@@ -93,7 +94,9 @@ export function normalizeAnimationDefinition(input = {}) {
   };
   const events = reserved(input.events, 64, "events");
   if (events.some(event => !event || typeof event.type !== "string" || !event.type.trim() || event.type.length > 80 || !Number.isInteger(event.frame) || event.frame < 0 || event.frame >= columns * rows)) throw new Error("Each animation event needs a type and a frame inside the sprite sheet.");
-  return freezeAnimation({ version: 2, revision: num(input.revision, 1, 1, 1000000, "Revision", true), id, name, description: animationText(input.description, 1000), type, category,
+  const family = choice(input.family, inferAnimationFamily(input), ANIMATION_FAMILIES, "animation family");
+  const subtype = family === "magic" ? choice(input.subtype || undefined, inferMagicSubtype(input), MAGIC_SUBTYPES, "magic subtype") : animationText(input.subtype, 48);
+  return freezeAnimation({ version: 2, revision: num(input.revision, 1, 1, 1000000, "Revision", true), id, name, description: animationText(input.description, 1000), type, category, family, subtype,
     collections: normalizeTags(input.collections),
     tags: normalizeTags(input.tags), sprite, grid: { columns, rows }, frames: { start, end, count, reverse: f.reverse === true, sequence: reserved(f.sequence, 240, "custom frames") },
     // Flat aliases keep the first Animation ID API compatible. Nested input is also accepted.

@@ -391,6 +391,7 @@ let battleMapVfxSequences = null;
 let battleMapCombatVfx = null;
 let battleMapAnimations = null;
 const animationDocumentSession = configureAnimationSession(document, {
+  presentation: { db, doc, getDoc, setDoc, serverTimestamp, getUserId: () => currentUser?.uid || null },
   persistence: {
     db,
     getUserId: () => currentUser?.uid || null,
@@ -5527,6 +5528,33 @@ function initializeBattleMapTemplates() {
     "click",
     loadSelectedSpellTemplate
   );
+  const presentationButton = $("editSpellPresentationButton");
+  const presentationStatus = $("spellPresentationStatus");
+  const syncPresentationButton = () => {
+    const id = E.spellTemplateSelect?.value;
+    const custom = getCustomSpellPreviewOptions().some(spell => spell.id === id);
+    if (presentationButton) presentationButton.disabled = !currentUser || !id || custom;
+    if (presentationStatus) presentationStatus.textContent = custom ? "Edit and save custom spell stages in Character Creator." : animationDocumentSession.presentation?.get(id)?.pendingSave ? "References changed. Open Spell Animations and Save Animation Setup to persist them." : id ? "Account-owned spell appearance; canonical spell rules are unchanged." : "";
+  };
+  E.spellTemplateSelect?.addEventListener("change", syncPresentationButton);
+  animationDocumentSession.presentation?.subscribe(syncPresentationButton);
+  presentationButton?.addEventListener("click", async () => {
+    const id = E.spellTemplateSelect?.value, uid = currentUser?.uid;
+    try {
+      const { getDefaultSpellById } = await import("./data/defaultSpells.js?v=stage8-20260826");
+      const spell = getDefaultSpellById(id);
+      if (!uid || !spell || getCustomSpellPreviewOptions().some(custom => custom.id === id)) return;
+      await animationDocumentSession.persistence?.load();
+      const ready = await animationDocumentSession.presentation.load();
+      if (!ready.ok) throw new Error(ready.message);
+      const { openSpellAnimationPanel } = await import("./vfx/spellAnimationPanel.js");
+      const saved = await openSpellAnimationPanel({ name: spell.name + " · account presentation", animations: animationDocumentSession.presentation.get(id)?.animations || {}, saveLabel: "Save Animation Setup", onSave: async stages => {
+        if (currentUser?.uid !== uid) throw new Error("Your account changed. Reopen this spell setup.");
+        await animationDocumentSession.presentation.save(id, stages);
+      } });
+      if (saved && presentationStatus) presentationStatus.textContent = "Saved spell animation setup for this account. It survives reload; canonical spell mechanics are unchanged.";
+    } catch (error) { if (presentationStatus) presentationStatus.textContent = error.message; }
+  });
   // The map picker previously contained only SRD spells, hiding saved custom
   // stage assignments. Reuse the character library/draft, not a second store.
   $("battleToolsMenu")?.addEventListener("toggle", async event => {
@@ -7673,6 +7701,8 @@ async function initCharacterCreatorSystem() {
 
   characterCreatorSystem =
     characterCreatorModule.createCharacterCreator({
+    getAnimationLibrary: () => animationDocumentSession.library,
+    getSpellAnimationPresentation: () => animationDocumentSession.presentation,
     db,
     doc,
     collection,
@@ -8661,7 +8691,10 @@ onAuthStateChanged(auth, async function (user) {
   console.log("Auth state changed:", user ? user.uid : "no user");
 
   currentUser = user;
-  animationDocumentSession.persistence?.setContext();
+  animationDocumentSession.presentation?.setContext();
+  await animationDocumentSession.persistence?.setContext();
+  await animationDocumentSession.presentation?.load({ force: true });
+  if (currentUser !== user) return;
 
   if (!user) {
     await showLoggedOut();

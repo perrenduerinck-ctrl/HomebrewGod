@@ -8,13 +8,17 @@ import { createAnimationPreviewStage } from "./animationPreviewStage.js";
 const title = slot => slot[0].toUpperCase() + slot.slice(1);
 const optionalNumber = input => String(input?.value || "").trim() === "" ? null : Number(input.value);
 
-export function openSpellAnimationPanel({ document = globalThis.document, animations = {}, name = "Spell" } = {}) {
+export function openSpellAnimationPanel({ document = globalThis.document, animations = {}, name = "Spell", family = "magic", slots = ANIMATION_SLOTS, stageLabels = {}, contentLabel = "Spell", saveLabel = "Use these stages", onSave = null, previewOnly = false } = {}) {
+  if (!slots.length || slots.some(slot => !ANIMATION_SLOTS.includes(slot))) throw new Error("Choose valid animation stages.");
+  const stageTitle = slot => stageLabels[slot] || title(slot);
+  const flowLabel = slots.map(stageTitle).join(" → ");
   const { library, editor, isSoundEnabled, persistence } = getAnimationSession(document);
   const dialog = document.createElement("dialog");
   dialog.className = "hg-spell-animation-panel";
-  dialog.setAttribute("aria-label", "Spell animations");
-  dialog.innerHTML = `<div class="hg-spell-animation-heading"><div><span class="hg-animation-eyebrow">SPELL VFX SEQUENCE</span><h2>Spell animations</h2><p data-spell-animation-name></p></div><button type="button" data-spell-cancel aria-label="Close spell animations">Close</button></div>
-    <p data-spell-animation-sync>Cast → Travel → Impact → Sustain → End. Empty stages are skipped.</p>
+  const heading = contentLabel === "Attack" ? "Attack animations" : "Spell animations";
+  dialog.setAttribute("aria-label", heading);
+  dialog.innerHTML = `<div class="hg-spell-animation-heading"><div><span class="hg-animation-eyebrow">${contentLabel === "Attack" ? "ATTACK VFX STAGES" : "SPELL VFX SEQUENCE"}</span><h2>${heading}</h2><p data-spell-animation-name></p></div><button type="button" data-spell-cancel aria-label="Close ${heading.toLowerCase()}">Close</button></div>
+    <p data-spell-animation-sync></p>
     <div class="hg-spell-animation-stage-flow" data-spell-animation-stages></div>
     <div class="hg-animation-stage-heading"><h3>Sequence Preview</h3><span>Drag Source and Target</span></div>
     <div class="hg-animation-preview hg-spell-animation-preview" data-spell-animation-preview data-background="grid">
@@ -26,6 +30,9 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
     <div class="hg-animation-buttons"><button type="button" class="hg-animation-primary" data-spell-play>▶ Preview all stages</button><button type="button" data-spell-stop>Stop preview</button><button type="button" data-spell-save>Use these stages</button></div>
     <p data-spell-animation-status role="status"></p>`;
   document.body.append(dialog);
+  dialog.querySelector('[data-spell-animation-sync]').textContent = flowLabel + ". Empty stages are skipped.";
+  dialog.querySelector('[data-spell-save]').textContent = saveLabel;
+  dialog.querySelector('[data-spell-save]').hidden = previewOnly;
   dialog.querySelector("[data-spell-animation-name]").textContent = name;
   const field = key => dialog.querySelector(`[data-spell-${key}]`);
   const status = message => { field("animation-status").textContent = message; };
@@ -42,10 +49,10 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
     distanceSelect: field("distance"),
     widthFeet: 150,
   });
-  let closed = false, result = null, revision = 0;
+  let closed = false, saving = false, result = null, revision = 0;
 
   persistence?.load?.().then(state => {
-    if (!closed && state?.message) field("animation-sync").textContent = `Cast → Travel → Impact → Sustain → End. ${state.message}`;
+    if (!closed && state?.message) { field("animation-sync").textContent = flowLabel + ". " + state.message; for (const row of field("animation-stages").children) syncDraftFromRow(row); render(); }
   });
 
   function syncDraftFromRow(row) {
@@ -83,14 +90,14 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
   function render() {
     const root = field("animation-stages");
     root.replaceChildren();
-    ANIMATION_SLOTS.forEach((slot, index) => {
+    slots.forEach((slot, index) => {
       const ref = normalizeSpellAnimationReference(draft[slot]);
       const animation = library.getAnimation(ref?.animationId);
       const row = document.createElement("section");
       row.className = "hg-spell-animation-stage-card";
       row.dataset.spellAnimationSlot = slot;
       row.dataset.empty = String(!ref);
-      row.innerHTML = `<div class="hg-spell-animation-card-main"><div class="hg-spell-animation-thumb" data-slot-thumbnail aria-hidden="true"><span>${title(slot)[0]}</span></div><div><span class="hg-animation-eyebrow">${index + 1} · ${title(slot)}</span><h3 data-slot-name></h3><p data-slot-summary></p></div></div>
+      row.innerHTML = `<div class="hg-spell-animation-card-main"><div class="hg-spell-animation-thumb" data-slot-thumbnail aria-hidden="true"><span>${stageTitle(slot)[0]}</span></div><div><span class="hg-animation-eyebrow">${index + 1} · ${stageTitle(slot)}</span><h3 data-slot-name></h3><p data-slot-summary></p></div></div>
         <div class="hg-animation-buttons">${[["choose", ref ? "Replace" : "Choose / Find"],["preview","Preview"],["clear","Clear"],["remix","Duplicate / Remix"],["create","Create New"],["upload","Upload New"]].map(([key,label]) => `<button type="button" data-slot-action="${key}"${!ref && ["preview","clear","remix"].includes(key) ? " disabled" : ""}>${label}</button>`).join("")}</div>
         <details data-slot-overrides><summary>Edit Override</summary><div class="hg-spell-animation-overrides">
           <label>Scale ×<input type="number" data-slot-scale min="0.1" max="8" step="0.1" value="${ref?.overrides.scaleMultiplier ?? 1}"></label>
@@ -122,7 +129,7 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
         row.querySelector("[data-slot-tint]").value = animation.appearance.tint;
       }
       for (const node of row.querySelectorAll("input,select")) node.dataset.initialValue = String(node.type === "checkbox" ? node.checked : node.value);
-      if (index < ANIMATION_SLOTS.length - 1) {
+      if (index < slots.length - 1) {
         const arrow = document.createElement("div");
         arrow.className = "hg-spell-animation-stage-arrow";
         arrow.setAttribute("aria-hidden", "true");
@@ -156,7 +163,7 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
         else status(played.ok ? `${title(slot)} preview complete.` : played.message);
         return;
       }
-      const id = await editor.openForSlot({ slot, mode: action, animationId: normalizeSpellAnimationReference(draft[slot])?.animationId });
+      const id = await editor.openForSlot({ slot, mode: action, family, animationId: normalizeSpellAnimationReference(draft[slot])?.animationId });
       if (!closed && id) { draft[slot] = normalizeSpellAnimationReference({ animationId: id }); render(); status(`Animation assigned to ${slot}.`); }
     } catch (error) { status(error.message || "The animation stage could not be updated."); }
   });
@@ -171,6 +178,8 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
   });
   field("stop").addEventListener("click", stop);
   field("save").addEventListener("click", async () => {
+    if (saving) return;
+    saving = true; field("save").disabled = true;
     try {
       const current = ++revision;
       for (const row of field("animation-stages").querySelectorAll("[data-spell-animation-slot]")) syncDraftFromRow(row);
@@ -180,9 +189,12 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
         await player.prepareAnimation(ref.animationId, ref.overrides);
       }
       if (closed || current !== revision) return;
+      if (onSave) await onSave(slots);
+      if (closed || current !== revision) return;
       result = slots;
       dialog.close();
     } catch (error) { status(error.message || "The stages could not be saved."); }
+    finally { saving = false; if (!closed) field("save").disabled = false; }
   });
   field("cancel").addEventListener("click", () => dialog.close());
   const completion = new Promise(resolve => dialog.addEventListener("close", () => {

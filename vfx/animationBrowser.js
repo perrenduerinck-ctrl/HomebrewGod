@@ -2,14 +2,15 @@ import { ANIMATION_TYPES } from "./animationLibrary.js";
 import { createVfxAssetCache } from "./vfxAssetManifest.js";
 import { getSpriteFrameStyle } from "./spriteAnimator.js";
 import { resolveVfxAlphaSource } from "./alphaAssets.js";
+import { MAGIC_SUBTYPES } from "./animationFamilies.js";
 
 // Reusable browser plus a compact selector. All text from user definitions is
 // assigned with textContent/Option, never interpolated into HTML.
 export function createAnimationSelector({ container, library, onSelect = () => {} }) {
-  container.innerHTML = `<label>Search animations<input data-animation-search type="search" placeholder="Name, type or tag"></label>
+  container.innerHTML = `<div class="hg-animation-family-tabs" role="tablist" aria-label="Animation library sections">${[["all", "All"], ["melee", "Melee"], ["ranged", "Ranged"], ["magic", "Magic"], ["favorites", "Favorites"], ["mine", "My Animations"], ["recent", "Recent"]].map(([key, label]) => `<button type="button" role="tab" data-animation-library-tab="${key}" aria-selected="${key === "all"}">${label}</button>`).join("")}</div><label>Search animations<input data-animation-search type="search" placeholder="Name, type or tag"></label>
     <div class="hg-animation-filter-row"><label>Type<select data-animation-type><option value="">All types</option></select></label>
     <label>Sort<select data-animation-sort><option value="name">Name</option><option value="newest">Newest</option><option value="used">Most used</option></select></label></div>
-    <details class="hg-animation-filters"><summary>More filters</summary><label>Tags<input data-animation-filter-tags placeholder="fire, sword…"></label>
+    <label data-animation-magic-filter hidden>Magic subtype<select data-animation-filter-subtype><option value="">All magic subtypes</option>${MAGIC_SUBTYPES.map(type => `<option value="${type}">${type[0].toUpperCase() + type.slice(1)}</option>`).join("")}</select></label><details class="hg-animation-filters"><summary>More filters</summary><label>Tags<input data-animation-filter-tags placeholder="fire, sword…"></label>
     <label>Source<select data-animation-origin><option value="">All available</option><option value="builtin">Built-in</option><option value="user">My animations</option><option value="room">Room animations</option></select></label>
     <label>Collection<input data-animation-collection placeholder="My fire spells"></label>
     <div class="hg-animation-buttons"><label class="hg-animation-toggle"><input type="checkbox" data-animation-favorites>Favorites</label><label class="hg-animation-toggle"><input type="checkbox" data-animation-recent>Recently used</label></div></details>
@@ -20,7 +21,7 @@ export function createAnimationSelector({ container, library, onSelect = () => {
   const field = name => container.querySelector(`[data-animation-${name}]`);
   for (const type of ANIMATION_TYPES) field("type").add(new Option(type, type));
   const cache = createVfxAssetCache({ maximumEntries: 32, onError: () => {} });
-  let selectedId = library.list()[0]?.id || "", limit = 24, revision = 0, destroyed = false;
+  let selectedId = library.list()[0]?.id || "", limit = 24, revision = 0, destroyed = false, activeTab = "all";
   const listeners = [], on = (node, event, fn) => { node.addEventListener(event, fn); listeners.push(() => node.removeEventListener(event, fn)); };
   let observer;
   async function thumbnail(node, animation, current) {
@@ -35,8 +36,11 @@ export function createAnimationSelector({ container, library, onSelect = () => {
   }
   function refresh() {
     const current = ++revision; observer?.disconnect();
-    const all = library.query({ search: field("search").value, type: field("type").value, tags: field("filter-tags").value,
-      origin: field("origin").value, collection: field("collection").value.trim().toLowerCase(), favorites: field("favorites").checked, recent: field("recent").checked, sort: field("sort").value });
+    const family = ["melee", "ranged", "magic"].includes(activeTab) ? activeTab : "";
+    field("magic-filter").hidden = activeTab !== "magic";
+    for (const tab of container.querySelectorAll('[data-animation-library-tab]')) tab.setAttribute("aria-selected", String(tab.dataset.animationLibraryTab === activeTab));
+    const all = library.query({ family, subtype: family === "magic" ? field("filter-subtype").value : "", search: field("search").value, type: field("type").value, tags: field("filter-tags").value,
+      origin: activeTab === "mine" ? "user" : field("origin").value, collection: field("collection").value.trim().toLowerCase(), favorites: activeTab === "favorites" || field("favorites").checked, recent: activeTab === "recent" || field("recent").checked, sort: field("sort").value });
     const visible = all.slice(0, limit);
     if (!all.some(a => a.id === selectedId)) selectedId = all[0]?.id || "";
     field("select").replaceChildren(...all.slice(0, 300).map(a => new Option(a.name, a.id))); field("select").value = selectedId;
@@ -50,7 +54,7 @@ export function createAnimationSelector({ container, library, onSelect = () => {
       const art = document.createElement("span"); art.className = "hg-animation-thumb";
       const sprite = document.createElement("span"); sprite.dataset.thumbnailId = a.id; art.appendChild(sprite);
       const title = document.createElement("strong"); title.textContent = a.name;
-      const type = document.createElement("small"); type.textContent = `${a.type} · ${a.ownership.kind === "user" ? "Custom" : "Built-in"}${library.getAvailability?.(a.id).available === false ? " · Unavailable sprite" : ""}`;
+      const type = document.createElement("small"); type.textContent = `${a.family[0].toUpperCase() + a.family.slice(1)} · ${a.type} · ${a.ownership.kind === "user" ? "Custom" : "Built-in"}${library.getAvailability?.(a.id).available === false ? " · Unavailable sprite" : ""}`;
       const tags = document.createElement("span"); tags.className = "hg-animation-card-tags"; tags.textContent = a.tags.slice(0, 3).join(" · ");
       choose.append(art, title, type, tags);
       const favorite = document.createElement("button"); favorite.type = "button"; favorite.className = "hg-animation-favorite"; favorite.dataset.favoriteAnimation = a.id;
@@ -66,10 +70,11 @@ export function createAnimationSelector({ container, library, onSelect = () => {
   }
   function select(id, reset = false) {
     selectedId = id;
-    if (reset) { for (const key of ["search", "type", "filter-tags", "origin", "collection"]) field(key).value = ""; field("favorites").checked = field("recent").checked = false; }
+    if (reset) { for (const key of ["search", "type", "filter-tags", "filter-subtype", "origin", "collection"]) field(key).value = ""; field("favorites").checked = field("recent").checked = false; activeTab = library.getAnimation(id)?.family || "all"; }
     library.markUsed(id); refresh(); onSelect(id);
   }
-  for (const key of ["search", "type", "sort", "filter-tags", "origin", "collection", "favorites", "recent"]) on(field(key), ["search", "filter-tags", "collection"].includes(key) ? "input" : "change", () => { limit = 24; refresh(); onSelect(selectedId); });
+  for (const key of ["search", "type", "sort", "filter-subtype", "filter-tags", "origin", "collection", "favorites", "recent"]) on(field(key), ["search", "filter-tags", "collection"].includes(key) ? "input" : "change", () => { limit = 24; refresh(); onSelect(selectedId); });
+  on(container.querySelector('[role="tablist"]'), "click", event => { const tab = event.target.closest('[data-animation-library-tab]'); if (!tab) return; activeTab = tab.dataset.animationLibraryTab; limit = 24; refresh(); onSelect(selectedId); });
   on(field("select"), "change", () => select(field("select").value));
   on(field("cards"), "click", event => {
     const favorite = event.target.closest("[data-favorite-animation]"); if (favorite) { const previous = selectedId; library.toggleFavorite(favorite.dataset.favoriteAnimation); if (previous !== selectedId) onSelect(selectedId); return; }
@@ -77,6 +82,6 @@ export function createAnimationSelector({ container, library, onSelect = () => {
   });
   on(field("more"), "click", () => { limit += 24; refresh(); });
   const unsubscribe = library.subscribe(refresh); refresh();
-  return { getSelectedId: () => selectedId, select: id => select(id, true), refresh,
+  return { getSelectedId: () => selectedId, select: id => select(id, true), setFamily(family = "") { activeTab = ["melee", "ranged", "magic"].includes(family) ? family : "all"; field("filter-subtype").value = ""; refresh(); }, refresh,
     destroy() { destroyed = true; revision++; observer?.disconnect(); cache.clear(); unsubscribe(); listeners.forEach(remove => remove()); } };
 }

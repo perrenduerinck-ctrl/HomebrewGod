@@ -92,6 +92,7 @@ export function createCharacterPersistence(
             collectionReference,
             character
           ) => {
+            context?.validateAnimationReferences?.(character);
             normalizeCharacterTextFields(
               character
             );
@@ -112,6 +113,7 @@ export function createCharacterPersistence(
         documentRef,
         nextRecord
       ) => {
+        context?.validateAnimationReferences?.(nextRecord);
         normalizeCharacterTextFields(
           nextRecord
         );
@@ -186,6 +188,9 @@ export function createCharacterPersistence(
 
   return createBaseCharacterPersistence({
     ...context,
+    friendlyServiceError: typeof context?.friendlyServiceError === "function"
+      ? (error, options) => error?.code === "animation/unsaved-reference" ? error.message : context.friendlyServiceError(error, options)
+      : context?.friendlyServiceError,
     normalizeCharacter:
       typeof originalNormalizeCharacter ===
         "function"

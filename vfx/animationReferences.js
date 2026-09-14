@@ -25,7 +25,8 @@ export function normalizeSpellAnimations(value, { strict = false } = {}) {
 }
 export function getSpellAnimationDependencies(spell) {
   const variants = Array.isArray(spell?.animationSelection?.ids) ? spell.animationSelection.ids : [];
-  return [...new Set([id(spell?.animationId), ...variants.map(id), ...Object.values(normalizeSpellAnimations(spell?.animations)).map(ref => typeof ref === "string" ? ref : ref.animationId)].filter(Boolean))];
+  const attackStages = Object.values(spell?.animation?.stages || {}).map(ref => id(typeof ref === "string" ? ref : ref?.animationId));
+  return [...new Set([id(spell?.animationId), ...attackStages, ...variants.map(id), ...Object.values(normalizeSpellAnimations(spell?.animations)).map(ref => typeof ref === "string" ? ref : ref.animationId)].filter(Boolean))];
 }
 export function replaceAnimationReferences(spell, oldId, newId) {
   if (newId != null && !id(newId)) throw new Error("Choose a valid replacement Animation ID.");
@@ -35,6 +36,32 @@ export function replaceAnimationReferences(spell, oldId, newId) {
     if ((typeof ref === "string" ? ref : ref?.animationId) !== oldId) continue;
     if (!newId) delete spell.animations[slot];
     else spell.animations[slot] = typeof ref === "string" ? newId : { ...ref, animationId: newId };
+  }
+  for (const [slot, ref] of Object.entries(spell.animation?.stages || {})) {
+    if ((typeof ref === "string" ? ref : ref?.animationId) !== oldId) continue;
+    if (!newId) delete spell.animation.stages[slot];
+    else spell.animation.stages[slot] = typeof ref === "string" ? newId : { ...ref, animationId: newId };
+  }
+}
+
+// Saving content must not turn a preview/session copy into a dangling durable
+// reference. Missing legacy refs remain editable and use the existing fallback.
+export function assertPersistentAnimationReferences(content, { library, allowMissing = true, allowRoom = false } = {}) {
+  if (!library?.getContext().ownerId) return;
+  const pending = [content], visited = new WeakSet(), ids = new Set();
+  while (pending.length) {
+    const value = pending.pop();
+    if (!value || typeof value !== "object" || visited.has(value)) continue;
+    visited.add(value);
+    for (const animationId of getSpellAnimationDependencies(value)) ids.add(animationId);
+    for (const child of Object.values(value)) if (child && typeof child === "object") pending.push(child);
+  }
+  const reject = message => { throw Object.assign(new Error(message), { code: "animation/unsaved-reference" }); };
+  for (const animationId of ids) {
+    const definition = library.getAnimation(animationId);
+    if (!definition) { if (!allowMissing) throw new Error("The selected animation is unavailable for this account."); continue; }
+    if (definition.ownership.scope === "session") reject(`${definition.name} is temporary. Open Edit settings and Save Animation to your personal library before saving this setup.`);
+    if (definition.ownership.scope === "room" && !allowRoom) reject("Account spell appearance needs an animation saved in your personal library, not a room-only animation.");
   }
 }
 

@@ -1,0 +1,31 @@
+import { test, expect } from "@playwright/test";
+import { mockAnimationServices } from "./helpers/animation-services.mjs";
+test.use({ actionTimeout: 20000 });
+test("a non-DM can save builtin appearance from Spell Creator; failed save keeps the last persisted stages", async ({ page }) => {
+  await mockAnimationServices(page, { room: "UXB-123" });
+  await page.goto("?smokeTest=1&room=UXB-123&view=characterCreator", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
+  await page.evaluate(async () => {
+    const api = window.__HOMEBREW_GOD_RELEASE_TEST__; await api.openScreen("characterCreator"); api.setDmRole(false); api.prepareCharacterCreatorClassTest({ stepId: "spells" });
+  });
+  await page.locator("#ccDefaultSpellSearch").fill("Acid Splash");
+  const card = page.locator('[data-cc-default-spell-option][data-spell-id="acid-splash"]');
+  await card.locator('[data-cc-action="edit-builtin-spell-animations"]').click();
+  const panel = page.getByRole("dialog", { name: "Spell animations", exact: true });
+  await panel.locator('[data-spell-animation-slot="impact"] [data-slot-action="choose"]').click();
+  const library = page.locator("#animationLibraryDialog");
+  await library.locator("[data-animation-select]").selectOption("cold_burst_01"); await library.locator("[data-animation-use-selected]").click();
+  await panel.getByRole("button", { name: "Save Animation Setup", exact: true }).click(); await expect(panel).toHaveCount(0);
+  await expect(card).toContainText("Account animation: impact");
+  await card.locator('[data-cc-action="edit-builtin-spell-animations"]').click();
+  await panel.locator('[data-spell-animation-slot="impact"] [data-slot-action="clear"]').click();
+  await page.evaluate(() => localStorage.setItem("acceptance-presentation-write-failure", "1"));
+  await panel.getByRole("button", { name: "Save Animation Setup", exact: true }).click();
+  await expect(panel.locator("[data-spell-animation-status]")).toContainText("permission denied");
+  await expect(panel.getByRole("button", { name: "Save Animation Setup", exact: true })).toBeEnabled();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("acceptance-firestore"))["users/animation-acceptance-user"].spellAnimationOverrides["acid-splash"].animations);
+  expect(saved.impact.animationId).toBe("cold_burst_01");
+  await panel.locator("[data-spell-cancel]").click();
+  await card.locator('[data-cc-action="edit-builtin-spell-animations"]').click();
+  await expect(panel.locator('[data-spell-animation-slot="impact"] [data-slot-name]')).toHaveText("Cold burst");
+});

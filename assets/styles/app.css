@@ -3401,6 +3401,33 @@ a:hover {
 }
 
 
+/* Content owns animation assignments; these are organization/authoring views. */
+.hg-animation-tool-nav, .hg-animation-family-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.hg-animation-family-tabs [aria-selected="true"],
+[data-animation-tool="library"] [data-animation-tool-library],
+[data-animation-tool="creator"] [data-animation-tool-creator] { border-color: var(--blue-soft); background: #243857; }
+.hg-animation-family-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.hg-animation-family-choice button { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 18px; }
+.hg-animation-family-choice strong { font-size: 1.15rem; }
+.hg-animation-family-choice span { color: var(--muted); font-size: .9rem; }
+.hg-animation-family-config { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 12px; }
+.hg-animation-family-config label { flex: 1; min-width: 140px; }
+.hg-content-animation-section { border: 1px solid #35435b; border-radius: 12px; padding: 14px; margin: 16px 0; }
+.hg-content-animation-section h4 { margin: 0; }
+.hg-content-animation-stages { display: grid; gap: 8px; margin: 12px 0; }
+.hg-content-animation-stage { display: grid; grid-template-columns: 52px minmax(120px, 1fr) minmax(0, 2fr); gap: 10px; align-items: center; border: 1px solid #2c3d56; border-radius: 8px; padding: 10px; }
+.hg-content-animation-stage p { margin: 4px 0; overflow-wrap: anywhere; }
+.hg-content-animation-thumb { display: block; width: 48px; height: 48px; background-repeat: no-repeat; background-color: #131c2b; border-radius: 6px; }
+.hg-content-animation-stage .hg-animation-buttons { display: flex; flex-wrap: wrap; gap: 5px; }
+.hg-content-animation-stage button { padding: 6px 8px; margin: 0; font-size: .85rem; }
+.hg-content-animation-saved { flex-basis: 100%; margin: 6px 0; color: var(--muted); }
+@media (max-width: 700px) {
+  .hg-animation-family-choice { grid-template-columns: 1fr; }
+  .hg-content-animation-stage { grid-template-columns: 52px minmax(0, 1fr); }
+  .hg-content-animation-stage .hg-animation-buttons { grid-column: 1 / -1; }
+  .hg-animation-family-tabs button, .hg-animation-tool-nav button, .hg-content-animation-stage button { width: auto; }
+}
+
 /* =====================================================
    STYLE SECTION 15 — RESPONSIVE / SMALL SCREENS
 ====================================================== */

@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
+import { mockAnimationServices } from "./helpers/animation-services.mjs";
+test.use({ actionTimeout: 20000 });
 
 const sheet = fileURLToPath(new URL("../assets/vfx/combat/melee/sword-slash-test.png", import.meta.url));
 async function openLibrary(page) {
@@ -8,7 +10,7 @@ async function openLibrary(page) {
   await page.evaluate(async () => { const api = window.__HOMEBREW_GOD_RELEASE_TEST__; await api.openScreen("battle"); api.setDmRole(true); });
   await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; });
   await page.locator("#battleVfxModeSelect").selectOption("full");
-  await page.locator("#animationLibraryButton").click();
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#animationLibraryButton").click();
   const dialog = page.locator("#animationLibraryDialog"); await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -16,9 +18,24 @@ const field = (dialog, name) => dialog.locator(`[data-animation-${name}]`);
 const section = (dialog, key) => dialog.locator(`[data-section="${key}"]`);
 async function expand(dialog, key) { const item = section(dialog, key); if (!await item.evaluate(el => el.open)) await item.locator("summary").first().click(); }
 async function slider(dialog, key, value) { await field(dialog, key).evaluate((el, value) => { el.value = String(value); el.dispatchEvent(new Event("input", { bubbles: true })); }, value); }
+async function saveFireballSetup(page, id) {
+  await page.locator("#spellTemplateSelect").selectOption("fireball");
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#editSpellPresentationButton").click();
+  const panel = page.getByRole("dialog", { name: "Spell animations", exact: true });
+  const row = panel.locator('[data-spell-animation-slot="cast"]');
+  if (id) {
+    await row.locator('[data-slot-action="choose"]').click();
+    const dialog = page.locator("#animationLibraryDialog");
+    await dialog.getByRole("tab", { name: "All", exact: true }).click();
+    await field(dialog, "select").selectOption(id); await field(dialog, "use-selected").click();
+  } else await row.locator('[data-slot-action="clear"]').click();
+  await panel.getByRole("button", { name: "Save Animation Setup", exact: true }).click();
+  await expect(panel).toHaveCount(0);
+}
 
 test("users upload, preview, save, duplicate and hot-swap a spell using Animation IDs", async ({ page }, testInfo) => {
   const errors = []; page.on("pageerror", e => errors.push(e.message));
+  await mockAnimationServices(page);
   const dialog = await openLibrary(page);
   await field(dialog, "select").selectOption("healing_burst_01");
   await field(dialog, "play").click();
@@ -28,7 +45,7 @@ test("users upload, preview, save, duplicate and hot-swap a spell using Animatio
   await field(dialog, "select").selectOption("sword_slash_01");
   await field(dialog, "play").click(); await expect(dialog.locator('[data-animation-id="sword_slash_01"]')).toBeVisible();
   await field(dialog, "stop").click();
-  await field(dialog, "custom").click();
+  await field(dialog, "custom").click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click();
   await field(dialog, "name").fill("My slash"); await field(dialog, "file").setInputFiles(sheet);
   await expect(field(dialog, "file-info")).toContainText("sword-slash-test.png");
   await field(dialog, "grid").selectOption("7"); await expect(field(dialog, "frames")).toHaveValue("49");
@@ -41,27 +58,26 @@ test("users upload, preview, save, duplicate and hot-swap a spell using Animatio
   await field(dialog, "preview").scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("animation-editor.png") });
   await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
-  await expect(field(dialog, "status")).toContainText("saved for this session");
+  await expect(field(dialog, "status")).toContainText("personal library");
   const id = await field(dialog, "select").inputValue(); expect(id).toMatch(/^custom_/);
-  await field(dialog, "action").selectOption("spell:fireball"); await field(dialog, "assign").click();
-  await expect(field(dialog, "assigned")).toHaveText("Assigned: My slash");
   await field(dialog, "close").click();
-  await page.locator("#battleVfxTestFireballButton").click();
+  await saveFireballSetup(page, id);
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#battleVfxTestFireballButton").click();
   const effect = page.locator(`#battleMapSurface [data-animation-id="${id}"]`);
   await expect(effect.locator(".hg-vfx-sprite")).toBeVisible();
   await expect(page.locator('#battleMapSurface [data-effect-type="fireball-clip-sprite"]')).toHaveCount(0);
   await expect(effect).toHaveCount(0); // Assigned spell loops have a bounded 5-second lifetime.
-  await page.locator("#animationLibraryButton").click();
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#animationLibraryButton").click();
   await field(dialog, "duplicate").click(); const copyId = await field(dialog, "select").inputValue(); expect(copyId).not.toBe(id);
   await field(dialog, "name").fill("My second slash"); await field(dialog, "fps").fill("36"); await field(dialog, "playback").selectOption("once");
   await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
-  await expect(field(dialog, "status")).toContainText("saved for this session");
-  await field(dialog, "assign").click(); await field(dialog, "close").click();
-  await page.locator("#battleVfxTestFireballButton").click();
+  await expect(field(dialog, "status")).toContainText("personal library");
+  await field(dialog, "close").click(); await saveFireballSetup(page, copyId);
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#battleVfxTestFireballButton").click();
   await expect(page.locator(`#battleMapSurface [data-animation-id="${copyId}"] .hg-vfx-sprite`)).toBeVisible();
   await expect(page.locator(`#battleMapSurface [data-animation-id="${copyId}"]`)).toHaveCount(0);
-  await page.locator("#animationLibraryButton").click(); await field(dialog, "reset").click(); await field(dialog, "close").click();
-  await page.locator("#battleVfxTestFireballButton").click();
+  await saveFireballSetup(page, null);
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#battleVfxTestFireballButton").click();
   await expect(page.locator('#battleMapSurface [data-effect-type="fireball-clip-sprite"]')).not.toHaveCount(0);
   expect(errors).toEqual([]);
 });
@@ -69,10 +85,10 @@ test("users upload, preview, save, duplicate and hot-swap a spell using Animatio
 test("editor validation, replay, close cleanup and responsive layout remain usable", async ({ page }) => {
   const errors = []; page.on("pageerror", e => errors.push(e.message));
   const dialog = await openLibrary(page);
-  await field(dialog, "search").fill("no-such-animation"); await field(dialog, "assign").click();
+  await field(dialog, "search").fill("no-such-animation"); await field(dialog, "edit").click();
   await expect(field(dialog, "status")).toContainText("Choose an animation first");
   await field(dialog, "search").fill("");
-  await field(dialog, "custom").click(); await field(dialog, "name").fill("Missing image");
+  await field(dialog, "custom").click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click(); await field(dialog, "name").fill("Missing image");
   await field(dialog, "draft-preview").click(); await expect(field(dialog, "status")).toContainText("Choose a sprite sheet");
   await field(dialog, "file").setInputFiles({ name: "broken.png", mimeType: "image/png", buffer: Buffer.from("not a png") });
   await expect(field(dialog, "file-info")).toContainText("broken.png");
@@ -90,7 +106,7 @@ test("editor validation, replay, close cleanup and responsive layout remain usab
   await expect(dialog.locator(".hg-map-vfx-effect")).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; });
-  await page.locator("#animationLibraryButton").click();
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#animationLibraryButton").click();
   expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -153,7 +169,7 @@ test("advanced projectile settings survive Simple Mode save and the preview paus
   const errors = []; page.on("pageerror", e => errors.push(e.message)); const dialog = await openLibrary(page);
   await field(dialog, "select").selectOption("cold_burst_01"); await field(dialog, "duplicate").click();
   await expect(section(dialog, "direction")).not.toBeVisible();
-  await field(dialog, "name").fill("Directional ice missile"); await field(dialog, "preset").selectOption("projectile"); await field(dialog, "apply-preset").click();
+  await field(dialog, "name").fill("Directional ice missile"); await field(dialog, "advanced-mode").check(); await field(dialog, "preset").selectOption("projectile"); await field(dialog, "apply-preset").click();
   await field(dialog, "advanced-mode").check(); await expect(section(dialog, "direction")).toBeVisible();
   await field(dialog, "frames").fill("12"); await field(dialog, "start").fill("6"); await expect(field(dialog, "end")).toHaveValue("17"); await field(dialog, "reverse").check();
   await field(dialog, "speed").fill("0.75"); await field(dialog, "travel-speed").fill("60"); await field(dialog, "arc").fill("45");
@@ -182,6 +198,7 @@ test("advanced projectile settings survive Simple Mode save and the preview paus
 
 test("preview source attachments follow dragged tokens and beam stretching spans the endpoints", async ({ page }) => {
   const dialog = await openLibrary(page); await field(dialog, "select").selectOption("healing_burst_01"); await field(dialog, "duplicate").click();
+  await field(dialog, "advanced-mode").check();
   await field(dialog, "preset").selectOption("aura"); await field(dialog, "apply-preset").click(); await field(dialog, "draft-preview").click();
   const effect = dialog.locator(".hg-vfx-animation-sprite"); await expect(effect).toHaveCount(1);
   const before = await effect.evaluate(el => Number.parseFloat(el.style.left));
@@ -195,7 +212,7 @@ test("preview source attachments follow dragged tokens and beam stretching spans
 });
 
 test("sprite inspection warns on opaque and fractional cells without blocking a valid upload", async ({ page }) => {
-  const dialog = await openLibrary(page); await field(dialog, "custom").click(); await field(dialog, "name").fill("Opaque test marker");
+  const dialog = await openLibrary(page); await field(dialog, "custom").click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click(); await field(dialog, "name").fill("Opaque test marker");
   const data = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = 101; c.height = 99; const ctx = c.getContext("2d"); ctx.fillStyle = "#225588"; ctx.fillRect(0, 0, 101, 99); return c.toDataURL().split(",")[1]; });
   await field(dialog, "file").setInputFiles({ name: "opaque.png", mimeType: "image/png", buffer: Buffer.from(data, "base64") });
   await expect(field(dialog, "sheet-stats")).toContainText("101 × 99"); await expect(field(dialog, "sheet-stats")).toContainText("do not divide evenly"); await expect(field(dialog, "sheet-stats")).toContainText("No transparency detected");
