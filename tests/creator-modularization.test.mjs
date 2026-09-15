@@ -198,6 +198,6 @@ test("characterCreator/index.js remains the browser-facing coordinator", () => {
   );
   assert.match(
     index,
-    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=initiative-reliability-20260905"/
+    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=combat-presentation-20260915"/
   );
 });

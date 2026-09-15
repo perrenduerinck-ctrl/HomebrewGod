@@ -2217,6 +2217,20 @@ function mergeActionRecord(existing, incoming) {
   return {
     ...existing,
     sources,
+    sourcePaths: [
+      ...asArray(existing.sourcePaths),
+      ...asArray(incoming.sourcePaths)
+    ].filter(Boolean).filter((value, index, values) => {
+      return values.findIndex((candidate) => (
+        JSON.stringify(candidate) === JSON.stringify(value)
+      )) === index;
+    }),
+    animation:
+      existing.animation || incoming.animation || null,
+    contentKind: firstText(
+      existing.contentKind,
+      incoming.contentKind
+    ),
     summary: richerText(existing.summary, incoming.summary),
     description: richerText(
       existing.description,
@@ -2275,7 +2289,8 @@ export function collectCharacterActions(
   ).map((entry, index) => ({
     ...entry,
     _actionResourceKey: `class:${firstText(entry?.id, index)}`,
-    _actionResourceKind: "class"
+    _actionResourceKind: "class",
+    _actionSourcePath: ["classMechanics", "resources", index]
   }));
   const featResources = asArray(
     safeCharacter?.featMechanics?.resources
@@ -2284,7 +2299,8 @@ export function collectCharacterActions(
   }).map((entry, index) => ({
     ...entry,
     _actionResourceKey: `feat:${firstText(entry?.id, index)}`,
-    _actionResourceKind: "feat"
+    _actionResourceKind: "feat",
+    _actionSourcePath: ["featMechanics", "resources", index]
   }));
   const resources = [
     ...classResources,
@@ -2300,6 +2316,8 @@ export function collectCharacterActions(
       defaultSection = "",
       source = "",
       sourceKind = "",
+      sourcePath = null,
+      contentKind = "ability",
       numberOfAttacks = null,
       allowResourceOnly = true
     } = {}
@@ -2384,6 +2402,12 @@ export function collectCharacterActions(
           sourceKind
         )
       ].filter(Boolean),
+      sourcePaths: sourcePath ? [sourcePath] : [],
+      animation:
+        entry.animation ||
+        entry.presentation?.animation ||
+        null,
+      contentKind,
       summary: firstText(
         entry.summary,
         entry.shortDescription,
@@ -2447,7 +2471,7 @@ export function collectCharacterActions(
   ) => {
     addAction(entry, context);
 
-    asArray(entry?.effects).forEach((effect) => {
+    asArray(entry?.effects).forEach((effect, effectIndex) => {
       addAction(
         {
           ...effect,
@@ -2477,7 +2501,12 @@ export function collectCharacterActions(
             entry?.featName
           )
         },
-        context
+        {
+          ...context,
+          sourcePath: context?.sourcePath
+            ? [...context.sourcePath, "effects", effectIndex]
+            : null
+        }
       );
     });
   };
@@ -2492,12 +2521,17 @@ export function collectCharacterActions(
   });
 
   equippedWeapons.forEach((item) => {
+    const itemIndex = asArray(
+      safeCharacter?.equipment?.items
+    ).indexOf(item);
     addAction(
       item,
       {
         defaultName: "Weapon Attack",
         defaultSection: "action",
         source: "Equipped weapon",
+        sourcePath: ["equipment", "items", itemIndex],
+        contentKind: "weapon",
         numberOfAttacks: clampInteger(
           safeCharacter?.combat?.attacksPerAction,
           1,
@@ -2507,9 +2541,32 @@ export function collectCharacterActions(
     );
   });
 
+  asArray(safeCharacter?.equipment?.items).forEach((item, index) => {
+    if (
+      equippedWeapons.includes(item) ||
+      !(
+        item?.actionType ||
+        item?.activation ||
+        item?.consumable === true ||
+        item?.healing ||
+        item?.damage ||
+        asArray(item?.effects).length
+      )
+    ) {
+      return;
+    }
+    addAction(item, {
+      defaultName: "Item",
+      defaultSection: "action",
+      source: "Item",
+      sourcePath: ["equipment", "items", index],
+      contentKind: "item"
+    });
+  });
+
   asArray(
     safeCharacter?.featMechanics?.naturalWeapons
-  ).forEach((entry) => {
+  ).forEach((entry, index) => {
     addAction(
       entry,
       {
@@ -2519,6 +2576,8 @@ export function collectCharacterActions(
           entry?.featName,
           "Natural weapon"
         ),
+        sourcePath: ["featMechanics", "naturalWeapons", index],
+        contentKind: "natural-weapon",
         numberOfAttacks: clampInteger(
           safeCharacter?.combat?.attacksPerAction,
           1,
@@ -2529,46 +2588,45 @@ export function collectCharacterActions(
   });
 
   [
-    ...asArray(safeCharacter?.magic?.spellAttacks),
-    ...asArray(safeCharacter?.magic?.attacks),
-    ...asArray(safeCharacter?.spellAttacks)
-  ].forEach((entry) => {
-    addAction(
-      entry,
-      {
+    [safeCharacter?.magic?.spellAttacks, ["magic", "spellAttacks"]],
+    [safeCharacter?.magic?.attacks, ["magic", "attacks"]],
+    [safeCharacter?.spellAttacks, ["spellAttacks"]]
+  ].forEach(([entries, basePath]) => {
+    asArray(entries).forEach((entry, index) => {
+      addAction(entry, {
         defaultName: "Spell Attack",
         defaultSection: "action",
-        source: firstText(
-          entry?.source,
-          "Spell"
-        )
-      }
-    );
+        source: firstText(entry?.source, "Spell"),
+        sourcePath: [...basePath, index],
+        contentKind: "magic-attack"
+      });
+    });
   });
 
   [
-    ...asArray(safeCharacter?.attacks),
-    ...asArray(safeCharacter?.combat?.attacks)
-  ].forEach((entry) => {
-    addAction(
-      entry,
-      {
+    [safeCharacter?.attacks, ["attacks"]],
+    [safeCharacter?.combat?.attacks, ["combat", "attacks"]]
+  ].forEach(([entries, basePath]) => {
+    asArray(entries).forEach((entry, index) => {
+      addAction(entry, {
         defaultName: "Attack",
         defaultSection: "action",
         source: "Attack",
+        sourcePath: [...basePath, index],
+        contentKind: "attack",
         numberOfAttacks: clampInteger(
           safeCharacter?.combat?.attacksPerAction,
           1,
           1
         )
-      }
-    );
+      });
+    });
   });
 
   const classFeatures = asArray(
     safeCharacter?.features?.classFeatures
   );
-  classFeatures.forEach((entry) => {
+  classFeatures.forEach((entry, index) => {
     const isSubclass = (
       normalizeKey(entry?.source) === "subclass" ||
       normalizeKey(entry?.sourceType) === "subclass" ||
@@ -2591,7 +2649,9 @@ export function collectCharacterActions(
         ),
         sourceKind: isSubclass
           ? "Subclass feature"
-          : "Class feature"
+          : "Class feature",
+        sourcePath: ["features", "classFeatures", index],
+        contentKind: isSubclass ? "subclass-ability" : "class-ability"
       }
     );
   });
@@ -2600,7 +2660,7 @@ export function collectCharacterActions(
     ?.features?.speciesTraits?.length
       ? safeCharacter.features.speciesTraits
       : safeCharacter?.species?.traits;
-  asArray(speciesTraits).forEach((entry) => {
+  asArray(speciesTraits).forEach((entry, index) => {
     addFeature(
       entry,
       {
@@ -2611,19 +2671,23 @@ export function collectCharacterActions(
           safeCharacter?.speciesName,
           "Species trait"
         ),
-        sourceKind: "Species trait"
+        sourceKind: "Species trait",
+        sourcePath: safeCharacter?.features?.speciesTraits?.length
+          ? ["features", "speciesTraits", index]
+          : ["species", "traits", index],
+        contentKind: "species-ability"
       }
     );
   });
 
   [
-    ...asArray(safeCharacter?.feats),
-    ...asArray(safeCharacter?.selectedFeats),
-    ...asArray(safeCharacter?.featMechanics?.instances)
-  ].forEach((entry) => {
-    addFeature(
-      entry?.feat || entry,
-      {
+    [safeCharacter?.feats, ["feats"]],
+    [safeCharacter?.selectedFeats, ["selectedFeats"]],
+    [safeCharacter?.featMechanics?.instances, ["featMechanics", "instances"]]
+  ].forEach(([entries, basePath]) => {
+    asArray(entries).forEach((entry, index) => {
+      const nestedFeat = isRecord(entry?.feat);
+      addFeature(entry?.feat || entry, {
         defaultName: "Feat",
         source: firstText(
           entry?.featName,
@@ -2632,14 +2696,16 @@ export function collectCharacterActions(
           "Feat"
         ),
         sourceKind: "Feat",
+        sourcePath: [...basePath, index, ...(nestedFeat ? ["feat"] : [])],
+        contentKind: "feat-ability",
         allowResourceOnly: false
-      }
-    );
+      });
+    });
   });
 
   asArray(
     safeCharacter?.features?.customFeatures
-  ).forEach((entry) => {
+  ).forEach((entry, index) => {
     addFeature(
       entry,
       {
@@ -2648,39 +2714,31 @@ export function collectCharacterActions(
           entry?.source,
           "Custom feature"
         ),
-        sourceKind: "Custom feature"
+        sourceKind: "Custom feature",
+        sourcePath: ["features", "customFeatures", index],
+        contentKind: "custom-ability"
       }
     );
   });
 
   [
-    ...asArray(
-      safeCharacter?.classMechanics?.actions
-    ),
-    ...asArray(
-      safeCharacter?.classMechanics?.combatProfiles
-    )
-  ].forEach((entry) => {
-    addAction(
-      entry,
-      {
-        defaultName: firstText(
-          entry?.featureName,
-          "Class Action"
-        ),
-        source: firstText(
-          entry?.className,
-          entry?.featureName,
-          "Class mechanic"
-        ),
-        sourceKind: "Class mechanic"
-      }
-    );
+    [safeCharacter?.classMechanics?.actions, ["classMechanics", "actions"]],
+    [safeCharacter?.classMechanics?.combatProfiles, ["classMechanics", "combatProfiles"]]
+  ].forEach(([entries, basePath]) => {
+    asArray(entries).forEach((entry, index) => {
+      addAction(entry, {
+        defaultName: firstText(entry?.featureName, "Class Action"),
+        source: firstText(entry?.className, entry?.featureName, "Class mechanic"),
+        sourceKind: "Class mechanic",
+        sourcePath: [...basePath, index],
+        contentKind: "class-ability"
+      });
+    });
   });
 
   asArray(
     safeCharacter?.featMechanics?.actions
-  ).forEach((entry) => {
+  ).forEach((entry, index) => {
     addAction(
       entry,
       {
@@ -2689,14 +2747,16 @@ export function collectCharacterActions(
           entry?.featName,
           "Feat mechanic"
         ),
-        sourceKind: "Feat mechanic"
+        sourceKind: "Feat mechanic",
+        sourcePath: ["featMechanics", "actions", index],
+        contentKind: "feat-ability"
       }
     );
   });
 
   asArray(
     safeCharacter?.featMechanics?.situationalEffects
-  ).forEach((entry) => {
+  ).forEach((entry, index) => {
     if (
       getExplicitActionSection(entry) ===
       "passive"
@@ -2721,7 +2781,9 @@ export function collectCharacterActions(
           entry?.featName,
           "Feat effect"
         ),
-        sourceKind: "Situational effect"
+        sourceKind: "Situational effect",
+        sourcePath: ["featMechanics", "situationalEffects", index],
+        contentKind: "feat-ability"
       }
     );
   });
@@ -2731,7 +2793,7 @@ export function collectCharacterActions(
       resource?.spendOptions
     );
 
-    spendOptions.forEach((option) => {
+    spendOptions.forEach((option, optionIndex) => {
       addAction(
         {
           ...option,
@@ -2758,7 +2820,13 @@ export function collectCharacterActions(
           sourceKind:
             resource._actionResourceKind === "class"
               ? "Class resource"
-              : "Feat resource"
+              : "Feat resource",
+          sourcePath: resource._actionSourcePath
+            ? [...resource._actionSourcePath, "spendOptions", optionIndex]
+            : null,
+          contentKind: resource._actionResourceKind === "class"
+            ? "class-ability"
+            : "feat-ability"
         }
       );
     });
@@ -2786,7 +2854,11 @@ export function collectCharacterActions(
             resource?._actionResourceKind === "class"
               ? "Class resource"
               : "Feat resource"
-          )
+          ),
+          sourcePath: resource._actionSourcePath || null,
+          contentKind: resource._actionResourceKind === "class"
+            ? "class-ability"
+            : "feat-ability"
         }
       );
     }
@@ -2950,6 +3022,21 @@ function renderActionCard(action, canTrack) {
           <p>${escapeHtml(action.description)}</p>
         </details>
       ` : ""}
+
+      <div class="hg-sheet-inline-actions hg-sheet-no-print">
+        <button
+          type="button"
+          data-character-sheet-action="use-combat-action"
+          data-combat-action-key="${escapeHtml(action.key)}"
+          ${!canTrack ? "disabled" : ""}
+        >Use on Map</button>
+        <button
+          type="button"
+          data-character-sheet-action="configure-combat-animation"
+          data-combat-action-key="${escapeHtml(action.key)}"
+          ${!canTrack ? "disabled" : ""}
+        >${action.animation ? "Edit Animation" : "Add Animation"}</button>
+      </div>
     </article>
   `;
 }
@@ -9089,6 +9176,14 @@ export function createCharacterSheetView(options = {}) {
       typeof options.onTargetSpell === "function"
         ? options.onTargetSpell
         : () => false,
+    onUseCombatAction:
+      typeof options.onUseCombatAction === "function"
+        ? options.onUseCombatAction
+        : () => false,
+    onConfigureCombatAnimation:
+      typeof options.onConfigureCombatAnimation === "function"
+        ? options.onConfigureCombatAnimation
+        : () => false,
     onRest: typeof options.onRest === "function"
       ? options.onRest
       : () => false,
@@ -10033,6 +10128,55 @@ export function createCharacterSheetView(options = {}) {
       state.spellVisibleCount +=
         SPELL_VISIBLE_COUNT_INCREMENT;
       updateSpellLibraryOnly();
+      return;
+    }
+
+    if (
+      action === "use-combat-action" ||
+      action === "configure-combat-animation"
+    ) {
+      const actionKey = cleanText(
+        button.dataset.combatActionKey
+      );
+      const combatAction = collectCharacterActions(
+        state.character
+      ).find((entry) => entry.key === actionKey);
+
+      if (!combatAction) {
+        deps.setStatus(
+          "That action is no longer available on this character."
+        );
+        return;
+      }
+
+      const callback = action === "use-combat-action"
+        ? deps.onUseCombatAction
+        : deps.onConfigureCombatAnimation;
+      try {
+        const result = callback({
+          action: cloneSnapshot(combatAction),
+          character: cloneSnapshot(state.character),
+          characterId: cleanText(
+            deps.getSheetContext()?.characterId,
+            state.character?.id
+          )
+        });
+        if (result && typeof result.then === "function") {
+          result.then((value) => {
+            if (action === "use-combat-action" && value !== false) close();
+            if (action === "configure-combat-animation" && value !== false) {
+              state.character = cloneSnapshot(value?.character || value || state.character);
+              render();
+            }
+          }).catch((error) => {
+            deps.setStatus(error?.message || "The combat action could not be opened.");
+          });
+        } else if (action === "use-combat-action" && result !== false) {
+          close();
+        }
+      } catch (error) {
+        deps.setStatus(error?.message || "The combat action could not be opened.");
+      }
       return;
     }
 

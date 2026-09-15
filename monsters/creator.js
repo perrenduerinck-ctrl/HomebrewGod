@@ -7,6 +7,9 @@ import {
 import {
   createRealtimeListenerRegistry
 } from "../shared/realtimeListeners.js";
+import { openCombatAnimationPanel } from "../vfx/combatAnimationPanel.js";
+import { inferCombatAnimationFamily } from "../vfx/combatPresentationSystem.js";
+import { assertPersistentAnimationReferences } from "../vfx/animationReferences.js";
 
 const MONSTER_SIZES = [
   "Tiny",
@@ -77,6 +80,7 @@ export const DEFAULT_MONSTER = {
   reactions: [],
   legendaryActions: [],
   lairActions: [],
+  actionAnimations: {},
   senses: [],
   savingThrows: [],
   skills: [],
@@ -262,6 +266,12 @@ export function normalizeMonsterRecord(rawMonster) {
       wis: normalizeNumber(abilities.wis, 10),
       cha: normalizeNumber(abilities.cha, 10)
     },
+    actionAnimations:
+      source.actionAnimations &&
+      typeof source.actionAnimations === "object" &&
+      !Array.isArray(source.actionAnimations)
+        ? JSON.parse(JSON.stringify(source.actionAnimations))
+        : {},
     notes: normalizeText(source.notes)
   };
 
@@ -394,6 +404,23 @@ function ensureStyles() {
     #monsterCreatorScreen [disabled] {
       cursor: not-allowed;
       opacity: 0.58;
+    }
+
+    #monsterCreatorScreen .monster-animation-actions {
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      margin: 2px 0 14px;
+      padding: 10px;
+      border: 1px solid rgba(96, 165, 250, 0.26);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.7);
+    }
+
+    #monsterCreatorScreen .monster-animation-actions small {
+      grid-column: 1 / -1;
+      color: #a7f3d0;
     }
   `;
   document.head.appendChild(style);
@@ -548,6 +575,23 @@ function ensureMonsterCreatorUi() {
     notes: getElement("monsterNotesInput")
   };
 
+  if (elements.actions && !getElement("monsterActionAnimationControls")) {
+    const controls = document.createElement("div");
+    controls.id = "monsterActionAnimationControls";
+    controls.className = "monster-animation-actions";
+    controls.innerHTML = `
+      <select id="monsterAnimationActionSelect" aria-label="Monster action animation"></select>
+      <button id="monsterConfigureActionAnimationButton" type="button">Add Animation</button>
+      <button id="monsterUseActionOnMapButton" type="button">Use on Map</button>
+      <small id="monsterActionAnimationSummary">Choose an action to configure its presentation.</small>
+    `;
+    elements.actions.insertAdjacentElement("afterend", controls);
+  }
+  elements.animationActionSelect = getElement("monsterAnimationActionSelect");
+  elements.configureActionAnimationButton = getElement("monsterConfigureActionAnimationButton");
+  elements.useActionOnMapButton = getElement("monsterUseActionOnMapButton");
+  elements.actionAnimationSummary = getElement("monsterActionAnimationSummary");
+
   elements.size = ensureSelect(
     elements.size,
     "monsterSizeSelect",
@@ -599,6 +643,7 @@ export function createMonsterCreator(config) {
 
   let selectedMonsterId = null;
   let monsters = [];
+  let actionAnimations = {};
   let listeningRoomCode = null;
   let isBusy = false;
   const removeDomListeners = [];
@@ -741,6 +786,124 @@ export function createMonsterCreator(config) {
     setElementText(elements.status, message);
   }
 
+  function monsterActionKey(field, name) {
+    return `${field}:${normalizeText(name, "action")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")}`;
+  }
+
+  function getMonsterActionChoices() {
+    return NAMED_ENTRY_FIELDS.flatMap((field) => {
+      const entries = parseMonsterNamedEntries(elements[field]?.value || "");
+      return entries.map((entry) => ({
+        ...entry,
+        field,
+        key: monsterActionKey(field, entry.name),
+        kind: field === "actions" ? "monster-action" : `monster-${field}`,
+        animation: actionAnimations[monsterActionKey(field, entry.name)]?.animation ||
+          actionAnimations[monsterActionKey(field, entry.name)] || null,
+        sequence: actionAnimations[monsterActionKey(field, entry.name)]?.sequence || []
+      }));
+    });
+  }
+
+  function renderMonsterActionAnimations() {
+    const select = elements.animationActionSelect;
+    if (!select) return;
+    const previous = select.value;
+    const choices = getMonsterActionChoices();
+    select.replaceChildren(...choices.map((choice) => {
+      const option = document.createElement("option");
+      option.value = choice.key;
+      option.textContent = `${choice.name} · ${choice.field.replace(/([A-Z])/g, " $1")}`;
+      return option;
+    }));
+    if (choices.some((choice) => choice.key === previous)) select.value = previous;
+    const selected = choices.find((choice) => choice.key === select.value);
+    const hasAnimation = Boolean(selected?.animation);
+    if (elements.configureActionAnimationButton) {
+      elements.configureActionAnimationButton.textContent = hasAnimation
+        ? "Edit Animation"
+        : "Add Animation";
+      elements.configureActionAnimationButton.disabled = !canEdit() || isBusy || !selected;
+    }
+    if (elements.useActionOnMapButton) {
+      elements.useActionOnMapButton.disabled = isBusy || !selected || !selectedMonsterId;
+    }
+    setElementText(
+      elements.actionAnimationSummary,
+      selected
+        ? hasAnimation
+          ? `${selected.name} has a saved ${selected.animation.family || "combat"} animation${selected.sequence.length ? ` and ${selected.sequence.length} linked multiattack step(s)` : ""}.`
+          : `${selected.name} uses safe no-animation fallback until an animation is assigned.`
+        : "Add an action above to configure its presentation."
+    );
+  }
+
+  async function configureMonsterActionAnimation() {
+    const action = getMonsterActionChoices().find((entry) => (
+      entry.key === elements.animationActionSelect?.value
+    ));
+    if (!action) {
+      setStatus("Add and choose a monster action first.");
+      return false;
+    }
+    const content = {
+      name: action.name,
+      description: action.description,
+      kind: action.kind,
+      animation: action.animation
+    };
+    const changed = await openCombatAnimationPanel({
+      content,
+      family: inferCombatAnimationFamily(content),
+      document,
+      contentLabel: "Monster Action"
+    });
+    if (!changed) return false;
+    actionAnimations[action.key] = {
+      ...(actionAnimations[action.key] || {}),
+      animation: content.animation,
+      ...(action.name.toLowerCase().includes("multiattack")
+        ? {
+            sequence: getMonsterActionChoices()
+              .filter((candidate) => (
+                candidate.key !== action.key &&
+                action.description.toLowerCase().includes(candidate.name.toLowerCase())
+              ))
+              .map((candidate) => candidate.key)
+              .slice(0, 8)
+          }
+        : {})
+    };
+    renderMonsterActionAnimations();
+    setStatus(`${action.name} animation attached. Save the monster to publish it.`);
+    return content.animation;
+  }
+
+  function useMonsterActionOnMap() {
+    const action = getMonsterActionChoices().find((entry) => (
+      entry.key === elements.animationActionSelect?.value
+    ));
+    if (!action || !selectedMonsterId) {
+      setStatus("Save the monster and choose an action first.");
+      return false;
+    }
+    if (typeof config.targetCombatActionOnMap !== "function") {
+      setStatus("Battle-map monster action targeting is unavailable.");
+      return false;
+    }
+    return config.targetCombatActionOnMap({
+      action,
+      monster: {
+        ...buildMonsterDocument(getSelectedMonster()),
+        id: selectedMonsterId
+      },
+      monsterId: selectedMonsterId
+    });
+  }
+
   function addDomListener(element, eventName, handler) {
     if (!element) return;
     element.addEventListener(eventName, handler);
@@ -779,7 +942,8 @@ export function createMonsterCreator(config) {
       elements.damageResistances,
       elements.damageVulnerabilities,
       elements.conditionImmunities,
-      elements.notes
+      elements.notes,
+      elements.configureActionAnimationButton
     ].filter(Boolean);
   }
 
@@ -824,6 +988,7 @@ export function createMonsterCreator(config) {
         !editable ||
         isBusy;
     }
+    renderMonsterActionAnimations();
   }
 
   function setBusy(busy) {
@@ -875,7 +1040,8 @@ export function createMonsterCreator(config) {
       conditionImmunities:
         elements.conditionImmunities &&
         elements.conditionImmunities.value,
-      notes: elements.notes && elements.notes.value
+      notes: elements.notes && elements.notes.value,
+      actionAnimations: JSON.parse(JSON.stringify(actionAnimations))
     };
 
     return normalizeMonsterRecord(raw);
@@ -933,6 +1099,8 @@ export function createMonsterCreator(config) {
     });
 
     writeValue(elements.notes, source.notes);
+    actionAnimations = JSON.parse(JSON.stringify(source.actionAnimations || {}));
+    renderMonsterActionAnimations();
 
     syncPermissionState();
     renderMonsterList();
@@ -1054,6 +1222,16 @@ export function createMonsterCreator(config) {
       if (elements.name) {
         elements.name.focus();
       }
+      return null;
+    }
+
+    try {
+      assertPersistentAnimationReferences(formMonster, {
+        library: config.getAnimationLibrary?.(),
+        allowRoom: true
+      });
+    } catch (error) {
+      setStatus(error.message);
       return null;
     }
 
@@ -1807,6 +1985,24 @@ export function createMonsterCreator(config) {
     "click",
     backToBattleMap
   );
+  NAMED_ENTRY_FIELDS.forEach((field) => {
+    addDomListener(elements[field], "input", renderMonsterActionAnimations);
+  });
+  addDomListener(
+    elements.animationActionSelect,
+    "change",
+    renderMonsterActionAnimations
+  );
+  addDomListener(
+    elements.configureActionAnimationButton,
+    "click",
+    configureMonsterActionAnimation
+  );
+  addDomListener(
+    elements.useActionOnMapButton,
+    "click",
+    useMonsterActionOnMap
+  );
 
   if (canEdit()) {
     selectedMonsterId = null;
@@ -1853,6 +2049,8 @@ export function createMonsterCreator(config) {
     duplicateMonster,
     deleteMonster,
     createMonsterToken,
+    configureMonsterActionAnimation,
+    useMonsterActionOnMap,
     copyMonsterJson,
     exportMonsterJson,
     importMonsterData,

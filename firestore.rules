@@ -325,6 +325,29 @@ service cloud.firestore {
           );
       }
 
+      match /animations/{animationId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create, update:
+          if isRoomDm(roomCode)
+          && request.resource.data.get('id', '') == animationId
+          && request.resource.data.get('roomCode', '') == roomCode
+          && request.resource.data.get('ownerId', '') == roomCode
+          && request.resource.data.get('ownership', {}).get('scope', '') == 'room'
+          && request.resource.data.get('ownership', {}).get('ownerId', '') == roomCode
+          && request.resource.data.get('sprite', '') is string
+          && request.resource.data.get('sprite', '').matches('https://.*')
+          && (
+            request.resource.data.get('sound', null) == null
+            || request.resource.data.get('sound', {}).get('src', '') == ''
+            || request.resource.data.get('sound', {}).get('src', '').matches('https://.*')
+          );
+
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
       match /maps/{mapId} {
         allow read:
           if isRoomMember(roomCode);

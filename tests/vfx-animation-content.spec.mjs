@@ -190,3 +190,88 @@ test("reusable attack stage UI writes content refs, not global assignments, and 
   expect(await page.evaluate(async () => (await import("/vfx/animationWorkspace.js")).getAnimationSession(document).library.getAnimationUsage("cold_burst_01").map(x => x.name))).toEqual(["Longbow"]);
   expect(await page.evaluate(async () => (await import("/vfx/animationWorkspace.js")).getAnimationSession(document).bindings.exportAssignments())).toEqual({});
 });
+
+test("generic combat content exposes duration, targets, paths, layers, camera and token automation", async ({ page }) => {
+  await mockAnimationServices(page, { room: "UXA-123" });
+  await battle(page);
+  await page.evaluate(async () => {
+    const { openCombatAnimationPanel } = await import("/vfx/combatAnimationPanel.js");
+    window.combatContent = {
+      id: "dragon-breath",
+      name: "Dragon Breath",
+      kind: "monster action",
+      damage: "12d6 fire"
+    };
+    window.combatPanelResult = openCombatAnimationPanel({
+      content: window.combatContent,
+      family: "magic",
+      contentLabel: "Monster Action"
+    });
+  });
+  const stages = page.getByRole("dialog", { name: "Monster Action animations", exact: true });
+  await choose(page, stages.locator('[data-spell-animation-slot="impact"]'), "fireball_explosion_01");
+  await stages.getByRole("button", { name: "Continue monster action setup", exact: true }).click();
+  await expect(stages).toHaveCount(0);
+
+  const behavior = page.getByRole("dialog", { name: "Combat animation behavior", exact: true });
+  await behavior.locator("[data-combat-target-mode]").selectOption("all");
+  await behavior.locator("[data-combat-duration-unit]").selectOption("rounds");
+  await behavior.locator("[data-combat-duration-value]").fill("3");
+  await behavior.locator("[data-combat-concentration]").check();
+  await behavior.locator("[data-combat-motion-kind]").selectOption("curve");
+  await behavior.locator("[data-combat-curvature]").fill("0.5");
+  await behavior.locator("[data-combat-camera-enabled]").check();
+  await behavior.locator("[data-combat-camera-shake]").fill("0.4");
+  await behavior.locator("[data-combat-automation-kind]").selectOption("summon");
+  await behavior.locator("[data-combat-automation-name]").fill("Flame Spirit");
+  await behavior.locator("details").evaluate(element => { element.open = true; });
+  await behavior.locator("[data-combat-add-layer]").click();
+  await behavior.locator('[data-layer-animation-slot="impact"]').selectOption("cold_burst_01");
+  await behavior.locator("[data-layer-delay]").fill("150");
+  await behavior.getByRole("button", { name: "Save combat behavior", exact: true }).click();
+  await expect(behavior).toHaveCount(0);
+  await page.evaluate(() => window.combatPanelResult);
+
+  const saved = await page.evaluate(() => window.combatContent);
+  expect(saved.damage).toBe("12d6 fire");
+  expect(saved.animation.family).toBe("magic");
+  expect(saved.animation.targetMode).toBe("all");
+  expect(saved.animation.duration).toMatchObject({ unit: "rounds", value: 3, concentration: true });
+  expect(saved.animation.motion).toMatchObject({ kind: "curve", curvature: 0.5 });
+  expect(saved.animation.camera.shake).toBe(0.4);
+  expect(saved.animation.automation.summon.name).toBe("Flame Spirit");
+  expect(saved.animation.layers[0].stages.impact.animationId).toBe("cold_burst_01");
+  expect(saved.animation.layers[0].delay).toBe(150);
+});
+
+test("a DM can share a saved custom animation with the room and reload it", async ({ page }) => {
+  await mockAnimationServices(page, { room: "UXA-123" });
+  await battle(page);
+  await page.evaluate(async () => {
+    const { library } = (await import("/vfx/animationWorkspace.js")).getAnimationSession(document);
+    library.registerAnimation({
+      id: "shared-spark",
+      name: "Shared Spark",
+      sprite: "https://res.cloudinary.com/acceptance/image/upload/shared-spark.png",
+      grid: { columns: 1, rows: 1 },
+      frameCount: 1,
+      ownership: { kind: "user", scope: "user", ownerId: "animation-acceptance-user" }
+    });
+  });
+  await page.locator("#battleToolsMenu").evaluate(element => { element.open = true; });
+  await page.locator("#animationLibraryButton").click();
+  const libraryDialog = page.locator("#animationLibraryDialog");
+  await libraryDialog.locator("[data-animation-select]").selectOption("shared-spark");
+  await libraryDialog.locator("[data-animation-share-room]").click();
+  await expect(libraryDialog.locator("[data-animation-status]")).toContainText("current room");
+  expect((await records(page))["rooms/UXA-123/animations/room_shared-spark"].ownership.scope).toBe("room");
+  await libraryDialog.locator("[data-animation-close]").click();
+
+  await page.reload();
+  await battle(page);
+  await page.locator("#battleToolsMenu").evaluate(element => { element.open = true; });
+  await page.locator("#animationLibraryButton").click();
+  await expect.poll(() => page.evaluate(async () => (
+    await import("/vfx/animationWorkspace.js")
+  ).getAnimationSession(document).library.getAnimation("room_shared-spark")?.ownership?.scope)).toBe("room");
+});
