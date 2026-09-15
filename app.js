@@ -36,7 +36,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=movement-robustness-20260906";
+import { createTokenSystem } from "./tokens/index.js?v=combat-presentation-20260915";
 import {
   createMapRuler,
   formatMapDistance,
@@ -87,6 +87,17 @@ import {
 import { preloadCantripSprites } from "./vfx/cantripEffects.js?v=complete-spell-vfx-20260903";
 import { createCombatSpriteTestControls } from "./vfx/combatSpriteTest.js";
 import { configureAnimationSession, createAnimationWorkspace } from "./vfx/animationWorkspace.js";
+import {
+  createRoomAnimationPersistence,
+  extendAnimationPersistenceWithRoom
+} from "./vfx/roomAnimationPersistence.js";
+import {
+  createCombatPresentationSystem,
+  normalizeCombatAnimationAttachment,
+  normalizeEffectDuration
+} from "./vfx/combatPresentationSystem.js";
+import { createCombatEffectLifecycle } from "./vfx/combatEffectLifecycle.js";
+import { createTokenAutomation } from "./vfx/tokenAutomation.js";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=complete-spell-vfx-20260903";
 import {
   createRealtimeListenerRegistry
@@ -390,6 +401,18 @@ let battleMapVfx = null;
 let battleMapVfxSequences = null;
 let battleMapCombatVfx = null;
 let battleMapAnimations = null;
+let battleMapCombatPresentation = null;
+let activeCombatTargetingCleanup = null;
+let tokenAutomation = null;
+const combatEffectLifecycle = createCombatEffectLifecycle();
+async function uploadAnimationSprite(file) {
+  const uploaded = await uploadMapToCloudinary(file);
+  return {
+    url: uploaded.secure_url,
+    publicId: uploaded.public_id || null,
+    resourceType: uploaded.resource_type || "image"
+  };
+}
 const animationDocumentSession = configureAnimationSession(document, {
   presentation: { db, doc, getDoc, setDoc, serverTimestamp, getUserId: () => currentUser?.uid || null },
   persistence: {
@@ -402,16 +425,27 @@ const animationDocumentSession = configureAnimationSession(document, {
     setDoc,
     deleteDoc,
     serverTimestamp,
-    uploadSprite: async file => {
-      const uploaded = await uploadMapToCloudinary(file);
-      return {
-        url: uploaded.secure_url,
-        publicId: uploaded.public_id || null,
-        resourceType: uploaded.resource_type || "image"
-      };
-    }
+    uploadSprite: uploadAnimationSprite
   }
 });
+const roomAnimationPersistence = createRoomAnimationPersistence({
+  library: animationDocumentSession.library,
+  db,
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  serverTimestamp,
+  getUserId: () => currentUser?.uid || null,
+  getRoomId: () => currentRoomCode,
+  getIsDm: () => currentIsDM === true,
+  uploadSprite: uploadAnimationSprite
+});
+extendAnimationPersistenceWithRoom(
+  animationDocumentSession.persistence,
+  roomAnimationPersistence
+);
 const BATTLE_VFX_MODE_STORAGE_KEY =
   "homebrewGodBattleVfxMode";
 let activeSpellTemplateInstruction = null;
@@ -1389,6 +1423,11 @@ campaignTimeSystem.subscribe(
     battleMapLighting?.applyWorldTime(
       state.worldTime
     );
+    combatEffectLifecycle.reconcile({
+      worldTime: state.worldTime,
+      initiative: initiativeSystem?.getState?.(),
+      tokenIds: tokenSystem?.getRoomTokens?.().map((token) => token.id)
+    });
   }
 );
 initiativeSystem.subscribe(
@@ -1396,6 +1435,11 @@ initiativeSystem.subscribe(
     renderCampaignTime(
       campaignTimeSystem.getState()
     );
+    combatEffectLifecycle.reconcile({
+      worldTime: campaignTimeSystem.getState().worldTime,
+      initiative: initiativeSystem.getState(),
+      tokenIds: tokenSystem?.getRoomTokens?.().map((token) => token.id)
+    });
   }
 );
 initializeCampaignTimeControls();
@@ -4671,7 +4715,9 @@ function handleConfirmedSpellVfx({
   casterToken
 } = {}) {
   try {
-    const instruction = activeSpellCastingSession?.getState?.().instruction;
+    const castingState = activeSpellCastingSession?.getState?.() || {};
+    const instruction = castingState.instruction;
+    const castingCharacterId = castingState.characterId || "";
     const directional = ["cone", "line"].includes(instruction?.templateShape);
     const selectedTarget = instruction?.singleTarget ? target?.affectedTokens?.[0] : null;
     const castEvent = createSpellVfxEvent({
@@ -4706,7 +4752,97 @@ function handleConfirmedSpellVfx({
       battleMapVfxSequences =
         createBattleMapCastingSequences(vfxEngine);
     }
-    battleMapVfxSequences?.play(castEvent, { onWarning: message => text(E.templateStatus, message) });
+    const customTargets = (castEvent.affectedTokens || [])
+      .map((entry) => {
+        const tokenId = entry.tokenId || entry.id;
+        return tokenId
+          ? E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(tokenId))}"]`)
+          : null;
+      })
+      .filter(Boolean);
+    if (castEvent.animations && customTargets.length > 1) {
+      const duration = normalizeEffectDuration(
+        spell?.targeting?.duration || spell?.duration
+      );
+      const sourceElement = casterToken?.id
+        ? E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(casterToken.id))}"]`)
+        : null;
+      const combatPresentation = ensureCombatPresentationSystem();
+      if (!combatPresentation) {
+        battleMapVfxSequences?.play(castEvent, {
+          onWarning: message => text(E.templateStatus, message)
+        });
+        return castEvent;
+      }
+      void combatPresentation.play({
+        content: spell,
+        animation: {
+          family: "magic",
+          stages: castEvent.animations,
+          targetMode: "all",
+          ...(duration ? { duration } : {})
+        },
+        source: sourceElement || castEvent.casterPoint,
+        target: customTargets[0],
+        targets: customTargets,
+        manageDurationExternally: true,
+        commit: () => true
+      }).then((result) => {
+        if (result?.skipped) {
+          battleMapVfxSequences?.play(castEvent, {
+            onWarning: message => text(E.templateStatus, message)
+          });
+          return;
+        }
+        if (duration && result?.attachment?.stages?.sustain) {
+          combatEffectLifecycle.startEffect({
+            controller: result,
+            contentId: castEvent.spellId,
+            contentName: castEvent.spellName,
+            sourceTokenId: casterToken?.id,
+            targetTokenIds: customTargets.map((element) => element.dataset.tokenId),
+            duration,
+            worldTime: campaignTimeSystem.getState().worldTime,
+            initiative: initiativeSystem?.getState?.(),
+            concentrationKey: duration.concentration
+              ? `${castingCharacterId}:${castEvent.spellId}`
+              : ""
+          });
+        }
+      }).catch(() => {
+        battleMapVfxSequences?.play(castEvent, {
+          onWarning: message => text(E.templateStatus, message)
+        });
+      });
+    } else {
+      const duration = normalizeEffectDuration(
+        spell?.targeting?.duration || spell?.duration
+      );
+      const playback = battleMapVfxSequences?.play(castEvent, {
+        onWarning: message => text(E.templateStatus, message),
+        ...(duration
+          ? { duration: { ...duration, unit: "manual", value: 1 } }
+          : {})
+      });
+      if (duration && castEvent.animations?.sustain && playback?.ready) {
+        void playback.ready.then((controller) => {
+          if (!controller?.ok) return;
+          combatEffectLifecycle.startEffect({
+            controller,
+            contentId: castEvent.spellId,
+            contentName: castEvent.spellName,
+            sourceTokenId: casterToken?.id,
+            targetTokenIds: customTargets.map((element) => element.dataset.tokenId),
+            duration,
+            worldTime: campaignTimeSystem.getState().worldTime,
+            initiative: initiativeSystem?.getState?.(),
+            concentrationKey: duration.concentration
+              ? `${castingCharacterId}:${castEvent.spellId}`
+              : ""
+          });
+        });
+      }
+    }
     return castEvent;
   } catch {
     // VFX is presentation-only and cannot change cast resolution.
@@ -4995,6 +5131,217 @@ function playSelectedSpellPreviewVfx() {
       "Preview VFX could not be played. Gameplay state was not changed.");
     return null;
   }
+}
+
+function findRenderedMonsterToken(monsterId) {
+  const id = String(monsterId || "").trim();
+  if (!id) return null;
+  const token = tokenSystem?.getRoomTokens?.().find((entry) => (
+    String(entry.linkedMonsterId || entry.linkedMonster?.id || "").trim() === id
+  ));
+  return token?.id
+    ? E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(token.id)}"]`) || null
+    : null;
+}
+
+function clearCombatActionTargeting(message = "") {
+  activeCombatTargetingCleanup?.();
+  activeCombatTargetingCleanup = null;
+  if (message) text(E.templateStatus, message);
+}
+
+function reconcileCombatPresentationEffects({ character = null, characterId = "" } = {}) {
+  const time = campaignTimeSystem.getState();
+  const initiative = initiativeSystem?.getState?.() || {};
+  const tokenIds = tokenSystem?.getRoomTokens?.().map((token) => token.id) || [];
+  let concentrationByActor = null;
+  let statusesByTokenId = null;
+  if (character) {
+    const concentration = character?.combat?.concentration;
+    concentrationByActor = {
+      [characterId]: concentration?.spellId
+        ? `${characterId}:${concentration.spellId}`
+        : ""
+    };
+    const linkedToken = tokenSystem?.getCharacterLinkedToken?.(characterId);
+    if (linkedToken?.id) {
+      statusesByTokenId = {
+        [linkedToken.id]: character?.combat?.conditions || character?.conditions || []
+      };
+    }
+  }
+  return combatEffectLifecycle.reconcile({
+    worldTime: time.worldTime,
+    initiative,
+    tokenIds,
+    concentrationByActor,
+    statusesByTokenId
+  });
+}
+
+async function playBattleMapCombatAction({
+  content,
+  sourceElement,
+  targetElements,
+  actor = null,
+  actorId = "",
+  sequence = []
+} = {}) {
+  const system = ensureCombatPresentationSystem();
+  if (!system || !sourceElement) {
+    throw new Error("The battle-map animation player is unavailable.");
+  }
+  const targets = (Array.isArray(targetElements) ? targetElements : [])
+    .filter(Boolean);
+  const presentations = [content, ...sequence].filter(Boolean).slice(0, 8);
+  const repeat = sequence.length
+    ? 1
+    : Math.max(1, Math.min(8, Math.round(Number(content?.numberOfAttacks) || 1)));
+  const results = [];
+
+  for (let repetition = 0; repetition < repeat; repetition += 1) {
+    for (const presentation of presentations) {
+      const configuredTargetMode = normalizeCombatAnimationAttachment(
+        presentation
+      )?.targetMode || "single";
+      const result = await system.play({
+        content: presentation,
+        animation: presentation.animation,
+        source: sourceElement,
+        target: targets[0] || sourceElement,
+        targets: targets.length ? targets : [sourceElement],
+        targetMode: targets.length > 1 && configuredTargetMode === "single"
+          ? "all"
+          : configuredTargetMode,
+        manageDurationExternally: true,
+        commit: ({ reason }) => {
+          document.dispatchEvent(new CustomEvent("homebrewgod:combat-impact", {
+            detail: {
+              contentId: presentation.id || presentation.key || "",
+              contentName: presentation.name || "Action",
+              actorId,
+              sourceTokenId: sourceElement.dataset.tokenId || "",
+              targetTokenIds: targets.map((element) => element.dataset.tokenId).filter(Boolean),
+              damage: presentation.damage || "",
+              damageType: presentation.damageType || "",
+              timingReason: reason
+            }
+          }));
+          return true;
+        }
+      });
+      results.push(result);
+      const attachment = result.attachment || normalizeCombatAnimationAttachment(presentation);
+      if (attachment?.duration && attachment.stages?.sustain) {
+        combatEffectLifecycle.startEffect({
+          controller: result,
+          contentId: presentation.id || presentation.key,
+          contentName: presentation.name,
+          sourceTokenId: sourceElement.dataset.tokenId,
+          targetTokenIds: targets.map((element) => element.dataset.tokenId),
+          duration: attachment.duration,
+          worldTime: campaignTimeSystem.getState().worldTime,
+          initiative: initiativeSystem?.getState?.(),
+          concentrationKey: attachment.duration.concentration
+            ? `${actorId}:${presentation.id || presentation.key || ""}`
+            : "",
+          requiredStatus: attachment.duration.status
+        });
+      }
+      await result.committed;
+    }
+  }
+
+  text(
+    E.templateStatus,
+    `${content?.name || "Action"} presentation played for ${Math.max(1, targets.length)} target${targets.length === 1 ? "" : "s"}. Gameplay hooks fired at visual impact.`
+  );
+  return results;
+}
+
+async function beginCombatActionTargeting({
+  action,
+  character = null,
+  characterId = "",
+  monster = null,
+  monsterId = ""
+} = {}) {
+  if (!currentRoomCode) {
+    throw new Error("Open a room before using an action on its battle map.");
+  }
+  showAnyMainScreen("battle");
+  tokenSystem?.render?.(currentRoomData || {});
+  initializeBattleMapVfx();
+  const sourceElement = characterId
+    ? findRenderedCharacterToken(characterId)
+    : findRenderedMonsterToken(monsterId);
+  if (!sourceElement) {
+    showAnyMainScreen(characterId ? "characterCreator" : "monsterCreator");
+    throw new Error(
+      `Create or synchronize this ${characterId ? "character" : "monster"}'s linked token before using its actions.`
+    );
+  }
+
+  clearCombatActionTargeting();
+  const selectedTargets = [];
+  sourceElement.classList.add("hg-token-combat-source");
+  let cancelled = false;
+  const cleanup = () => {
+    if (cancelled) return;
+    cancelled = true;
+    E.battleMapSurface?.removeEventListener("click", onClick, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+    sourceElement.classList.remove("hg-token-combat-source");
+    selectedTargets.forEach((element) => element.classList.remove("hg-token-combat-target"));
+    if (activeCombatTargetingCleanup === cleanup) activeCombatTargetingCleanup = null;
+  };
+  const onKeyDown = (event) => {
+    if (event.key === "Escape") {
+      cleanup();
+      text(E.templateStatus, "Combat action targeting cancelled.");
+    }
+  };
+  const onClick = async (event) => {
+    const targetElement = event.target.closest?.(".hg-token[data-token-id]");
+    if (!targetElement || !E.battleMapSurface?.contains(targetElement)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!selectedTargets.includes(targetElement)) {
+      selectedTargets.push(targetElement);
+      targetElement.classList.add("hg-token-combat-target");
+    }
+    if (event.shiftKey) {
+      text(E.templateStatus, `${selectedTargets.length} targets selected. Shift-click more, then click one target without Shift to play.`);
+      return;
+    }
+    const targets = [...selectedTargets];
+    cleanup();
+    const sequence = (Array.isArray(action?.sequence) ? action.sequence : [])
+      .map((key) => {
+        const raw = monster?.actionAnimations?.[key];
+        const named = Object.values(monster || {}).flatMap((value) => Array.isArray(value) ? value : [])
+          .find((entry) => entry?.name && key.endsWith(String(entry.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")));
+        return raw
+          ? { ...(named || {}), id: key, key, name: named?.name || key, animation: raw.animation || raw }
+          : null;
+      }).filter(Boolean);
+    await playBattleMapCombatAction({
+      content: action,
+      sourceElement,
+      targetElements: targets,
+      actor: character || monster,
+      actorId: characterId || monsterId,
+      sequence
+    });
+  };
+  activeCombatTargetingCleanup = cleanup;
+  E.battleMapSurface?.addEventListener("click", onClick, true);
+  document.addEventListener("keydown", onKeyDown, true);
+  text(
+    E.templateStatus,
+    `${action?.name || "Action"}: click a target token. Shift-click to collect multiple targets; Escape cancels.`
+  );
+  return true;
 }
 
 async function beginCharacterSpellTargeting({
@@ -5759,6 +6106,65 @@ function createBattleMapCastingSequences(effectEngine) {
   return battleMapAnimations.wrapSequences(sequences, count => { assignedCount = count; showState(); });
 }
 
+function applyCombatCameraEffect(effect = {}) {
+  const surface = E.battleMapSurface;
+  if (!surface?.animate) return;
+  const shake = Math.max(0, Math.min(1, Number(effect.shake) || 0));
+  const zoom = Math.max(0.5, Math.min(2, Number(effect.zoom) || 1));
+  const distance = Math.round(10 * shake);
+  surface.animate(
+    [
+      { transform: "translate(0, 0) scale(1)" },
+      { transform: `translate(${distance}px, ${-distance}px) scale(${zoom})` },
+      { transform: `translate(${-distance}px, ${Math.round(distance / 2)}px) scale(${zoom})` },
+      { transform: "translate(0, 0) scale(1)" }
+    ],
+    {
+      duration: Math.max(0, Math.min(3000, Number(effect.durationMs) || 240)),
+      easing: "ease-out"
+    }
+  );
+}
+
+function ensureCombatPresentationSystem() {
+  const engine = battleMapVfx || initializeBattleMapVfx();
+  if (!engine) return null;
+  battleMapAnimations ||= createAnimationWorkspace({ engine });
+  if (!tokenAutomation) {
+    tokenAutomation = createTokenAutomation({
+      canMutate: () => currentIsDM === true,
+      createToken: (command) => tokenSystem?.createAutomationToken?.(command),
+      updateToken: (tokenId, command) => tokenSystem?.transformAutomationToken?.(tokenId, command),
+      onRequest(command) {
+        document.dispatchEvent(new CustomEvent("homebrewgod:token-automation-request", {
+          detail: command
+        }));
+      }
+    });
+  }
+  if (!battleMapCombatPresentation) {
+    battleMapCombatPresentation = createCombatPresentationSystem({
+      player: battleMapAnimations.player,
+      library: battleMapAnimations.library,
+      onCamera: applyCombatCameraEffect,
+      onAutomation: ({ automation, request, targets }) => {
+        const tokenRecord = (value) => {
+          const tokenId = value?.dataset?.tokenId || value?.id || value?.tokenId;
+          return tokenSystem?.getRoomTokens?.().find((token) => token.id === tokenId) || value;
+        };
+        const targetRecords = targets.map(tokenRecord);
+        return tokenAutomation.execute(automation, {
+          source: tokenRecord(request.source),
+          target: targetRecords[0],
+          targets: targetRecords
+        });
+      },
+      onWarning: (message) => text(E.templateStatus, message)
+    });
+  }
+  return battleMapCombatPresentation;
+}
+
 function initializeBattleMapVfx() {
   if (
     battleMapVfx ||
@@ -5990,6 +6396,18 @@ function ensureBattleManagerPolishStyles() {
       inset: 0;
       pointer-events: none;
       z-index: 300;
+    }
+
+    .hg-token.hg-token-combat-source {
+      outline: 3px solid #60a5fa;
+      outline-offset: 3px;
+      filter: drop-shadow(0 0 9px rgba(96, 165, 250, 0.95));
+    }
+
+    .hg-token.hg-token-combat-target {
+      outline: 3px solid #f97316;
+      outline-offset: 3px;
+      filter: drop-shadow(0 0 9px rgba(249, 115, 22, 0.95));
     }
 
     .map-tile {
@@ -7788,6 +8206,14 @@ async function initCharacterCreatorSystem() {
       return beginCharacterSpellTargeting(
         request
       );
+    },
+
+    targetCombatActionOnMap: function (request) {
+      return beginCombatActionTargeting(request);
+    },
+
+    onGameplayStateChanged: function (request) {
+      return reconcileCombatPresentationEffects(request);
     }
     });
 
@@ -7855,6 +8281,10 @@ async function initMonsterCreatorSystem() {
         : "";
     },
 
+    getAnimationLibrary: function () {
+      return animationDocumentSession.library;
+    },
+
     createMonsterLinkedToken: function (monster) {
       if (
         !tokenSystem ||
@@ -7885,6 +8315,10 @@ async function initMonsterCreatorSystem() {
       return tokenSystem.syncLinkedMonsterTokens(
         monster
       );
+    },
+
+    targetCombatActionOnMap: function (request) {
+      return beginCombatActionTargeting(request);
     },
 
     onBack: function () {

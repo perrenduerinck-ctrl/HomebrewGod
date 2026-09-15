@@ -19,7 +19,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <p class="hg-animation-session" data-animation-session>Personal animations sync after sign-in.</p>
     <div class="hg-animation-columns"><section class="hg-animation-settings"><div data-animation-browser-panel>
     <div data-animation-chooser></div><div class="hg-animation-buttons"><button data-animation-edit type="button">Edit settings</button><button data-animation-duplicate type="button">Duplicate / Remix</button>
-    <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-delete type="button">Delete custom</button></div>
+    <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-share-room type="button">Share with room</button><button data-animation-delete type="button">Delete custom</button></div>
     <div data-animation-external hidden><p data-animation-external-label></p><button type="button" data-animation-use-selected>Use selected animation</button></div>
     <div data-animation-delete-warning hidden><p data-animation-delete-message></p><label>Replacement<select data-animation-delete-replacement></select></label><button type="button" data-animation-delete-replace>Replace references and delete</button><button type="button" data-animation-delete-remove>Remove references and delete</button><button type="button" data-animation-delete-cancel>Cancel</button></div>
     </div><section data-animation-family-choice hidden><h3>Choose an animation family</h3><p>Behavior templates over the same animation engine.</p><div class="hg-animation-family-choice">${[["melee", "Melee", "Close-range physical attacks."], ["ranged", "Ranged", "Physical attacks that travel to a target."], ["magic", "Magic", "Spell and magical effects."]].map(([family, label, description]) => `<button type="button" aria-label="${label}" data-create-family="${family}"><strong>${label}</strong><span>${description}</span></button>`).join("")}</div></section>
@@ -70,6 +70,8 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   function selectionChanged() {
     stop(); editRevision++; inspectionRevision++; field("form").hidden = true; field("family-choice").hidden = true; field("browser-panel").hidden = false; showTool("library");
     const a = selected(); field("delete").disabled = !a || a.ownership.kind === "builtin";
+    field("share-room").hidden = !persistence?.canShareWithRoom?.();
+    field("share-room").disabled = !a || a.ownership.kind === "builtin" || a.ownership.scope === "room";
     if (!a) { field("preview-info").textContent = "Choose an animation to preview."; return; }
     field("preview-fps").value = a.fps; field("preview-scale").value = a.scale;
     field("preview-info").textContent = `${a.grid.columns} × ${a.grid.rows} · ${a.frameCount} frames · ${a.type}`;
@@ -142,6 +144,15 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(dialog, "close", () => { finishExternal(); stop(); editRevision++; inspectionRevision++; });
   on(field("use-selected"), "click", safely(() => { const a = selected(); if (!a) throw new Error("Choose an animation first."); assertPersistentAnimationReferences({ animationId: a.id }, { library, allowRoom: true }); finishExternal(a.id); dialog.close(); }));
   on(field("custom"), "click", openCreator);
+  on(field("share-room"), "click", safely(async () => {
+    const a = selected();
+    if (!a) throw new Error("Choose an animation first.");
+    const shared = await persistence?.shareAnimationWithRoom?.(a.id);
+    if (!shared?.ok) throw new Error("The animation could not be shared with this room.");
+    chooser.select(shared.definition.id);
+    selectionChanged();
+    status(`Shared “${shared.definition.name}” with the current room.`);
+  }));
   on(field("tool-library"), "click", selectionChanged);
   on(field("tool-creator"), "click", openCreator);
   on(field("family-choice"), "click", event => { const family = event.target.closest('[data-create-family]')?.dataset.createFamily; if (family) openEditor(null, family); });
@@ -161,7 +172,10 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("duplicate"), "click", safely(() => { const a = library.duplicateAnimation(chooser.getSelectedId()); chooser.select(a.id); openEditor(a); status("Created a separate custom remix."); }));
   async function removeAnimation(options = {}) {
     const removedId = deleteId;
-    const persistent = library.getAnimation(removedId)?.ownership.scope === "user";
+    const removedScope = library.getAnimation(removedId)?.ownership.scope;
+    const persistent = ["user", "room"].includes(
+      removedScope
+    );
     library.validateDelete(removedId, options);
     if (persistent) {
       const synced = await persistence?.deleteAnimation?.(removedId);
@@ -169,7 +183,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     }
     library.deleteAnimation(removedId, options);
     field("delete-warning").hidden = true; deleteId = null; selectionChanged(); assignmentInfo(); status(persistent
-      ? "Animation removed from My Library. Known loaded references updated; hosted sprite retained. Unopened room references were not verified."
+      ? `Animation removed from ${removedScope === "room" ? "Room Library" : "My Library"}. Known loaded references updated; hosted sprite retained.`
       : "Session animation removed. Known references updated; no saved metadata or hosted sprite was deleted.");
   }
   on(field("delete"), "click", safely(() => {
@@ -185,7 +199,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   }));
   on(field("delete-replace"), "click", safely(() => {
     const replaceWith = field("delete-replacement").value;
-    if (library.getAnimation(deleteId)?.ownership.scope !== "user") return removeAnimation({ replaceWith });
+    if (!["user", "room"].includes(library.getAnimation(deleteId)?.ownership.scope)) return removeAnimation({ replaceWith });
     const replaced = library.replaceKnownReferences(deleteId, replaceWith);
     field("delete-warning").hidden = true; deleteId = null; assignmentInfo();
     status(`${replaced.length} known loaded references replaced. Save each affected character and account spell presentation setup. Animation metadata and hosted sprite are retained; other rooms were not changed.`);
@@ -266,7 +280,10 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       if (prepared.persistent) {
         const synced = await persistence.saveAnimation(candidate, { asset: prepared.asset });
         if (!synced.ok) throw new Error("Sign in again to save this animation. Your previous animation is unchanged.");
-        if (candidate.ownership.ownerId !== library.getContext().ownerId) throw new Error("Account changed while saving. Reopen the library for your current account before assigning an animation.");
+        const expectedOwner = candidate.ownership.scope === "room"
+          ? library.getContext().roomId
+          : library.getContext().ownerId;
+        if (candidate.ownership.ownerId !== expectedOwner) throw new Error("Account or room changed while saving. Reopen the library before assigning an animation.");
       }
       if (destroyed || current !== editRevision) return;
       const saved = editId ? library.updateAnimation(editId, prepared.definition) : library.registerAnimation(candidate);

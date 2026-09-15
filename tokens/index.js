@@ -2335,6 +2335,66 @@ export function createTokenSystem(options) {
     });
   }
 
+  async function createAutomationToken(spec = {}) {
+    const roomCode = deps.getCurrentRoomCode?.();
+    const roomData = deps.getCurrentRoomData?.() || {};
+    if (!roomCode || deps.getCurrentIsDM?.() !== true) {
+      throw new Error("Only the room DM can create an automated summon token.");
+    }
+    const target = getCurrentTokenTarget(roomData);
+    if (!target.mapMode) throw new Error("Load a map before creating a summon token.");
+    const sizeCategory = normalizeSizeCategory(spec.sizeCategory);
+    const now = Date.now();
+    const newToken = {
+      name: String(spec.name || "Summon").trim().slice(0, 120) || "Summon",
+      type: safeTokenType(spec.tokenType || "npc"),
+      imageUrl: /^https:\/\//i.test(String(spec.imageUrl || "")) ? String(spec.imageUrl) : "",
+      publicId: null,
+      x: clampPercent(spec.x),
+      y: clampPercent(spec.y),
+      mapMode: target.mapMode,
+      tileKey: target.tileKey,
+      sizeCategory,
+      creatureSize: sizeCategory,
+      size: Math.round(getMediumSize(roomData) * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
+      elevation: normalizeElevation(spec.elevation),
+      elevationFeet: normalizeElevation(spec.elevation),
+      automation: {
+        kind: "summon",
+        sourceTokenId: String(spec.sourceTokenId || "").trim() || null
+      },
+      display: { name: true, hpBar: false, hpText: false, ac: false, conditions: true, initiative: false },
+      createdAtMillis: now,
+      updatedAtMillis: now,
+      createdAt: deps.serverTimestamp(),
+      updatedAt: deps.serverTimestamp()
+    };
+    const created = await deps.addDoc(
+      deps.collection(deps.db, "rooms", roomCode, "tokens"),
+      newToken
+    );
+    return normalizeToken({ ...newToken, id: created?.id || null });
+  }
+
+  async function transformAutomationToken(tokenId, spec = {}) {
+    const roomCode = deps.getCurrentRoomCode?.();
+    if (!roomCode || deps.getCurrentIsDM?.() !== true) {
+      throw new Error("Only the room DM can apply an automated token transformation.");
+    }
+    const patch = { updatedAtMillis: Date.now(), updatedAt: deps.serverTimestamp() };
+    if (spec.name) patch.name = String(spec.name).trim().slice(0, 120);
+    if (/^https:\/\//i.test(String(spec.imageUrl || ""))) patch.imageUrl = String(spec.imageUrl);
+    if (spec.sizeCategory) {
+      patch.sizeCategory = normalizeSizeCategory(spec.sizeCategory);
+      patch.creatureSize = patch.sizeCategory;
+    }
+    await deps.updateDoc(
+      deps.doc(deps.db, "rooms", roomCode, "tokens", String(tokenId)),
+      patch
+    );
+    return patch;
+  }
+
   async function syncLinkedCharacterTokens(
     character
   ) {
@@ -2941,6 +3001,8 @@ export function createTokenSystem(options) {
     buildMonsterLinkedTokenPatch,
     createCharacterLinkedToken,
     createMonsterLinkedToken,
+    createAutomationToken,
+    transformAutomationToken,
     getCharacterLinkedToken,
     loadCharacterLinkedToken,
     getRoomTokens,

@@ -15,9 +15,13 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
   const { library, editor, isSoundEnabled, persistence } = getAnimationSession(document);
   const dialog = document.createElement("dialog");
   dialog.className = "hg-spell-animation-panel";
-  const heading = contentLabel === "Attack" ? "Attack animations" : "Spell animations";
+  const heading = contentLabel === "Spell"
+    ? "Spell animations"
+    : contentLabel === "Attack"
+      ? "Attack animations"
+      : `${contentLabel} animations`;
   dialog.setAttribute("aria-label", heading);
-  dialog.innerHTML = `<div class="hg-spell-animation-heading"><div><span class="hg-animation-eyebrow">${contentLabel === "Attack" ? "ATTACK VFX STAGES" : "SPELL VFX SEQUENCE"}</span><h2>${heading}</h2><p data-spell-animation-name></p></div><button type="button" data-spell-cancel aria-label="Close ${heading.toLowerCase()}">Close</button></div>
+  dialog.innerHTML = `<div class="hg-spell-animation-heading"><div><span class="hg-animation-eyebrow">${contentLabel === "Spell" ? "SPELL VFX SEQUENCE" : "COMBAT VFX STAGES"}</span><h2>${heading}</h2><p data-spell-animation-name></p></div><button type="button" data-spell-cancel aria-label="Close ${heading.toLowerCase()}">Close</button></div>
     <p data-spell-animation-sync></p>
     <div class="hg-spell-animation-stage-flow" data-spell-animation-stages></div>
     <div class="hg-animation-stage-heading"><h3>Sequence Preview</h3><span>Drag Source and Target</span></div>

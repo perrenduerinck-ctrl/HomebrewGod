@@ -66,6 +66,8 @@ import {
 import { createCharacterCatalogs } from "./catalogs.js";
 import { spellAnimationSummary } from "../vfx/spellAnimationSection.js";
 import { assertPersistentAnimationReferences } from "../vfx/animationReferences.js";
+import { openCombatAnimationPanel } from "../vfx/combatAnimationPanel.js";
+import { inferCombatAnimationFamily } from "../vfx/combatPresentationSystem.js";
 import { createCharacterPersistence } from "./persistence.js?v=animation-content-ux-20260913";
 import { runCharacterCreatorSelfTests } from "./selfTests.js";
 import {
@@ -214,6 +216,10 @@ export function createCharacterCreator(options = {}) {
 
     targetSpellOnMap:
       options.targetSpellOnMap,
+    targetCombatActionOnMap:
+      options.targetCombatActionOnMap,
+    onGameplayStateChanged:
+      options.onGameplayStateChanged,
 
     uploadCharacterPortrait:
       options.uploadCharacterPortrait ||
@@ -36794,8 +36800,81 @@ export function createCharacterCreator(options = {}) {
       message ||
       "Gameplay saved."
     );
+    const snapshot = getCharacterSnapshot();
+    try {
+      deps.onGameplayStateChanged?.({
+        character: snapshot,
+        characterId: creatorState.currentCharacterId
+      });
+    } catch {
+      // Presentation lifecycle observers never invalidate a character save.
+    }
+    return snapshot;
+  }
 
-    return getCharacterSnapshot();
+  function getSection17ContentAtPath(path) {
+    let value = creatorState.draft;
+    for (const segment of Array.isArray(path) ? path : []) {
+      if (value == null || typeof value !== "object") return null;
+      value = value[segment];
+    }
+    return value && typeof value === "object" ? value : null;
+  }
+
+  function findSection17CombatActionOwner(action) {
+    for (const path of Array.isArray(action?.sourcePaths) ? action.sourcePaths : []) {
+      const candidate = getSection17ContentAtPath(path);
+      if (candidate) return candidate;
+    }
+
+    const actionId = cleanString(action?.id).toLowerCase();
+    const actionName = cleanString(action?.name).toLowerCase();
+    const seen = new Set();
+    const queue = [creatorState.draft];
+    let inspected = 0;
+    while (queue.length && inspected < 12000) {
+      const candidate = queue.shift();
+      if (!candidate || typeof candidate !== "object" || seen.has(candidate)) continue;
+      seen.add(candidate);
+      inspected += 1;
+      if (!Array.isArray(candidate)) {
+        const candidateId = cleanString(candidate.id || candidate.actionId).toLowerCase();
+        const candidateName = cleanString(candidate.name || candidate.label).toLowerCase();
+        if (candidateId && candidateId === actionId || candidateName && candidateName === actionName) {
+          return candidate;
+        }
+      }
+      Object.values(candidate).forEach((value) => {
+        if (value && typeof value === "object") queue.push(value);
+      });
+    }
+    return null;
+  }
+
+  async function configureSection17CombatAnimation(action) {
+    const owner = findSection17CombatActionOwner(action);
+    if (!owner) {
+      throw new Error("The saved source record for that action could not be found.");
+    }
+    const family = inferCombatAnimationFamily({ ...owner, ...action });
+    const changed = await openCombatAnimationPanel({
+      content: owner,
+      family,
+      contentLabel: action?.contentKind === "item" ? "Item" : "Action",
+      document,
+      onChange: () => {
+        creatorState.dirty = true;
+      }
+    });
+    if (!changed) return false;
+
+    return persistSection17SheetMutation(
+      () => ({
+        changed: true,
+        message: `${cleanString(action?.name, "Action")} animation saved on its source record.`
+      }),
+      "Action animation saved."
+    );
   }
 
   function handleSection17SheetGameplayAction(
@@ -37197,6 +37276,26 @@ export function createCharacterCreator(options = {}) {
                     selection
                   );
                 }
+            });
+          },
+        onConfigureCombatAnimation:
+          ({ action }) => {
+            return configureSection17CombatAnimation(action);
+          },
+        onUseCombatAction:
+          ({ action, character, characterId }) => {
+            if (typeof deps.targetCombatActionOnMap !== "function") {
+              setStatus("Battle-map action targeting is unavailable.");
+              return false;
+            }
+            if (!creatorState.currentCharacterId) {
+              setStatus("Save this character before using an action on the map.");
+              return false;
+            }
+            return deps.targetCombatActionOnMap({
+              action,
+              character,
+              characterId: characterId || creatorState.currentCharacterId
             });
           },
         onRest:
