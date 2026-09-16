@@ -317,6 +317,7 @@ export function createCombatPresentationSystem({
     const commit = typeof request.commit === "function"
       ? request.commit
       : () => true;
+    const presentationOnly = request.presentationOnly === true;
     let committed = false;
     const commitOnce = async (reason) => {
       if (committed) return false;
@@ -326,13 +327,14 @@ export function createCombatPresentationSystem({
     };
 
     if (!attachment) {
-      await commitOnce("no-animation");
+      if (!presentationOnly) await commitOnce("no-animation");
       return {
         ok: true,
         skipped: true,
         reason: "no-animation",
         impactReady: Promise.resolve("no-animation"),
-        committed: Promise.resolve(true),
+        committed: Promise.resolve(!presentationOnly),
+        automationReady: Promise.resolve([]),
         finished: Promise.resolve({ ok: true, reason: "no-animation" }),
         cancel() {},
         end() {}
@@ -345,13 +347,14 @@ export function createCombatPresentationSystem({
     ].map((reference) => reference.animationId);
     if (library && ids.some((id) => !library.getAnimation(id))) {
       onWarning("A referenced combat animation is unavailable; gameplay continued without it.");
-      await commitOnce("animation-unavailable");
+      if (!presentationOnly) await commitOnce("animation-unavailable");
       return {
         ok: true,
         skipped: true,
         reason: "animation-unavailable",
         impactReady: Promise.resolve("animation-unavailable"),
-        committed: Promise.resolve(true),
+        committed: Promise.resolve(!presentationOnly),
+        automationReady: Promise.resolve([]),
         finished: Promise.resolve({ ok: true, reason: "animation-unavailable" }),
         cancel() {},
         end() {}
@@ -393,10 +396,16 @@ export function createCombatPresentationSystem({
     active.add(record);
 
     let impactResolved = false;
+    const hasImpactStage = Boolean(attachment.stages.impact) ||
+      attachment.layers.some((layer) => Boolean(layer.stages.impact));
+    const hasTravelStage = Boolean(attachment.stages.travel) ||
+      attachment.layers.some((layer) => Boolean(layer.stages.travel));
     const noteImpact = (event) => {
       if (impactResolved) return;
       if (["impact", "arrived"].includes(event?.type) ||
-          event?.type === "stage" && event.slot === "impact") {
+          event?.type === "stage" && event.slot === "impact" ||
+          !hasImpactStage && !hasTravelStage && event?.type === "stage" &&
+            ["cast", "sustain", "end"].includes(event.slot)) {
         impactResolved = true;
         impact.resolve(event?.type || "impact");
       }
@@ -489,14 +498,21 @@ export function createCombatPresentationSystem({
       impact.resolve("animation-unavailable");
     }
 
+    if (presentationOnly && !impactResolved) {
+      impactResolved = true;
+      impact.resolve("presentation-only");
+    }
+
+    let automationResults = [];
     const committedPromise = impact.promise.then(async (reason) => {
+      if (presentationOnly) return false;
       if (attachment.camera) {
         try { onCamera({ phase: "impact", ...attachment.camera, request }); } catch {}
       }
       const result = await commitOnce(reason);
       if (attachment.automation) {
         try {
-          await onAutomation({
+          automationResults = await onAutomation({
             automation: attachment.automation,
             request,
             targets: destinations
@@ -507,6 +523,7 @@ export function createCombatPresentationSystem({
       }
       return result;
     });
+    const automationReady = committedPromise.then(() => automationResults || []);
 
     const timeout = scheduler.setTimeout(
       () => {
@@ -538,6 +555,7 @@ export function createCombatPresentationSystem({
       controllers,
       impactReady: impact.promise,
       committed: committedPromise,
+      automationReady,
       finished,
       cancel: record.cancel,
       end: record.end,

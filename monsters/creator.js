@@ -148,8 +148,10 @@ function parseNamedEntry(value) {
     }
 
     return {
+      id: normalizeText(value.id),
       name: name || "Feature",
-      description
+      description,
+      ...(Array.isArray(value.sequence) ? { sequence: JSON.parse(JSON.stringify(value.sequence)) } : {})
     };
   }
 
@@ -182,6 +184,27 @@ export function parseMonsterNamedEntries(value) {
   return entries
     .map(parseNamedEntry)
     .filter(Boolean);
+}
+
+function actionSlug(value) {
+  return normalizeText(value, "action").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "action";
+}
+
+export function stableMonsterActionId(field, name, index = 0) {
+  return `monster-action-${actionSlug(field)}-${actionSlug(name)}-${Math.max(0, Number(index) || 0)}`;
+}
+
+function normalizeMultiattackSequence(sequence = []) {
+  return (Array.isArray(sequence) ? sequence : [])
+    .map((entry) => typeof entry === "string"
+      ? { actionId: normalizeText(entry), count: 1 }
+      : {
+          actionId: normalizeText(entry?.actionId || entry?.id || entry?.key),
+          count: Math.max(1, Math.min(8, Math.round(normalizeNumber(entry?.count, 1))))
+        })
+    .filter((entry) => entry.actionId)
+    .slice(0, 16);
 }
 
 function formatNamedEntries(entries) {
@@ -276,8 +299,11 @@ export function normalizeMonsterRecord(rawMonster) {
   };
 
   NAMED_ENTRY_FIELDS.forEach(function (field) {
-    normalized[field] =
-      parseMonsterNamedEntries(source[field]);
+    normalized[field] = parseMonsterNamedEntries(source[field]).map((entry, index) => ({
+      ...entry,
+      id: entry.id || stableMonsterActionId(field, entry.name, index),
+      ...(entry.sequence ? { sequence: normalizeMultiattackSequence(entry.sequence) } : {})
+    }));
   });
 
   LIST_FIELDS.forEach(function (field) {
@@ -644,6 +670,7 @@ export function createMonsterCreator(config) {
   let selectedMonsterId = null;
   let monsters = [];
   let actionAnimations = {};
+  let actionIdentities = {};
   let listeningRoomCode = null;
   let isBusy = false;
   const removeDomListeners = [];
@@ -793,19 +820,65 @@ export function createMonsterCreator(config) {
       .replace(/^-+|-+$/g, "")}`;
   }
 
+  function reconcileActionIdentities(field, entries) {
+    const previous = Array.isArray(actionIdentities[field]) ? actionIdentities[field] : [];
+    const used = new Set();
+    const next = entries.map((entry, index) => {
+      let matchIndex = previous.findIndex((candidate, candidateIndex) => (
+        !used.has(candidateIndex) && candidate.name === entry.name
+      ));
+      if (matchIndex < 0 && previous[index] && !used.has(index)) matchIndex = index;
+      if (matchIndex >= 0) used.add(matchIndex);
+      return {
+        ...entry,
+        id: previous[matchIndex]?.id || stableMonsterActionId(field, entry.name, index)
+      };
+    });
+    actionIdentities[field] = next.map((entry) => ({ ...entry }));
+    return next;
+  }
+
   function getMonsterActionChoices() {
     return NAMED_ENTRY_FIELDS.flatMap((field) => {
-      const entries = parseMonsterNamedEntries(elements[field]?.value || "");
-      return entries.map((entry) => ({
-        ...entry,
+      const entries = reconcileActionIdentities(
         field,
-        key: monsterActionKey(field, entry.name),
-        kind: field === "actions" ? "monster-action" : `monster-${field}`,
-        animation: actionAnimations[monsterActionKey(field, entry.name)]?.animation ||
-          actionAnimations[monsterActionKey(field, entry.name)] || null,
-        sequence: actionAnimations[monsterActionKey(field, entry.name)]?.sequence || []
-      }));
+        parseMonsterNamedEntries(elements[field]?.value || "")
+      );
+      return entries.map((entry) => {
+        const legacyKey = monsterActionKey(field, entry.name);
+        if (!actionAnimations[entry.id] && actionAnimations[legacyKey]) {
+          actionAnimations[entry.id] = JSON.parse(JSON.stringify(actionAnimations[legacyKey]));
+        }
+        const saved = actionAnimations[entry.id] || actionAnimations[legacyKey] || null;
+        return {
+          ...entry,
+          field,
+          key: entry.id,
+          legacyKey,
+          kind: field === "actions" ? "monster-action" : `monster-${field}`,
+          animation: saved?.animation || saved || null,
+          sequence: normalizeMultiattackSequence(saved?.sequence || entry.sequence || [])
+        };
+      });
     });
+  }
+
+  function inferMultiattackSequence(action, choices) {
+    if (!action.name.toLowerCase().includes("multiattack")) return [];
+    const description = action.description.toLowerCase();
+    const counts = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 };
+    return choices.flatMap((candidate) => {
+      if (candidate.key === action.key) return [];
+      const escaped = candidate.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const counted = description.match(new RegExp(`(?:\\b(\\d+|one|two|three|four|five|six|seven|eight)\\s+(?:attacks?\\s+)?(?:with\\s+(?:its\\s+)?)?)${escaped}s?\\b`));
+      if (counted) {
+        const count = counts[counted[1]] || Number(counted[1]) || 1;
+        return [{ actionId: candidate.id, count: Math.max(1, Math.min(8, count)) }];
+      }
+      return description.includes(candidate.name.toLowerCase())
+        ? [{ actionId: candidate.id, count: 1 }]
+        : [];
+    }).slice(0, 16);
   }
 
   function renderMonsterActionAnimations() {
@@ -867,13 +940,9 @@ export function createMonsterCreator(config) {
       animation: content.animation,
       ...(action.name.toLowerCase().includes("multiattack")
         ? {
-            sequence: getMonsterActionChoices()
-              .filter((candidate) => (
-                candidate.key !== action.key &&
-                action.description.toLowerCase().includes(candidate.name.toLowerCase())
-              ))
-              .map((candidate) => candidate.key)
-              .slice(0, 8)
+            sequence: action.sequence.length
+              ? action.sequence
+              : inferMultiattackSequence(action, getMonsterActionChoices())
           }
         : {})
     };
@@ -997,6 +1066,7 @@ export function createMonsterCreator(config) {
   }
 
   function readMonsterForm() {
+    const actionChoices = getMonsterActionChoices();
     const raw = {
       name: elements.name && elements.name.value,
       size: elements.size && elements.size.value,
@@ -1015,14 +1085,12 @@ export function createMonsterCreator(config) {
         wis: elements.wis && elements.wis.value,
         cha: elements.cha && elements.cha.value
       },
-      traits: elements.traits && elements.traits.value,
-      actions: elements.actions && elements.actions.value,
-      bonusActions: elements.bonusActions && elements.bonusActions.value,
-      reactions: elements.reactions && elements.reactions.value,
-      legendaryActions:
-        elements.legendaryActions &&
-        elements.legendaryActions.value,
-      lairActions: elements.lairActions && elements.lairActions.value,
+      traits: actionChoices.filter((entry) => entry.field === "traits"),
+      actions: actionChoices.filter((entry) => entry.field === "actions"),
+      bonusActions: actionChoices.filter((entry) => entry.field === "bonusActions"),
+      reactions: actionChoices.filter((entry) => entry.field === "reactions"),
+      legendaryActions: actionChoices.filter((entry) => entry.field === "legendaryActions"),
+      lairActions: actionChoices.filter((entry) => entry.field === "lairActions"),
       senses: elements.senses && elements.senses.value,
       savingThrows:
         elements.savingThrows &&
@@ -1099,6 +1167,12 @@ export function createMonsterCreator(config) {
     });
 
     writeValue(elements.notes, source.notes);
+    actionIdentities = Object.fromEntries(
+      NAMED_ENTRY_FIELDS.map((field) => [
+        field,
+        (source[field] || []).map((entry) => ({ ...entry }))
+      ])
+    );
     actionAnimations = JSON.parse(JSON.stringify(source.actionAnimations || {}));
     renderMonsterActionAnimations();
 

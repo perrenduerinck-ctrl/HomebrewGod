@@ -21,18 +21,40 @@ import {
   readTokenBaseSpeed
 } from "../combat/movementSystem.js?v=movement-robustness-20260906";
 
+export function isMatchingAutomationSummon(token, effectId) {
+  return token?.automation?.kind === "summon" &&
+    String(token.automation.effectId || "") === String(effectId || "") &&
+    Boolean(effectId);
+}
+
+export function buildTransformationRestorePatch(current = {}, effectId, deleteValue = null) {
+  const state = current.automationTransformation;
+  if (!state || state.effectId !== String(effectId || "")) return null;
+  const patch = {};
+  for (const [key, originalValue] of Object.entries(state.original || {})) {
+    const appliedValue = state.applied?.[key];
+    if (JSON.stringify(current[key] ?? null) !== JSON.stringify(appliedValue ?? null)) continue;
+    patch[key] = originalValue === null ? deleteValue : originalValue;
+  }
+  patch.automationTransformation = deleteValue;
+  return patch;
+}
+
 export function createTokenSystem(options) {
   const deps = {
     db: options.db,
     doc: options.doc,
     collection: options.collection,
     addDoc: options.addDoc,
+    getDoc: options.getDoc,
     updateDoc: options.updateDoc,
     deleteDoc: options.deleteDoc,
     getDocs: options.getDocs,
     query: options.query,
     where: options.where,
     onSnapshot: options.onSnapshot,
+    runTransaction: options.runTransaction,
+    deleteField: options.deleteField,
     serverTimestamp: options.serverTimestamp,
 
     uploadImage: options.uploadImage,
@@ -2361,7 +2383,9 @@ export function createTokenSystem(options) {
       elevationFeet: normalizeElevation(spec.elevation),
       automation: {
         kind: "summon",
-        sourceTokenId: String(spec.sourceTokenId || "").trim() || null
+        effectId: String(spec.effectId || "").trim() || null,
+        sourceTokenId: String(spec.sourceTokenId || "").trim() || null,
+        createdByUid: String(spec.createdByUid || deps.getCurrentUserUid?.() || "").trim() || null
       },
       display: { name: true, hpBar: false, hpText: false, ac: false, conditions: true, initiative: false },
       createdAtMillis: now,
@@ -2381,18 +2405,87 @@ export function createTokenSystem(options) {
     if (!roomCode || deps.getCurrentIsDM?.() !== true) {
       throw new Error("Only the room DM can apply an automated token transformation.");
     }
-    const patch = { updatedAtMillis: Date.now(), updatedAt: deps.serverTimestamp() };
-    if (spec.name) patch.name = String(spec.name).trim().slice(0, 120);
-    if (/^https:\/\//i.test(String(spec.imageUrl || ""))) patch.imageUrl = String(spec.imageUrl);
-    if (spec.sizeCategory) {
-      patch.sizeCategory = normalizeSizeCategory(spec.sizeCategory);
-      patch.creatureSize = patch.sizeCategory;
+    const cleanTokenId = String(tokenId || "").trim();
+    const effectId = String(spec.effectId || "").trim();
+    if (!cleanTokenId || !effectId) throw new Error("Temporary transformations require an effect ID.");
+    const reference = deps.doc(deps.db, "rooms", roomCode, "tokens", cleanTokenId);
+    if (typeof deps.runTransaction !== "function") {
+      throw new Error("Safe transformation transactions are unavailable.");
     }
-    await deps.updateDoc(
-      deps.doc(deps.db, "rooms", roomCode, "tokens", String(tokenId)),
-      patch
-    );
-    return patch;
+    return deps.runTransaction(deps.db, async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists()) throw new Error("The transformation target no longer exists.");
+      const current = snapshot.data() || {};
+      const active = current.automationTransformation;
+      if (active?.effectId && active.effectId !== effectId) {
+        throw new Error("That token already has another temporary transformation.");
+      }
+      const patch = { updatedAtMillis: Date.now(), updatedAt: deps.serverTimestamp() };
+      if (spec.name) patch.name = String(spec.name).trim().slice(0, 120);
+      if (/^https:\/\//i.test(String(spec.imageUrl || ""))) patch.imageUrl = String(spec.imageUrl);
+      if (spec.sizeCategory) {
+        patch.sizeCategory = normalizeSizeCategory(spec.sizeCategory);
+        patch.creatureSize = patch.sizeCategory;
+      }
+      const original = active?.original || {
+        name: current.name ?? null,
+        imageUrl: current.imageUrl ?? null,
+        publicId: current.publicId ?? null,
+        size: current.size ?? null,
+        sizeCategory: current.sizeCategory ?? null,
+        creatureSize: current.creatureSize ?? null,
+        display: current.display ?? null,
+        tokenStyle: current.tokenStyle ?? null,
+        tint: current.tint ?? null,
+        borderColor: current.borderColor ?? null,
+        opacity: current.opacity ?? null
+      };
+      const applied = Object.fromEntries(
+        Object.keys(patch)
+          .filter((key) => !["updatedAt", "updatedAtMillis"].includes(key))
+          .map((key) => [key, patch[key]])
+      );
+      const automationTransformation = {
+        effectId,
+        createdByUid: String(spec.createdByUid || deps.getCurrentUserUid?.() || "").trim() || null,
+        original,
+        applied,
+        appliedAtMillis: Date.now()
+      };
+      transaction.update(reference, { ...patch, automationTransformation });
+      return { tokenId: cleanTokenId, effectId, original, applied };
+    });
+  }
+
+  async function deleteAutomationSummon(tokenId, effectId) {
+    const roomCode = deps.getCurrentRoomCode?.();
+    if (!roomCode || deps.getCurrentIsDM?.() !== true) return false;
+    const reference = deps.doc(deps.db, "rooms", roomCode, "tokens", String(tokenId));
+    return deps.runTransaction(deps.db, async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists()) return false;
+      if (!isMatchingAutomationSummon(snapshot.data(), effectId)) return false;
+      transaction.delete(reference);
+      return true;
+    });
+  }
+
+  async function restoreAutomationTransform(tokenId, effectId) {
+    const roomCode = deps.getCurrentRoomCode?.();
+    if (!roomCode || deps.getCurrentIsDM?.() !== true) return false;
+    const reference = deps.doc(deps.db, "rooms", roomCode, "tokens", String(tokenId));
+    return deps.runTransaction(deps.db, async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists()) return false;
+      const current = snapshot.data() || {};
+      const deleteValue = typeof deps.deleteField === "function" ? deps.deleteField() : null;
+      const patch = buildTransformationRestorePatch(current, effectId, deleteValue);
+      if (!patch) return false;
+      patch.updatedAtMillis = Date.now();
+      patch.updatedAt = deps.serverTimestamp();
+      transaction.update(reference, patch);
+      return true;
+    });
   }
 
   async function syncLinkedCharacterTokens(
@@ -3003,6 +3096,8 @@ export function createTokenSystem(options) {
     createMonsterLinkedToken,
     createAutomationToken,
     transformAutomationToken,
+    deleteAutomationSummon,
+    restoreAutomationTransform,
     getCharacterLinkedToken,
     loadCharacterLinkedToken,
     getRoomTokens,

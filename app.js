@@ -36,7 +36,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=combat-presentation-20260915";
+import { createTokenSystem } from "./tokens/index.js?v=foundation-milestone-20260915";
 import {
   createMapRuler,
   formatMapDistance,
@@ -95,9 +95,13 @@ import {
   createCombatPresentationSystem,
   normalizeCombatAnimationAttachment,
   normalizeEffectDuration
-} from "./vfx/combatPresentationSystem.js";
-import { createCombatEffectLifecycle } from "./vfx/combatEffectLifecycle.js";
-import { createTokenAutomation } from "./vfx/tokenAutomation.js";
+} from "./vfx/combatPresentationSystem.js?v=foundation-milestone-20260915";
+import {
+  createCombatEffectLifecycle,
+  getCombatEffectEndReason
+} from "./vfx/combatEffectLifecycle.js?v=foundation-milestone-20260915";
+import { createCombatEffectPersistence } from "./vfx/combatEffectPersistence.js?v=foundation-milestone-20260915";
+import { createTokenAutomation } from "./vfx/tokenAutomation.js?v=foundation-milestone-20260915";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=complete-spell-vfx-20260903";
 import {
   createRealtimeListenerRegistry
@@ -141,6 +145,11 @@ import {
   createMovementPanel
 } from "./combat/movementPanel.js?v=movement-robustness-20260906";
 import {
+  buildCombatPresentationSteps,
+  resolveMonsterMultiattackSequence,
+  selectCombatTargets
+} from "./combat/combatActionPlan.js?v=foundation-milestone-20260915";
+import {
   createMapLighting
 } from "./battleMap/mapLighting.js?v=initiative-reliability-20260905";
 import {
@@ -149,6 +158,8 @@ import {
   friendlyServiceError,
   validateSecureImageDescriptor
 } from "./shared/securityPersistence.js";
+import { createSidebarNavigation } from "./ui/navigation/sidebar.js?v=foundation-milestone-20260915";
+import { createToolDrawer } from "./ui/navigation/toolDrawer.js?v=foundation-milestone-20260915";
 
 console.log("Homebrew God app.js loaded");
 
@@ -346,6 +357,8 @@ const E = {
   battleManagerInner: $("battleManagerInner"),
   battleMapSurface: $("battleMapSurface"),
   battleInitiativePanel: $("battleInitiativePanel"),
+  battleCampaignTimePanel: $("battleCampaignTimePanel"),
+  battleToolsMenu: $("battleToolsMenu"),
 
   // Puzzle map
   puzzleMapControls: $("puzzleMapControls"),
@@ -404,7 +417,25 @@ let battleMapAnimations = null;
 let battleMapCombatPresentation = null;
 let activeCombatTargetingCleanup = null;
 let tokenAutomation = null;
-const combatEffectLifecycle = createCombatEffectLifecycle();
+let combatEffectPersistence = null;
+let latestCombatEffectRecords = [];
+const combatEffectLifecycle = createCombatEffectLifecycle({
+  onChange: handleCombatEffectLifecycleChange,
+  onEnd: handleCombatEffectEnded
+});
+combatEffectPersistence = createCombatEffectPersistence({
+  db,
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp,
+  getRoomId: () => currentRoomCode || "",
+  getUserId: () => currentUser?.uid || "",
+  getIsDm: () => currentIsDM === true,
+  onWarning: (message) => console.warn(message)
+});
 async function uploadAnimationSprite(file) {
   const uploaded = await uploadMapToCloudinary(file);
   return {
@@ -473,6 +504,9 @@ const appRealtimeListeners =
     }
   });
 let activeMainScreenName = "";
+let navigationController = null;
+let navigationToolDrawer = null;
+let activeEffectsPanel = null;
 
 let tokenSystem = null;
 let initiativeSystem = null;
@@ -504,7 +538,9 @@ const ROOM_OWNED_SUBCOLLECTIONS = [
   "puzzleTiles",
   "tokens",
   "characters",
-  "activePlayers"
+  "activePlayers",
+  "animations",
+  "combatEffects"
 ];
 const MAX_IMAGE_UPLOAD_BYTES =
   MAX_SECURE_IMAGE_BYTES;
@@ -582,7 +618,8 @@ function initializeBattleMapToolbar() {
   }
 }
 
-function showScreen(screenName) {
+function navigateMainScreen(screenName) {
+  if (screenName !== "battle") navigationToolDrawer?.close({ focus: false });
   initializeBattleMapToolbar();
   closeBattleMapMenus();
   E.authScreen.classList.add("hidden");
@@ -599,7 +636,26 @@ function showScreen(screenName) {
   if (screenName === "monsterCreator") E.monsterCreatorScreen.classList.remove("hidden");
   if (screenName === "characterCreator") E.characterCreatorScreen.classList.remove("hidden");
 
+  if (currentRoomCode && screenName === "characterCreator") {
+    void initCharacterCreatorSystem();
+  }
+  if (currentRoomCode && screenName === "monsterCreator") {
+    void initMonsterCreatorSystem();
+  }
+
+  if (screenName === "battle") {
+    battleMapRuler?.refresh();
+    battleMapTemplates?.refresh();
+    battleMapVfx?.refresh();
+    battleMapLighting?.refresh();
+  }
+
   syncRealtimeListenersForScreen(screenName);
+  navigationController?.setContext({
+    screen: screenName,
+    role: currentIsDM ? "dm" : "player",
+    roomOpen: Boolean(currentRoomCode)
+  });
 }
 
 function text(el, value) {
@@ -1463,6 +1519,7 @@ function makeRoomCode() {
 
 function clearRoomListeners() {
   appRealtimeListeners.stop("room");
+  combatEffectPersistence?.stop();
   stopRoomViewListeners();
 
   if (
@@ -1507,12 +1564,14 @@ function stopRoomViewListeners() {
   ) {
     tokenSystem.stopTokenListener();
   }
+
 }
 
 function syncRealtimeListenersForScreen(
   screenName
 ) {
   if (activeMainScreenName === "battle" && screenName !== "battle") {
+    combatEffectLifecycle.releaseControllers();
     battleMapVfxSequences?.clear("screen-change");
     battleMapCombatVfx?.clear();
     battleMapAnimations?.clear();
@@ -1556,6 +1615,10 @@ function syncRealtimeListenersForScreen(
       "function"
   ) {
     tokenSystem.stopTokenListener();
+  }
+
+  if (screenName === "battle" && latestCombatEffectRecords.length) {
+    queueMicrotask(() => synchronizePersistedCombatEffects());
   }
 
   if (
@@ -1613,6 +1676,11 @@ function setDmControlsVisible(isVisible) {
   initiativePanelSystem?.render(
     initiativeSystem.getState()
   );
+  navigationController?.setContext({
+    screen: activeMainScreenName,
+    role: isVisible ? "dm" : "player",
+    roomOpen: Boolean(currentRoomCode)
+  });
 }
 
 function normalizeCurrentMapData(mapData) {
@@ -1716,12 +1784,18 @@ async function saveUserDoc(user) {
 }
 
 async function showLoggedOut() {
-  showScreen("auth");
+  navigateMainScreen("auth");
 
   stopSavedRoomsListener();
 
   await removeActivePlayerSession();
   clearRoomListeners();
+  combatEffectLifecycle.clear("room-left", {
+    emit: false,
+    cleanup: false,
+    playEnd: false
+  });
+  latestCombatEffectRecords = [];
 
   currentUser = null;
   currentRoomCode = null;
@@ -1738,7 +1812,7 @@ function showLoggedIn(user) {
   text(E.userNameText, user.displayName || "Unnamed");
   text(E.userTypeText, user.isAnonymous ? "Guest" : "Account");
   text(E.userIdText, user.uid);
-  showScreen("lobby");
+  navigateMainScreen("lobby");
 }
 
 addOptionalEventListener(E.guestButton, "click", async function () {
@@ -2210,13 +2284,20 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
 function openRoom(roomCode, screenToShow = "room") {
   const cleanCode = normalizeRoomCode(roomCode);
 
+  clearRoomListeners();
+  combatEffectLifecycle.clear("room-left", {
+    emit: false,
+    cleanup: false,
+    playEnd: false
+  });
+  latestCombatEffectRecords = [];
   currentRoomCode = cleanCode;
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   latestPuzzleTiles = null;
   hasMigratedLegacyPuzzleTiles = false;
 
-  clearRoomListeners();
+  combatEffectPersistence?.listen(cleanCode, synchronizePersistedCombatEffects);
 
   appRealtimeListeners.connect(
     "room",
@@ -2310,10 +2391,10 @@ function openRoom(roomCode, screenToShow = "room") {
   );
 
   if (screenToShow === "battle") {
-    showScreen("battle");
+    navigateMainScreen("battle");
     applyBattleZoom();
   } else {
-    showScreen("room");
+    navigateMainScreen("room");
   }
 }
 
@@ -2321,6 +2402,12 @@ async function leaveCurrentRoomView() {
   await removeActivePlayerSession();
 
   clearRoomListeners();
+  combatEffectLifecycle.clear("room-left", {
+    emit: false,
+    cleanup: false,
+    playEnd: false
+  });
+  latestCombatEffectRecords = [];
 
   currentRoomCode = null;
   currentRoomData = null;
@@ -2337,7 +2424,7 @@ async function leaveCurrentRoomView() {
   text(E.battleMapUpdateStatus, "");
   text(E.puzzleMapStatus, "");
 
-  showScreen("lobby");
+  navigateMainScreen("lobby");
 }
 
 function ensureRoomDeletionControl() {
@@ -2419,7 +2506,7 @@ function resetDeletedRoomState() {
   latestActivePlayersSnapshot = null;
   latestPuzzleTiles = null;
   setDmControlsVisible(false);
-  showScreen("lobby");
+  navigateMainScreen("lobby");
 }
 
 async function deleteCurrentRoomPermanently() {
@@ -2461,6 +2548,12 @@ async function deleteCurrentRoomPermanently() {
   try {
     await removeActivePlayerSession();
     clearRoomListeners();
+    combatEffectLifecycle.clear("room-left", {
+      emit: false,
+      cleanup: false,
+      playEnd: false
+    });
+    latestCombatEffectRecords = [];
 
     await updateDoc(roomRef, {
       deletingAt: serverTimestamp()
@@ -4764,6 +4857,7 @@ function handleConfirmedSpellVfx({
       const duration = normalizeEffectDuration(
         spell?.targeting?.duration || spell?.duration
       );
+      const effectId = duration ? createCombatEffectId() : "";
       const sourceElement = casterToken?.id
         ? E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(casterToken.id))}"]`)
         : null;
@@ -4786,16 +4880,25 @@ function handleConfirmedSpellVfx({
         target: customTargets[0],
         targets: customTargets,
         manageDurationExternally: true,
+        effectId,
+        effectDuration: duration,
         commit: () => true
-      }).then((result) => {
+      }).then(async (result) => {
         if (result?.skipped) {
           battleMapVfxSequences?.play(castEvent, {
             onWarning: message => text(E.templateStatus, message)
           });
           return;
         }
-        if (duration && result?.attachment?.stages?.sustain) {
+        await result.committed;
+        const automationState = automationLifecycleState(await result.automationReady);
+        if (duration && (
+          result?.attachment?.stages?.sustain ||
+          result?.attachment?.stages?.end ||
+          automationState
+        )) {
           combatEffectLifecycle.startEffect({
+            id: effectId,
             controller: result,
             contentId: castEvent.spellId,
             contentName: castEvent.spellName,
@@ -4806,7 +4909,12 @@ function handleConfirmedSpellVfx({
             initiative: initiativeSystem?.getState?.(),
             concentrationKey: duration.concentration
               ? `${castingCharacterId}:${castEvent.spellId}`
-              : ""
+              : "",
+            requiredStatus: duration.status,
+            createdByUid: currentUser?.uid || "",
+            roomCode: currentRoomCode,
+            animation: persistedEffectAnimation(result.attachment),
+            automationState
           });
         }
       }).catch(() => {
@@ -4828,6 +4936,7 @@ function handleConfirmedSpellVfx({
         void playback.ready.then((controller) => {
           if (!controller?.ok) return;
           combatEffectLifecycle.startEffect({
+            id: createCombatEffectId(),
             controller,
             contentId: castEvent.spellId,
             contentName: castEvent.spellName,
@@ -4838,7 +4947,16 @@ function handleConfirmedSpellVfx({
             initiative: initiativeSystem?.getState?.(),
             concentrationKey: duration.concentration
               ? `${castingCharacterId}:${castEvent.spellId}`
-              : ""
+              : "",
+            requiredStatus: duration.status,
+            createdByUid: currentUser?.uid || "",
+            roomCode: currentRoomCode,
+            animation: persistedEffectAnimation(normalizeCombatAnimationAttachment({
+              family: "magic",
+              stages: castEvent.animations,
+              targetMode: instruction?.targetType === "self" ? "self" : "single",
+              duration
+            }))
           });
         });
       }
@@ -5150,6 +5268,162 @@ function clearCombatActionTargeting(message = "") {
   if (message) text(E.templateStatus, message);
 }
 
+function createCombatEffectId() {
+  return `combat-effect-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+}
+
+function persistedEffectAnimation(attachment) {
+  if (!attachment) return null;
+  const keepStages = (stages = {}) => Object.fromEntries(
+    Object.entries(stages).filter(([slot]) => ["sustain", "end"].includes(slot))
+  );
+  const stages = keepStages(attachment.stages);
+  const layers = (attachment.layers || [])
+    .map((layer) => ({ ...layer, stages: keepStages(layer.stages) }))
+    .filter((layer) => Object.keys(layer.stages).length);
+  if (!Object.keys(stages).length && !layers.length) return null;
+  return {
+    version: attachment.version || 1,
+    family: attachment.family,
+    targetMode: attachment.targetMode,
+    duration: attachment.duration,
+    stages,
+    layers,
+    motion: attachment.motion
+  };
+}
+
+function automationLifecycleState(results = []) {
+  const state = { summonTokenIds: [], transformations: [] };
+  for (const result of Array.isArray(results) ? results : []) {
+    if (!result?.ok) continue;
+    if (result.command?.type === "summon-token" && result.value?.id) {
+      state.summonTokenIds.push(result.value.id);
+    }
+    if (result.command?.type === "transform-token" && result.value?.tokenId) {
+      state.transformations.push({
+        tokenId: result.value.tokenId,
+        effectId: result.value.effectId
+      });
+    }
+  }
+  return state.summonTokenIds.length || state.transformations.length ? state : null;
+}
+
+function combatEffectContext() {
+  return {
+    worldTime: campaignTimeSystem.getState().worldTime,
+    initiative: initiativeSystem?.getState?.(),
+    tokenIds: tokenSystem?.getRoomTokens?.().map((token) => token.id) || []
+  };
+}
+
+function restoreCombatEffectController(record) {
+  if (activeMainScreenName !== "battle" || !record?.animation) return null;
+  const system = ensureCombatPresentationSystem();
+  if (!system) return null;
+  const findToken = (tokenId) => tokenId
+    ? E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(tokenId))}"]`)
+    : null;
+  const source = findToken(record.sourceTokenId) || record.sourcePoint;
+  const targets = record.targetTokenIds.map(findToken).filter(Boolean);
+  if (!source || record.targetTokenIds.length && targets.length !== record.targetTokenIds.length) return null;
+  const destinations = targets.length ? targets : record.targetPoints;
+  const target = destinations[0] || source;
+  let controller = null;
+  let requestedEnd = false;
+  let requestedCancel = false;
+  const ready = system.play({
+    animation: record.animation,
+    content: { id: record.contentId, name: record.contentName, animation: record.animation },
+    source,
+    target,
+    targets: destinations.length ? destinations : [target],
+    targetMode: record.animation.targetMode,
+    manageDurationExternally: true,
+    presentationOnly: true
+  }).then((result) => {
+    controller = result;
+    if (requestedCancel) result.cancel?.();
+    else if (requestedEnd) result.end?.();
+    return result;
+  }).catch((error) => {
+    console.warn("Could not restore a persistent combat effect:", error);
+    return null;
+  });
+  return {
+    end() { requestedEnd = true; controller?.end?.(); },
+    cancel() { requestedCancel = true; controller?.cancel?.(); },
+    pause() { controller?.pause?.(); },
+    resume() { controller?.resume?.(); },
+    finished: ready.then((result) => result?.finished)
+  };
+}
+
+function synchronizePersistedCombatEffects(records = latestCombatEffectRecords) {
+  latestCombatEffectRecords = Array.isArray(records) ? records : [];
+  const context = combatEffectContext();
+  combatEffectLifecycle.hydrate(latestCombatEffectRecords, {
+    restoreController: (record) => getCombatEffectEndReason(record, context)
+      ? null
+      : restoreCombatEffectController(record)
+  });
+  combatEffectLifecycle.reconcile(context);
+}
+
+function handleCombatEffectLifecycleChange(_snapshot, reason, record) {
+  renderActiveEffectsPanel();
+  if (!record || !combatEffectPersistence) return;
+  if (reason === "started") {
+    void combatEffectPersistence.save(record).catch((error) => {
+      console.warn("Could not persist active combat effect:", error);
+    });
+  } else if (!["hydrated", "remote-ended", "room-left"].includes(reason)) {
+    void combatEffectPersistence.remove(record).catch((error) => {
+      console.warn("Could not remove active combat effect:", error);
+    });
+  }
+}
+
+function renderActiveEffectsPanel() {
+  if (!activeEffectsPanel) return;
+  const list = activeEffectsPanel.querySelector("[data-active-effects-list]");
+  const records = combatEffectLifecycle.getSnapshot();
+  if (!records.length) {
+    list.innerHTML = '<p class="small">No active persistent effects.</p>';
+    return;
+  }
+  list.replaceChildren(...records.map((record) => {
+    const item = document.createElement("article");
+    item.className = "hg-active-effect";
+    const heading = document.createElement("strong");
+    heading.textContent = record.contentName || "Effect";
+    const detail = document.createElement("p");
+    detail.className = "small";
+    detail.textContent = `${record.duration.value || ""} ${record.duration.unit}${record.duration.concentration ? " · concentration" : ""}`.trim();
+    const end = document.createElement("button");
+    end.type = "button";
+    end.textContent = "End effect";
+    end.disabled = currentIsDM !== true && record.createdByUid !== currentUser?.uid;
+    end.addEventListener("click", () => combatEffectLifecycle.endEffect(record.id, "manual"));
+    item.append(heading, detail, end);
+    return item;
+  }));
+}
+
+function handleCombatEffectEnded(record, reason) {
+  if (!record?.automationState || reason === "remote-ended" || currentIsDM !== true) return;
+  for (const tokenId of record.automationState.summonTokenIds || []) {
+    void tokenSystem?.deleteAutomationSummon?.(tokenId, record.id);
+  }
+  for (const transformation of record.automationState.transformations || []) {
+    void tokenSystem?.restoreAutomationTransform?.(
+      transformation.tokenId,
+      transformation.effectId || record.id
+    );
+  }
+}
+
 function reconcileCombatPresentationEffects({ character = null, characterId = "" } = {}) {
   const time = campaignTimeSystem.getState();
   const initiative = initiativeSystem?.getState?.() || {};
@@ -5193,27 +5467,38 @@ async function playBattleMapCombatAction({
   }
   const targets = (Array.isArray(targetElements) ? targetElements : [])
     .filter(Boolean);
-  const presentations = [content, ...sequence].filter(Boolean).slice(0, 8);
+  const presentations = buildCombatPresentationSteps(content, sequence);
   const repeat = sequence.length
     ? 1
     : Math.max(1, Math.min(8, Math.round(Number(content?.numberOfAttacks) || 1)));
   const results = [];
 
   for (let repetition = 0; repetition < repeat; repetition += 1) {
-    for (const presentation of presentations) {
+    for (const step of presentations) {
+      const presentation = step.content;
       const configuredTargetMode = normalizeCombatAnimationAttachment(
         presentation
       )?.targetMode || "single";
+      const gameplayTargets = selectCombatTargets(
+        configuredTargetMode,
+        sourceElement,
+        targets
+      );
+      const attachmentBeforePlay = normalizeCombatAnimationAttachment(presentation);
+      const effectId = attachmentBeforePlay?.duration || attachmentBeforePlay?.automation
+        ? createCombatEffectId()
+        : "";
       const result = await system.play({
         content: presentation,
         animation: presentation.animation,
         source: sourceElement,
-        target: targets[0] || sourceElement,
-        targets: targets.length ? targets : [sourceElement],
-        targetMode: targets.length > 1 && configuredTargetMode === "single"
-          ? "all"
-          : configuredTargetMode,
+        target: gameplayTargets[0],
+        targets: gameplayTargets,
+        targetMode: configuredTargetMode,
         manageDurationExternally: true,
+        presentationOnly: step.presentationOnly,
+        effectId,
+        effectDuration: attachmentBeforePlay?.duration || null,
         commit: ({ reason }) => {
           document.dispatchEvent(new CustomEvent("homebrewgod:combat-impact", {
             detail: {
@@ -5221,7 +5506,7 @@ async function playBattleMapCombatAction({
               contentName: presentation.name || "Action",
               actorId,
               sourceTokenId: sourceElement.dataset.tokenId || "",
-              targetTokenIds: targets.map((element) => element.dataset.tokenId).filter(Boolean),
+              targetTokenIds: gameplayTargets.map((element) => element.dataset.tokenId).filter(Boolean),
               damage: presentation.damage || "",
               damageType: presentation.damageType || "",
               timingReason: reason
@@ -5231,24 +5516,33 @@ async function playBattleMapCombatAction({
         }
       });
       results.push(result);
+      await result.committed;
+      const automationResults = await result.automationReady;
       const attachment = result.attachment || normalizeCombatAnimationAttachment(presentation);
-      if (attachment?.duration && attachment.stages?.sustain) {
+      const automationState = automationLifecycleState(automationResults);
+      if (!step.presentationOnly && attachment?.duration && (
+        attachment.stages?.sustain || attachment.stages?.end || automationState
+      )) {
         combatEffectLifecycle.startEffect({
+          id: effectId,
           controller: result,
           contentId: presentation.id || presentation.key,
           contentName: presentation.name,
           sourceTokenId: sourceElement.dataset.tokenId,
-          targetTokenIds: targets.map((element) => element.dataset.tokenId),
+          targetTokenIds: gameplayTargets.map((element) => element.dataset.tokenId).filter(Boolean),
           duration: attachment.duration,
           worldTime: campaignTimeSystem.getState().worldTime,
           initiative: initiativeSystem?.getState?.(),
           concentrationKey: attachment.duration.concentration
             ? `${actorId}:${presentation.id || presentation.key || ""}`
             : "",
-          requiredStatus: attachment.duration.status
+          requiredStatus: attachment.duration.status,
+          createdByUid: currentUser?.uid || "",
+          roomCode: currentRoomCode,
+          animation: persistedEffectAnimation(attachment),
+          automationState
         });
       }
-      await result.committed;
     }
   }
 
@@ -5269,14 +5563,14 @@ async function beginCombatActionTargeting({
   if (!currentRoomCode) {
     throw new Error("Open a room before using an action on its battle map.");
   }
-  showAnyMainScreen("battle");
+  navigateMainScreen("battle");
   tokenSystem?.render?.(currentRoomData || {});
   initializeBattleMapVfx();
   const sourceElement = characterId
     ? findRenderedCharacterToken(characterId)
     : findRenderedMonsterToken(monsterId);
   if (!sourceElement) {
-    showAnyMainScreen(characterId ? "characterCreator" : "monsterCreator");
+    navigateMainScreen(characterId ? "characterCreator" : "monsterCreator");
     throw new Error(
       `Create or synchronize this ${characterId ? "character" : "monster"}'s linked token before using its actions.`
     );
@@ -5316,15 +5610,7 @@ async function beginCombatActionTargeting({
     }
     const targets = [...selectedTargets];
     cleanup();
-    const sequence = (Array.isArray(action?.sequence) ? action.sequence : [])
-      .map((key) => {
-        const raw = monster?.actionAnimations?.[key];
-        const named = Object.values(monster || {}).flatMap((value) => Array.isArray(value) ? value : [])
-          .find((entry) => entry?.name && key.endsWith(String(entry.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")));
-        return raw
-          ? { ...(named || {}), id: key, key, name: named?.name || key, animation: raw.animation || raw }
-          : null;
-      }).filter(Boolean);
+    const sequence = resolveMonsterMultiattackSequence(action, monster);
     await playBattleMapCombatAction({
       content: action,
       sourceElement,
@@ -5369,7 +5655,7 @@ async function beginCharacterSpellTargeting({
     clearSpell: true
   });
 
-  showAnyMainScreen("battle");
+  navigateMainScreen("battle");
   let linkedToken = null;
 
   try {
@@ -5391,7 +5677,7 @@ async function beginCharacterSpellTargeting({
     }
   } catch (error) {
     if (allowWithoutRoom !== true) {
-      showAnyMainScreen(
+      navigateMainScreen(
         "characterCreator"
       );
     }
@@ -5418,7 +5704,7 @@ async function beginCharacterSpellTargeting({
 
   if (!tokenElement) {
     if (allowWithoutRoom !== true) {
-      showAnyMainScreen(
+      navigateMainScreen(
         "characterCreator"
       );
     }
@@ -6156,7 +6442,10 @@ function ensureCombatPresentationSystem() {
         return tokenAutomation.execute(automation, {
           source: tokenRecord(request.source),
           target: targetRecords[0],
-          targets: targetRecords
+          targets: targetRecords,
+          effectId: request.effectId,
+          duration: request.effectDuration,
+          createdByUid: currentUser?.uid || ""
         });
       },
       onWarning: (message) => text(E.templateStatus, message)
@@ -7870,12 +8159,15 @@ if (!tokenSystem) {
     doc,
     collection,
     addDoc,
+    getDoc,
     updateDoc,
     deleteDoc,
     getDocs,
     query,
     where,
     onSnapshot,
+    runTransaction,
+    deleteField,
     serverTimestamp,
 
     uploadImage: uploadMapToCloudinary,
@@ -7991,6 +8283,9 @@ document.addEventListener(
       currentRoomData || movementSystem.getState(),
       "tokens-rendered"
     );
+    if (activeMainScreenName === "battle" && latestCombatEffectRecords.length) {
+      synchronizePersistedCombatEffects();
+    }
   }
 );
 
@@ -8015,44 +8310,52 @@ initiativeSystem.subscribe(function () {
 // APP SECTION 13 — BATTLE MAP / CREATOR TAB NAVIGATION
 // =====================================================
 
-function showAnyMainScreen(screenName) {
-  const screens = [
-    E.authScreen,
-    E.lobbyScreen,
-    E.roomDashboardScreen,
-    E.battleMapScreen,
-    E.monsterCreatorScreen,
-    E.characterCreatorScreen
-  ];
-
-  screens.forEach(function (screen) {
-    if (screen) {
-      screen.classList.add("hidden");
-    }
-  });
-
-  const screenMap = {
-    auth: E.authScreen,
-    lobby: E.lobbyScreen,
-    room: E.roomDashboardScreen,
-    battle: E.battleMapScreen,
-    monsterCreator: E.monsterCreatorScreen,
-    characterCreator: E.characterCreatorScreen
+function openNavigationTool(toolName, trigger) {
+  if (!currentRoomCode) return false;
+  if (toolName === "animationLibrary") {
+    E.animationLibraryButton?.click();
+    return true;
+  }
+  if (toolName === "animationCreator") {
+    E.animationCreatorButton?.click();
+    return true;
+  }
+  if (activeMainScreenName !== "battle") navigateMainScreen("battle");
+  const tools = {
+    combatTracker: { label: "Combat Tracker", element: E.battleInitiativePanel },
+    campaignTime: { label: "Calendar / Time", element: E.battleCampaignTimePanel },
+    tokenBuilder: { label: "Token Builder", element: E.tokenBuilderControls },
+    mapBuilder: { label: "Map Builder", element: E.puzzleMapControls },
+    displayOptions: { label: "Display / Controls / Audio", element: E.battleToolsMenu },
+    effects: { label: "Active Effects", element: activeEffectsPanel }
   };
-
-  if (screenMap[screenName]) {
-    screenMap[screenName].classList.remove("hidden");
-  }
-
-  if (screenName === "battle") {
-    battleMapRuler?.refresh();
-    battleMapTemplates?.refresh();
-    battleMapVfx?.refresh();
-    battleMapLighting?.refresh();
-  }
-
-  syncRealtimeListenersForScreen(screenName);
+  const tool = tools[toolName];
+  if (!tool?.element) return false;
+  if (toolName === "effects") renderActiveEffectsPanel();
+  return navigationToolDrawer?.open({ ...tool, trigger }) || false;
 }
+
+function initializeApplicationShell() {
+  if (navigationController) return navigationController;
+  navigationToolDrawer = createToolDrawer({ document });
+  activeEffectsPanel = document.createElement("section");
+  activeEffectsPanel.className = "hg-active-effects-panel";
+  activeEffectsPanel.innerHTML = '<div class="hg-active-effects-list" data-active-effects-list></div>';
+  renderActiveEffectsPanel();
+  navigationController = createSidebarNavigation({
+    document,
+    onNavigate: (screenName) => navigateMainScreen(screenName),
+    onOpenTool: openNavigationTool
+  });
+  navigationController.setContext({
+    screen: activeMainScreenName || "auth",
+    role: currentIsDM ? "dm" : "player",
+    roomOpen: Boolean(currentRoomCode)
+  });
+  return navigationController;
+}
+
+initializeApplicationShell();
 
 function applyBattleZoom() {
   const scale = "scale(" + battleZoom + ")";
@@ -8322,7 +8625,7 @@ async function initMonsterCreatorSystem() {
     },
 
     onBack: function () {
-      showAnyMainScreen("battle");
+      navigateMainScreen("battle");
       applyBattleZoom();
 
       if (
@@ -8350,7 +8653,7 @@ if (E.openBattleMapButton) {
 
 if (E.backToRoomButton) {
   E.backToRoomButton.addEventListener("click", function () {
-    showAnyMainScreen("room");
+    navigateMainScreen("room");
   });
 }
 
@@ -8411,7 +8714,7 @@ if (E.openMonsterCreatorButton) {
 
 if (E.backFromCharacterCreatorButton) {
   E.backFromCharacterCreatorButton.addEventListener("click", function () {
-    showAnyMainScreen("battle");
+    navigateMainScreen("battle");
     applyBattleZoom();
 
     if (
@@ -8449,19 +8752,19 @@ async function openStartupViewIfNeeded() {
   alreadyUsedStartupLink = true;
 
   if (startupView === "battle") {
-    showAnyMainScreen("battle");
+    navigateMainScreen("battle");
     applyBattleZoom();
     return;
   }
 
   if (startupView === "characterCreator") {
-    showAnyMainScreen("characterCreator");
+    navigateMainScreen("characterCreator");
     await initCharacterCreatorSystem();
     return;
   }
 
   if (startupView === "monsterCreator") {
-    showAnyMainScreen("monsterCreator");
+    navigateMainScreen("monsterCreator");
     await initMonsterCreatorSystem();
     return;
   }
@@ -8633,6 +8936,18 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       attachImageUploadTestFile:
         attachReleaseTestImageUploadFile,
 
+      setNavigationContext:
+        function ({ role = "player", roomOpen = true, screen = "battle" } = {}) {
+          navigationController?.setContext({ role, roomOpen, screen });
+          return {
+            visible: !navigationController?.root?.hidden,
+            labels: [...document.querySelectorAll("#homebrewGodSidebar [data-sidebar-target]")]
+              .map((button) => button.textContent.trim()),
+            role,
+            screen
+          };
+        },
+
       openScreen:
         async function (screenName) {
           if (
@@ -8645,7 +8960,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             );
           }
 
-          showAnyMainScreen(
+          navigateMainScreen(
             screenName
           );
 

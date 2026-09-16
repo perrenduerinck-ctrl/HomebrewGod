@@ -348,6 +348,37 @@ service cloud.firestore {
           if isRoomDm(roomCode);
       }
 
+      match /combatEffects/{effectId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if isRoomMember(roomCode)
+          && request.resource.data.get('id', '') == effectId
+          && request.resource.data.get('roomCode', '') == roomCode
+          && request.resource.data.get('createdByUid', '') == request.auth.uid;
+
+        allow update:
+          if (
+            isRoomDm(roomCode)
+            || (
+              isRoomMember(roomCode)
+              && resource.data.get('createdByUid', '') == request.auth.uid
+            )
+          )
+          && request.resource.data.get('id', '') == effectId
+          && request.resource.data.get('roomCode', '') == roomCode
+          && request.resource.data.get('createdByUid', '')
+            == resource.data.get('createdByUid', '');
+
+        allow delete:
+          if isRoomDm(roomCode)
+          || (
+            isRoomMember(roomCode)
+            && resource.data.get('createdByUid', '') == request.auth.uid
+          );
+      }
+
       match /maps/{mapId} {
         allow read:
           if isRoomMember(roomCode);

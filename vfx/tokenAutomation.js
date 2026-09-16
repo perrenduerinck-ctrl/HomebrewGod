@@ -59,11 +59,17 @@ export function createTokenAutomation({
             ...command,
             x: Number(target.x ?? target.centerX ?? context.point?.x ?? 50),
             y: Number(target.y ?? target.centerY ?? context.point?.y ?? 50),
-            sourceTokenId: text(context.source?.id || context.source?.tokenId)
+            sourceTokenId: text(context.source?.id || context.source?.tokenId),
+            effectId: text(context.effectId),
+            createdByUid: text(context.createdByUid),
+            duration: context.duration || null
           }
         : {
             ...command,
-            tokenId: command.tokenId || text(target.id || target.tokenId)
+            tokenId: command.tokenId || text(target.id || target.tokenId),
+            effectId: text(context.effectId),
+            createdByUid: text(context.createdByUid),
+            duration: context.duration || null
           };
       onRequest(prepared, context);
 

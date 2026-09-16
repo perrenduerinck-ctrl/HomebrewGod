@@ -252,6 +252,11 @@ export function normalizeInitiativeState(source = {}) {
       initiativeOrder[currentTurnIndex].tokenId;
   }
 
+  const legacyTurnCounter = combatActive
+    ? (finiteInteger(value.roundNumber, 1, 1) - 1) * Math.max(1, initiativeOrder.length) +
+      Math.max(0, currentTurnIndex)
+    : 0;
+
   return Object.freeze({
     combatActive,
     roundNumber: combatActive
@@ -259,7 +264,12 @@ export function normalizeInitiativeState(source = {}) {
       : 1,
     initiativeOrder,
     currentTurnIndex,
-    currentCombatantId
+    currentCombatantId,
+    // Monotonic while moving forward so turn-duration effects do not change
+    // length when combatants are added, removed or reordered mid-encounter.
+    turnCounter: combatActive
+      ? finiteInteger(value.turnCounter, legacyTurnCounter, 0)
+      : 0
   });
 }
 
@@ -280,6 +290,7 @@ function stateWithOrder(
       ...state,
       combatActive: false,
       roundNumber: 1,
+      turnCounter: 0,
       initiativeOrder,
       currentTurnIndex: -1,
       currentCombatantId: null
@@ -366,6 +377,7 @@ export function applyInitiativeCommand(
         roundNumber:
           state.roundNumber +
           (crossedRoundBoundary ? 1 : 0),
+        turnCounter: state.turnCounter + 1,
         initiativeOrder: order,
         currentTurnIndex: nextIndex,
         currentCombatantId: order[nextIndex].tokenId
@@ -453,6 +465,7 @@ export function applyInitiativeCommand(
     next = {
       combatActive: true,
       roundNumber: 1,
+      turnCounter: 0,
       initiativeOrder: order,
       currentTurnIndex: 0,
       currentCombatantId: order[0].tokenId
@@ -464,6 +477,7 @@ export function applyInitiativeCommand(
       ...state,
       combatActive: false,
       roundNumber: 1,
+      turnCounter: 0,
       currentTurnIndex: -1,
       currentCombatantId: null
     };
@@ -482,6 +496,7 @@ export function applyInitiativeCommand(
       ...state,
       roundNumber:
         state.roundNumber + (wraps ? 1 : 0),
+      turnCounter: state.turnCounter + 1,
       currentTurnIndex,
       currentCombatantId:
         state.initiativeOrder[currentTurnIndex].tokenId
@@ -500,6 +515,7 @@ export function applyInitiativeCommand(
       roundNumber: wraps
         ? Math.max(1, state.roundNumber - 1)
         : state.roundNumber,
+      turnCounter: Math.max(0, state.turnCounter - 1),
       currentTurnIndex,
       currentCombatantId:
         state.initiativeOrder[currentTurnIndex].tokenId
@@ -527,7 +543,8 @@ export function toRoomInitiativeFields(value) {
       roundNumber: state.roundNumber,
       initiativeOrder: copyCombatants(state.initiativeOrder),
       currentTurnIndex: state.currentTurnIndex,
-      currentCombatantId: state.currentCombatantId
+      currentCombatantId: state.currentCombatantId,
+      turnCounter: state.turnCounter
     }
   };
 }

@@ -408,6 +408,52 @@ test("prepared initiative rolls can be reused without touching randomness", () =
   );
 });
 
+test("persisted turn counter survives initiative reorder and active removal", () => {
+  let state = normalizeInitiativeState({
+    initiativeOrder: [
+      combatant("a", 30),
+      combatant("b", 20),
+      combatant("c", 10)
+    ]
+  });
+  state = applyInitiativeCommand(
+    state,
+    { type: "start-combat" }
+  ).state;
+  state = applyInitiativeCommand(
+    state,
+    { type: "next-turn" }
+  ).state;
+  assert.equal(state.currentCombatantId, "b");
+  assert.equal(state.turnCounter, 1);
+
+  state = applyInitiativeCommand(
+    state,
+    {
+      type: "add-combatant",
+      combatant: combatant("d", 25)
+    }
+  ).state;
+  assert.equal(state.currentCombatantId, "b");
+  assert.equal(state.turnCounter, 1);
+
+  state = applyInitiativeCommand(
+    state,
+    { type: "remove-combatant", tokenId: "b" }
+  ).state;
+  assert.equal(state.currentCombatantId, "c");
+  assert.equal(state.turnCounter, 2);
+  assert.equal(
+    toRoomInitiativeFields(state).initiativeState.turnCounter,
+    2
+  );
+
+  const restored = normalizeInitiativeState(
+    toRoomInitiativeFields(state).initiativeState
+  );
+  assert.equal(restored.turnCounter, 2);
+});
+
 test("initiative round and campaign seconds are composed as one room transition", () => {
   const room = {
     worldTime: 100,
