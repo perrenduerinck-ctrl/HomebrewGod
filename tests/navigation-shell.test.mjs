@@ -30,8 +30,11 @@ test("DM navigation groups every connected creator, campaign and world tool once
 
 test("navigation stays hidden without an open room and shell modules retain accessibility contracts", () => {
   assert.deepEqual(visibleSidebarSections({ role: "dm", roomOpen: false }), []);
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const sidebar = readFileSync(new URL("../ui/navigation/sidebar.js", import.meta.url), "utf8");
   const drawer = readFileSync(new URL("../ui/navigation/toolDrawer.js", import.meta.url), "utf8");
+  assert.match(app, /animationLibraryButton:\s*\$\("animationLibraryButton"\)/);
+  assert.match(app, /animationCreatorButton:\s*\$\("animationCreatorButton"\)/);
   assert.match(sidebar, /aria-expanded/);
   assert.match(sidebar, /localStorage|STORAGE_KEY/);
   assert.match(sidebar, /keydown/);

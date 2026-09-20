@@ -300,6 +300,8 @@ const E = {
   battleVfxModeSelect:
     $("battleVfxModeSelect"),
   battleVfxSoundToggle: $("battleVfxSoundToggle"),
+  animationLibraryButton: $("animationLibraryButton"),
+  animationCreatorButton: $("animationCreatorButton"),
   battleVfxDebugPanel: $("battleVfxDebugPanel"),
   battleVfxDebugEnabledToggle: $("battleVfxDebugEnabledToggle"),
   battleVfxDebugShadowToggle: $("battleVfxDebugShadowToggle"),
