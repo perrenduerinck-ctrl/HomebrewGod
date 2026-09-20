@@ -639,7 +639,7 @@
       "The battle-map Monster Creator button opens its tool tab."
     );
     assert(
-      appSource.includes('showAnyMainScreen("monsterCreator")') &&
+      appSource.includes('navigateMainScreen("monsterCreator")') &&
         appSource.includes("await initMonsterCreatorSystem();"),
       "The monsterCreator startup URL opens and initializes the creator."
     );
