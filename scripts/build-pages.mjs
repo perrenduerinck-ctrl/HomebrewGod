@@ -113,6 +113,7 @@ for (
     "monsters",
     "shared",
     "tokens",
+    "ui",
     "vfx"
   ]
 ) {
