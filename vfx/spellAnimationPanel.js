@@ -3,7 +3,7 @@ import { getAnimationSession } from "./animationWorkspace.js";
 import { createBattleMapEffectEngine } from "./effectEngine.js";
 import { createAnimationPlayer } from "./animationPlayer.js";
 import { createAnimationSequenceController } from "./animationSequence.js";
-import { createAnimationPreviewStage } from "./animationPreviewStage.js";
+import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "./animationPreviewStage.js";
 
 const title = slot => slot[0].toUpperCase() + slot.slice(1);
 const optionalNumber = input => String(input?.value || "").trim() === "" ? null : Number(input.value);
@@ -30,7 +30,7 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
       <button class="hg-animation-dummy hg-animation-source" data-spell-source type="button" aria-label="Source token, drag or use arrow keys"><span>S</span><small>Source</small></button>
       <button class="hg-animation-dummy hg-animation-target" data-spell-target type="button" aria-label="Target token, drag or use arrow keys"><span>T</span><small>Target</small></button>
     </div>
-    <div class="hg-animation-preview-options"><label>Test distance<select data-spell-distance><option value="custom">Custom / drag anchors</option>${[5,10,30,60,120].map(value => `<option value="${value}">${value} ft</option>`).join("")}</select></label><button type="button" data-spell-swap>Swap Source / Target</button><button type="button" data-spell-reset>Reset anchors</button></div>
+    <div class="hg-animation-preview-options"><label>Test distance<select data-spell-distance>${ANIMATION_PREVIEW_DISTANCES.map(value => `<option value="${value}">${value === "adjacent" ? "Adjacent" : `${value} ft`}</option>`).join("")}<option value="custom" selected>Custom / drag anchors</option></select></label><button type="button" data-spell-swap>Swap Source / Target</button><button type="button" data-spell-reset>Reset anchors</button></div>
     <div class="hg-animation-buttons"><button type="button" class="hg-animation-primary" data-spell-play>▶ Preview all stages</button><button type="button" data-spell-stop>Stop preview</button><button type="button" data-spell-save>Use these stages</button></div>
     <p data-spell-animation-status role="status"></p>`;
   document.body.append(dialog);

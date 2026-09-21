@@ -2513,6 +2513,15 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-vfx-animation-sprite, .hg-vfx-animation-sprite * { pointer-events: none; }
 .hg-vfx-animation-sprite { border-radius: 0; }
 .hg-animation-debug { color: #ffdf60; white-space: nowrap; font: 11px monospace; }
+.hg-animation-runtime-debug { position: absolute; inset: 0; z-index: 9999; pointer-events: none; }
+.hg-animation-runtime-debug svg { width: 100%; height: 100%; overflow: visible; }
+.hg-animation-runtime-debug :is(.hg-animation-debug-direction, .hg-animation-debug-path) { fill: none; vector-effect: non-scaling-stroke; }
+.hg-animation-debug-direction { stroke: #86d9ff88; stroke-width: 1; stroke-dasharray: 4 4; }
+.hg-animation-debug-path { stroke: #ffdf60; stroke-dasharray: 6 4; }
+.hg-animation-runtime-debug [data-path-kind="beam"] { stroke: #7bdcff99; stroke-dasharray: none; }
+.hg-animation-runtime-debug text { fill: #fff; paint-order: stroke; stroke: #071322; stroke-width: 3px; stroke-linejoin: round; font: 700 10px system-ui; }
+.hg-animation-debug-distance { text-anchor: middle; fill: #ffefac !important; }
+.hg-animation-debug-info { position: absolute; right: 6px; bottom: 6px; min-width: 170px; padding: 7px 9px; border: 1px solid #5d6f91; border-radius: 6px; background: #071322e8; color: white; font: 11px/1.35 ui-monospace, monospace; white-space: pre-line; }
 .hg-spell-animation-panel { --animation-accent: #b7a7ff; width: min(900px, calc(100vw - 40px)); max-height: 90vh; overflow: auto; padding: 24px; border: 1px solid #657093; border-radius: 16px; color: #eef2ff; background: #111827; font: 14px system-ui; }
 .hg-spell-animation-panel::backdrop { background: #020617a8; }
 .hg-spell-animation-panel section { border: 1px solid #334155; padding: 14px; border-radius: 10px; margin: 12px 0; }

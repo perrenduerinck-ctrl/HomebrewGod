@@ -92,6 +92,62 @@ export function animationGeometry(source, target) {
   return { source, target, distance: Math.hypot(dx, dy), angle: dx || dy ? Math.atan2(dy, dx) * 180 / Math.PI : 0 };
 }
 
+export function projectileEndpoints(definition, source, target) {
+  const dx = target.x - source.x, dy = target.y - source.y, distance = Math.hypot(dx, dy), ux = distance ? dx / distance : 1, uy = distance ? dy / distance : 0;
+  const startOffset = number(definition?.projectile?.startOffset), endOffset = number(definition?.projectile?.endOffset);
+  const totalOffset = startOffset + endOffset;
+  const ratio = totalOffset > distance ? distance / Math.max(1, totalOffset) : 1;
+  return { source: { x: source.x + ux * startOffset * ratio, y: source.y + uy * startOffset * ratio },
+    target: { x: target.x - ux * endOffset * ratio, y: target.y - uy * endOffset * ratio }, distance: Math.max(0, distance - totalOffset) };
+}
+
+// Shared presentation geometry for playback and creator diagnostics. Gameplay
+// targeting never consumes these visual placement points.
+export function animationPlacementPoint(definition, { source, target, map }) {
+  if (definition.behavior === "projectile") return projectileEndpoints(definition, source, target).source;
+  if (definition.behavior === "beam" || definition.placement.spawnAt === "between") return { x: (source.x + target.x) / 2, y: (source.y + target.y) / 2 };
+  if (definition.placement.spawnAt === "source") return source;
+  if (definition.placement.spawnAt === "target") return target;
+  if (["source-to-target", "source-toward-target"].includes(definition.placement.spawnAt)) {
+    const distance = Math.hypot(target.x - source.x, target.y - source.y);
+    const offset = definition.placement.spawnAt === "source-toward-target" ? Math.min(distance, number(definition.placement.towardOffset)) : 0;
+    return { x: source.x + (distance ? (target.x - source.x) * offset / distance : 0), y: source.y + (distance ? (target.y - source.y) * offset / distance : 0) };
+  }
+  return map;
+}
+
+const label = value => String(value || "").toLowerCase().replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, letter => letter.toUpperCase());
+const normalizedAngle = value => ((number(value) + 540) % 360) - 180;
+export function animationDebugGeometry(definition, points, state = {}, grid = {}) {
+  const geometry = animationGeometry(points.source, points.target);
+  const endpoints = projectileEndpoints(definition, points.source, points.target);
+  const spawn = animationPlacementPoint(definition, points);
+  const impact = definition.behavior === "projectile" ? endpoints.target
+    : ["source-effect", "aura"].includes(definition.behavior) ? points.source
+      : definition.behavior === "ground" ? points.map : points.target;
+  const directional = ["projectile", "beam", "melee"].includes(definition.behavior) || ["face-target", "face-away"].includes(definition.direction.mode);
+  const facingAngle = directional ? geometry.angle + (definition.direction.mode === "face-away" ? 180 : 0) : definition.rotation;
+  const pixelsPerFoot = number(grid.pixelsPerFoot);
+  return {
+    ...geometry,
+    distanceFeet: pixelsPerFoot > 0 ? geometry.distance / pixelsPerFoot : null,
+    spawn,
+    impact,
+    pivot: Number.isFinite(state.x) && Number.isFinite(state.y) ? { x: state.x, y: state.y } : spawn,
+    facingAngle: normalizedAngle(facingAngle),
+    behavior: label(definition.behavior),
+    placement: label(definition.placement.mode),
+    facing: definition.direction.mode === "face-away" ? "Away from target"
+      : directional ? "Target" : definition.direction.mode === "token-facing" ? "Token" : "Fixed",
+    followSource: definition.placement.followSource === true,
+    followTarget: definition.placement.followTarget === true,
+    path: { kind: definition.behavior === "projectile" ? "projectile" : definition.behavior === "beam" ? "beam" : "direction",
+      source: definition.behavior === "projectile" ? endpoints.source : points.source,
+      target: definition.behavior === "projectile" ? endpoints.target : points.target,
+      arcHeight: definition.behavior === "projectile" ? number(definition.projectile.arcHeight) : 0 }
+  };
+}
+
 // Grid pixels are measured before map zoom; the renderer applies map scale.
 // No targeting or combat rule consumes these visual dimensions.
 export function animationAreaSize(area = {}, grid = {}) {

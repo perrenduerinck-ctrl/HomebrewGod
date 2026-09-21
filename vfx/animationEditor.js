@@ -5,7 +5,7 @@ import { createAnimationSelector } from "./animationBrowser.js";
 import { animationFormMarkup, writeAnimationFields, readAnimationFields } from "./animationEditorFields.js";
 import { ANIMATION_PRESETS } from "./animationPlayback.js";
 import { inspectAnimationSprite, spriteCheckSummary } from "./animationSpriteCheck.js";
-import { createAnimationPreviewStage } from "./animationPreviewStage.js";
+import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "./animationPreviewStage.js";
 import { assertPersistentAnimationReferences } from "./animationReferences.js";
 import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
 import { getFamilyTemplates } from "./animationFamilies.js";
@@ -34,8 +34,8 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <div class="hg-animation-preview-options"><label>Slow motion<select data-animation-slow><option value="1">1×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select></label>
     <label>Background<select data-animation-background><option value="checker">Transparent checkerboard</option><option value="dark">Dark</option><option value="light">Light</option><option value="grid">Grid</option><option value="map">Map-style</option></select></label></div>
     <details class="hg-animation-preview-tools"><summary>Preview Tools</summary><label class="hg-animation-toggle"><input data-animation-show-frame type="checkbox">Show frame number</label><label class="hg-animation-toggle"><input data-animation-show-bounds type="checkbox">Show bounding box</label><label class="hg-animation-toggle"><input data-animation-show-pivot type="checkbox">Show pivot</label>
-    <label class="hg-animation-toggle"><input data-animation-show-points type="checkbox">Show source, target, travel path and impact point</label>
-    <label>Test distance<select data-animation-distance><option value="custom">Custom / drag anchors</option><option value="adjacent">Adjacent</option>${[5,10,30,60,120].map(n => `<option value="${n}">${n} ft</option>`).join("")}</select></label>
+    <label class="hg-animation-toggle"><input data-animation-show-points type="checkbox" checked>Show Source / Target debugger</label>
+    <label>Test distance<select data-animation-distance>${ANIMATION_PREVIEW_DISTANCES.map(value => `<option value="${value}">${value === "adjacent" ? "Adjacent" : `${value} ft`}</option>`).join("")}<option value="custom" selected>Custom / drag anchors</option></select></label>
     <button type="button" data-animation-swap-tokens>Swap source / target</button><button type="button" data-animation-reset-tokens>Reset tokens</button>
     <div class="hg-animation-buttons">${[["source","Source Effect"],["target","Target Effect"],["projectile","Projectile"],["melee","Melee Directional"],["beam","Beam"],["aura","Aura"]].map(([key,name]) => `<button type="button" data-animation-quick="${key}">${name}</button>`).join("")}</div></details>
     <p data-animation-preview-info class="hg-animation-hint"></p><p class="hg-animation-hint">Preview only. Choose animation stages in the spell or attack editor; save them with that content.</p></section></div>

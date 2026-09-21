@@ -1,3 +1,6 @@
+import { animationPlacementPoint, projectileEndpoints } from "./animationRuntime.js";
+export { projectileEndpoints } from "./animationRuntime.js";
+
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 export function animationFrames(d) {
   let frames = d.frames.sequence.length ? [...d.frames.sequence] : Array.from({ length: d.frames.count }, (_, i) => i + d.frames.start);
@@ -10,13 +13,6 @@ export function chooseAnimationVariation(d, random = Math.random) {
   const signed = amount => amount ? (clamp(Number(random()) || 0, 0, 1) * 2 - 1) * amount : 0;
   return Object.freeze({ rotation: signed(d.variation.rotation), scale: 1 + signed(d.variation.scale),
     offsetX: signed(d.variation.offsetX), offsetY: signed(d.variation.offsetY), speed: 1 + signed(d.variation.speed) });
-}
-export function projectileEndpoints(d, source, target) {
-  const dx = target.x - source.x, dy = target.y - source.y, distance = Math.hypot(dx, dy), ux = distance ? dx / distance : 1, uy = distance ? dy / distance : 0;
-  const totalOffset = d.projectile.startOffset + d.projectile.endOffset;
-  const ratio = totalOffset > distance ? distance / Math.max(1, totalOffset) : 1;
-  return { source: { x: source.x + ux * d.projectile.startOffset * ratio, y: source.y + uy * d.projectile.startOffset * ratio },
-    target: { x: target.x - ux * d.projectile.endOffset * ratio, y: target.y - uy * d.projectile.endOffset * ratio }, distance: Math.max(0, distance - totalOffset) };
 }
 export function animationTiming(d, variation, source, target, limit) {
   const speed = d.timing.speed * variation.speed;
@@ -38,18 +34,12 @@ export function animationTiming(d, variation, source, target, limit) {
 }
 export function sampleAnimation(d, elapsed, { source, target, map }, variation, timing) {
   const progress = timing.travel ? clamp(elapsed / timing.travel, 0, 1) : 0;
-  let point = d.placement.spawnAt === "source" ? source : d.placement.spawnAt === "target" ? target : d.placement.spawnAt === "between"
-    ? { x: (source.x + target.x) / 2, y: (source.y + target.y) / 2 } : map;
+  let point = animationPlacementPoint(d, { source, target, map });
   const endpoint = projectileEndpoints(d, source, target);
   if (d.behavior === "projectile") point = {
     x: endpoint.source.x + (endpoint.target.x - endpoint.source.x) * progress,
     y: endpoint.source.y + (endpoint.target.y - endpoint.source.y) * progress - (endpoint.distance ? 4 * d.projectile.arcHeight * progress * (1 - progress) : 0)
   };
-  if (d.behavior === "beam") point = { x: (source.x + target.x) / 2, y: (source.y + target.y) / 2 };
-  if (["source-to-target", "source-toward-target"].includes(d.placement.spawnAt) && !["projectile", "beam"].includes(d.behavior)) {
-    const distance = Math.hypot(target.x - source.x, target.y - source.y), offset = d.placement.spawnAt === "source-toward-target" ? Math.min(distance, d.placement.towardOffset) : 0;
-    point = { x: source.x + (distance ? (target.x - source.x) * offset / distance : 0), y: source.y + (distance ? (target.y - source.y) * offset / distance : 0) };
-  }
   let dx = target.x - source.x, dy = target.y - source.y;
   if (d.behavior === "projectile" && timing.travel && (dx || dy)) dy -= 4 * d.projectile.arcHeight * (1 - 2 * progress);
   const facing = Math.atan2(dy, dx) * 180 / Math.PI;

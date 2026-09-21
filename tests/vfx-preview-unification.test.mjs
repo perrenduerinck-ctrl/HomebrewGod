@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAnimationPreviewStage } from "../vfx/animationPreviewStage.js";
+import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "../vfx/animationPreviewStage.js";
 import { buildSpellAnimationPreviewContext, createSpellPreviewSession } from "../battleMap/spellPreview.js";
 import { createSpellTemplateInstruction } from "../battleMap/spellTemplates.js";
 import { getDefaultSpellById } from "../data/defaultSpells.js";
@@ -93,6 +93,10 @@ test("shared preview distance sets exact actor separation without changing grid 
   assert.equal(state.widthFeet, 150);
   assert.ok(Math.abs(Math.hypot(state.target.x - state.source.x, state.target.y - state.source.y) / state.pixelsPerFoot - 40) < 1e-9);
   f.stage.destroy();
+});
+
+test("shared preview exposes the complete debugger distance set", () => {
+  assert.deepEqual(ANIMATION_PREVIEW_DISTANCES, ["adjacent", 5, 10, 15, 30, 60, 90, 120]);
 });
 
 test("single-target spell preview retains selected caster and target token IDs", () => {

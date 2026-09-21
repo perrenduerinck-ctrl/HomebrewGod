@@ -226,6 +226,26 @@ test("new animations derive placement from behavior and legacy animations keep m
   await expect(field(dialog, "spawn")).toHaveValue("map"); await expect(field(dialog, "follow-source")).not.toBeChecked();
 });
 
+test("creator debugger shows runtime geometry, facing, follow state and every quick distance", async ({ page }) => {
+  const dialog = await openLibrary(page);
+  await field(dialog, "select").selectOption("sword_slash_01"); await field(dialog, "duplicate").click();
+  await expect(field(dialog, "show-points")).toBeChecked();
+  expect(await field(dialog, "distance").locator("option").evaluateAll(options => options.map(option => option.value)))
+    .toEqual(["adjacent", "5", "10", "15", "30", "60", "90", "120", "custom"]);
+  await dialog.locator(".hg-animation-preview-tools > summary").click();
+  await field(dialog, "advanced-mode").check(); await field(dialog, "override-placement").uncheck();
+  await field(dialog, "behavior").selectOption("projectile"); await field(dialog, "travel-speed").fill("20"); await field(dialog, "distance").selectOption("30");
+  await field(dialog, "draft-preview").click(); const debug = dialog.locator(".hg-animation-runtime-debug"); await expect(debug).toBeVisible();
+  const state = await debug.evaluate(root => ({ info: root.querySelector("[data-animation-debug-info]").textContent,
+    markers: [...root.querySelectorAll("[data-debug-marker]")].map(node => node.dataset.debugMarker),
+    path: root.querySelector(".hg-animation-debug-path").dataset.pathKind,
+    distance: root.querySelector(".hg-animation-debug-distance").textContent }));
+  expect(state.info).toContain("SOURCE → TARGET"); expect(state.info).toContain("Distance: 30 ft"); expect(state.info).toContain("Behavior: Projectile");
+  expect(state.info).toContain("Placement: Source To Target"); expect(state.info).toContain("Facing: Target"); expect(state.info).toContain("Follow Source: No"); expect(state.info).toContain("Follow Target: No"); expect(state.info).toContain("Angle:");
+  expect(state.markers).toEqual(["source", "target", "spawn", "impact", "pivot"]); expect(state.path).toBe("projectile"); expect(state.distance).toBe("30 ft");
+  await field(dialog, "stop").click();
+});
+
 test("preview source attachments follow dragged tokens and beam stretching spans the endpoints", async ({ page }) => {
   const dialog = await openLibrary(page); await field(dialog, "select").selectOption("healing_burst_01"); await field(dialog, "duplicate").click();
   await field(dialog, "advanced-mode").check();

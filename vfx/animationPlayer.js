@@ -1,7 +1,7 @@
 import { mergeAnimationDefinition } from "./animationLibrary.js";
 import { createVfxAssetCache } from "./vfxAssetManifest.js";
 import { chooseAnimationVariation, animationTiming, sampleAnimation } from "./animationPlayback.js";
-import { normalizeAnimationRuntimeContext, animationGeometry, animationAreaSize, animationLayerMetrics, normalizeAnimationGrid } from "./animationRuntime.js";
+import { normalizeAnimationRuntimeContext, animationGeometry, animationDebugGeometry, animationAreaSize, animationLayerMetrics, normalizeAnimationGrid } from "./animationRuntime.js";
 import { createAnimationDebug } from "./animationDebug.js";
 
 let nextOwner = 0;
@@ -68,8 +68,8 @@ function updateElement({ element, effect, elapsed, mapScale, frame }) {
   if (!runtime) return null;
   const d = runtime.definition, points = runtime.context.sample(d.placement);
   runtime.points = points;
-  runtime.debugLayer?.update(animationGeometry(points.source, points.target), d.behavior === "projectile" ? d.projectile.arcHeight : 0);
   const state = sampleAnimation(d, elapsed, points, runtime.variation, runtime.timing);
+  runtime.debugLayer?.update(animationDebugGeometry(d, points, state, runtime.grid));
   element.style.left = `${state.x}px`; element.style.top = `${state.y}px`; element.style.opacity = String(state.opacity);
   element.style.setProperty("--hg-vfx-rotation", `${state.rotation}deg`); element.style.setProperty("--hg-vfx-scale", String(state.scale * mapScale));
   element.dataset.vfxX = String(state.x); element.dataset.vfxY = String(state.y); element.dataset.animationFrame = String(frame ?? d.frames.start);

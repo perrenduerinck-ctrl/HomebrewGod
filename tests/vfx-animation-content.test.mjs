@@ -182,8 +182,8 @@ test("hydrated missing animation uses the unchanged safe legacy spell fallback",
   assert.equal(adapter.play({ spellId: "fireball" }).ok, true); assert.equal(legacyCalls, 1);
   assert.equal(f.store.get("fireball").animations.impact, "missing");
 });
-test("the five foundational modules remain byte-for-byte identical to merged main", () => {
-  const expected = { animationRuntime: "c6b662892d23645373aeb9192147647d23763929fb469cd0ae947212e1c72eed", animationPlayer: "38c38caa4bf3cffcacba14f028dcccb3c5f994d242f6c872f945781b732bb27b", animationSequence: "79259d2d3554413e2143183095612e4aafa04ab6d2352527954bf651212a9632", animationSpellAdapter: "4aedc5b8da50aeeda940cd0564fe66db2d1e81b10a090566cc5aa72ccc77e04b", animationPersistence: "9dff983660c320021a7c64f5f4a086243df7a1327066df276def17548828492e" };
+test("the five foundational modules remain byte-for-byte locked after intentional runtime changes", () => {
+  const expected = { animationRuntime: "cfda3d5b53906dcb746e9bd3d61d762efaa6eb0b449af59df94b32920918b97c", animationPlayer: "a04a28e7f4750b2bbfc553859df35b0e6c9bfc7725ce15b05adc9ef57ff8042d", animationSequence: "79259d2d3554413e2143183095612e4aafa04ab6d2352527954bf651212a9632", animationSpellAdapter: "4aedc5b8da50aeeda940cd0564fe66db2d1e81b10a090566cc5aa72ccc77e04b", animationPersistence: "9dff983660c320021a7c64f5f4a086243df7a1327066df276def17548828492e" };
   for (const [file, hash] of Object.entries(expected)) {
     // Git on Windows may change line endings, not module contents.
     const source = readFileSync(new URL("../vfx/" + file + ".js", import.meta.url), "utf8").replace(/\r\n/g, "\n");

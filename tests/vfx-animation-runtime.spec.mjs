@@ -12,18 +12,21 @@ test("real shared renderer aligns tokens, projectiles and beams through map zoom
     const actors=[80,400].map((x,i)=>{const node=document.createElement("div");node.dataset.tokenId=String(i);node.style.cssText=`position:absolute;left:${x}px;top:100px;width:40px;height:40px`;const body=document.createElement("div");body.className="hg-token-fallback";body.style.cssText="width:40px;height:40px;transform:translateY(-20px)";node.append(body);surface.append(node);return node;});
     let zoom=1; const engine=createBattleMapEffectEngine({surface,getScale:()=>zoom,getTokenElement:id=>actors[Number(id)]});const player=createAnimationPlayer({engine,library});
     const wait=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-    const played=await player.playAnimation("runtime_sprite",{source:actors[0],target:actors[1],debugPoints:true}); await wait();
+    const played=await player.playAnimation("runtime_sprite",{source:actors[0],target:actors[1],debugPoints:true,grid:{pixelsPerFoot:10}}); await wait();
     const delta=()=>{const effect=surface.querySelector(".hg-vfx-animation-sprite"),body=actors[0].firstChild.getBoundingClientRect(),overlay=engine.getOverlayElement().getBoundingClientRect();return {x:parseFloat(effect.style.left)-(body.left+body.width/2-overlay.left),y:parseFloat(effect.style.top)-(body.top+body.height/2-overlay.top)};};
     const checks=[delta()]; zoom=1.5;surface.style.transform="scale(1.5)";engine.refresh();await wait();checks.push(delta());
     surface.style.left="175px";surface.style.top="210px";engine.refresh();await wait();checks.push(delta());actors[0].style.left="130px";await wait();checks.push(delta());
-    const debug=surface.querySelector(".hg-animation-runtime-debug output").textContent; played.cancel();
+    const debugRoot=surface.querySelector(".hg-animation-runtime-debug"),debug=debugRoot.querySelector("output").textContent;
+    const debuggerState={markers:[...debugRoot.querySelectorAll('[data-debug-marker]')].map(node=>node.dataset.debugMarker),path:debugRoot.querySelector('.hg-animation-debug-path').dataset.pathKind,distance:debugRoot.querySelector('.hg-animation-debug-distance').textContent};played.cancel();
     const self=await player.playAnimation("runtime_sprite",{source:actors[0],target:actors[0],rotation:17});await wait();const rotation=surface.querySelector(".hg-vfx-animation-sprite").style.getPropertyValue("--hg-vfx-rotation");self.cancel();
     const projectile=await player.playAnimation("runtime_sprite",{source:actors[0],target:{x:600,y:200},behavior:"projectile",projectile:{speed:5000},playback:"hold"});const arrival=await projectile.arrived;await projectile.finished;
     const missing=await player.playAnimation("runtime_sprite",{source:actors[0],placement:{mode:"TARGET"}});await wait();const missingDelta=delta();missing.cancel();
-    player.destroy();engine.destroy();const remaining=surface.querySelectorAll(".hg-map-vfx-effect,.hg-animation-runtime-debug").length;surface.remove();return{checks,debug,rotation,arrival,missingDelta,remaining};
+    player.destroy();engine.destroy();const remaining=surface.querySelectorAll(".hg-map-vfx-effect,.hg-animation-runtime-debug").length;surface.remove();return{checks,debug,debuggerState,rotation,arrival,missingDelta,remaining};
   });
   for(const p of [...result.checks,result.missingDelta]) {expect(p.x).toBeCloseTo(0,1);expect(p.y).toBeCloseTo(0,1);}
-  expect(result.rotation).toBe("17deg");expect(result.debug).toContain("Distance");expect(result.arrival).toEqual(["arrived"]);expect(result.remaining).toBe(0);
+  expect(result.rotation).toBe("17deg");expect(result.debug).toContain("SOURCE → TARGET");expect(result.debug).toContain("Distance:");expect(result.debug).toContain("Behavior: Static");expect(result.debug).toContain("Placement: Source");expect(result.debug).toContain("Facing: Target");expect(result.debug).toContain("Follow Source: Yes");expect(result.debug).toContain("Angle:");
+  expect(result.debuggerState.markers).toEqual(["source","target","spawn","impact","pivot"]);expect(result.debuggerState.path).toBe("direction");expect(result.debuggerState.distance).toMatch(/ft$/);
+  expect(result.arrival).toEqual(["arrived"]);expect(result.remaining).toBe(0);
 });
 
 test("spell creation uploads an animation in place, stores stage IDs, preserves fields and tracks usage", async ({ page }) => {

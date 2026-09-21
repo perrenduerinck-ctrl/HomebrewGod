@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeAnimationPoint, normalizeAnimationRuntimeContext, animationAreaSize, normalizeAnimationGrid } from "../vfx/animationRuntime.js";
+import { normalizeAnimationPoint, normalizeAnimationRuntimeContext, animationAreaSize, normalizeAnimationGrid, animationDebugGeometry } from "../vfx/animationRuntime.js";
 import { normalizeAnimationDefinition } from "../vfx/animationDefinition.js";
 import { sampleAnimation, animationTiming, chooseAnimationVariation } from "../vfx/animationPlayback.js";
 import { createAnimationLibrary, createAnimationBindings } from "../vfx/animationLibrary.js";
@@ -113,6 +113,17 @@ test("fixed points resize with the map while followSource re-reads the runtime a
   layer.clientWidth = 800; layer.clientHeight = 400;
   assert.deepEqual(context.sample({}).target, { x: 400, y: 120 });
   assert.deepEqual(context.sample({ followSource: true }).source, source);
+});
+test("runtime debug geometry reports the same projectile endpoints, pivot, distance and facing used by playback", () => {
+  const definition = normalizeAnimationDefinition({ ...base, behavior: "projectile", placement: { override: false },
+    projectile: { startOffset: 10, endOffset: 20, arcHeight: 30 }, direction: { mode: "face-target" } });
+  const points = { source: { x: 0, y: 20 }, target: { x: 100, y: 20 }, map: { x: 45, y: 70 } };
+  const debug = animationDebugGeometry(definition, points, { x: 35, y: -5 }, { pixelsPerFoot: 10 });
+  assert.deepEqual(debug.spawn, { x: 10, y: 20 }); assert.deepEqual(debug.impact, { x: 80, y: 20 });
+  assert.deepEqual(debug.pivot, { x: 35, y: -5 }); assert.equal(debug.distanceFeet, 10); assert.equal(debug.facingAngle, 0);
+  assert.equal(debug.behavior, "Projectile"); assert.equal(debug.placement, "Source To Target"); assert.equal(debug.facing, "Target");
+  assert.equal(debug.followSource, false); assert.equal(debug.followTarget, false);
+  assert.deepEqual(debug.path, { kind: "projectile", source: { x: 10, y: 20 }, target: { x: 80, y: 20 }, arcHeight: 30 });
 });
 test("sword, spear, self healing, other healing, ground and beam share centered placement and facing", () => {
   const source = { x: 50, y: 100 }, target = { x: 250, y: 100 }, map = { x: 130, y: 200 };

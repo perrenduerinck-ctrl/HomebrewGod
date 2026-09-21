@@ -5,6 +5,7 @@ const DEFAULT_POINTS = Object.freeze({
   source: Object.freeze({ xRatio: 0.24, yRatio: 0.56 }),
   target: Object.freeze({ xRatio: 0.76, yRatio: 0.44 }),
 });
+export const ANIMATION_PREVIEW_DISTANCES = Object.freeze(["adjacent", 5, 10, 15, 30, 60, 90, 120]);
 
 function copyPoint(point, fallback) {
   return {
