@@ -37,7 +37,11 @@ async function tokenCenter(page,id) {
   });
 }
 async function selectPreview(page,spellId) {
-  await page.locator('#battleToolsMenu').evaluate(el=>{el.open=true;});
+  const menu=page.locator('#battleToolsMenu');
+  // Use the real disclosure interaction so its lazy custom-spell refresh runs
+  // after a battle-route reload. Assigning `.open` does not fire `toggle`.
+  await menu.evaluate(el=>{el.open=false;});
+  await menu.locator(':scope > summary').click();
   await page.locator('#spellTemplateSelect').selectOption(spellId);await page.locator('#loadSpellTemplateButton').click();
   await expect(page.locator('#templateStatus')).toContainText('Click caster position.');
 }

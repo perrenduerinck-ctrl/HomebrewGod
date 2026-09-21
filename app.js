@@ -485,6 +485,8 @@ let activeSpellTemplateInstruction = null;
 let activeSpellPreviewSpell = null;
 let activeSpellPreviewSession = null;
 let spellPreviewLoading = false;
+let customSpellPreviewRoomCode = "";
+let customSpellPreviewCharacters = [];
 let spellPreviewGeneration = 0;
 let spellPreviewCasterMarker = null;
 let spellPreviewTargetMarker = null;
@@ -5964,13 +5966,37 @@ function updateBattleMapTemplateUi(state) {
 function getCustomSpellPreviewOptions() {
   const characters = characterCreatorSystem?.getState?.().characterCache || [];
   const draft = characterCreatorSystem?.getDraft?.();
-  return [...new Map([...characters, draft].flatMap(character => character?.magic?.customSpells || [])
+  const roomCharacters = customSpellPreviewRoomCode === currentRoomCode
+    ? customSpellPreviewCharacters
+    : [];
+  return [...new Map([...roomCharacters, ...characters, draft].flatMap(character => character?.magic?.customSpells || [])
     .filter(spell => spell?.id && spell?.name).map(spell => [spell.id, spell])).values()];
 }
 
-function syncCustomSpellPreviewOptions() {
+async function loadRoomCustomSpellPreviewOptions() {
+  const roomCode = currentRoomCode;
+  if (!roomCode) {
+    customSpellPreviewRoomCode = "";
+    customSpellPreviewCharacters = [];
+    return getCustomSpellPreviewOptions();
+  }
+  try {
+    const snapshot = await getDocs(collection(db, "rooms", roomCode, "characters"));
+    if (currentRoomCode !== roomCode) return getCustomSpellPreviewOptions();
+    customSpellPreviewRoomCode = roomCode;
+    customSpellPreviewCharacters = snapshot.docs.map(character => character.data());
+  } catch (error) {
+    if (customSpellPreviewRoomCode !== roomCode) {
+      customSpellPreviewRoomCode = "";
+      customSpellPreviewCharacters = [];
+    }
+    console.warn("Could not refresh custom spells for the battle-map picker.", error);
+  }
+  return getCustomSpellPreviewOptions();
+}
+
+function syncCustomSpellPreviewOptions(spells = getCustomSpellPreviewOptions()) {
   if (!E.spellTemplateSelect) return;
-  const spells = getCustomSpellPreviewOptions();
   const old = E.spellTemplateSelect.querySelector('optgroup[data-custom-spells]');
   const signature = JSON.stringify(spells.map(spell => [spell.id, spell.name]));
   if (old?.dataset.signature === signature) return;
@@ -6208,7 +6234,7 @@ function initializeBattleMapTemplates() {
   // stage assignments. Reuse the character library/draft, not a second store.
   $("battleToolsMenu")?.addEventListener("toggle", async event => {
     if (!event.target.open || currentIsDM !== true) return;
-    try { await initCharacterCreatorSystem(); syncCustomSpellPreviewOptions(); }
+    try { syncCustomSpellPreviewOptions(await loadRoomCustomSpellPreviewOptions()); }
     catch { /* Default spells remain available if character loading fails. */ }
   });
 
