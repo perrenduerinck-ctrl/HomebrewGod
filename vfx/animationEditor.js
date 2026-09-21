@@ -1,4 +1,4 @@
-import { MAX_UPLOAD_BYTES, normalizeAnimation, mergeAnimationDefinition } from "./animationLibrary.js";
+import { MAX_UPLOAD_BYTES, normalizeAnimation, mergeAnimationDefinition, getBehaviorPlacementDefaults } from "./animationLibrary.js";
 import { createAnimationPlayer } from "./animationPlayer.js";
 import { createBattleMapEffectEngine } from "./effectEngine.js";
 import { createAnimationSelector } from "./animationBrowser.js";
@@ -83,6 +83,19 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("subtype-control").hidden = field("family").value !== "magic";
     field("custom-grid").hidden = field("grid").value !== "custom";
     field("axis-scale").hidden = field("lock").checked;
+    const automaticPlacement = !field("override-placement").checked;
+    const behaviorDefaults = getBehaviorPlacementDefaults(field("behavior").value);
+    if (automaticPlacement) {
+      field("spawn").value = behaviorDefaults.placement.spawnAt;
+      field("follow-source").checked = behaviorDefaults.placement.followSource;
+      field("follow-target").checked = behaviorDefaults.placement.followTarget;
+      field("fixed-map").checked = behaviorDefaults.placement.fixedToMap;
+      field("facing").value = behaviorDefaults.direction.mode;
+    }
+    field("placement-controls").hidden = automaticPlacement;
+    field("placement-summary").textContent = automaticPlacement
+      ? `${behaviorDefaults.placement.mode.replaceAll("_", " ")} · ${behaviorDefaults.direction.mode === "face-target" ? "Face target" : "Fixed direction"} · Follow source: ${behaviorDefaults.placement.followSource ? "Yes" : "No"} · Follow target: ${behaviorDefaults.placement.followTarget ? "Yes" : "No"}`
+      : "Manual placement controls are enabled.";
     field("projectile-fields").hidden = field("behavior").value !== "projectile"; field("beam-fields").hidden = field("behavior").value !== "beam";
     field("tint-fields").hidden = !field("tint-enabled").checked;
     for (const output of dialog.querySelectorAll("[data-animation-value-for]")) output.textContent = field(output.dataset.animationValueFor).value;
@@ -100,7 +113,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     draftSaveId = null;
     stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; draftSpriteFile = null; imageInfo = null;
     field("form").hidden = false; field("family-choice").hidden = true; field("browser-panel").hidden = true; showTool("creator"); field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
-    const initial = a || normalizeAnimation({ ...getFamilyTemplates(family)[0], id: "draft_preview", sprite: "draft.png", grid: { columns: 6, rows: 6 }, frameCount: 36 });
+    const initial = a || normalizeAnimation({ ...getFamilyTemplates(family)[0], placement: { ...getFamilyTemplates(family)[0].placement, override: false }, id: "draft_preview", sprite: "draft.png", grid: { columns: 6, rows: 6 }, frameCount: 36 });
     writeAnimationFields(field, initial); familyTemplates(); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
     field("sound-info").textContent = draftSound ? "Current sound retained." : "No sound";
     const columns = a?.grid.columns || 6, rows = a?.grid.rows || 6;
@@ -163,7 +176,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     const { id, ...settings } = template;
     const current = readAnimationFields(field);
     const base = normalizeAnimation({ ...current, id: editId || "draft_preview", sprite: draftSource || "draft.png" });
-    writeAnimationFields(field, mergeAnimationDefinition(base, { playback: "once", timing: { loopCount: 1 }, ...settings, name: current.name || template.name }));
+    writeAnimationFields(field, mergeAnimationDefinition(base, { playback: "once", timing: { loopCount: 1 }, ...settings, placement: { ...settings.placement, override: current.placement.override }, name: current.name || template.name }));
     syncControls(); status(template.name + " defaults applied. Advanced settings can override behavior.");
   }));
   const creatorButton = dialog.ownerDocument.getElementById("animationCreatorButton");
@@ -208,6 +221,12 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("delete-cancel"), "click", () => { deleteId = null; field("delete-warning").hidden = true; });
   on(field("editor-cancel"), "click", selectionChanged);
   on(field("form"), "input", syncControls); on(field("form"), "change", syncControls);
+  on(field("behavior"), "change", () => {
+    if (!field("override-placement").checked && field("behavior").value === "aura") {
+      field("playback").value = "loop"; field("loops").value = "0";
+    }
+    syncControls();
+  });
   on(field("form"), "click", event => {
     const anchor = event.target.closest("[data-anchor]"); if (anchor) { const [x, y] = anchor.dataset.anchor.split(","); field("anchor-x").value = x; field("anchor-y").value = y; syncControls(); }
     const tag = event.target.closest("[data-add-tag]"); if (tag) { const tags = new Set(field("tags").value.split(",").map(t => t.trim()).filter(Boolean)); tags.add(tag.dataset.addTag); field("tags").value = [...tags].join(", "); }

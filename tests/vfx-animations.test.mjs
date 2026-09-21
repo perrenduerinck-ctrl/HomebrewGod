@@ -8,7 +8,7 @@ import { createEffectEngine } from "../vfx/effectEngine.js";
 import { createSpriteAnimator, getSpriteFrameStyle } from "../vfx/spriteAnimator.js";
 import { createSpellVfxEvent } from "../vfx/castEvent.js";
 import { getAnimationActions } from "../vfx/animationWorkspace.js";
-import { normalizeAnimationDefinition, mergeAnimationDefinition } from "../vfx/animationDefinition.js";
+import { normalizeAnimationDefinition, mergeAnimationDefinition, applyBehaviorPlacementDefaults } from "../vfx/animationDefinition.js";
 import { animationFrames, animationTiming, sampleAnimation, chooseAnimationVariation } from "../vfx/animationPlayback.js";
 
 const definition = { id: "test_sheet", name: "Sheet", sprite: "test.png", grid: { columns: 6, rows: 6 }, frameCount: 36 };
@@ -70,6 +70,33 @@ test("configured animations report readable errors and never silently clamp inva
     [{ anchorY: 2 }, /pivot/], [{ sprite: "javascript:alert(1)" }, /asset path/]]) {
     assert.throws(() => normalizeAnimation({ ...definition, ...changes }), message);
   }
+});
+
+test("behavior defaults produce coherent placement while legacy definitions remain manual", () => {
+  const expected = {
+    projectile: ["SOURCE_TO_TARGET", "face-target", false, false, false],
+    melee: ["SOURCE_TOWARD_TARGET", "face-target", true, false, false],
+    beam: ["MIDPOINT", "face-target", true, true, false],
+    "source-effect": ["SOURCE", "fixed", true, false, false],
+    "target-effect": ["TARGET", "fixed", false, true, false],
+    aura: ["SOURCE", "fixed", true, false, false],
+    ground: ["WORLD", "fixed", false, false, true],
+    summon: ["TARGET", "fixed", false, false, false],
+    attached: ["TARGET", "fixed", false, true, false]
+  };
+  for (const [behavior, values] of Object.entries(expected)) {
+    const automatic = normalizeAnimationDefinition(applyBehaviorPlacementDefaults({ ...definition, behavior,
+      placement: { spawnAt: "map", followSource: false, followTarget: false }, direction: { mode: "face-away" } }));
+    assert.deepEqual([automatic.placement.mode, automatic.direction.mode, automatic.placement.followSource,
+      automatic.placement.followTarget, automatic.placement.fixedToMap], values, behavior);
+    assert.equal(automatic.placement.override, false);
+    if (behavior === "beam") assert.equal(automatic.beam.stretchToTarget, true);
+  }
+  const legacy = normalizeAnimationDefinition({ ...definition, behavior: "beam", placement: { mode: "TARGET", followTarget: false }, direction: { mode: "face-away" }, beam: { stretchToTarget: false } });
+  assert.equal(legacy.placement.override, true); assert.equal(legacy.placement.mode, "TARGET");
+  assert.equal(legacy.placement.followTarget, false); assert.equal(legacy.direction.mode, "face-away"); assert.equal(legacy.beam.stretchToTarget, false);
+  const runtimeOverride = mergeAnimationDefinition(normalizeAnimationDefinition(applyBehaviorPlacementDefaults({ ...definition, behavior: "projectile" })), { placement: { mode: "TARGET", followTarget: true } });
+  assert.equal(runtimeOverride.placement.override, true); assert.equal(runtimeOverride.placement.mode, "TARGET"); assert.equal(runtimeOverride.placement.followTarget, true);
 });
 
 test("metadata grids preserve every crop, rectangular aspect and partial rows including a single used cell", async () => {

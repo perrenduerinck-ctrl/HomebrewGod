@@ -196,6 +196,36 @@ test("advanced projectile settings survive Simple Mode save and the preview paus
   await field(dialog, "close").click(); await expect(dialog.locator(".hg-map-vfx-effect")).toHaveCount(0); expect(errors).toEqual([]);
 });
 
+test("new animations derive placement from behavior and legacy animations keep manual geometry", async ({ page }) => {
+  const dialog = await openLibrary(page);
+  await field(dialog, "custom").click(); await dialog.getByRole("button", { name: "Magic", exact: true }).click();
+  await expect(field(dialog, "override-placement")).not.toBeChecked(); await expect(field(dialog, "placement-controls")).toBeHidden();
+  const cases = [
+    ["projectile", "source-to-target", false, false, false, "Face target"],
+    ["melee", "source-toward-target", true, false, false, "Face target"],
+    ["beam", "between", true, true, false, "Follow target: Yes"],
+    ["source-effect", "source", true, false, false, "Follow source: Yes"],
+    ["target-effect", "target", false, true, false, "Follow target: Yes"],
+    ["ground", "map", false, false, true, "WORLD"],
+    ["summon", "target", false, false, false, "TARGET"],
+    ["attached", "target", false, true, false, "Follow target: Yes"]
+  ];
+  for (const [behavior, spawn, followSource, followTarget, fixed, summary] of cases) {
+    await field(dialog, "behavior").selectOption(behavior);
+    await expect(field(dialog, "spawn")).toHaveValue(spawn); await expect(field(dialog, "follow-source")).toBeChecked({ checked: followSource });
+    await expect(field(dialog, "follow-target")).toBeChecked({ checked: followTarget }); await expect(field(dialog, "fixed-map")).toBeChecked({ checked: fixed });
+    await expect(field(dialog, "placement-summary")).toContainText(summary);
+  }
+  await field(dialog, "behavior").selectOption("aura"); await expect(field(dialog, "playback")).toHaveValue("loop"); await expect(field(dialog, "loops")).toHaveValue("0");
+  await field(dialog, "override-placement").check(); await expect(field(dialog, "placement-controls")).toBeVisible();
+  await field(dialog, "spawn").selectOption("map"); await field(dialog, "follow-source").uncheck();
+  await field(dialog, "editor-cancel").click(); await field(dialog, "select").selectOption("sword_slash_01"); await field(dialog, "duplicate").click();
+  await expect(field(dialog, "override-placement")).toBeChecked(); await expect(field(dialog, "placement-controls")).toBeVisible();
+  // The built-in predates behavior-derived placement, so its original WORLD /
+  // non-following geometry remains untouched when duplicated and edited.
+  await expect(field(dialog, "spawn")).toHaveValue("map"); await expect(field(dialog, "follow-source")).not.toBeChecked();
+});
+
 test("preview source attachments follow dragged tokens and beam stretching spans the endpoints", async ({ page }) => {
   const dialog = await openLibrary(page); await field(dialog, "select").selectOption("healing_burst_01"); await field(dialog, "duplicate").click();
   await field(dialog, "advanced-mode").check();

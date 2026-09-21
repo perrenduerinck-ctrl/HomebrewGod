@@ -10,6 +10,34 @@ export const ANIMATION_CATEGORIES = Object.freeze(["Magic", "Fire", "Cold", "Lig
 export const MAX_ANIMATION_FRAMES = 240;
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const ANIMATION_PLACEMENTS = Object.freeze({ source: "SOURCE", target: "TARGET", between: "MIDPOINT", map: "WORLD", "source-to-target": "SOURCE_TO_TARGET", "source-toward-target": "SOURCE_TOWARD_TARGET" });
+const BEHAVIOR_PLACEMENT_DEFAULTS = Object.freeze({
+  static: Object.freeze({ spawnAt: "map", fixedToMap: true, followSource: false, followTarget: false, direction: "fixed" }),
+  projectile: Object.freeze({ spawnAt: "source-to-target", fixedToMap: false, followSource: false, followTarget: false, direction: "face-target" }),
+  beam: Object.freeze({ spawnAt: "between", fixedToMap: false, followSource: true, followTarget: true, direction: "face-target", stretchToTarget: true }),
+  melee: Object.freeze({ spawnAt: "source-toward-target", fixedToMap: false, followSource: true, followTarget: false, direction: "face-target" }),
+  "source-effect": Object.freeze({ spawnAt: "source", fixedToMap: false, followSource: true, followTarget: false, direction: "fixed" }),
+  "target-effect": Object.freeze({ spawnAt: "target", fixedToMap: false, followSource: false, followTarget: true, direction: "fixed" }),
+  aura: Object.freeze({ spawnAt: "source", fixedToMap: false, followSource: true, followTarget: false, direction: "fixed" }),
+  ground: Object.freeze({ spawnAt: "map", fixedToMap: true, followSource: false, followTarget: false, direction: "fixed" }),
+  screen: Object.freeze({ spawnAt: "map", fixedToMap: true, followSource: false, followTarget: false, direction: "fixed" }),
+  summon: Object.freeze({ spawnAt: "target", fixedToMap: false, followSource: false, followTarget: false, direction: "fixed" }),
+  attached: Object.freeze({ spawnAt: "target", fixedToMap: false, followSource: false, followTarget: true, direction: "fixed" })
+});
+export function getBehaviorPlacementDefaults(behavior = "static") {
+  const defaults = BEHAVIOR_PLACEMENT_DEFAULTS[behavior] || BEHAVIOR_PLACEMENT_DEFAULTS.static;
+  return {
+    placement: { spawnAt: defaults.spawnAt, mode: ANIMATION_PLACEMENTS[defaults.spawnAt], fixedToMap: defaults.fixedToMap,
+      followSource: defaults.followSource, followTarget: defaults.followTarget },
+    direction: { mode: defaults.direction },
+    ...(defaults.stretchToTarget === undefined ? {} : { beam: { stretchToTarget: defaults.stretchToTarget } })
+  };
+}
+export function applyBehaviorPlacementDefaults(input = {}) {
+  const defaults = getBehaviorPlacementDefaults(input.behavior);
+  return { ...input, placement: { ...input.placement, ...defaults.placement, override: false },
+    direction: { ...input.direction, ...defaults.direction },
+    ...(defaults.beam ? { beam: { ...input.beam, ...defaults.beam } } : {}) };
+}
 export const freezeAnimation = value => {
   if (value && typeof value === "object") { Object.values(value).forEach(freezeAnimation); Object.freeze(value); }
   return value;
@@ -63,7 +91,7 @@ export function normalizeAnimationDefinition(input = {}) {
     offsetX: num(input.offsetX ?? t.offsetX, 0, -10000, 10000, "Horizontal offset"), offsetY: num(input.offsetY ?? t.offsetY, 0, -10000, 10000, "Vertical offset"),
     anchorX: num(input.anchorX ?? t.anchorX, .5, 0, 1, "Horizontal pivot"), anchorY: num(input.anchorY ?? t.anchorY, .5, 0, 1, "Vertical pivot"),
     flipX: (input.flipX ?? t.flipX) === true, flipY: (input.flipY ?? t.flipY) === true };
-  const a = input.appearance || {}, direction = input.direction || {}, placement = input.placement || {}, projectile = input.projectile || {}, beam = input.beam || {}, variation = input.variation || {}, motion = input.motionEffects || {};
+  const a = input.appearance || {}, rawDirection = input.direction || {}, rawPlacement = input.placement || {}, projectile = input.projectile || {}, rawBeam = input.beam || {}, variation = input.variation || {}, motion = input.motionEffects || {};
   const tint = a.tint == null || a.tint === "" ? null : String(a.tint);
   if (tint && !/^#[0-9a-f]{6}$/i.test(tint)) throw new Error("Choose a valid tint color.");
   const appearance = { opacity: num(a.opacity, 1, 0, 1, "Opacity"), tint, tintStrength: num(a.tintStrength, .5, 0, 1, "Tint strength"),
@@ -82,7 +110,14 @@ export function normalizeAnimationDefinition(input = {}) {
   if (!["builtin", "user"].includes(ownership.kind) || !["global", "session", "user", "room"].includes(ownership.scope)) throw new Error("Invalid animation ownership.");
   const category = animationText(input.category || input.type || "Other", 48);
   const type = choice(input.type, legacyType(category), ANIMATION_TYPES, "animation type");
-  const behavior = choice(input.behavior, projectile.enabled ? "projectile" : beam.enabled ? "beam" : "static", ["static", "projectile", "beam", "melee", "source-effect", "target-effect", "aura", "ground", "screen", "summon", "attached"], "animation behavior");
+  const behavior = choice(input.behavior, projectile.enabled ? "projectile" : rawBeam.enabled ? "beam" : "static", ["static", "projectile", "beam", "melee", "source-effect", "target-effect", "aura", "ground", "screen", "summon", "attached"], "animation behavior");
+  // Definitions saved before automatic placement existed are manual by default.
+  // This preserves every existing source/target/follow combination on load.
+  const overridePlacement = rawPlacement.override !== false;
+  const defaults = getBehaviorPlacementDefaults(behavior);
+  const placement = overridePlacement ? rawPlacement : { ...rawPlacement, ...defaults.placement };
+  const direction = overridePlacement ? rawDirection : { ...rawDirection, ...defaults.direction };
+  const beam = overridePlacement || !defaults.beam ? rawBeam : { ...rawBeam, ...defaults.beam };
   const spawnAt = placement.mode ? Object.keys(ANIMATION_PLACEMENTS).find(key => ANIMATION_PLACEMENTS[key] === String(placement.mode).toUpperCase()) : placement.spawnAt || ({ melee: "source-toward-target", "source-effect": "source", "target-effect": "target", aura: "source", summon: "target" }[behavior] || "map");
   if (!spawnAt || !ANIMATION_PLACEMENTS[spawnAt]) throw new Error("Choose a valid placement mode.");
   const area = input.area || {};
@@ -103,7 +138,7 @@ export function normalizeAnimationDefinition(input = {}) {
     frameCount: count, fps: timing.fps, playback: mode, loop: ["loop", "pingpong"].includes(mode) && loopCount === 0, timing,
     ...transform, transform, size: num(input.size, 160, 8, 1024, "Display size"),
     direction: { mode: choice(direction.mode, "face-target", ["fixed", "face-target", "face-away", "token-facing"], "direction mode"), sourceDirection: choice(direction.sourceDirection?.toLowerCase(), "right", ["up", "right", "down", "left"], "source direction") },
-    placement: { mode: ANIMATION_PLACEMENTS[spawnAt], spawnAt, towardOffset: num(placement.towardOffset, 40, 0, 1000, "Offset toward target"), visualReach: num(placement.visualReach, 0, 0, 1000, "Visual reach"), fixedToMap: placement.fixedToMap === true, followSource: placement.followSource === true, followTarget: placement.followTarget === true, persist: placement.persist === true, duration: num(placement.duration, 0, 0, 60, "Effect duration") },
+    placement: { mode: ANIMATION_PLACEMENTS[spawnAt], spawnAt, override: overridePlacement, towardOffset: num(placement.towardOffset, 40, 0, 1000, "Offset toward target"), visualReach: num(placement.visualReach, 0, 0, 1000, "Visual reach"), fixedToMap: placement.fixedToMap === true, followSource: placement.followSource === true, followTarget: placement.followTarget === true, persist: placement.persist === true, duration: num(placement.duration, 0, 0, 60, "Effect duration") },
     area: { shape: choice(area.shape?.toLowerCase(), "point", ["point", "circle", "cone", "line", "rectangle", "self"], "area shape"), radius: num(area.radius, 0, 0, 1000, "Visual radius"), width: num(area.width, 0, 0, 1000, "Visual width"), length: num(area.length, 0, 0, 1000, "Visual length"), unit: choice(area.unit, "ft", ["ft", "px"], "area unit") },
     behavior,
     projectile: { enabled: behavior === "projectile", speed: num(projectile.speed, 300, 10, 5000, "Travel speed"), startOffset: num(projectile.startOffset, 0, 0, 1000, "Start offset"), endOffset: num(projectile.endOffset, 0, 0, 1000, "End offset"), arcHeight: num(projectile.arcHeight, 0, -1000, 1000, "Arc height") },
@@ -127,6 +162,7 @@ export function mergeAnimationDefinition(original, changes = {}) {
     else if (changes.projectile?.enabled === false && original.behavior === "projectile" || changes.beam?.enabled === false && original.behavior === "beam") result.behavior = "static";
   }
   for (const key of ["grid", "frames", "timing", "transform", "direction", "placement", "projectile", "beam", "appearance", "variation", "motionEffects", "area"]) result[key] = { ...original[key], ...changes[key] };
+  if (changes.placement && changes.placement.override === undefined && Object.keys(changes.placement).length) result.placement.override = true;
   if (changes.placement?.spawnAt !== undefined && changes.placement?.mode === undefined) result.placement.mode = ANIMATION_PLACEMENTS[changes.placement.spawnAt];
   if (typeof changes.playback === "object") { result.timing = { ...result.timing, ...changes.playback }; result.playback = result.timing.mode; }
   const aliases = { transform: ["scale", "rotation", "offsetX", "offsetY", "anchorX", "anchorY", "flipX", "flipY"], timing: ["fps"], appearance: ["blendMode"] };

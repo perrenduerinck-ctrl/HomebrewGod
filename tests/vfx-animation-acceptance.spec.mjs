@@ -57,8 +57,9 @@ test("Gary Missile uploads, saves with a spell, previews and casts after full re
   // Leave time for separate real-DOM visibility and sprite assertions on a
   // shared CI runner; a 1000 px/s projectile can expire between protocol calls.
   await field(dialog,'fps').fill('60');await field(dialog,'travel-speed').fill('100');
-  await dialog.locator('[data-section="direction"] > summary').click();
-  await field(dialog,'facing').selectOption('face-target');
+  await expect(field(dialog,'override-placement')).not.toBeChecked();
+  await expect(field(dialog,'placement-controls')).toBeHidden();
+  await expect(field(dialog,'facing')).toHaveValue('face-target');
   await dialog.getByRole('button',{name:'Save Animation',exact:true}).click();
   await expect(field(dialog,'status')).toContainText('personal library');const [gary]=await animationRecords(page);
   await field(dialog,'close').click();

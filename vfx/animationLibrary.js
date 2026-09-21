@@ -1,6 +1,6 @@
 import { normalizeAnimation, mergeAnimationDefinition, freezeAnimation as freeze, animationText as text } from "./animationDefinition.js";
 import { normalizeSpellAnimations, getSpellAnimationDependencies, replaceAnimationReferences } from "./animationReferences.js";
-export { normalizeAnimation, normalizeAnimationDefinition, mergeAnimationDefinition, ANIMATION_TYPES, ANIMATION_TAGS, ANIMATION_CATEGORIES, MAX_ANIMATION_FRAMES, MAX_UPLOAD_BYTES } from "./animationDefinition.js";
+export { normalizeAnimation, normalizeAnimationDefinition, mergeAnimationDefinition, getBehaviorPlacementDefaults, applyBehaviorPlacementDefaults, ANIMATION_TYPES, ANIMATION_TAGS, ANIMATION_CATEGORIES, MAX_ANIMATION_FRAMES, MAX_UPLOAD_BYTES } from "./animationDefinition.js";
 
 export function createAnimationLibrary({ builtins = [], idFactory = () => `custom_${globalThis.crypto.randomUUID()}` } = {}) {
   const entries = new Map(), originals = new Map(), listeners = new Set(), usage = new Map();
