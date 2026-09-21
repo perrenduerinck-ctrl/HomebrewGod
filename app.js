@@ -620,7 +620,21 @@ function initializeBattleMapToolbar() {
   }
 }
 
+function syncMainScreenRoute(screenName) {
+  if (!currentRoomCode || !window.history?.replaceState) return;
+  const routeUrl = new URL(window.location.href);
+  routeUrl.searchParams.set("room", currentRoomCode);
+  if (["battle", "characterCreator", "monsterCreator"].includes(screenName)) {
+    routeUrl.searchParams.set("view", screenName);
+  } else {
+    routeUrl.searchParams.delete("view");
+  }
+  if (screenName !== "characterCreator") routeUrl.searchParams.delete("step");
+  window.history.replaceState(window.history.state, "", routeUrl);
+}
+
 function navigateMainScreen(screenName) {
+  syncMainScreenRoute(screenName);
   if (screenName !== "battle") navigationToolDrawer?.close({ focus: false });
   initializeBattleMapToolbar();
   closeBattleMapMenus();

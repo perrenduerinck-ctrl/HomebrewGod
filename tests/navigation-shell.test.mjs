@@ -35,6 +35,9 @@ test("navigation stays hidden without an open room and shell modules retain acce
   const drawer = readFileSync(new URL("../ui/navigation/toolDrawer.js", import.meta.url), "utf8");
   assert.match(app, /animationLibraryButton:\s*\$\("animationLibraryButton"\)/);
   assert.match(app, /animationCreatorButton:\s*\$\("animationCreatorButton"\)/);
+  assert.match(app, /function syncMainScreenRoute\(screenName\)/);
+  assert.match(app, /syncMainScreenRoute\(screenName\);[\s\S]*initCharacterCreatorSystem\(\)/);
+  assert.match(app, /history\.replaceState/);
   assert.match(sidebar, /aria-expanded/);
   assert.match(sidebar, /localStorage|STORAGE_KEY/);
   assert.match(sidebar, /keydown/);
