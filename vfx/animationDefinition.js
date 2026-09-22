@@ -1,4 +1,4 @@
-import { ANIMATION_FAMILIES, MAGIC_SUBTYPES, inferAnimationFamily, inferMagicSubtype } from "./animationFamilies.js";
+import { ANIMATION_FAMILIES, MAGIC_SUBTYPES, deriveAnimationType, inferAnimationFamily, inferAnimationStyle } from "./animationFamilies.js";
 // Appearance metadata only. Types, tags and events never resolve game rules.
 export const ANIMATION_TYPES = Object.freeze([
   "Spell Effect", "Melee Attack", "Projectile", "Impact", "Explosion", "Beam", "Aura",
@@ -109,7 +109,6 @@ export function normalizeAnimationDefinition(input = {}) {
   const ownership = input.ownership || { kind: "user", scope: "session", ownerId: null };
   if (!["builtin", "user"].includes(ownership.kind) || !["global", "session", "user", "room"].includes(ownership.scope)) throw new Error("Invalid animation ownership.");
   const category = animationText(input.category || input.type || "Other", 48);
-  const type = choice(input.type, legacyType(category), ANIMATION_TYPES, "animation type");
   const behavior = choice(input.behavior, projectile.enabled ? "projectile" : rawBeam.enabled ? "beam" : "static", ["static", "projectile", "beam", "melee", "source-effect", "target-effect", "aura", "ground", "screen", "summon", "attached"], "animation behavior");
   // Definitions saved before automatic placement existed are manual by default.
   // This preserves every existing source/target/follow combination on load.
@@ -130,9 +129,11 @@ export function normalizeAnimationDefinition(input = {}) {
   const events = reserved(input.events, 64, "events");
   if (events.some(event => !event || typeof event.type !== "string" || !event.type.trim() || event.type.length > 80 || !Number.isInteger(event.frame) || event.frame < 0 || event.frame >= columns * rows)) throw new Error("Each animation event needs a type and a frame inside the sprite sheet.");
   const family = choice(input.family, inferAnimationFamily(input), ANIMATION_FAMILIES, "animation family");
-  const subtype = family === "magic" ? choice(input.subtype || undefined, inferMagicSubtype(input), MAGIC_SUBTYPES, "magic subtype") : animationText(input.subtype, 48);
+  const style = inferAnimationStyle(input, family);
+  const type = choice(input.type, deriveAnimationType(family, style, legacyType(category)), ANIMATION_TYPES, "animation type");
+  const subtype = family === "magic" ? choice(style, "custom", MAGIC_SUBTYPES, "magic style") : animationText(input.subtype, 48);
   return freezeAnimation({ version: 2, revision: num(input.revision, 1, 1, 1000000, "Revision", true), id, name, description: animationText(input.description, 1000), type, category, family, subtype,
-    collections: normalizeTags(input.collections),
+    style, collections: normalizeTags(input.collections),
     tags: normalizeTags(input.tags), sprite, thumbnailUrl, grid: { columns, rows }, frames: { start, end, count, reverse: f.reverse === true, sequence: reserved(f.sequence, 240, "custom frames") },
     // Flat aliases keep the first Animation ID API compatible. Nested input is also accepted.
     frameCount: count, fps: timing.fps, playback: mode, loop: ["loop", "pingpong"].includes(mode) && loopCount === 0, timing,
@@ -156,6 +157,11 @@ export const normalizeAnimation = normalizeAnimationDefinition;
 // Merge nested edits without allowing old compatibility aliases to undo them.
 export function mergeAnimationDefinition(original, changes = {}) {
   const result = { ...original, ...changes };
+  if ((changes.family !== undefined || changes.style !== undefined) && changes.type === undefined) {
+    const family = changes.family || original.family;
+    const style = changes.style || inferAnimationStyle(result, family);
+    result.type = deriveAnimationType(family, style, original.type);
+  }
   if (changes.behavior === undefined) {
     if (changes.projectile?.enabled === true) result.behavior = "projectile";
     else if (changes.beam?.enabled === true) result.behavior = "beam";

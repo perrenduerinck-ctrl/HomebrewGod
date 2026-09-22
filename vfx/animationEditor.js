@@ -8,7 +8,7 @@ import { inspectAnimationSprite, spriteCheckSummary } from "./animationSpriteChe
 import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "./animationPreviewStage.js";
 import { assertPersistentAnimationReferences } from "./animationReferences.js";
 import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
-import { getFamilyTemplates } from "./animationFamilies.js";
+import { deriveAnimationType, getAnimationStyleLabel, getAnimationStyles, getFamilyTemplates } from "./animationFamilies.js";
 export { createAnimationSelector } from "./animationBrowser.js";
 
 export function createAnimationEditor({ dialog, button, library, bindings, actions = [], isSoundEnabled, persistence = null }) {
@@ -74,13 +74,12 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("share-room").disabled = !a || a.ownership.kind === "builtin" || a.ownership.scope === "room";
     if (!a) { field("preview-info").textContent = "Choose an animation to preview."; return; }
     field("preview-fps").value = a.fps; field("preview-scale").value = a.scale;
-    field("preview-info").textContent = `${a.grid.columns} × ${a.grid.rows} · ${a.frameCount} frames · ${a.type}`;
+    field("preview-info").textContent = `${a.grid.columns} × ${a.grid.rows} · ${a.frameCount} frames · ${a.family[0].toUpperCase() + a.family.slice(1)} · ${getAnimationStyleLabel(a)}`;
   }
   const chooser = createAnimationSelector({ container: field("chooser"), library, onSelect: selectionChanged });
   function assignmentInfo() { /* Assignment authority lives in the content editor, not this library. */ }
   function syncControls() {
     field("form").dataset.advanced = String(field("advanced-mode").checked);
-    field("subtype-control").hidden = field("family").value !== "magic";
     field("custom-grid").hidden = field("grid").value !== "custom";
     field("axis-scale").hidden = field("lock").checked;
     const automaticPlacement = !field("override-placement").checked;
@@ -108,13 +107,20 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     try { const result = await inspectAnimationSprite(src); if (!destroyed && current === inspectionRevision) { imageInfo = result; syncControls(); } }
     catch (error) { if (!destroyed && current === inspectionRevision) { imageInfo = null; field("sheet-stats").textContent = error.message; status(error.message); } }
   }
-  function familyTemplates() { field("family-template").replaceChildren(...getFamilyTemplates(field("family").value).map(template => new Option(template.name, template.id))); }
+  function styleOptions(preferred = field("style").value) {
+    const styles = getAnimationStyles(field("family").value);
+    field("style").replaceChildren(...styles.map(style => new Option(style.label, style.value)));
+    field("style").value = styles.some(style => style.value === preferred) ? preferred : styles[0]?.value || "";
+  }
+  function deriveVisibleType() {
+    field("editor-type").value = deriveAnimationType(field("family").value, field("style").value, field("editor-type").value || "Other");
+  }
   function openEditor(a = null, family = a?.family || "magic") {
     draftSaveId = null;
     stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; draftSpriteFile = null; imageInfo = null;
     field("form").hidden = false; field("family-choice").hidden = true; field("browser-panel").hidden = true; showTool("creator"); field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
     const initial = a || normalizeAnimation({ ...getFamilyTemplates(family)[0], placement: { ...getFamilyTemplates(family)[0].placement, override: false }, id: "draft_preview", sprite: "draft.png", grid: { columns: 6, rows: 6 }, frameCount: 36 });
-    writeAnimationFields(field, initial); familyTemplates(); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
+    field("family").value = initial.family; styleOptions(initial.style); writeAnimationFields(field, initial); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
     field("sound-info").textContent = draftSound ? "Current sound retained." : "No sound";
     const columns = a?.grid.columns || 6, rows = a?.grid.rows || 6;
     field("grid").value = columns === rows && [4,5,6,7,8].includes(columns) ? String(columns) : "custom";
@@ -169,15 +175,16 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("tool-library"), "click", selectionChanged);
   on(field("tool-creator"), "click", openCreator);
   on(field("family-choice"), "click", event => { const family = event.target.closest('[data-create-family]')?.dataset.createFamily; if (family) openEditor(null, family); });
-  on(field("family"), "change", () => { familyTemplates(); syncControls(); });
-  on(field("apply-family-template"), "click", safely(() => {
-    const template = getFamilyTemplates(field("family").value).find(template => template.id === field("family-template").value);
-    if (!template) throw new Error("Choose a family template.");
+  on(field("family"), "change", () => { styleOptions(); deriveVisibleType(); syncControls(); });
+  on(field("style"), "change", () => { deriveVisibleType(); syncControls(); });
+  on(field("apply-style-defaults"), "click", safely(() => {
+    const template = getFamilyTemplates(field("family").value).find(template => template.style === field("style").value);
+    if (!template) throw new Error("Choose a style.");
     const { id, ...settings } = template;
     const current = readAnimationFields(field);
     const base = normalizeAnimation({ ...current, id: editId || "draft_preview", sprite: draftSource || "draft.png" });
     writeAnimationFields(field, mergeAnimationDefinition(base, { playback: "once", timing: { loopCount: 1 }, ...settings, placement: { ...settings.placement, override: current.placement.override }, name: current.name || template.name }));
-    syncControls(); status(template.name + " defaults applied. Advanced settings can override behavior.");
+    styleOptions(template.style); syncControls(); status(template.name + " style defaults applied. Advanced settings can override behavior.");
   }));
   const creatorButton = dialog.ownerDocument.getElementById("animationCreatorButton");
   if (creatorButton) on(creatorButton, "click", safely(async () => { finishExternal(); if (!dialog.open) dialog.showModal(); openCreator(); await persistence?.load?.(); }));
@@ -317,7 +324,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       chooser.setFamily(family); field("external").hidden = false; field("external-label").textContent = `Choose an animation for ${slot}.`;
       if (animationId && library.getAnimation(animationId)) chooser.select(animationId);
       const promise = new Promise(resolve => { external = { resolve }; });
-      if (mode === "create" || mode === "upload") { openEditor(null, family); if (family !== "melee") { field("spawn").value = slot === "cast" ? "source" : slot === "travel" ? "source-to-target" : "target"; field("behavior").value = slot === "travel" ? "projectile" : "static"; if (family === "magic") field("subtype").value = ({ cast: "cast", travel: "projectile", impact: "impact", sustain: "sustain", end: "end" })[slot] || "custom"; } syncControls(); if (mode === "upload") field("file").click(); }
+      if (mode === "create" || mode === "upload") { openEditor(null, family); if (family !== "melee") { field("spawn").value = slot === "cast" ? "source" : slot === "travel" ? "source-to-target" : "target"; field("behavior").value = slot === "travel" ? "projectile" : "static"; if (family === "magic") { field("style").value = ({ cast: "cast", travel: "projectile", impact: "impact", sustain: "sustain", end: "end" })[slot] || "custom"; deriveVisibleType(); } } syncControls(); if (mode === "upload") field("file").click(); }
       if (mode === "remix" && selected()) { const a = library.duplicateAnimation(selected().id); chooser.select(a.id); openEditor(a); }
       return promise;
     }, close() { if (dialog.open) dialog.close(); else stop(); },

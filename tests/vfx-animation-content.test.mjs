@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { normalizeAnimationDefinition } from "../vfx/animationDefinition.js";
 import { createAnimationLibrary, createAnimationBindings } from "../vfx/animationLibrary.js";
-import { FAMILY_TEMPLATES, inferAnimationFamily } from "../vfx/animationFamilies.js";
+import { FAMILY_TEMPLATES, deriveAnimationType, getAnimationStyles, inferAnimationFamily, inferAnimationStyle } from "../vfx/animationFamilies.js";
 import { normalizeAttackAnimation, attackAnimationToSpellStages, spellStagesToAttackAnimation } from "../vfx/contentAnimationModel.js";
 import { getSpellAnimationDependencies, replaceAnimationReferences, assertPersistentAnimationReferences } from "../vfx/animationReferences.js";
 import { createSpellAnimationPresentation } from "../vfx/spellAnimationPresentation.js";
@@ -37,13 +37,29 @@ test("legacy family inference preserves IDs, hosted assets and frame schema", ()
   assert.equal(inferAnimationFamily({ tags: ["arrow", "bow"] }), "ranged");
   assert.equal(inferAnimationFamily({ category: "melee", tags: ["sword"] }), "melee");
   assert.equal(inferAnimationFamily({ tags: ["magic", "arrow"] }), "magic");
+  assert.equal(inferAnimationStyle({ family: "magic", subtype: "impact" }), "impact");
+  assert.equal(inferAnimationStyle({ family: "melee", name: "Ancient Sword Slash" }), "sword-slash");
+  assert.equal(inferAnimationStyle({ family: "ranged", tags: ["crossbow"] }), "crossbow");
   for (const family of ["melee", "ranged", "magic"]) assert.equal(normalizeAnimationDefinition({ ...base, family }).family, family);
 });
-test("family and magic subtype filtering remain independent from elemental tags", () => {
-  const library = createAnimationLibrary({ builtins: [base, { ...base, id: "slash", family: "melee" }, { ...base, id: "arrow", family: "ranged" }, { ...base, id: "impact", family: "magic", subtype: "impact" }] });
+test("family and style filtering remain independent from tags while collections act as folders", () => {
+  const library = createAnimationLibrary({ builtins: [base, { ...base, id: "slash", family: "melee", collections: ["Sword Pack"] }, { ...base, id: "arrow", family: "ranged" }, { ...base, id: "impact", family: "magic", subtype: "impact", collections: ["Boss Attacks"] }] });
   assert.deepEqual(library.query({ family: "melee" }).map(x => x.id), ["slash"]);
   assert.deepEqual(library.query({ family: "ranged" }).map(x => x.id), ["arrow"]);
-  assert.deepEqual(library.query({ family: "magic", subtype: "impact", tags: "fire" }).map(x => x.id), ["impact"]);
+  assert.deepEqual(library.query({ family: "magic", style: "impact", tags: "fire" }).map(x => x.id), ["impact"]);
+  assert.deepEqual(library.query({ family: "magic", subtype: "impact" }).map(x => x.id), ["impact"]);
+  assert.deepEqual(library.getCollections(), ["boss attacks", "sword pack"]);
+  assert.deepEqual(library.query({ collection: "sword pack" }).map(x => x.id), ["slash"]);
+});
+test("Family and Style derive internal Type while explicit legacy Type remains compatible", () => {
+  const healing = normalizeAnimationDefinition({ ...base, family: "magic", style: "healing" });
+  assert.equal(healing.style, "healing"); assert.equal(healing.subtype, "healing"); assert.equal(healing.type, "Healing");
+  const legacy = normalizeAnimationDefinition({ ...base, family: "magic", subtype: "impact", type: "Impact" });
+  assert.equal(legacy.style, "impact"); assert.equal(legacy.type, "Impact");
+  const beam = createAnimationLibrary({ builtins: [legacy] }).updateAnimation(legacy.id, { style: "beam" });
+  assert.equal(beam.type, "Beam"); assert.equal(beam.subtype, "beam");
+  assert.equal(deriveAnimationType("melee", "claw"), "Melee Attack");
+  assert.deepEqual(getAnimationStyles("magic").map(style => style.value), ["cast", "projectile", "beam", "impact", "area", "aura", "healing", "buff", "debuff", "summoning", "transformation", "sustain", "end", "custom"]);
 });
 test("all melee/ranged templates use the existing source/target contract", () => {
   assert.equal(FAMILY_TEMPLATES.filter(x => x.family === "melee").length, 11);

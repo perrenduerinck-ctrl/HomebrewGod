@@ -27,7 +27,7 @@ async function saveCharacter(page) {
   await expect.poll(async () => Object.values(await records(page)).flatMap(x => x.magic?.customSpells || []).length).toBe(1);
 }
 
-test("Library and Creator are distinct, family templates save/filter correctly and magic subtype is separate from tags", async ({ page }, info) => {
+test("Library and Creator expose Family, Style, Tags and Collection while legacy Type stays internal", async ({ page }, info) => {
   const services = await mockAnimationServices(page, { room: "UXA-123" }); await battle(page);
   await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#animationLibraryButton").click(); const dialog = page.locator("#animationLibraryDialog");
   await expect(dialog).toHaveAttribute("aria-label", "Animation Library");
@@ -37,6 +37,7 @@ test("Library and Creator are distinct, family templates save/filter correctly a
   for (const [family, name] of [["Melee", "Sword Slash UX"], ["Ranged", "Arrow Flight UX"]]) {
     await dialog.getByRole("button", { name: family, exact: true }).click();
     await expect(field(dialog, "family")).toHaveValue(family.toLowerCase());
+    await expect(field(dialog, "style")).toBeVisible(); await expect(field(dialog, "editor-type")).toBeHidden();
     await field(dialog, "name").fill(name);
     await field(dialog, "file").setInputFiles({ name: "sheet.png", mimeType: "image/png", buffer: services.sheet });
     await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
@@ -51,7 +52,7 @@ test("Library and Creator are distinct, family templates save/filter correctly a
   expect(saved.find(x => x.family === "melee").placement.mode).toBe("SOURCE_TOWARD_TARGET");
   expect(saved.find(x => x.family === "melee").placement.followSource).toBe(true);
   expect(saved.find(x => x.family === "ranged").placement.mode).toBe("SOURCE_TO_TARGET");
-  await field(dialog, "filter-subtype").selectOption("impact");
+  await field(dialog, "filter-style").selectOption("impact");
   await expect(dialog.locator(".hg-animation-card")).toContainText(["Fireball explosion"]);
   await page.screenshot({ path: info.outputPath("family-library.png") });
   await page.setViewportSize({ width: 390, height: 844 });

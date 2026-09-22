@@ -2592,6 +2592,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-animation-preview-options, .hg-animation-custom-grid { display: flex; gap: 12px; }
 .hg-animation-preview-options > label, .hg-animation-custom-grid > label { flex: 1; min-width: 0; }
 .hg-animation-form-grid, .hg-animation-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 14px; }
+.hg-animation-filter-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .hg-animation-library form { margin: 0; }
 #animationLibraryDialog [data-animation-status] { padding: 10px 12px; margin: 16px 0 0; background: #1b283e; color: #d0e5ff; font-size: 12px; border-radius: 8px; }
 .hg-animation-library [data-animation-status]:empty { display: none; }
@@ -3500,6 +3501,7 @@ a:hover {
 .hg-content-animation-saved { flex-basis: 100%; margin: 6px 0; color: var(--muted); }
 @media (max-width: 700px) {
   .hg-animation-family-choice { grid-template-columns: 1fr; }
+  .hg-animation-filter-row { grid-template-columns: 1fr; }
   .hg-content-animation-stage { grid-template-columns: 52px minmax(0, 1fr); }
   .hg-content-animation-stage .hg-animation-buttons { grid-column: 1 / -1; }
   .hg-animation-family-tabs button, .hg-animation-tool-nav button, .hg-content-animation-stage button { width: auto; }

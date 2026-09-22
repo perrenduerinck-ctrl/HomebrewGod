@@ -1,6 +1,6 @@
-import { ANIMATION_TYPES, ANIMATION_TAGS, applyBehaviorPlacementDefaults } from "./animationLibrary.js";
+import { ANIMATION_TAGS, applyBehaviorPlacementDefaults } from "./animationLibrary.js";
 import { ANIMATION_PRESETS } from "./animationPlayback.js";
-import { ANIMATION_FAMILIES, MAGIC_SUBTYPES } from "./animationFamilies.js";
+import { ANIMATION_FAMILIES, getAnimationStyles } from "./animationFamilies.js";
 
 const select = (key, label, options) => `<label>${label}<select data-animation-${key}>${options.map(o => { const [value, text] = Array.isArray(o) ? o : [o, o]; return `<option value="${value}">${text}</option>`; }).join("")}</select></label>`;
 const input = (key, label, min, max, step = 1, kind = "number") => `<label>${label}<span class="hg-animation-input-line"><input data-animation-${key} type="${kind}" min="${min}" max="${max}" step="${step}">${kind === "range" ? `<output data-animation-value-for="${key}"></output>` : ""}</span></label>`;
@@ -11,7 +11,7 @@ const section = (key, label, body, advanced = false, open = false) => `<details 
 // Input names retain the compact creator's public UI hooks. Percent controls
 // are converted at the boundary; saved values are normalized fractions.
 export const EDITOR_FIELDS = {
-  family: ["family", "magic", "text"], subtype: ["subtype", "custom", "text"],
+  family: ["family", "magic", "text"], style: ["style", "custom", "text"],
   name: ["name", "", "text"], "editor-type": ["type", "Other", "text"], tags: ["tags", [], "tags"], description: ["description", "", "text"],
   collections: ["collections", [], "tags"], "toward-offset": ["placement.towardOffset", 40], "visual-reach": ["placement.visualReach", 0], "fixed-map": ["placement.fixedToMap", false, "check"],
   "area-shape": ["area.shape", "point", "text"], "area-unit": ["area.unit", "ft", "text"], "area-radius": ["area.radius", 0], "area-width": ["area.width", 0], "area-length": ["area.length", 0],
@@ -30,11 +30,10 @@ export const EDITOR_FIELDS = {
 
 export function animationFormMarkup() {
   return `<div class="hg-animation-edit-heading"><h3 data-animation-editor-title>Create animation</h3>${toggle("advanced-mode", "Advanced Settings")}</div>
-    <div class="hg-animation-family-config">${select("family", "Family", ANIMATION_FAMILIES.map(family => [family, family[0].toUpperCase() + family.slice(1)]))}<label data-animation-subtype-control>${select("subtype", "Magic subtype", MAGIC_SUBTYPES).replace(/^<label>|<\/label>$/g, "")}</label><label>Family template<select data-animation-family-template></select></label><button type="button" data-animation-apply-family-template>Apply template</button></div><details data-advanced open><summary>Universal behavior presets</summary><div class="hg-animation-preset-bar">${select("preset", "Start with a preset", [["", "Choose a starting point"], ...Object.entries(ANIMATION_PRESETS).map(([key, p]) => [key, p.name])])}<button type="button" data-animation-apply-preset>Apply preset</button></div></details>
-    ${section("basic", "Basic", group(`<label>Name<input data-animation-name maxlength="120" required placeholder="My new effect"></label>${select("editor-type", "Type", ANIMATION_TYPES)}`) +
+    <div class="hg-animation-family-config">${select("family", "Family", ANIMATION_FAMILIES.map(family => [family, family[0].toUpperCase() + family.slice(1)]))}${select("style", "Style", getAnimationStyles("magic").map(style => [style.value, style.label]))}<button type="button" data-animation-apply-style-defaults>Apply style defaults</button></div><input data-animation-editor-type type="hidden"><details data-advanced open><summary>Universal behavior presets</summary><div class="hg-animation-preset-bar">${select("preset", "Start with a preset", [["", "Choose a starting point"], ...Object.entries(ANIMATION_PRESETS).map(([key, p]) => [key, p.name])])}<button type="button" data-animation-apply-preset>Apply preset</button></div></details>
+    ${section("basic", "Basic", group(`<label>Name<input data-animation-name maxlength="120" required placeholder="My new effect"></label><label>Collection<input data-animation-collections placeholder="Gary, Sword Pack" maxlength="1200"><small>User folders; separate multiple collections with commas.</small></label>`) +
       `<label>Tags<input data-animation-tags placeholder="sword, slash, melee, heavy" maxlength="1200"><small>Separate tags with commas. Custom tags are welcome.</small></label>
       <div class="hg-animation-tag-suggestions">${ANIMATION_TAGS.slice(0, 10).map(tag => `<button type="button" data-add-tag="${tag}">${tag}</button>`).join("")}</div>
-      <label data-advanced>Collections<input data-animation-collections placeholder="My fire spells, Sword pack"><small>Comma-separated groups. An animation can belong to several.</small></label>
       <label data-advanced>Description<textarea data-animation-description maxlength="1000" rows="2" placeholder="What makes this effect useful?"></textarea></label>`, false, true)}
     ${section("sprite", "Sprite Sheet", `<div data-animation-upload-zone><label class="hg-animation-upload">Drop a sprite sheet here or choose a file<input data-animation-file type="file" accept="image/png,image/webp,image/jpeg"><small>PNG, WebP or JPEG · up to 8 MB</small></label><img data-animation-upload-thumbnail alt="Uploaded sprite sheet" hidden style="max-width:120px;max-height:100px"><button type="button" data-animation-replace-sprite>Replace Sprite</button></div><p data-animation-file-info class="hg-animation-hint"></p>
       ${group(select("grid", "Grid preset", [4,5,6,7,8].map(n => [n, `${n} × ${n}`]).concat([["custom", "Custom"]])) + input("frames", "Frames to play", 1, 240))}

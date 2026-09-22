@@ -7,9 +7,10 @@ a developer query parameter. The existing Animation ID architecture remains:
 
 ## Browse and assign
 
-The browser shows dedicated 128 px thumbnails, names, one primary **Type**, and tags.
-Search names, descriptions or tags; filter by Type, tags, Built-in/My/Room,
-Favorites or Recently Used. Sort by Name, Newest or Most Used. Thumbnails load as
+The browser shows dedicated 128 px thumbnails, names, **Family**, **Style**, tags,
+and collections. The three primary families are Melee, Ranged and Magic. Search
+names, descriptions, styles, tags or collections; filter by Family, Style,
+Collection, Built-in/My/Room, Favorites or Recently Used. Sort by Name, Newest or Most Used. Thumbnails load as
 cards enter view; the browser initially shows 24 cards and can show up to 300.
 Search narrows larger libraries. Built-ins ship pre-generated WebP thumbnails and
 new uploads create and persist `thumbnailUrl` beside the full sprite URL. Library
@@ -23,13 +24,16 @@ creates a user copy with a new ID; the original is unchanged. **Edit settings**
 updates the selected ID for its next playback. Only custom definitions can be
 deleted. Missing/deleted/failed assignments fall back to the original spell effect.
 
-Types and tags organize appearances; neither changes damage, rules or targeting.
+Families, styles, tags and collections organize appearances; none changes damage,
+rules or targeting. Collections are user folders, while tags remain flexible and
+searchable.
 
 ## Create and remix
 
 **Custom Animation** opens in Simple Mode. Give it a name, upload a PNG/WebP/JPEG,
-choose a grid, preview and save. The basic sections expose Type, comma-separated
-custom tags, frames, FPS, uniform scale and playback. Presets provide editable
+choose a Family and Style, choose a grid, preview and save. The basic sections
+expose Family, Style, comma-separated Collections and Tags, frames, FPS, uniform
+scale and playback. Presets provide editable
 starting values for Explosion, Melee Slash/Thrust, Projectile, Beam, Aura, Buff,
 Debuff, Ground Effect, Impact and Summon.
 
@@ -139,8 +143,11 @@ bindings.setAnimation("spell:fireball", animation.id);
 
 Library APIs include get/register/update/duplicate/delete/reset, search, query,
 toggleFavorite, markUsed, getUsage, subscribe and export/import. The old
-`getAnimationsByCategory` and `category` are compatibility aliases; the UI uses Type
-and Tags. Preferences/usage are stored separately from the appearance definition.
+`getAnimationsByCategory`, `category`, `subtype` and `type` remain compatibility
+metadata. The UI uses Family, Style, Tags and Collections; Type is derived from
+Family and Style when possible. Definitions saved before Style existed are
+normalized transparently without changing their IDs or references.
+Preferences/usage are stored separately from the appearance definition.
 Exports keep the existing `{version: 1, type: "homebrewgod-animation", animation}`
 envelope, containing the normalized version-2 definition. Import creates a new
 user ID, without importing another user's favorites or usage history.

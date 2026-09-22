@@ -5,6 +5,7 @@ import { createAnimationPlayer } from "./animationPlayer.js";
 import { createAnimationSequenceController } from "./animationSequence.js";
 import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "./animationPreviewStage.js";
 import { getAnimationThumbnailUrl } from "./animationThumbnails.js";
+import { getAnimationStyleLabel } from "./animationFamilies.js";
 
 const title = slot => slot[0].toUpperCase() + slot.slice(1);
 const optionalNumber = input => String(input?.value || "").trim() === "" ? null : Number(input.value);
@@ -120,7 +121,7 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
           <label class="hg-animation-toggle"><input type="checkbox" data-slot-tinted${ref?.overrides.tint ? " checked" : ""}>Tint</label><input type="color" data-slot-tint value="${ref?.overrides.tint || "#ff5500"}">
         </div></details>`;
       row.querySelector("[data-slot-name]").textContent = animation?.name || (ref ? `Missing animation: ${ref.animationId}` : "No animation");
-      row.querySelector("[data-slot-summary]").textContent = ref ? `${animation?.type || "Unavailable"} · ${ref.trigger || "afterPrevious"}` : "Optional stage · skipped";
+      row.querySelector("[data-slot-summary]").textContent = ref ? `${animation ? getAnimationStyleLabel(animation) : "Unavailable"} · ${ref.trigger || "afterPrevious"}` : "Optional stage · skipped";
       const thumbnail = row.querySelector("[data-slot-thumbnail]");
       const thumbnailUrl = getAnimationThumbnailUrl(animation);
       if (thumbnailUrl) {

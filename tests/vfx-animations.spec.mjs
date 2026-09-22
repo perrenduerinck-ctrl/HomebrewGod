@@ -142,7 +142,7 @@ test("shared renderer preserves full rectangular cells, pivots, flips and alpha"
   expect(result.resized).toEqual({ x: 440, y: 360 });
 });
 
-test("animation browser offers thumbnails, type and tag filters, favorites, recents and remixes", async ({ page }, testInfo) => {
+test("animation browser offers thumbnails, style and collection filters, favorites, recents and remixes", async ({ page }, testInfo) => {
   const errors = [], imageRequests = []; page.on("pageerror", e => errors.push(e.message));
   page.on("request", request => { if (request.resourceType() === "image") imageRequests.push(request.url()); });
   const dialog = await openLibrary(page);
@@ -152,20 +152,22 @@ test("animation browser offers thumbnails, type and tag filters, favorites, rece
   await expect.poll(() => dialog.locator("[data-thumbnail-id]").evaluateAll(nodes => nodes.filter(n => n.style.backgroundImage).length)).toBe(6);
   expect(imageRequests.some(url => /assets\/vfx\/thumbnails\/.+\.webp/.test(url))).toBe(true);
   expect(imageRequests.some(url => /sword-slash-test|fireball-impact-alpha-6x6|regeneration\.png|cold-cast-6x6|fire-impact-spritesheet|radiant-spear\.png/.test(url))).toBe(false);
-  await field(dialog, "type").selectOption("Explosion"); await expect(dialog.locator(".hg-animation-card")).toHaveCount(1);
+  await dialog.getByRole("tab", { name: "Magic", exact: true }).click(); await field(dialog, "filter-style").selectOption("impact"); await expect(dialog.locator(".hg-animation-card")).toHaveCount(3);
   await dialog.locator('[data-choose-animation="fireball_explosion_01"]').click();
   await dialog.getByRole("button", { name: "Favorite Fireball explosion", exact: true }).click();
   await dialog.locator(".hg-animation-filters summary").click(); await field(dialog, "favorites").check(); await field(dialog, "filter-tags").fill("fire");
   await expect(dialog.locator(".hg-animation-card")).toHaveCount(1); await field(dialog, "filter-tags").fill("ice"); await expect(dialog.locator(".hg-animation-card")).toHaveCount(0);
-  await field(dialog, "filter-tags").fill(""); await field(dialog, "favorites").uncheck(); await field(dialog, "type").selectOption(""); await field(dialog, "recent").check();
+  await field(dialog, "filter-tags").fill(""); await field(dialog, "favorites").uncheck(); await field(dialog, "filter-style").selectOption(""); await field(dialog, "recent").check();
   await expect(dialog.locator(".hg-animation-card")).toHaveCount(1); await expect(field(dialog, "select")).toHaveValue("fireball_explosion_01");
   await field(dialog, "recent").uncheck(); await dialog.locator(".hg-animation-filters summary").click();
   await dialog.evaluate(el => { el.scrollTop = 0; }); await page.screenshot({ path: testInfo.outputPath("animation-browser.png") });
   await field(dialog, "duplicate").click(); await expect(field(dialog, "name")).toHaveValue("Fireball explosion copy");
-  await field(dialog, "name").fill("Blue fire remix"); await field(dialog, "tags").fill("fire, blue, custom sparkle");
+  await field(dialog, "name").fill("Blue fire remix"); await field(dialog, "tags").fill("fire, blue, custom sparkle"); await field(dialog, "collections").fill("Gary, Boss Attacks");
   await dialog.getByRole("button", { name: "Save Animation", exact: true }).click(); await expect(field(dialog, "status")).toContainText("saved for this session");
   await field(dialog, "search").fill("custom sparkle"); await expect(dialog.locator(".hg-animation-card")).toHaveCount(1);
-  await field(dialog, "search").fill(""); await field(dialog, "select").selectOption("fireball_explosion_01"); await field(dialog, "edit").click();
+  await field(dialog, "search").fill(""); await dialog.getByRole("tab", { name: "My Animations", exact: true }).click(); await field(dialog, "collection").selectOption("gary");
+  await expect(dialog.locator(".hg-animation-card")).toContainText(["Blue fire remix"]);
+  await field(dialog, "collection").selectOption(""); await dialog.getByRole("tab", { name: "All", exact: true }).click(); await field(dialog, "select").selectOption("fireball_explosion_01"); await field(dialog, "edit").click();
   await expect(field(dialog, "name")).toHaveValue("Fireball explosion"); expect(errors).toEqual([]);
 });
 
