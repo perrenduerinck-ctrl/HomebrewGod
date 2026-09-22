@@ -1,5 +1,6 @@
 import { normalizeAnimation, mergeAnimationDefinition, freezeAnimation as freeze, animationText as text } from "./animationDefinition.js";
 import { normalizeSpellAnimations, getSpellAnimationDependencies, replaceAnimationReferences } from "./animationReferences.js";
+import { getAnimationLayerDependencies, replaceAnimationLayerReferences } from "./animationLayers.js";
 export { normalizeAnimation, normalizeAnimationDefinition, mergeAnimationDefinition, getBehaviorPlacementDefaults, applyBehaviorPlacementDefaults, ANIMATION_TYPES, ANIMATION_TAGS, ANIMATION_CATEGORIES, MAX_ANIMATION_FRAMES, MAX_UPLOAD_BYTES } from "./animationDefinition.js";
 
 export function createAnimationLibrary({ builtins = [], idFactory = () => `custom_${globalThis.crypto.randomUUID()}` } = {}) {
@@ -11,7 +12,19 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
   let order = 0;
   const stats = id => usage.get(id) || { favorite: false, used: 0, recent: 0, created: 0 };
   const emit = () => { for (const fn of listeners) { try { fn(); } catch { /* UI observers cannot change data. */ } } };
+  function validateLayerGraph(candidate) {
+    const visit = (animation, ancestry) => {
+      if (ancestry.includes(animation.id)) throw new Error(`Layer cycle detected at “${animation.name}”. Remove the recursive layer reference.`);
+      const next = [...ancestry, animation.id];
+      for (const dependency of getAnimationLayerDependencies(animation)) {
+        const child = dependency === candidate.id ? candidate : entries.get(dependency);
+        if (child) visit(child, next);
+      }
+    };
+    visit(candidate, []);
+  }
   function validatePut(animation) {
+    validateLayerGraph(animation);
     if (!entries.has(animation.id) && entries.size >= 5000) throw new Error("This library is full (5,000 definitions).");
     // Bound embedded uploads without counting shared sheets repeatedly.
     const sheets = new Set([...entries.values()].filter(a => a.id !== animation.id).flatMap(a => [a.sprite, a.thumbnailUrl || "", a.sound?.src || ""]));
@@ -73,25 +86,40 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
     const a = requireAnimation(id);
     return registerAnimation({ ...a, id: idFactory(), name: `${a.name} copy`, ownership: { scope: "session" } });
   }
-  function getAnimationUsage(id) { return [...references].filter(([, ref]) => getSpellAnimationDependencies(ref.get()).includes(id)).map(([key, ref]) => ({ key, name: ref.name || key })); }
+  function getAnimationUsage(id) {
+    const content = [...references].filter(([, ref]) => getSpellAnimationDependencies(ref.get()).includes(id)).map(([key, ref]) => ({ key, name: ref.name || key }));
+    const definitions = [...entries.values()].filter(animation => animation.id !== id && getAnimationLayerDependencies(animation).includes(id))
+      .map(animation => ({ key: `animation:${animation.id}`, name: `Animation: ${animation.name}` }));
+    return [...content, ...definitions];
+  }
   function validateDelete(id, { replaceWith, removeReferences = false } = {}) {
     if (requireAnimation(id).ownership.kind === "builtin") throw new Error("Built-in animations cannot be deleted. Duplicate one to customize it.");
     const used = getAnimationUsage(id);
-    if (used.length && !replaceWith && !removeReferences) throw new Error(`This animation is used by ${used.length} abilities. Replace or remove its references first.`);
+    if (used.length && !replaceWith && !removeReferences) throw new Error(`This animation is used by ${used.length} saved references. Replace or remove its references first.`);
     if (replaceWith) { requireAnimation(replaceWith); if (replaceWith === id) throw new Error("Choose a different replacement animation."); }
     return used;
   }
   function deleteAnimation(id, options = {}) {
     const used = validateDelete(id, options);
     const { replaceWith } = options;
-    for (const { key } of used) references.get(key).replace(id, replaceWith || null);
+    for (const { key } of used) {
+      if (key.startsWith("animation:")) {
+        const parentId = key.slice("animation:".length), parent = entries.get(parentId);
+        if (parent) put(mergeAnimationDefinition(parent, { layers: replaceAnimationLayerReferences(parent.layers, id, replaceWith || null), revision: parent.revision + 1 }));
+      } else references.get(key).replace(id, replaceWith || null);
+    }
     entries.delete(id); usage.delete(id); availability.delete(id); emit(); return true;
   }
   function replaceKnownReferences(id, replaceWith) {
     requireAnimation(id); requireAnimation(replaceWith);
     if (id === replaceWith) throw new Error("Choose a different replacement animation.");
     const known = getAnimationUsage(id);
-    for (const { key } of known) references.get(key).replace(id, replaceWith);
+    for (const { key } of known) {
+      if (key.startsWith("animation:")) {
+        const parentId = key.slice("animation:".length), parent = entries.get(parentId);
+        if (parent) put(mergeAnimationDefinition(parent, { layers: replaceAnimationLayerReferences(parent.layers, id, replaceWith), revision: parent.revision + 1 }));
+      } else references.get(key).replace(id, replaceWith);
+    }
     emit(); return known;
   }
   function resetAnimation(id) {

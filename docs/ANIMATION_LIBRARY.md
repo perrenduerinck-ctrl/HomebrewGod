@@ -188,13 +188,19 @@ cancellation removes the effect immediately.
 Uploads are limited to 8 MB per file, 64 megapixels and 16384 pixels per image side;
 cells must be at least 4 pixels. A session's embedded media budget is 48 MB and a
 library can contain 5,000 definitions. At most 240 selected frames, 100 finite
-cycles, 1–60 base FPS, 0.05–8× speed, 0.1–8× scale, and 32 sequence steps are allowed.
+cycles, 1–60 base FPS, 0.05–8× speed, 0.1–8× scale, eight layers per definition,
+and 32 total sequence members (including expanded layers) are allowed.
 Finite playback must finish within 60 seconds; start/sequence offsets are bounded
 to 10 seconds. Existing engine capacity and Reduced/Off behavior remain in force.
 
-`layers` remains bounded extension data. Frame `events` now emit host callbacks;
-they do not spawn gameplay objects or apply damage. Layered rendering, camera
-shake and a timeline editor are not implemented.
+The creator's Layers section composes up to eight saved Animation IDs with delay,
+duration, transform, opacity, blend and placement overrides. It stores references,
+not duplicate sprite data, and the shared player expands those references for both
+preview and combat. Cycles are rejected and missing referenced animations fail
+without starting a partial effect. Add, duplicate, delete and reorder controls use
+the same Animation Library selector. Frame `events` emit host callbacks; they do
+not spawn gameplay objects or apply damage. Camera shake and a timeline editor
+remain unimplemented.
 Face Away works through the API and spell overrides; Token Facing is reserved.
 The creator exposes Fixed and Face Target. A marketplace and sharing UI remain
 out of scope; signed-in personal animation storage is implemented above.

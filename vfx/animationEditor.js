@@ -10,6 +10,7 @@ import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "./anim
 import { assertPersistentAnimationReferences } from "./animationReferences.js";
 import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
 import { deriveAnimationType, getAnimationStyleLabel, getAnimationStyles, getFamilyTemplates } from "./animationFamilies.js";
+import { createAnimationLayerEditor } from "./animationLayerEditor.js";
 export { createAnimationSelector } from "./animationBrowser.js";
 
 export function createAnimationEditor({ dialog, button, library, bindings, actions = [], isSoundEnabled, persistence = null }) {
@@ -21,7 +22,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <div class="hg-animation-columns"><section class="hg-animation-settings"><div data-animation-browser-panel>
     <div data-animation-chooser></div><div class="hg-animation-buttons"><button data-animation-edit type="button">Edit settings</button><button data-animation-duplicate type="button">Duplicate / Remix</button>
     <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-share-room type="button">Share with room</button><button data-animation-delete type="button">Delete custom</button></div>
-    <div data-animation-external hidden><p data-animation-external-label></p><button type="button" data-animation-use-selected>Use selected animation</button></div>
+    <div data-animation-external hidden><p data-animation-external-label></p><button type="button" data-animation-use-selected>Use selected animation</button><button type="button" data-animation-cancel-selection hidden>Cancel layer selection</button></div>
     <div data-animation-delete-warning hidden><p data-animation-delete-message></p><label>Replacement<select data-animation-delete-replacement></select></label><button type="button" data-animation-delete-replace>Replace references and delete</button><button type="button" data-animation-delete-remove>Remove references and delete</button><button type="button" data-animation-delete-cancel>Cancel</button></div>
     </div><section data-animation-family-choice hidden><h3>Choose an animation family</h3><p>Behavior templates over the same animation engine.</p><div class="hg-animation-family-choice">${[["melee", "Melee", "Close-range physical attacks."], ["ranged", "Ranged", "Physical attacks that travel to a target."], ["magic", "Magic", "Spell and magical effects."]].map(([family, label, description]) => `<button type="button" aria-label="${label}" data-create-family="${family}"><strong>${label}</strong><span>${description}</span></button>`).join("")}</div></section>
     <form data-animation-form hidden>${animationFormMarkup()}</form></section>
@@ -44,7 +45,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   const field = name => dialog.querySelector(`[data-animation-${name}]`), status = message => { field("status").textContent = message; };
   const surface = field("preview"), previewEngine = createBattleMapEffectEngine({ surface }), preview = createAnimationPlayer({ engine: previewEngine, library, isSoundEnabled, onError: () => {} });
   let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, draftSpriteFile = null, imageInfo = null, destroyed = false, playback = null, paused = false, spriteEditor = null;
-  let external = null, deleteId = null, draftSaveId = null, saving = false;
+  let external = null, layerSelection = null, deleteId = null, draftSaveId = null, saving = false;
   const listeners = [], on = (element, event, fn) => { element.addEventListener(event, fn); listeners.push(() => element.removeEventListener(event, fn)); };
   const safely = fn => async event => { try { await fn(event); } catch (e) { status(e.message || "The animation could not be updated."); } };
   const previewStage = createAnimationPreviewStage({
@@ -77,7 +78,24 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("preview-fps").value = a.fps; field("preview-scale").value = a.scale;
     field("preview-info").textContent = `${a.grid.columns} × ${a.grid.rows} · ${a.frameCount} frames · ${a.family[0].toUpperCase() + a.family.slice(1)} · ${getAnimationStyleLabel(a)}`;
   }
-  const chooser = createAnimationSelector({ container: field("chooser"), library, onSelect: selectionChanged });
+  function layerSelectionChanged() {
+    const a = selected();
+    field("use-selected").disabled = !a;
+    field("preview-info").textContent = a ? `${a.name} · ${a.id}` : "Choose an animation for this layer.";
+  }
+  const chooser = createAnimationSelector({ container: field("chooser"), library, onSelect: () => layerSelection ? layerSelectionChanged() : selectionChanged() });
+  const layerEditor = createAnimationLayerEditor({ container: field("layers-editor"), library, chooseAnimation: openLayerSelector });
+  function openLayerSelector(index, animationId) {
+    stop(); layerSelection = { index }; field("form").hidden = true; field("family-choice").hidden = true; field("browser-panel").hidden = false; showTool("library");
+    field("external").hidden = false; field("external-label").textContent = `Choose an animation for layer ${index + 1}.`;
+    field("use-selected").textContent = "Use selected for layer"; field("cancel-selection").hidden = false;
+    if (animationId && library.getAnimation(animationId)) chooser.select(animationId); else { chooser.setFamily(""); layerSelectionChanged(); }
+  }
+  function closeLayerSelector({ restoreEditor = true } = {}) {
+    if (!layerSelection) return;
+    layerSelection = null; field("external").hidden = true; field("use-selected").textContent = "Use selected animation"; field("use-selected").disabled = false; field("cancel-selection").hidden = true;
+    if (restoreEditor) { field("browser-panel").hidden = true; field("form").hidden = false; showTool("creator"); }
+  }
   function assignmentInfo() { /* Assignment authority lives in the content editor, not this library. */ }
   function syncControls() {
     field("form").dataset.advanced = String(field("advanced-mode").checked);
@@ -118,11 +136,12 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("editor-type").value = deriveAnimationType(field("family").value, field("style").value, field("editor-type").value || "Other");
   }
   function openEditor(a = null, family = a?.family || "magic") {
+    closeLayerSelector({ restoreEditor: false });
     draftSaveId = null;
     stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; draftSpriteFile = null; imageInfo = null;
     field("form").hidden = false; field("family-choice").hidden = true; field("browser-panel").hidden = true; showTool("creator"); field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
     const initial = a || normalizeAnimation({ ...getFamilyTemplates(family)[0], placement: { ...getFamilyTemplates(family)[0].placement, override: false }, id: "draft_preview", sprite: "draft.png", grid: { columns: 6, rows: 6 }, frameCount: 36 });
-    field("family").value = initial.family; styleOptions(initial.style); writeAnimationFields(field, initial); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
+    field("family").value = initial.family; styleOptions(initial.style); writeAnimationFields(field, initial); layerEditor.write(initial.layers); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
     field("sound-info").textContent = draftSound ? "Current sound retained." : "No sound";
     const columns = a?.grid.columns || 6, rows = a?.grid.rows || 6;
     field("grid").value = columns === rows && [4,5,6,7,8].includes(columns) ? String(columns) : "custom";
@@ -130,9 +149,9 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("upload-thumbnail").hidden = !draftSource; if (draftSource) field("upload-thumbnail").src = draftSource; else field("upload-thumbnail").removeAttribute("src");
     syncControls(); if (draftSource) inspect(draftSource); field("name").focus();
   }
-  function openCreator() { stop(); editRevision++; inspectionRevision++; showTool("creator"); field("browser-panel").hidden = true; field("form").hidden = true; field("family-choice").hidden = false; }
+  function openCreator() { closeLayerSelector({ restoreEditor: false }); stop(); editRevision++; inspectionRevision++; showTool("creator"); field("browser-panel").hidden = true; field("form").hidden = true; field("family-choice").hidden = false; }
   function draft() {
-    const changes = readAnimationFields(field); changes.sound = draftSound ? { ...changes.sound, src: draftSound } : null;
+    const changes = readAnimationFields(field); changes.sound = draftSound ? { ...changes.sound, src: draftSound } : null; changes.layers = layerEditor.read();
     changes.sprite = draftSource; changes.id = editId || "draft_preview";
     return draftBase ? mergeAnimationDefinition(draftBase, changes) : normalizeAnimation(changes);
   }
@@ -159,11 +178,19 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("The file could not be read.")); reader.readAsDataURL(file); });
   }
   function finishExternal(id = null) { const request = external; external = null; request?.resolve(id); field("external").hidden = true; }
-  on(button, "click", safely(async () => { finishExternal(); dialog.showModal(); selectionChanged(); assignmentInfo(); await persistence?.load?.(); }));
+  on(button, "click", safely(async () => { finishExternal(); closeLayerSelector({ restoreEditor: false }); dialog.showModal(); selectionChanged(); assignmentInfo(); await persistence?.load?.(); }));
   on(field("close"), "click", () => dialog.close());
   on(dialog, "keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); dialog.close(); } });
-  on(dialog, "close", () => { finishExternal(); stop(); editRevision++; inspectionRevision++; });
-  on(field("use-selected"), "click", safely(() => { const a = selected(); if (!a) throw new Error("Choose an animation first."); assertPersistentAnimationReferences({ animationId: a.id }, { library, allowRoom: true }); finishExternal(a.id); dialog.close(); }));
+  on(dialog, "close", () => { finishExternal(); closeLayerSelector({ restoreEditor: false }); stop(); editRevision++; inspectionRevision++; });
+  on(field("use-selected"), "click", safely(() => {
+    const a = selected(); if (!a) throw new Error("Choose an animation first.");
+    if (layerSelection) {
+      if (a.id === editId) throw new Error("An animation cannot use itself as a layer.");
+      const index = layerSelection.index; layerEditor.setAnimation(index, a.id); closeLayerSelector(); status(`Layer ${index + 1} now uses ${a.name}.`); return;
+    }
+    assertPersistentAnimationReferences({ animationId: a.id }, { library, allowRoom: true }); finishExternal(a.id); dialog.close();
+  }));
+  on(field("cancel-selection"), "click", () => closeLayerSelector());
   on(field("custom"), "click", openCreator);
   on(field("share-room"), "click", safely(async () => {
     const a = selected();
@@ -174,7 +201,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     selectionChanged();
     status(`Shared “${shared.definition.name}” with the current room.`);
   }));
-  on(field("tool-library"), "click", selectionChanged);
+  on(field("tool-library"), "click", () => { closeLayerSelector({ restoreEditor: false }); selectionChanged(); });
   on(field("tool-creator"), "click", openCreator);
   on(field("family-choice"), "click", event => { const family = event.target.closest('[data-create-family]')?.dataset.createFamily; if (family) openEditor(null, family); });
   on(field("family"), "change", () => { styleOptions(); deriveVisibleType(); syncControls(); });
@@ -297,7 +324,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     event.preventDefault(); if (saving) return;
     saving = true;
     try {
-      const a = draft(), current = ++editRevision; await preview.prepareAnimation(a);
+      const a = draft(), current = ++editRevision; assertPersistentAnimationReferences(a, { library, allowRoom: a.ownership.scope === "room" }); await preview.prepareAnimation(a);
       if (destroyed || current !== editRevision) return;
       const prepared = draftBase?.ownership.kind === "builtin"
         ? { definition: a, asset: null, persistent: false }
@@ -323,7 +350,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   }));
   selectionChanged(); assignmentInfo();
   return { stop, openCreator, async openForSlot({ slot = "impact", mode = "choose", animationId, family = "magic" } = {}) {
-      finishExternal(); if (!dialog.open) dialog.showModal(); selectionChanged(); await persistence?.load?.();
+      finishExternal(); closeLayerSelector({ restoreEditor: false }); if (!dialog.open) dialog.showModal(); selectionChanged(); await persistence?.load?.();
       chooser.setFamily(family); field("external").hidden = false; field("external-label").textContent = `Choose an animation for ${slot}.`;
       if (animationId && library.getAnimation(animationId)) chooser.select(animationId);
       const promise = new Promise(resolve => { external = { resolve }; });
@@ -331,5 +358,5 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       if (mode === "remix" && selected()) { const a = library.duplicateAnimation(selected().id); chooser.select(a.id); openEditor(a); }
       return promise;
     }, close() { if (dialog.open) dialog.close(); else stop(); },
-    destroy() { if (destroyed) return; destroyed = true; editRevision++; inspectionRevision++; stop(); if (dialog.open) dialog.close(); chooser.destroy(); previewStage.destroy(); persistenceUnsubscribe(); preview.destroy(); previewEngine.destroy(); listeners.forEach(remove => remove()); } };
+    destroy() { if (destroyed) return; destroyed = true; editRevision++; inspectionRevision++; stop(); if (dialog.open) dialog.close(); layerEditor.destroy(); chooser.destroy(); previewStage.destroy(); persistenceUnsubscribe(); preview.destroy(); previewEngine.destroy(); listeners.forEach(remove => remove()); } };
 }

@@ -12,6 +12,7 @@ import { normalizeAnimationDefinition, mergeAnimationDefinition, applyBehaviorPl
 import { animationFrames, animationTiming, sampleAnimation, chooseAnimationVariation } from "../vfx/animationPlayback.js";
 import { createAnimationThumbnailCache, getAnimationThumbnailUrl } from "../vfx/animationThumbnails.js";
 import { analyzeAnimationSprite, getSpriteGridSuggestions, spriteCheckSummary, trimEmptyFrameSelection } from "../vfx/animationSpriteCheck.js";
+import { MAX_ANIMATION_LAYERS } from "../vfx/animationLayers.js";
 
 const definition = { id: "test_sheet", name: "Sheet", sprite: "test.png", grid: { columns: 6, rows: 6 }, frameCount: 36 };
 test("sprite editor diagnostics suggest grids, find empty cells and trim only blank endpoints", () => {
@@ -235,6 +236,42 @@ test("upgraded definitions accept nested settings and legacy edits without losin
   assert.ok(Object.isFrozen(renamed.appearance)); assert.ok(Object.isFrozen(renamed.layers[0]));
   assert.throws(() => mergeAnimationDefinition(renamed, { appearance: { tint: "url(secret)" } }), /tint/);
   assert.throws(() => mergeAnimationDefinition(renamed, { timing: { speed: 0 } }), /speed/);
+});
+
+test("layer definitions stay as bounded Animation ID references and participate in safe deletion", () => {
+  const library = createAnimationLibrary({ builtins: BUILTIN_ANIMATIONS, idFactory: () => "replacement_layer" });
+  const glow = library.registerAnimation({ ...definition, id: "layer_glow", name: "Layer glow" });
+  const composite = library.registerAnimation({ ...definition, id: "layer_composite", name: "Layer composite", layers: [{
+    animationId: glow.id, at: 250, duration: .4, scale: 1.5, opacity: .45, offsetX: 12, offsetY: -8,
+    rotation: 30, blendMode: "screen", placement: "target", followTarget: true
+  }] });
+  assert.deepEqual(composite.layers[0], { animationId: glow.id, startDelay: .25, duration: .4, scale: 1.5, opacity: .45,
+    offsetX: 12, offsetY: -8, rotation: 30, blendMode: "screen", placement: "target", followSource: false, followTarget: true });
+  assert.deepEqual(library.getAnimationUsage(glow.id).map(item => item.name), ["Animation: Layer composite"]);
+  assert.throws(() => library.deleteAnimation(glow.id), /used by 1 saved references/);
+  library.deleteAnimation(glow.id, { removeReferences: true });
+  assert.deepEqual(library.getAnimation(composite.id).layers, []);
+  assert.throws(() => normalizeAnimation({ ...definition, id: "too_many_layers", layers: Array.from({ length: MAX_ANIMATION_LAYERS + 1 }, () => ({ animationId: "test_sheet" })) }), /at most 8 layers/);
+});
+
+test("the shared player expands layered definitions with timing and visual overrides", async () => {
+  const f = fixture();
+  f.library.registerAnimation({ ...definition, id: "layer_glow", name: "Layer glow" });
+  f.library.registerAnimation({ ...definition, id: "layer_composite", name: "Layer composite", layers: [{ animationId: "layer_glow", startDelay: .25,
+    duration: .4, scale: 1.5, opacity: .45, offsetX: 12, offsetY: -8, rotation: 30, blendMode: "screen", placement: "target", followTarget: true }] });
+  const played = await f.player.playAnimation("layer_composite", { x: 20, y: 30, targetX: 90, targetY: 100 });
+  assert.equal(played.ok, true); assert.equal(played.handles.length, 2);
+  const layer = played.handles[1].effect;
+  assert.equal(layer.delay, 250); assert.equal(layer.duration, 400); assert.equal(layer.scale, 1.5); assert.equal(layer.opacity, .45);
+  assert.equal(layer.rotation, 75); assert.equal(layer.sprite.blendMode, "screen"); assert.equal(layer.position.x, 102); assert.equal(layer.position.y, 92);
+  played.cancel(); f.destroy();
+});
+
+test("layer cycles are rejected before a definition can enter the library", () => {
+  const library = createAnimationLibrary();
+  library.registerAnimation({ ...definition, id: "layer_a", name: "Layer A" });
+  library.registerAnimation({ ...definition, id: "layer_b", name: "Layer B", layers: [{ animationId: "layer_a" }] });
+  assert.throws(() => library.updateAnimation("layer_a", { layers: [{ animationId: "layer_b" }] }), /Layer cycle detected/);
 });
 
 test("range and custom frame playback honor reversal, ping pong, speed and finite loops", async () => {

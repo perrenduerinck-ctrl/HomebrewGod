@@ -3,6 +3,7 @@ import { createVfxAssetCache } from "./vfxAssetManifest.js";
 import { chooseAnimationVariation, animationTiming, sampleAnimation } from "./animationPlayback.js";
 import { normalizeAnimationRuntimeContext, animationGeometry, animationDebugGeometry, animationAreaSize, animationLayerMetrics, normalizeAnimationGrid } from "./animationRuntime.js";
 import { createAnimationDebug } from "./animationDebug.js";
+import { animationLayerOverrides } from "./animationLayers.js";
 
 let nextOwner = 0;
 const failed = (reason, message = "") => ({ ok: false, skipped: true, reason, message });
@@ -112,6 +113,27 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
     return normalizeAnimationRuntimeContext(options, { getLayer: () => engine.getOverlayElement(), normalizePoint: input => engine.getAnimationPoint?.(input) });
   };
 
+  function compileSequence(steps) {
+    let total = 0;
+    const append = (group, entry, layerOffset, ancestry) => {
+      const definition = entry.definition || library.getAnimation(entry.animationId);
+      if (!definition) throw new Error(entry.animationId ? `Layer animation “${entry.animationId}” is unavailable.` : "That animation is unavailable. Choose another animation.");
+      if (ancestry.includes(definition.id)) throw new Error(`Layer cycle detected at “${definition.name}”. Remove the recursive layer reference.`);
+      if (++total > 32) throw new Error("A sequence can play at most 32 animation members, including layers.");
+      group.push({ entry: { ...entry, definition }, layerOffset });
+      const nextAncestry = [...ancestry, definition.id];
+      for (const layer of definition.layers || []) {
+        append(group, { animationId: layer.animationId, ...animationLayerOverrides(layer) }, layerOffset + layer.startDelay * 1000, nextAncestry);
+      }
+    };
+    return steps.map(step => {
+      const entry = typeof step === "string" ? { animationId: step } : step;
+      const group = [];
+      append(group, entry, 0, []);
+      return group;
+    });
+  }
+
   async function prepareAnimation(idOrDefinition, overrides = {}) {
     const original = typeof idOrDefinition === "string" ? library.getAnimation(idOrDefinition) : idOrDefinition;
     if (!original) throw new Error("That animation is unavailable. Choose another animation.");
@@ -198,11 +220,13 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
     options.signal?.addEventListener("abort", cancelPending, { once: true });
     const handles = [];
     try {
-      const prepared = await Promise.all(steps.map(async step => {
-        const entry = typeof step === "string" ? { animationId: step } : step;
+      const compiled = compileSequence(steps);
+      const preparedGroups = await Promise.all(compiled.map(group => Promise.all(group.map(async member => {
+        const { entry } = member;
         const settings = { ...options, ...entry };
-        return { entry, settings, ...await prepareAnimation(entry.definition || entry.animationId, settings) };
-      }));
+        return { ...member, settings, ...await prepareAnimation(entry.definition || entry.animationId, settings) };
+      }))));
+      const prepared = preparedGroups.flat();
       if (destroyed || token.cancelled || token.revision !== revision || options.signal?.aborted) return failed("cancelled");
       if (engine.getState().mode === "off") return failed("effects-off");
       if (typeof options.resolvePlacement === "function") {
@@ -218,12 +242,19 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
         item.duration = item.timing.duration; item.untilCancelled = item.timing.indefinite;
       }
       let cursor = 0;
-      const requests = prepared.map(item => {
-        const delay = finite(item.entry.at, cursor, "Sequence offset") + item.definition.timing.startDelay * 1000;
-        if (delay < 0 || delay > 10000) throw new Error("Sequence offsets must be between 0 and 10000 milliseconds.");
-        cursor = item.untilCancelled ? Infinity : Math.max(cursor, delay + item.duration);
-        return { item, delay };
-      });
+      const requests = [];
+      for (const group of preparedGroups) {
+        const start = finite(group[0].entry.at, cursor, "Sequence offset");
+        if (start < 0 || start > 10000) throw new Error("Sequence offsets must be between 0 and 10000 milliseconds.");
+        let groupEnd = start;
+        for (const item of group) {
+          const delay = start + item.layerOffset + item.definition.timing.startDelay * 1000;
+          if (!Number.isFinite(delay) || delay < 0 || delay > 10000) throw new Error("Layered animation offsets must be between 0 and 10000 milliseconds.");
+          groupEnd = item.untilCancelled ? Infinity : Math.max(groupEnd, delay + item.duration);
+          requests.push({ item, delay });
+        }
+        cursor = Math.max(cursor, groupEnd);
+      }
       // Validate coordinates before starting any member of the sequence.
       for (const { item } of requests) {
         for (const key of ["x", "y", "targetX", "targetY"]) finite(item.settings[key], 0, key);

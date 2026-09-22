@@ -91,6 +91,47 @@ test("users upload, preview, save, duplicate and hot-swap a spell using Animatio
   expect(errors).toEqual([]);
 });
 
+test("the creator saves, reorders, reloads and previews lightweight animation layers", async ({ page }) => {
+  await mockAnimationServices(page);
+  let dialog = await openLibrary(page);
+  await field(dialog, "select").selectOption("sword_slash_01"); await field(dialog, "duplicate").click();
+  await field(dialog, "file").setInputFiles(sheet); await expect(field(dialog, "file-info")).toContainText("sword-slash-test.png");
+  await expand(dialog, "layers"); await field(dialog, "add-layer").click();
+  let rows = field(dialog, "layer-list").locator("[data-layer-index]"); await expect(rows).toHaveCount(1);
+  await rows.nth(0).getByRole("button", { name: "Choose from Animation Library" }).click();
+  await field(dialog, "select").selectOption("healing_burst_01"); await field(dialog, "use-selected").click();
+  await expect(rows.nth(0).locator("[data-layer-name]")).toHaveText("Healing burst");
+  await rows.nth(0).locator('[data-layer-field="startDelay"]').fill("0.05");
+  await rows.nth(0).locator('[data-layer-field="duration"]').fill("0.4");
+  await rows.nth(0).locator('[data-layer-field="scale"]').fill("1.4");
+  await rows.nth(0).locator('[data-layer-field="opacity"]').fill("0.55");
+  await rows.nth(0).locator('[data-layer-field="offsetX"]').fill("12");
+  await rows.nth(0).locator('[data-layer-field="offsetY"]').fill("-8");
+  await rows.nth(0).locator('[data-layer-field="rotation"]').fill("30");
+  await rows.nth(0).locator('[data-layer-field="blendMode"]').selectOption("screen");
+  await rows.nth(0).locator('[data-layer-field="placement"]').selectOption("target");
+  await rows.nth(0).locator('[data-layer-field="followTarget"]').check();
+  await rows.nth(0).getByRole("button", { name: "Duplicate Layer" }).click(); await expect(rows).toHaveCount(2);
+  await rows.nth(1).getByRole("button", { name: "Choose from Animation Library" }).click();
+  await field(dialog, "select").selectOption("cold_burst_01"); await field(dialog, "use-selected").click();
+  await rows.nth(1).getByRole("button", { name: "Move layer 2 up" }).click();
+  await expect(rows.nth(0).locator("[data-layer-name]")).toHaveText("Cold burst");
+  await field(dialog, "add-layer").click(); await expect(rows).toHaveCount(3);
+  await rows.nth(2).getByRole("button", { name: "Delete Layer" }).click(); await expect(rows).toHaveCount(2);
+  await field(dialog, "draft-preview").click(); await expect(dialog.locator(".hg-vfx-animation-sprite")).toHaveCount(3);
+  await field(dialog, "stop").click(); await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
+  await expect(field(dialog, "status")).toContainText("personal library");
+  const id = await field(dialog, "select").inputValue();
+  const [saved] = (await animationRecords(page)).filter(animation => animation.id === id);
+  expect(saved.layers).toHaveLength(2); expect(saved.layers.map(layer => layer.animationId)).toEqual(["cold_burst_01", "healing_burst_01"]);
+  expect(saved.layers[1]).toMatchObject({ startDelay: .05, duration: .4, scale: 1.4, opacity: .55, offsetX: 12, offsetY: -8, rotation: 30, blendMode: "screen", placement: "target", followTarget: true });
+  await field(dialog, "close").click();
+  dialog = await openLibrary(page); await field(dialog, "select").selectOption(id); await field(dialog, "edit").click(); await expand(dialog, "layers");
+  rows = field(dialog, "layer-list").locator("[data-layer-index]"); await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator("[data-layer-id]")).toHaveText("cold_burst_01");
+  await expect(rows.nth(1).locator('[data-layer-field="startDelay"]')).toHaveValue("0.05");
+});
+
 test("editor validation, replay, close cleanup and responsive layout remain usable", async ({ page }) => {
   const errors = []; page.on("pageerror", e => errors.push(e.message));
   const dialog = await openLibrary(page);

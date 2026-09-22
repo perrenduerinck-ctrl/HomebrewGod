@@ -1,4 +1,5 @@
 import { ANIMATION_FAMILIES, MAGIC_SUBTYPES, deriveAnimationType, inferAnimationFamily, inferAnimationStyle } from "./animationFamilies.js";
+import { normalizeAnimationLayers } from "./animationLayers.js";
 // Appearance metadata only. Types, tags and events never resolve game rules.
 export const ANIMATION_TYPES = Object.freeze([
   "Spell Effect", "Melee Attack", "Projectile", "Impact", "Explosion", "Beam", "Aura",
@@ -147,7 +148,7 @@ export function normalizeAnimationDefinition(input = {}) {
     appearance, blendMode: appearance.blendMode,
     motionEffects: { spin: num(motion.spin, 0, -1440, 1440, "Spin speed"), pulseScale: num(motion.pulseScale, 0, 0, 1, "Scale pulse"), pulseOpacity: num(motion.pulseOpacity, 0, 0, 1, "Opacity pulse"), pulsePeriod: num(motion.pulsePeriod, 1, .1, 10, "Pulse period") },
     variation: { rotation: num(variation.rotation, 0, 0, 180, "Rotation variation"), scale: num(variation.scale, 0, 0, .9, "Scale variation"), offsetX: num(variation.offsetX, 0, 0, 1000, "Horizontal variation"), offsetY: num(variation.offsetY, 0, 0, 1000, "Vertical variation"), speed: num(variation.speed, 0, 0, .9, "Speed variation") },
-    sound, layers: reserved(input.layers, 16, "layers"), events,
+    sound, layers: normalizeAnimationLayers(input.layers), events,
     inset: num(input.inset ?? input.atlas?.inset, 0, 0, 64, "Cell inset", true), atlas,
     ownership: { kind: ownership.kind, scope: ownership.scope, ownerId: ownership.ownerId == null ? null : animationText(ownership.ownerId) }
   });

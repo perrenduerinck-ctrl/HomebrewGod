@@ -2651,6 +2651,16 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-animation-upload input { background: transparent; border: none; padding: 0; }
 .hg-animation-tag-suggestions { display: flex; gap: 4px; flex-wrap: wrap; }
 .hg-animation-library .hg-animation-tag-suggestions button { min-height: 24px; padding: 3px 8px; border-radius: 14px; font-size: 10px; color: #c4bbe9; background: #28243f; border-color: #423b5e; }
+.hg-animation-layer-toolbar, .hg-animation-layer-heading, .hg-animation-layer-picker, .hg-animation-layer-follow { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.hg-animation-layer-toolbar { margin: 8px 0; color: #aebbd9; font-size: 11px; }
+.hg-animation-layer { margin: 10px 0; padding: 10px; border: 1px solid #3a4662; border-radius: 9px; background: #0d1526; }
+.hg-animation-layer-heading > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hg-animation-layer-heading span { color: #a7b5d2; font-size: 11px; overflow-wrap: anywhere; }
+.hg-animation-layer-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.hg-animation-library .hg-animation-layer-actions button { min-height: 28px; padding: 4px 7px; }
+.hg-animation-layer-picker { margin: 8px 0; padding: 7px; border-radius: 6px; background: #151f34; }
+.hg-animation-layer-picker code { color: #c8bdff; font-size: 10px; overflow-wrap: anywhere; }
+.hg-animation-layer-follow { justify-content: flex-start; }
 .hg-animation-save-bar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 0; }
 .hg-animation-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
 .hg-animation-card { position: relative; border: 1px solid #313e59; border-radius: 10px; overflow: hidden; background: #172137; }
