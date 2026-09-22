@@ -299,7 +299,7 @@ test("signed-in creator uploads, reloads, edits and replaces sprites without cha
   await expect(field(dialog,'status')).toContainText('personal library');
   const [record]=await animationRecords(page);expect(record.name).toBe('Gary Missile');expect(record.grid).toEqual({columns:6,rows:6});
   expect(record.fps).toBe(36);expect(record.behavior).toBe('projectile');expect(record.sprite).toMatch(/^https:\/\/res.cloudinary.com/);
-  expect(JSON.stringify(record)).not.toContain('data:');expect(services.uploads()).toBe(1);
+  expect(JSON.stringify(record)).not.toContain('data:');expect(record.thumbnailUrl).toMatch(/^https:\/\//);expect(record.thumbnailAsset.publicId).toContain('thumbnail-1.webp');expect(services.uploads()).toBe(2);
   await page.reload();await page.waitForFunction(()=>Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
   await expect.poll(async()=>(await libraryState(page)).animations.find(a=>a.id===record.id)?.name).toBe('Gary Missile');
   await page.evaluate(async()=>{const api=window.__HOMEBREW_GOD_RELEASE_TEST__;await api.openScreen('battle');api.setDmRole(true);});

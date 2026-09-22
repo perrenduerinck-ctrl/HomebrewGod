@@ -1,5 +1,6 @@
 import { normalizeAnimation } from "./animationDefinition.js";
 import { getSpellAnimationDependencies } from "./animationReferences.js";
+import { createAnimationThumbnail } from "./animationThumbnails.js";
 
 const DATA_URL_PATTERN = /^data:/i;
 
@@ -24,6 +25,7 @@ function hostedAssetError(label) {
 
 function assertHostedAssets(definition) {
   if (!/^https:\/\//i.test(String(definition.sprite || ""))) throw hostedAssetError("The sprite sheet (secure hosted URL required)");
+  if (definition.thumbnailUrl && !/^https:\/\//i.test(String(definition.thumbnailUrl))) throw hostedAssetError("The thumbnail (secure hosted URL required)");
   if (definition.sound?.src && !/^https:\/\//i.test(String(definition.sound.src))) throw hostedAssetError("The sound asset (secure hosted URL required)");
 }
 
@@ -48,6 +50,7 @@ export function createAnimationPersistence({
   deleteDoc,
   serverTimestamp,
   uploadSprite,
+  createThumbnail = createAnimationThumbnail,
   assetBaseUrl = globalThis.document?.baseURI,
   onStatus = () => {},
 } = {}) {
@@ -57,6 +60,7 @@ export function createAnimationPersistence({
   const loadingOwners = new Map();
   const knownIds = new Set();
   const assets = new Map();
+  const thumbnailAssets = new Map();
   const subscribers = new Set();
   let lastStatus = { state: "idle", message: "Sign in to sync personal animations." };
   let contextOwner = null;
@@ -89,7 +93,7 @@ export function createAnimationPersistence({
       if (!src || DATA_URL_PATTERN.test(src) || /^https?:\/\//i.test(src)) return src;
       try { return new URL(src, assetBaseUrl).href; } catch { return src; }
     };
-    return { ...input, sprite: resolve(input.sprite), sound: input.sound ? { ...input.sound, src: resolve(input.sound.src) } : null };
+    return { ...input, sprite: resolve(input.sprite), thumbnailUrl: resolve(input.thumbnailUrl), sound: input.sound ? { ...input.sound, src: resolve(input.sound.src) } : null };
   }
 
   function canPersist() {
@@ -120,6 +124,7 @@ export function createAnimationPersistence({
             library.hydrateAnimation?.(definition);
             knownIds.add(assetKey(owner, definition.id));
             if (record.spriteAsset) assets.set(assetKey(owner, definition.id), { ...record.spriteAsset });
+            if (record.thumbnailAsset) thumbnailAssets.set(assetKey(owner, definition.id), { ...record.thumbnailAsset });
             count += 1;
           } catch (error) {
             console.warn("Skipped an invalid saved animation.", error);
@@ -141,35 +146,59 @@ export function createAnimationPersistence({
 
   async function prepareAnimation(input, { spriteFile = null } = {}) {
     const owner = syncLibraryContext();
-    if (!owner || !configured) return { definition: normalizeAnimation(input), asset: null, persistent: false };
+    if (!owner || !configured) {
+      let definition = normalizeAnimation(input);
+      if (spriteFile) {
+        const generated = await createThumbnail(spriteFile, definition);
+        definition = normalizeAnimation({ ...definition, thumbnailUrl: generated.dataUrl });
+      }
+      return { definition, asset: null, thumbnailAsset: null, persistent: false };
+    }
 
     requireOwner(owner, input);
     let definition = normalizeOwnedAnimation(resolveAssets(input), owner);
-    let asset = assets.get(assetKey(owner, definition.id)) || null;
+    const key = assetKey(owner, definition.id);
+    let asset = assets.get(key) || null;
+    let thumbnailAsset = thumbnailAssets.get(key) || null;
     if (spriteFile) {
       if (typeof uploadSprite !== "function") throw new Error("Sprite uploads are not configured.");
+      if (typeof createThumbnail !== "function") throw new Error("Thumbnail creation is not configured.");
+      const generated = await createThumbnail(spriteFile, definition);
+      requireOwner(owner);
       publish("uploading", "Uploading sprite sheet…");
-      let uploaded;
-      try { uploaded = await uploadSprite(spriteFile); }
+      let uploaded, uploadedThumbnail;
+      try {
+        uploaded = await uploadSprite(spriteFile);
+        requireOwner(owner);
+        publish("uploading", "Uploading animation thumbnail…");
+        uploadedThumbnail = await uploadSprite(generated.file);
+      }
       catch (error) {
-        if (owner === ownerId()) publish("offline", "The sprite sheet could not be uploaded. Your previous saved animation is unchanged.", error);
+        if (owner === ownerId()) publish("offline", "The sprite sheet or thumbnail could not be uploaded. Your previous saved animation is unchanged.", error);
         throw error;
       }
       requireOwner(owner);
       const url = String(uploaded?.url || uploaded?.secure_url || "").trim();
       if (!/^https:\/\//i.test(url)) throw new Error("The sprite upload did not return a secure URL.");
+      const thumbnailUrl = String(uploadedThumbnail?.url || uploadedThumbnail?.secure_url || "").trim();
+      if (!/^https:\/\//i.test(thumbnailUrl)) throw new Error("The thumbnail upload did not return a secure URL.");
       asset = {
         url,
         publicId: uploaded.publicId || uploaded.public_id || null,
         resourceType: uploaded.resourceType || uploaded.resource_type || "image",
       };
-      definition = normalizeOwnedAnimation({ ...definition, sprite: url }, owner);
+      thumbnailAsset = {
+        url: thumbnailUrl,
+        publicId: uploadedThumbnail.publicId || uploadedThumbnail.public_id || null,
+        resourceType: uploadedThumbnail.resourceType || uploadedThumbnail.resource_type || "image",
+      };
+      definition = normalizeOwnedAnimation({ ...definition, sprite: url, thumbnailUrl }, owner);
     }
     assertHostedAssets(definition);
-    return { definition, asset, persistent: true };
+    return { definition, asset, thumbnailAsset, persistent: true };
   }
 
-  async function saveAnimation(input, { asset = null } = {}) {
+  async function saveAnimation(input, { asset = null, thumbnailAsset = null } = {}) {
     const owner = syncLibraryContext();
     if (!configured || !owner) return { ok: false, persistent: false };
     requireOwner(owner, input);
@@ -185,7 +214,9 @@ export function createAnimationPersistence({
     const key = assetKey(owner, definition.id);
     if (!knownIds.has(key)) record.createdAt = stamp;
     const spriteAsset = asset || assets.get(key);
+    const savedThumbnailAsset = thumbnailAsset || thumbnailAssets.get(key);
     if (spriteAsset) record.spriteAsset = { ...spriteAsset };
+    if (savedThumbnailAsset) record.thumbnailAsset = { ...savedThumbnailAsset };
     try { await setDoc(doc(db, "users", owner, "animations", definition.id), record, { merge: true }); }
     catch (error) {
       if (owner === ownerId()) publish("offline", "The animation could not be synced. Your session remains usable.", error);
@@ -193,6 +224,7 @@ export function createAnimationPersistence({
     }
     knownIds.add(key);
     if (spriteAsset) assets.set(key, { ...spriteAsset });
+    if (savedThumbnailAsset) thumbnailAssets.set(key, { ...savedThumbnailAsset });
     if (owner === ownerId()) publish("ready", `Saved “${definition.name}” to your personal animation library.`);
     return { ok: true, persistent: true, definition };
   }
@@ -227,6 +259,7 @@ export function createAnimationPersistence({
     // Hosted files are intentionally retained unless a server can prove that no
     // other saved animation references them.
     assets.delete(assetKey(owner, animationId));
+    thumbnailAssets.delete(assetKey(owner, animationId));
     if (owner === ownerId()) publish("ready", "Animation deleted from your personal library.");
     return { ok: true, persistent: true };
   }

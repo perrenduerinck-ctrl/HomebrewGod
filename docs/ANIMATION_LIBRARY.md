@@ -7,11 +7,15 @@ a developer query parameter. The existing Animation ID architecture remains:
 
 ## Browse and assign
 
-The browser shows static sprite thumbnails, names, one primary **Type**, and tags.
+The browser shows dedicated 128 px thumbnails, names, one primary **Type**, and tags.
 Search names, descriptions or tags; filter by Type, tags, Built-in/My/Room,
 Favorites or Recently Used. Sort by Name, Newest or Most Used. Thumbnails load as
 cards enter view; the browser initially shows 24 cards and can show up to 300.
-Search narrows larger libraries. A compact selector remains below the cards.
+Search narrows larger libraries. Built-ins ship pre-generated WebP thumbnails and
+new uploads create and persist `thumbnailUrl` beside the full sprite URL. Library
+cards use a separate bounded thumbnail cache and never request the full sheet;
+legacy definitions without thumbnail metadata show a lightweight placeholder.
+A compact selector remains below the cards.
 
 Select an animation, preview it, choose an action and click **Change animation**.
 **Use original effect** clears that presentation assignment. **Duplicate / Remix**
@@ -189,7 +193,9 @@ projectile/source-direction/fade geometry and organization without data mutation
 Browser checks exercise real upload/save/assign/remix, thumbnails/filters,
 advanced settings retained in Simple Mode, frozen/resumed projectile previews,
 source attachment, beam dimensions, optional audio cleanup, opacity inspection,
-responsive layout and the earlier spell/melee flows.
+responsive layout and the earlier spell/melee flows. Scale checks cover 50, 100,
+500 and 1,000 definitions and assert that opening the library requests no sprite
+sheets.
 
 ```text
 node --test --test-isolation=none tests/vfx-*.test.mjs

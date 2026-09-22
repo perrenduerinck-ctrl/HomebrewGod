@@ -143,11 +143,15 @@ test("shared renderer preserves full rectangular cells, pivots, flips and alpha"
 });
 
 test("animation browser offers thumbnails, type and tag filters, favorites, recents and remixes", async ({ page }, testInfo) => {
-  const errors = []; page.on("pageerror", e => errors.push(e.message)); const dialog = await openLibrary(page);
+  const errors = [], imageRequests = []; page.on("pageerror", e => errors.push(e.message));
+  page.on("request", request => { if (request.resourceType() === "image") imageRequests.push(request.url()); });
+  const dialog = await openLibrary(page);
   await expect(dialog.locator(".hg-animation-card")).toHaveCount(6);
   // Thumbnails outside the dialog viewport load only when brought into view.
   await dialog.locator(".hg-animation-card").last().scrollIntoViewIfNeeded();
   await expect.poll(() => dialog.locator("[data-thumbnail-id]").evaluateAll(nodes => nodes.filter(n => n.style.backgroundImage).length)).toBe(6);
+  expect(imageRequests.some(url => /assets\/vfx\/thumbnails\/.+\.webp/.test(url))).toBe(true);
+  expect(imageRequests.some(url => /sword-slash-test|fireball-impact-alpha-6x6|regeneration\.png|cold-cast-6x6|fire-impact-spritesheet|radiant-spear\.png/.test(url))).toBe(false);
   await field(dialog, "type").selectOption("Explosion"); await expect(dialog.locator(".hg-animation-card")).toHaveCount(1);
   await dialog.locator('[data-choose-animation="fireball_explosion_01"]').click();
   await dialog.getByRole("button", { name: "Favorite Fireball explosion", exact: true }).click();
@@ -163,6 +167,42 @@ test("animation browser offers thumbnails, type and tag filters, favorites, rece
   await field(dialog, "search").fill("custom sparkle"); await expect(dialog.locator(".hg-animation-card")).toHaveCount(1);
   await field(dialog, "search").fill(""); await field(dialog, "select").selectOption("fireball_explosion_01"); await field(dialog, "edit").click();
   await expect(field(dialog, "name")).toHaveValue("Fireball explosion"); expect(errors).toEqual([]);
+});
+
+test("animation library stays bounded at 50, 100, 500 and 1000 records without requesting sprite sheets", async ({ page }) => {
+  let spriteRequests = 0, thumbnailRequests = 0;
+  await page.route("https://sprites.test/**", route => { spriteRequests++; return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+XwL5WQAAAABJRU5ErkJggg==", "base64") }); });
+  await page.route("https://thumbs.test/**", route => { thumbnailRequests++; return route.fulfill({ contentType: "image/webp", body: Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEALmk0mk0iIiIiIgBoSygABc6zbAAA", "base64") }); });
+  await page.goto("?smokeTest=1&vfxTest=1");
+  const results = await page.evaluate(async () => {
+    const [{ createAnimationLibrary }, { createAnimationSelector }] = await Promise.all([
+      import("/vfx/animationLibrary.js"), import("/vfx/animationBrowser.js")
+    ]);
+    const output = [];
+    for (const count of [50, 100, 500, 1000]) {
+      const library = createAnimationLibrary();
+      for (let index = 0; index < count; index++) library.registerAnimation({
+        id: `scale_${count}_${index}`, name: `Scale animation ${String(index).padStart(4, "0")}`,
+        sprite: `https://sprites.test/${count}/${index}.png`, thumbnailUrl: `https://thumbs.test/${count}/${index}.webp`,
+        grid: { columns: 6, rows: 6 }, frameCount: 36
+      });
+      const container = document.createElement("div");
+      container.style.cssText = "position:fixed;inset:0 auto auto 0;width:720px;height:560px;overflow:auto;z-index:99999;background:#111";
+      document.body.append(container);
+      const started = performance.now();
+      const selector = createAnimationSelector({ container, library });
+      await new Promise(resolve => setTimeout(resolve, 75));
+      output.push({ count, cards: container.querySelectorAll(".hg-animation-card").length, milliseconds: performance.now() - started });
+      selector.destroy();
+      container.remove();
+    }
+    return output;
+  });
+  expect(results.map(result => [result.count, result.cards])).toEqual([[50, 24], [100, 24], [500, 24], [1000, 24]]);
+  expect(Math.max(...results.map(result => result.milliseconds))).toBeLessThan(1500);
+  expect(spriteRequests).toBe(0);
+  expect(thumbnailRequests).toBeGreaterThan(0);
+  expect(thumbnailRequests).toBeLessThanOrEqual(96);
 });
 
 test("advanced projectile settings survive Simple Mode save and the preview pauses without drifting", async ({ page }, testInfo) => {

@@ -1,7 +1,5 @@
 import { ANIMATION_TYPES } from "./animationLibrary.js";
-import { createVfxAssetCache } from "./vfxAssetManifest.js";
-import { getSpriteFrameStyle } from "./spriteAnimator.js";
-import { resolveVfxAlphaSource } from "./alphaAssets.js";
+import { createAnimationThumbnailCache, getAnimationThumbnailUrl } from "./animationThumbnails.js";
 import { MAGIC_SUBTYPES } from "./animationFamilies.js";
 
 // Reusable browser plus a compact selector. All text from user definitions is
@@ -20,19 +18,20 @@ export function createAnimationSelector({ container, library, onSelect = () => {
     <p data-animation-results class="hg-animation-hint"></p>`;
   const field = name => container.querySelector(`[data-animation-${name}]`);
   for (const type of ANIMATION_TYPES) field("type").add(new Option(type, type));
-  const cache = createVfxAssetCache({ maximumEntries: 32, onError: () => {} });
+  const thumbnailCache = createAnimationThumbnailCache({ maximumEntries: 256 });
   let selectedId = library.list()[0]?.id || "", limit = 24, revision = 0, destroyed = false, activeTab = "all";
   const listeners = [], on = (node, event, fn) => { node.addEventListener(event, fn); listeners.push(() => node.removeEventListener(event, fn)); };
   let observer;
   async function thumbnail(node, animation, current) {
     if (!animation || destroyed || current !== revision) return;
-    if (!await cache.preload(animation.sprite) || destroyed || current !== revision || !node.isConnected) return;
-    const dimensions = cache.getDimensions(animation.sprite); if (!dimensions) return;
-    const w = dimensions.width / animation.grid.columns, h = dimensions.height / animation.grid.rows, factor = 66 / Math.max(w, h);
-    const atlas = animation.atlas || { ...dimensions, columns: Array.from({ length: animation.grid.columns + 1 }, (_, i) => i * w), rows: Array.from({ length: animation.grid.rows + 1 }, (_, i) => i * h) };
-    Object.assign(node.style, getSpriteFrameStyle({ src: animation.sprite, preserveGrid: true, columns: animation.grid.columns, rows: animation.grid.rows,
-      frameCount: animation.frames.end + 1, frameWidth: w * factor, frameHeight: h * factor, atlas: { ...atlas, inset: animation.inset } }, Math.round((animation.frames.start + animation.frames.end) / 2)));
-    node.style.backgroundImage = `url(${JSON.stringify(resolveVfxAlphaSource(animation.sprite))})`;
+    const source = getAnimationThumbnailUrl(animation);
+    if (!source) { node.dataset.thumbnailState = "missing"; return; }
+    if (!await thumbnailCache.preload(source) || destroyed || current !== revision || !node.isConnected) {
+      node.dataset.thumbnailState = "error";
+      return;
+    }
+    node.style.backgroundImage = `url(${JSON.stringify(source)})`;
+    node.dataset.thumbnailState = "ready";
   }
   function refresh() {
     const current = ++revision; observer?.disconnect();
@@ -52,7 +51,7 @@ export function createAnimationSelector({ container, library, onSelect = () => {
       const card = document.createElement("div"); card.className = "hg-animation-card"; card.dataset.selected = String(a.id === selectedId);
       const choose = document.createElement("button"); choose.type = "button"; choose.dataset.chooseAnimation = a.id; choose.setAttribute("aria-pressed", String(a.id === selectedId));
       const art = document.createElement("span"); art.className = "hg-animation-thumb";
-      const sprite = document.createElement("span"); sprite.dataset.thumbnailId = a.id; art.appendChild(sprite);
+      const sprite = document.createElement("span"); sprite.dataset.thumbnailId = a.id; sprite.textContent = getAnimationThumbnailUrl(a) ? "" : a.name.slice(0, 1).toUpperCase(); art.appendChild(sprite);
       const title = document.createElement("strong"); title.textContent = a.name;
       const type = document.createElement("small"); type.textContent = `${a.family[0].toUpperCase() + a.family.slice(1)} · ${a.type} · ${a.ownership.kind === "user" ? "Custom" : "Built-in"}${library.getAvailability?.(a.id).available === false ? " · Unavailable sprite" : ""}`;
       const tags = document.createElement("span"); tags.className = "hg-animation-card-tags"; tags.textContent = a.tags.slice(0, 3).join(" · ");
@@ -83,5 +82,5 @@ export function createAnimationSelector({ container, library, onSelect = () => {
   on(field("more"), "click", () => { limit += 24; refresh(); });
   const unsubscribe = library.subscribe(refresh); refresh();
   return { getSelectedId: () => selectedId, select: id => select(id, true), setFamily(family = "") { activeTab = ["melee", "ranged", "magic"].includes(family) ? family : "all"; field("filter-subtype").value = ""; refresh(); }, refresh,
-    destroy() { destroyed = true; revision++; observer?.disconnect(); cache.clear(); unsubscribe(); listeners.forEach(remove => remove()); } };
+    destroy() { destroyed = true; revision++; observer?.disconnect(); thumbnailCache.clear(); unsubscribe(); listeners.forEach(remove => remove()); } };
 }

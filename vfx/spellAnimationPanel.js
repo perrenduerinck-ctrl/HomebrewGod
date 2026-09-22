@@ -4,6 +4,7 @@ import { createBattleMapEffectEngine } from "./effectEngine.js";
 import { createAnimationPlayer } from "./animationPlayer.js";
 import { createAnimationSequenceController } from "./animationSequence.js";
 import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "./animationPreviewStage.js";
+import { getAnimationThumbnailUrl } from "./animationThumbnails.js";
 
 const title = slot => slot[0].toUpperCase() + slot.slice(1);
 const optionalNumber = input => String(input?.value || "").trim() === "" ? null : Number(input.value);
@@ -121,8 +122,9 @@ export function openSpellAnimationPanel({ document = globalThis.document, animat
       row.querySelector("[data-slot-name]").textContent = animation?.name || (ref ? `Missing animation: ${ref.animationId}` : "No animation");
       row.querySelector("[data-slot-summary]").textContent = ref ? `${animation?.type || "Unavailable"} · ${ref.trigger || "afterPrevious"}` : "Optional stage · skipped";
       const thumbnail = row.querySelector("[data-slot-thumbnail]");
-      if (animation?.sprite) {
-        thumbnail.style.backgroundImage = `url(${JSON.stringify(animation.sprite).slice(1, -1)})`;
+      const thumbnailUrl = getAnimationThumbnailUrl(animation);
+      if (thumbnailUrl) {
+        thumbnail.style.backgroundImage = `url(${JSON.stringify(thumbnailUrl)})`;
         thumbnail.classList.add("has-image");
       }
       root.append(row);

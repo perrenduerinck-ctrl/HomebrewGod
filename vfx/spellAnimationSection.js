@@ -1,12 +1,12 @@
 import { ANIMATION_SLOTS, normalizeSpellAnimations, normalizeSpellAnimationReference } from "./animationReferences.js";
-import { resolveVfxAlphaSource } from "./alphaAssets.js";
+import { getAnimationThumbnailUrl } from "./animationThumbnails.js";
 const escape = text => String(text ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 export const spellAnimationSummary = animations => ANIMATION_SLOTS.filter(slot => normalizeSpellAnimations(animations)[slot]).join(" → ") || "None";
 export function animationThumbnail(animation) {
   if (!animation) return '<span class="hg-content-animation-thumb" aria-hidden="true">—</span>';
-  const columns = animation.grid.columns, rows = animation.grid.rows, frame = Math.floor((animation.frames.start + animation.frames.end) / 2);
-  const style = `background-image:url(${JSON.stringify(resolveVfxAlphaSource(animation.sprite))});background-size:${columns * 100}% ${rows * 100}%;background-position:${columns > 1 ? frame % columns / (columns - 1) * 100 : 0}% ${rows > 1 ? Math.floor(frame / columns) / (rows - 1) * 100 : 0}%`;
-  return `<span class="hg-content-animation-thumb" aria-hidden="true" style="${escape(style)}"></span>`;
+  const thumbnailUrl = getAnimationThumbnailUrl(animation);
+  const style = thumbnailUrl ? `background-image:url(${JSON.stringify(thumbnailUrl)});background-size:contain;background-position:center` : "";
+  return `<span class="hg-content-animation-thumb" aria-hidden="true"${style ? ` style="${escape(style)}"` : ""}>${thumbnailUrl ? "" : escape(animation.name.slice(0, 1).toUpperCase())}</span>`;
 }
 export function renderSpellAnimationSection({ animations = {}, library, spellId = "", editable = true } = {}) {
   const stages = normalizeSpellAnimations(animations);

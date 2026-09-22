@@ -14,8 +14,8 @@ export function createAnimationLibrary({ builtins = [], idFactory = () => `custo
   function validatePut(animation) {
     if (!entries.has(animation.id) && entries.size >= 5000) throw new Error("This library is full (5,000 definitions).");
     // Bound embedded uploads without counting shared sheets repeatedly.
-    const sheets = new Set([...entries.values()].filter(a => a.id !== animation.id).flatMap(a => [a.sprite, a.sound?.src || ""]));
-    sheets.add(animation.sprite); sheets.add(animation.sound?.src || "");
+    const sheets = new Set([...entries.values()].filter(a => a.id !== animation.id).flatMap(a => [a.sprite, a.thumbnailUrl || "", a.sound?.src || ""]));
+    sheets.add(animation.sprite); sheets.add(animation.thumbnailUrl || ""); sheets.add(animation.sound?.src || "");
     if ([...sheets].reduce((sum, src) => sum + (src.startsWith("data:") ? src.length : 0), 0) > 48 * 1024 * 1024) {
       throw new Error("This session's uploaded sheets are full. Remove an unused custom animation first.");
     }

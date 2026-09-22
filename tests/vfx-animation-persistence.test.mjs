@@ -41,6 +41,12 @@ function fixture({ owner = "user-a", loadError = null, dependencies = {} } = {})
       uploads.push(file);
       return { url: `https://res.cloudinary.com/demo/image/upload/${file.name}`, publicId: `animations/${file.name}` };
     },
+    async createThumbnail(file, animation) {
+      return {
+        file: { name: `${animation.id}-thumbnail.webp`, type: "image/webp", size: 4096 },
+        dataUrl: "data:image/webp;base64,AAAA"
+      };
+    },
     assetBaseUrl: "https://perrenduerinck-ctrl.github.io/HomebrewGod/",
     ...dependencies,
   });
@@ -71,6 +77,7 @@ test("account changes during upload reject saving into the next user's account",
   let resolve;
   const f = fixture({ dependencies: { uploadSprite: () => new Promise(done => { resolve = done; }) } });
   const pending = f.store.prepareAnimation(hosted("private"), { spriteFile: { name: "new.png" } });
+  while (!resolve) await Promise.resolve();
   f.setOwner("user-b"); resolve({ secure_url: "https://example.test/new.png" });
   await assert.rejects(() => pending, /account changed/);
   await assert.rejects(() => f.store.saveAnimation(hosted("private")), /account changed/);
@@ -160,17 +167,22 @@ test("new sprite sheets upload before the saved definition is prepared", async (
   const file = { name: "nova.png", type: "image/png", size: 2000 };
   const prepared = await f.store.prepareAnimation({ ...hosted("nova"), sprite: "data:image/png;base64,AAAA" }, { spriteFile: file });
   assert.equal(f.uploads[0], file);
+  assert.equal(f.uploads[1].name, "nova-thumbnail.webp");
   assert.equal(prepared.definition.sprite, "https://res.cloudinary.com/demo/image/upload/nova.png");
+  assert.equal(prepared.definition.thumbnailUrl, "https://res.cloudinary.com/demo/image/upload/nova-thumbnail.webp");
   assert.equal(prepared.asset.publicId, "animations/nova.png");
+  assert.equal(prepared.thumbnailAsset.publicId, "animations/nova-thumbnail.webp");
 });
 
 test("Firestore records never contain base64 sprite data", async () => {
   const f = fixture();
   const prepared = await f.store.prepareAnimation({ ...hosted("nova"), sprite: "data:image/png;base64,AAAA" }, { spriteFile: { name: "nova.png" } });
   const saved = f.library.registerAnimation(prepared.definition);
-  await f.store.saveAnimation(saved, { asset: prepared.asset });
+  await f.store.saveAnimation(saved, { asset: prepared.asset, thumbnailAsset: prepared.thumbnailAsset });
   assert.doesNotMatch(JSON.stringify(f.writes[0].data), /data:image/);
   assert.match(f.writes[0].data.sprite, /^https:\/\//);
+  assert.match(f.writes[0].data.thumbnailUrl, /^https:\/\//);
+  assert.equal(f.writes[0].data.thumbnailAsset.publicId, "animations/nova-thumbnail.webp");
 });
 
 test("a data URL without an upload is rejected before Firestore writes", async () => {
@@ -211,11 +223,21 @@ test("replacing a sprite preserves animation ID and advances only its revision",
   await f.store.saveAnimation(saved);
   const replacement = await f.store.prepareAnimation(saved, { spriteFile: { name: "replacement.webp" } });
   saved = f.library.updateAnimation(saved.id, replacement.definition);
-  await f.store.saveAnimation(saved, { asset: replacement.asset });
+  await f.store.saveAnimation(saved, { asset: replacement.asset, thumbnailAsset: replacement.thumbnailAsset });
   assert.equal(saved.id, "custom_fire");
   assert.equal(saved.revision, 2);
   assert.match(saved.sprite, /replacement\.webp$/);
+  assert.match(saved.thumbnailUrl, /custom_fire-thumbnail\.webp$/);
   assert.equal(f.writes[1].data.spriteAsset.publicId, "animations/replacement.webp");
+  assert.equal(f.writes[1].data.thumbnailAsset.publicId, "animations/custom_fire-thumbnail.webp");
+});
+
+test("signed-out uploads keep a lightweight session thumbnail without persistence", async () => {
+  const f = fixture({ owner: "" });
+  const prepared = await f.store.prepareAnimation({ ...hosted("session_thumb"), ownership: { kind: "user", scope: "session", ownerId: null }, sprite: "data:image/png;base64,AAAA" }, { spriteFile: { name: "session.png" } });
+  assert.equal(prepared.persistent, false);
+  assert.equal(prepared.definition.thumbnailUrl, "data:image/webp;base64,AAAA");
+  assert.equal(f.uploads.length, 0);
 });
 
 test("a session duplicate can be promoted to persistent user ownership", async () => {

@@ -297,7 +297,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       const candidate = library.prepareAnimationSave({ ...prepared.definition, ...(editId ? {} : { id: draftSaveId || undefined }) }, { animationId: editId });
       draftSaveId = candidate.id;
       if (prepared.persistent) {
-        const synced = await persistence.saveAnimation(candidate, { asset: prepared.asset });
+        const synced = await persistence.saveAnimation(candidate, { asset: prepared.asset, thumbnailAsset: prepared.thumbnailAsset });
         if (!synced.ok) throw new Error("Sign in again to save this animation. Your previous animation is unchanged.");
         const expectedOwner = candidate.ownership.scope === "room"
           ? library.getContext().roomId

@@ -10,6 +10,7 @@ import { createSpellVfxEvent } from "../vfx/castEvent.js";
 import { getAnimationActions } from "../vfx/animationWorkspace.js";
 import { normalizeAnimationDefinition, mergeAnimationDefinition, applyBehaviorPlacementDefaults } from "../vfx/animationDefinition.js";
 import { animationFrames, animationTiming, sampleAnimation, chooseAnimationVariation } from "../vfx/animationPlayback.js";
+import { createAnimationThumbnailCache, getAnimationThumbnailUrl } from "../vfx/animationThumbnails.js";
 
 const definition = { id: "test_sheet", name: "Sheet", sprite: "test.png", grid: { columns: 6, rows: 6 }, frameCount: 36 };
 test("the assignment selector includes dedicated spell sequences as well as profiles and the sword test", () => {
@@ -51,6 +52,7 @@ test("library IDs separate appearance, ownership and assignments, with independe
   library.updateAnimation(duplicate.id, { sprite: "replacement.png" });
   assert.equal(library.getAnimation(duplicate.id).inset, 0);
   assert.equal(library.getAnimation(duplicate.id).atlas, null);
+  assert.equal(library.getAnimation(duplicate.id).thumbnailUrl, "");
   assert.equal(library.searchAnimations("sword weapon").length, 2);
   assert.equal(library.getAnimationsByCategory("Sword").length, 2);
   const imported = library.importAnimation(JSON.parse(JSON.stringify(library.exportAnimation(duplicate.id))));
@@ -70,6 +72,26 @@ test("configured animations report readable errors and never silently clamp inva
     [{ anchorY: 2 }, /pivot/], [{ sprite: "javascript:alert(1)" }, /asset path/]]) {
     assert.throws(() => normalizeAnimation({ ...definition, ...changes }), message);
   }
+});
+
+test("built-ins use dedicated lightweight thumbnails and the thumbnail cache is separate from sprite assets", async () => {
+  assert.ok(BUILTIN_ANIMATIONS.every(animation => animation.thumbnailUrl?.endsWith(".webp")));
+  assert.equal(getAnimationThumbnailUrl({ sprite: "large-sheet.png" }), "");
+  const requested = [];
+  class FakeImage {
+    set src(value) { requested.push(value); queueMicrotask(() => this.onload?.()); }
+  }
+  const cache = createAnimationThumbnailCache({ maximumEntries: 2, ImageClass: FakeImage });
+  await cache.preload("thumb-a.webp");
+  await cache.preload("thumb-b.webp");
+  await cache.preload("thumb-a.webp");
+  await cache.preload("thumb-c.webp");
+  assert.deepEqual(requested, ["thumb-a.webp", "thumb-b.webp", "thumb-c.webp"]);
+  assert.equal(cache.size, 2);
+  assert.equal(cache.has("thumb-a.webp"), true);
+  assert.equal(cache.has("thumb-b.webp"), false);
+  cache.clear();
+  assert.equal(cache.size, 0);
 });
 
 test("behavior defaults produce coherent placement while legacy definitions remain manual", () => {

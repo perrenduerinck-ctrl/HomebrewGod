@@ -67,7 +67,9 @@ export async function mockAnimationServices(page, { room = "" } = {}) {
   let uploadCount = 0;
   await page.route("https://api.cloudinary.com/**/image/upload", route => {
     uploadCount++;
-    return route.fulfill({ json: { secure_url: `https://res.cloudinary.com/acceptance/image/upload/sprite-${uploadCount}.png`, public_id: `acceptance/sprite-${uploadCount}`, resource_type: "image" } });
+    const thumbnail = uploadCount % 2 === 0;
+    const name = thumbnail ? `thumbnail-${uploadCount / 2}.webp` : `sprite-${Math.ceil(uploadCount / 2)}.png`;
+    return route.fulfill({ json: { secure_url: `https://res.cloudinary.com/acceptance/image/upload/${name}`, public_id: `acceptance/${name}`, resource_type: "image" } });
   });
   await page.route("https://res.cloudinary.com/acceptance/**", route => route.fulfill({ contentType: "image/png", body: sheet }));
   return { sheet, uploads: () => uploadCount };

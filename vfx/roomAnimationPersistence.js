@@ -1,5 +1,6 @@
 import { normalizeAnimation } from "./animationDefinition.js";
 import { getSpellAnimationDependencies } from "./animationReferences.js";
+import { createAnimationThumbnail } from "./animationThumbnails.js";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -33,6 +34,9 @@ function assertHostedAssets(definition) {
   if (!/^https:\/\//i.test(String(definition.sprite || ""))) {
     throw new Error("Upload the sprite sheet before sharing this animation.");
   }
+  if (definition.thumbnailUrl && !/^https:\/\//i.test(String(definition.thumbnailUrl))) {
+    throw new Error("Upload the thumbnail before sharing this animation.");
+  }
   if (definition.sound?.src && !/^https:\/\//i.test(definition.sound.src)) {
     throw new Error("Upload the sound before sharing this animation.");
   }
@@ -65,7 +69,8 @@ export function createRoomAnimationPersistence({
   getUserId = () => null,
   getRoomId = () => null,
   getIsDm = () => false,
-  uploadSprite = null
+  uploadSprite = null,
+  createThumbnail = createAnimationThumbnail
 } = {}) {
   const loadedRooms = new Set();
   const roomId = () => text(getRoomId?.());
@@ -125,27 +130,42 @@ export function createRoomAnimationPersistence({
     const room = roomId();
     let definition = normalizeRoomAnimation(input, room);
     let asset = null;
+    let thumbnailAsset = null;
     if (spriteFile) {
       if (typeof uploadSprite !== "function") {
         throw new Error("Shared sprite uploads are unavailable.");
       }
+      const generated = await createThumbnail(spriteFile, definition);
+      requireDm();
       const uploaded = await uploadSprite(spriteFile);
+      requireDm();
+      const uploadedThumbnail = await uploadSprite(generated.file);
+      requireDm();
       const url = text(uploaded?.url || uploaded?.secure_url);
       if (!/^https:\/\//i.test(url)) {
         throw new Error("The shared sprite upload did not return a secure URL.");
+      }
+      const thumbnailUrl = text(uploadedThumbnail?.url || uploadedThumbnail?.secure_url);
+      if (!/^https:\/\//i.test(thumbnailUrl)) {
+        throw new Error("The shared thumbnail upload did not return a secure URL.");
       }
       asset = {
         url,
         publicId: uploaded.publicId || uploaded.public_id || null,
         resourceType: uploaded.resourceType || uploaded.resource_type || "image"
       };
-      definition = normalizeRoomAnimation({ ...definition, sprite: url }, room);
+      thumbnailAsset = {
+        url: thumbnailUrl,
+        publicId: uploadedThumbnail.publicId || uploadedThumbnail.public_id || null,
+        resourceType: uploadedThumbnail.resourceType || uploadedThumbnail.resource_type || "image"
+      };
+      definition = normalizeRoomAnimation({ ...definition, sprite: url, thumbnailUrl }, room);
     }
     assertHostedAssets(definition);
-    return { definition, asset, persistent: true };
+    return { definition, asset, thumbnailAsset, persistent: true };
   }
 
-  async function saveAnimation(input, { asset = null } = {}) {
+  async function saveAnimation(input, { asset = null, thumbnailAsset = null } = {}) {
     requireDm();
     const room = roomId();
     const definition = normalizeRoomAnimation(input, room);
@@ -162,6 +182,7 @@ export function createRoomAnimationPersistence({
       updatedAt: stamp
     };
     if (asset) record.spriteAsset = { ...asset };
+    if (thumbnailAsset) record.thumbnailAsset = { ...thumbnailAsset };
     await setDoc(
       doc(db, "rooms", room, "animations", definition.id),
       record,

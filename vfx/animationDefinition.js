@@ -74,7 +74,7 @@ export function normalizeAnimationDefinition(input = {}) {
   const id = animationText(input.id), name = animationText(input.name);
   if (!/^[a-z][\w.-]{0,119}$/i.test(id)) throw new Error("Choose a valid animation ID.");
   if (!name) throw new Error("Give the animation a name.");
-  const sprite = asset(input.sprite), columns = num(input.grid?.columns, 1, 1, 240, "Columns", true), rows = num(input.grid?.rows, 1, 1, 240, "Rows", true);
+  const sprite = asset(input.sprite), thumbnailUrl = input.thumbnailUrl ? asset(input.thumbnailUrl) : "", columns = num(input.grid?.columns, 1, 1, 240, "Columns", true), rows = num(input.grid?.rows, 1, 1, 240, "Rows", true);
   const f = input.frames || {}, p = typeof input.playback === "object" ? input.playback : input.timing || {}, t = input.transform || {};
   const start = num(f.start, 0, 0, columns * rows - 1, "Starting frame", true);
   const count = num(input.frameCount ?? f.count, f.end === undefined ? Math.min(columns * rows - start, MAX_ANIMATION_FRAMES) : Number(f.end) - start + 1, 1, Math.min(columns * rows - start, MAX_ANIMATION_FRAMES), "Frame count", true);
@@ -133,7 +133,7 @@ export function normalizeAnimationDefinition(input = {}) {
   const subtype = family === "magic" ? choice(input.subtype || undefined, inferMagicSubtype(input), MAGIC_SUBTYPES, "magic subtype") : animationText(input.subtype, 48);
   return freezeAnimation({ version: 2, revision: num(input.revision, 1, 1, 1000000, "Revision", true), id, name, description: animationText(input.description, 1000), type, category, family, subtype,
     collections: normalizeTags(input.collections),
-    tags: normalizeTags(input.tags), sprite, grid: { columns, rows }, frames: { start, end, count, reverse: f.reverse === true, sequence: reserved(f.sequence, 240, "custom frames") },
+    tags: normalizeTags(input.tags), sprite, thumbnailUrl, grid: { columns, rows }, frames: { start, end, count, reverse: f.reverse === true, sequence: reserved(f.sequence, 240, "custom frames") },
     // Flat aliases keep the first Animation ID API compatible. Nested input is also accepted.
     frameCount: count, fps: timing.fps, playback: mode, loop: ["loop", "pingpong"].includes(mode) && loopCount === 0, timing,
     ...transform, transform, size: num(input.size, 160, 8, 1024, "Display size"),
@@ -180,5 +180,6 @@ export function mergeAnimationDefinition(original, changes = {}) {
   if (changes.frames?.end === undefined && (changes.frameCount !== undefined || changes.frames?.count !== undefined)) result.frames.end = result.frames.start + Number(result.frameCount) - 1;
   const resetCrop = changes.sprite !== undefined && changes.sprite !== original.sprite || changes.grid && (result.grid.columns !== original.grid.columns || result.grid.rows !== original.grid.rows);
   if (resetCrop) { result.atlas = changes.atlas ?? null; result.inset = changes.inset ?? 0; }
+  if (changes.sprite !== undefined && changes.sprite !== original.sprite && changes.thumbnailUrl === undefined) result.thumbnailUrl = "";
   return normalizeAnimationDefinition(result);
 }

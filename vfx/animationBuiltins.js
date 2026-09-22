@@ -6,19 +6,19 @@ const healing = STATUS_EFFECT_DEFINITIONS.find(a => a.id === "status-buff-regene
 export const SWORD_SLASH_ANIMATION = Object.freeze({
   id: "sword_slash_01", name: "Sword slash", category: "Sword", type: "Melee Attack", tags: ["sword", "melee", "weapon", "slash"],
   sprite: "./assets/vfx/combat/melee/sword-slash-test.png", grid: { columns: 6, rows: 6 },
-  frameCount: 36, fps: 30, inset: 4
+  thumbnailUrl: "./assets/vfx/thumbnails/sword-slash-01.webp", frameCount: 36, fps: 30, inset: 4
 });
 export const BUILTIN_ANIMATIONS = Object.freeze([
   SWORD_SLASH_ANIMATION,
   { id: "fireball_explosion_01", name: "Fireball explosion", category: "Fire", type: "Explosion", tags: ["fire", "magic", "spell", "impact"],
     sprite: fire.src, grid: { columns: fire.columns, rows: fire.rows }, frameCount: fire.frameCount,
-    fps: 30, atlas: fire.atlas, inset: fire.atlas?.inset || 0 },
+    thumbnailUrl: "./assets/vfx/thumbnails/fireball-explosion-01.webp", fps: 30, atlas: fire.atlas, inset: fire.atlas?.inset || 0 },
   { id: "healing_burst_01", name: "Healing burst", category: "Healing", type: "Healing", tags: ["healing", "magic", "buff"],
-    sprite: healing.src, grid: { columns: 5, rows: 5 }, frameCount: 25, fps: 20, atlas: healing.atlas },
+    sprite: healing.src, thumbnailUrl: "./assets/vfx/thumbnails/healing-burst-01.webp", grid: { columns: 5, rows: 5 }, frameCount: 25, fps: 20, atlas: healing.atlas },
   { id: "cold_burst_01", name: "Cold burst", category: "Cold", type: "Impact", tags: ["cold", "magic", "impact"],
-    sprite: "./assets/vfx/modern6x6/cold-cast-6x6.png", grid: { columns: 6, rows: 6 }, frameCount: 36, fps: 24 },
+    sprite: "./assets/vfx/modern6x6/cold-cast-6x6.png", thumbnailUrl: "./assets/vfx/thumbnails/cold-burst-01.webp", grid: { columns: 6, rows: 6 }, frameCount: 36, fps: 24 },
   { id: "fire_legacy_4x4", name: "Fire impact (classic)", category: "Fire", type: "Impact", tags: ["fire", "magic", "impact", "legacy"],
-    sprite: "./assets/vfx/fire/fire-impact-spritesheet.png", grid: { columns: 4, rows: 4 }, frameCount: 16, fps: 18, blendMode: "screen" },
+    sprite: "./assets/vfx/fire/fire-impact-spritesheet.png", thumbnailUrl: "./assets/vfx/thumbnails/fire-impact-classic.webp", grid: { columns: 4, rows: 4 }, frameCount: 16, fps: 18, blendMode: "screen" },
   { id: "radiant_spear_01", name: "Radiant spear (single frame)", category: "Spear", type: "Weapon Attack", tags: ["spear", "radiant", "weapon", "projectile"],
-    sprite: "./assets/vfx/library/radiant-spear.png", grid: { columns: 1, rows: 1 }, frameCount: 1, fps: 1 }
+    sprite: "./assets/vfx/library/radiant-spear.png", thumbnailUrl: "./assets/vfx/thumbnails/radiant-spear-01.webp", grid: { columns: 1, rows: 1 }, frameCount: 1, fps: 1 }
 ]);

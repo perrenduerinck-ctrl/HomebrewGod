@@ -2633,7 +2633,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-animation-card small { font-size: 10px; font-weight: 400; color: #a9b6d0; margin: 4px 0; }
 .hg-animation-card-tags { color: #a79bd0; font-size: 10px; min-height: 14px; }
 .hg-animation-thumb { height: 80px; width: 100%; display: grid; place-items: center; border-radius: 6px; margin-bottom: 8px; background: radial-gradient(ellipse, #30416688, #101a2b); }
-.hg-animation-thumb > span { display: block; background-repeat: no-repeat; }
+.hg-animation-thumb > span { display: grid; place-items: center; width: 72px; height: 72px; background-position: center; background-repeat: no-repeat; background-size: contain; color: #cfc6ff; font-size: 1.35rem; font-weight: 800; }
 .hg-animation-library .hg-animation-card .hg-animation-favorite { position: absolute; top: 6px; right: 6px; min-height: 26px; width: 26px; padding: 1px; border: 0; background: #11192bd9; color: #ffe0a3; font-size: 18px; }
 .hg-animation-assignment { padding: 4px 12px; border: 1px solid #36425c; border-radius: 10px; background: #19233a; }
 .hg-animation-compact { font-size: 11px; color: #a3b3d1; }
