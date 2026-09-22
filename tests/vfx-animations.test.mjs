@@ -11,8 +11,25 @@ import { getAnimationActions } from "../vfx/animationWorkspace.js";
 import { normalizeAnimationDefinition, mergeAnimationDefinition, applyBehaviorPlacementDefaults } from "../vfx/animationDefinition.js";
 import { animationFrames, animationTiming, sampleAnimation, chooseAnimationVariation } from "../vfx/animationPlayback.js";
 import { createAnimationThumbnailCache, getAnimationThumbnailUrl } from "../vfx/animationThumbnails.js";
+import { analyzeAnimationSprite, getSpriteGridSuggestions, spriteCheckSummary, trimEmptyFrameSelection } from "../vfx/animationSpriteCheck.js";
 
 const definition = { id: "test_sheet", name: "Sheet", sprite: "test.png", grid: { columns: 6, rows: 6 }, frameCount: 36 };
+test("sprite editor diagnostics suggest grids, find empty cells and trim only blank endpoints", () => {
+  const alpha = new Uint8ClampedArray(64);
+  for (let y = 0; y < 4; y++) for (let x = 4; x < 8; x++) alpha[y * 8 + x] = 255;
+  alpha[4 * 8] = 255;
+  const image = { width: 40, height: 40, transparency: true, sample: { width: 8, height: 8, alpha } };
+  const suggestions = getSpriteGridSuggestions(image);
+  assert.deepEqual(suggestions.filter(item => item.exact).map(item => item.columns), [4, 5, 8]);
+  const analysis = analyzeAnimationSprite(image, 2, 2);
+  assert.deepEqual(analysis.emptyFrames, [0, 3]);
+  assert.deepEqual(analysis.mostlyTransparentFrames, [2]);
+  assert.deepEqual(trimEmptyFrameSelection([0, 1, 2, 3], analysis.emptyFrames), [1, 2]);
+  assert.deepEqual(trimEmptyFrameSelection([0, 1, 3, 2], analysis.emptyFrames), [1, 3, 2]);
+  assert.match(spriteCheckSummary(image, 2, 2, 4, 3, analysis), /2 blank frames detected/);
+  assert.match(spriteCheckSummary({ width: 40, height: 20, transparency: true }, 4, 4, 16, 15), /non-square/);
+  assert.equal(analyzeAnimationSprite(image, 70, 70).limited, true);
+});
 test("the assignment selector includes dedicated spell sequences as well as profiles and the sword test", () => {
   const keys = getAnimationActions().map(a => a.key);
   for (const key of ["spell:fireball", "spell:fire-bolt", "spell:lightning-bolt", "attack:sword-slash"]) assert.ok(keys.includes(key), key);

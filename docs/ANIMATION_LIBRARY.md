@@ -33,15 +33,19 @@ searchable.
 **Custom Animation** opens in Simple Mode. Give it a name, upload a PNG/WebP/JPEG,
 choose a Family and Style, choose a grid, preview and save. The basic sections
 expose Family, Style, comma-separated Collections and Tags, frames, FPS, uniform
-scale and playback. Presets provide editable
+scale and playback. Uploaded sheets also expose a numbered visual grid, frame
+scrubber and per-cell include checkboxes. Clicking a cell or scrubbing previews
+that frame; disabled cells are stored through the existing custom frame sequence.
+Presets provide editable
 starting values for Explosion, Melee Slash/Thrust, Projectile, Beam, Aura, Buff,
 Debuff, Ground Effect, Impact and Summon.
 
 **Advanced Settings** reveals collapsible controls:
 
 - Sprite Sheet: zero-based inclusive start/end cells, reverse order and an optional
-  comma-separated frame sequence. Presets include 4×4 through 8×8, plus custom
-  columns and rows. Partial grids and rectangular frames are supported.
+  comma-separated frame sequence. Dimension-based 4×4 through 8×8 suggestions
+  are offered as explicit buttons and never overwrite the chosen grid. Custom
+  columns, rows, partial grids and rectangular frames remain supported.
 - Playback: speed multiplier, finite loop count (0 means Infinite), start and end
   delays in seconds; Once, Loop, Ping Pong and Hold Last Frame.
 - Size & Position: uniform scale, unlocked width/height scales, offsets in pixels,
@@ -67,9 +71,12 @@ New uploads use the complete calculated cells, with no automatic background
 removal, forced pixelation or square-frame stretching.
 
 The upload check shows resolution, grid, calculated cell size and frames used.
-Fractional cells, large images and missing transparency produce warnings. Opaque
-images remain valid. Alpha detection samples a reduced image; remote images can
-render even when cross-origin policy prevents their alpha inspection.
+It reports blank or mostly transparent frames, fractional and non-square cells,
+large images and missing transparency. **Trim Empty Start / End Frames** removes
+only blank endpoints from playback metadata. Optional per-frame crop/padding
+analysis outlines visible pixels; neither tool modifies the uploaded artwork.
+Opaque images remain valid. Alpha detection samples a bounded reduced image;
+remote images can render even when cross-origin policy prevents inspection.
 
 ## Preview Stage
 
@@ -199,7 +206,8 @@ ping-pong frame order, timing, finite loops, pause/resume, indefinite cleanup,
 projectile/source-direction/fade geometry and organization without data mutation.
 Browser checks exercise real upload/save/assign/remix, thumbnails/filters,
 advanced settings retained in Simple Mode, frozen/resumed projectile previews,
-source attachment, beam dimensions, optional audio cleanup, opacity inspection,
+visual grids, scrubbing and frame selection, source attachment, beam dimensions,
+optional audio cleanup, opacity inspection,
 responsive layout and the earlier spell/melee flows. Scale checks cover 50, 100,
 500 and 1,000 definitions and assert that opening the library requests no sprite
 sheets.

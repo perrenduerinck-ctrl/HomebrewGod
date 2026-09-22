@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
-import { mockAnimationServices } from "./helpers/animation-services.mjs";
+import { animationRecords, mockAnimationServices } from "./helpers/animation-services.mjs";
 test.use({ actionTimeout: 20000 });
 
 const sheet = fileURLToPath(new URL("../assets/vfx/combat/melee/sword-slash-test.png", import.meta.url));
@@ -48,18 +48,27 @@ test("users upload, preview, save, duplicate and hot-swap a spell using Animatio
   await field(dialog, "custom").click(); await dialog.getByRole('button', { name: 'Magic', exact: true }).click();
   await field(dialog, "name").fill("My slash"); await field(dialog, "file").setInputFiles(sheet);
   await expect(field(dialog, "file-info")).toContainText("sword-slash-test.png");
+  await expect(field(dialog, "sheet-editor")).toBeVisible(); await expect(field(dialog, "frame-grid").locator(".hg-animation-frame-cell")).toHaveCount(36);
+  await expect(field(dialog, "sheet-grid-label")).toHaveText("6 columns × 6 rows · 36 cells");
+  await expect(field(dialog, "grid-suggestions").locator("button")).toHaveCount(5);
+  await field(dialog, "frame-grid").locator('[data-frame-preview="17"]').click(); await expect(field(dialog, "frame-position")).toHaveText("FRAME 18 / 36");
+  await field(dialog, "frame-crop-toggle").check(); await expect(field(dialog, "frame-padding")).toBeVisible();
   await field(dialog, "grid").selectOption("7"); await expect(field(dialog, "frames")).toHaveValue("49");
   await field(dialog, "grid").selectOption("custom");
   await field(dialog, "columns").fill("6"); await field(dialog, "rows").fill("6"); await field(dialog, "frames").fill("30");
+  await field(dialog, "frame-grid").locator('[data-frame-enabled="3"]').uncheck(); await expect(field(dialog, "sequence")).not.toHaveValue("");
   await field(dialog, "fps").fill("18"); await field(dialog, "scale").fill("1.2"); await field(dialog, "playback").selectOption("loop");
   await field(dialog, "draft-preview").click();
   await expect(dialog.locator('[data-animation-id="draft_preview"] .hg-vfx-sprite')).toBeVisible();
-  await expect(field(dialog, "preview-info")).toContainText("Loops until Stop");
+  await expect(field(dialog, "preview-info")).toContainText("29 frames"); await expect(field(dialog, "preview-info")).toContainText("Loops until Stop");
   await field(dialog, "preview").scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("animation-editor.png") });
+  await page.setViewportSize({ width: 390, height: 844 }); expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 720 });
   await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
   await expect(field(dialog, "status")).toContainText("personal library");
   const id = await field(dialog, "select").inputValue(); expect(id).toMatch(/^custom_/);
+  const saved = (await animationRecords(page)).find(animation => animation.id === id); expect(saved.frames.sequence).toHaveLength(29); expect(saved.frames.sequence).not.toContain(3);
   await field(dialog, "close").click();
   await saveFireballSetup(page, id);
   await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#battleVfxTestFireballButton").click();

@@ -5,6 +5,7 @@ import { createAnimationSelector } from "./animationBrowser.js";
 import { animationFormMarkup, writeAnimationFields, readAnimationFields } from "./animationEditorFields.js";
 import { ANIMATION_PRESETS } from "./animationPlayback.js";
 import { inspectAnimationSprite, spriteCheckSummary } from "./animationSpriteCheck.js";
+import { createAnimationSpriteEditor } from "./animationSpriteEditor.js";
 import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "./animationPreviewStage.js";
 import { assertPersistentAnimationReferences } from "./animationReferences.js";
 import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
@@ -42,7 +43,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <p data-animation-status role="status"></p>`;
   const field = name => dialog.querySelector(`[data-animation-${name}]`), status = message => { field("status").textContent = message; };
   const surface = field("preview"), previewEngine = createBattleMapEffectEngine({ surface }), preview = createAnimationPlayer({ engine: previewEngine, library, isSoundEnabled, onError: () => {} });
-  let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, draftSpriteFile = null, imageInfo = null, destroyed = false, playback = null, paused = false;
+  let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, draftSpriteFile = null, imageInfo = null, destroyed = false, playback = null, paused = false, spriteEditor = null;
   let external = null, deleteId = null, draftSaveId = null, saving = false;
   const listeners = [], on = (element, event, fn) => { element.addEventListener(event, fn); listeners.push(() => element.removeEventListener(event, fn)); };
   const safely = fn => async event => { try { await fn(event); } catch (e) { status(e.message || "The animation could not be updated."); } };
@@ -100,7 +101,8 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     for (const output of dialog.querySelectorAll("[data-animation-value-for]")) output.textContent = field(output.dataset.animationValueFor).value;
     for (const anchor of dialog.querySelectorAll("[data-anchor]")) anchor.setAttribute("aria-pressed", String(anchor.dataset.anchor === `${Number(field("anchor-x").value)},${Number(field("anchor-y").value)}`));
     const sequence = field("sequence").value.trim();
-    field("sheet-stats").textContent = spriteCheckSummary(imageInfo, Number(field("columns").value), Number(field("rows").value), sequence ? sequence.split(",").length : Number(field("frames").value), Number(field("end").value));
+    const analysis = spriteEditor?.sync({ src: draftSource, imageInfo });
+    field("sheet-stats").textContent = spriteCheckSummary(imageInfo, Number(field("columns").value), Number(field("rows").value), sequence ? sequence.split(",").length : Number(field("frames").value), Number(field("end").value), analysis);
   }
   async function inspect(src) {
     const current = ++inspectionRevision;
@@ -227,6 +229,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("delete-remove"), "click", safely(() => removeAnimation({ removeReferences: true })));
   on(field("delete-cancel"), "click", () => { deleteId = null; field("delete-warning").hidden = true; });
   on(field("editor-cancel"), "click", selectionChanged);
+  spriteEditor = createAnimationSpriteEditor({ field, listen: on, changed: syncControls, status });
   on(field("form"), "input", syncControls); on(field("form"), "change", syncControls);
   on(field("behavior"), "change", () => {
     if (!field("override-placement").checked && field("behavior").value === "aura") {
@@ -241,7 +244,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   on(field("grid"), "change", () => {
     if (field("grid").value !== "custom") { field("columns").value = field("rows").value = field("grid").value; resetFrames(); } syncControls();
   });
-  function resetFrames() { field("start").value = 0; field("frames").value = Math.min(240, Number(field("columns").value) * Number(field("rows").value)); field("end").value = Number(field("frames").value) - 1; syncControls(); }
+  function resetFrames() { field("start").value = 0; field("frames").value = Math.min(240, Number(field("columns").value) * Number(field("rows").value)); field("end").value = Number(field("frames").value) - 1; field("sequence").value = ""; syncControls(); }
   for (const key of ["columns", "rows"]) on(field(key), "input", resetFrames);
   for (const key of ["start", "frames"]) on(field(key), "input", () => { field("end").value = Number(field("start").value) + Number(field("frames").value) - 1; syncControls(); });
   on(field("end"), "input", () => { field("frames").value = Number(field("end").value) - Number(field("start").value) + 1; syncControls(); });

@@ -2621,6 +2621,32 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
 .hg-animation-library .hg-animation-pivots button[aria-pressed="true"] { border-color: var(--animation-accent); color: #e0d8ff; background: #4c3b7b; }
 .hg-animation-field-label { font-size: 12px; color: #ced6f0; }
 .hg-animation-sheet-stats { padding: 9px; border-radius: 7px; color: #b0c4d9; background: #091322; font-size: 11px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+.hg-animation-grid-suggestion-panel { margin: 12px 0; padding: 9px; border: 1px solid #303b56; border-radius: 8px; background: #10182a; }
+.hg-animation-grid-suggestion-panel > small { display: block; margin-top: 3px; color: #98a6c7; }
+.hg-animation-grid-suggestions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.hg-animation-library .hg-animation-grid-suggestions button { min-height: 28px; padding: 4px 7px; font-size: 10px; }
+.hg-animation-sheet-editor { margin: 12px 0; padding: 10px; border: 1px solid #3b4967; border-radius: 9px; background: #0b1220; }
+.hg-animation-sheet-editor-heading { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: #dce5ff; font-size: 11px; }
+.hg-animation-sheet-grid-wrap { position: relative; width: fit-content; max-width: 100%; margin: auto; overflow: hidden; border: 1px solid #65779a; border-radius: 5px; background-color: #273147; background-image: conic-gradient(#34415a 25%, transparent 0 50%, #34415a 0 75%, transparent 0); background-size: 16px 16px; }
+.hg-animation-sheet-grid-wrap > img { display: block; width: auto; height: auto; max-width: 100%; max-height: 420px; }
+.hg-animation-frame-grid { position: absolute; inset: 0; display: grid; }
+.hg-animation-frame-cell { position: relative; min-width: 0; min-height: 0; border: 1px solid #c5d2ef77; background: #10213b12; }
+.hg-animation-library .hg-animation-frame-cell > button { width: 100%; height: 100%; min-height: 0; padding: 2px; border: 0; border-radius: 0; background: transparent; color: white; font: 700 10px/1 ui-monospace, monospace; text-shadow: 0 1px 3px #000, 0 0 3px #000; }
+.hg-animation-library .hg-animation-frame-cell > button[data-previewing="true"] { box-shadow: inset 0 0 0 2px #ffe276; background: #ffe27622; }
+.hg-animation-frame-cell[data-enabled="false"] { background: #5b142b99; }
+.hg-animation-frame-cell[data-empty="true"] { background-image: repeating-linear-gradient(135deg, #c56e7f44 0 3px, transparent 3px 7px); }
+.hg-animation-frame-cell[data-transparent="true"] > button { color: #b7c6e8; }
+.hg-animation-library .hg-animation-frame-cell label { position: absolute; top: 1px; right: 1px; display: block; width: 14px; height: 14px; margin: 0; }
+.hg-animation-library .hg-animation-frame-cell input[type="checkbox"] { appearance: auto; width: 14px; height: 14px; min-height: 0; margin: 0; padding: 0; accent-color: #b7a7ff; }
+.hg-animation-grid-limit { grid-column: 1 / -1; padding: 12px; background: #101827ee; color: #b4c2de; font-size: 11px; }
+.hg-animation-frame-scrubber { display: grid; grid-template-columns: 36px 36px minmax(110px, 1fr) 36px 36px; gap: 5px; align-items: center; margin-top: 9px; }
+.hg-animation-library .hg-animation-frame-scrubber button { min-height: 30px; padding: 3px; }
+.hg-animation-frame-scrubber output { text-align: center; color: #e2e9ff; font: 700 11px ui-monospace, monospace; }
+.hg-animation-frame-preview { display: grid; grid-template-columns: minmax(96px, 140px) minmax(0, 1fr); gap: 12px; align-items: center; margin-top: 8px; }
+.hg-animation-frame-crop-art { position: relative; width: 100%; min-height: 96px; overflow: hidden; border: 1px solid #52617f; border-radius: 6px; background-color: #28334a; background-repeat: no-repeat; }
+.hg-animation-frame-crop-art > span { position: absolute; border: 1px dashed #72f0a7; box-shadow: 0 0 0 999px #07101b88; pointer-events: none; }
+.hg-animation-frame-preview p { margin: 4px 0; }
+.hg-animation-frame-preview output { display: block; margin: 5px 0; color: #aab9d8; font-size: 10px; }
 .hg-animation-upload { padding: 10px; border: 1px dashed #52617f; border-radius: 8px; background: #1c284055; }
 .hg-animation-upload input { background: transparent; border: none; padding: 0; }
 .hg-animation-tag-suggestions { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -2655,6 +2681,7 @@ body:has(#battleMapScreen:not(.hidden)) > .persistenceConnectionStatus {
   .hg-animation-preview-panel { padding: 10px; }
   .hg-animation-transport { grid-template-columns: repeat(2, 1fr); }
   .hg-animation-edit-heading { align-items: start; flex-direction: column; }
+  .hg-animation-frame-preview { grid-template-columns: 1fr; }
 }
 .hg-vfx-combat-sprite { border-radius: 0; }
 .hg-vfx-combat-sprite .hg-vfx-sprite { overflow: hidden; }
