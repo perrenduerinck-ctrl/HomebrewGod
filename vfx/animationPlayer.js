@@ -94,7 +94,7 @@ function updateElement({ element, effect, elapsed, mapScale, frame }) {
     const at = runtime.timing.frames.indexOf(event.frame);
     if (at >= 0 && sequenceIndex >= at && !runtime.fired.has(index)) { runtime.fired.add(index); runtime.emit?.({ ...event, source: points.source, target: points.target }); }
   }
-  try { runtime.onFrame?.({ animationId: d.id, frame, total: d.frameCount, elapsed, ...state, geometry: animationGeometry(points.source, points.target) }); } catch { /* Preview observers do not control playback. */ }
+  try { runtime.onFrame?.({ animationId: d.id, frame, total: d.frameCount, elapsed, timelineElapsed: runtime.timelineOffset + elapsed, ...state, geometry: animationGeometry(points.source, points.target) }); } catch { /* Preview observers do not control playback. */ }
   return { x: state.x, y: state.y, screenY: state.y, frame, rotation: state.rotation };
 }
 
@@ -189,6 +189,7 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
     const runtime = { definition: d, points: item.points, variation: item.variation, timing: item.timing,
       context: item.context, grid: normalizeAnimationGrid(options.grid, animationLayerMetrics(engine.getOverlayElement()).scale), debugPoints: options.debugPoints === true, arrive: () => arrive("arrived"), fired: new Set(), emit: event => { if (event.type === "impact") impact("impact"); try { options.onEvent?.({ ...event, animationId: d.id }); } catch { /* Visual notifications never change game state. */ } },
       getSourcePoint: options.getSourcePoint, getTargetPoint: options.getTargetPoint, sourceTokenId: options.sourceTokenId, targetTokenId: options.targetTokenId, onFrame: options.onFrame, soundStarted: false,
+      timelineOffset: delay,
       isSoundEnabled, soundAt: d.sound ? item.timing.frames.indexOf(d.sound.startFrame) * 1000 / (d.fps * item.timing.speed) : Infinity };
     let finish;
     const finished = new Promise(resolve => { finish = resolve; });

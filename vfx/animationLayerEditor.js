@@ -7,8 +7,8 @@ const numeric = new Set(["startDelay", "duration", "scale", "opacity", "offsetX"
 const checks = new Set(["followSource", "followTarget"]);
 const placementNames = Object.freeze({ inherit: "Use referenced animation", source: "Caster / Source", target: "Target", between: "Midpoint", map: "World / Map position", "source-to-target": "Source to target", "source-toward-target": "Source toward target" });
 
-export function createAnimationLayerEditor({ container, library, chooseAnimation = () => {} } = {}) {
-  if (!container) return { write() {}, read: () => [], setAnimation() {}, destroy() {} };
+export function createAnimationLayerEditor({ container, library, chooseAnimation = () => {}, changed = () => {} } = {}) {
+  if (!container) return { write() {}, read: () => [], setAnimation() {}, setStartDelay() {}, destroy() {} };
   let layers = [], destroyed = false;
   const listeners = [], on = (node, event, fn) => { node.addEventListener(event, fn); listeners.push(() => node.removeEventListener(event, fn)); };
   const toDraft = layer => ({ ...defaults, ...clone(layer || {}),
@@ -62,11 +62,11 @@ export function createAnimationLayerEditor({ container, library, chooseAnimation
     container.querySelector("[data-animation-layer-empty]").hidden = layers.length > 0;
   }
   function syncAll() { for (const row of container.querySelectorAll("[data-layer-index]")) syncRow(row); }
-  on(container, "input", event => { const row = event.target.closest("[data-layer-index]"); if (row) syncRow(row); });
-  on(container, "change", event => { const row = event.target.closest("[data-layer-index]"); if (row) syncRow(row); });
+  on(container, "input", event => { const row = event.target.closest("[data-layer-index]"); if (row) { syncRow(row); changed(); } });
+  on(container, "change", event => { const row = event.target.closest("[data-layer-index]"); if (row) { syncRow(row); changed(); } });
   on(container, "click", event => {
     const add = event.target.closest("[data-animation-add-layer]");
-    if (add) { if (layers.length < MAX_ANIMATION_LAYERS) { syncAll(); layers.push({ ...defaults }); render(); } return; }
+    if (add) { if (layers.length < MAX_ANIMATION_LAYERS) { syncAll(); layers.push({ ...defaults }); render(); changed(); } return; }
     const button = event.target.closest("[data-layer-action]"), row = button?.closest("[data-layer-index]");
     if (!button || !row) return;
     syncAll(); const index = Number(row.dataset.layerIndex), action = button.dataset.layerAction;
@@ -75,13 +75,20 @@ export function createAnimationLayerEditor({ container, library, chooseAnimation
     if (action === "duplicate" && layers.length < MAX_ANIMATION_LAYERS) layers.splice(index + 1, 0, clone(layers[index]));
     if (action === "up" && index > 0) [layers[index - 1], layers[index]] = [layers[index], layers[index - 1]];
     if (action === "down" && index < layers.length - 1) [layers[index + 1], layers[index]] = [layers[index], layers[index + 1]];
-    render();
+    render(); changed();
   });
   render();
   return {
     write(value) { layers = (Array.isArray(value) ? value : []).slice(0, MAX_ANIMATION_LAYERS).map(toDraft); render(); },
     read() { syncAll(); return clone(layers); },
-    setAnimation(index, animationId) { if (!layers[index]) return; layers[index].animationId = animationId; render(); },
+    setAnimation(index, animationId) { if (!layers[index]) return; layers[index].animationId = animationId; render(); changed(); },
+    setStartDelay(index, value, { notify = true } = {}) {
+      if (!layers[index]) return;
+      layers[index].startDelay = value;
+      const node = container.querySelector(`[data-layer-index="${index}"] [data-layer-field="startDelay"]`);
+      if (node) node.value = String(value);
+      if (notify) changed();
+    },
     destroy() { destroyed = true; listeners.forEach(remove => remove()); layers = []; }
   };
 }

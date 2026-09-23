@@ -199,8 +199,15 @@ not duplicate sprite data, and the shared player expands those references for bo
 preview and combat. Cycles are rejected and missing referenced animations fail
 without starting a partial effect. Add, duplicate, delete and reorder controls use
 the same Animation Library selector. Frame `events` emit host callbacks; they do
-not spawn gameplay objects or apply damage. Camera shake and a timeline editor
-remain unimplemented.
+not spawn gameplay objects or apply damage.
+
+The creator Timeline renders the base definition and each layer on the timing
+returned by `animationPlayer.prepareAnimation`. Dragging a layer block writes its
+existing `startDelay`; zoom changes only the view. The playhead advances from
+`timelineElapsed` frame callbacks emitted by the shared player, so Play, Pause,
+Stop and Replay do not create a second clock. Definition frame events appear as
+diamond markers and the optional sound start frame appears as a triangle. Camera
+shake remains unimplemented.
 Face Away works through the API and spell overrides; Token Facing is reserved.
 The creator exposes Fixed and Face Target. A marketplace and sharing UI remain
 out of scope; signed-in personal animation storage is implemented above.

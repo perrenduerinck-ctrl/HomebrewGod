@@ -263,6 +263,7 @@ test("the shared player expands layered definitions with timing and visual overr
   assert.equal(played.ok, true); assert.equal(played.handles.length, 2);
   const layer = played.handles[1].effect;
   assert.equal(layer.delay, 250); assert.equal(layer.duration, 400); assert.equal(layer.scale, 1.5); assert.equal(layer.opacity, .45);
+  assert.equal(layer.metadata.animationRuntime.timelineOffset, 250);
   assert.equal(layer.rotation, 75); assert.equal(layer.sprite.blendMode, "screen"); assert.equal(layer.position.x, 102); assert.equal(layer.position.y, 92);
   played.cancel(); f.destroy();
 });

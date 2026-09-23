@@ -94,7 +94,9 @@ test("users upload, preview, save, duplicate and hot-swap a spell using Animatio
 test("the creator saves, reorders, reloads and previews lightweight animation layers", async ({ page }) => {
   await mockAnimationServices(page);
   let dialog = await openLibrary(page);
-  await field(dialog, "select").selectOption("sword_slash_01"); await field(dialog, "duplicate").click();
+  await field(dialog, "select").selectOption("sword_slash_01");
+  await page.evaluate(async () => (await import("/vfx/animationWorkspace.js")).getAnimationSession(document).library.updateAnimation("sword_slash_01", { events: [{ frame: 5, type: "impact" }] }));
+  await field(dialog, "duplicate").click();
   await field(dialog, "file").setInputFiles(sheet); await expect(field(dialog, "file-info")).toContainText("sword-slash-test.png");
   await expand(dialog, "layers"); await field(dialog, "add-layer").click();
   let rows = field(dialog, "layer-list").locator("[data-layer-index]"); await expect(rows).toHaveCount(1);
@@ -118,8 +120,19 @@ test("the creator saves, reorders, reloads and previews lightweight animation la
   await expect(rows.nth(0).locator("[data-layer-name]")).toHaveText("Cold burst");
   await field(dialog, "add-layer").click(); await expect(rows).toHaveCount(3);
   await rows.nth(2).getByRole("button", { name: "Delete Layer" }).click(); await expect(rows).toHaveCount(2);
-  await field(dialog, "draft-preview").click(); await expect(dialog.locator(".hg-vfx-animation-sprite")).toHaveCount(3);
-  await field(dialog, "stop").click(); await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
+  await expand(dialog, "timeline"); const timeline = field(dialog, "timeline-editor");
+  await expect(timeline.locator(".hg-animation-timeline-row")).toHaveCount(3); await expect(timeline.locator(".hg-animation-timeline-marker-event")).toHaveCount(1);
+  const healingBlock = timeline.locator('[data-timeline-layer="1"]'), healingCanvas = healingBlock.locator("..");
+  const blockBox = await healingBlock.boundingBox(), canvasBox = await healingCanvas.boundingBox();
+  await page.mouse.move(blockBox.x + 5, blockBox.y + blockBox.height / 2); await page.mouse.down(); await page.mouse.move(canvasBox.x + 40, blockBox.y + blockBox.height / 2); await page.mouse.up();
+  const delayInput = rows.nth(1).locator('[data-layer-field="startDelay"]'); await expect.poll(async () => Number(await delayInput.inputValue())).toBeGreaterThan(.05); await delayInput.fill("0.05");
+  await timeline.locator("[data-timeline-zoom-in]").click(); await expect(timeline.locator("[data-timeline-zoom-label]")).toHaveText("120 px / second");
+  await timeline.locator("[data-timeline-play]").click(); await expect(dialog.locator(".hg-vfx-animation-sprite")).toHaveCount(3);
+  await expect.poll(async () => Number.parseFloat(await timeline.locator("[data-timeline-playhead-label]").textContent())).toBeGreaterThan(0);
+  await timeline.locator("[data-timeline-pause]").click(); const pausedAt = await timeline.locator("[data-timeline-playhead-label]").textContent(); await page.waitForTimeout(150); await expect(timeline.locator("[data-timeline-playhead-label]")).toHaveText(pausedAt);
+  await timeline.locator("[data-timeline-pause]").click(); await timeline.locator("[data-timeline-stop]").click(); await expect(timeline.locator("[data-timeline-playhead-label]")).toHaveText("0.00s");
+  await timeline.locator("[data-timeline-replay]").click(); await expect(dialog.locator(".hg-vfx-animation-sprite")).toHaveCount(3); await timeline.locator("[data-timeline-stop]").click();
+  await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
   await expect(field(dialog, "status")).toContainText("personal library");
   const id = await field(dialog, "select").inputValue();
   const [saved] = (await animationRecords(page)).filter(animation => animation.id === id);

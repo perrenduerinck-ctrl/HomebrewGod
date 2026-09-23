@@ -11,6 +11,7 @@ import { assertPersistentAnimationReferences } from "./animationReferences.js";
 import { getAnimationDeletionPolicy } from "./animationDeletionPolicy.js";
 import { deriveAnimationType, getAnimationStyleLabel, getAnimationStyles, getFamilyTemplates } from "./animationFamilies.js";
 import { createAnimationLayerEditor } from "./animationLayerEditor.js";
+import { createAnimationTimelineEditor } from "./animationTimelineEditor.js";
 export { createAnimationSelector } from "./animationBrowser.js";
 
 export function createAnimationEditor({ dialog, button, library, bindings, actions = [], isSoundEnabled, persistence = null }) {
@@ -44,7 +45,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <p data-animation-status role="status"></p>`;
   const field = name => dialog.querySelector(`[data-animation-${name}]`), status = message => { field("status").textContent = message; };
   const surface = field("preview"), previewEngine = createBattleMapEffectEngine({ surface }), preview = createAnimationPlayer({ engine: previewEngine, library, isSoundEnabled, onError: () => {} });
-  let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, draftSpriteFile = null, imageInfo = null, destroyed = false, playback = null, paused = false, spriteEditor = null;
+  let previewRevision = 0, editRevision = 0, inspectionRevision = 0, editId = null, draftSource = "", draftSound = "", draftBase = null, draftSpriteFile = null, imageInfo = null, destroyed = false, playback = null, paused = false, spriteEditor = null, timelineEditor = null;
   let external = null, layerSelection = null, deleteId = null, draftSaveId = null, saving = false;
   const listeners = [], on = (element, event, fn) => { element.addEventListener(event, fn); listeners.push(() => element.removeEventListener(event, fn)); };
   const safely = fn => async event => { try { await fn(event); } catch (e) { status(e.message || "The animation could not be updated."); } };
@@ -61,7 +62,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("session").textContent = state.message;
     field("session").dataset.state = state.state;
   }) || (() => {});
-  function stop() { previewRevision++; preview.clear(); playback = null; paused = false; field("pause").textContent = "Pause"; field("preview-info").textContent = "Preview stopped."; }
+  function stop() { previewRevision++; preview.clear(); playback = null; paused = false; field("pause").textContent = "Pause"; timelineEditor?.reset(); field("preview-info").textContent = "Preview stopped."; }
   function selected() { return library.getAnimation(chooser.getSelectedId()); }
   function showTool(tool) {
     dialog.dataset.animationTool = tool;
@@ -84,7 +85,11 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     field("preview-info").textContent = a ? `${a.name} · ${a.id}` : "Choose an animation for this layer.";
   }
   const chooser = createAnimationSelector({ container: field("chooser"), library, onSelect: () => layerSelection ? layerSelectionChanged() : selectionChanged() });
-  const layerEditor = createAnimationLayerEditor({ container: field("layers-editor"), library, chooseAnimation: openLayerSelector });
+  const layerEditor = createAnimationLayerEditor({ container: field("layers-editor"), library, chooseAnimation: openLayerSelector, changed: () => timelineEditor?.scheduleRefresh() });
+  timelineEditor = createAnimationTimelineEditor({ container: field("timeline-editor"), library, getDefinition: () => draft(), getLayers: () => layerEditor.read(),
+    resolveTiming: (definition, overrides) => preview.prepareAnimation(definition, { ...previewStage.getContext(), ...overrides }),
+    updateLayerDelay: (index, value, options) => layerEditor.setStartDelay(index, value, options),
+    play: () => playCurrent(), replay: () => playCurrent(), pause: togglePause, stop });
   function openLayerSelector(index, animationId) {
     stop(); layerSelection = { index }; field("form").hidden = true; field("family-choice").hidden = true; field("browser-panel").hidden = false; showTool("library");
     field("external").hidden = false; field("external-label").textContent = `Choose an animation for layer ${index + 1}.`;
@@ -121,6 +126,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     const sequence = field("sequence").value.trim();
     const analysis = spriteEditor?.sync({ src: draftSource, imageInfo });
     field("sheet-stats").textContent = spriteCheckSummary(imageInfo, Number(field("columns").value), Number(field("rows").value), sequence ? sequence.split(",").length : Number(field("frames").value), Number(field("end").value), analysis);
+    timelineEditor?.scheduleRefresh();
   }
   async function inspect(src) {
     const current = ++inspectionRevision;
@@ -163,7 +169,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       ...previewStage.getContext({ debugPoints: field("show-points").checked }),
       debugPoints: field("show-points").checked, previewSpeed: Number(field("slow").value),
       ...(fromDraft ? {} : { fps: Number(field("preview-fps").value), scale: Number(field("preview-scale").value) }),
-      onFrame: state => { if (current === previewRevision) { const text = `Frame ${state.frame + 1} / ${definition.grid.columns * definition.grid.rows}`; if (field("frame-readout").textContent !== text) field("frame-readout").textContent = text; } }
+      onFrame: state => { if (current === previewRevision) { timelineEditor?.setPlayhead(state.timelineElapsed); const text = `Frame ${state.frame + 1} / ${definition.grid.columns * definition.grid.rows}`; if (field("frame-readout").textContent !== text) field("frame-readout").textContent = text; } }
     });
     if (current !== previewRevision) { result.cancel?.(); return; }
     if (!result.ok) throw new Error(result.message || "The animation could not be played.");
@@ -173,6 +179,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     status(fromDraft ? "Previewing unsaved settings." : "Preview only. Assignments are unchanged.");
   }
   function playCurrent() { return field("form").hidden ? play(selected()) : play(draft(), true); }
+  function togglePause() { if (!playback) return false; paused = !paused; if (paused) playback.pause(); else playback.resume(); field("pause").textContent = paused ? "Resume" : "Pause"; return paused; }
   async function readFile(file) {
     if (!file.size || file.size > MAX_UPLOAD_BYTES) throw new Error("Choose a file smaller than 8 MB.");
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("The file could not be read.")); reader.readAsDataURL(file); });
@@ -305,7 +312,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   }));
   on(field("sound-clear"), "click", () => { draftSound = ""; field("sound-file").value = ""; field("sound-info").textContent = "No sound"; });
   on(field("play"), "click", safely(playCurrent)); on(field("replay"), "click", safely(playCurrent)); on(field("stop"), "click", stop);
-  on(field("pause"), "click", () => { if (!playback) return; paused = !paused; if (paused) playback.pause(); else playback.resume(); field("pause").textContent = paused ? "Resume" : "Pause"; });
+  on(field("pause"), "click", togglePause);
   on(field("draft-preview"), "click", safely(() => play(draft(), true)));
   on(field("background"), "change", () => { surface.dataset.background = field("background").value; });
   on(field("show-frame"), "change", () => { field("frame-readout").hidden = !field("show-frame").checked; });
@@ -358,5 +365,5 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       if (mode === "remix" && selected()) { const a = library.duplicateAnimation(selected().id); chooser.select(a.id); openEditor(a); }
       return promise;
     }, close() { if (dialog.open) dialog.close(); else stop(); },
-    destroy() { if (destroyed) return; destroyed = true; editRevision++; inspectionRevision++; stop(); if (dialog.open) dialog.close(); layerEditor.destroy(); chooser.destroy(); previewStage.destroy(); persistenceUnsubscribe(); preview.destroy(); previewEngine.destroy(); listeners.forEach(remove => remove()); } };
+    destroy() { if (destroyed) return; destroyed = true; editRevision++; inspectionRevision++; stop(); if (dialog.open) dialog.close(); timelineEditor.destroy(); layerEditor.destroy(); chooser.destroy(); previewStage.destroy(); persistenceUnsubscribe(); preview.destroy(); previewEngine.destroy(); listeners.forEach(remove => remove()); } };
 }
