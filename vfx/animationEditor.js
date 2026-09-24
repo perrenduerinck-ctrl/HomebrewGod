@@ -147,7 +147,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     stop(); editRevision++; inspectionRevision++; editId = a?.id || null; draftBase = a; draftSource = a?.sprite || ""; draftSound = a?.sound?.src || ""; draftSpriteFile = null; imageInfo = null;
     field("form").hidden = false; field("family-choice").hidden = true; field("browser-panel").hidden = true; showTool("creator"); field("editor-title").textContent = a ? `Edit ${a.name}` : "Create animation";
     const initial = a || normalizeAnimation({ ...getFamilyTemplates(family)[0], placement: { ...getFamilyTemplates(family)[0].placement, override: false }, id: "draft_preview", sprite: "draft.png", grid: { columns: 6, rows: 6 }, frameCount: 36 });
-    field("family").value = initial.family; styleOptions(initial.style); writeAnimationFields(field, initial); layerEditor.write(initial.layers); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
+    field("family").value = initial.family; styleOptions(initial.style); writeAnimationFields(field, initial); spriteEditor?.write(initial.atlas, initial.inset); layerEditor.write(initial.layers); field("advanced-mode").checked = false; field("preset").value = ""; field("file").value = field("sound-file").value = "";
     field("sound-info").textContent = draftSound ? "Current sound retained." : "No sound";
     const columns = a?.grid.columns || 6, rows = a?.grid.rows || 6;
     field("grid").value = columns === rows && [4,5,6,7,8].includes(columns) ? String(columns) : "custom";
@@ -158,6 +158,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   function openCreator() { closeLayerSelector({ restoreEditor: false }); stop(); editRevision++; inspectionRevision++; showTool("creator"); field("browser-panel").hidden = true; field("form").hidden = true; field("family-choice").hidden = false; }
   function draft() {
     const changes = readAnimationFields(field); changes.sound = draftSound ? { ...changes.sound, src: draftSound } : null; changes.layers = layerEditor.read();
+    Object.assign(changes, spriteEditor?.getMetadata());
     changes.sprite = draftSource; changes.id = editId || "draft_preview";
     return draftBase ? mergeAnimationDefinition(draftBase, changes) : normalizeAnimation(changes);
   }
@@ -276,10 +277,10 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     const tag = event.target.closest("[data-add-tag]"); if (tag) { const tags = new Set(field("tags").value.split(",").map(t => t.trim()).filter(Boolean)); tags.add(tag.dataset.addTag); field("tags").value = [...tags].join(", "); }
   });
   on(field("grid"), "change", () => {
-    if (field("grid").value !== "custom") { field("columns").value = field("rows").value = field("grid").value; resetFrames(); } syncControls();
+    if (field("grid").value !== "custom") { field("columns").value = field("rows").value = field("grid").value; spriteEditor?.resetGrid(); resetFrames(); } syncControls();
   });
   function resetFrames() { field("start").value = 0; field("frames").value = Math.min(240, Number(field("columns").value) * Number(field("rows").value)); field("end").value = Number(field("frames").value) - 1; field("sequence").value = ""; syncControls(); }
-  for (const key of ["columns", "rows"]) on(field(key), "input", resetFrames);
+  for (const key of ["columns", "rows"]) on(field(key), "input", () => { spriteEditor?.resetGrid(); resetFrames(); });
   for (const key of ["start", "frames"]) on(field(key), "input", () => { field("end").value = Number(field("start").value) + Number(field("frames").value) - 1; syncControls(); });
   on(field("end"), "input", () => { field("frames").value = Number(field("end").value) - Number(field("start").value) + 1; syncControls(); });
   on(field("playback"), "change", () => { field("loops").value = field("playback").value === "loop" ? "0" : "1"; });
@@ -298,7 +299,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     if (!["image/png", "image/webp", "image/jpeg"].includes(file.type)) throw new Error("Choose a PNG, WebP or JPEG sprite sheet.");
     const current = ++editRevision, data = await readFile(file);
     if (destroyed || current !== editRevision) return;
-    draftSource = data; draftSpriteFile = file; imageInfo = null; field("file-info").textContent = file.name; field("upload-thumbnail").src = data; field("upload-thumbnail").hidden = false; status("Sheet loaded. Checking its cells and transparency…"); syncControls(); await inspect(data);
+    spriteEditor?.resetGrid(); draftSource = data; draftSpriteFile = file; imageInfo = null; field("file-info").textContent = file.name; field("upload-thumbnail").src = data; field("upload-thumbnail").hidden = false; status("Sheet loaded. Checking its cells and transparency…"); syncControls(); await inspect(data);
   }
   on(field("file"), "change", safely(() => loadSprite(field("file").files[0])));
   on(field("upload-zone"), "dragover", event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; });

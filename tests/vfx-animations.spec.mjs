@@ -91,6 +91,46 @@ test("users upload, preview, save, duplicate and hot-swap a spell using Animatio
   expect(errors).toEqual([]);
 });
 
+test("editable frame boxes drag, diagnose bleed, reset and persist without changing sprite data", async ({ page }) => {
+  await mockAnimationServices(page);
+  const dialog = await openLibrary(page);
+  await field(dialog, "custom").click(); await dialog.getByRole("button", { name: "Magic", exact: true }).click();
+  await field(dialog, "name").fill("Aligned frames"); await field(dialog, "file").setInputFiles(sheet);
+  await expect(field(dialog, "sheet-editor")).toBeVisible();
+  await field(dialog, "edit-frame-boxes").check();
+  await expect(field(dialog, "frame-alignment-controls")).toBeVisible();
+  await expect(field(dialog, "frame-alignment-overlay")).toBeVisible();
+
+  const overlay = field(dialog, "frame-alignment-overlay"); await overlay.scrollIntoViewIfNeeded();
+  const box = await overlay.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down(); await page.mouse.move(box.x + box.width / 2 + 8, box.y + box.height / 2 + 5); await page.mouse.up();
+  await expect(field(dialog, "grid-offset-x")).not.toHaveValue("0");
+  await expect(field(dialog, "grid-offset-y")).not.toHaveValue("0");
+
+  await field(dialog, "reset-alignment").click();
+  await expect(field(dialog, "grid-offset-x")).toHaveValue("0"); await expect(field(dialog, "grid-offset-y")).toHaveValue("0");
+  await expect(field(dialog, "frame-inset-x")).toHaveValue("0"); await expect(field(dialog, "frame-inset-y")).toHaveValue("0");
+  await field(dialog, "grid-offset-x").fill("3"); await field(dialog, "grid-offset-y").fill("-2");
+  await field(dialog, "frame-inset-x").fill("4"); await field(dialog, "frame-inset-y").fill("5");
+  await field(dialog, "neighbor-bleed").check();
+  await expect(field(dialog, "frame-intended")).toBeVisible(); await expect(field(dialog, "frame-sampled")).toBeVisible();
+  await expect(field(dialog, "neighbor-bleed-summary")).toContainText("sampled frame");
+
+  await dialog.getByRole("button", { name: "Save Animation", exact: true }).click();
+  await expect(field(dialog, "status")).toContainText("personal library");
+  const id = await field(dialog, "select").inputValue();
+  const saved = (await animationRecords(page)).find(animation => animation.id === id);
+  expect(saved.atlas).toMatchObject({ offsetX: 3, offsetY: -2, insetX: 4, insetY: 5 });
+  expect(saved.sprite).not.toContain("data:image");
+
+  await field(dialog, "close").click();
+  await page.locator("#battleToolsMenu").evaluate(el => { el.open = true; }); await page.locator("#animationLibraryButton").click();
+  await field(dialog, "select").selectOption(id); await field(dialog, "edit").click(); await field(dialog, "edit-frame-boxes").check();
+  await expect(field(dialog, "grid-offset-x")).toHaveValue("3"); await expect(field(dialog, "grid-offset-y")).toHaveValue("-2");
+  await expect(field(dialog, "frame-inset-x")).toHaveValue("4"); await expect(field(dialog, "frame-inset-y")).toHaveValue("5");
+});
+
 test("the creator saves, reorders, reloads and previews lightweight animation layers", async ({ page }) => {
   await mockAnimationServices(page);
   let dialog = await openLibrary(page);

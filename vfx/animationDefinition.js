@@ -99,13 +99,19 @@ export function normalizeAnimationDefinition(input = {}) {
     brightness: num(a.brightness, 1, 0, 4, "Brightness"), contrast: num(a.contrast, 1, 0, 4, "Contrast"), saturation: num(a.saturation, 1, 0, 4, "Saturation"), hue: num(a.hue, 0, -360, 360, "Hue rotation"),
     blendMode: choice(input.blendMode ?? a.blendMode, "normal", ["normal", "screen", "plus-lighter", "multiply"], "blend mode"),
     fadeIn: num(a.fadeIn, 0, 0, 10, "Fade in"), fadeOut: num(a.fadeOut, 0, 0, 10, "Fade out") };
+  const inset = num(input.inset ?? input.atlas?.inset, 0, 0, 64, "Cell inset", true);
   let atlas = null;
   if (input.atlas) {
     const at = input.atlas, width = num(at.width, undefined, 1, 16384, "Atlas width"), height = num(at.height, undefined, 1, 16384, "Atlas height");
     for (const [axis, cells, extent] of [["columns", columns, width], ["rows", rows, height]]) {
       if (!Array.isArray(at[axis]) || at[axis].length !== cells + 1 || !at[axis].every((n, i) => Number.isFinite(n) && n >= 0 && n <= extent && (!i || n - at[axis][i - 1] >= 4))) throw new Error("The measured sprite cells do not match this grid.");
     }
-    atlas = { width, height, columns: [...at.columns], rows: [...at.rows] };
+    atlas = { width, height, columns: [...at.columns], rows: [...at.rows],
+      inset,
+      offsetX: num(at.offsetX, 0, -16384, 16384, "Grid offset X", true),
+      offsetY: num(at.offsetY, 0, -16384, 16384, "Grid offset Y", true),
+      insetX: num(at.insetX, inset, 0, 64, "Frame inset X", true),
+      insetY: num(at.insetY, inset, 0, 64, "Frame inset Y", true) };
   }
   const ownership = input.ownership || { kind: "user", scope: "session", ownerId: null };
   if (!["builtin", "user"].includes(ownership.kind) || !["global", "session", "user", "room"].includes(ownership.scope)) throw new Error("Invalid animation ownership.");
@@ -149,7 +155,7 @@ export function normalizeAnimationDefinition(input = {}) {
     motionEffects: { spin: num(motion.spin, 0, -1440, 1440, "Spin speed"), pulseScale: num(motion.pulseScale, 0, 0, 1, "Scale pulse"), pulseOpacity: num(motion.pulseOpacity, 0, 0, 1, "Opacity pulse"), pulsePeriod: num(motion.pulsePeriod, 1, .1, 10, "Pulse period") },
     variation: { rotation: num(variation.rotation, 0, 0, 180, "Rotation variation"), scale: num(variation.scale, 0, 0, .9, "Scale variation"), offsetX: num(variation.offsetX, 0, 0, 1000, "Horizontal variation"), offsetY: num(variation.offsetY, 0, 0, 1000, "Vertical variation"), speed: num(variation.speed, 0, 0, .9, "Speed variation") },
     sound, layers: normalizeAnimationLayers(input.layers), events,
-    inset: num(input.inset ?? input.atlas?.inset, 0, 0, 64, "Cell inset", true), atlas,
+    inset, atlas,
     ownership: { kind: ownership.kind, scope: ownership.scope, ownerId: ownership.ownerId == null ? null : animationText(ownership.ownerId) }
   });
 }

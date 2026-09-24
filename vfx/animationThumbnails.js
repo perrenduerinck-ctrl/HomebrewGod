@@ -1,3 +1,5 @@
+import { createUniformSpriteAtlas, getSpriteAtlasFrameBounds } from "./spriteAtlas.js";
+
 export const ANIMATION_THUMBNAIL_SIZE = 128;
 
 const text = value => String(value ?? "").trim();
@@ -22,20 +24,11 @@ function frameBounds(animation, image) {
   const frame = Math.max(0, Math.min(columns * rows - 1, representativeFrame(animation)));
   const column = frame % columns;
   const row = Math.floor(frame / columns);
-  const atlas = animation?.atlas;
-  const atlasMatches = atlas && Array.isArray(atlas.columns) && Array.isArray(atlas.rows) &&
-    atlas.columns.length === columns + 1 && atlas.rows.length === rows + 1;
-  const left = atlasMatches ? atlas.columns[column] : image.width * column / columns;
-  const right = atlasMatches ? atlas.columns[column + 1] : image.width * (column + 1) / columns;
-  const top = atlasMatches ? atlas.rows[row] : image.height * row / rows;
-  const bottom = atlasMatches ? atlas.rows[row + 1] : image.height * (row + 1) / rows;
-  const inset = Math.max(0, Number(animation?.inset ?? atlas?.inset) || 0);
-  return {
-    x: Math.min(right - 1, left + inset),
-    y: Math.min(bottom - 1, top + inset),
-    width: Math.max(1, right - left - inset * 2),
-    height: Math.max(1, bottom - top - inset * 2)
-  };
+  const savedAtlas = animation?.atlas;
+  const atlasMatches = savedAtlas && Array.isArray(savedAtlas.columns) && Array.isArray(savedAtlas.rows) &&
+    savedAtlas.columns.length === columns + 1 && savedAtlas.rows.length === rows + 1;
+  const atlas = atlasMatches ? savedAtlas : createUniformSpriteAtlas(image.width, image.height, columns, rows);
+  return getSpriteAtlasFrameBounds(atlas, column, row, { fallbackInset: animation?.inset });
 }
 
 async function decodeImage(file) {

@@ -1,4 +1,5 @@
 import { analyzeAnimationSprite, getSpriteGridSuggestions, trimEmptyFrameSelection } from "./animationSpriteCheck.js";
+import { createUniformSpriteAtlas, getSpriteAtlasAlignment, getSpriteAtlasFrameBounds, resetSpriteAtlasAlignment } from "./spriteAtlas.js";
 
 const MAX_VISUAL_CELLS = 576;
 const MAX_SEQUENCE_FRAMES = 240;
@@ -14,6 +15,9 @@ function parsedSequence(value, total) {
 export function createAnimationSpriteEditor({ field, listen, changed = () => {}, status = () => {} }) {
   let source = "", image = null, analysis = analyzeAnimationSprite(null, 1, 1), selectedFrame = 0;
   let imageVersion = 0, analysisSignature = "", gridSignature = "", suggestionSignature = "";
+  let storedAtlas = null, baseInset = 0, alignmentDirty = false;
+  let alignment = { offsetX: 0, offsetY: 0, insetX: 0, insetY: 0 };
+  let drag = null;
 
   function gridState() {
     const columns = Math.max(1, integer(field("columns").value, 1));
@@ -41,33 +45,153 @@ export function createAnimationSpriteEditor({ field, listen, changed = () => {},
     selectedFrame = clamp(selectedFrame, minimum, maximum); changed(); return true;
   }
 
+  function atlasBase() {
+    const { columns, rows } = gridState();
+    if (storedAtlas && storedAtlas.columns?.length === columns + 1 && storedAtlas.rows?.length === rows + 1 &&
+      (!image || storedAtlas.width === image.width && storedAtlas.height === image.height)) return storedAtlas;
+    if (!image?.width || !image?.height) return storedAtlas;
+    return createUniformSpriteAtlas(image.width, image.height, columns, rows);
+  }
+
+  function currentAtlas() {
+    const atlas = atlasBase();
+    return atlas ? { ...atlas, inset: baseInset, ...alignment } : null;
+  }
+
+  function hasCustomAlignment() {
+    return alignment.offsetX !== 0 || alignment.offsetY !== 0 || alignment.insetX !== baseInset || alignment.insetY !== baseInset;
+  }
+
+  function metadata() {
+    const atlas = currentAtlas();
+    return { inset: baseInset, atlas: atlas && (storedAtlas || alignmentDirty || hasCustomAlignment()) ? atlas : null };
+  }
+
+  function syncAlignmentInputs() {
+    field("grid-offset-x").value = String(alignment.offsetX);
+    field("grid-offset-y").value = String(alignment.offsetY);
+    field("frame-inset-x").value = String(alignment.insetX);
+    field("frame-inset-y").value = String(alignment.insetY);
+  }
+
+  function readAlignmentInputs() {
+    alignment = {
+      offsetX: clamp(integer(field("grid-offset-x").value), -16384, 16384),
+      offsetY: clamp(integer(field("grid-offset-y").value), -16384, 16384),
+      insetX: clamp(integer(field("frame-inset-x").value), 0, 64),
+      insetY: clamp(integer(field("frame-inset-y").value), 0, 64)
+    };
+    alignmentDirty = true;
+  }
+
+  function write(atlas = null, inset = 0) {
+    storedAtlas = atlas ? { ...atlas, columns: [...atlas.columns], rows: [...atlas.rows] } : null;
+    baseInset = clamp(integer(inset ?? atlas?.inset), 0, 64);
+    alignment = { ...getSpriteAtlasAlignment(storedAtlas, baseInset) };
+    alignmentDirty = false;
+    field("edit-frame-boxes").checked = false;
+    field("neighbor-bleed").checked = false;
+    syncAlignmentInputs();
+  }
+
+  function resetAlignment() {
+    const reset = resetSpriteAtlasAlignment(currentAtlas() || {}, baseInset);
+    alignment = { offsetX: reset.offsetX, offsetY: reset.offsetY, insetX: reset.insetX, insetY: reset.insetY };
+    alignmentDirty = Boolean(storedAtlas);
+    syncAlignmentInputs(); updateFramePreview(); changed();
+    status("Frame alignment reset to the original grid. The sprite image was not changed.");
+  }
+
+  function resetGrid() {
+    storedAtlas = null; baseInset = 0; alignmentDirty = false;
+    alignment = { offsetX: 0, offsetY: 0, insetX: 0, insetY: 0 };
+    syncAlignmentInputs();
+  }
+
   function frameDiagnostics(index) {
     return analysis.frames[index] || null;
+  }
+
+  function percent(value, extent) {
+    return `${value / extent * 100}%`;
+  }
+
+  function positionBox(node, bounds, atlas) {
+    node.style.left = percent(bounds.left, atlas.width);
+    node.style.top = percent(bounds.top, atlas.height);
+    node.style.width = percent(bounds.right - bounds.left, atlas.width);
+    node.style.height = percent(bounds.bottom - bounds.top, atlas.height);
+  }
+
+  function renderBleedDiagnostic(bounds, atlas) {
+    const enabled = field("neighbor-bleed").checked;
+    const intendedNode = field("frame-intended"), sampledNode = field("frame-sampled"), bands = field("neighbor-bleed-bands"), summary = field("neighbor-bleed-summary");
+    intendedNode.hidden = sampledNode.hidden = bands.hidden = summary.hidden = !enabled || !bounds;
+    field("frame-crop-art").classList.toggle("show-neighbor-bleed", enabled && Boolean(bounds));
+    if (!enabled || !bounds) return;
+    positionBox(intendedNode, bounds.intended, atlas); positionBox(sampledNode, bounds.sample, atlas);
+    bands.replaceChildren();
+    const addBand = rectangle => {
+      if (rectangle.right <= rectangle.left || rectangle.bottom <= rectangle.top) return;
+      const node = document.createElement("i"); positionBox(node, rectangle, atlas); bands.append(node);
+    };
+    const sample = bounds.sample, intended = bounds.intended;
+    addBand({ left: sample.left, right: Math.min(sample.right, intended.left), top: sample.top, bottom: sample.bottom });
+    addBand({ left: Math.max(sample.left, intended.right), right: sample.right, top: sample.top, bottom: sample.bottom });
+    addBand({ left: Math.max(sample.left, intended.left), right: Math.min(sample.right, intended.right), top: sample.top, bottom: Math.min(sample.bottom, intended.top) });
+    addBand({ left: Math.max(sample.left, intended.left), right: Math.min(sample.right, intended.right), top: Math.max(sample.top, intended.bottom), bottom: sample.bottom });
+    const crossings = Object.entries(bounds.bleed).filter(([, pixels]) => pixels > 0).map(([side, pixels]) => `${side} ${Math.round(pixels)}px`);
+    summary.textContent = `${Math.round(bounds.width)} × ${Math.round(bounds.height)}px sampled frame · ${crossings.length ? `neighbor crossing: ${crossings.join(" / ")}` : "no neighboring cell crossed"}. Red marks sampled pixels outside the intended cell.`;
+  }
+
+  function renderAlignmentOverlay(atlas) {
+    const editing = field("edit-frame-boxes").checked;
+    field("frame-alignment-controls").hidden = !editing;
+    field("sheet-grid-wrap").classList.toggle("editing-frame-boxes", editing);
+    const overlay = field("frame-alignment-overlay"); overlay.hidden = !editing || !atlas;
+    if (!editing || !atlas) return;
+    overlay.replaceChildren();
+    for (const boundary of atlas.columns) {
+      const line = document.createElement("i"); line.className = "hg-animation-atlas-line hg-animation-atlas-line-x";
+      line.style.left = percent(boundary + alignment.offsetX, atlas.width); overlay.append(line);
+    }
+    for (const boundary of atlas.rows) {
+      const line = document.createElement("i"); line.className = "hg-animation-atlas-line hg-animation-atlas-line-y";
+      line.style.top = percent(boundary + alignment.offsetY, atlas.height); overlay.append(line);
+    }
   }
 
   function updateFramePreview() {
     const { columns, rows, total } = gridState();
     selectedFrame = clamp(selectedFrame, 0, Math.max(0, total - 1));
-    const column = selectedFrame % columns, row = Math.floor(selectedFrame / columns);
+    const column = selectedFrame % columns, row = Math.floor(selectedFrame / columns), atlas = currentAtlas();
+    const bounds = atlas ? getSpriteAtlasFrameBounds(atlas, column, row, { fallbackInset: baseInset }) : null;
     field("frame-scrubber").max = String(Math.max(0, total - 1)); field("frame-scrubber").value = String(selectedFrame);
     field("frame-position").textContent = `FRAME ${selectedFrame + 1} / ${total}`;
     const art = field("frame-crop-art");
     art.style.backgroundImage = source ? `url(${JSON.stringify(source)})` : "";
-    art.style.backgroundSize = `${columns * 100}% ${rows * 100}%`;
-    art.style.backgroundPosition = `${columns === 1 ? 0 : column / (columns - 1) * 100}% ${rows === 1 ? 0 : row / (rows - 1) * 100}%`;
-    if (image?.width && image?.height) art.style.aspectRatio = `${image.width / columns} / ${image.height / rows}`;
-    const diagnostic = frameDiagnostics(selectedFrame), bounds = diagnostic?.bounds;
+    if (bounds && atlas) {
+      art.style.backgroundSize = `${atlas.width / bounds.width * 100}% ${atlas.height / bounds.height * 100}%`;
+      art.style.backgroundPosition = `${atlas.width === bounds.width ? 0 : bounds.x / (atlas.width - bounds.width) * 100}% ${atlas.height === bounds.height ? 0 : bounds.y / (atlas.height - bounds.height) * 100}%`;
+      art.style.aspectRatio = `${bounds.width} / ${bounds.height}`;
+    } else {
+      art.style.backgroundSize = `${columns * 100}% ${rows * 100}%`;
+      art.style.backgroundPosition = `${columns === 1 ? 0 : column / (columns - 1) * 100}% ${rows === 1 ? 0 : row / (rows - 1) * 100}%`;
+      if (image?.width && image?.height) art.style.aspectRatio = `${image.width / columns} / ${image.height / rows}`;
+    }
+    const diagnostic = frameDiagnostics(selectedFrame), contentBounds = diagnostic?.bounds;
     const outline = field("frame-content-bounds"), showCrop = field("frame-crop-toggle").checked;
-    outline.hidden = !showCrop || !bounds;
-    if (bounds) {
-      outline.style.left = `${bounds.left * 100}%`; outline.style.top = `${bounds.top * 100}%`;
-      outline.style.width = `${(bounds.right - bounds.left) * 100}%`; outline.style.height = `${(bounds.bottom - bounds.top) * 100}%`;
+    outline.hidden = !showCrop || !contentBounds;
+    if (contentBounds) {
+      outline.style.left = `${contentBounds.left * 100}%`; outline.style.top = `${contentBounds.top * 100}%`;
+      outline.style.width = `${(contentBounds.right - contentBounds.left) * 100}%`; outline.style.height = `${(contentBounds.bottom - contentBounds.top) * 100}%`;
     }
     field("frame-padding").hidden = !showCrop;
     field("frame-padding").textContent = !analysis.available ? "Transparency unavailable; full cell shown."
       : diagnostic?.empty ? "Blank frame."
-      : `Visible ${(diagnostic.coverage * 100).toFixed(1)}% · padding L ${Math.round(bounds.left * 100)}% / R ${Math.round((1 - bounds.right) * 100)}% / T ${Math.round(bounds.top * 100)}% / B ${Math.round((1 - bounds.bottom) * 100)}%`;
+      : `Visible ${(diagnostic.coverage * 100).toFixed(1)}% · padding L ${Math.round(contentBounds.left * 100)}% / R ${Math.round((1 - contentBounds.right) * 100)}% / T ${Math.round(contentBounds.top * 100)}% / B ${Math.round((1 - contentBounds.bottom) * 100)}%`;
     for (const button of field("frame-grid").querySelectorAll("[data-frame-preview]")) button.dataset.previewing = String(Number(button.dataset.framePreview) === selectedFrame);
+    renderAlignmentOverlay(atlas); renderBleedDiagnostic(bounds, atlas);
   }
 
   function updateSelection() {
@@ -132,8 +256,6 @@ export function createAnimationSpriteEditor({ field, listen, changed = () => {},
   });
   listen(field("frame-grid"), "input", event => {
     const checkbox = event.target.closest("[data-frame-enabled]"); if (!checkbox) return;
-    // Keep the form-wide input synchronizer from restoring the old sequence
-    // before this checkbox has written its new playback selection.
     event.stopPropagation();
     const frame = Number(checkbox.dataset.frameEnabled), frames = playbackFrames();
     if (checkbox.checked) { if (!frames.includes(frame)) frames.push(frame); frames.sort((a, b) => a - b); }
@@ -145,7 +267,7 @@ export function createAnimationSpriteEditor({ field, listen, changed = () => {},
     const button = event.target.closest("[data-grid-suggestion]"); if (!button) return;
     const size = Number(button.dataset.gridSuggestion); field("grid").value = String(size); field("columns").value = field("rows").value = String(size);
     field("start").value = "0"; field("frames").value = String(Math.min(MAX_SEQUENCE_FRAMES, size * size)); field("end").value = String(Math.min(MAX_SEQUENCE_FRAMES, size * size) - 1); field("sequence").value = "";
-    selectedFrame = 0; gridSignature = ""; changed(); status(`${size}×${size} grid applied. The uploaded artwork was not changed.`);
+    selectedFrame = 0; gridSignature = ""; resetGrid(); changed(); status(`${size}×${size} grid applied. The uploaded artwork was not changed.`);
   });
   listen(field("frame-first"), "click", () => { selectedFrame = 0; updateFramePreview(); });
   listen(field("frame-previous"), "click", () => { selectedFrame--; updateFramePreview(); });
@@ -153,6 +275,38 @@ export function createAnimationSpriteEditor({ field, listen, changed = () => {},
   listen(field("frame-last"), "click", () => { selectedFrame = gridState().total - 1; updateFramePreview(); });
   listen(field("frame-scrubber"), "input", () => { selectedFrame = Number(field("frame-scrubber").value); updateFramePreview(); });
   listen(field("frame-crop-toggle"), "change", updateFramePreview);
+  listen(field("neighbor-bleed"), "change", updateFramePreview);
+  listen(field("edit-frame-boxes"), "change", updateFramePreview);
+  for (const key of ["grid-offset-x", "grid-offset-y", "frame-inset-x", "frame-inset-y"]) listen(field(key), "input", () => { readAlignmentInputs(); updateFramePreview(); });
+  listen(field("frame-alignment-controls"), "click", event => {
+    if (event.target.closest("[data-animation-reset-alignment]")) { resetAlignment(); return; }
+    const button = event.target.closest("[data-animation-frame-nudge]"); if (!button) return;
+    const amount = event.shiftKey ? 5 : 1, direction = button.dataset.animationFrameNudge;
+    if (direction === "left") alignment.offsetX -= amount;
+    if (direction === "right") alignment.offsetX += amount;
+    if (direction === "up") alignment.offsetY -= amount;
+    if (direction === "down") alignment.offsetY += amount;
+    alignment.offsetX = clamp(alignment.offsetX, -16384, 16384); alignment.offsetY = clamp(alignment.offsetY, -16384, 16384);
+    alignmentDirty = true; syncAlignmentInputs(); updateFramePreview(); changed();
+  });
+  listen(field("frame-alignment-overlay"), "pointerdown", event => {
+    if (!image?.width || !image?.height) return;
+    event.preventDefault();
+    drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, offsetX: alignment.offsetX, offsetY: alignment.offsetY };
+    field("frame-alignment-overlay").setPointerCapture?.(event.pointerId);
+  });
+  listen(field("frame-alignment-overlay"), "pointermove", event => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const rectangle = field("sheet-grid-image").getBoundingClientRect();
+    if (!rectangle.width || !rectangle.height) return;
+    alignment.offsetX = clamp(Math.round(drag.offsetX + (event.clientX - drag.x) * image.width / rectangle.width), -16384, 16384);
+    alignment.offsetY = clamp(Math.round(drag.offsetY + (event.clientY - drag.y) * image.height / rectangle.height), -16384, 16384);
+    alignmentDirty = true; syncAlignmentInputs(); updateFramePreview();
+  });
+  listen(field("frame-alignment-overlay"), "pointerup", event => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    drag = null; changed();
+  });
   listen(field("trim-empty"), "click", () => {
     const frames = playbackFrames(), trimmed = trimEmptyFrameSelection(frames, analysis.emptyFrames);
     if (!trimmed.length) { status("Every enabled frame appears blank; nothing was trimmed."); return; }
@@ -160,5 +314,6 @@ export function createAnimationSpriteEditor({ field, listen, changed = () => {},
     selectedFrame = trimmed[0]; writeFrames(trimmed); status(`Trimmed ${frames.length - trimmed.length} blank start/end frame${frames.length - trimmed.length === 1 ? "" : "s"}. The uploaded artwork was not changed.`);
   });
 
-  return { sync, getAnalysis: () => analysis, getSelectedFrame: () => selectedFrame };
+  syncAlignmentInputs();
+  return { sync, write, resetGrid, getMetadata: metadata, getAnalysis: () => analysis, getSelectedFrame: () => selectedFrame };
 }

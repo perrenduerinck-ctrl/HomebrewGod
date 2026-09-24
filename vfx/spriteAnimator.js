@@ -1,4 +1,5 @@
 import { resolveVfxAlphaSource } from "./alphaAssets.js";
+import { getSpriteAtlasFrameBounds } from "./spriteAtlas.js";
 export const MAX_SPRITE_FRAMES = 240;
 
 const finiteNumber = (value) => {
@@ -85,7 +86,11 @@ export function normalizeSpriteOptions(
     validBounds(sourceAtlas.rows, rows, sourceAtlas.height)
     ? Object.freeze({ width: sourceAtlas.width, height: sourceAtlas.height,
       columns: Object.freeze([...sourceAtlas.columns]), rows: Object.freeze([...sourceAtlas.rows]),
-      inset: clamp(Math.round(finiteNumber(sourceAtlas.inset) ?? 1), 0, 64) })
+      inset: clamp(Math.round(finiteNumber(sourceAtlas.inset) ?? 1), 0, 64),
+      offsetX: clamp(Math.round(finiteNumber(sourceAtlas.offsetX) ?? 0), -16384, 16384),
+      offsetY: clamp(Math.round(finiteNumber(sourceAtlas.offsetY) ?? 0), -16384, 16384),
+      insetX: clamp(Math.round(finiteNumber(sourceAtlas.insetX) ?? finiteNumber(sourceAtlas.inset) ?? 1), 0, 64),
+      insetY: clamp(Math.round(finiteNumber(sourceAtlas.insetY) ?? finiteNumber(sourceAtlas.inset) ?? 1), 0, 64) })
     : null;
 
   return Object.freeze({
@@ -150,14 +155,7 @@ export function getSpriteFrameStyle(
   );
   if (normalized.atlas) {
     const atlas = normalized.atlas;
-    // Inset into each measured gutter, preserving the complete source image
-    // on disk. Status sheets use a larger inset to exclude their drawn grid.
-    const inset = Math.min(atlas.inset,
-      Math.floor((atlas.columns[column + 1] - atlas.columns[column] - 1) / 2),
-      Math.floor((atlas.rows[row + 1] - atlas.rows[row] - 1) / 2));
-    const x = atlas.columns[column] + inset, y = atlas.rows[row] + inset;
-    const width = atlas.columns[column + 1] - x - inset;
-    const height = atlas.rows[row + 1] - y - inset;
+    const { x, y, width, height } = getSpriteAtlasFrameBounds(atlas, column, row, { fallbackInset: atlas.inset });
     const scale = Math.min(normalized.frameWidth / width, normalized.frameHeight / height);
     const px = n => `${Math.round(n * 10000) / 10000}px`;
     return Object.freeze({

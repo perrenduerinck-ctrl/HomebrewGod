@@ -4,6 +4,7 @@ import { chooseAnimationVariation, animationTiming, sampleAnimation } from "./an
 import { normalizeAnimationRuntimeContext, animationGeometry, animationDebugGeometry, animationAreaSize, animationLayerMetrics, normalizeAnimationGrid } from "./animationRuntime.js";
 import { createAnimationDebug } from "./animationDebug.js";
 import { animationLayerOverrides } from "./animationLayers.js";
+import { createUniformSpriteAtlas, getSpriteAtlasMaximumFrameSize } from "./spriteAtlas.js";
 
 let nextOwner = 0;
 const failed = (reason, message = "") => ({ ok: false, skipped: true, reason, message });
@@ -157,13 +158,10 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
     if (definition.atlas && (definition.atlas.width !== dimensions.width || definition.atlas.height !== dimensions.height)) {
       throw new Error("The sprite dimensions no longer match its measured cells. Update its grid settings.");
     }
-    const atlas = definition.atlas || { ...dimensions,
-      columns: Array.from({ length: columns + 1 }, (_, i) => i * dimensions.width / columns),
-      rows: Array.from({ length: rows + 1 }, (_, i) => i * dimensions.height / rows) };
-    const widths = atlas.columns.slice(1).map((n, i) => n - atlas.columns[i]);
-    const heights = atlas.rows.slice(1).map((n, i) => n - atlas.rows[i]);
-    if (Math.min(...widths, ...heights) < Math.max(4, definition.inset * 2 + 2)) throw new Error("The grid cells are too small for this sheet.");
-    const width = Math.max(...widths) - definition.inset * 2, height = Math.max(...heights) - definition.inset * 2;
+    const atlas = definition.atlas || createUniformSpriteAtlas(dimensions.width, dimensions.height, columns, rows);
+    const alignedAtlas = { ...atlas, inset: definition.inset };
+    const { width, height } = getSpriteAtlasMaximumFrameSize(alignedAtlas, { fallbackInset: definition.inset });
+    if (width < 2 || height < 2) throw new Error("The grid cells are too small for this sheet alignment.");
     const factor = definition.size / Math.max(width, height);
     const variation = { ...chooseAnimationVariation(definition, overrides.random) };
     const previewSpeed = finite(overrides.previewSpeed, 1, "Preview speed");
@@ -177,7 +175,7 @@ export function createAnimationPlayer({ engine, library, assetCache, isSoundEnab
         startFrame: definition.frames.start, endFrame: definition.frames.end, frameSequence: timing.frames, playbackRate: timing.speed,
         loops: Math.max(1, definition.timing.loopCount), loop: definition.loop || definition.behavior === "projectile" && definition.playback !== "hold",
         removeOnComplete: !timing.indefinite && definition.timing.endDelay === 0 && definition.behavior !== "projectile" && definition.playback !== "hold" && !definition.placement.duration,
-        blendMode: definition.blendMode, atlas: { ...atlas, inset: definition.inset } } };
+        blendMode: definition.blendMode, atlas: alignedAtlas } };
   }
 
   function startRequest(item, options, delay) {
