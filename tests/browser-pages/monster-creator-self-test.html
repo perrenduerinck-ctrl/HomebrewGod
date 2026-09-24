@@ -269,7 +269,7 @@
       });
     }
 
-    const creator = createMonsterCreator({
+    const creatorConfig = {
       db: {},
       collection: function (...parts) {
         return {
@@ -390,7 +390,25 @@
       confirmDelete: function () {
         return true;
       }
-    });
+    };
+    let creator = createMonsterCreator(creatorConfig);
+
+    window.__MONSTER_CREATOR_MODERN_TEST__ = {
+      creator,
+      storedMonsters,
+      tokenRequests,
+      setDm(value) {
+        isDm = Boolean(value);
+      },
+      reset() {
+        creator.destroy();
+        creator = createMonsterCreator(creatorConfig);
+        return creator;
+      },
+      get creator() {
+        return creator;
+      }
+    };
 
     assert(!document.getElementById("saveMonsterButton").disabled, "DMs can save.");
     assert(document.getElementById("duplicateMonsterButton").disabled, "Duplicate requires a saved monster.");

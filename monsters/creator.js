@@ -10,6 +10,20 @@ import {
 import { openCombatAnimationPanel } from "../vfx/combatAnimationPanel.js";
 import { inferCombatAnimationFamily } from "../vfx/combatPresentationSystem.js";
 import { assertPersistentAnimationReferences } from "../vfx/animationReferences.js";
+import {
+  MONSTER_ENTRY_FIELDS,
+  createMonsterEntryEditor,
+  formatMonsterNamedEntries,
+  parseMonsterNamedEntries,
+  stableMonsterActionId
+} from "./entryEditor.js";
+import {
+  createMonsterStatBlockPreview,
+  ensureMonsterCreatorWorkspace
+} from "./statBlockPreview.js";
+import { ensureMonsterCreatorStyles } from "./monsterCreatorStyles.js";
+
+export { parseMonsterNamedEntries, stableMonsterActionId } from "./entryEditor.js";
 
 const MONSTER_SIZES = [
   "Tiny",
@@ -37,14 +51,7 @@ const MONSTER_TYPES = [
   "Undead"
 ];
 
-const NAMED_ENTRY_FIELDS = [
-  "traits",
-  "actions",
-  "bonusActions",
-  "reactions",
-  "legendaryActions",
-  "lairActions"
-];
+const NAMED_ENTRY_FIELDS = MONSTER_ENTRY_FIELDS;
 
 const LIST_FIELDS = [
   "senses",
@@ -134,67 +141,6 @@ function normalizeStringList(value) {
     .filter(Boolean);
 }
 
-function parseNamedEntry(value) {
-  if (value && typeof value === "object") {
-    const name = normalizeText(value.name || value.title);
-    const description = normalizeText(
-      value.description ||
-      value.text ||
-      value.details
-    );
-
-    if (!name && !description) {
-      return null;
-    }
-
-    return {
-      id: normalizeText(value.id),
-      name: name || "Feature",
-      description,
-      ...(Array.isArray(value.sequence) ? { sequence: JSON.parse(JSON.stringify(value.sequence)) } : {})
-    };
-  }
-
-  const text = normalizeText(value);
-
-  if (!text) {
-    return null;
-  }
-
-  const separatorIndex = text.indexOf("|");
-
-  if (separatorIndex < 0) {
-    return {
-      name: text,
-      description: ""
-    };
-  }
-
-  return {
-    name: normalizeText(text.slice(0, separatorIndex), "Feature"),
-    description: normalizeText(text.slice(separatorIndex + 1))
-  };
-}
-
-export function parseMonsterNamedEntries(value) {
-  const entries = Array.isArray(value)
-    ? value
-    : String(value == null ? "" : value).split(/\r?\n/);
-
-  return entries
-    .map(parseNamedEntry)
-    .filter(Boolean);
-}
-
-function actionSlug(value) {
-  return normalizeText(value, "action").toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "action";
-}
-
-export function stableMonsterActionId(field, name, index = 0) {
-  return `monster-action-${actionSlug(field)}-${actionSlug(name)}-${Math.max(0, Number(index) || 0)}`;
-}
-
 function normalizeMultiattackSequence(sequence = []) {
   return (Array.isArray(sequence) ? sequence : [])
     .map((entry) => typeof entry === "string"
@@ -205,16 +151,6 @@ function normalizeMultiattackSequence(sequence = []) {
         })
     .filter((entry) => entry.actionId)
     .slice(0, 16);
-}
-
-function formatNamedEntries(entries) {
-  return parseMonsterNamedEntries(entries)
-    .map(function (entry) {
-      return entry.description
-        ? entry.name + " | " + entry.description
-        : entry.name;
-    })
-    .join("\n");
 }
 
 function formatStringList(entries) {
@@ -353,103 +289,7 @@ function makeJsonFileName(name) {
 }
 
 function ensureStyles() {
-  if (document.getElementById("monsterCreatorPhaseSeventeenStyles")) {
-    return;
-  }
-
-  const style = document.createElement("style");
-  style.id = "monsterCreatorPhaseSeventeenStyles";
-  style.textContent = `
-    #monsterCreatorScreen .monster-field {
-      display: grid;
-      gap: 5px;
-      margin: 0 0 10px;
-      color: #cbd5e1;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    #monsterCreatorScreen .monster-field > input,
-    #monsterCreatorScreen .monster-field > select,
-    #monsterCreatorScreen .monster-field > textarea,
-    #monsterCreatorScreen .creatorWidePanel > textarea {
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    #monsterCreatorScreen .creatorWidePanel > textarea {
-      min-height: 82px;
-      margin: 0 0 10px;
-      resize: vertical;
-    }
-
-    #monsterCreatorScreen .statMiniGrid .monster-field {
-      min-width: 0;
-      margin: 0;
-    }
-
-    #monsterCreatorScreen .monster-library-item {
-      width: 100%;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 6px 12px;
-      align-items: center;
-      margin: 0 0 7px;
-      padding: 9px 10px;
-      border: 1px solid rgba(96, 165, 250, 0.28);
-      border-radius: 6px;
-      color: #e5e7eb;
-      background: #111827;
-      text-align: left;
-      cursor: pointer;
-    }
-
-    #monsterCreatorScreen .monster-library-item:hover,
-    #monsterCreatorScreen .monster-library-item.is-selected {
-      border-color: #60a5fa;
-      background: #172033;
-    }
-
-    #monsterCreatorScreen .monster-library-name {
-      min-width: 0;
-      overflow-wrap: anywhere;
-      font-weight: 800;
-    }
-
-    #monsterCreatorScreen .monster-library-meta {
-      color: #a7f3d0;
-      font-size: 12px;
-      white-space: nowrap;
-    }
-
-    #monsterCreatorScreen #deleteMonsterButton {
-      border-color: rgba(248, 113, 113, 0.55);
-      color: #fecaca;
-    }
-
-    #monsterCreatorScreen [disabled] {
-      cursor: not-allowed;
-      opacity: 0.58;
-    }
-
-    #monsterCreatorScreen .monster-animation-actions {
-      display: grid;
-      grid-template-columns: minmax(150px, 1fr) auto auto;
-      gap: 8px;
-      align-items: center;
-      margin: 2px 0 14px;
-      padding: 10px;
-      border: 1px solid rgba(96, 165, 250, 0.26);
-      border-radius: 8px;
-      background: rgba(15, 23, 42, 0.7);
-    }
-
-    #monsterCreatorScreen .monster-animation-actions small {
-      grid-column: 1 / -1;
-      color: #a7f3d0;
-    }
-  `;
-  document.head.appendChild(style);
+  ensureMonsterCreatorStyles(document);
 }
 
 function ensureButton(actionBar, id, label, afterElement) {
@@ -601,6 +441,22 @@ function ensureMonsterCreatorUi() {
     notes: getElement("monsterNotesInput")
   };
 
+  const editorGrid = screen.querySelector(".creatorFullGrid");
+  elements.statBlockPreview = ensureMonsterCreatorWorkspace({
+    screen,
+    editor: editorGrid,
+    document
+  });
+  const entriesPanel = elements.traits?.closest(".toolPanelMini");
+  let entryRoot = getElement("monsterEntryEditors");
+  if (!entryRoot && entriesPanel) {
+    entryRoot = document.createElement("div");
+    entryRoot.id = "monsterEntryEditors";
+    entryRoot.className = "monster-entry-editors";
+    entriesPanel.insertBefore(entryRoot, elements.traits);
+  }
+  elements.entryRoot = entryRoot;
+
   if (elements.actions && !getElement("monsterActionAnimationControls")) {
     const controls = document.createElement("div");
     controls.id = "monsterActionAnimationControls";
@@ -611,7 +467,7 @@ function ensureMonsterCreatorUi() {
       <button id="monsterUseActionOnMapButton" type="button">Use on Map</button>
       <small id="monsterActionAnimationSummary">Choose an action to configure its presentation.</small>
     `;
-    elements.actions.insertAdjacentElement("afterend", controls);
+    (entryRoot || elements.actions).insertAdjacentElement("afterend", controls);
   }
   elements.animationActionSelect = getElement("monsterAnimationActionSelect");
   elements.configureActionAnimationButton = getElement("monsterConfigureActionAnimationButton");
@@ -674,6 +530,20 @@ export function createMonsterCreator(config) {
   let listeningRoomCode = null;
   let isBusy = false;
   const removeDomListeners = [];
+  const statBlockPreview = createMonsterStatBlockPreview({
+    container: elements.statBlockPreview
+  });
+  const entryEditor = createMonsterEntryEditor({
+    root: elements.entryRoot,
+    legacyControls: Object.fromEntries(
+      NAMED_ENTRY_FIELDS.map((field) => [field, elements[field]])
+    ),
+    onChange(field, entries) {
+      actionIdentities[field] = entries.map((entry) => ({ ...entry }));
+      renderMonsterActionAnimations();
+      renderMonsterPreview();
+    }
+  });
   const realtimeListeners =
     createRealtimeListenerRegistry({
       onStopError: (error) => {
@@ -813,6 +683,10 @@ export function createMonsterCreator(config) {
     setElementText(elements.status, message);
   }
 
+  function renderMonsterPreview() {
+    statBlockPreview.render(readMonsterForm());
+  }
+
   function monsterActionKey(field, name) {
     return `${field}:${normalizeText(name, "action")
       .toLowerCase()
@@ -831,7 +705,7 @@ export function createMonsterCreator(config) {
       if (matchIndex >= 0) used.add(matchIndex);
       return {
         ...entry,
-        id: previous[matchIndex]?.id || stableMonsterActionId(field, entry.name, index)
+        id: entry.id || previous[matchIndex]?.id || stableMonsterActionId(field, entry.name, index)
       };
     });
     actionIdentities[field] = next.map((entry) => ({ ...entry }));
@@ -842,7 +716,7 @@ export function createMonsterCreator(config) {
     return NAMED_ENTRY_FIELDS.flatMap((field) => {
       const entries = reconcileActionIdentities(
         field,
-        parseMonsterNamedEntries(elements[field]?.value || "")
+        entryEditor?.read(field) || parseMonsterNamedEntries(elements[field]?.value || "")
       );
       return entries.map((entry) => {
         const legacyKey = monsterActionKey(field, entry.name);
@@ -1022,6 +896,7 @@ export function createMonsterCreator(config) {
     getEditableControls().forEach(function (control) {
       control.disabled = !editable || isBusy;
     });
+    entryEditor?.setDisabled(!editable || isBusy);
 
     if (elements.newButton) {
       elements.newButton.disabled = !editable || isBusy;
@@ -1152,13 +1027,6 @@ export function createMonsterCreator(config) {
     writeValue(elements.wis, source.abilities.wis);
     writeValue(elements.cha, source.abilities.cha);
 
-    NAMED_ENTRY_FIELDS.forEach(function (field) {
-      writeValue(
-        elements[field],
-        formatNamedEntries(source[field])
-      );
-    });
-
     LIST_FIELDS.forEach(function (field) {
       writeValue(
         elements[field],
@@ -1173,8 +1041,16 @@ export function createMonsterCreator(config) {
         (source[field] || []).map((entry) => ({ ...entry }))
       ])
     );
+    if (entryEditor) {
+      entryEditor.writeAll(source, { silent: true });
+    } else {
+      NAMED_ENTRY_FIELDS.forEach(function (field) {
+        writeValue(elements[field], formatMonsterNamedEntries(source[field]));
+      });
+    }
     actionAnimations = JSON.parse(JSON.stringify(source.actionAnimations || {}));
     renderMonsterActionAnimations();
+    statBlockPreview.render(source);
 
     syncPermissionState();
     renderMonsterList();
@@ -2059,8 +1935,22 @@ export function createMonsterCreator(config) {
     "click",
     backToBattleMap
   );
+  [
+    elements.name, elements.size, elements.type, elements.alignment,
+    elements.imageUrl, elements.ac, elements.hp, elements.speed, elements.cr,
+    elements.str, elements.dex, elements.con, elements.int, elements.wis, elements.cha,
+    elements.senses, elements.savingThrows, elements.skills,
+    elements.damageImmunities, elements.damageResistances,
+    elements.damageVulnerabilities, elements.conditionImmunities, elements.notes
+  ].filter(Boolean).forEach((control) => {
+    addDomListener(control, "input", renderMonsterPreview);
+    addDomListener(control, "change", renderMonsterPreview);
+  });
   NAMED_ENTRY_FIELDS.forEach((field) => {
-    addDomListener(elements[field], "input", renderMonsterActionAnimations);
+    addDomListener(elements[field], "input", () => {
+      renderMonsterActionAnimations();
+      renderMonsterPreview();
+    });
   });
   addDomListener(
     elements.animationActionSelect,
@@ -2097,6 +1987,7 @@ export function createMonsterCreator(config) {
   return {
     destroy: function () {
       cleanupListeners();
+      entryEditor?.destroy();
       removeDomListeners.forEach(
         function (removeListener) {
           removeListener();

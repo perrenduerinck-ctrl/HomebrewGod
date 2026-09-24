@@ -1,0 +1,436 @@
+#monsterCreatorScreen,
+#monsterCreatorScreen * {
+  box-sizing: border-box;
+}
+
+#monsterCreatorScreen .creatorActionBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#monsterCreatorScreen .creatorActionBar button,
+#monsterCreatorScreen .creatorActionBar .fileButtonLabel {
+  width: auto;
+  margin: 0;
+}
+
+#monsterCreatorScreen .monster-creator-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr);
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+  margin-top: 14px;
+}
+
+#monsterCreatorScreen .monster-editor-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+}
+
+#monsterCreatorScreen .monster-editor-column > .toolPanelMini {
+  min-width: 0;
+  margin: 0;
+}
+
+#monsterCreatorScreen .creatorWidePanel,
+#monsterCreatorScreen .creatorLibraryPanel {
+  grid-column: 1 / -1;
+}
+
+#monsterCreatorScreen .monster-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 0 0 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#monsterCreatorScreen .monster-field > input,
+#monsterCreatorScreen .monster-field > select,
+#monsterCreatorScreen .monster-field > textarea,
+#monsterCreatorScreen .creatorWidePanel > textarea {
+  width: 100%;
+  max-width: 100%;
+}
+
+#monsterCreatorScreen .statMiniGrid .monster-field {
+  min-width: 0;
+  margin: 0;
+}
+
+#monsterCreatorScreen .monster-preview-column {
+  position: sticky;
+  top: 12px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(188, 98, 89, .5);
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(22, 17, 25, .98), rgba(10, 13, 23, .98));
+  box-shadow: 0 16px 44px rgba(0, 0, 0, .32);
+}
+
+#monsterCreatorScreen .monster-preview-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(188, 98, 89, .3);
+  background: rgba(96, 36, 41, .2);
+}
+
+#monsterCreatorScreen .monster-preview-heading span {
+  color: #f0a09a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+
+#monsterCreatorScreen .monster-preview-heading h3 {
+  margin: 0;
+  color: #fff3e6;
+  font-size: 14px;
+}
+
+#monsterCreatorScreen .monster-stat-preview {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+}
+
+#monsterCreatorScreen .monster-stat-block {
+  min-width: 0;
+  padding: 20px clamp(14px, 3vw, 26px) 28px;
+  color: #261a19;
+  background:
+    linear-gradient(rgba(252, 244, 222, .96), rgba(240, 224, 189, .97)),
+    repeating-linear-gradient(0deg, transparent 0 4px, rgba(83, 50, 34, .04) 4px 5px);
+  font: 14px/1.45 Georgia, "Times New Roman", serif;
+}
+
+#monsterCreatorScreen .monster-stat-header {
+  padding-bottom: 10px;
+  border-bottom: 4px double #7d2d2d;
+}
+
+#monsterCreatorScreen .monster-stat-header h3 {
+  margin: 0;
+  color: #6e2227;
+  font-size: clamp(25px, 4vw, 36px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+#monsterCreatorScreen .monster-stat-meta {
+  margin: 4px 0 0;
+  color: #4e3834;
+  font-style: italic;
+}
+
+#monsterCreatorScreen .monster-stat-basics,
+#monsterCreatorScreen .monster-stat-details {
+  padding: 9px 0;
+  border-bottom: 2px solid #9c5048;
+}
+
+#monsterCreatorScreen .monster-stat-detail {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+#monsterCreatorScreen .monster-stat-detail strong {
+  color: #702a2d;
+}
+
+#monsterCreatorScreen .monster-stat-abilities {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+  padding: 12px 0;
+  border-bottom: 2px solid #9c5048;
+}
+
+#monsterCreatorScreen .monster-stat-ability {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: #702a2d;
+  text-align: center;
+}
+
+#monsterCreatorScreen .monster-stat-ability span {
+  color: #261a19;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#monsterCreatorScreen .monster-stat-section {
+  margin-top: 14px;
+}
+
+#monsterCreatorScreen .monster-stat-section h4 {
+  margin: 0 0 7px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #9c5048;
+  color: #702a2d;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+#monsterCreatorScreen .monster-stat-entry,
+#monsterCreatorScreen .monster-stat-empty {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+#monsterCreatorScreen .monster-stat-empty {
+  color: #74625c;
+  font-style: italic;
+}
+
+#monsterCreatorScreen .monster-entry-editors {
+  display: grid;
+  gap: 12px;
+}
+
+#monsterCreatorScreen .monster-entry-section {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(111, 139, 208, .28);
+  border-radius: 11px;
+  background: rgba(8, 14, 28, .6);
+}
+
+#monsterCreatorScreen .monster-entry-section-heading,
+#monsterCreatorScreen .monster-entry-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#monsterCreatorScreen .monster-entry-section-heading h4 {
+  flex: 1;
+  margin: 0;
+  color: #e7ecff;
+}
+
+#monsterCreatorScreen .monster-entry-section-heading [data-entry-count] {
+  min-width: 25px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #a7f3d0;
+  background: rgba(46, 160, 122, .14);
+  text-align: center;
+}
+
+#monsterCreatorScreen .monster-entry-section-heading button,
+#monsterCreatorScreen .monster-entry-card-actions button {
+  width: auto;
+  min-height: 30px;
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+#monsterCreatorScreen .monster-entry-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+#monsterCreatorScreen .monster-entry-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(110, 134, 198, .35);
+  border-radius: 9px;
+  background: rgba(19, 29, 52, .88);
+}
+
+#monsterCreatorScreen .monster-entry-card.is-dragging {
+  opacity: .5;
+}
+
+#monsterCreatorScreen .monster-entry-card-header {
+  padding: 8px;
+  cursor: grab;
+}
+
+#monsterCreatorScreen .monster-entry-card-header > strong {
+  flex: 1;
+  min-width: 80px;
+  overflow: hidden;
+  color: #f3f6ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#monsterCreatorScreen .monster-entry-drag {
+  color: #8fa5d7;
+  font-weight: 900;
+  letter-spacing: -3px;
+}
+
+#monsterCreatorScreen .monster-entry-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+#monsterCreatorScreen .monster-entry-card-body {
+  display: grid;
+  grid-template-columns: minmax(130px, .35fr) minmax(180px, 1fr);
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+#monsterCreatorScreen .monster-entry-card-body[hidden] {
+  display: none;
+}
+
+#monsterCreatorScreen .monster-entry-card-body label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #b8c4e5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#monsterCreatorScreen .monster-entry-card-body input,
+#monsterCreatorScreen .monster-entry-card-body textarea {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+#monsterCreatorScreen .monster-entry-card-body textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+#monsterCreatorScreen .monster-entry-empty {
+  margin: 3px 0;
+  padding: 10px;
+  border: 1px dashed rgba(116, 138, 255, .25);
+  border-radius: 8px;
+  color: #99a8ca;
+  text-align: center;
+}
+
+#monsterCreatorScreen .monster-library-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  width: 100%;
+  margin: 0 0 7px;
+  padding: 9px 10px;
+  border: 1px solid rgba(96, 165, 250, .28);
+  border-radius: 8px;
+  color: #e5e7eb;
+  background: #111827;
+  text-align: left;
+}
+
+#monsterCreatorScreen .monster-library-item:hover,
+#monsterCreatorScreen .monster-library-item.is-selected {
+  border-color: #60a5fa;
+  background: #172033;
+}
+
+#monsterCreatorScreen .monster-library-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+#monsterCreatorScreen .monster-library-meta {
+  color: #a7f3d0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#monsterCreatorScreen #deleteMonsterButton {
+  border-color: rgba(248, 113, 113, .55);
+  color: #fecaca;
+}
+
+#monsterCreatorScreen [disabled] {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+#monsterCreatorScreen .monster-animation-actions {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0 0;
+  padding: 10px;
+  border: 1px solid rgba(96, 165, 250, .26);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .7);
+}
+
+#monsterCreatorScreen .monster-animation-actions small {
+  grid-column: 1 / -1;
+  color: #a7f3d0;
+}
+
+@media (max-width: 1180px) {
+  #monsterCreatorScreen .monster-creator-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #monsterCreatorScreen .monster-preview-column {
+    position: static;
+  }
+
+  #monsterCreatorScreen .monster-stat-preview {
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  #monsterCreatorScreen .monster-editor-column,
+  #monsterCreatorScreen .monster-entry-card-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #monsterCreatorScreen .monster-entry-section-heading,
+  #monsterCreatorScreen .monster-entry-card-header,
+  #monsterCreatorScreen .monster-animation-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #monsterCreatorScreen .monster-entry-card-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  #monsterCreatorScreen .monster-entry-card-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  #monsterCreatorScreen .monster-stat-abilities {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #monsterCreatorScreen .monster-animation-actions {
+    display: grid;
+  }
+
+  #monsterCreatorScreen .monster-animation-actions > * {
+    width: 100%;
+    min-width: 0;
+  }
+}
