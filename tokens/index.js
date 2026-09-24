@@ -2365,29 +2365,66 @@ export function createTokenSystem(options) {
     }
     const target = getCurrentTokenTarget(roomData);
     if (!target.mapMode) throw new Error("Load a map before creating a summon token.");
-    const sizeCategory = normalizeSizeCategory(spec.sizeCategory);
+    let sourcePatch = {};
+    if (["monster", "character"].includes(spec.sourceType) && spec.sourceId) {
+      const sourceReference = deps.doc(
+        deps.db,
+        "rooms",
+        roomCode,
+        spec.sourceType === "monster" ? "monsters" : "characters",
+        String(spec.sourceId)
+      );
+      const sourceSnapshot = await deps.getDoc(sourceReference);
+      if (!sourceSnapshot?.exists?.()) throw new Error("The selected summon source no longer exists.");
+      const source = { id: String(spec.sourceId), ...(sourceSnapshot.data?.() || {}) };
+      sourcePatch = spec.sourceType === "monster"
+        ? buildMonsterLinkedTokenPatch(source, roomData)
+        : buildCharacterLinkedTokenPatch(source, roomData);
+    }
+    const sizeCategory = normalizeSizeCategory(sourcePatch.sizeCategory || spec.sizeCategory);
+    const ownershipMode = String(spec.ownership?.mode || spec.ownership || "dm");
+    const ownerUid = ownershipMode === "caster"
+      ? String(spec.casterOwnerUid || spec.createdByUid || "").trim() || null
+      : ownershipMode === "player"
+        ? String(spec.ownership?.playerUid || spec.playerUid || "").trim() || null
+        : String(roomData.dmUid || spec.createdByUid || "").trim() || null;
     const now = Date.now();
     const newToken = {
-      name: String(spec.name || "Summon").trim().slice(0, 120) || "Summon",
-      type: safeTokenType(spec.tokenType || "npc"),
-      imageUrl: /^https:\/\//i.test(String(spec.imageUrl || "")) ? String(spec.imageUrl) : "",
-      publicId: null,
+      ...sourcePatch,
+      name: sourcePatch.name || String(spec.name || "Summon").trim().slice(0, 120) || "Summon",
+      type: safeTokenType(sourcePatch.sourceType === "monster" ? "enemy" : sourcePatch.sourceType === "character" ? "player" : spec.tokenType || "npc"),
+      imageUrl: sourcePatch.imageUrl || (/^https:\/\//i.test(String(spec.imageUrl || "")) ? String(spec.imageUrl) : ""),
+      publicId: sourcePatch.publicId || null,
       x: clampPercent(spec.x),
       y: clampPercent(spec.y),
-      mapMode: target.mapMode,
-      tileKey: target.tileKey,
+      mapMode: spec.mapMode || target.mapMode,
+      tileKey: spec.tileKey ?? target.tileKey,
       sizeCategory,
       creatureSize: sizeCategory,
       size: Math.round(getMediumSize(roomData) * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
+      ownerUid,
       elevation: normalizeElevation(spec.elevation),
       elevationFeet: normalizeElevation(spec.elevation),
       automation: {
         kind: "summon",
         effectId: String(spec.effectId || "").trim() || null,
         sourceTokenId: String(spec.sourceTokenId || "").trim() || null,
-        createdByUid: String(spec.createdByUid || deps.getCurrentUserUid?.() || "").trim() || null
+        createdByUid: String(spec.createdByUid || deps.getCurrentUserUid?.() || "").trim() || null,
+        sourceType: String(spec.sourceType || "custom"),
+        sourceId: String(spec.sourceId || "").trim() || null,
+        ownership: spec.ownership || { mode: "dm" },
+        initiative: String(spec.initiative || "none"),
+        duration: spec.duration || { mode: "permanent", value: 1 },
+        onEnd: spec.onEnd || { mode: "leave", dismissAnimationId: "" }
       },
-      display: { name: true, hpBar: false, hpText: false, ac: false, conditions: true, initiative: false },
+      display: sourcePatch.display || {
+        name: true,
+        hpBar: Boolean(sourcePatch.maxHp),
+        hpText: Boolean(sourcePatch.maxHp),
+        ac: Boolean(sourcePatch.ac),
+        conditions: true,
+        initiative: false
+      },
       createdAtMillis: now,
       updatedAtMillis: now,
       createdAt: deps.serverTimestamp(),

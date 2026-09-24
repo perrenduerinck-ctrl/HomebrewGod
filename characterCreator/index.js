@@ -220,6 +220,8 @@ export function createCharacterCreator(options = {}) {
       options.targetCombatActionOnMap,
     onGameplayStateChanged:
       options.onGameplayStateChanged,
+    getSummonCatalog:
+      options.getSummonCatalog,
 
     uploadCharacterPortrait:
       options.uploadCharacterPortrait ||
@@ -36862,6 +36864,7 @@ export function createCharacterCreator(options = {}) {
       family,
       contentLabel: action?.contentKind === "item" ? "Item" : "Action",
       document,
+      getSummonCatalog: deps.getSummonCatalog,
       onChange: () => {
         creatorState.dirty = true;
       }

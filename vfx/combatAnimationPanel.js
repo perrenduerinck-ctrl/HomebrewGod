@@ -4,6 +4,7 @@ import {
   inferCombatAnimationFamily,
   normalizeCombatAnimationAttachment
 } from "./combatPresentationSystem.js";
+import { createSummonAutomationPanel } from "./summonAutomationPanel.js";
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -37,7 +38,7 @@ function stageSettings(family) {
         };
 }
 
-function openCombatBehaviorPanel({ attachment, content, document }) {
+function openCombatBehaviorPanel({ attachment, content, document, summonCatalog = {} }) {
   const { library } = getAnimationSession(document);
   const dialog = document.createElement("dialog");
   dialog.className = "hg-spell-animation-panel hg-combat-behavior-panel";
@@ -58,10 +59,13 @@ function openCombatBehaviorPanel({ attachment, content, document }) {
       <label>Camera shake<input data-combat-camera-shake type="range" min="0" max="1" step="0.05" value="0"></label>
       <label>Camera zoom<input data-combat-camera-zoom type="number" min="0.5" max="2" step="0.05" value="1"></label>
       <label>Camera duration (ms)<input data-combat-camera-duration type="number" min="0" max="3000" step="10" value="240"></label>
-      <label>After impact<select data-combat-automation-kind><option value="none">No token automation</option><option value="summon">Create summon token (DM)</option><option value="transform">Transform target token (DM)</option></select></label>
-      <label>Token name<input data-combat-automation-name maxlength="120" placeholder="Optional name"></label>
-      <label>Token image URL<input data-combat-automation-image type="url" maxlength="2048" placeholder="https://..."></label>
-      <label>Token size<select data-combat-automation-size><option value="tiny">Tiny</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="huge">Huge</option><option value="gargantuan">Gargantuan</option></select></label>
+      <label>Token automation<select data-combat-automation-kind><option value="none">No token automation</option><option value="summon">Summon token(s)</option><option value="transform">Transform target token (DM)</option></select></label>
+    </div>
+    <div data-combat-summon-host></div>
+    <div class="hg-spell-animation-overrides" data-combat-transform-settings>
+      <label>Transformed name<input data-combat-automation-name maxlength="120" placeholder="Optional name"></label>
+      <label>Transformed image URL<input data-combat-automation-image type="url" maxlength="2048" placeholder="https://..."></label>
+      <label>Transformed size<select data-combat-automation-size><option value="tiny">Tiny</option><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="huge">Huge</option><option value="gargantuan">Gargantuan</option></select></label>
     </div>
     <details><summary>Layered animation rendering</summary><p>Overlay up to eight extra stage animations. A delay staggers a layer without delaying gameplay.</p><div data-combat-layers></div><button type="button" data-combat-add-layer>Add animation layer</button></details>
     <div class="hg-animation-buttons"><button type="button" class="hg-animation-primary" data-combat-save>Save combat behavior</button><button type="button" data-combat-cancel>Cancel</button></div>
@@ -69,6 +73,8 @@ function openCombatBehaviorPanel({ attachment, content, document }) {
   document.body.append(dialog);
 
   const field = key => dialog.querySelector(`[data-combat-${key}]`);
+  const summonEditor = createSummonAutomationPanel({ document, library, catalog: summonCatalog });
+  field("summon-host").append(summonEditor.root);
   field("content-name").textContent = content?.name || content?.label || "Combat action";
   field("target-mode").value = attachment.targetMode || "single";
   field("duration-unit").value = attachment.duration?.unit || "none";
@@ -93,6 +99,13 @@ function openCombatBehaviorPanel({ attachment, content, document }) {
   field("automation-name").value = automation.name || "";
   field("automation-image").value = automation.imageUrl || "";
   field("automation-size").value = automation.sizeCategory || "medium";
+  summonEditor.write(attachment.automation?.summon || {});
+  const syncAutomationKind = () => {
+    summonEditor.root.hidden = field("automation-kind").value !== "summon";
+    field("transform-settings").hidden = field("automation-kind").value !== "transform";
+  };
+  field("automation-kind").addEventListener("change", syncAutomationKind);
+  syncAutomationKind();
 
   function addLayerRow(value = {}) {
     const root = field("layers");
@@ -145,11 +158,13 @@ function openCombatBehaviorPanel({ attachment, content, document }) {
       const automationType = field("automation-kind").value;
       const automationValue = automationType === "none"
         ? null
-        : {
+        : automationType === "summon"
+          ? summonEditor.read()
+          : {
             name: field("automation-name").value,
             imageUrl: field("automation-image").value,
             sizeCategory: field("automation-size").value
-          };
+            };
       const layers = [...field("layers").querySelectorAll("[data-combat-layer]")]
         .map((row, index) => {
           const stages = Object.fromEntries(
@@ -225,6 +240,7 @@ export async function openCombatAnimationPanel({
   family = inferCombatAnimationFamily(content),
   document = globalThis.document,
   contentLabel = "Ability",
+  getSummonCatalog = null,
   onChange = () => {}
 } = {}) {
   if (!content || typeof content !== "object") {
@@ -258,7 +274,10 @@ export async function openCombatAnimationPanel({
   const configured = await openCombatBehaviorPanel({
     attachment,
     content,
-    document
+    document,
+    summonCatalog: typeof getSummonCatalog === "function"
+      ? await getSummonCatalog()
+      : {}
   });
   if (!configured) return null;
 

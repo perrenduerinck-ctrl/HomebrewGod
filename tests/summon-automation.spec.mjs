@@ -1,0 +1,30 @@
+import { test, expect } from "@playwright/test";
+
+test("summon automation exposes and saves every requested control", async ({ page }) => {
+  await page.goto("/tests/browser-pages/summon-automation-self-test.html");
+  const root = page.locator("[data-combat-summon-settings]");
+  await expect(root.getByText("Summoned Token", { exact: true })).toBeVisible();
+  await root.locator("[data-summon-source-type]").selectOption("monster");
+  await root.locator("[data-summon-source-id]").selectOption("wolf");
+  await root.locator("[data-summon-location]").selectOption("around-target");
+  await root.locator("[data-summon-count]").fill("20");
+  await root.locator("[data-summon-timing]").selectOption("event");
+  await root.locator("[data-summon-event]").fill("summon-now");
+  await root.locator("[data-summon-ownership]").selectOption("player");
+  await root.locator("[data-summon-player]").selectOption("player-2");
+  await root.locator("[data-summon-initiative]").selectOption("shared");
+  await root.locator("[data-summon-duration]").selectOption("rounds");
+  await root.locator("[data-summon-duration-value]").fill("4");
+  await root.locator("[data-summon-on-end]").selectOption("dismiss");
+  await root.locator("[data-summon-dismiss-animation]").selectOption("dismiss-poof");
+  const saved = await page.evaluate(() => window.__SUMMON_AUTOMATION_TEST__.read());
+  expect(saved.sourceType).toBe("monster");
+  expect(saved.sourceId).toBe("wolf");
+  expect(saved.count).toBe(20);
+  expect(saved.spawnLocation).toBe("around-target");
+  expect(saved.eventName).toBe("summon-now");
+  expect(saved.ownership).toEqual({ mode: "player", playerUid: "player-2" });
+  expect(saved.initiative).toBe("shared");
+  expect(saved.duration).toEqual({ mode: "rounds", value: 4 });
+  expect(saved.onEnd).toEqual({ mode: "dismiss", dismissAnimationId: "dismiss-poof" });
+});

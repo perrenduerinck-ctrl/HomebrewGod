@@ -93,6 +93,7 @@ import {
 } from "./vfx/roomAnimationPersistence.js";
 import {
   createCombatPresentationSystem,
+  getAutomationEffectDuration,
   normalizeCombatAnimationAttachment,
   normalizeEffectDuration
 } from "./vfx/combatPresentationSystem.js?v=foundation-milestone-20260915";
@@ -102,6 +103,7 @@ import {
 } from "./vfx/combatEffectLifecycle.js?v=foundation-milestone-20260915";
 import { createCombatEffectPersistence } from "./vfx/combatEffectPersistence.js?v=foundation-milestone-20260915";
 import { createTokenAutomation } from "./vfx/tokenAutomation.js?v=foundation-milestone-20260915";
+import { findNearestFreeSummonPoint } from "./vfx/summonAutomation.js";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=complete-spell-vfx-20260903";
 import {
   createRealtimeListenerRegistry
@@ -5312,11 +5314,16 @@ function persistedEffectAnimation(attachment) {
 }
 
 function automationLifecycleState(results = []) {
-  const state = { summonTokenIds: [], transformations: [] };
+  const state = { summonTokenIds: [], summons: [], transformations: [] };
   for (const result of Array.isArray(results) ? results : []) {
     if (!result?.ok) continue;
     if (result.command?.type === "summon-token" && result.value?.id) {
       state.summonTokenIds.push(result.value.id);
+      state.summons.push({
+        tokenId: result.value.id,
+        onEnd: result.command.onEnd?.mode || "remove",
+        dismissAnimationId: result.command.onEnd?.dismissAnimationId || ""
+      });
     }
     if (result.command?.type === "transform-token" && result.value?.tokenId) {
       state.transformations.push({
@@ -5431,8 +5438,26 @@ function renderActiveEffectsPanel() {
 
 function handleCombatEffectEnded(record, reason) {
   if (!record?.automationState || reason === "remote-ended" || currentIsDM !== true) return;
-  for (const tokenId of record.automationState.summonTokenIds || []) {
-    void tokenSystem?.deleteAutomationSummon?.(tokenId, record.id);
+  const savedSummons = Array.isArray(record.automationState.summons)
+    ? record.automationState.summons
+    : (record.automationState.summonTokenIds || []).map((tokenId) => ({ tokenId, onEnd: "remove" }));
+  for (const summon of savedSummons) {
+    if (summon.onEnd === "leave") continue;
+    void (async () => {
+      if (summon.onEnd === "dismiss" && summon.dismissAnimationId) {
+        const target = E.tokenLayer?.querySelector(
+          `.hg-token[data-token-id="${CSS.escape(String(summon.tokenId))}"]`
+        );
+        if (target) {
+          const playback = await battleMapAnimations?.player?.playAnimation?.(
+            summon.dismissAnimationId,
+            { target, duration: 5000 }
+          );
+          await playback?.finished;
+        }
+      }
+      await tokenSystem?.deleteAutomationSummon?.(summon.tokenId, record.id);
+    })();
   }
   for (const transformation of record.automationState.transformations || []) {
     void tokenSystem?.restoreAutomationTransform?.(
@@ -5503,6 +5528,8 @@ async function playBattleMapCombatAction({
         targets
       );
       const attachmentBeforePlay = normalizeCombatAnimationAttachment(presentation);
+      const lifecycleDurationBeforePlay = attachmentBeforePlay?.duration ||
+        getAutomationEffectDuration(attachmentBeforePlay?.automation);
       const effectId = attachmentBeforePlay?.duration || attachmentBeforePlay?.automation
         ? createCombatEffectId()
         : "";
@@ -5516,7 +5543,7 @@ async function playBattleMapCombatAction({
         manageDurationExternally: true,
         presentationOnly: step.presentationOnly,
         effectId,
-        effectDuration: attachmentBeforePlay?.duration || null,
+        effectDuration: lifecycleDurationBeforePlay || null,
         commit: ({ reason }) => {
           document.dispatchEvent(new CustomEvent("homebrewgod:combat-impact", {
             detail: {
@@ -5538,7 +5565,9 @@ async function playBattleMapCombatAction({
       const automationResults = await result.automationReady;
       const attachment = result.attachment || normalizeCombatAnimationAttachment(presentation);
       const automationState = automationLifecycleState(automationResults);
-      if (!step.presentationOnly && attachment?.duration && (
+      const lifecycleDuration = attachment?.duration ||
+        getAutomationEffectDuration(attachment?.automation);
+      if (!step.presentationOnly && lifecycleDuration && (
         attachment.stages?.sustain || attachment.stages?.end || automationState
       )) {
         combatEffectLifecycle.startEffect({
@@ -5548,13 +5577,13 @@ async function playBattleMapCombatAction({
           contentName: presentation.name,
           sourceTokenId: sourceElement.dataset.tokenId,
           targetTokenIds: gameplayTargets.map((element) => element.dataset.tokenId).filter(Boolean),
-          duration: attachment.duration,
+          duration: lifecycleDuration,
           worldTime: campaignTimeSystem.getState().worldTime,
           initiative: initiativeSystem?.getState?.(),
-          concentrationKey: attachment.duration.concentration
+          concentrationKey: lifecycleDuration.concentration
             ? `${actorId}:${presentation.id || presentation.key || ""}`
             : "",
-          requiredStatus: attachment.duration.status,
+          requiredStatus: lifecycleDuration.status,
           createdByUid: currentUser?.uid || "",
           roomCode: currentRoomCode,
           animation: persistedEffectAnimation(attachment),
@@ -6454,6 +6483,89 @@ function applyCombatCameraEffect(effect = {}) {
   );
 }
 
+function requestSummonPlacements(summon, context = {}) {
+  const surface = E.battleMapSurface;
+  if (!surface) return Promise.resolve([]);
+  const placements = [];
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      surface.removeEventListener("click", onClick, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+    const finish = (value) => { cleanup(); resolve(value); };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") finish([]);
+    };
+    const onClick = (event) => {
+      const rect = surface.getBoundingClientRect();
+      const requested = {
+        x: ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100,
+        y: ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100
+      };
+      const surfaceRecord = context.target || context.source || {};
+      const grid = context.grid || {};
+      const free = findNearestFreeSummonPoint(requested, {
+        tokens: [...(context.tokens || []), ...placements], grid, surface: surfaceRecord
+      });
+      const occupied = !free || Math.abs(free.x - requested.x) > 0.01 || Math.abs(free.y - requested.y) > 0.01;
+      const override = summon.placement.allowDmOverride && event.shiftKey;
+      if (summon.placement.preventOverlap && occupied && !summon.placement.nearestFree && !override) {
+        text(E.templateStatus, "That area is occupied. Choose a free square or Shift-click for the allowed DM override.");
+        return;
+      }
+      if (summon.placement.preventOverlap && !free && !override) return;
+      const selected = summon.placement.preventOverlap && summon.placement.nearestFree && free && !override
+        ? free
+        : requested;
+      placements.push({
+        ...selected,
+        mapMode: surfaceRecord.mapMode || null,
+        tileKey: surfaceRecord.tileKey ?? null
+      });
+      if (placements.length >= summon.count) finish(placements);
+      else text(E.templateStatus, `Place summon ${placements.length + 1} of ${summon.count}; Escape cancels.`);
+    };
+    surface.addEventListener("click", onClick, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    text(E.templateStatus, `Place summon 1 of ${summon.count}; Escape cancels.`);
+  });
+}
+
+async function applySummonInitiative(created, summon, context = {}) {
+  if (!initiativeSystem || summon.initiative === "none") return;
+  const tokens = created.map((entry) => entry.value).filter((entry) => entry?.id);
+  for (const token of tokens) await initiativeSystem.addToken(token);
+  const ids = tokens.map((token) => token.id);
+  if (!ids.length) return;
+  if (summon.initiative === "roll") {
+    await initiativeSystem.rollInitiative(ids);
+    return;
+  }
+  if (summon.initiative === "shared") {
+    await initiativeSystem.rollInitiative([ids[0]]);
+    const total = initiativeSystem.getState().initiativeOrder.find((entry) => entry.tokenId === ids[0])?.totalInitiative;
+    for (const id of ids.slice(1)) await initiativeSystem.setInitiative(id, total);
+    return;
+  }
+  const casterId = context.source?.id || context.source?.tokenId;
+  const caster = initiativeSystem.getState().initiativeOrder.find((entry) => entry.tokenId === casterId);
+  if (!caster) {
+    await initiativeSystem.rollInitiative(ids);
+    return;
+  }
+  for (const id of ids) await initiativeSystem.setInitiative(id, caster.totalInitiative);
+  for (const [offset, id] of ids.entries()) {
+    let state = initiativeSystem.getState();
+    let index = state.initiativeOrder.findIndex((entry) => entry.tokenId === id);
+    const casterIndex = state.initiativeOrder.findIndex((entry) => entry.tokenId === casterId);
+    while (index > casterIndex + 1 + offset) {
+      await initiativeSystem.moveTie(id, "up");
+      state = initiativeSystem.getState();
+      index = state.initiativeOrder.findIndex((entry) => entry.tokenId === id);
+    }
+  }
+}
+
 function ensureCombatPresentationSystem() {
   const engine = battleMapVfx || initializeBattleMapVfx();
   if (!engine) return null;
@@ -6463,6 +6575,8 @@ function ensureCombatPresentationSystem() {
       canMutate: () => currentIsDM === true,
       createToken: (command) => tokenSystem?.createAutomationToken?.(command),
       updateToken: (tokenId, command) => tokenSystem?.transformAutomationToken?.(tokenId, command),
+      requestPlacements: requestSummonPlacements,
+      afterSummon: applySummonInitiative,
       onRequest(command) {
         document.dispatchEvent(new CustomEvent("homebrewgod:token-automation-request", {
           detail: command
@@ -6487,7 +6601,16 @@ function ensureCombatPresentationSystem() {
           targets: targetRecords,
           effectId: request.effectId,
           duration: request.effectDuration,
-          createdByUid: currentUser?.uid || ""
+          createdByUid: currentUser?.uid || "",
+          tokens: tokenSystem?.getRoomTokens?.() || [],
+          grid: (() => {
+            const rect = E.battleMapSurface?.getBoundingClientRect?.();
+            const pixels = getBattleMapGridPixelSize();
+            return {
+              xPercent: rect?.width ? pixels / rect.width * 100 : 5,
+              yPercent: rect?.height ? pixels / rect.height * 100 : 5
+            };
+          })()
         });
       },
       onWarning: (message) => text(E.templateStatus, message)
@@ -8431,6 +8554,62 @@ function openToolTab(viewName) {
   window.open(toolUrl.toString(), "_blank");
 }
 
+async function getCombatSummonCatalog() {
+  if (!currentRoomCode) return { tokens: [], players: [] };
+  const playersByUid = new Map();
+  latestActivePlayersSnapshot?.forEach?.((entry) => {
+    const player = entry.data?.() || {};
+    if (player.uid && !playersByUid.has(player.uid)) {
+      playersByUid.set(player.uid, {
+        uid: player.uid,
+        name: player.displayName || "Player"
+      });
+    }
+  });
+  try {
+    const [monsterSnapshot, characterSnapshot, playerSnapshot] = await Promise.all([
+      getDocs(collection(db, "rooms", currentRoomCode, "monsters")),
+      getDocs(collection(db, "rooms", currentRoomCode, "characters")),
+      getDocs(collection(db, "rooms", currentRoomCode, "players"))
+    ]);
+    playerSnapshot.docs.forEach((entry) => {
+      const player = entry.data() || {};
+      if (player.uid && !playersByUid.has(player.uid)) {
+        playersByUid.set(player.uid, {
+          uid: player.uid,
+          name: player.displayName || "Player"
+        });
+      }
+    });
+    return {
+      tokens: [
+        ...monsterSnapshot.docs.map((entry) => {
+          const record = entry.data() || {};
+          return {
+            type: "monster", id: entry.id, name: record.name || "Unnamed Monster",
+            imageUrl: record.imageUrl || record.image?.url || "",
+            sizeCategory: String(record.size || "medium").toLowerCase(), tokenType: "enemy"
+          };
+        }),
+        ...characterSnapshot.docs.map((entry) => {
+          const record = entry.data() || {};
+          return {
+            type: "character", id: entry.id,
+            name: record.identity?.name || record.name || "Unnamed Character",
+            imageUrl: record.identity?.image?.url || record.imageUrl || "",
+            sizeCategory: String(record.identity?.size || record.size || "medium").toLowerCase(),
+            tokenType: "player"
+          };
+        })
+      ],
+      players: [...playersByUid.values()]
+    };
+  } catch (error) {
+    console.warn("Could not load summon token choices:", error);
+    return { tokens: [], players: [...playersByUid.values()] };
+  }
+}
+
 async function initCharacterCreatorSystem() {
   if (characterCreatorSystem) {
     characterCreatorSystem.connectListeners();
@@ -8559,7 +8738,8 @@ async function initCharacterCreatorSystem() {
 
     onGameplayStateChanged: function (request) {
       return reconcileCombatPresentationEffects(request);
-    }
+    },
+    getSummonCatalog: getCombatSummonCatalog
     });
 
   return characterCreatorSystem;
@@ -8629,6 +8809,7 @@ async function initMonsterCreatorSystem() {
     getAnimationLibrary: function () {
       return animationDocumentSession.library;
     },
+    getSummonCatalog: getCombatSummonCatalog,
 
     createMonsterLinkedToken: function (monster) {
       if (

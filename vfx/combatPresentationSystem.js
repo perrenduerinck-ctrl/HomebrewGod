@@ -2,6 +2,10 @@ import { createAnimationSequenceController } from "./animationSequence.js";
 import {
   normalizeSpellAnimationReference
 } from "./animationReferences.js";
+import {
+  normalizeSummonAutomation,
+  summonEffectDuration
+} from "./summonAutomation.js";
 
 const STAGE_ALIASES = Object.freeze({
   attack: "cast",
@@ -125,13 +129,7 @@ function normalizeCamera(value = {}) {
 function normalizeAutomation(value = {}) {
   if (!value || typeof value !== "object") return null;
   const summon = value.summon && typeof value.summon === "object"
-    ? {
-        name: text(value.summon.name, "Summon"),
-        imageUrl: text(value.summon.imageUrl, "", 2048),
-        sizeCategory: text(value.summon.sizeCategory, "medium", 32),
-        tokenType: text(value.summon.tokenType, "npc", 32),
-        duration: normalizeEffectDuration(value.summon.duration)
-      }
+    ? normalizeSummonAutomation(value.summon)
     : null;
   const transform = value.transform && typeof value.transform === "object"
     ? {
@@ -143,6 +141,12 @@ function normalizeAutomation(value = {}) {
     : null;
   return summon || transform
     ? Object.freeze({ summon, transform })
+    : null;
+}
+
+export function getAutomationEffectDuration(automation) {
+  return automation?.summon
+    ? summonEffectDuration(automation.summon)
     : null;
 }
 
@@ -414,6 +418,35 @@ export function createCombatPresentationSystem({
       { id: "base", stages: attachment.stages, delay: 0 },
       ...attachment.layers
     ];
+    const automationDone = deferred();
+    let automationStarted = false;
+    const summonTiming = attachment.automation?.summon?.spawnTiming || "event";
+    const summonEventName = attachment.automation?.summon?.eventName || "impact";
+    const beginAutomation = (trigger) => {
+      if (automationStarted || !attachment.automation || presentationOnly) return false;
+      automationStarted = true;
+      Promise.resolve(onAutomation({
+        automation: attachment.automation,
+        request,
+        targets: destinations,
+        trigger
+      })).then(
+        (results) => automationDone.resolve(Array.isArray(results) ? results : []),
+        (error) => {
+          onWarning(error?.message || "Token automation could not complete.");
+          automationDone.resolve([]);
+        }
+      );
+      return true;
+    };
+    const eventMatchesAutomation = (event) => summonTiming === "event" && (
+      event?.type === summonEventName ||
+      event?.slot === summonEventName ||
+      event?.name === summonEventName ||
+      event?.eventName === summonEventName
+    );
+    if (!attachment.automation || presentationOnly) automationDone.resolve([]);
+    else if (summonTiming === "start") beginAutomation({ type: "animation-start" });
 
     try {
       for (const [destinationIndex, destination] of destinations.entries()) {
@@ -483,6 +516,7 @@ export function createCombatPresentationSystem({
             maximumDuration: request.maximumDuration || 8000,
             onEvent(event) {
               noteImpact(event);
+              if (eventMatchesAutomation(event)) beginAutomation(event);
               request.onEvent?.({ ...event, target: destination, layer: layer.id });
             }
           });
@@ -503,27 +537,22 @@ export function createCombatPresentationSystem({
       impact.resolve("presentation-only");
     }
 
-    let automationResults = [];
     const committedPromise = impact.promise.then(async (reason) => {
       if (presentationOnly) return false;
       if (attachment.camera) {
         try { onCamera({ phase: "impact", ...attachment.camera, request }); } catch {}
       }
       const result = await commitOnce(reason);
-      if (attachment.automation) {
-        try {
-          automationResults = await onAutomation({
-            automation: attachment.automation,
-            request,
-            targets: destinations
-          });
-        } catch (error) {
-          onWarning(error?.message || "Token automation could not complete.");
-        }
+      if (
+        attachment.automation &&
+        summonTiming === "event" &&
+        summonEventName === "impact"
+      ) {
+        beginAutomation({ type: "impact", reason });
       }
       return result;
     });
-    const automationReady = committedPromise.then(() => automationResults || []);
+    const automationReady = automationDone.promise;
 
     const timeout = scheduler.setTimeout(
       () => {
@@ -536,11 +565,19 @@ export function createCombatPresentationSystem({
     );
     const finished = Promise.all(
       controllers.map((controller) => controller.finished)
-    ).then((results) => ({
-      ok: results.every((result) => result?.ok !== false),
-      reason: "completed",
-      results
-    })).finally(() => {
+    ).then(async (results) => {
+      if (attachment.automation && !automationStarted && !presentationOnly) {
+        beginAutomation({
+          type: summonTiming === "end" ? "animation-end" : "event-fallback",
+          eventName: summonEventName
+        });
+      }
+      return {
+        ok: results.every((result) => result?.ok !== false),
+        reason: "completed",
+        results
+      };
+    }).finally(() => {
       scheduler.clearTimeout(timeout);
       if (!impactResolved) {
         impactResolved = true;

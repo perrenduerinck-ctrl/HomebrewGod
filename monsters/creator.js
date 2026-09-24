@@ -806,7 +806,8 @@ export function createMonsterCreator(config) {
       content,
       family: inferCombatAnimationFamily(content),
       document,
-      contentLabel: "Monster Action"
+      contentLabel: "Monster Action",
+      getSummonCatalog: config.getSummonCatalog
     });
     if (!changed) return false;
     actionAnimations[action.key] = {

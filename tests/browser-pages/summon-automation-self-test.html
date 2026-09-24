@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Summon Automation Test</title></head>
+<body><main id="root"></main><script type="module">
+  import { createSummonAutomationPanel } from "../../vfx/summonAutomationPanel.js";
+  const editor = createSummonAutomationPanel({
+    document,
+    library: { list: () => [{ id: "dismiss-poof", name: "Dismiss Poof" }] },
+    catalog: {
+      tokens: [
+        { type: "monster", id: "wolf", name: "Dire Wolf", sizeCategory: "large", tokenType: "enemy" },
+        { type: "character", id: "hero", name: "Aria", sizeCategory: "medium", tokenType: "player" }
+      ],
+      players: [{ uid: "player-2", name: "Second Player" }]
+    }
+  });
+  document.getElementById("root").append(editor.root);
+  window.__SUMMON_AUTOMATION_TEST__ = editor;
+</script></body></html>
