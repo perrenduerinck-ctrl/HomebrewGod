@@ -162,6 +162,9 @@ import {
 } from "./shared/securityPersistence.js";
 import { createSidebarNavigation } from "./ui/navigation/sidebar.js?v=foundation-milestone-20260915";
 import { createToolDrawer } from "./ui/navigation/toolDrawer.js?v=foundation-milestone-20260915";
+import { createWorkshop } from "./workshop/index.js";
+import { createWorkshopPersistence } from "./workshop/workshopPersistence.js";
+import { prepareWorkshopCopy } from "./workshop/workshopImport.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -211,6 +214,7 @@ const E = {
   battleMapScreen: $("battleMapScreen"),
   monsterCreatorScreen: $("monsterCreatorScreen"),
   characterCreatorScreen: $("characterCreatorScreen"),
+  workshopScreen: $("workshopScreen"),
   persistenceConnectionStatus: $("persistenceConnectionStatus"),
 
   // Auth
@@ -522,6 +526,8 @@ let movementPanelSystem = null;
 let battleMapLighting = null;
 let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
+let workshopSystem = null;
+let workshopPersistence = null;
 let characterCreatorModulePromise = null;
 let monsterCreatorModulePromise = null;
 
@@ -628,7 +634,7 @@ function syncMainScreenRoute(screenName) {
   if (!currentRoomCode || !window.history?.replaceState) return;
   const routeUrl = new URL(window.location.href);
   routeUrl.searchParams.set("room", currentRoomCode);
-  if (["battle", "characterCreator", "monsterCreator"].includes(screenName)) {
+  if (["battle", "characterCreator", "monsterCreator", "workshop"].includes(screenName)) {
     routeUrl.searchParams.set("view", screenName);
   } else {
     routeUrl.searchParams.delete("view");
@@ -648,6 +654,7 @@ function navigateMainScreen(screenName) {
   E.battleMapScreen.classList.add("hidden");
   E.monsterCreatorScreen.classList.add("hidden");
   E.characterCreatorScreen.classList.add("hidden");
+  E.workshopScreen.classList.add("hidden");
 
   if (screenName === "auth") E.authScreen.classList.remove("hidden");
   if (screenName === "lobby") E.lobbyScreen.classList.remove("hidden");
@@ -655,12 +662,16 @@ function navigateMainScreen(screenName) {
   if (screenName === "battle") E.battleMapScreen.classList.remove("hidden");
   if (screenName === "monsterCreator") E.monsterCreatorScreen.classList.remove("hidden");
   if (screenName === "characterCreator") E.characterCreatorScreen.classList.remove("hidden");
+  if (screenName === "workshop") E.workshopScreen.classList.remove("hidden");
 
   if (currentRoomCode && screenName === "characterCreator") {
     void initCharacterCreatorSystem();
   }
   if (currentRoomCode && screenName === "monsterCreator") {
     void initMonsterCreatorSystem();
+  }
+  if (currentRoomCode && screenName === "workshop") {
+    void initWorkshopSystem();
   }
 
   if (screenName === "battle") {
@@ -8522,6 +8533,14 @@ function initializeApplicationShell() {
 
 initializeApplicationShell();
 
+document.addEventListener("homebrewgod:workshop-publish", function (event) {
+  void publishToWorkshop(event.detail || {});
+});
+
+document.addEventListener("homebrewgod:workshop-browse", function (event) {
+  void browseWorkshop(event.detail || {});
+});
+
 function applyBattleZoom() {
   const scale = "scale(" + battleZoom + ")";
 
@@ -8608,6 +8627,106 @@ async function getCombatSummonCatalog() {
     console.warn("Could not load summon token choices:", error);
     return { tokens: [], players: [...playersByUid.values()] };
   }
+}
+
+async function importWorkshopAsset(asset, replaceRecordId = "") {
+  if (!currentUser) throw new Error("Sign in before importing Workshop content.");
+  const copy = prepareWorkshopCopy(asset, {
+    idFactory: () => replaceRecordId || crypto.randomUUID()
+  });
+  const provenance = copy.provenance;
+
+  if (copy.assetType === "monster") {
+    if (!currentRoomCode || !currentIsDM) {
+      throw new Error("Only the room DM can add Workshop monsters to this room library.");
+    }
+    const monsterId = replaceRecordId || copy.recordId;
+    const reference = doc(db, "rooms", currentRoomCode, "monsters", monsterId);
+    const previous = replaceRecordId ? await getDoc(reference) : null;
+    const previousData = previous?.exists?.() ? previous.data() : {};
+    await setDoc(reference, {
+      ...copy.content,
+      ...provenance,
+      id: monsterId,
+      roomCode: currentRoomCode,
+      ownerUid: currentRoomData?.dmUid || currentUser.uid,
+      ownerName: currentRoomData?.dmName || currentUser.displayName || "Unnamed DM",
+      createdAt: previousData.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      updatedAtMillis: Date.now()
+    });
+    return { assetType: "monster", recordId: monsterId };
+  }
+
+  if (copy.assetType === "animation") {
+    const animationId = replaceRecordId || copy.recordId;
+    const library = animationDocumentSession.library;
+    const ownership = { kind: "user", scope: "user", ownerId: currentUser.uid, roomId: null };
+    const definition = { ...copy.content, id: animationId, ownership };
+    let candidate;
+    if (replaceRecordId) {
+      const existing = library.getAnimation(animationId);
+      if (!existing) {
+        await animationDocumentSession.persistence?.load?.({ force: true });
+      }
+      if (!library.getAnimation(animationId)) throw new Error("Your imported animation copy is unavailable.");
+      candidate = library.prepareAnimationSave(definition, { animationId });
+      await animationDocumentSession.persistence.saveAnimation(candidate);
+      library.updateAnimation(animationId, definition);
+    } else {
+      candidate = library.prepareAnimationSave(definition);
+      await animationDocumentSession.persistence.saveAnimation(candidate);
+      library.registerAnimation(candidate);
+    }
+    await setDoc(doc(db, "users", currentUser.uid, "animations", animationId), provenance, { merge: true });
+    return { assetType: "animation", recordId: animationId };
+  }
+
+  const recordId = replaceRecordId || copy.recordId;
+  await setDoc(doc(db, "users", currentUser.uid, "workshopLibrary", recordId), {
+    ...copy.content,
+    ...provenance,
+    id: recordId,
+    assetType: copy.assetType,
+    updatedAt: serverTimestamp(),
+    updatedAtMillis: Date.now()
+  });
+  return { assetType: copy.assetType, recordId };
+}
+
+async function initWorkshopSystem() {
+  if (workshopSystem) return workshopSystem;
+  workshopPersistence = createWorkshopPersistence({
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+    query, where, limit, startAfter, serverTimestamp, writeBatch,
+    getUserId: () => currentUser?.uid || "",
+    getUserName: () => currentUser?.displayName || currentRoomData?.dmName || "Homebrew God Creator",
+    getRoomCode: () => currentRoomCode || "",
+    publicBrowse: false
+  });
+  workshopSystem = createWorkshop({
+    screen: E.workshopScreen,
+    persistence: workshopPersistence,
+    importAsset: (asset) => importWorkshopAsset(asset),
+    updateImportedAsset: (asset, recordId) => importWorkshopAsset(asset, recordId),
+    getCurrentUserId: () => currentUser?.uid || "",
+    getCurrentRoomCode: () => currentRoomCode || "",
+    getCurrentIsDM: () => currentIsDM === true,
+    onNavigate: (screenName) => navigateMainScreen(screenName)
+  });
+  return workshopSystem;
+}
+
+async function publishToWorkshop(request) {
+  const workshop = await initWorkshopSystem();
+  navigateMainScreen("workshop");
+  return workshop.publishFromCreator(request);
+}
+
+async function browseWorkshop(request = {}) {
+  const workshop = await initWorkshopSystem();
+  workshop.open(request);
+  return workshop;
 }
 
 async function initCharacterCreatorSystem() {
@@ -8810,6 +8929,8 @@ async function initMonsterCreatorSystem() {
       return animationDocumentSession.library;
     },
     getSummonCatalog: getCombatSummonCatalog,
+    onPublishToWorkshop: publishToWorkshop,
+    onBrowseWorkshop: browseWorkshop,
 
     createMonsterLinkedToken: function (monster) {
       if (
@@ -8991,6 +9112,12 @@ async function openStartupViewIfNeeded() {
     await initMonsterCreatorSystem();
     return;
   }
+
+  if (startupView === "workshop") {
+    navigateMainScreen("workshop");
+    await initWorkshopSystem();
+    return;
+  }
 }
 
 
@@ -9042,7 +9169,8 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       "room",
       "battle",
       "monsterCreator",
-      "characterCreator"
+      "characterCreator",
+      "workshop"
     ]);
   const releaseScreenElements = {
     auth:
@@ -9056,7 +9184,9 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
     monsterCreator:
       E.monsterCreatorScreen,
     characterCreator:
-      E.characterCreatorScreen
+      E.characterCreatorScreen,
+    workshop:
+      E.workshopScreen
   };
   const releaseTestUploadSelectors =
     Object.freeze({
@@ -9199,6 +9329,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             "monsterCreator"
           ) {
             await initMonsterCreatorSystem();
+          }
+
+          if (screenName === "workshop") {
+            await initWorkshopSystem();
           }
 
           return {
@@ -9655,6 +9789,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
 // ?room=ROOMCODE&view=battle
 // ?room=ROOMCODE&view=characterCreator
 // ?room=ROOMCODE&view=monsterCreator
+// ?room=ROOMCODE&view=workshop
 // =====================================================
 
 console.log("Registering auth listener");

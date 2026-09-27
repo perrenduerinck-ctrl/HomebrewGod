@@ -6,7 +6,8 @@ export const SIDEBAR_SECTIONS = Object.freeze([
       { id: "quick-battle", label: "Battle Map", action: "screen", target: "battle", room: true },
       { id: "quick-combat", label: "Combat Tracker", action: "tool", target: "combatTracker", room: true },
       { id: "quick-characters", label: "Characters", action: "screen", target: "characterCreator", room: true },
-      { id: "quick-animations", label: "Animations", action: "tool", target: "animationLibrary", room: true }
+      { id: "quick-animations", label: "Animations", action: "tool", target: "animationLibrary", room: true },
+      { id: "quick-workshop", label: "Homebrew Workshop", action: "screen", target: "workshop", room: true }
     ]
   },
   {
@@ -54,7 +55,8 @@ export const SIDEBAR_SECTIONS = Object.freeze([
     items: [
       { id: "library-characters", label: "Characters", action: "screen", target: "characterCreator", room: true },
       { id: "library-monsters", label: "Monsters", action: "screen", target: "monsterCreator", room: true, roles: ["dm"] },
-      { id: "library-animations", label: "Animations", action: "tool", target: "animationLibrary", room: true }
+      { id: "library-animations", label: "Animations", action: "tool", target: "animationLibrary", room: true },
+      { id: "library-workshop", label: "Homebrew Workshop", action: "screen", target: "workshop", room: true }
     ]
   },
   {

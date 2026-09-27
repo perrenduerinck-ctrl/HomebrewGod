@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>body{margin:0;background:#0f0d0b;color:#eee;font-family:system-ui}.screen{min-height:100vh}button,input,select,textarea{font:inherit}</style></head><body>
+<main id="workshopScreen" class="screen"></main>
+<script type="module">
+  import { createWorkshop } from "../../workshop/index.js";
+  const assets = Array.from({length:600},(_,index)=>({assetId:`asset_${index}`,assetType:index%2?"monster":"animation",name:`Creation ${index}`,description:index%7===0?"Vampire dungeon boss":"Reusable homebrew",authorUid:"author",authorName:"Aster",visibility:"ROOM",roomCode:"ROOM-1",tags:index%7===0?["undead"]:["general"],version:1,updatedAtMillis:600-index,createdAtMillis:index,saveCount:index%11,thumbnailUrl:""}));
+  const persistence = {
+    async listAssets({scope}) { return {entries:scope==="friends"?[]:assets.slice(0,40),cursors:{},hasMore:scope!=="friends"}; },
+    async loadAsset(id){const asset=assets.find(entry=>entry.assetId===id);return {...asset,content:asset.assetType==="monster"?{name:asset.name,size:"Medium",type:"Undead",alignment:"Neutral",abilities:{}}:{}};},
+    async getSummary(id){return assets.find(entry=>entry.assetId===id);}, async toggleFavorite(){}, async recordImport(){}, async findOwnedSource(){return null;},
+    async listCollections(){return[];}, async saveCollection(value){return{...value,collectionId:"collection_1",ownerUid:"author",assetIds:value.assetIds||[]};}, async setCollectionAsset(value,id){return{...value,assetIds:[...value.assetIds,id]};}, async deleteCollection(){}, async remix(id,{name}){return{...(await this.loadAsset(id)),assetId:"remix_1",name};}, async deleteAsset(){}, async removeFromRoom(){}
+  };
+  globalThis.prompt=()=>null; globalThis.confirm=()=>false;
+  const api=createWorkshop({screen:document.getElementById("workshopScreen"),persistence,importAsset:async()=>({recordId:"copy_1"}),updateImportedAsset:async()=>({recordId:"copy_1"}),getCurrentUserId:()=>"author",getCurrentRoomCode:()=>"ROOM-1",getCurrentIsDM:()=>true,onNavigate:()=>{}});
+  window.workshopTest=api; setTimeout(()=>{document.body.dataset.ready="true";},50);
+</script></body></html>

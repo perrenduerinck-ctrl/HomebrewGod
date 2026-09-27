@@ -152,6 +152,66 @@ service cloud.firestore {
         && request.resource.data.ownerUid == roomData(roomCode).dmUid;
     }
 
+    function validWorkshopAssetType(value) {
+      return value in [
+        'monster', 'magic-item', 'spell', 'animation', 'npc',
+        'map', 'encounter', 'summon', 'feat', 'other'
+      ];
+    }
+
+    function validWorkshopVisibility(value) {
+      return value in ['PRIVATE', 'ROOM', 'FRIENDS', 'PUBLIC'];
+    }
+
+    function canReadWorkshopAsset(data) {
+      return signedIn()
+        && (
+          data.authorUid == request.auth.uid
+          || data.visibility == 'PUBLIC'
+          || (
+            data.visibility == 'ROOM'
+            && data.roomCode is string
+            && isRoomMember(data.roomCode)
+          )
+        );
+    }
+
+    function validWorkshopSummary(assetId) {
+      return request.resource.data.keys().hasOnly([
+          'assetId', 'assetType', 'name', 'nameSearch', 'description',
+          'authorUid', 'authorName', 'visibility', 'roomCode', 'tags',
+          'thumbnailUrl', 'version', 'forkedFrom', 'sourceKey',
+          'sourceRecordId', 'collectionIds', 'saveCount', 'createdAt',
+          'updatedAt', 'createdAtMillis', 'updatedAtMillis'
+        ])
+        && request.resource.data.assetId == assetId
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 2000
+        && validWorkshopAssetType(request.resource.data.assetType)
+        && validWorkshopVisibility(request.resource.data.visibility)
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 16
+        && request.resource.data.thumbnailUrl is string
+        && (
+          request.resource.data.thumbnailUrl == ''
+          || request.resource.data.thumbnailUrl.matches('https://.*')
+        )
+        && request.resource.data.version is int
+        && request.resource.data.version >= 1
+        && request.resource.data.version <= 1000000
+        && (
+          request.resource.data.visibility != 'ROOM'
+          || (
+            request.resource.data.roomCode is string
+            && isRoomMember(request.resource.data.roomCode)
+          )
+        );
+    }
+
     match /users/{userId} {
       allow read, create, update, delete:
         if isSelf(userId);
@@ -178,6 +238,94 @@ service cloud.firestore {
             || request.resource.data.get('sound', {}).get('src', '') == ''
             || request.resource.data.get('sound', {}).get('src', '').matches('https://.*')
           );
+      }
+
+      match /workshopFavorites/{assetId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.assetId == assetId;
+      }
+
+      match /workshopImports/{assetId} {
+        allow read, create, update, delete: if isSelf(userId);
+      }
+
+      match /workshopCollections/{collectionId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.collectionId == collectionId
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.assetIds is list
+          && request.resource.data.assetIds.size() <= 500;
+      }
+
+      match /workshopLibrary/{recordId} {
+        allow read, create, update, delete: if isSelf(userId);
+      }
+    }
+
+    match /workshopAssets/{assetId} {
+      allow read: if canReadWorkshopAsset(resource.data);
+
+      allow create:
+        if signedIn()
+        && validWorkshopSummary(assetId);
+
+      allow update:
+        if signedIn()
+        && (
+          (
+            resource.data.authorUid == request.auth.uid
+            && validWorkshopSummary(assetId)
+          )
+          || (
+            resource.data.visibility == 'ROOM'
+            && isRoomDm(resource.data.roomCode)
+            && request.resource.data.authorUid == resource.data.authorUid
+            && request.resource.data.visibility == 'PRIVATE'
+            && request.resource.data.roomCode == ''
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'visibility', 'roomCode', 'updatedAt', 'updatedAtMillis'
+            ])
+          )
+        );
+
+      allow delete:
+        if signedIn()
+        && resource.data.authorUid == request.auth.uid;
+
+      match /versions/{versionId} {
+        allow read:
+          if exists(/databases/$(database)/documents/workshopAssets/$(assetId))
+          && canReadWorkshopAsset(
+            get(/databases/$(database)/documents/workshopAssets/$(assetId)).data
+          );
+
+        allow create, update:
+          if signedIn()
+          && existsAfter(/databases/$(database)/documents/workshopAssets/$(assetId))
+          && getAfter(/databases/$(database)/documents/workshopAssets/$(assetId)).data.authorUid
+            == request.auth.uid
+          && request.resource.data.assetId == assetId
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.version is int
+          && request.resource.data.version >= 1
+          && request.resource.data.content is map
+          && request.resource.data.keys().hasOnly([
+            'assetId', 'version', 'authorUid', 'createdAt',
+            'createdAtMillis', 'content'
+          ]);
+
+        allow delete:
+          if signedIn()
+          && exists(/databases/$(database)/documents/workshopAssets/$(assetId))
+          && get(/databases/$(database)/documents/workshopAssets/$(assetId)).data.authorUid
+            == request.auth.uid;
       }
     }
 

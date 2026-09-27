@@ -377,6 +377,18 @@ function ensureMonsterCreatorUi() {
     "Delete Monster",
     duplicateButton
   );
+  const publishButton = ensureButton(
+    actionBar,
+    "publishMonsterWorkshopButton",
+    "Publish to Workshop",
+    deleteButton
+  );
+  const browseWorkshopButton = ensureButton(
+    actionBar,
+    "browseWorkshopMonstersButton",
+    "Browse Workshop Monsters",
+    publishButton
+  );
 
   const basicsPanel = getElement("monsterNameInput")
     ? getElement("monsterNameInput").closest(".toolPanelMini")
@@ -405,6 +417,8 @@ function ensureMonsterCreatorUi() {
     saveButton,
     duplicateButton,
     deleteButton,
+    publishButton,
+    browseWorkshopButton,
     tokenButton: getElement("createMonsterTokenButton"),
     copyButton: getElement("copyMonsterJsonButton"),
     exportButton: getElement("exportMonsterJsonButton"),
@@ -928,6 +942,15 @@ export function createMonsterCreator(config) {
         !selectedMonsterId;
     }
 
+    if (elements.publishButton) {
+      elements.publishButton.disabled =
+        !editable || isBusy || !selectedMonsterId;
+    }
+
+    if (elements.browseWorkshopButton) {
+      elements.browseWorkshopButton.disabled = isBusy;
+    }
+
     if (elements.importInput) {
       elements.importInput.disabled =
         !editable ||
@@ -1049,6 +1072,7 @@ export function createMonsterCreator(config) {
         writeValue(elements[field], formatMonsterNamedEntries(source[field]));
       });
     }
+
     actionAnimations = JSON.parse(JSON.stringify(source.actionAnimations || {}));
     renderMonsterActionAnimations();
     statBlockPreview.render(source);
@@ -1334,6 +1358,30 @@ export function createMonsterCreator(config) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function publishMonsterToWorkshop() {
+    if (!selectedMonsterId) {
+      setStatus("Save the monster before publishing it to the Workshop.");
+      return null;
+    }
+    const content = getExportData();
+    const request = {
+      assetType: "monster",
+      sourceRecordId: selectedMonsterId,
+      sourceScope: `room:${getRoomCode()}`,
+      name: content.name,
+      description: content.notes || "",
+      thumbnailUrl: content.imageUrl || "",
+      tags: [content.type, content.size, content.cr ? `cr-${content.cr}` : ""].filter(Boolean),
+      content
+    };
+    config.onPublishToWorkshop?.(request);
+    return request;
+  }
+
+  function browseWorkshopMonsters() {
+    config.onBrowseWorkshop?.({ assetType: "monster", tab: "browse" });
   }
 
   async function deleteMonster(skipConfirmation = false) {
@@ -1936,6 +1984,16 @@ export function createMonsterCreator(config) {
     "click",
     backToBattleMap
   );
+  addDomListener(
+    elements.publishButton,
+    "click",
+    publishMonsterToWorkshop
+  );
+  addDomListener(
+    elements.browseWorkshopButton,
+    "click",
+    browseWorkshopMonsters
+  );
   [
     elements.name, elements.size, elements.type, elements.alignment,
     elements.imageUrl, elements.ac, elements.hp, elements.speed, elements.cr,
@@ -2013,6 +2071,8 @@ export function createMonsterCreator(config) {
     newMonster,
     saveMonster,
     duplicateMonster,
+    publishMonsterToWorkshop,
+    browseWorkshopMonsters,
     deleteMonster,
     createMonsterToken,
     configureMonsterActionAnimation,

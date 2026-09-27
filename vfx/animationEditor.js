@@ -22,7 +22,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
     <p class="hg-animation-session" data-animation-session>Personal animations sync after sign-in.</p>
     <div class="hg-animation-columns"><section class="hg-animation-settings"><div data-animation-browser-panel>
     <div data-animation-chooser></div><div class="hg-animation-buttons"><button data-animation-edit type="button">Edit settings</button><button data-animation-duplicate type="button">Duplicate / Remix</button>
-    <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-share-room type="button">Share with room</button><button data-animation-delete type="button">Delete custom</button></div>
+    <button data-animation-custom type="button" class="hg-animation-primary">Custom Animation</button><button data-animation-share-room type="button">Share with room</button><button data-animation-publish-workshop type="button">Publish to Workshop</button><button data-animation-browse-workshop type="button">Browse Workshop Animations</button><button data-animation-delete type="button">Delete custom</button></div>
     <div data-animation-external hidden><p data-animation-external-label></p><button type="button" data-animation-use-selected>Use selected animation</button><button type="button" data-animation-cancel-selection hidden>Cancel layer selection</button></div>
     <div data-animation-delete-warning hidden><p data-animation-delete-message></p><label>Replacement<select data-animation-delete-replacement></select></label><button type="button" data-animation-delete-replace>Replace references and delete</button><button type="button" data-animation-delete-remove>Remove references and delete</button><button type="button" data-animation-delete-cancel>Cancel</button></div>
     </div><section data-animation-family-choice hidden><h3>Choose an animation family</h3><p>Behavior templates over the same animation engine.</p><div class="hg-animation-family-choice">${[["melee", "Melee", "Close-range physical attacks."], ["ranged", "Ranged", "Physical attacks that travel to a target."], ["magic", "Magic", "Spell and magical effects."]].map(([family, label, description]) => `<button type="button" aria-label="${label}" data-create-family="${family}"><strong>${label}</strong><span>${description}</span></button>`).join("")}</div></section>
@@ -73,6 +73,7 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
   function selectionChanged() {
     stop(); editRevision++; inspectionRevision++; field("form").hidden = true; field("family-choice").hidden = true; field("browser-panel").hidden = false; showTool("library");
     const a = selected(); field("delete").disabled = !a || a.ownership.kind === "builtin";
+    field("publish-workshop").disabled = !a || a.ownership.kind === "builtin";
     field("share-room").hidden = !persistence?.canShareWithRoom?.();
     field("share-room").disabled = !a || a.ownership.kind === "builtin" || a.ownership.scope === "room";
     if (!a) { field("preview-info").textContent = "Choose an animation to preview."; return; }
@@ -356,6 +357,25 @@ export function createAnimationEditor({ dialog, button, library, bindings, actio
       chooser.select(saved.id); assignmentInfo(); status(prepared.persistent ? "Animation saved to your personal library. Choose its stages in a spell or attack editor." : "Animation saved for this session. Sign in to sync it.");
     } finally { saving = false; }
   }));
+  on(field("publish-workshop"), "click", () => {
+    const animation = selected();
+    if (!animation || animation.ownership.kind === "builtin") return;
+    if (dialog.open) dialog.close();
+    document.dispatchEvent(new CustomEvent("homebrewgod:workshop-publish", { detail: {
+      assetType: "animation",
+      sourceRecordId: animation.id,
+      sourceScope: `${animation.ownership.scope}:${animation.ownership.ownerId || ""}`,
+      name: animation.name,
+      description: animation.description || "",
+      thumbnailUrl: animation.thumbnailUrl || "",
+      tags: [...animation.tags, animation.family, animation.type].filter(Boolean),
+      content: JSON.parse(JSON.stringify(animation))
+    } }));
+  });
+  on(field("browse-workshop"), "click", () => {
+    if (dialog.open) dialog.close();
+    document.dispatchEvent(new CustomEvent("homebrewgod:workshop-browse", { detail: { assetType: "animation", tab: "browse" } }));
+  });
   selectionChanged(); assignmentInfo();
   return { stop, openCreator, async openForSlot({ slot = "impact", mode = "choose", animationId, family = "magic" } = {}) {
       finishExternal(); closeLayerSelector({ restoreEditor: false }); if (!dialog.open) dialog.showModal(); selectionChanged(); await persistence?.load?.();
