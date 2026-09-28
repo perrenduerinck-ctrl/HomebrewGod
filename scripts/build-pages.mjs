@@ -114,7 +114,8 @@ for (
     "shared",
     "tokens",
     "ui",
-    "vfx"
+    "vfx",
+    "workshop"
   ]
 ) {
   await cp(

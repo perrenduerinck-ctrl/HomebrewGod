@@ -145,7 +145,8 @@ test("the Pages build includes runtime folders but excludes development folders"
     "shared",
     "tokens",
     "ui",
-    "vfx"
+    "vfx",
+    "workshop"
   ].forEach((directory) => {
     assert.match(build, new RegExp(`"${directory}"`));
   });
