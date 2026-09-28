@@ -224,7 +224,7 @@ test("generic combat content exposes duration, targets, paths, layers, camera an
   await behavior.locator("[data-combat-camera-enabled]").check();
   await behavior.locator("[data-combat-camera-shake]").fill("0.4");
   await behavior.locator("[data-combat-automation-kind]").selectOption("summon");
-  await behavior.locator("[data-combat-automation-name]").fill("Flame Spirit");
+  await behavior.locator("[data-summon-name]").fill("Flame Spirit");
   await behavior.locator("details").evaluate(element => { element.open = true; });
   await behavior.locator("[data-combat-add-layer]").click();
   await behavior.locator('[data-layer-animation-slot="impact"]').selectOption("cold_burst_01");
