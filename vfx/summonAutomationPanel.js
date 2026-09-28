@@ -21,6 +21,7 @@ export function createSummonAutomationPanel({
   root.className = "hg-summon-automation-settings";
   root.dataset.combatSummonSettings = "true";
   root.innerHTML = `<legend>Summoned Token</legend>
+    <div class="hg-animation-buttons"><button type="button" data-summon-browse-library>Browse Library Monsters</button></div>
     <div class="hg-spell-animation-overrides">
       <label>Token source<select data-summon-source-type><option value="monster">Choose Monster</option><option value="character">Choose Character</option><option value="custom">Custom Token</option></select></label>
       <label data-summon-source-record>Saved source<select data-summon-source-id></select></label>
@@ -78,6 +79,11 @@ export function createSummonAutomationPanel({
   }
 
   field("source-type").addEventListener("change", () => { populateSources(); sync(); });
+  field("browse-library").addEventListener("click", () => {
+    document.dispatchEvent(new CustomEvent("homebrewgod:workshop-browse", {
+      detail: { assetType: "monster", tab: "library" }
+    }));
+  });
   for (const name of ["timing", "ownership", "duration", "on-end"]) {
     field(name).addEventListener("change", sync);
   }

@@ -1,7 +1,10 @@
-export const WORKSHOP_ASSET_TYPES = Object.freeze([
-  "monster", "magic-item", "spell", "animation", "npc",
-  "map", "encounter", "summon", "feat", "other"
-]);
+import { matchesWorkshopFilters } from "./workshopFilters.js";
+import {
+  WORKSHOP_ASSET_TYPES,
+  createWorkshopTypeMetadata
+} from "./workshopTypeRegistry.js";
+
+export { WORKSHOP_ASSET_TYPES } from "./workshopTypeRegistry.js";
 
 export const WORKSHOP_VISIBILITIES = Object.freeze([
   "PRIVATE", "ROOM", "FRIENDS", "PUBLIC"
@@ -97,6 +100,7 @@ export function normalizeWorkshopAsset(input = {}, context = {}) {
     forkedFrom: input.forkedFrom ? safeId(input.forkedFrom, "Fork source") : null,
     sourceKey: text(input.sourceKey, 240),
     sourceRecordId: text(input.sourceRecordId, 160),
+    typeMetadata: createWorkshopTypeMetadata(assetType, input.content, input.typeMetadata),
     collectionIds: Array.isArray(input.collectionIds)
       ? [...new Set(input.collectionIds.map((entry) => text(entry, 160)).filter(Boolean))].slice(0, 50)
       : [],
@@ -126,21 +130,14 @@ export function canAccessWorkshopAsset(asset, context = {}) {
 }
 
 export function matchesWorkshopAsset(asset, filters = {}) {
-  if (filters.assetType && asset.assetType !== filters.assetType) return false;
-  if (filters.visibility && asset.visibility !== filters.visibility) return false;
-  if (filters.author && !asset.authorName.toLowerCase().includes(String(filters.author).toLowerCase())) return false;
-  const tag = String(filters.tag || "").trim().toLowerCase();
-  if (tag && !asset.tags.some((entry) => entry.includes(tag))) return false;
-  const words = String(filters.search || "").toLowerCase().split(/\s+/).filter(Boolean);
-  const haystack = `${asset.name} ${asset.description} ${asset.authorName} ${asset.tags.join(" ")}`.toLowerCase();
-  return words.every((word) => haystack.includes(word));
+  return matchesWorkshopFilters(asset, filters);
 }
 
 export function sortWorkshopAssets(assets, sort = "updated") {
   return [...assets].sort((left, right) => {
     if (sort === "created") return (right.createdAtMillis || 0) - (left.createdAtMillis || 0);
-    if (sort === "saved") return (right.saveCount || 0) - (left.saveCount || 0) || left.name.localeCompare(right.name);
-    if (sort === "name") return left.name.localeCompare(right.name);
+    if (sort === "saved") return (right.saveCount || 0) - (left.saveCount || 0) || String(left.name || "").localeCompare(String(right.name || ""));
+    if (sort === "name") return String(left.name || "").localeCompare(String(right.name || ""));
     return (right.updatedAtMillis || 0) - (left.updatedAtMillis || 0);
   });
 }

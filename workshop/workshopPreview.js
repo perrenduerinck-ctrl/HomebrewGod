@@ -2,6 +2,7 @@ import { renderMonsterStatBlock } from "../monsters/statBlockPreview.js";
 import { createAnimationLibrary } from "../vfx/animationLibrary.js";
 import { createAnimationPlayer } from "../vfx/animationPlayer.js";
 import { createBattleMapEffectEngine } from "../vfx/effectEngine.js";
+import { getWorkshopTypeDefinition } from "./workshopTypeRegistry.js";
 
 export function createWorkshopPreview({ dialog, onImport, onRemix } = {}) {
   if (!dialog) return { open() {}, close() {}, destroy() {} };
@@ -42,6 +43,36 @@ export function createWorkshopPreview({ dialog, onImport, onRemix } = {}) {
     cleanupAnimation = () => { player.destroy(); engine.destroy(); };
   }
 
+  function cardPreview(asset, container) {
+    const article = document.createElement("article");
+    article.className = "workshop-content-card-preview";
+    const description = document.createElement("p");
+    description.textContent = asset.description || asset.content?.description || "No description yet.";
+    const details = document.createElement("dl");
+    const entries = Object.entries(asset.typeMetadata || {}).filter(([, value]) => value !== "" && value != null && value !== false).slice(0, 12);
+    for (const [key, rawValue] of entries) {
+      const term = document.createElement("dt");
+      term.textContent = key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
+      const value = document.createElement("dd");
+      value.textContent = Array.isArray(rawValue) ? rawValue.join(", ") : String(rawValue);
+      details.append(term, value);
+    }
+    article.append(description, details);
+    container.append(article);
+  }
+
+  function imagePreview(asset, container) {
+    const source = asset.content?.imageUrl || asset.content?.url || asset.thumbnailUrl || "";
+    if (/^https:\/\//i.test(source)) {
+      const image = document.createElement("img");
+      image.className = "workshop-map-preview";
+      image.src = source;
+      image.alt = `${asset.name} preview`;
+      image.loading = "lazy";
+      container.append(image);
+    } else cardPreview(asset, container);
+  }
+
   function open(asset) {
     cleanupAnimation(); cleanupAnimation = () => {}; current = asset;
     field("title").textContent = asset.name;
@@ -49,8 +80,12 @@ export function createWorkshopPreview({ dialog, onImport, onRemix } = {}) {
     field("status").textContent = "Preview only. Nothing has been imported.";
     const container = field("content");
     container.replaceChildren();
-    if (asset.assetType === "monster") renderMonsterStatBlock(container, asset.content);
-    else if (asset.assetType === "animation") animationPreview(asset, container);
+    const type = getWorkshopTypeDefinition(asset.assetType);
+    container.dataset.workshopPreviewKind = type.preview;
+    if (type.preview === "monster") renderMonsterStatBlock(container, asset.content);
+    else if (type.preview === "animation") animationPreview(asset, container);
+    else if (type.preview === "image") imagePreview(asset, container);
+    else if (type.preview === "card") cardPreview(asset, container);
     else {
       const pre = document.createElement("pre");
       pre.className = "workshop-structured-preview";

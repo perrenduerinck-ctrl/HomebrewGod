@@ -52,6 +52,36 @@ test(
   }
 );
 
+test(
+  "deployed Library, Monster Creator, Animation Creator and summon modules load without import errors",
+  async ({ page }) => {
+    const importErrors = [];
+    page.on("pageerror", (error) => importErrors.push(error.message));
+    await page.goto("?smokeTest=1&release=unified-library", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 60000 });
+    const modules = await page.evaluate(async () => {
+      const paths = [
+        "workshop/index.js",
+        "monsters/creator.js",
+        "vfx/animationWorkspace.js",
+        "vfx/summonAutomation.js",
+        "vfx/summonAutomationPanel.js"
+      ];
+      return Promise.all(paths.map(async (path) => ({
+        path,
+        exports: Object.keys(await import(new URL(path, document.baseURI).href))
+      })));
+    });
+    expect(modules.every((entry) => entry.exports.length > 0)).toBe(true);
+    await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
+    expect((await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("workshop"))).visible).toBe(true);
+    expect((await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("monsterCreator"))).visible).toBe(true);
+    await page.evaluate(() => document.getElementById("animationCreatorButton")?.click());
+    await expect(page.getByRole("dialog", { name: "Animation Creator" })).toBeVisible();
+    expect(importErrors).toEqual([]);
+  }
+);
+
 const deployedSelfTests = [
   {
     name:

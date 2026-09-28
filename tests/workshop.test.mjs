@@ -6,6 +6,10 @@ import { createWorkshopPersistence } from "../workshop/workshopPersistence.js";
 import { prepareWorkshopCopy } from "../workshop/workshopImport.js";
 import { matchesWorkshopAsset, normalizeWorkshopAsset, sortWorkshopAssets, workshopSourceKey } from "../workshop/workshopModel.js";
 import { compareWorkshopVersions } from "../workshop/workshopVersioning.js";
+import { filterWorkshopAssets } from "../workshop/workshopFilters.js";
+import { createWorkshopRecentStore, applyWorkshopRecent } from "../workshop/workshopRecent.js";
+import { WORKSHOP_ASSET_TYPES, createWorkshopTypeRegistry, getWorkshopTypeDefinition, matchesWorkshopType } from "../workshop/workshopTypeRegistry.js";
+import { createWorkshopCardModel } from "../workshop/workshopBrowser.js";
 
 function memoryFirestore() {
   const records = new Map();
@@ -143,10 +147,10 @@ test("remix, favorites, and mixed collections preserve references and ownership"
   assert.equal((await persistence.listCollections()).length, 0);
 });
 
-test("search, filtering, sorting, and 1000-summary stress stay bounded", () => {
+test("search, filtering, sorting, and 5000-summary stress stay bounded", () => {
   const context = { authorUid: "stress-author", authorName: "Stress Author", roomCode: "ROOM-1" };
   const start = performance.now();
-  const assets = Array.from({ length: 1000 }, (_, index) => normalizeWorkshopAsset({
+  const assets = Array.from({ length: 5000 }, (_, index) => normalizeWorkshopAsset({
     assetId: `asset_${index}`,
     assetType: index % 2 ? "monster" : "animation",
     name: `Creation ${String(index).padStart(4, "0")}`,
@@ -154,9 +158,61 @@ test("search, filtering, sorting, and 1000-summary stress stay bounded", () => {
     visibility: "ROOM", roomCode: "ROOM-1", tags: index % 10 === 0 ? ["undead"] : ["general"], content: { index }
   }, context)).map((asset, index) => ({ ...asset, updatedAtMillis: index }));
   const matches = sortWorkshopAssets(assets.filter((asset) => matchesWorkshopAsset(asset, { search: "vampire", assetType: "animation", tag: "undead" })), "updated");
-  assert.equal(matches.length, 100);
+  assert.equal(matches.length, 500);
   assert.ok(matches[0].updatedAtMillis > matches.at(-1).updatedAtMillis);
-  assert.ok(performance.now() - start < 500, "1000 summaries should filter without rendering full payloads");
+  assert.ok(performance.now() - start < 1500, "5000 summaries should filter without rendering full payloads");
+});
+
+test("the unified registry supports current and future reusable content without one schema", () => {
+  for (const type of ["monster", "magic-item", "weapon", "armor", "spell", "animation", "npc", "map", "encounter", "summon", "feat", "class", "subclass", "background", "species", "condition", "effect", "other"]) {
+    assert.ok(WORKSHOP_ASSET_TYPES.includes(type), type);
+    assert.equal(getWorkshopTypeDefinition(type).id, type);
+  }
+  assert.equal(matchesWorkshopType("weapon", "item"), true);
+  assert.equal(matchesWorkshopType("armor", "item"), true);
+  assert.equal(matchesWorkshopType("spell", "item"), false);
+  const monsterAsset = normalizeWorkshopAsset({ assetId: "library_monster", assetType: "monster", name: "Skeleton King", description: "Undead ruler", tags: ["boss", "necrotic"], visibility: "ROOM", content: { cr: "9", size: "Large", type: "Undead" } }, { authorUid: "author", authorName: "Aster", roomCode: "ROOM-1" });
+  assert.deepEqual(monsterAsset.typeMetadata, { cr: "9", size: "Large", creatureType: "Undead" });
+  const card = createWorkshopCardModel(monsterAsset);
+  assert.match(card.typeSummary, /CR 9/);
+  assert.ok(card.quickActions.some((entry) => entry.id === "create-token"));
+  assert.equal(createWorkshopTypeRegistry([{ id: "vehicle", label: "Vehicles", singular: "Vehicle", icon: "⛵", preview: "card" }]).get("vehicle").label, "Vehicles");
+});
+
+test("combined unified search, type, tags, collection and type-specific filters narrow results", () => {
+  const base = { authorUid: "author", authorName: "Aster", roomCode: "ROOM-1" };
+  const monsterAsset = { ...normalizeWorkshopAsset({ assetId: "skeleton_king", assetType: "monster", name: "Skeleton King", description: "Undead necrotic boss", tags: ["boss", "necrotic"], visibility: "ROOM", content: { cr: "9", size: "Large", type: "Undead" } }, base), collectionIds: ["undead_dungeon"], collectionNames: ["Undead Dungeon"] };
+  const animationAsset = { ...normalizeWorkshopAsset({ assetId: "soul_portal", assetType: "animation", name: "Soul Portal", description: "Undead gateway", tags: ["necrotic"], visibility: "ROOM", content: { family: "magic", style: "portal" } }, base), collectionIds: ["undead_dungeon"], collectionNames: ["Undead Dungeon"] };
+  const result = filterWorkshopAssets([monsterAsset, animationAsset], { search: "undead aster", assetType: "monster", tags: "boss, necrotic", collectionId: "undead_dungeon", cr: "9", creatureType: "undead", currentUserId: "author" });
+  assert.deepEqual(result.map((entry) => entry.assetId), ["skeleton_king"]);
+  assert.equal(filterWorkshopAssets([monsterAsset, animationAsset], { search: "Undead Dungeon" }).length, 2);
+});
+
+test("recently used records stay lightweight and account-scoped", () => {
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) || null, setItem: (key, entry) => values.set(key, entry) };
+  let uid = "user-a";
+  const recent = createWorkshopRecentStore({ storage, getUserId: () => uid, limit: 3 });
+  recent.record({ assetId: "monster-1", assetType: "monster", content: { huge: "not stored" } }, "create-token");
+  assert.equal(recent.list()[0].assetId, "monster-1");
+  assert.equal("content" in recent.list()[0], false);
+  assert.equal(applyWorkshopRecent([{ assetId: "monster-1" }], recent.list())[0].recentlyUsed, true);
+  uid = "user-b";
+  assert.deepEqual(recent.list(), []);
+});
+
+test("My Library combines owned creations and independent imported summaries", async () => {
+  const { persistence, state } = setup();
+  const original = await persistence.publish({ assetType: "monster", name: monster.name, visibility: "ROOM", content: monster });
+  state.uid = "member-2"; state.name = "Bryn";
+  await persistence.recordImport(original, "local-copy-1");
+  const owned = await persistence.publish({ assetType: "spell", name: "Grave Burst", visibility: "PRIVATE", content: { level: 3, school: "Necromancy" } });
+  let library = await persistence.listAssets({ scope: "library" });
+  assert.deepEqual(new Set(library.entries.map((entry) => entry.assetId)), new Set([original.assetId, owned.assetId]));
+  assert.equal(library.entries.find((entry) => entry.assetId === original.assetId).localRecordId, "local-copy-1");
+  state.uid = "author-1"; await persistence.deleteAsset(original.assetId); state.uid = "member-2";
+  library = await persistence.listAssets({ scope: "library" });
+  assert.equal(library.entries.some((entry) => entry.assetId === original.assetId), true, "saved summary survives source deletion");
 });
 
 test("sanitization rejects unsafe URLs, oversized payloads, and client author spoofing", () => {

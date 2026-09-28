@@ -124,25 +124,35 @@ export function createWorkshopPersistence(options = {}) {
 
   async function listAssets({ scope = "browse", pageSize = WORKSHOP_PAGE_SIZE, cursors = {} } = {}) {
     const actor = requireUser();
-    if (scope === "saved") {
+    if (["saved", "library"].includes(scope)) {
       const imports = await listPersonal("workshopImports");
-      return { entries: sortWorkshopAssets(imports.map((entry) => ({
+      const importOffset = Math.max(0, Math.trunc(Number(cursors.importOffset) || 0));
+      const importPage = imports.slice(importOffset, importOffset + pageSize);
+      const importedEntries = importPage.map((entry) => ({
         ...entry.summary,
         imported: true,
         localRecordId: entry.localRecordId,
         sourceWorkshopVersion: entry.sourceWorkshopVersion || entry.summary?.version || 1
-      }))), cursors: {}, hasMore: false };
+      }));
+      const importsHaveMore = importOffset + importPage.length < imports.length;
+      if (scope === "saved") return { entries: sortWorkshopAssets(importedEntries), cursors: { importOffset: importOffset + importPage.length }, hasMore: importsHaveMore };
+      const owned = await runSummaryQuery([where("authorUid", "==", actor.uid)], pageSize, cursors.my);
+      const merged = new Map(owned.entries.map((entry) => [entry.assetId, entry]));
+      importedEntries.forEach((entry) => merged.set(entry.assetId, entry));
+      return { entries: sortWorkshopAssets([...merged.values()]), cursors: { my: owned.cursor, importOffset: importOffset + importPage.length }, hasMore: owned.hasMore || importsHaveMore };
     }
     if (scope === "favorites") {
       const favorites = await listPersonal("workshopFavorites");
+      const favoriteOffset = Math.max(0, Math.trunc(Number(cursors.favoriteOffset) || 0));
+      const favoritePage = favorites.slice(favoriteOffset, favoriteOffset + pageSize);
       const resolved = [];
-      for (const favorite of favorites.slice(0, 200)) {
+      for (const favorite of favoritePage) {
         try {
           const summary = await getSummary(favorite.assetId || favorite.id);
           if (summary && canAccessWorkshopAsset(summary, actor)) resolved.push({ ...summary, favorite: true });
         } catch { /* Inaccessible favorites disappear without exposing metadata. */ }
       }
-      return { entries: sortWorkshopAssets(resolved), cursors: {}, hasMore: false };
+      return { entries: sortWorkshopAssets(resolved), cursors: { favoriteOffset: favoriteOffset + favoritePage.length }, hasMore: favoriteOffset + favoritePage.length < favorites.length };
     }
     if (scope === "friends") return { entries: [], cursors: {}, hasMore: false };
 
@@ -162,6 +172,20 @@ export function createWorkshopPersistence(options = {}) {
       hasMore ||= result.hasMore;
     }
     return { entries: sortWorkshopAssets([...unique.values()]), cursors: nextCursors, hasMore };
+  }
+
+  async function listLibraryState() {
+    const actor = requireUser();
+    const [favorites, imports, collections] = await Promise.all([
+      listPersonal("workshopFavorites"),
+      listPersonal("workshopImports"),
+      listCollections()
+    ]);
+    return {
+      favoriteIds: new Set(favorites.map((entry) => entry.assetId || entry.id)),
+      imports: new Map(imports.map((entry) => [entry.assetId || entry.id, entry])),
+      collections
+    };
   }
 
   async function findOwnedSource(sourceKey) {
@@ -293,6 +317,6 @@ export function createWorkshopPersistence(options = {}) {
   return Object.freeze({
     publish, loadAsset, listAssets, findOwnedSource, deleteAsset, removeFromRoom, remix,
     toggleFavorite, recordImport, listCollections, listCollectionAssets, saveCollection,
-    setCollectionAsset, deleteCollection, getSummary
+    setCollectionAsset, deleteCollection, getSummary, listLibraryState
   });
 }

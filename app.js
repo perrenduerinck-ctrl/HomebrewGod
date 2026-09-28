@@ -8694,6 +8694,55 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
   return { assetType: copy.assetType, recordId };
 }
 
+async function loadImportedWorkshopAsset(asset) {
+  if (!currentUser || !asset?.localRecordId) {
+    throw new Error("That independent library copy is unavailable.");
+  }
+  if (asset.assetType === "monster") {
+    if (!currentRoomCode) throw new Error("Open the room that owns this monster copy.");
+    const snapshot = await getDoc(doc(db, "rooms", currentRoomCode, "monsters", asset.localRecordId));
+    if (!snapshot.exists()) throw new Error("That independent monster copy is unavailable in this room.");
+    return { ...asset, content: { ...snapshot.data(), id: snapshot.id } };
+  }
+  if (asset.assetType === "animation") {
+    let definition = animationDocumentSession.library.getAnimation(asset.localRecordId);
+    if (!definition) {
+      await animationDocumentSession.persistence?.load?.({ force: true });
+      definition = animationDocumentSession.library.getAnimation(asset.localRecordId);
+    }
+    if (!definition) throw new Error("That independent animation copy is unavailable.");
+    return { ...asset, content: JSON.parse(JSON.stringify(definition)) };
+  }
+  const snapshot = await getDoc(doc(db, "users", currentUser.uid, "workshopLibrary", asset.localRecordId));
+  if (!snapshot.exists()) throw new Error("That independent library copy is unavailable.");
+  return { ...asset, content: { ...snapshot.data(), id: snapshot.id } };
+}
+
+async function useWorkshopAsset({ actionId, asset, localRecordId }) {
+  const content = { ...(asset?.content || {}), id: localRecordId || asset?.content?.id };
+  if (actionId === "create-token" && asset?.assetType === "monster") {
+    if (!tokenSystem?.createMonsterLinkedToken) throw new Error("The token system is not ready.");
+    const token = await tokenSystem.createMonsterLinkedToken(content);
+    navigateMainScreen("battle");
+    return { message: `${content.name || asset.name} token created on the active map.`, token };
+  }
+  if (actionId === "edit-copy" && asset?.assetType === "monster") {
+    navigateMainScreen("monsterCreator");
+    return { message: "Independent monster copy opened in Monster Creator." };
+  }
+  if (["edit-copy", "assign-animation"].includes(actionId) && asset?.assetType === "animation") {
+    E.animationLibraryButton?.click();
+    return { message: actionId === "assign-animation" ? "Animation Library opened for assignment." : "Independent animation copy opened in the Animation Library." };
+  }
+  if (actionId === "add-to-character") {
+    navigateMainScreen("characterCreator");
+    document.dispatchEvent(new CustomEvent("homebrewgod:library-use", { detail: { actionId, asset, localRecordId } }));
+    return { message: `${asset.name} is ready in Character Creator.` };
+  }
+  document.dispatchEvent(new CustomEvent("homebrewgod:library-use", { detail: { actionId, asset, localRecordId } }));
+  return { message: `${asset.name} is ready to use.` };
+}
+
 async function initWorkshopSystem() {
   if (workshopSystem) return workshopSystem;
   workshopPersistence = createWorkshopPersistence({
@@ -8702,13 +8751,15 @@ async function initWorkshopSystem() {
     getUserId: () => currentUser?.uid || "",
     getUserName: () => currentUser?.displayName || currentRoomData?.dmName || "Homebrew God Creator",
     getRoomCode: () => currentRoomCode || "",
-    publicBrowse: false
+    publicBrowse: true
   });
   workshopSystem = createWorkshop({
     screen: E.workshopScreen,
     persistence: workshopPersistence,
     importAsset: (asset) => importWorkshopAsset(asset),
     updateImportedAsset: (asset, recordId) => importWorkshopAsset(asset, recordId),
+    loadImportedAsset: loadImportedWorkshopAsset,
+    onQuickAction: useWorkshopAsset,
     getCurrentUserId: () => currentUser?.uid || "",
     getCurrentRoomCode: () => currentRoomCode || "",
     getCurrentIsDM: () => currentIsDM === true,

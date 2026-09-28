@@ -86,7 +86,12 @@ test("runtime areas, data, assets, tests, and documentation have explicit homes"
     "vfx/fireEffects.js",
     "vfx/particles.js",
     "vfx/persistentEffects.js",
-    "vfx/spriteAnimator.js"
+    "vfx/spriteAnimator.js",
+    "workshop/index.js",
+    "workshop/workshopFilters.js",
+    "workshop/workshopRecent.js",
+    "workshop/workshopSearch.js",
+    "workshop/workshopTypeRegistry.js"
   ].forEach((relativePath) => {
     assert.equal(
       fs.existsSync(path.join(root, relativePath)),

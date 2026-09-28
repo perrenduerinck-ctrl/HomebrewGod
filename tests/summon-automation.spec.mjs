@@ -4,6 +4,9 @@ test("summon automation exposes and saves every requested control", async ({ pag
   await page.goto("/tests/browser-pages/summon-automation-self-test.html");
   const root = page.locator("[data-combat-summon-settings]");
   await expect(root.getByText("Summoned Token", { exact: true })).toBeVisible();
+  await page.evaluate(() => document.addEventListener("homebrewgod:workshop-browse", (event) => { window.__libraryRequest = event.detail; }, { once: true }));
+  await root.getByRole("button", { name: "Browse Library Monsters" }).click();
+  expect(await page.evaluate(() => window.__libraryRequest)).toEqual({ assetType: "monster", tab: "library" });
   await root.locator("[data-summon-source-type]").selectOption("monster");
   await root.locator("[data-summon-source-id]").selectOption("wolf");
   await root.locator("[data-summon-location]").selectOption("around-target");
