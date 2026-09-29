@@ -5,7 +5,7 @@ import {
   normalizeWorkshopAsset,
   sortWorkshopAssets
 } from "./workshopModel.js";
-import { normalizeWorkshopCollection, updateCollectionAssets } from "./workshopCollections.js";
+import { collectionEntryIds, normalizeWorkshopCollection, updateCollectionAssets, updateCollectionEntries } from "./workshopCollections.js";
 import { nextWorkshopVersion } from "./workshopVersioning.js";
 
 const dataOf = (snapshot) => typeof snapshot?.data === "function" ? snapshot.data() || {} : snapshot?.data || {};
@@ -122,6 +122,19 @@ export function createWorkshopPersistence(options = {}) {
     return docsOf(snapshot).map((entry) => ({ ...dataOf(entry), id: entry.id }));
   }
 
+  async function listOwnedSummaries() {
+    const actor = requireUser();
+    const entries = [];
+    let cursor = null;
+    for (let page = 0; page < 100; page += 1) {
+      const result = await runSummaryQuery([where("authorUid", "==", actor.uid)], 100, cursor);
+      entries.push(...result.entries);
+      if (!result.hasMore || !result.cursor) break;
+      cursor = result.cursor;
+    }
+    return sortWorkshopAssets(entries);
+  }
+
   async function listAssets({ scope = "browse", pageSize = WORKSHOP_PAGE_SIZE, cursors = {} } = {}) {
     const actor = requireUser();
     if (["saved", "library"].includes(scope)) {
@@ -188,12 +201,14 @@ export function createWorkshopPersistence(options = {}) {
     };
   }
 
-  async function findOwnedSource(sourceKey) {
+  async function findOwnedSource(sourceKey, { assetType = "", sourceRecordId = "" } = {}) {
     const actor = requireUser();
     let cursor = null;
     for (let page = 0; page < 10; page += 1) {
       const result = await runSummaryQuery([where("authorUid", "==", actor.uid)], 100, cursor);
-      const match = result.entries.find((entry) => entry.sourceKey === sourceKey);
+      const match = result.entries.find((entry) => entry.sourceKey === sourceKey || (
+        sourceRecordId && entry.sourceRecordId === sourceRecordId && (!assetType || entry.assetType === assetType)
+      ));
       if (match) return match;
       if (!result.hasMore || !result.cursor) break;
       cursor = result.cursor;
@@ -278,8 +293,9 @@ export function createWorkshopPersistence(options = {}) {
     const actor = requireUser();
     const collectionRecord = normalizeWorkshopCollection(input, actor.uid);
     const assets = [];
-    for (let index = 0; index < collectionRecord.assetIds.length; index += 20) {
-      const batch = collectionRecord.assetIds.slice(index, index + 20);
+    const legacyAssetIds = collectionEntryIds(collectionRecord).filter((entry) => !entry.includes(":"));
+    for (let index = 0; index < legacyAssetIds.length; index += 20) {
+      const batch = legacyAssetIds.slice(index, index + 20);
       const summaries = await Promise.all(batch.map(async (assetId) => {
         try { return await getSummary(assetId); }
         catch { return null; }
@@ -308,6 +324,10 @@ export function createWorkshopPersistence(options = {}) {
     return saveCollection(updateCollectionAssets(input, assetId, included));
   }
 
+  async function setCollectionEntry(input, libraryId, included) {
+    return saveCollection(updateCollectionEntries(input, libraryId, included));
+  }
+
   async function deleteCollection(collectionId) {
     const actor = requireUser();
     await deleteDoc(doc(db, "users", actor.uid, "workshopCollections", String(collectionId)));
@@ -317,6 +337,7 @@ export function createWorkshopPersistence(options = {}) {
   return Object.freeze({
     publish, loadAsset, listAssets, findOwnedSource, deleteAsset, removeFromRoom, remix,
     toggleFavorite, recordImport, listCollections, listCollectionAssets, saveCollection,
-    setCollectionAsset, deleteCollection, getSummary, listLibraryState
+    setCollectionAsset, setCollectionEntry, deleteCollection, getSummary, listLibraryState,
+    listOwnedSummaries
   });
 }

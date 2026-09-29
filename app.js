@@ -165,6 +165,10 @@ import { createToolDrawer } from "./ui/navigation/toolDrawer.js?v=foundation-mil
 import { createWorkshop } from "./workshop/index.js";
 import { createWorkshopPersistence } from "./workshop/workshopPersistence.js";
 import { prepareWorkshopCopy } from "./workshop/workshopImport.js";
+import { createLibraryAggregator } from "./library/libraryAggregator.js";
+import { createMonsterLibraryAdapter } from "./library/adapters/monsterLibraryAdapter.js";
+import { createAnimationLibraryAdapter } from "./library/adapters/animationLibraryAdapter.js";
+import { createMapLibraryAdapter } from "./library/adapters/mapLibraryAdapter.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -528,6 +532,7 @@ let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
 let workshopSystem = null;
 let workshopPersistence = null;
+let libraryAggregator = null;
 let characterCreatorModulePromise = null;
 let monsterCreatorModulePromise = null;
 
@@ -8682,6 +8687,27 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
     return { assetType: "animation", recordId: animationId };
   }
 
+  if (copy.assetType === "map") {
+    if (!currentRoomCode || !currentIsDM) {
+      throw new Error("Only the room DM can add Workshop maps to this room library.");
+    }
+    const mapId = replaceRecordId || copy.recordId;
+    const reference = doc(db, "rooms", currentRoomCode, "maps", mapId);
+    const previous = replaceRecordId ? await getDoc(reference) : null;
+    const previousData = previous?.exists?.() ? previous.data() : {};
+    await setDoc(reference, {
+      ...copy.content,
+      ...provenance,
+      id: mapId,
+      ownerUid: currentRoomData?.dmUid || currentUser.uid,
+      ownerName: currentRoomData?.dmName || currentUser.displayName || "Unnamed DM",
+      createdAt: previousData.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      updatedAtMillis: Date.now()
+    });
+    return { assetType: "map", recordId: mapId };
+  }
+
   const recordId = replaceRecordId || copy.recordId;
   await setDoc(doc(db, "users", currentUser.uid, "workshopLibrary", recordId), {
     ...copy.content,
@@ -8713,6 +8739,12 @@ async function loadImportedWorkshopAsset(asset) {
     if (!definition) throw new Error("That independent animation copy is unavailable.");
     return { ...asset, content: JSON.parse(JSON.stringify(definition)) };
   }
+  if (asset.assetType === "map") {
+    if (!currentRoomCode) throw new Error("Open the room that owns this map copy.");
+    const snapshot = await getDoc(doc(db, "rooms", currentRoomCode, "maps", asset.localRecordId));
+    if (!snapshot.exists()) throw new Error("That independent map copy is unavailable in this room.");
+    return { ...asset, content: { ...snapshot.data(), id: snapshot.id } };
+  }
   const snapshot = await getDoc(doc(db, "users", currentUser.uid, "workshopLibrary", asset.localRecordId));
   if (!snapshot.exists()) throw new Error("That independent library copy is unavailable.");
   return { ...asset, content: { ...snapshot.data(), id: snapshot.id } };
@@ -8734,6 +8766,22 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
     E.animationLibraryButton?.click();
     return { message: actionId === "assign-animation" ? "Animation Library opened for assignment." : "Independent animation copy opened in the Animation Library." };
   }
+  if (actionId === "use-map" && asset?.assetType === "map") {
+    if (!currentRoomCode || !currentIsDM) throw new Error("Open a room as its DM before using this map.");
+    const map = {
+      id: localRecordId || content.id || asset.sourceRecordId,
+      name: content.name || asset.name || "Unnamed Map",
+      url: content.url || content.imageUrl,
+      publicId: content.publicId || null,
+      deleteToken: content.deleteToken || null,
+      deleteTokenCreatedAtMillis: content.deleteTokenCreatedAtMillis || null,
+      savedToLibrary: true
+    };
+    await setCurrentRoomMap(map);
+    showSharedMap(map);
+    navigateMainScreen("battle");
+    return { message: `${map.name} is now on the battle map.` };
+  }
   if (actionId === "add-to-character") {
     navigateMainScreen("characterCreator");
     document.dispatchEvent(new CustomEvent("homebrewgod:library-use", { detail: { actionId, asset, localRecordId } }));
@@ -8753,9 +8801,27 @@ async function initWorkshopSystem() {
     getRoomCode: () => currentRoomCode || "",
     publicBrowse: true
   });
+  const adapterConfig = {
+    db, collection, doc, getDoc, getDocs,
+    getUserId: () => currentUser?.uid || "",
+    getUserName: () => currentUser?.displayName || currentRoomData?.dmName || "Homebrew God Creator",
+    getRoomCode: () => currentRoomCode || "",
+    getIsDM: () => currentIsDM === true
+  };
+  libraryAggregator = createLibraryAggregator({
+    adapters: [
+      createMonsterLibraryAdapter(adapterConfig),
+      createAnimationLibraryAdapter(adapterConfig),
+      createMapLibraryAdapter(adapterConfig)
+    ],
+    persistence: workshopPersistence,
+    loadImportedRecord: loadImportedWorkshopAsset,
+    getUserId: () => currentUser?.uid || ""
+  });
   workshopSystem = createWorkshop({
     screen: E.workshopScreen,
     persistence: workshopPersistence,
+    libraryAggregator,
     importAsset: (asset) => importWorkshopAsset(asset),
     updateImportedAsset: (asset, recordId) => importWorkshopAsset(asset, recordId),
     loadImportedAsset: loadImportedWorkshopAsset,

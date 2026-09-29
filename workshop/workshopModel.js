@@ -99,6 +99,7 @@ export function normalizeWorkshopAsset(input = {}, context = {}) {
     version,
     forkedFrom: input.forkedFrom ? safeId(input.forkedFrom, "Fork source") : null,
     sourceKey: text(input.sourceKey, 240),
+    sourceType: text(input.sourceType || assetType, 80),
     sourceRecordId: text(input.sourceRecordId, 160),
     typeMetadata: createWorkshopTypeMetadata(assetType, input.content, input.typeMetadata),
     collectionIds: Array.isArray(input.collectionIds)
@@ -143,5 +144,5 @@ export function sortWorkshopAssets(assets, sort = "updated") {
 }
 
 export function workshopSourceKey(assetType, sourceRecordId, scope = "") {
-  return [assetType, scope, text(sourceRecordId, 160)].filter(Boolean).join(":");
+  return [assetType, text(sourceRecordId, 160)].filter(Boolean).join(":");
 }

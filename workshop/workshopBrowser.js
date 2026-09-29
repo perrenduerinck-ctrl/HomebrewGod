@@ -22,6 +22,11 @@ export function createWorkshopCardModel(asset = {}) {
           ? "Friends / Group"
           : "Private";
   const updated = Number(asset.updatedAtMillis) || 0;
+  const badges = [type.singular];
+  if (asset.publishedAssetId) badges.push("Published");
+  else if (asset.importedFromWorkshop || asset.imported) badges.push("Imported");
+  else if (asset.libraryRecord && asset.visibility === "ROOM") badges.push("Room");
+  else if (asset.libraryRecord) badges.push("Private");
   return Object.freeze({
     asset,
     assetId: asset.assetId,
@@ -35,6 +40,7 @@ export function createWorkshopCardModel(asset = {}) {
     tags: [...(Array.isArray(asset.tags) ? asset.tags : [])],
     favorite: asset.favorite === true,
     source,
+    badges,
     updatedLabel: updated ? new Date(updated).toLocaleDateString() : "",
     typeSummary: getWorkshopCardTypeSummary(asset),
     quickActions: [...type.quickActions]
@@ -67,9 +73,12 @@ export function renderWorkshopCards(container, assets, handlers = {}) {
       thumb.append(image);
     } else thumb.append(element(document, "span", "", model.icon));
     const body = element(document, "div", "workshop-card-body");
+    const badges = element(document, "div", "workshop-card-badges");
+    for (const badge of model.badges) badges.append(element(document, "span", "workshop-card-badge", badge));
     body.append(
+      badges,
       element(document, "h3", "", model.name),
-      element(document, "p", "workshop-card-meta", `${model.typeLabel} · ${model.author} · ${model.source} · v${asset.version || 1}${asset.saveCount ? ` · ${asset.saveCount} saved` : ""}`),
+      element(document, "p", "workshop-card-meta", `${model.author} · ${model.source}${asset.libraryRecord ? "" : ` · v${asset.version || 1}`}${asset.saveCount ? ` · ${asset.saveCount} saved` : ""}`),
       element(document, "p", "workshop-card-type-summary", model.typeSummary),
       element(document, "p", "workshop-card-description", model.description),
       element(document, "p", "workshop-card-tags", model.tags.map((tag) => `#${tag}`).join(" ")),
@@ -93,13 +102,14 @@ export function renderWorkshopCards(container, assets, handlers = {}) {
       addButton("Keep My Version", "keepVersion");
       addButton("Update My Copy", "updateCopy");
     }
-    if (!asset.imported) addButton("Add to My Library", "importAsset");
-    if (!asset.imported) addButton(asset.favorite ? "★ Favorited" : "☆ Favorite", "favorite");
-    if (!asset.imported) addButton("Collection", "collection");
+    if (!asset.imported && !asset.libraryRecord) addButton("Add to My Library", "importAsset");
+    if (!asset.imported && !asset.libraryRecord) addButton(asset.favorite ? "★ Favorited" : "☆ Favorite", "favorite");
+    if (asset.libraryRecord || asset.imported || asset.authorUid === handlers.currentUserId) addButton("Add to Collections", "collection");
+    if (asset.libraryRecord && asset.nativeRecord) addButton(asset.publishedAssetId ? "Update Published" : "Publish to Workshop", "publishLibrary");
     if (handlers.activeCollection) addButton("Remove from Collection", "removeFromCollection");
-    if (!asset.imported) addButton("Duplicate / Remix", "remix");
-    if (!asset.imported && handlers.canRemoveFromRoom && asset.visibility === "ROOM") addButton("Remove from Room", "removeFromRoom");
-    if (asset.authorUid === handlers.currentUserId) addButton("Delete", "deleteAsset");
+    if (!asset.imported && !asset.libraryRecord) addButton("Duplicate / Remix", "remix");
+    if (!asset.imported && !asset.libraryRecord && handlers.canRemoveFromRoom && asset.visibility === "ROOM") addButton("Remove from Room", "removeFromRoom");
+    if (!asset.libraryRecord && asset.authorUid === handlers.currentUserId) addButton("Delete", "deleteAsset");
     if (typeof handlers.quickAction === "function") {
       for (const quickAction of model.quickActions) {
         const button = element(document, "button", "workshop-card-quick-action", quickAction.label);

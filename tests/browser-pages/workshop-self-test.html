@@ -1,17 +1,34 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>body{margin:0;background:#0f0d0b;color:#eee;font-family:system-ui}.screen{min-height:100vh}button,input,select,textarea{font:inherit}</style></head><body>
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>body{margin:0;background:#0f0d0b;color:#eee;font-family:system-ui}.screen{min-height:100vh}button,input,select,textarea{font:inherit}</style></head><body>
 <main id="workshopScreen" class="screen"></main>
 <script type="module">
   import { createWorkshop } from "../../workshop/index.js";
   const assets = Array.from({length:600},(_,index)=>({assetId:`asset_${index}`,assetType:index%2?"monster":"animation",name:`Creation ${index}`,description:index%7===0?"Vampire dungeon boss":"Reusable homebrew",authorUid:"author",authorName:"Aster",visibility:"ROOM",roomCode:"ROOM-1",tags:index%7===0?["undead","boss"]:["general"],version:1,updatedAtMillis:600-index,createdAtMillis:index,saveCount:index%11,thumbnailUrl:"",typeMetadata:index%2?{cr:String(index%20),size:"Medium",creatureType:"Undead"}:{family:"magic",style:"burst"}}));
-  const collection={collectionId:"mixed_pack",name:"Undead Dungeon",ownerUid:"author",visibility:"PRIVATE",assetIds:["asset_0","asset_1"]};
+  const nativeAssets = [
+    ...Array.from({length:3},(_,index)=>({libraryId:`monster:monster_${index}`,assetId:`monster:monster_${index}`,libraryRecord:true,nativeRecord:true,sourceType:"monster",sourceRecordId:`monster_${index}`,sourceKey:`monster:monster_${index}`,assetType:"monster",name:`Native Monster ${index+1}`,description:"Owned monster",authorUid:"author",ownerUid:"author",authorName:"Aster",visibility:"ROOM",roomCode:"ROOM-1",tags:["undead"],updatedAtMillis:90-index,typeMetadata:{cr:String(index+1),size:"Medium",creatureType:"Undead"}})),
+    ...Array.from({length:4},(_,index)=>({libraryId:`animation:animation_${index}`,assetId:`animation:animation_${index}`,libraryRecord:true,nativeRecord:true,sourceType:"animation",sourceRecordId:`animation_${index}`,sourceKey:`animation:animation_${index}`,assetType:"animation",name:`Native Animation ${index+1}`,description:"Owned animation",authorUid:"author",ownerUid:"author",authorName:"Aster",visibility:"PRIVATE",tags:["magic"],updatedAtMillis:80-index,typeMetadata:{family:"magic",style:"burst"}})),
+    ...Array.from({length:2},(_,index)=>({libraryId:`map:map_${index}`,assetId:`map:map_${index}`,libraryRecord:true,nativeRecord:true,sourceType:"map",sourceRecordId:`map_${index}`,sourceKey:`map:map_${index}`,assetType:"map",name:`Native Map ${index+1}`,description:"Owned map",authorUid:"author",ownerUid:"author",authorName:"Aster",visibility:"ROOM",roomCode:"ROOM-1",tags:["dungeon"],updatedAtMillis:70-index,typeMetadata:{mapType:"Dungeon"}}))
+  ];
+  let collections=[{collectionId:"mixed_pack",name:"Undead Dungeon",description:"Mixed native content",ownerUid:"author",visibility:"PRIVATE",entries:[],assetIds:["monster:monster_0","animation:animation_0","map:map_0"]}];
+  let serial=1;
+  const clone=value=>structuredClone(value);
   const persistence = {
-    async listAssets({scope}) { const entries=scope==="friends"?[]:scope==="favorites"?assets.slice(0,2):scope==="library"?[{...assets[1],imported:true,localRecordId:"copy_1",sourceWorkshopVersion:1},assets[2]]:assets.slice(0,40); return {entries,cursors:{},hasMore:["browse","my","room"].includes(scope)}; },
-    async listLibraryState(){return{favoriteIds:new Set(["asset_0","asset_1"]),imports:new Map([["asset_1",{assetId:"asset_1",localRecordId:"copy_1",sourceWorkshopVersion:1}]]),collections:[collection]};},
+    async listAssets({scope}) { const entries=scope==="friends"?[]:scope==="favorites"?assets.slice(0,2):assets.slice(0,40); return {entries,cursors:{},hasMore:["browse","my","room"].includes(scope)}; },
+    async listLibraryState(){return{favoriteIds:new Set(["asset_0","asset_1"]),imports:new Map(),collections:clone(collections)};},
     async loadAsset(id){const asset=assets.find(entry=>entry.assetId===id);return {...asset,content:asset.assetType==="monster"?{name:asset.name,size:"Medium",type:"Undead",alignment:"Neutral",cr:asset.typeMetadata.cr,abilities:{}}:{id:asset.assetId,name:asset.name,sprite:"https://example.com/sprite.png",grid:{columns:1,rows:1},frameCount:1}};},
     async getSummary(id){return assets.find(entry=>entry.assetId===id);}, async toggleFavorite(){}, async recordImport(){}, async findOwnedSource(){return null;},
-    async listCollections(){return[collection];}, async listCollectionAssets(value){return assets.filter(entry=>value.assetIds.includes(entry.assetId));}, async saveCollection(value){return{...value,collectionId:value.collectionId||"collection_1",ownerUid:"author",assetIds:value.assetIds||[]};}, async setCollectionAsset(value,id,included=true){return{...value,assetIds:included?[...new Set([...value.assetIds,id])]:value.assetIds.filter(entry=>entry!==id)};}, async deleteCollection(){}, async remix(id,{name}){return{...(await this.loadAsset(id)),assetId:"remix_1",name};}, async deleteAsset(){}, async removeFromRoom(){}
+    async listCollections(){return clone(collections);},
+    async listCollectionAssets(value){const keys=new Set([...(value.entries||[]),...(value.assetIds||[])]);return [...nativeAssets,...assets].filter(entry=>keys.has(entry.libraryId||entry.assetId));},
+    async saveCollection(value){const saved={...value,collectionId:value.collectionId||`collection_${serial++}`,ownerUid:"author",entries:[...(value.entries||[])],assetIds:[...(value.assetIds||[])]};const index=collections.findIndex(entry=>entry.collectionId===saved.collectionId);if(index>=0)collections[index]=clone(saved);else collections.push(clone(saved));return clone(saved);},
+    async setCollectionEntry(value,id,included=true){const next={...value,entries:included?[...new Set([...(value.entries||[]),id])]:(value.entries||[]).filter(entry=>entry!==id)};return this.saveCollection(next);},
+    async setCollectionAsset(value,id,included=true){const next={...value,assetIds:included?[...new Set([...(value.assetIds||[]),id])]:(value.assetIds||[]).filter(entry=>entry!==id)};return this.saveCollection(next);},
+    async deleteCollection(id){collections=collections.filter(entry=>entry.collectionId!==id);}, async remix(id,{name}){return{...(await this.loadAsset(id)),assetId:"remix_1",name};}, async deleteAsset(){}, async removeFromRoom(){}, async publish(value){return{...value,assetId:"published_1",version:1};}
   };
-  globalThis.prompt=()=>null; globalThis.confirm=()=>false;
-  const api=createWorkshop({screen:document.getElementById("workshopScreen"),persistence,importAsset:async()=>({recordId:"copy_1"}),updateImportedAsset:async()=>({recordId:"copy_1"}),loadImportedAsset:async(asset)=>persistence.loadAsset(asset.assetId),onQuickAction:async({actionId})=>({message:`used ${actionId}`}),getCurrentUserId:()=>"author",getCurrentRoomCode:()=>"ROOM-1",getCurrentIsDM:()=>true,onNavigate:()=>{}});
-  window.workshopTest=api; setTimeout(()=>{document.body.dataset.ready="true";},50);
+  const libraryAggregator={
+    async list({scope}){return scope==="my"?nativeAssets.filter(entry=>!entry.imported):nativeAssets;},
+    async load(asset){return{...asset,content:asset.assetType==="monster"?{id:asset.sourceRecordId,name:asset.name,size:"Medium",type:"Undead",alignment:"Neutral",cr:asset.typeMetadata.cr,abilities:{}}:asset.assetType==="animation"?{id:asset.sourceRecordId,name:asset.name,sprite:"https://example.com/sprite.png",grid:{columns:1,rows:1},frameCount:1}:{id:asset.sourceRecordId,name:asset.name,url:"https://example.com/map.png"}};}
+  };
+  globalThis.prompt=()=>{throw new Error("prompt must not be used")}; globalThis.confirm=()=>true;
+  const api=createWorkshop({screen:document.getElementById("workshopScreen"),persistence,libraryAggregator,importAsset:async()=>({recordId:"copy_1"}),updateImportedAsset:async()=>({recordId:"copy_1"}),loadImportedAsset:async(asset)=>persistence.loadAsset(asset.assetId),onQuickAction:async({actionId})=>({message:`used ${actionId}`}),getCurrentUserId:()=>"author",getCurrentRoomCode:()=>"ROOM-1",getCurrentIsDM:()=>true,onNavigate:()=>{}});
+  window.workshopTest=api; window.workshopCollections=()=>clone(collections); setTimeout(()=>{document.body.dataset.ready="true";},50);
 </script></body></html>

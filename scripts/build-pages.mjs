@@ -110,6 +110,7 @@ for (
     "characterSheet",
     "combat",
     "data",
+    "library",
     "monsters",
     "shared",
     "tokens",

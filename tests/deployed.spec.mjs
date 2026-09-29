@@ -62,6 +62,10 @@ test(
     const modules = await page.evaluate(async () => {
       const paths = [
         "workshop/index.js",
+        "library/libraryAggregator.js",
+        "library/adapters/monsterLibraryAdapter.js",
+        "library/adapters/animationLibraryAdapter.js",
+        "library/adapters/mapLibraryAdapter.js",
         "monsters/creator.js",
         "vfx/animationWorkspace.js",
         "vfx/summonAutomation.js",

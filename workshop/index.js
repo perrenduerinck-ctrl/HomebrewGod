@@ -14,12 +14,13 @@ import {
 const tabs = Object.freeze([
   ["browse", "Browse"], ["library", "My Library"], ["my", "My Creations"],
   ["room", "Room"], ["favorites", "Favorites"], ["collections", "Collections"],
-  ["friends", "Friends / Group"]
+  ["friends", "Friends / Group — Coming Soon", true]
 ]);
 
 export function createWorkshop({
   screen,
   persistence,
+  libraryAggregator = null,
   importAsset,
   updateImportedAsset,
   loadImportedAsset,
@@ -34,7 +35,7 @@ export function createWorkshop({
   ensureWorkshopStyles(document);
   screen.innerHTML = `<div class="workshop-shell">
     <header class="workshop-header"><div><span class="workshop-eyebrow">HOME BREW LIBRARY</span><h1>Homebrew Workshop</h1><p>One library for reusable monsters, items, spells, animations, maps, encounters, and future homebrew.</p></div><button type="button" data-workshop-back>Back to Battle</button></header>
-    <nav class="workshop-tabs" aria-label="Workshop sections">${tabs.map(([id, label]) => `<button type="button" data-workshop-tab="${id}" aria-selected="false">${label}</button>`).join("")}</nav>
+    <nav class="workshop-tabs" aria-label="Workshop sections">${tabs.map(([id, label, disabled]) => `<button type="button" data-workshop-tab="${id}" aria-selected="false" ${disabled ? "disabled aria-disabled=\"true\"" : ""}>${label}</button>`).join("")}</nav>
     <section class="workshop-toolbar" data-workshop-toolbar>
       <label>Search<input type="search" data-workshop-search placeholder="Name, description, tags, author"></label>
       <label>Content Type<select data-workshop-type><option value="">All</option>${WORKSHOP_TYPE_FILTERS.map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select></label>
@@ -64,6 +65,25 @@ export function createWorkshop({
       <div class="workshop-publish-actions"><button type="submit" data-workshop-publish-mode="publish">Publish</button><button type="button" data-workshop-publish-mode="update">Update Published Version</button><button type="button" data-workshop-publish-mode="new-version">Create New Version</button><button type="button" data-workshop-publish-mode="unchanged">Leave Published Version Unchanged</button></div>
       <p data-workshop-publish-status role="status"></p>
     </form>
+  </dialog>
+  <dialog class="workshop-dialog workshop-collection-dialog" data-workshop-collection-dialog>
+    <div class="workshop-dialog-heading"><div><span class="workshop-eyebrow">COLLECTION</span><h2 data-workshop-collection-dialog-title>New Collection</h2></div><button type="button" data-workshop-collection-cancel>Close</button></div>
+    <form class="workshop-collection-form" data-workshop-collection-form>
+      <label>Collection Name<input required maxlength="120" data-workshop-collection-name></label>
+      <label>Description<textarea maxlength="1000" rows="4" data-workshop-collection-description></textarea></label>
+      <label>Visibility<select data-workshop-collection-visibility><option value="PRIVATE">Private</option><option value="ROOM">Room</option></select></label>
+      <div class="workshop-publish-actions"><button type="submit">Save Collection</button><button type="button" data-workshop-collection-cancel>Cancel</button></div>
+      <p data-workshop-collection-status role="status"></p>
+    </form>
+  </dialog>
+  <dialog class="workshop-dialog workshop-collection-dialog" data-workshop-membership-dialog>
+    <div class="workshop-dialog-heading"><div><span class="workshop-eyebrow">ORGANIZE</span><h2>Add to Collections</h2><p data-workshop-membership-asset></p></div><button type="button" data-workshop-membership-cancel>Close</button></div>
+    <form data-workshop-membership-form>
+      <div class="workshop-collection-membership" data-workshop-membership-list></div>
+      <button type="button" data-workshop-membership-create>+ Create New Collection</button>
+      <div class="workshop-publish-actions"><button type="submit">Save</button><button type="button" data-workshop-membership-cancel>Cancel</button></div>
+      <p data-workshop-membership-status role="status"></p>
+    </form>
   </dialog>`;
 
   const field = (name) => screen.querySelector(`[data-workshop-${name}]`) || document.querySelector(`[data-workshop-${name}]`);
@@ -77,6 +97,9 @@ export function createWorkshop({
   let destroyed = false;
   let publishRequest = null;
   let activeCollection = null;
+  let editingCollection = null;
+  let membershipAsset = null;
+  let afterCollectionSave = null;
   let searchTimer = 0;
   let libraryState = { favoriteIds: new Set(), imports: new Map(), collections: [] };
   const recent = createWorkshopRecentStore({ getUserId: getCurrentUserId });
@@ -146,15 +169,20 @@ export function createWorkshop({
   function decorateEntries(items) {
     const collectionByAsset = new Map();
     for (const item of libraryState.collections || []) {
-      for (const assetId of item.assetIds || []) {
+      for (const assetId of [...new Set([...(item.entries || []), ...(item.assetIds || [])])]) {
         const current = collectionByAsset.get(assetId) || { ids: [], names: [] };
         current.ids.push(item.collectionId); current.names.push(item.name);
         collectionByAsset.set(assetId, current);
       }
     }
     const imported = (items || []).map((entry) => {
-      const importRecord = libraryState.imports?.get?.(entry.assetId);
-      const collections = collectionByAsset.get(entry.assetId) || { ids: [], names: [] };
+      const importRecord = libraryState.imports?.get?.(entry.workshopAssetId || entry.assetId);
+      const collectionKeys = [entry.libraryId, entry.assetId, entry.publishedAssetId, entry.workshopAssetId, entry.sourceWorkshopAssetId].filter(Boolean);
+      const collections = collectionKeys.reduce((result, key) => {
+        const match = collectionByAsset.get(key);
+        if (match) { result.ids.push(...match.ids); result.names.push(...match.names); }
+        return result;
+      }, { ids: [], names: [] });
       return {
         ...entry,
         ...(importRecord ? {
@@ -163,13 +191,14 @@ export function createWorkshop({
           sourceWorkshopVersion: importRecord.sourceWorkshopVersion || entry.version || 1
         } : {}),
         collectionIds: [...new Set([...(entry.collectionIds || []), ...collections.ids])],
-        collectionNames: collections.names
+        collectionNames: [...new Set(collections.names)]
       };
     });
     return applyWorkshopRecent(applyWorkshopFavorites(imported, libraryState.favoriteIds), recent.list());
   }
 
   async function loadFull(asset) {
+    if (asset.libraryRecord && libraryAggregator) return libraryAggregator.load(asset);
     if (asset.imported && typeof loadImportedAsset === "function") {
       const owned = await loadImportedAsset(asset);
       if (owned?.content) return { ...asset, ...owned, imported: true };
@@ -217,18 +246,95 @@ export function createWorkshop({
 
   async function addToCollection(asset) {
     try {
-      let collections = await persistence.listCollections();
-      if (!collections.length) {
-        const name = globalThis.prompt?.("Name your first collection:", "My Homebrew Pack");
-        if (!name) return;
-        collections = [await persistence.saveCollection({ name, description: "", visibility: "PRIVATE", assetIds: [] })];
-      }
-      const promptText = collections.map((entry, index) => `${index + 1}. ${entry.name}`).join("\n");
-      const choice = Number(globalThis.prompt?.(`Add to which collection?\n${promptText}`, "1")) - 1;
-      if (!collections[choice]) return;
-      await persistence.setCollectionAsset(collections[choice], asset.assetId, true);
-      status(`Added ${asset.name} to ${collections[choice].name}.`);
+      membershipAsset = asset;
+      const collections = await persistence.listCollections();
+      renderMembershipChoices(collections, asset);
+      field("membership-asset").textContent = asset.name;
+      field("membership-status").textContent = collections.length ? "Choose one or more collections." : "Create a collection to organize this asset.";
+      if (!field("membership-dialog").open) field("membership-dialog").showModal?.();
     } catch (error) { status(error.message); }
+  }
+
+  function openCollectionEditor(collectionRecord = null, onSaved = null) {
+    editingCollection = collectionRecord;
+    afterCollectionSave = onSaved;
+    field("collection-dialog-title").textContent = collectionRecord ? "Edit Collection" : "New Collection";
+    field("collection-name").value = collectionRecord?.name || "";
+    field("collection-description").value = collectionRecord?.description || "";
+    field("collection-visibility").value = collectionRecord?.visibility === "ROOM" ? "ROOM" : "PRIVATE";
+    field("collection-status").textContent = "";
+    if (!field("collection-dialog").open) field("collection-dialog").showModal?.();
+  }
+
+  function renderMembershipChoices(collections, asset) {
+    const root = field("membership-list");
+    root.replaceChildren();
+    const keys = new Set([asset.libraryId, asset.assetId, asset.publishedAssetId, asset.workshopAssetId, asset.sourceWorkshopAssetId].filter(Boolean));
+    for (const item of collections) {
+      const label = document.createElement("label");
+      label.className = "workshop-collection-choice";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = item.collectionId;
+      input.dataset.workshopMembershipCollection = item.collectionId;
+      input.checked = [...(item.entries || []), ...(item.assetIds || [])].some((entry) => keys.has(entry));
+      const text = document.createElement("span");
+      text.textContent = item.name;
+      label.append(input, text);
+      root.append(label);
+    }
+    if (!collections.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "No collections yet.";
+      root.append(empty);
+    }
+  }
+
+  function collectionKeysForAsset(asset) {
+    return [...new Set([
+      asset.libraryId,
+      asset.assetId,
+      asset.publishedAssetId,
+      asset.workshopAssetId,
+      asset.sourceWorkshopAssetId
+    ].filter(Boolean))];
+  }
+
+  async function updateCollectionMembership(collection, asset, included) {
+    const libraryId = asset.libraryId || asset.assetId;
+    let updated = collection;
+    if (typeof persistence.setCollectionEntry === "function") {
+      updated = await persistence.setCollectionEntry(updated, libraryId, included);
+    } else {
+      updated = await persistence.setCollectionAsset(updated, libraryId, included);
+    }
+    if (!included && typeof persistence.setCollectionAsset === "function") {
+      for (const legacyId of collectionKeysForAsset(asset)) {
+        if ((updated.assetIds || []).includes(legacyId)) {
+          updated = await persistence.setCollectionAsset(updated, legacyId, false);
+        }
+      }
+    }
+    return updated;
+  }
+
+  async function saveMembership() {
+    if (!membershipAsset) return;
+    const collections = await persistence.listCollections();
+    const selected = new Set([...field("membership-list").querySelectorAll("[data-workshop-membership-collection]:checked")].map((input) => input.value));
+    for (const item of collections) {
+      const existing = new Set([...(item.entries || []), ...(item.assetIds || [])]);
+      const included = selected.has(item.collectionId);
+      const currentlyIncluded = collectionKeysForAsset(membershipAsset).some((key) => existing.has(key));
+      if (included === currentlyIncluded) continue;
+      await updateCollectionMembership(item, membershipAsset, included);
+    }
+    field("membership-dialog").close();
+    libraryState = await persistence.listLibraryState();
+    syncCollectionFilter();
+    entries = decorateEntries(entries);
+    render();
+    status(`Updated collections for ${membershipAsset.name}.`);
   }
 
   async function remixAsset(asset) {
@@ -245,7 +351,7 @@ export function createWorkshop({
       status(`Preparing ${asset.name}…`);
       let localRecordId = asset.localRecordId || "";
       let full = await loadFull(asset);
-      if (["edit-copy", "create-token", "add-to-character", "use-map", "use-encounter", "use-summon"].includes(actionId) && !asset.imported) {
+      if (["edit-copy", "create-token", "add-to-character", "use-map", "use-encounter", "use-summon"].includes(actionId) && !asset.imported && !asset.libraryRecord) {
         const imported = await importFull(full);
         localRecordId = imported.recordId;
         if (typeof loadImportedAsset === "function") {
@@ -259,6 +365,24 @@ export function createWorkshop({
     } catch (error) { status(error.message || "That library action is unavailable."); }
   }
 
+  async function publishLibraryAsset(asset) {
+    try {
+      const full = await loadFull(asset);
+      await publishFromCreator({
+        assetType: asset.assetType,
+        sourceType: asset.sourceType || asset.assetType,
+        sourceRecordId: asset.sourceRecordId,
+        sourceScope: asset.sourceScope,
+        sourceKey: asset.sourceKey || asset.libraryId,
+        name: asset.name,
+        description: asset.description,
+        thumbnailUrl: asset.thumbnailUrl,
+        tags: asset.tags,
+        content: full.content || full
+      });
+    } catch (error) { status(error.message || "That library record could not be published."); }
+  }
+
   async function deleteAsset(asset) {
     if (!globalThis.confirm?.(`Delete “${asset.name}” from the Workshop? Imported copies will not be deleted.`)) return;
     try { await persistence.deleteAsset(asset.assetId); entries = entries.filter((entry) => entry.assetId !== asset.assetId); render(); status("Workshop asset deleted. Existing imported copies were not changed."); }
@@ -268,8 +392,8 @@ export function createWorkshop({
   async function viewChanges(asset) {
     try {
       const [previous, latest] = await Promise.all([
-        persistence.loadAsset(asset.assetId, asset.sourceWorkshopVersion),
-        persistence.loadAsset(asset.assetId, asset.latestVersion)
+        persistence.loadAsset(asset.workshopAssetId || asset.assetId, asset.sourceWorkshopVersion),
+        persistence.loadAsset(asset.workshopAssetId || asset.assetId, asset.latestVersion)
       ]);
       const changes = compareWorkshopVersions(previous.content, latest.content);
       const copy = { ...latest, assetType: "other", name: `Changes: ${asset.name}`, content: changes.length ? changes : [{ path: "metadata", before: `v${asset.sourceWorkshopVersion}`, after: `v${asset.latestVersion}` }] };
@@ -279,7 +403,7 @@ export function createWorkshop({
 
   async function updateCopy(asset) {
     try {
-      const latest = await persistence.loadAsset(asset.assetId, asset.latestVersion);
+      const latest = await persistence.loadAsset(asset.workshopAssetId || asset.assetId, asset.latestVersion);
       await importFull(latest, field("status"), asset.localRecordId);
       await refresh();
     } catch (error) { status(error.message); }
@@ -292,7 +416,7 @@ export function createWorkshop({
       : scope === "room" && !getCurrentRoomCode()
         ? "Open a room to browse its shared library."
         : scope === "library"
-          ? "Your library is empty. Create homebrew or add an independent copy from Browse."
+          ? "Your library is empty. Create a monster, animation, map, or import something from the Workshop."
           : scope === "favorites"
             ? "No favorites yet. Favoriting keeps a shortcut without importing the asset."
             : "No library assets match these filters.";
@@ -305,11 +429,13 @@ export function createWorkshop({
       importAsset: async (asset) => { try { await importFull(asset); } catch (error) { status(error.message); } },
       favorite: favoriteAsset,
       collection: addToCollection,
+      publishLibrary: publishLibraryAsset,
       removeFromCollection: async (asset) => {
         if (!activeCollection) return;
         try {
-          activeCollection = await persistence.setCollectionAsset(activeCollection, asset.assetId, false);
-          entries = entries.filter((entry) => entry.assetId !== asset.assetId);
+          const libraryId = asset.libraryId || asset.assetId;
+          activeCollection = await updateCollectionMembership(activeCollection, asset, false);
+          entries = entries.filter((entry) => (entry.libraryId || entry.assetId) !== libraryId);
           render(); status(`Removed ${asset.name} from ${activeCollection.name}.`);
         } catch (error) { status(error.message); }
       },
@@ -333,11 +459,13 @@ export function createWorkshop({
 
   async function augmentSavedVersions(items) {
     if (scope !== "library") return items;
-    await Promise.all(items.filter((entry) => entry.imported).map(async (entry) => {
-      try { const latest = await persistence.getSummary(entry.assetId); entry.latestVersion = latest?.version || entry.sourceWorkshopVersion; }
-      catch { entry.latestVersion = entry.sourceWorkshopVersion; }
+    return Promise.all(items.map(async (entry) => {
+      if (!entry.imported) return entry;
+      try {
+        const latest = await persistence.getSummary(entry.workshopAssetId || entry.assetId);
+        return { ...entry, latestVersion: latest?.version || entry.sourceWorkshopVersion };
+      } catch { return { ...entry, latestVersion: entry.sourceWorkshopVersion }; }
     }));
-    return items;
   }
 
   async function refresh({ append = false } = {}) {
@@ -349,9 +477,11 @@ export function createWorkshop({
         libraryState = await persistence.listLibraryState();
       }
       syncCollectionFilter();
-      const result = await persistence.listAssets({ scope, cursors: append ? cursors : {} });
+      const result = ["library", "my"].includes(scope) && libraryAggregator
+        ? { entries: await libraryAggregator.list({ scope }), cursors: {}, hasMore: false }
+        : await persistence.listAssets({ scope, cursors: append ? cursors : {} });
       const next = await augmentSavedVersions(result.entries);
-      const merged = append ? [...new Map([...entries, ...next].map((entry) => [entry.assetId, entry])).values()] : next;
+      const merged = append ? [...new Map([...entries, ...next].map((entry) => [entry.libraryId || entry.assetId, entry])).values()] : next;
       entries = decorateEntries(merged);
       cursors = result.cursors; hasMore = result.hasMore;
       render(); status(`${visibleEntries().length} asset${visibleEntries().length === 1 ? "" : "s"} shown. Full content loads only when you preview or use it.`);
@@ -368,49 +498,59 @@ export function createWorkshop({
     grid.classList.add("workshop-hidden");
     field("more").hidden = true;
     const root = field("collections"); root.classList.remove("workshop-hidden"); root.replaceChildren();
-    const create = document.createElement("button"); create.type = "button"; create.textContent = "Create Collection";
-    create.addEventListener("click", async () => {
-      const name = globalThis.prompt?.("Collection name:", "New Collection"); if (!name) return;
-      await persistence.saveCollection({ name, description: "", visibility: "PRIVATE", assetIds: [] }); await renderCollections();
-    });
-    root.append(create);
+    const heading = document.createElement("div"); heading.className = "workshop-collections-heading";
+    const title = document.createElement("h2"); title.textContent = "Collections";
+    const create = document.createElement("button"); create.type = "button"; create.textContent = "+ New Collection";
+    create.addEventListener("click", () => openCollectionEditor(null, () => renderCollections()));
+    heading.append(title, create); root.append(heading);
     try {
       const collections = await persistence.listCollections();
+      libraryState = { ...libraryState, collections };
+      syncCollectionFilter();
       for (const item of collections) {
         const card = document.createElement("article"); card.className = "workshop-collection";
         const title = document.createElement("h3"); title.textContent = item.name;
-        const meta = document.createElement("p"); meta.textContent = `${item.assetIds.length} assets · ${item.visibility}`;
+        const description = document.createElement("p"); description.textContent = item.description || "No description.";
+        const count = new Set([...(item.entries || []), ...(item.assetIds || [])]).size;
+        const meta = document.createElement("p"); meta.textContent = `${count} asset${count === 1 ? "" : "s"} · ${item.visibility === "ROOM" ? "Room" : "Private"}`;
         const actions = document.createElement("div"); actions.className = "workshop-collection-actions";
-        const browse = document.createElement("button"); browse.type = "button"; browse.textContent = "Browse Collection";
+        const browse = document.createElement("button"); browse.type = "button"; browse.textContent = "Open";
         browse.addEventListener("click", async () => {
           activeCollection = item;
-          scope = "collection";
-          entries = decorateEntries(await persistence.listCollectionAssets(item));
+          scope = "library";
           field("toolbar").classList.remove("workshop-hidden"); grid.classList.remove("workshop-hidden"); root.classList.add("workshop-hidden");
-          for (const button of screen.querySelectorAll("[data-workshop-tab]")) button.setAttribute("aria-selected", "false");
-          render(); status(`Browsing ${item.name}: ${entries.length} accessible asset${entries.length === 1 ? "" : "s"}.`);
+          for (const button of screen.querySelectorAll("[data-workshop-tab]")) button.setAttribute("aria-selected", String(button.dataset.workshopTab === "library"));
+          field("collection").value = item.collectionId;
+          entries = []; cursors = {}; hasMore = false;
+          await refresh();
+          status(`Collection: ${item.name} · ${visibleEntries().length} asset${visibleEntries().length === 1 ? "" : "s"}.`);
         });
         const rename = document.createElement("button"); rename.type = "button"; rename.textContent = "Rename";
-        rename.addEventListener("click", async () => { const name = globalThis.prompt?.("Collection name:", item.name); if (name) { await persistence.saveCollection({ ...item, name }); await renderCollections(); } });
+        rename.addEventListener("click", () => openCollectionEditor(item, () => renderCollections()));
         const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "Delete";
-        remove.addEventListener("click", async () => { if (globalThis.confirm?.(`Delete collection “${item.name}”? Assets are not deleted.`)) { await persistence.deleteCollection(item.collectionId); await renderCollections(); } });
-        actions.append(browse, rename, remove); card.append(title, meta, actions); root.append(card);
+        remove.addEventListener("click", async () => {
+          if (!globalThis.confirm?.("Delete this collection?\nThe assets inside it will not be deleted.")) return;
+          await persistence.deleteCollection(item.collectionId);
+          await renderCollections();
+        });
+        actions.append(browse, rename, remove); card.append(title, description, meta, actions); root.append(card);
       }
-      if (!collections.length) { const empty = document.createElement("p"); empty.textContent = "Create a collection to group mixed Workshop assets without duplicating them."; root.append(empty); }
+      if (!collections.length) { const empty = document.createElement("p"); empty.textContent = "Create a collection to organize monsters, animations, maps, and other owned content."; root.append(empty); }
       status(`${collections.length} collection${collections.length === 1 ? "" : "s"}.`);
     } catch (error) { status(error.message); }
   }
 
   function setScope(next) {
     const requested = next === "saved" ? "library" : next;
-    scope = tabs.some(([id]) => id === requested) ? requested : "browse";
+    scope = tabs.some(([id, , disabled]) => id === requested && !disabled) ? requested : "browse";
     activeCollection = null;
+    field("collection").value = "";
     for (const button of screen.querySelectorAll("[data-workshop-tab]")) button.setAttribute("aria-selected", String(button.dataset.workshopTab === scope));
     field("toolbar").classList.toggle("workshop-hidden", scope === "collections");
     grid.classList.toggle("workshop-hidden", scope === "collections");
     field("collections").classList.toggle("workshop-hidden", scope !== "collections");
     entries = []; cursors = {}; hasMore = false;
-    void refresh();
+    if (scope === "collections") void renderCollections(); else void refresh();
   }
 
   function showPublishDialog(request, existing) {
@@ -437,6 +577,7 @@ export function createWorkshop({
         ...request,
         assetId: existing?.assetId || request.assetId,
         sourceKey: request.sourceKey || workshopSourceKey(request.assetType, request.sourceRecordId, request.sourceScope),
+        sourceType: request.sourceType || request.assetType,
         name: field("publish-name").value,
         description: field("publish-description").value,
         tags: field("publish-tags").value,
@@ -453,7 +594,10 @@ export function createWorkshop({
   async function publishFromCreator(request) {
     try {
       const sourceKey = request.sourceKey || workshopSourceKey(request.assetType, request.sourceRecordId, request.sourceScope);
-      const existing = sourceKey ? await persistence.findOwnedSource(sourceKey) : null;
+      const existing = sourceKey ? await persistence.findOwnedSource(sourceKey, {
+        assetType: request.assetType,
+        sourceRecordId: request.sourceRecordId
+      }) : null;
       showPublishDialog({ ...request, sourceKey }, existing);
     } catch (error) { status(error.message); onNavigate("workshop"); }
   }
@@ -475,6 +619,50 @@ export function createWorkshop({
   on(field("publish-close"), "click", () => field("publish-dialog").close());
   on(field("publish-form"), "submit", (event) => { event.preventDefault(); void publishWithMode("publish"); });
   for (const mode of ["update", "new-version", "unchanged"]) on(field("publish-form").querySelector(`[data-workshop-publish-mode="${mode}"]`), "click", () => void publishWithMode(mode));
+  on(field("collection-form"), "submit", async (event) => {
+    event.preventDefault();
+    const name = field("collection-name").value.trim();
+    if (!name) { field("collection-status").textContent = "Give the collection a name."; return; }
+    try {
+      const saved = await persistence.saveCollection({
+        ...(editingCollection || {}),
+        name,
+        description: field("collection-description").value,
+        visibility: field("collection-visibility").value,
+        entries: editingCollection?.entries || [],
+        assetIds: editingCollection?.assetIds || []
+      });
+      field("collection-dialog").close();
+      editingCollection = null;
+      libraryState = await persistence.listLibraryState();
+      syncCollectionFilter();
+      const callback = afterCollectionSave; afterCollectionSave = null;
+      if (typeof callback === "function") await callback(saved);
+      status(`Saved collection ${saved.name}.`);
+    } catch (error) { field("collection-status").textContent = error.message; }
+  });
+  for (const cancel of screen.querySelectorAll("[data-workshop-collection-cancel]")) on(cancel, "click", () => {
+    field("collection-dialog").close(); editingCollection = null; afterCollectionSave = null;
+  });
+  on(field("membership-form"), "submit", (event) => {
+    event.preventDefault();
+    void saveMembership().catch((error) => { field("membership-status").textContent = error.message; });
+  });
+  for (const cancel of screen.querySelectorAll("[data-workshop-membership-cancel]")) on(cancel, "click", () => {
+    field("membership-dialog").close(); membershipAsset = null;
+  });
+  on(field("membership-create"), "click", () => {
+    const asset = membershipAsset;
+    field("membership-dialog").close();
+    openCollectionEditor(null, async () => {
+      membershipAsset = asset;
+      const collections = await persistence.listCollections();
+      renderMembershipChoices(collections, asset);
+      field("membership-asset").textContent = asset.name;
+      field("membership-status").textContent = "Choose one or more collections.";
+      field("membership-dialog").showModal?.();
+    });
+  });
   setScope("browse");
 
   return Object.freeze({
