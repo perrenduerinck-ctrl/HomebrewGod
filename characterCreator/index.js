@@ -163,6 +163,15 @@ import {
   normalizeInventoryItemBase
 } from "./inventoryEquipment.js";
 import {
+  addLibraryItemToCharacter,
+  createCharacterItemTransferPersistence
+} from "./itemLibraryIntegration.js";
+import {
+  magicItemRarityLabel,
+  magicItemTypeLabel,
+  normalizeMagicItem
+} from "../items/magicItemModel.js";
+import {
   createDerivedSignature,
   createScopedDerivedCache,
   getDerivedObjectIdentity
@@ -222,6 +231,10 @@ export function createCharacterCreator(options = {}) {
       options.onGameplayStateChanged,
     getSummonCatalog:
       options.getSummonCatalog,
+    getMagicItemLibrary:
+      options.getMagicItemLibrary,
+    runTransaction:
+      options.runTransaction,
 
     uploadCharacterPortrait:
       options.uploadCharacterPortrait ||
@@ -11058,6 +11071,11 @@ export function createCharacterCreator(options = {}) {
     pendingContainerRemovalId: "",
     openContainerId: "",
     showContainedItems: false,
+    pendingMagicItem: null,
+    magicItemLibraryCache: [],
+    magicItemLibraryLoaded: false,
+    magicItemLibraryLoading: false,
+    magicItemLibraryError: "",
 
     characterCache: [],
     characterRoomCode: null,
@@ -20482,6 +20500,26 @@ export function createCharacterCreator(options = {}) {
         </div>
 
         <div class="hg-character-card-actions">
+          ${
+            creatorState.pendingMagicItem
+              ? `
+                <button
+                  type="button"
+                  class="primary"
+                  data-cc-action="add-pending-magic-item"
+                  data-character-id="${escapeHtml(
+                    characterId
+                  )}"
+                  ${disabled ? "disabled" : ""}
+                >
+                  Add ${escapeHtml(
+                    creatorState.pendingMagicItem.name
+                  )}
+                </button>
+              `
+              : ""
+          }
+
           <button
             type="button"
             class="primary"
@@ -20975,6 +21013,16 @@ export function createCharacterCreator(options = {}) {
 
     ({ button }) => {
       exportCharacterFromLibrary(
+        button.dataset.characterId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "add-pending-magic-item",
+
+    ({ button }) => {
+      addPendingMagicItemToCharacter(
         button.dataset.characterId
       );
     }
@@ -29454,6 +29502,423 @@ export function createCharacterCreator(options = {}) {
 // CHARACTER CREATOR SECTION 15 — EQUIPMENT / INVENTORY
 // =====================================================
 
+  const characterItemTransferPersistence =
+    createCharacterItemTransferPersistence({
+      db: deps.db,
+      doc: deps.doc,
+      runTransaction: deps.runTransaction,
+      serverTimestamp: deps.serverTimestamp,
+      getRoomCode,
+      getUserId: () => {
+        return cleanString(
+          deps.getCurrentUserUid?.()
+        );
+      },
+      getIsDM: () => {
+        return deps.getCurrentIsDM?.() === true;
+      }
+    });
+
+  function getSection15MagicItemLibrary() {
+    return Array.isArray(
+      creatorState.magicItemLibraryCache
+    )
+      ? creatorState.magicItemLibraryCache
+      : [];
+  }
+
+  async function refreshSection15MagicItemLibrary(
+    { force = false } = {}
+  ) {
+    if (
+      typeof deps.getMagicItemLibrary !== "function"
+    ) {
+      creatorState.magicItemLibraryLoaded = true;
+      creatorState.magicItemLibraryCache = [];
+      return [];
+    }
+
+    if (
+      creatorState.magicItemLibraryLoading ||
+      (
+        creatorState.magicItemLibraryLoaded &&
+        !force
+      )
+    ) {
+      return getSection15MagicItemLibrary();
+    }
+
+    creatorState.magicItemLibraryLoading = true;
+    creatorState.magicItemLibraryError = "";
+
+    try {
+      const records =
+        await deps.getMagicItemLibrary();
+
+      creatorState.magicItemLibraryCache =
+        (Array.isArray(records) ? records : [])
+          .map((item) => {
+            return normalizeMagicItem(item);
+          })
+          .sort((left, right) => {
+            return left.name.localeCompare(
+              right.name,
+              undefined,
+              { sensitivity: "base" }
+            );
+          });
+      creatorState.magicItemLibraryLoaded = true;
+
+      return getSection15MagicItemLibrary();
+    } catch (error) {
+      creatorState.magicItemLibraryError =
+        error?.message ||
+        "Magic Item Library could not be loaded.";
+      return [];
+    } finally {
+      creatorState.magicItemLibraryLoading = false;
+
+      if (
+        creatorState.viewMode === "builder" &&
+        creatorState.currentStepId === "equipment" &&
+        typeof document !== "undefined"
+      ) {
+        renderCurrentStep();
+      }
+    }
+  }
+
+  function ensureSection15MagicItemLibrary() {
+    if (
+      !creatorState.magicItemLibraryLoaded &&
+      !creatorState.magicItemLibraryLoading
+    ) {
+      void refreshSection15MagicItemLibrary();
+    }
+  }
+
+  function renderSection15MagicItemLibrary() {
+    ensureSection15MagicItemLibrary();
+
+    if (creatorState.magicItemLibraryLoading) {
+      return `
+        <div class="hg-character-placeholder">
+          Loading your Magic Item Library...
+        </div>
+      `;
+    }
+
+    if (creatorState.magicItemLibraryError) {
+      return `
+        <div class="hg-character-warning">
+          ${escapeHtml(
+            creatorState.magicItemLibraryError
+          )}
+        </div>
+      `;
+    }
+
+    const items = getSection15MagicItemLibrary();
+
+    if (!items.length) {
+      return `
+        <div class="hg-character-placeholder">
+          No personal magic items yet. Create one in Magic Item Creator,
+          then refresh this list.
+        </div>
+      `;
+    }
+
+    return items.map((item) => {
+      return `
+        <article class="hg-character-choice-card">
+          <h3>${escapeHtml(item.name)}</h3>
+          <p class="small">
+            <b>${escapeHtml(
+              magicItemRarityLabel(item.rarity)
+            )}</b>
+            ${escapeHtml(
+              magicItemTypeLabel(item.itemType)
+            )}
+            ${
+              item.requiresAttunement
+                ? " · Requires attunement"
+                : ""
+            }
+          </p>
+          ${
+            item.description
+              ? `<p class="small">${escapeHtml(item.description)}</p>`
+              : ""
+          }
+          <div class="hg-character-card-actions">
+            <button
+              type="button"
+              data-cc-action="add-library-magic-item"
+              data-item-id="${escapeHtml(item.id)}"
+            >
+              Add Independent Copy
+            </button>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function addSection15LibraryMagicItem(itemId) {
+    const item = getSection15MagicItemLibrary()
+      .find((entry) => {
+        return entry.id === cleanString(itemId);
+      });
+
+    if (!item) {
+      return false;
+    }
+
+    const result = addLibraryItemToCharacter(
+      creatorState.draft,
+      item,
+      {
+        characterId:
+          creatorState.currentCharacterId ||
+          creatorState.draft?.id ||
+          ""
+      }
+    );
+
+    creatorState.draft.equipment =
+      result.character.equipment;
+    markDraftChanged();
+
+    return result.inventoryItem;
+  }
+
+  function queueMagicItemForCharacter(rawItem) {
+    const item = normalizeMagicItem(rawItem);
+    const existing = getSection15MagicItemLibrary()
+      .filter((entry) => entry.id !== item.id);
+
+    creatorState.magicItemLibraryCache = [
+      item,
+      ...existing
+    ];
+    creatorState.magicItemLibraryLoaded = true;
+
+    if (creatorState.viewMode === "builder") {
+      const added = addSection15LibraryMagicItem(item.id);
+
+      if (added) {
+        setStatus(
+          `${item.name} was added as an independent inventory copy.`
+        );
+        navigateToStep("equipment");
+      }
+
+      return {
+        added: Boolean(added),
+        pending: false,
+        item: added || item
+      };
+    }
+
+    creatorState.pendingMagicItem = item;
+    setStatus(
+      `Choose a character below to add ${item.name}.`
+    );
+    renderCharacterLibraryView();
+
+    return {
+      added: false,
+      pending: true,
+      item
+    };
+  }
+
+  function addPendingMagicItemToCharacter(
+    characterId
+  ) {
+    const pending = creatorState.pendingMagicItem;
+
+    if (!pending) {
+      return false;
+    }
+
+    if (!openCharacterFromLibrary(characterId)) {
+      return false;
+    }
+
+    const added = addSection15LibraryMagicItem(
+      pending.id
+    );
+
+    if (!added) {
+      return false;
+    }
+
+    creatorState.pendingMagicItem = null;
+    setStatus(
+      `${pending.name} was added as an independent inventory copy. Save the character to keep it.`
+    );
+    navigateToStep("equipment");
+
+    return true;
+  }
+
+  function getSection15TransferTargets() {
+    const currentId = cleanString(
+      creatorState.currentCharacterId
+    );
+    const userId = cleanString(
+      deps.getCurrentUserUid?.()
+    );
+    const isDM =
+      deps.getCurrentIsDM?.() === true;
+
+    return (Array.isArray(
+      creatorState.characterCache
+    )
+      ? creatorState.characterCache
+      : []
+    ).filter((character) => {
+      return (
+        cleanString(character?.id) &&
+        cleanString(character.id) !== currentId &&
+        (
+          isDM ||
+          cleanString(character?.ownerUid) === userId
+        )
+      );
+    }).sort((left, right) => {
+      return getCharacterLibraryDisplayName(left)
+        .localeCompare(
+          getCharacterLibraryDisplayName(right),
+          undefined,
+          { sensitivity: "base" }
+        );
+    });
+  }
+
+  function renderSection15TransferControls(
+    item,
+    index
+  ) {
+    const targets =
+      getSection15TransferTargets();
+
+    if (
+      !creatorState.currentCharacterId ||
+      !targets.length
+    ) {
+      return "";
+    }
+
+    return `
+      <div class="hg-character-field-grid two">
+        <label class="hg-character-field">
+          <span>Transfer to character</span>
+          <select
+            id="ccItemTransferTarget-${index}"
+            data-cc-transfer-target="true"
+            data-index="${index}"
+          >
+            <option value="">Choose character</option>
+            ${targets.map((character) => {
+              return `
+                <option value="${escapeHtml(character.id)}">
+                  ${escapeHtml(
+                    getCharacterLibraryDisplayName(character)
+                  )}
+                </option>
+              `;
+            }).join("")}
+          </select>
+        </label>
+        <div class="hg-character-field">
+          <span>Safe transfer</span>
+          <button
+            type="button"
+            data-cc-action="transfer-inventory-item"
+            data-index="${index}"
+            ${creatorState.dirty ? "disabled" : ""}
+          >
+            Transfer Item
+          </button>
+        </div>
+      </div>
+      ${
+        creatorState.dirty
+          ? `<p class="small">Save this character before transferring. Transfers update both saved characters atomically.</p>`
+          : ""
+      }
+    `;
+  }
+
+  async function transferSection15InventoryItem(
+    index,
+    targetCharacterId
+  ) {
+    if (!creatorState.currentCharacterId) {
+      throw new Error(
+        "Save this character before transferring items."
+      );
+    }
+
+    if (creatorState.dirty) {
+      throw new Error(
+        "Save this character before transferring items."
+      );
+    }
+
+    const item = getSection15Inventory()[index];
+
+    if (!item) {
+      throw new Error(
+        "That inventory item is no longer available."
+      );
+    }
+
+    const result =
+      await characterItemTransferPersistence.transfer({
+        sourceCharacterId:
+          creatorState.currentCharacterId,
+        targetCharacterId,
+        itemId: item.id
+      });
+
+    creatorState.draft.equipment =
+      result.sourceCharacter.equipment;
+    creatorState.dirty = false;
+    creatorState.characterCache =
+      creatorState.characterCache.map((character) => {
+        if (
+          cleanString(character?.id) ===
+          cleanString(
+            result.sourceCharacter.id
+          )
+        ) {
+          return normalizeSection19CharacterRecord(
+            result.sourceCharacter
+          );
+        }
+
+        if (
+          cleanString(character?.id) ===
+          cleanString(
+            result.targetCharacter.id
+          )
+        ) {
+          return normalizeSection19CharacterRecord(
+            result.targetCharacter
+          );
+        }
+
+        return character;
+      });
+    persistDraftToSession();
+
+    return result;
+  }
+
   function getSpellcastingFocusClassIds(
     item,
     spellcastingClasses = []
@@ -31930,6 +32395,11 @@ export function createCharacterCreator(options = {}) {
               index
             )}
 
+            ${renderSection15TransferControls(
+              item,
+              index
+            )}
+
             <div class="hg-character-card-actions">
               <div
                 class="hg-character-quantity-control"
@@ -32059,11 +32529,16 @@ export function createCharacterCreator(options = {}) {
     getSection15CatalogPage,
     getSection15TotalWeight,
     getSection15UnknownWeightCount,
+    getSection15MagicItemLibrary,
     moveSection15ItemToContainer,
     removeSection15Item,
     renderSection15Catalog,
     renderSection15Inventory,
+    renderSection15MagicItemLibrary,
     renderSection15OpenContainerPanel,
+    refreshSection15MagicItemLibrary,
+    addSection15LibraryMagicItem,
+    transferSection15InventoryItem,
     toggleSection15ItemState,
     updateSection15InventoryItem
   });
@@ -38186,6 +38661,10 @@ export function createCharacterCreator(options = {}) {
     navigateToStep,
     startNew: startSection20NewCharacter,
     replaceDraft: replaceSection20Draft,
+    queueMagicItem:
+      queueMagicItemForCharacter,
+    refreshMagicItemLibrary:
+      refreshSection15MagicItemLibrary,
 
     getState() {
       return creatorState;

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Character Item Integration Self-Test</title>
+    <link rel="stylesheet" href="../../assets/styles/app.css">
+  </head>
+  <body data-test-status="running">
+    <section id="characterCreatorScreen" class="screen">
+      <div class="creatorTopBar"><p class="small"></p></div>
+      <div class="creatorActionBar"></div>
+      <div class="creatorFullGrid"></div>
+      <p id="characterCreatorStatus" role="status"></p>
+    </section>
+
+    <script>
+      window.alert = () => {};
+      window.confirm = () => true;
+      sessionStorage.clear();
+
+      const reportFailure = (error) => {
+        document.body.dataset.testStatus = "fail";
+        document.getElementById("characterCreatorStatus").textContent =
+          error?.stack || error?.message || String(error);
+      };
+      window.addEventListener("error", (event) => reportFailure(event.error || event.message));
+      window.addEventListener("unhandledrejection", (event) => reportFailure(event.reason));
+    </script>
+
+    <script type="module">
+      import { createCharacterCreator } from "../../characterCreator/index.js";
+
+      const item = {
+        id: "ember-blade",
+        name: "Ember Blade",
+        itemType: "weapon",
+        rarity: "rare",
+        description: "A blade lit by banked embers.",
+        requiresAttunement: true,
+        charges: { maximum: 3, current: 3, recharge: "dawn" },
+        effects: [{ id: "ember", name: "Ember", description: "Fire damage." }]
+      };
+      const heroA = {
+        id: "hero-a",
+        ownerUid: "user-1",
+        identity: { name: "Aster" },
+        equipment: {
+          currency: {},
+          notes: "source notes",
+          items: [{
+            id: "transfer-wand",
+            name: "Transfer Wand",
+            category: "magic-item",
+            quantity: 1,
+            isMagical: true,
+            requiresAttunement: true,
+            equipped: false,
+            attuned: false,
+            sourceLibraryItemId: "wand-library"
+          }]
+        }
+      };
+      const heroB = {
+        id: "hero-b",
+        ownerUid: "user-1",
+        identity: { name: "Bram" },
+        equipment: { currency: {}, notes: "target notes", items: [] }
+      };
+      const records = new Map([
+        ["rooms/ROOM/characters/hero-a", structuredClone(heroA)],
+        ["rooms/ROOM/characters/hero-b", structuredClone(heroB)]
+      ]);
+      const doc = (_db, ...segments) => ({ path: segments.join("/") });
+      const runTransaction = async (_db, callback) => callback({
+        get: async (reference) => ({
+          exists: () => records.has(reference.path),
+          data: () => structuredClone(records.get(reference.path))
+        }),
+        update(reference, patch) {
+          records.set(reference.path, {
+            ...records.get(reference.path),
+            ...structuredClone(patch)
+          });
+        }
+      });
+
+      const creator = createCharacterCreator({
+        db: {},
+        doc,
+        runTransaction,
+        serverTimestamp: () => "SERVER",
+        getCurrentRoomCode: () => "ROOM",
+        getCurrentUserUid: () => "user-1",
+        getCurrentIsDM: () => false,
+        getMagicItemLibrary: async () => [item]
+      });
+
+      creator.state.characterCache = [structuredClone(heroA), structuredClone(heroB)];
+      creator.replaceDraft(heroA, {
+        skipDiscardGuard: true,
+        characterId: "hero-a",
+        dirty: false,
+        stepId: "equipment"
+      });
+      creator.navigateToStep("equipment");
+
+      window.__CHARACTER_ITEM_INTEGRATION__ = {
+        creator,
+        item,
+        records: () => [...records.entries()].map(([path, value]) => [path, structuredClone(value)])
+      };
+      document.body.dataset.testStatus = "ready";
+    </script>
+  </body>
+</html>

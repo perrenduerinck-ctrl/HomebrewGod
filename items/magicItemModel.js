@@ -114,7 +114,9 @@ export function magicItemToInventoryCopy(raw, { idFactory = () => globalThis.cry
   return {
     id: clean(idFactory(), 160),
     name: item.name,
-    category: "magic-item",
+    category: ["weapon", "armor", "consumable"].includes(item.itemType)
+      ? item.itemType
+      : "magic-item",
     itemType: item.itemType,
     rarity: item.rarity,
     description: item.description,
@@ -124,13 +126,17 @@ export function magicItemToInventoryCopy(raw, { idFactory = () => globalThis.cry
     weight: item.weight,
     isMagical: true,
     requiresAttunement: item.requiresAttunement,
+    attunementRequirements: item.attunementRequirements,
     attuned: false,
     equipped: false,
     charges: { ...item.charges },
     effects: item.effects.map((effect) => ({ ...effect })),
     source: "library",
     sourceLibraryItemId: item.id,
+    copiedFromLibraryItemId: item.id,
     sourceWorkshopAssetId: item.sourceWorkshopAssetId,
-    sourceWorkshopVersion: item.sourceWorkshopVersion
+    sourceWorkshopVersion: item.sourceWorkshopVersion,
+    sourceAuthorUid: item.sourceAuthorUid,
+    copiedFromLibraryId: item.copiedFromLibraryId
   };
 }

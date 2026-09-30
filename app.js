@@ -8888,6 +8888,24 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
     navigateMainScreen("battle");
     return { message: `${map.name} is now on the battle map.` };
   }
+  if (
+    actionId === "add-to-character" &&
+    ["magic-item", "weapon", "armor"].includes(
+      asset?.assetType
+    )
+  ) {
+    navigateMainScreen("characterCreator");
+    const creator =
+      await initCharacterCreatorSystem();
+    const queued =
+      creator.queueMagicItem(content);
+
+    return {
+      message: queued.added
+        ? `${content.name || asset.name} was added to the current character as an independent copy.`
+        : `Choose a character to add ${content.name || asset.name}.`
+    };
+  }
   if (actionId === "add-to-character") {
     navigateMainScreen("characterCreator");
     document.dispatchEvent(new CustomEvent("homebrewgod:library-use", { detail: { actionId, asset, localRecordId } }));
@@ -9036,7 +9054,13 @@ async function initCharacterCreatorSystem() {
     updateDoc,
     deleteDoc,
     onSnapshot,
+    runTransaction,
     serverTimestamp,
+
+    getMagicItemLibrary: function () {
+      return getMagicItemPersistenceSystem()
+        .list();
+    },
 
     getCurrentRoomCode: function () {
       return currentRoomCode;

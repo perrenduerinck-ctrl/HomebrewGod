@@ -6,6 +6,9 @@ const EQUIPMENT_CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
 const EQUIPMENT_STEP_ACTIONS = Object.freeze([
   "add-catalog-item",
+  "add-library-magic-item",
+  "refresh-magic-item-library",
+  "transfer-inventory-item",
   "show-more-equipment",
   "add-custom-item",
   "skip-equipment",
@@ -41,6 +44,7 @@ export function createEquipmentStep(
     ABILITY_DEFINITIONS,
     addSection15CatalogItem,
     addSection15CustomItem,
+    addSection15LibraryMagicItem,
     calculateCharacterCarryingCapacity,
     changeSection15Quantity,
     getCharacterAttunementLimit,
@@ -54,7 +58,10 @@ export function createEquipmentStep(
     removeSection15Item,
     renderSection15Catalog,
     renderSection15Inventory,
+    renderSection15MagicItemLibrary,
     renderSection15OpenContainerPanel,
+    refreshSection15MagicItemLibrary,
+    transferSection15InventoryItem,
     toggleSection15ItemState,
     updateSection15InventoryItem,
   } = dependencies;
@@ -262,6 +269,29 @@ export function createEquipmentStep(
       </div>
 
       ${renderSection15OpenContainerPanel()}
+
+      <hr>
+
+      <div class="hg-character-library-header">
+        <div>
+          <h3>My Magic Item Library</h3>
+          <p>
+            Library items are copied into this character. Equipping,
+            attuning, editing, or transferring the copy never changes
+            the original Library record.
+          </p>
+        </div>
+        <button
+          type="button"
+          data-cc-action="refresh-magic-item-library"
+        >
+          Refresh Library
+        </button>
+      </div>
+
+      <div class="hg-character-choice-grid">
+        ${renderSection15MagicItemLibrary()}
+      </div>
 
       <hr>
 
@@ -777,6 +807,88 @@ export function createEquipmentStep(
     }
   }
 
+  function handleSection15AddLibraryMagicItem(
+    ...values
+  ) {
+    const button =
+      findSection15ActionElement(
+        ...values
+      );
+    const item =
+      addSection15LibraryMagicItem(
+        button?.dataset?.itemId || ""
+      );
+
+    if (!item) {
+      setStatus(
+        "That Library item is no longer available. Refresh the list and try again."
+      );
+      renderCreatorView();
+      return false;
+    }
+
+    setStatus(
+      `${item.name} was added as an independent inventory copy.`
+    );
+    renderCreatorView();
+    return true;
+  }
+
+  async function handleSection15RefreshMagicItemLibrary() {
+    await refreshSection15MagicItemLibrary({
+      force: true
+    });
+    setStatus(
+      "Magic Item Library refreshed."
+    );
+    renderCreatorView();
+    return true;
+  }
+
+  async function handleSection15TransferInventoryItem(
+    ...values
+  ) {
+    const index = getSection15ActionIndex(
+      ...values
+    );
+    const target =
+      typeof document !== "undefined"
+        ? document.getElementById(
+            `ccItemTransferTarget-${index}`
+          )
+        : null;
+    const targetCharacterId =
+      cleanString(target?.value);
+
+    if (!targetCharacterId) {
+      setStatus(
+        "Choose the destination character first."
+      );
+      return false;
+    }
+
+    try {
+      const result =
+        await transferSection15InventoryItem(
+          index,
+          targetCharacterId
+        );
+
+      setStatus(
+        `${result.transferredItem.name} transferred safely. The destination copy starts unequipped and unattuned.`
+      );
+      renderCreatorView();
+      return true;
+    } catch (error) {
+      setStatus(
+        error?.message ||
+        "That item could not be transferred."
+      );
+      renderCreatorView();
+      return false;
+    }
+  }
+
   function handleSection15AddCustomItem() {
     if (
       addSection15CustomItem()
@@ -1209,6 +1321,15 @@ export function createEquipmentStep(
     switch (action) {
       case "add-catalog-item":
         handleSection15AddCatalogItem(context);
+        return true;
+      case "add-library-magic-item":
+        handleSection15AddLibraryMagicItem(context);
+        return true;
+      case "refresh-magic-item-library":
+        await handleSection15RefreshMagicItemLibrary();
+        return true;
+      case "transfer-inventory-item":
+        await handleSection15TransferInventoryItem(context);
         return true;
       case "show-more-equipment":
         showMoreEquipmentCatalog();
