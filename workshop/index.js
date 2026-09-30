@@ -40,12 +40,13 @@ export function createWorkshop({
       <label>Search<input type="search" data-workshop-search placeholder="Name, description, tags, author"></label>
       <label>Content Type<select data-workshop-type><option value="">All</option>${WORKSHOP_TYPE_FILTERS.map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select></label>
       <label>Owner / Source<select data-workshop-source><option value="">All sources</option><option value="mine">Created by me</option><option value="imported">Imported copies</option><option value="room">Room shared</option><option value="friends">Friends / Group</option><option value="public">Public</option></select></label>
+      <label>Campaign<select data-workshop-campaign><option value="">All Sources</option><option value="campaigns">All Campaigns</option><option value="personal">Personal</option><option value="current">Current Room</option></select></label>
       <label>Visibility<select data-workshop-visibility><option value="">All sources</option><option>PRIVATE</option><option>ROOM</option><option>FRIENDS</option><option>PUBLIC</option></select></label>
       <label>Author<input data-workshop-author placeholder="Author"></label>
       <label>Tags<input data-workshop-tag placeholder="undead, boss"></label>
       <label>Collection<select data-workshop-collection><option value="">All collections</option></select></label>
       <label class="workshop-check"><input type="checkbox" data-workshop-recent> Recently Used</label>
-      <label>Sort<select data-workshop-sort><option value="updated">Recently Updated</option><option value="created">Recently Added</option><option value="saved">Most Saved</option><option value="name">Name</option></select></label>
+      <label>Sort<select data-workshop-sort><option value="updated">Recently Updated</option><option value="recent">Recently Used</option><option value="name">Name</option><option value="created">Recently Added</option></select></label>
       <div class="workshop-specific-filters" data-workshop-specific-filters></div>
     </section>
     <p class="workshop-status" data-workshop-status role="status"></p>
@@ -100,6 +101,9 @@ export function createWorkshop({
   let editingCollection = null;
   let membershipAsset = null;
   let afterCollectionSave = null;
+  let campaigns = [];
+  let summaryReads = 0;
+  let loadError = "";
   let searchTimer = 0;
   let libraryState = { favoriteIds: new Set(), imports: new Map(), collections: [] };
   const recent = createWorkshopRecentStore({ getUserId: getCurrentUserId });
@@ -114,6 +118,8 @@ export function createWorkshop({
       search: field("search").value,
       assetType: field("type").value,
       source: field("source").value,
+      campaign: field("campaign").value,
+      currentRoomCode: getCurrentRoomCode(),
       visibility: field("visibility").value,
       author: field("author").value,
       tags: field("tag").value,
@@ -166,6 +172,19 @@ export function createWorkshop({
     select.value = [...select.options].some((option) => option.value === selected) ? selected : "";
   }
 
+  function syncCampaignFilter() {
+    const select = field("campaign");
+    const selected = select.value;
+    select.replaceChildren(
+      new Option("All Sources", ""),
+      new Option("All Campaigns", "campaigns"),
+      new Option("Personal", "personal"),
+      new Option("Current Room", "current")
+    );
+    for (const campaign of campaigns) select.append(new Option(campaign.roomName, `room:${campaign.roomCode}`));
+    select.value = [...select.options].some((option) => option.value === selected) ? selected : "";
+  }
+
   function decorateEntries(items) {
     const collectionByAsset = new Map();
     for (const item of libraryState.collections || []) {
@@ -195,6 +214,33 @@ export function createWorkshop({
       };
     });
     return applyWorkshopRecent(applyWorkshopFavorites(imported, libraryState.favoriteIds), recent.list());
+  }
+
+  function includeUnavailableCollectionEntries(items) {
+    const collectionId = field("collection").value;
+    if (!collectionId) return items;
+    const selected = (libraryState.collections || []).find((entry) => entry.collectionId === collectionId);
+    if (!selected) return items;
+    const available = new Set(items.flatMap((entry) => [entry.libraryId, entry.assetId, entry.publishedAssetId, entry.workshopAssetId, entry.sourceWorkshopAssetId].filter(Boolean)));
+    const missing = [...new Set([...(selected.entries || []), ...(selected.assetIds || [])])].filter((entry) => !available.has(entry));
+    return [...items, ...missing.map((libraryId) => ({
+      libraryId,
+      assetId: libraryId,
+      assetType: String(libraryId).includes(":") ? String(libraryId).split(":", 1)[0] : "other",
+      sourceType: "unavailable",
+      sourceKind: "campaign",
+      sourceRecordId: String(libraryId),
+      name: "Unavailable asset",
+      description: "This collection reference no longer resolves. Remove it from the collection or let account repair restore its index entry.",
+      authorName: "Source unavailable",
+      tags: [],
+      libraryRecord: true,
+      nativeRecord: false,
+      unavailable: true,
+      visibility: "PRIVATE",
+      collectionIds: [collectionId],
+      collectionNames: [selected.name]
+    }))];
   }
 
   async function loadFull(asset) {
@@ -411,17 +457,20 @@ export function createWorkshop({
 
   function render() {
     if (scope === "collections") return renderCollections();
-    const emptyMessage = scope === "friends"
+    const emptyMessage = loadError
+      ? `Library unavailable: ${loadError}`
+      : scope === "friends"
       ? "No Friends / Group assets are available."
       : scope === "room" && !getCurrentRoomCode()
         ? "Open a room to browse its shared library."
-        : scope === "library"
+        : scope === "library" && entries.length === 0
           ? "Your library is empty. Create a monster, animation, map, or import something from the Workshop."
           : scope === "favorites"
             ? "No favorites yet. Favoriting keeps a shortcut without importing the asset."
             : "No library assets match these filters.";
     renderWorkshopCards(grid, visibleEntries(), {
       currentUserId: getCurrentUserId(),
+      currentRoomCode: getCurrentRoomCode(),
       canRemoveFromRoom: getCurrentIsDM() && scope === "room",
       activeCollection,
       emptyMessage,
@@ -430,6 +479,7 @@ export function createWorkshop({
       favorite: favoriteAsset,
       collection: addToCollection,
       publishLibrary: publishLibraryAsset,
+      copyToCurrentRoom: (asset) => void runQuickAction(asset, "copy-to-current-room"),
       removeFromCollection: async (asset) => {
         if (!activeCollection) return;
         try {
@@ -471,24 +521,42 @@ export function createWorkshop({
   async function refresh({ append = false } = {}) {
     if (loading || destroyed) return;
     loading = true;
-    status("Loading Workshop summaries…");
+    loadError = "";
+    status(append ? "Loading more lightweight summaries…" : ["library", "my"].includes(scope) ? "Loading your account-wide library…" : "Loading Workshop summaries…");
     try {
       if (typeof persistence.listLibraryState === "function") {
         libraryState = await persistence.listLibraryState();
       }
       syncCollectionFilter();
+      if (!append && ["library", "my"].includes(scope) && libraryAggregator) {
+        libraryAggregator.invalidate?.();
+        campaigns = await libraryAggregator.listCampaigns?.({ refresh: true }) || [];
+        syncCampaignFilter();
+      }
       const result = ["library", "my"].includes(scope) && libraryAggregator
-        ? { entries: await libraryAggregator.list({ scope }), cursors: {}, hasMore: false }
+        ? typeof libraryAggregator.listPage === "function"
+          ? await libraryAggregator.listPage({ scope, cursors: append ? cursors : {}, pageSize: 50 })
+          : { entries: await libraryAggregator.list({ scope }), cursors: {}, hasMore: false, metrics: {} }
         : await persistence.listAssets({ scope, cursors: append ? cursors : {} });
-      const next = await augmentSavedVersions(result.entries);
+      const selectedCollection = (libraryState.collections || []).find((entry) => entry.collectionId === field("collection").value);
+      const collectionIds = selectedCollection ? [...new Set([...(selectedCollection.entries || []), ...(selectedCollection.assetIds || [])])] : [];
+      const resolved = !append && ["library", "my"].includes(scope) && collectionIds.length && typeof libraryAggregator?.resolveLibraryIds === "function"
+        ? await libraryAggregator.resolveLibraryIds(collectionIds, { scope })
+        : { entries: [], metrics: {} };
+      const pageAndCollection = [...new Map([...(result.entries || []), ...(resolved.entries || [])]
+        .map((entry) => [entry.libraryId || entry.assetId, entry])).values()];
+      const next = await augmentSavedVersions(pageAndCollection);
       const merged = append ? [...new Map([...entries, ...next].map((entry) => [entry.libraryId || entry.assetId, entry])).values()] : next;
-      entries = decorateEntries(merged);
+      entries = decorateEntries(includeUnavailableCollectionEntries(merged));
       cursors = result.cursors; hasMore = result.hasMore;
-      render(); status(`${visibleEntries().length} asset${visibleEntries().length === 1 ? "" : "s"} shown. Full content loads only when you preview or use it.`);
+      const currentReads = (result.metrics?.summaryReads || 0) + (resolved.metrics?.summaryReads || 0);
+      summaryReads = append ? summaryReads + currentReads : currentReads;
+      render(); status(`${visibleEntries().length} asset${visibleEntries().length === 1 ? "" : "s"} shown. ${summaryReads ? `${summaryReads} lightweight summary read${summaryReads === 1 ? "" : "s"}. ` : ""}Full content loads only when you preview or use it.`);
     } catch (error) {
       entries = [];
+      loadError = error.message || "The library could not be loaded.";
       render();
-      status(error.message || "The Workshop could not be loaded.");
+      status(`Library could not load: ${loadError}`);
     }
     finally { loading = false; }
   }
@@ -545,6 +613,7 @@ export function createWorkshop({
     scope = tabs.some(([id, , disabled]) => id === requested && !disabled) ? requested : "browse";
     activeCollection = null;
     field("collection").value = "";
+    field("campaign").value = "";
     for (const button of screen.querySelectorAll("[data-workshop-tab]")) button.setAttribute("aria-selected", String(button.dataset.workshopTab === scope));
     field("toolbar").classList.toggle("workshop-hidden", scope === "collections");
     grid.classList.toggle("workshop-hidden", scope === "collections");
@@ -614,7 +683,11 @@ export function createWorkshop({
   on(field("back"), "click", () => onNavigate("battle"));
   on(field("more"), "click", () => refresh({ append: true }));
   on(field("type"), "input", () => { renderTypeFilters(); render(); });
-  for (const name of ["source", "visibility", "author", "tag", "collection", "recent", "sort"]) on(field(name), "input", render);
+  for (const name of ["source", "campaign", "visibility", "author", "tag", "recent", "sort"]) on(field(name), "input", render);
+  on(field("collection"), "input", () => {
+    if (["library", "my"].includes(scope)) void refresh();
+    else render();
+  });
   on(field("search"), "input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 250); });
   on(field("publish-close"), "click", () => field("publish-dialog").close());
   on(field("publish-form"), "submit", (event) => { event.preventDefault(); void publishWithMode("publish"); });

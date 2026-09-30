@@ -240,6 +240,26 @@ service cloud.firestore {
           );
       }
 
+      match /libraryIndex/{libraryId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.libraryId == libraryId
+          && (
+            request.resource.data.assetType == 'monster'
+            || request.resource.data.assetType == 'map'
+          )
+          && request.resource.data.sourceRecordId is string
+          && request.resource.data.sourceRecordId.size() > 0
+          && request.resource.data.sourceRoomCode is string
+          && request.resource.data.sourceRoomCode.size() > 0
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.updatedAtMillis is number;
+      }
+
       match /workshopFavorites/{assetId} {
         allow read, delete: if isSelf(userId);
         allow create, update:
@@ -261,7 +281,9 @@ service cloud.firestore {
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
           && request.resource.data.assetIds is list
-          && request.resource.data.assetIds.size() <= 500;
+          && request.resource.data.assetIds.size() <= 500
+          && request.resource.data.get('entries', []) is list
+          && request.resource.data.get('entries', []).size() <= 500;
       }
 
       match /workshopLibrary/{recordId} {

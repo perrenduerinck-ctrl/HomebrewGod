@@ -137,6 +137,7 @@ export function matchesWorkshopAsset(asset, filters = {}) {
 export function sortWorkshopAssets(assets, sort = "updated") {
   return [...assets].sort((left, right) => {
     if (sort === "created") return (right.createdAtMillis || 0) - (left.createdAtMillis || 0);
+    if (sort === "recent") return (right.lastUsedAtMillis || 0) - (left.lastUsedAtMillis || 0) || (right.updatedAtMillis || 0) - (left.updatedAtMillis || 0);
     if (sort === "saved") return (right.saveCount || 0) - (left.saveCount || 0) || String(left.name || "").localeCompare(String(right.name || ""));
     if (sort === "name") return String(left.name || "").localeCompare(String(right.name || ""));
     return (right.updatedAtMillis || 0) - (left.updatedAtMillis || 0);

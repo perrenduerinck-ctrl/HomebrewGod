@@ -63,9 +63,12 @@ test(
       const paths = [
         "workshop/index.js",
         "library/libraryAggregator.js",
+        "library/accountLibraryIndex.js",
+        "library/adapters/accountLibraryAdapter.js",
         "library/adapters/monsterLibraryAdapter.js",
         "library/adapters/animationLibraryAdapter.js",
         "library/adapters/mapLibraryAdapter.js",
+        "library/copyToRoom.js",
         "monsters/creator.js",
         "vfx/animationWorkspace.js",
         "vfx/summonAutomation.js",

@@ -12,7 +12,13 @@ function element(document, tag, className = "", text = "") {
 
 export function createWorkshopCardModel(asset = {}) {
   const type = getWorkshopTypeDefinition(asset.assetType);
-  const source = asset.imported
+  const source = asset.unavailable
+    ? "Unavailable"
+    : asset.sourceKind === "personal"
+      ? "Personal"
+      : asset.sourceKind === "campaign" && (asset.sourceRoomName || asset.sourceRoomCode)
+        ? `Campaign: ${asset.sourceRoomName || asset.sourceRoomCode}`
+        : asset.imported
     ? "My Library"
     : asset.visibility === "ROOM"
       ? "Room"
@@ -23,10 +29,15 @@ export function createWorkshopCardModel(asset = {}) {
           : "Private";
   const updated = Number(asset.updatedAtMillis) || 0;
   const badges = [type.singular];
-  if (asset.publishedAssetId) badges.push("Published");
-  else if (asset.importedFromWorkshop || asset.imported) badges.push("Imported");
-  else if (asset.libraryRecord && asset.visibility === "ROOM") badges.push("Room");
-  else if (asset.libraryRecord) badges.push("Private");
+  if (asset.unavailable) badges.push("Unavailable");
+  else {
+    if (asset.sourceKind === "personal") badges.push("Personal");
+    if (asset.sourceKind === "campaign") badges.push("Campaign");
+    if (asset.publishedAssetId) badges.push("Published");
+    if (asset.importedFromWorkshop || asset.imported) badges.push("Imported");
+    if (asset.libraryRecord && !asset.publishedAssetId && !asset.imported && asset.visibility === "ROOM" && asset.sourceKind !== "campaign") badges.push("Room");
+    if (asset.libraryRecord && !asset.publishedAssetId && !asset.imported && asset.visibility !== "ROOM" && asset.sourceKind !== "personal") badges.push("Private");
+  }
   return Object.freeze({
     asset,
     assetId: asset.assetId,
@@ -96,6 +107,13 @@ export function renderWorkshopCards(container, assets, handlers = {}) {
       button.addEventListener("click", () => handlers[action]?.(asset, button));
       actions.append(button);
     };
+    if (asset.unavailable) {
+      if (handlers.activeCollection) addButton("Remove from Collection", "removeFromCollection");
+      body.append(actions);
+      card.append(thumb, body);
+      container.append(card);
+      continue;
+    }
     addButton("Preview", "preview");
     if (asset.imported && asset.latestVersion > asset.sourceWorkshopVersion) {
       addButton("View Changes", "viewChanges");
@@ -110,7 +128,12 @@ export function renderWorkshopCards(container, assets, handlers = {}) {
     if (!asset.imported && !asset.libraryRecord) addButton("Duplicate / Remix", "remix");
     if (!asset.imported && !asset.libraryRecord && handlers.canRemoveFromRoom && asset.visibility === "ROOM") addButton("Remove from Room", "removeFromRoom");
     if (!asset.libraryRecord && asset.authorUid === handlers.currentUserId) addButton("Delete", "deleteAsset");
-    if (typeof handlers.quickAction === "function") {
+    const crossCampaign = asset.sourceKind === "campaign"
+      && Boolean(asset.sourceRoomCode)
+      && String(asset.sourceRoomCode).toUpperCase() !== String(handlers.currentRoomCode || "").toUpperCase();
+    if (crossCampaign && ["monster", "map"].includes(asset.assetType)) {
+      addButton("Copy to Current Room", "copyToCurrentRoom");
+    } else if (typeof handlers.quickAction === "function") {
       for (const quickAction of model.quickActions) {
         const button = element(document, "button", "workshop-card-quick-action", quickAction.label);
         button.type = "button";

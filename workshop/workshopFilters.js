@@ -14,6 +14,15 @@ function matchesSource(asset, source, currentUserId) {
   return true;
 }
 
+function matchesCampaign(asset, campaign, currentRoomCode) {
+  if (!campaign) return true;
+  if (campaign === "personal") return asset.sourceKind === "personal" || (!asset.sourceRoomCode && asset.visibility !== "ROOM");
+  if (campaign === "campaigns") return asset.sourceKind === "campaign" || Boolean(asset.sourceRoomCode);
+  if (campaign === "current") return Boolean(currentRoomCode) && String(asset.sourceRoomCode || asset.roomCode || "").toUpperCase() === String(currentRoomCode).toUpperCase();
+  if (campaign.startsWith("room:")) return String(asset.sourceRoomCode || asset.roomCode || "").toUpperCase() === campaign.slice(5).toUpperCase();
+  return true;
+}
+
 function matchesTypeSpecific(asset, filters) {
   const metadata = asset.typeMetadata && typeof asset.typeMetadata === "object" ? asset.typeMetadata : {};
   const fields = ["cr", "size", "creatureType", "itemType", "rarity", "level", "school", "damageType", "family", "style", "mapType", "difficulty", "sourceType", "role"];
@@ -32,6 +41,7 @@ function matchesTypeSpecific(asset, filters) {
 export function matchesWorkshopFilters(asset, filters = {}) {
   if (!matchesWorkshopSearch(asset, filters.search)) return false;
   if (!matchesWorkshopType(asset.assetType, filters.assetType)) return false;
+  if (!matchesCampaign(asset, value(filters.campaign), filters.currentRoomCode)) return false;
   if (filters.visibility && asset.visibility !== filters.visibility) return false;
   if (!matchesSource(asset, filters.source, String(filters.currentUserId || ""))) return false;
   if (filters.favoritesOnly && asset.favorite !== true) return false;

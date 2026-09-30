@@ -1125,6 +1125,21 @@ export function createMonsterCreator(config) {
     };
   }
 
+  async function syncMonsterLibraryIndex(monsterId, monsterData) {
+    if (typeof config.syncLibraryIndex !== "function") return false;
+    try {
+      await config.syncLibraryIndex({
+        assetType: "monster",
+        sourceRecordId: monsterId,
+        record: { ...monsterData, id: monsterId }
+      });
+      return true;
+    } catch (error) {
+      console.warn("Could not update the account library index:", error);
+      return false;
+    }
+  }
+
   async function createMonsterDocument(monsterData) {
     const roomCode = getRoomCode();
 
@@ -1177,6 +1192,11 @@ export function createMonsterCreator(config) {
     );
 
     selectedMonsterId = createdRef.id;
+    await syncMonsterLibraryIndex(createdRef.id, {
+      ...monsterData,
+      ownerUid: mutationIdentity.roomDmUid,
+      updatedAtMillis
+    });
     return createdRef.id;
   }
 
@@ -1238,6 +1258,7 @@ export function createMonsterCreator(config) {
           label: "monster"
         });
 
+        const updatedAtMillis = Date.now();
         await config.updateDoc(
           validatedDocument.ref,
           {
@@ -1248,12 +1269,16 @@ export function createMonsterCreator(config) {
                 .ownerUid ||
               getMutationIdentity()
                 .roomDmUid,
-            updatedAtMillis:
-              Date.now(),
+            updatedAtMillis,
             updatedAt:
               config.serverTimestamp()
           }
         );
+        await syncMonsterLibraryIndex(selectedMonsterId, {
+          ...monsterData,
+          ownerUid: validatedDocument.data.ownerUid || getMutationIdentity().roomDmUid,
+          updatedAtMillis
+        });
         saveStatus = "Monster updated.";
       } else {
         await createMonsterDocument(
@@ -1441,6 +1466,13 @@ export function createMonsterCreator(config) {
       await config.deleteDoc(
         validatedDocument.ref
       );
+      if (typeof config.removeLibraryIndex === "function") {
+        try {
+          await config.removeLibraryIndex("monster", selectedMonsterId);
+        } catch (error) {
+          console.warn("Could not remove the stale account library entry:", error);
+        }
+      }
       selectedMonsterId = null;
       loadMonsterIntoForm(
         DEFAULT_MONSTER,

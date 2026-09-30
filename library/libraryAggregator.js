@@ -6,6 +6,8 @@ const sourceIdentity = (value = {}) => `${value.assetType || value.sourceType ||
 
 export function createLibraryAggregator({ adapters = [], persistence = null, loadImportedRecord = null, getUserId = () => "" } = {}) {
   const registry = createLibraryRegistry(adapters);
+  let metadataCache = null;
+  let campaignCache = null;
 
   async function ownedPublications() {
     if (typeof persistence?.listOwnedSummaries === "function") return persistence.listOwnedSummaries();
@@ -19,6 +21,13 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
       : { favoriteIds: new Set(), imports: new Map(), collections: [] };
   }
 
+  async function metadata(refresh = false) {
+    if (!metadataCache || refresh) {
+      metadataCache = Promise.all([ownedPublications(), state()]).then(([publications, libraryState]) => ({ publications, libraryState }));
+    }
+    return metadataCache;
+  }
+
   async function nativeRecords() {
     const groups = await Promise.all(registry.list().map((adapter) => adapter.listSummaries()));
     return groups.flat().map((record) => createLibraryRecord(record));
@@ -30,6 +39,7 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
       ...publication,
       libraryId: libraryIdFor(publication.assetType, sourceRecordId),
       sourceType: "workshop",
+      sourceKind: "personal",
       sourceRecordId,
       sourceKey: publication.sourceKey || libraryIdFor(publication.assetType, sourceRecordId),
       ownerUid: publication.authorUid,
@@ -53,6 +63,7 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
       libraryId: libraryIdFor(assetType, sourceRecordId),
       assetType,
       sourceType: "workshop-import",
+      sourceKind: "personal",
       sourceRecordId,
       ownerUid: getUserId(),
       ownerName: "My Library",
@@ -68,8 +79,7 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
     });
   }
 
-  async function list({ scope = "library" } = {}) {
-    const [native, publications, libraryState] = await Promise.all([nativeRecords(), ownedPublications(), state()]);
+  function mergeRecords(native, publications, libraryState, { includeFallbacks = true } = {}) {
     const imports = valuesOf(libraryState.imports);
     const publicationsBySource = new Map();
     for (const publication of publications) {
@@ -83,7 +93,8 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
     const matchedImports = new Set();
     const merged = new Map();
 
-    for (const nativeRecord of native) {
+    for (const source of native) {
+      const nativeRecord = createLibraryRecord(source);
       const publication = publicationsBySource.get(nativeRecord.sourceKey) || publicationsBySource.get(sourceIdentity(nativeRecord));
       if (publication) matchedPublications.add(publication.assetId);
       const importRecord = importsByAsset.get(nativeRecord.sourceWorkshopAssetId) || importsByLocal.get(sourceIdentity(nativeRecord));
@@ -101,27 +112,94 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
       merged.set(imported.libraryId, attachLibraryPublication(imported, publication));
     }
 
-    for (const publication of publications) {
-      if (matchedPublications.has(publication.assetId)) continue;
-      const fallback = fallbackPublication(publication);
-      if (!merged.has(fallback.libraryId)) merged.set(fallback.libraryId, fallback);
+    if (includeFallbacks) {
+      for (const publication of publications) {
+        if (matchedPublications.has(publication.assetId)) continue;
+        const fallback = fallbackPublication(publication);
+        if (!merged.has(fallback.libraryId)) merged.set(fallback.libraryId, fallback);
+      }
+      for (const importRecord of imports) {
+        const importId = importRecord.assetId || importRecord.id;
+        if (matchedImports.has(importId)) continue;
+        const fallback = fallbackImport(importRecord);
+        if (!merged.has(fallback.libraryId)) merged.set(fallback.libraryId, fallback);
+      }
     }
-    for (const importRecord of imports) {
-      const importId = importRecord.assetId || importRecord.id;
-      if (matchedImports.has(importId)) continue;
-      const fallback = fallbackImport(importRecord);
-      if (!merged.has(fallback.libraryId)) merged.set(fallback.libraryId, fallback);
-    }
+    return [...merged.values()];
+  }
 
+  function applyScope(records, scope) {
     const uid = String(getUserId() || "");
-    const records = [...merged.values()];
     return scope === "my"
       ? records.filter((record) => !record.importedFromWorkshop && (!uid || record.ownerUid === uid))
       : records;
   }
 
+  async function list({ scope = "library" } = {}) {
+    const [native, details] = await Promise.all([nativeRecords(), metadata(true)]);
+    return applyScope(mergeRecords(native, details.publications, details.libraryState), scope);
+  }
+
+  async function listPage({ scope = "library", cursors = {}, pageSize = 50 } = {}) {
+    const firstPage = !Object.values(cursors || {}).some(Boolean);
+    const [pages, details] = await Promise.all([
+      Promise.all(registry.list().map(async (adapter) => {
+        const key = adapter.sourceType;
+        if (typeof adapter.listPage === "function") return { key, ...(await adapter.listPage({ cursor: cursors?.[key] || null, pageSize })) };
+        if (cursors?.[key] === "complete") return { key, entries: [], cursor: "complete", hasMore: false, readCount: 0 };
+        const entries = await adapter.listSummaries();
+        return { key, entries, cursor: "complete", hasMore: false, readCount: entries.length };
+      })),
+      metadata(firstPage)
+    ]);
+    const native = pages.flatMap((page) => page.entries || []);
+    const records = applyScope(mergeRecords(native, details.publications, details.libraryState, { includeFallbacks: firstPage }), scope);
+    return {
+      entries: records,
+      cursors: Object.fromEntries(pages.map((page) => [page.key, page.cursor || null])),
+      hasMore: pages.some((page) => page.hasMore),
+      metrics: {
+        summaryReads: pages.reduce((total, page) => total + (Number(page.readCount) || 0), 0)
+          + (firstPage ? details.publications.length + valuesOf(details.libraryState.imports).length : 0),
+        loadedSummaries: native.length,
+        pageSize
+      }
+    };
+  }
+
+  async function listCampaigns({ refresh = false } = {}) {
+    if (!campaignCache || refresh) {
+      campaignCache = Promise.all(registry.list().map((adapter) => typeof adapter.listCampaigns === "function" ? adapter.listCampaigns() : []))
+        .then((groups) => [...new Map(groups.flat().map((entry) => [entry.roomCode, entry])).values()]
+          .sort((left, right) => left.roomName.localeCompare(right.roomName)));
+    }
+    return campaignCache;
+  }
+
+  async function resolveLibraryIds(libraryIds = [], { scope = "library" } = {}) {
+    const requested = new Set((libraryIds || []).map(String).filter(Boolean));
+    if (!requested.size) return { entries: [], metrics: { summaryReads: 0 } };
+    const [groups, details] = await Promise.all([
+      Promise.all(registry.list().map((adapter) => typeof adapter.getSummariesByIds === "function"
+        ? adapter.getSummariesByIds([...requested])
+        : { entries: [], readCount: 0 })),
+      metadata()
+    ]);
+    const merged = applyScope(mergeRecords(
+      groups.flatMap((group) => group.entries || []),
+      details.publications,
+      details.libraryState
+    ), scope);
+    return {
+      entries: merged.filter((record) => [record.libraryId, record.assetId, record.publishedAssetId, record.workshopAssetId, record.sourceWorkshopAssetId]
+        .some((id) => id && requested.has(id))),
+      metrics: { summaryReads: groups.reduce((total, group) => total + (Number(group.readCount) || 0), 0) }
+    };
+  }
+
   async function load(record) {
     if (!record?.libraryRecord) throw new Error("Choose an owned library record.");
+    if (record.unavailable) throw new Error("That collection entry is unavailable.");
     const adapter = registry.get(record.sourceType);
     if (adapter) {
       const content = await adapter.load(record.sourceRecordId, record);
@@ -143,5 +221,10 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
     throw new Error("That owned library record is unavailable.");
   }
 
-  return Object.freeze({ list, load, registry });
+  function invalidate() {
+    metadataCache = null;
+    campaignCache = null;
+  }
+
+  return Object.freeze({ list, listPage, listCampaigns, resolveLibraryIds, load, invalidate, registry });
 }

@@ -13,6 +13,8 @@ export function createWorkshopSearchText(asset = {}) {
     asset.name,
     asset.description,
     asset.authorName,
+    asset.sourceRoomName,
+    asset.sourceRoomCode,
     type.label,
     ...assetTags,
     ...collectionNames,

@@ -166,9 +166,10 @@ import { createWorkshop } from "./workshop/index.js";
 import { createWorkshopPersistence } from "./workshop/workshopPersistence.js";
 import { prepareWorkshopCopy } from "./workshop/workshopImport.js";
 import { createLibraryAggregator } from "./library/libraryAggregator.js";
-import { createMonsterLibraryAdapter } from "./library/adapters/monsterLibraryAdapter.js";
 import { createAnimationLibraryAdapter } from "./library/adapters/animationLibraryAdapter.js";
-import { createMapLibraryAdapter } from "./library/adapters/mapLibraryAdapter.js";
+import { createAccountLibraryAdapter } from "./library/adapters/accountLibraryAdapter.js";
+import { createAccountLibraryIndex } from "./library/accountLibraryIndex.js";
+import { copyLibraryRecordToRoom } from "./library/copyToRoom.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -533,6 +534,7 @@ let monsterCreatorSystem = null;
 let workshopSystem = null;
 let workshopPersistence = null;
 let libraryAggregator = null;
+let accountLibraryIndex = null;
 let characterCreatorModulePromise = null;
 let monsterCreatorModulePromise = null;
 
@@ -3491,14 +3493,25 @@ async function saveMapToRoomLibrary(mapData) {
     return null;
   }
 
-  const mapDocRef = await addDoc(collection(db, "rooms", currentRoomCode, "maps"), {
+  const updatedAtMillis = Date.now();
+  const mapRecord = {
     name: mapData.name || "Unnamed Map",
     url: mapData.url,
     publicId: mapData.publicId || null,
     deleteToken: mapData.deleteToken || null,
     deleteTokenCreatedAtMillis: mapData.deleteTokenCreatedAtMillis || null,
-    createdAt: serverTimestamp()
-  });
+    ownerUid: currentRoomData?.dmUid || currentUser?.uid || "",
+    ownerName: currentRoomData?.dmName || currentUser?.displayName || "Unnamed DM",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    updatedAtMillis
+  };
+  const mapDocRef = await addDoc(collection(db, "rooms", currentRoomCode, "maps"), mapRecord);
+  try {
+    await syncAccountLibraryRecord({ assetType: "map", sourceRecordId: mapDocRef.id, record: mapRecord });
+  } catch (error) {
+    console.warn("Could not update the account library index:", error);
+  }
 
   return mapDocRef.id;
 }
@@ -3584,6 +3597,11 @@ async function forgetSavedMap(mapId) {
     }
 
     await deleteDoc(doc(db, "rooms", currentRoomCode, "maps", mapId));
+    try {
+      await removeAccountLibraryRecord("map", mapId);
+    } catch (error) {
+      console.warn("Could not remove the stale account library entry:", error);
+    }
 
     if (Array.isArray(latestMapsSnapshot)) {
       latestMapsSnapshot = latestMapsSnapshot.filter(function (mapDoc) {
@@ -8634,6 +8652,30 @@ async function getCombatSummonCatalog() {
   }
 }
 
+function getAccountLibraryIndexSystem() {
+  if (accountLibraryIndex) return accountLibraryIndex;
+  accountLibraryIndex = createAccountLibraryIndex({
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch,
+    getUserId: () => currentUser?.uid || "",
+    getUserName: () => currentUser?.displayName || currentRoomData?.dmName || "Homebrew God Creator"
+  });
+  return accountLibraryIndex;
+}
+
+async function syncAccountLibraryRecord({ assetType, sourceRecordId, roomCode = currentRoomCode, roomName = currentRoomData?.roomName, record } = {}) {
+  const result = await getAccountLibraryIndexSystem().syncNative({
+    assetType, sourceRecordId, roomCode, roomName: roomName || roomCode || "Unnamed Campaign", record
+  });
+  libraryAggregator?.invalidate?.();
+  return result;
+}
+
+async function removeAccountLibraryRecord(assetType, sourceRecordId) {
+  const result = await getAccountLibraryIndexSystem().removeNative(assetType, sourceRecordId);
+  libraryAggregator?.invalidate?.();
+  return result;
+}
+
 async function importWorkshopAsset(asset, replaceRecordId = "") {
   if (!currentUser) throw new Error("Sign in before importing Workshop content.");
   const copy = prepareWorkshopCopy(asset, {
@@ -8649,7 +8691,8 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
     const reference = doc(db, "rooms", currentRoomCode, "monsters", monsterId);
     const previous = replaceRecordId ? await getDoc(reference) : null;
     const previousData = previous?.exists?.() ? previous.data() : {};
-    await setDoc(reference, {
+    const updatedAtMillis = Date.now();
+    const monsterRecord = {
       ...copy.content,
       ...provenance,
       id: monsterId,
@@ -8658,8 +8701,14 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
       ownerName: currentRoomData?.dmName || currentUser.displayName || "Unnamed DM",
       createdAt: previousData.createdAt || serverTimestamp(),
       updatedAt: serverTimestamp(),
-      updatedAtMillis: Date.now()
-    });
+      updatedAtMillis
+    };
+    await setDoc(reference, monsterRecord);
+    try {
+      await syncAccountLibraryRecord({ assetType: "monster", sourceRecordId: monsterId, record: monsterRecord });
+    } catch (error) {
+      console.warn("Could not update the account library index:", error);
+    }
     return { assetType: "monster", recordId: monsterId };
   }
 
@@ -8695,7 +8744,8 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
     const reference = doc(db, "rooms", currentRoomCode, "maps", mapId);
     const previous = replaceRecordId ? await getDoc(reference) : null;
     const previousData = previous?.exists?.() ? previous.data() : {};
-    await setDoc(reference, {
+    const updatedAtMillis = Date.now();
+    const mapRecord = {
       ...copy.content,
       ...provenance,
       id: mapId,
@@ -8703,8 +8753,14 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
       ownerName: currentRoomData?.dmName || currentUser.displayName || "Unnamed DM",
       createdAt: previousData.createdAt || serverTimestamp(),
       updatedAt: serverTimestamp(),
-      updatedAtMillis: Date.now()
-    });
+      updatedAtMillis
+    };
+    await setDoc(reference, mapRecord);
+    try {
+      await syncAccountLibraryRecord({ assetType: "map", sourceRecordId: mapId, record: mapRecord });
+    } catch (error) {
+      console.warn("Could not update the account library index:", error);
+    }
     return { assetType: "map", recordId: mapId };
   }
 
@@ -8752,6 +8808,20 @@ async function loadImportedWorkshopAsset(asset) {
 
 async function useWorkshopAsset({ actionId, asset, localRecordId }) {
   const content = { ...(asset?.content || {}), id: localRecordId || asset?.content?.id };
+  if (actionId === "copy-to-current-room" && ["monster", "map"].includes(asset?.assetType)) {
+    if (!currentRoomCode || !currentIsDM) throw new Error("Open the destination room as its DM before copying campaign content.");
+    const copied = await copyLibraryRecordToRoom({
+      db, collection, addDoc, updateDoc, serverTimestamp,
+      asset, content, roomCode: currentRoomCode,
+      roomData: currentRoomData || {}, user: currentUser || {}
+    });
+    try {
+      await syncAccountLibraryRecord({ assetType: copied.assetType, sourceRecordId: copied.recordId, record: copied.record });
+    } catch (error) {
+      console.warn("Could not update the account library index:", error);
+    }
+    return { message: `${content.name || asset.name} was copied into ${currentRoomData?.roomName || currentRoomCode} with a new ID.`, recordId: copied.recordId };
+  }
   if (actionId === "create-token" && asset?.assetType === "monster") {
     if (!tokenSystem?.createMonsterLinkedToken) throw new Error("The token system is not ready.");
     const token = await tokenSystem.createMonsterLinkedToken(content);
@@ -8802,7 +8872,7 @@ async function initWorkshopSystem() {
     publicBrowse: true
   });
   const adapterConfig = {
-    db, collection, doc, getDoc, getDocs,
+    db, collection, doc, getDoc, getDocs, query, orderBy, limit, startAfter,
     getUserId: () => currentUser?.uid || "",
     getUserName: () => currentUser?.displayName || currentRoomData?.dmName || "Homebrew God Creator",
     getRoomCode: () => currentRoomCode || "",
@@ -8810,9 +8880,11 @@ async function initWorkshopSystem() {
   };
   libraryAggregator = createLibraryAggregator({
     adapters: [
-      createMonsterLibraryAdapter(adapterConfig),
-      createAnimationLibraryAdapter(adapterConfig),
-      createMapLibraryAdapter(adapterConfig)
+      createAccountLibraryAdapter({
+        ...adapterConfig,
+        ensureIndex: () => getAccountLibraryIndexSystem().ensure()
+      }),
+      createAnimationLibraryAdapter(adapterConfig)
     ],
     persistence: workshopPersistence,
     loadImportedRecord: loadImportedWorkshopAsset,
@@ -9048,6 +9120,10 @@ async function initMonsterCreatorSystem() {
     getSummonCatalog: getCombatSummonCatalog,
     onPublishToWorkshop: publishToWorkshop,
     onBrowseWorkshop: browseWorkshop,
+    syncLibraryIndex: function ({ assetType, sourceRecordId, record }) {
+      return syncAccountLibraryRecord({ assetType, sourceRecordId, record });
+    },
+    removeLibraryIndex: removeAccountLibraryRecord,
 
     createMonsterLinkedToken: function (monster) {
       if (
