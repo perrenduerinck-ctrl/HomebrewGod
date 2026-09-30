@@ -168,8 +168,10 @@ import { prepareWorkshopCopy } from "./workshop/workshopImport.js";
 import { createLibraryAggregator } from "./library/libraryAggregator.js";
 import { createAnimationLibraryAdapter } from "./library/adapters/animationLibraryAdapter.js";
 import { createAccountLibraryAdapter } from "./library/adapters/accountLibraryAdapter.js";
+import { createMagicItemLibraryAdapter } from "./library/adapters/magicItemLibraryAdapter.js";
 import { createAccountLibraryIndex } from "./library/accountLibraryIndex.js";
 import { copyLibraryRecordToRoom } from "./library/copyToRoom.js";
+import { createMagicItemPersistence } from "./items/magicItemPersistence.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -219,6 +221,7 @@ const E = {
   battleMapScreen: $("battleMapScreen"),
   monsterCreatorScreen: $("monsterCreatorScreen"),
   characterCreatorScreen: $("characterCreatorScreen"),
+  magicItemCreatorScreen: $("magicItemCreatorScreen"),
   workshopScreen: $("workshopScreen"),
   persistenceConnectionStatus: $("persistenceConnectionStatus"),
 
@@ -531,12 +534,15 @@ let movementPanelSystem = null;
 let battleMapLighting = null;
 let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
+let magicItemCreatorSystem = null;
+let magicItemPersistence = null;
 let workshopSystem = null;
 let workshopPersistence = null;
 let libraryAggregator = null;
 let accountLibraryIndex = null;
 let characterCreatorModulePromise = null;
 let monsterCreatorModulePromise = null;
+let magicItemCreatorModulePromise = null;
 
 let activeSessionId = makeActiveSessionId();
 let activeSessionRoomCode = null;
@@ -641,7 +647,7 @@ function syncMainScreenRoute(screenName) {
   if (!currentRoomCode || !window.history?.replaceState) return;
   const routeUrl = new URL(window.location.href);
   routeUrl.searchParams.set("room", currentRoomCode);
-  if (["battle", "characterCreator", "monsterCreator", "workshop"].includes(screenName)) {
+  if (["battle", "characterCreator", "monsterCreator", "magicItemCreator", "workshop"].includes(screenName)) {
     routeUrl.searchParams.set("view", screenName);
   } else {
     routeUrl.searchParams.delete("view");
@@ -661,6 +667,7 @@ function navigateMainScreen(screenName) {
   E.battleMapScreen.classList.add("hidden");
   E.monsterCreatorScreen.classList.add("hidden");
   E.characterCreatorScreen.classList.add("hidden");
+  E.magicItemCreatorScreen.classList.add("hidden");
   E.workshopScreen.classList.add("hidden");
 
   if (screenName === "auth") E.authScreen.classList.remove("hidden");
@@ -669,6 +676,7 @@ function navigateMainScreen(screenName) {
   if (screenName === "battle") E.battleMapScreen.classList.remove("hidden");
   if (screenName === "monsterCreator") E.monsterCreatorScreen.classList.remove("hidden");
   if (screenName === "characterCreator") E.characterCreatorScreen.classList.remove("hidden");
+  if (screenName === "magicItemCreator") E.magicItemCreatorScreen.classList.remove("hidden");
   if (screenName === "workshop") E.workshopScreen.classList.remove("hidden");
 
   if (currentRoomCode && screenName === "characterCreator") {
@@ -676,6 +684,9 @@ function navigateMainScreen(screenName) {
   }
   if (currentRoomCode && screenName === "monsterCreator") {
     void initMonsterCreatorSystem();
+  }
+  if (currentRoomCode && screenName === "magicItemCreator") {
+    void initMagicItemCreatorSystem();
   }
   if (currentRoomCode && screenName === "workshop") {
     void initWorkshopSystem();
@@ -8736,6 +8747,21 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
     return { assetType: "animation", recordId: animationId };
   }
 
+  if (["magic-item", "weapon", "armor"].includes(copy.assetType)) {
+    const recordId = replaceRecordId || copy.recordId;
+    const persistence = getMagicItemPersistenceSystem();
+    const saved = await persistence.save({
+      ...copy.content,
+      ...provenance,
+      id: recordId,
+      itemType: copy.assetType === "weapon" || copy.assetType === "armor"
+        ? copy.assetType
+        : copy.content.itemType
+    });
+    libraryAggregator?.invalidate?.();
+    return { assetType: "magic-item", recordId: saved.id };
+  }
+
   if (copy.assetType === "map") {
     if (!currentRoomCode || !currentIsDM) {
       throw new Error("Only the room DM can add Workshop maps to this room library.");
@@ -8795,6 +8821,10 @@ async function loadImportedWorkshopAsset(asset) {
     if (!definition) throw new Error("That independent animation copy is unavailable.");
     return { ...asset, content: JSON.parse(JSON.stringify(definition)) };
   }
+  if (["magic-item", "weapon", "armor"].includes(asset.assetType)) {
+    const item = await getMagicItemPersistenceSystem().load(asset.localRecordId);
+    return { ...asset, content: item };
+  }
   if (asset.assetType === "map") {
     if (!currentRoomCode) throw new Error("Open the room that owns this map copy.");
     const snapshot = await getDoc(doc(db, "rooms", currentRoomCode, "maps", asset.localRecordId));
@@ -8836,6 +8866,12 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
     E.animationLibraryButton?.click();
     return { message: actionId === "assign-animation" ? "Animation Library opened for assignment." : "Independent animation copy opened in the Animation Library." };
   }
+  if (actionId === "edit-copy" && ["magic-item", "weapon", "armor"].includes(asset?.assetType)) {
+    navigateMainScreen("magicItemCreator");
+    const creator = await initMagicItemCreatorSystem();
+    creator.openItem(content, { duplicate: !localRecordId && !asset.libraryRecord });
+    return { message: "Independent magic item copy opened in Magic Item Creator." };
+  }
   if (actionId === "use-map" && asset?.assetType === "map") {
     if (!currentRoomCode || !currentIsDM) throw new Error("Open a room as its DM before using this map.");
     const map = {
@@ -8861,6 +8897,44 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
   return { message: `${asset.name} is ready to use.` };
 }
 
+function getMagicItemPersistenceSystem() {
+  if (magicItemPersistence) return magicItemPersistence;
+  magicItemPersistence = createMagicItemPersistence({
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+    query, orderBy, limit, startAfter, serverTimestamp,
+    getUserId: () => currentUser?.uid || ""
+  });
+  return magicItemPersistence;
+}
+
+async function initMagicItemCreatorSystem() {
+  if (magicItemCreatorSystem) {
+    await magicItemCreatorSystem.refresh();
+    return magicItemCreatorSystem;
+  }
+  if (!magicItemCreatorModulePromise) {
+    magicItemCreatorModulePromise = import("./items/magicItemCreator.js");
+  }
+  let creatorModule;
+  try {
+    creatorModule = await magicItemCreatorModulePromise;
+  } catch (error) {
+    magicItemCreatorModulePromise = null;
+    console.error("Magic Item Creator module failed to load:", error);
+    throw error;
+  }
+  magicItemCreatorSystem = creatorModule.createMagicItemCreator({
+    screen: E.magicItemCreatorScreen,
+    persistence: getMagicItemPersistenceSystem(),
+    onBack: () => navigateMainScreen("battle"),
+    onPublishToWorkshop: publishToWorkshop,
+    onBrowseWorkshop: browseWorkshop,
+    getUserId: () => currentUser?.uid || "",
+    uploadImage: uploadMapToCloudinary
+  });
+  return magicItemCreatorSystem;
+}
+
 async function initWorkshopSystem() {
   if (workshopSystem) return workshopSystem;
   workshopPersistence = createWorkshopPersistence({
@@ -8884,7 +8958,8 @@ async function initWorkshopSystem() {
         ...adapterConfig,
         ensureIndex: () => getAccountLibraryIndexSystem().ensure()
       }),
-      createAnimationLibraryAdapter(adapterConfig)
+      createAnimationLibraryAdapter(adapterConfig),
+      createMagicItemLibraryAdapter(adapterConfig)
     ],
     persistence: workshopPersistence,
     loadImportedRecord: loadImportedWorkshopAsset,
@@ -9306,6 +9381,12 @@ async function openStartupViewIfNeeded() {
     return;
   }
 
+  if (startupView === "magicItemCreator") {
+    navigateMainScreen("magicItemCreator");
+    await initMagicItemCreatorSystem();
+    return;
+  }
+
   if (startupView === "workshop") {
     navigateMainScreen("workshop");
     await initWorkshopSystem();
@@ -9336,6 +9417,7 @@ window.addEventListener("pagehide", function () {
   appRealtimeListeners.stopAll();
   characterCreatorSystem?.cleanupListeners?.();
   monsterCreatorSystem?.cleanupListeners?.();
+  magicItemCreatorSystem?.destroy?.();
   tokenSystem?.stopTokenListener?.();
   battleMapVfxSequences?.destroy();
   battleMapVfxSequences = null;
@@ -9363,6 +9445,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       "battle",
       "monsterCreator",
       "characterCreator",
+      "magicItemCreator",
       "workshop"
     ]);
   const releaseScreenElements = {
@@ -9378,6 +9461,8 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       E.monsterCreatorScreen,
     characterCreator:
       E.characterCreatorScreen,
+    magicItemCreator:
+      E.magicItemCreatorScreen,
     workshop:
       E.workshopScreen
   };
@@ -9524,6 +9609,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             await initMonsterCreatorSystem();
           }
 
+          if (screenName === "magicItemCreator") {
+            await initMagicItemCreatorSystem();
+          }
+
           if (screenName === "workshop") {
             await initWorkshopSystem();
           }
@@ -9545,6 +9634,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             monsterCreatorReady:
               Boolean(
                 monsterCreatorSystem
+              ),
+            magicItemCreatorReady:
+              Boolean(
+                magicItemCreatorSystem
               )
           };
         },

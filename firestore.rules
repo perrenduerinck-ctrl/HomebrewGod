@@ -240,6 +240,36 @@ service cloud.firestore {
           );
       }
 
+      match /magicItems/{itemId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.id == itemId
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.itemType in [
+            'weapon', 'armor', 'consumable', 'wondrous-item'
+          ]
+          && request.resource.data.rarity in [
+            'common', 'uncommon', 'rare', 'very-rare',
+            'legendary', 'artifact', 'varies'
+          ]
+          && request.resource.data.description is string
+          && request.resource.data.description.size() <= 8000
+          && request.resource.data.imageUrl is string
+          && (
+            request.resource.data.imageUrl == ''
+            || request.resource.data.imageUrl.matches('https://.*')
+          )
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 16
+          && request.resource.data.effects is list
+          && request.resource.data.effects.size() <= 30
+          && request.resource.data.updatedAtMillis is number;
+      }
+
       match /libraryIndex/{libraryId} {
         allow read, delete: if isSelf(userId);
         allow create, update:

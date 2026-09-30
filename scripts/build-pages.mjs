@@ -111,6 +111,7 @@ for (
     "combat",
     "data",
     "library",
+    "items",
     "monsters",
     "shared",
     "tokens",

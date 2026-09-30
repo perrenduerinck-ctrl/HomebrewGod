@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Magic Item Creator Test</title><link rel="stylesheet" href="../../assets/styles/app.css"></head><body>
+<main id="screen"></main>
+<script type="module">
+  import { createMagicItemCreator } from "../../items/magicItemCreator.js";
+  import { normalizeMagicItem } from "../../items/magicItemModel.js";
+  const records = new Map(); let next = 0;
+  const persistence = {
+    async save(raw) { const item = normalizeMagicItem({ ...raw, id: raw.id || `item-${++next}`, updatedAtMillis: Date.now() }); records.set(item.id, item); return item; },
+    async load(id) { return records.get(id); },
+    async list() { return [...records.values()]; },
+    async remove(id) { records.delete(id); }
+  };
+  window.__published = null;
+  window.creator = createMagicItemCreator({
+    screen: document.getElementById("screen"), persistence,
+    getUserId: () => "user-1",
+    uploadImage: async () => ({ secure_url: "https://example.com/uploaded-item.png" }),
+    onPublishToWorkshop: (request) => { window.__published = request; },
+    onBrowseWorkshop: (request) => { window.__browse = request; }
+  });
+  window.magicItemRecords = () => [...records.values()];
+</script></body></html>

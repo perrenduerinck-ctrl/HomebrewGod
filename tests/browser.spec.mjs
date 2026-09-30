@@ -2245,7 +2245,7 @@ test(
 );
 
 test(
-  "app smoke mode exercises room, battle-map, character, and monster screens",
+  "app smoke mode exercises room, battle-map, character, monster, and magic-item screens",
   async ({ page }) => {
     await page.goto(
       "?smokeTest=1&release=phase20-20260727",
@@ -2281,7 +2281,8 @@ test(
         "room",
         "battle",
         "characterCreator",
-        "monsterCreator"
+        "monsterCreator",
+        "magicItemCreator"
       ]
     ) {
       const state =
@@ -2333,6 +2334,24 @@ test(
     expect(
       monsterState.monsterCreatorReady
     ).toBe(true);
+
+    const magicItemState =
+      await page.evaluate(() => {
+        return window
+          .__HOMEBREW_GOD_RELEASE_TEST__
+          .openScreen(
+            "magicItemCreator"
+          );
+      });
+
+    expect(
+      magicItemState.magicItemCreatorReady
+    ).toBe(true);
+    await expect(
+      page.getByRole("heading", {
+        name: "Magic Item Creator"
+      })
+    ).toBeVisible();
   }
 );
 
