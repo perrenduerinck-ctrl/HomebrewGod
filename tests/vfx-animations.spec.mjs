@@ -163,7 +163,13 @@ test("the creator saves, reorders, reloads and previews lightweight animation la
   await expand(dialog, "timeline"); const timeline = field(dialog, "timeline-editor");
   await expect(timeline.locator(".hg-animation-timeline-row")).toHaveCount(3); await expect(timeline.locator(".hg-animation-timeline-marker-event")).toHaveCount(1);
   const healingBlock = timeline.locator('[data-timeline-layer="1"]'), healingCanvas = healingBlock.locator("..");
-  await healingBlock.scrollIntoViewIfNeeded(); await expect(healingBlock).toBeVisible();
+  await expect.poll(async () => {
+    const block = await healingBlock.elementHandle();
+    if (!block) return false;
+    await page.waitForTimeout(180);
+    return block.evaluate(node => node.isConnected).catch(() => false);
+  }).toBe(true);
+  await expect(healingBlock).toBeVisible();
   await healingBlock.dragTo(healingCanvas, { sourcePosition: { x: 5, y: 10 }, targetPosition: { x: 40, y: 10 } });
   const delayInput = rows.nth(1).locator('[data-layer-field="startDelay"]'); await expect.poll(async () => Number(await delayInput.inputValue())).toBeGreaterThan(.05); await delayInput.fill("0.05");
   await timeline.locator("[data-timeline-zoom-in]").click(); await expect(timeline.locator("[data-timeline-zoom-label]")).toHaveText("120 px / second");
