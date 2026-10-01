@@ -9757,6 +9757,14 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             await initWorkshopSystem();
           }
 
+          // Creator modules load asynchronously. During a cold smoke-test
+          // start, the auth observer can finish while that import is pending
+          // and restore its own screen. Reassert the requested destination so
+          // openScreen resolves only after its documented screen is visible.
+          navigateMainScreen(
+            screenName
+          );
+
           return {
             screenName,
             visible:

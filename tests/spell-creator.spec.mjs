@@ -10,7 +10,9 @@ test("Spell Creator saves, filters, previews, attaches animations, and publishes
   await page.locator('[data-spell-field="damageDice"]').fill("4d6");
   await page.locator('[data-spell-field="description"]').fill("Chains one target in supernatural frost.");
   await page.locator('[data-spell-field="concentration"]').check();
-  await page.getByRole("button", { name: "Attach / Edit Animations" }).click();
+  const animationButton = page.getByRole("button", { name: "Attach / Edit Animations" });
+  await animationButton.evaluate((button) => button.scrollIntoView({ block: "center" }));
+  await animationButton.click();
   await expect(page.locator("[data-spell-status]")).toContainText("Animation sequence attached");
   await expect(page.locator("[data-spell-animation-summary]")).toHaveText("cast → impact");
   await expect(page.locator("[data-spell-preview]")).toContainText("Frost Chain");
