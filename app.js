@@ -170,10 +170,12 @@ import { createAnimationLibraryAdapter } from "./library/adapters/animationLibra
 import { createAccountLibraryAdapter } from "./library/adapters/accountLibraryAdapter.js";
 import { createMagicItemLibraryAdapter } from "./library/adapters/magicItemLibraryAdapter.js";
 import { createSpellLibraryAdapter } from "./library/adapters/spellLibraryAdapter.js";
+import { createNpcLibraryAdapter } from "./library/adapters/npcLibraryAdapter.js";
 import { createAccountLibraryIndex } from "./library/accountLibraryIndex.js";
 import { copyLibraryRecordToRoom } from "./library/copyToRoom.js";
 import { createMagicItemPersistence } from "./items/magicItemPersistence.js";
 import { createSpellPersistence } from "./spells/spellPersistence.js";
+import { createNpcPersistence } from "./npcs/npcPersistence.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -225,6 +227,7 @@ const E = {
   characterCreatorScreen: $("characterCreatorScreen"),
   magicItemCreatorScreen: $("magicItemCreatorScreen"),
   spellCreatorScreen: $("spellCreatorScreen"),
+  npcCreatorScreen: $("npcCreatorScreen"),
   workshopScreen: $("workshopScreen"),
   persistenceConnectionStatus: $("persistenceConnectionStatus"),
 
@@ -541,6 +544,8 @@ let magicItemCreatorSystem = null;
 let magicItemPersistence = null;
 let spellCreatorSystem = null;
 let spellPersistence = null;
+let npcCreatorSystem = null;
+let npcPersistence = null;
 let workshopSystem = null;
 let workshopPersistence = null;
 let libraryAggregator = null;
@@ -549,6 +554,7 @@ let characterCreatorModulePromise = null;
 let monsterCreatorModulePromise = null;
 let magicItemCreatorModulePromise = null;
 let spellCreatorModulePromise = null;
+let npcCreatorModulePromise = null;
 
 let activeSessionId = makeActiveSessionId();
 let activeSessionRoomCode = null;
@@ -653,7 +659,7 @@ function syncMainScreenRoute(screenName) {
   if (!currentRoomCode || !window.history?.replaceState) return;
   const routeUrl = new URL(window.location.href);
   routeUrl.searchParams.set("room", currentRoomCode);
-  if (["battle", "characterCreator", "monsterCreator", "magicItemCreator", "spellCreator", "workshop"].includes(screenName)) {
+  if (["battle", "characterCreator", "monsterCreator", "magicItemCreator", "spellCreator", "npcCreator", "workshop"].includes(screenName)) {
     routeUrl.searchParams.set("view", screenName);
   } else {
     routeUrl.searchParams.delete("view");
@@ -675,6 +681,7 @@ function navigateMainScreen(screenName) {
   E.characterCreatorScreen.classList.add("hidden");
   E.magicItemCreatorScreen.classList.add("hidden");
   E.spellCreatorScreen.classList.add("hidden");
+  E.npcCreatorScreen.classList.add("hidden");
   E.workshopScreen.classList.add("hidden");
 
   if (screenName === "auth") E.authScreen.classList.remove("hidden");
@@ -685,6 +692,7 @@ function navigateMainScreen(screenName) {
   if (screenName === "characterCreator") E.characterCreatorScreen.classList.remove("hidden");
   if (screenName === "magicItemCreator") E.magicItemCreatorScreen.classList.remove("hidden");
   if (screenName === "spellCreator") E.spellCreatorScreen.classList.remove("hidden");
+  if (screenName === "npcCreator") E.npcCreatorScreen.classList.remove("hidden");
   if (screenName === "workshop") E.workshopScreen.classList.remove("hidden");
 
   if (currentRoomCode && screenName === "characterCreator") {
@@ -698,6 +706,9 @@ function navigateMainScreen(screenName) {
   }
   if (currentRoomCode && screenName === "spellCreator") {
     void initSpellCreatorSystem();
+  }
+  if (currentRoomCode && screenName === "npcCreator") {
+    void initNpcCreatorSystem();
   }
   if (currentRoomCode && screenName === "workshop") {
     void initWorkshopSystem();
@@ -8784,6 +8795,25 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
     return { assetType: "spell", recordId: saved.id };
   }
 
+  if (copy.assetType === "npc") {
+    const recordId = replaceRecordId || copy.recordId;
+    let existingScope = { roomCode: "", roomName: "" };
+    if (replaceRecordId) {
+      try {
+        const existing = await getNpcPersistenceSystem().load(recordId);
+        existingScope = { roomCode: existing.roomCode, roomName: existing.roomName };
+      } catch {}
+    }
+    const saved = await getNpcPersistenceSystem().save({
+      ...copy.content,
+      ...provenance,
+      id: recordId,
+      ...existingScope
+    });
+    libraryAggregator?.invalidate?.();
+    return { assetType: "npc", recordId: saved.id };
+  }
+
   if (copy.assetType === "map") {
     if (!currentRoomCode || !currentIsDM) {
       throw new Error("Only the room DM can add Workshop maps to this room library.");
@@ -8851,6 +8881,10 @@ async function loadImportedWorkshopAsset(asset) {
     const spell = await getSpellPersistenceSystem().load(asset.localRecordId);
     return { ...asset, content: spell };
   }
+  if (asset.assetType === "npc") {
+    const npc = await getNpcPersistenceSystem().load(asset.localRecordId);
+    return { ...asset, content: npc };
+  }
   if (asset.assetType === "map") {
     if (!currentRoomCode) throw new Error("Open the room that owns this map copy.");
     const snapshot = await getDoc(doc(db, "rooms", currentRoomCode, "maps", asset.localRecordId));
@@ -8904,6 +8938,31 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
     creator.openSpell(content, { duplicate: !localRecordId && !asset.libraryRecord });
     if (actionId === "assign-animation") await creator.editAnimations(false);
     return { message: actionId === "assign-animation" ? "Spell opened for animation assignment." : "Independent spell copy opened in Spell Creator." };
+  }
+  if (["edit-copy", "duplicate"].includes(actionId) && asset?.assetType === "npc") {
+    navigateMainScreen("npcCreator");
+    const creator = await initNpcCreatorSystem();
+    creator.openNpc(content, { duplicate: actionId === "duplicate" || (!localRecordId && !asset.libraryRecord) });
+    return { message: actionId === "duplicate" ? "Independent NPC copy opened in NPC Creator." : "NPC opened in NPC Creator." };
+  }
+  if (actionId === "copy-to-current-room" && asset?.assetType === "npc") {
+    if (!currentRoomCode) throw new Error("Open the destination campaign before copying this NPC.");
+    const saved = await getNpcPersistenceSystem().save({
+      ...content,
+      id: crypto.randomUUID(),
+      name: `${content.name || asset.name} Copy`,
+      roomCode: currentRoomCode,
+      roomName: currentRoomData?.roomName || currentRoomCode,
+      copiedFromNpcId: content.id || asset.sourceRecordId,
+      copiedFromLibraryId: asset.libraryId || `npc:${content.id || asset.sourceRecordId}`,
+      createdAtMillis: Date.now()
+    });
+    libraryAggregator?.invalidate?.();
+    return { message: `${saved.name} was copied into ${saved.roomName} with a new ID.`, recordId: saved.id };
+  }
+  if (actionId === "create-token" && asset?.assetType === "npc") {
+    const token = await createNpcMapToken(content);
+    return { message: `${content.name || asset.name} token created on the active map.`, token };
   }
   if (actionId === "use-map" && asset?.assetType === "map") {
     if (!currentRoomCode || !currentIsDM) throw new Error("Open a room as its DM before using this map.");
@@ -8976,6 +9035,40 @@ function getSpellPersistenceSystem() {
     getUserId: () => currentUser?.uid || ""
   });
   return spellPersistence;
+}
+
+function getNpcPersistenceSystem() {
+  if (npcPersistence) return npcPersistence;
+  npcPersistence = createNpcPersistence({
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+    query, orderBy, limit, startAfter, serverTimestamp,
+    getUserId: () => currentUser?.uid || ""
+  });
+  return npcPersistence;
+}
+
+async function createNpcMapToken(npc) {
+  if (!tokenSystem?.createAutomationToken) throw new Error("The token system is not ready.");
+  const combat = npc?.combat || {};
+  const token = await tokenSystem.createAutomationToken({
+    sourceType: "npc",
+    sourceId: npc.id,
+    name: npc.name,
+    imageUrl: npc.portraitUrl || npc.imageUrl || "",
+    tokenType: "npc",
+    ac: combat.ac,
+    maxHp: combat.hp,
+    currentHp: combat.hp,
+    speed: combat.speed,
+    combatEnabled: combat.enabled === true,
+    ownership: { mode: "dm" },
+    initiative: "none",
+    duration: { mode: "permanent", value: 1 },
+    onEnd: { mode: "leave", dismissAnimationId: "" },
+    createdByUid: currentUser?.uid || ""
+  });
+  navigateMainScreen("battle");
+  return token;
 }
 
 async function initMagicItemCreatorSystem() {
@@ -9054,6 +9147,34 @@ async function initSpellCreatorSystem() {
   return spellCreatorSystem;
 }
 
+async function initNpcCreatorSystem() {
+  if (npcCreatorSystem) {
+    await npcCreatorSystem.refresh();
+    return npcCreatorSystem;
+  }
+  if (!npcCreatorModulePromise) npcCreatorModulePromise = import("./npcs/npcCreator.js");
+  let creatorModule;
+  try { creatorModule = await npcCreatorModulePromise; }
+  catch (error) {
+    npcCreatorModulePromise = null;
+    console.error("NPC Creator module failed to load:", error);
+    throw error;
+  }
+  npcCreatorSystem = creatorModule.createNpcCreator({
+    screen: E.npcCreatorScreen,
+    persistence: getNpcPersistenceSystem(),
+    onBack: () => navigateMainScreen("battle"),
+    onPublishToWorkshop: publishToWorkshop,
+    onBrowseLibrary: browseWorkshop,
+    onCreateToken: async (npc) => ({ token: await createNpcMapToken(npc), message: `${npc.name} token created on the active map.` }),
+    getUserId: () => currentUser?.uid || "",
+    getCurrentRoomCode: () => currentRoomCode || "",
+    getCurrentRoomName: () => currentRoomData?.roomName || currentRoomCode || "",
+    uploadImage: uploadMapToCloudinary
+  });
+  return npcCreatorSystem;
+}
+
 async function initWorkshopSystem() {
   if (workshopSystem) return workshopSystem;
   workshopPersistence = createWorkshopPersistence({
@@ -9079,7 +9200,8 @@ async function initWorkshopSystem() {
       }),
       createAnimationLibraryAdapter(adapterConfig),
       createMagicItemLibraryAdapter(adapterConfig),
-      createSpellLibraryAdapter(adapterConfig)
+      createSpellLibraryAdapter(adapterConfig),
+      createNpcLibraryAdapter(adapterConfig)
     ],
     persistence: workshopPersistence,
     loadImportedRecord: loadImportedWorkshopAsset,
@@ -9519,6 +9641,12 @@ async function openStartupViewIfNeeded() {
     return;
   }
 
+  if (startupView === "npcCreator") {
+    navigateMainScreen("npcCreator");
+    await initNpcCreatorSystem();
+    return;
+  }
+
   if (startupView === "workshop") {
     navigateMainScreen("workshop");
     await initWorkshopSystem();
@@ -9551,6 +9679,7 @@ window.addEventListener("pagehide", function () {
   monsterCreatorSystem?.cleanupListeners?.();
   magicItemCreatorSystem?.destroy?.();
   spellCreatorSystem?.destroy?.();
+  npcCreatorSystem?.destroy?.();
   tokenSystem?.stopTokenListener?.();
   battleMapVfxSequences?.destroy();
   battleMapVfxSequences = null;
@@ -9580,6 +9709,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       "characterCreator",
       "magicItemCreator",
       "spellCreator",
+      "npcCreator",
       "workshop"
     ]);
   const releaseScreenElements = {
@@ -9599,6 +9729,8 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       E.magicItemCreatorScreen,
     spellCreator:
       E.spellCreatorScreen,
+    npcCreator:
+      E.npcCreatorScreen,
     workshop:
       E.workshopScreen
   };
@@ -9753,6 +9885,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             await initSpellCreatorSystem();
           }
 
+          if (screenName === "npcCreator") {
+            await initNpcCreatorSystem();
+          }
+
           if (screenName === "workshop") {
             await initWorkshopSystem();
           }
@@ -9790,6 +9926,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             spellCreatorReady:
               Boolean(
                 spellCreatorSystem
+              ),
+            npcCreatorReady:
+              Boolean(
+                npcCreatorSystem
               )
           };
         },

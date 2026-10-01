@@ -62,8 +62,8 @@ const definitions = [
   {
     id: "npc", label: "NPCs", singular: "NPC", icon: "🧙", preview: "card",
     filters: [filter("creatureType", "Creature Type"), filter("role", "Role")],
-    quickActions: [action("edit-copy", "Edit Copy"), action("create-token", "Create Map Token"), action("add-to-encounter", "Add to Encounter")],
-    metadata(content = {}) { return { creatureType: clean(content.type || content.species, 80), role: clean(content.role, 80) }; },
+    quickActions: [action("edit-copy", "Edit"), action("duplicate", "Duplicate"), action("copy-to-current-room", "Copy to Campaign"), action("create-token", "Create Token")],
+    metadata(content = {}) { return { creatureType: clean(content.type || content.species, 80), role: clean(content.role || content.occupation, 80), disposition: clean(content.disposition, 80), combatEnabled: content.combat?.enabled === true }; },
     card(asset) { return [asset.typeMetadata?.creatureType, asset.typeMetadata?.role].filter(Boolean).join(" · "); }
   },
   {

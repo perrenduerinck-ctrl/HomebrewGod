@@ -295,6 +295,42 @@ service cloud.firestore {
           && request.resource.data.updatedAtMillis is number;
       }
 
+      match /npcs/{npcId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.id == npcId
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.portraitUrl is string
+          && (
+            request.resource.data.portraitUrl == ''
+            || request.resource.data.portraitUrl.matches('https://.*')
+          )
+          && request.resource.data.roomCode is string
+          && request.resource.data.roomCode.size() <= 40
+          && (
+            request.resource.data.roomCode == ''
+            || isRoomMember(request.resource.data.roomCode)
+          )
+          && request.resource.data.description is string
+          && request.resource.data.description.size() <= 8000
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() <= 12000
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 24
+          && request.resource.data.relationshipIds is list
+          && request.resource.data.relationshipIds.size() <= 100
+          && request.resource.data.factionIds is list
+          && request.resource.data.factionIds.size() <= 50
+          && request.resource.data.knowledge is list
+          && request.resource.data.knowledge.size() <= 100
+          && request.resource.data.combat is map
+          && request.resource.data.updatedAtMillis is number;
+      }
+
       match /libraryIndex/{libraryId} {
         allow read, delete: if isSelf(userId);
         allow create, update:

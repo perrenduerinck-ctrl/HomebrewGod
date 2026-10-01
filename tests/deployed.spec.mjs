@@ -68,8 +68,13 @@ test(
         "library/adapters/monsterLibraryAdapter.js",
         "library/adapters/animationLibraryAdapter.js",
         "library/adapters/mapLibraryAdapter.js",
+        "library/adapters/npcLibraryAdapter.js",
         "library/copyToRoom.js",
         "monsters/creator.js",
+        "npcs/npcCreator.js",
+        "npcs/npcModel.js",
+        "npcs/npcPersistence.js",
+        "npcs/npcPreview.js",
         "vfx/animationWorkspace.js",
         "vfx/summonAutomation.js",
         "vfx/summonAutomationPanel.js"
@@ -83,6 +88,7 @@ test(
     await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
     expect((await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("workshop"))).visible).toBe(true);
     expect((await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("monsterCreator"))).visible).toBe(true);
+    expect((await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("npcCreator"))).visible).toBe(true);
     await page.evaluate(() => document.getElementById("animationCreatorButton")?.click());
     await expect(page.getByRole("dialog", { name: "Animation Creator" })).toBeVisible();
     expect(importErrors).toEqual([]);

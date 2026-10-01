@@ -1,4 +1,5 @@
 import { renderMonsterStatBlock } from "../monsters/statBlockPreview.js";
+import { renderNpcPreview } from "../npcs/npcPreview.js";
 import { createAnimationLibrary } from "../vfx/animationLibrary.js";
 import { createAnimationPlayer } from "../vfx/animationPlayer.js";
 import { createBattleMapEffectEngine } from "../vfx/effectEngine.js";
@@ -82,7 +83,8 @@ export function createWorkshopPreview({ dialog, onImport, onRemix } = {}) {
     container.replaceChildren();
     const type = getWorkshopTypeDefinition(asset.assetType);
     container.dataset.workshopPreviewKind = type.preview;
-    if (type.preview === "monster") renderMonsterStatBlock(container, asset.content);
+    if (asset.assetType === "npc") renderNpcPreview(container, asset.content);
+    else if (type.preview === "monster") renderMonsterStatBlock(container, asset.content);
     else if (type.preview === "animation") animationPreview(asset, container);
     else if (type.preview === "image") imagePreview(asset, container);
     else if (type.preview === "card") cardPreview(asset, container);

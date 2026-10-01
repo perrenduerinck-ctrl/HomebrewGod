@@ -2380,6 +2380,23 @@ export function createTokenSystem(options) {
       sourcePatch = spec.sourceType === "monster"
         ? buildMonsterLinkedTokenPatch(source, roomData)
         : buildCharacterLinkedTokenPatch(source, roomData);
+    } else if (spec.sourceType === "npc") {
+      const maxHp = Number.isFinite(Number(spec.maxHp)) && Number(spec.maxHp) > 0
+        ? Math.round(Number(spec.maxHp))
+        : null;
+      const ac = Number.isFinite(Number(spec.ac)) && Number(spec.ac) >= 0
+        ? Math.round(Number(spec.ac))
+        : null;
+      sourcePatch = {
+        sourceType: "npc",
+        sourceId: String(spec.sourceId || "").trim() || null,
+        linkedNpcId: String(spec.sourceId || "").trim() || null,
+        maxHp,
+        currentHp: maxHp == null ? null : Math.max(0, Math.min(maxHp, Math.round(Number(spec.currentHp) || maxHp))),
+        ac,
+        speed: String(spec.speed || "").trim().slice(0, 160),
+        combatEnabled: spec.combatEnabled === true
+      };
     }
     const sizeCategory = normalizeSizeCategory(sourcePatch.sizeCategory || spec.sizeCategory);
     const ownershipMode = String(spec.ownership?.mode || spec.ownership || "dm");

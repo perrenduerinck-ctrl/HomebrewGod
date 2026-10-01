@@ -2245,7 +2245,7 @@ test(
 );
 
 test(
-  "app smoke mode exercises room, battle-map, character, monster, magic-item, and spell screens",
+  "app smoke mode exercises room, battle-map, character, monster, magic-item, spell, and NPC screens",
   async ({ page }) => {
     await page.goto(
       "?smokeTest=1&release=phase20-20260727",
@@ -2283,7 +2283,8 @@ test(
         "characterCreator",
         "monsterCreator",
         "magicItemCreator",
-        "spellCreator"
+        "spellCreator",
+        "npcCreator"
       ]
     ) {
       const state =
@@ -2369,6 +2370,24 @@ test(
     await expect(
       page.getByRole("heading", {
         name: "Spell Library"
+      })
+    ).toBeVisible();
+
+    const npcState =
+      await page.evaluate(() => {
+        return window
+          .__HOMEBREW_GOD_RELEASE_TEST__
+          .openScreen(
+            "npcCreator"
+          );
+      });
+
+    expect(
+      npcState.npcCreatorReady
+    ).toBe(true);
+    await expect(
+      page.getByRole("heading", {
+        name: "NPC Creator"
       })
     ).toBeVisible();
   }
