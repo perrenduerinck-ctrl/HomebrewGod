@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Spell Creator Test</title><link rel="stylesheet" href="../../assets/styles/app.css"><link rel="stylesheet" href="../../spells/spellCreator.css"></head><body>
+<main id="screen"></main>
+<script type="module">
+  import { createSpellCreator } from "../../spells/spellCreator.js";
+  import { normalizeHomebrewSpell } from "../../spells/spellModel.js";
+  const records = new Map(); let next = 0;
+  const persistence = {
+    async save(raw) { const spell = normalizeHomebrewSpell({ ...raw, id: raw.id || `spell-${++next}`, updatedAtMillis: Date.now() }); records.set(spell.id, spell); return spell; },
+    async load(id) { return records.get(id); },
+    async list() { return [...records.values()]; },
+    async remove(id) { records.delete(id); }
+  };
+  window.__published = null; window.__characterSpell = null; window.__animationPreviews = 0;
+  window.creator = createSpellCreator({
+    screen: document.getElementById("screen"), persistence,
+    getUserId: () => "user-1",
+    onEditAnimations: async ({ animations, previewOnly }) => {
+      if (previewOnly) { window.__animationPreviews += 1; return null; }
+      return { ...animations, cast: { animationId: "arcane-cast" }, impact: { animationId: "frost-impact" } };
+    },
+    onAddToCharacter: async (spell) => { window.__characterSpell = spell; return { message: "Spell queued." }; },
+    onPublishToWorkshop: (request) => { window.__published = request; },
+    onBrowseWorkshop: (request) => { window.__browse = request; }
+  });
+  window.spellRecords = () => [...records.values()];
+</script></body></html>

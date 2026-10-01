@@ -270,6 +270,31 @@ service cloud.firestore {
           && request.resource.data.updatedAtMillis is number;
       }
 
+      match /spells/{spellId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.id == spellId
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.level is int
+          && request.resource.data.level >= 0
+          && request.resource.data.level <= 9
+          && request.resource.data.school is string
+          && request.resource.data.school.size() > 0
+          && request.resource.data.school.size() <= 40
+          && request.resource.data.classes is list
+          && request.resource.data.classes.size() <= 20
+          && request.resource.data.description is string
+          && request.resource.data.description.size() <= 12000
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 20
+          && request.resource.data.animations is map
+          && request.resource.data.updatedAtMillis is number;
+      }
+
       match /libraryIndex/{libraryId} {
         allow read, delete: if isSelf(userId);
         allow create, update:

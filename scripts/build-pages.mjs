@@ -113,6 +113,7 @@ for (
     "library",
     "items",
     "monsters",
+    "spells",
     "shared",
     "tokens",
     "ui",

@@ -183,9 +183,11 @@ test("combined unified search, type, tags, collection and type-specific filters 
   const base = { authorUid: "author", authorName: "Aster", roomCode: "ROOM-1" };
   const monsterAsset = { ...normalizeWorkshopAsset({ assetId: "skeleton_king", assetType: "monster", name: "Skeleton King", description: "Undead necrotic boss", tags: ["boss", "necrotic"], visibility: "ROOM", content: { cr: "9", size: "Large", type: "Undead" } }, base), collectionIds: ["undead_dungeon"], collectionNames: ["Undead Dungeon"] };
   const animationAsset = { ...normalizeWorkshopAsset({ assetId: "soul_portal", assetType: "animation", name: "Soul Portal", description: "Undead gateway", tags: ["necrotic"], visibility: "ROOM", content: { family: "magic", style: "portal" } }, base), collectionIds: ["undead_dungeon"], collectionNames: ["Undead Dungeon"] };
+  const spellAsset = { ...normalizeWorkshopAsset({ assetId: "grave_burst", assetType: "spell", name: "Grave Burst", description: "A necrotic pulse", tags: ["necrotic"], visibility: "ROOM", content: { level: 3, school: "Necromancy", classes: ["Wizard"], damageType: "Necrotic" } }, base), collectionIds: ["undead_dungeon"], collectionNames: ["Undead Dungeon"] };
   const result = filterWorkshopAssets([monsterAsset, animationAsset], { search: "undead aster", assetType: "monster", tags: "boss, necrotic", collectionId: "undead_dungeon", cr: "9", creatureType: "undead", currentUserId: "author" });
   assert.deepEqual(result.map((entry) => entry.assetId), ["skeleton_king"]);
-  assert.equal(filterWorkshopAssets([monsterAsset, animationAsset], { search: "Undead Dungeon" }).length, 2);
+  assert.equal(filterWorkshopAssets([monsterAsset, animationAsset, spellAsset], { search: "Undead Dungeon" }).length, 3);
+  assert.deepEqual(filterWorkshopAssets([monsterAsset, animationAsset, spellAsset], { assetType: "spell", level: "3", school: "necro", className: "wizard", damageType: "necrotic" }).map((entry) => entry.assetId), ["grave_burst"]);
 });
 
 test("recently used records stay lightweight and account-scoped", () => {

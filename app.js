@@ -169,9 +169,11 @@ import { createLibraryAggregator } from "./library/libraryAggregator.js";
 import { createAnimationLibraryAdapter } from "./library/adapters/animationLibraryAdapter.js";
 import { createAccountLibraryAdapter } from "./library/adapters/accountLibraryAdapter.js";
 import { createMagicItemLibraryAdapter } from "./library/adapters/magicItemLibraryAdapter.js";
+import { createSpellLibraryAdapter } from "./library/adapters/spellLibraryAdapter.js";
 import { createAccountLibraryIndex } from "./library/accountLibraryIndex.js";
 import { copyLibraryRecordToRoom } from "./library/copyToRoom.js";
 import { createMagicItemPersistence } from "./items/magicItemPersistence.js";
+import { createSpellPersistence } from "./spells/spellPersistence.js";
 
 console.log("Homebrew God app.js loaded");
 
@@ -222,6 +224,7 @@ const E = {
   monsterCreatorScreen: $("monsterCreatorScreen"),
   characterCreatorScreen: $("characterCreatorScreen"),
   magicItemCreatorScreen: $("magicItemCreatorScreen"),
+  spellCreatorScreen: $("spellCreatorScreen"),
   workshopScreen: $("workshopScreen"),
   persistenceConnectionStatus: $("persistenceConnectionStatus"),
 
@@ -536,6 +539,8 @@ let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
 let magicItemCreatorSystem = null;
 let magicItemPersistence = null;
+let spellCreatorSystem = null;
+let spellPersistence = null;
 let workshopSystem = null;
 let workshopPersistence = null;
 let libraryAggregator = null;
@@ -543,6 +548,7 @@ let accountLibraryIndex = null;
 let characterCreatorModulePromise = null;
 let monsterCreatorModulePromise = null;
 let magicItemCreatorModulePromise = null;
+let spellCreatorModulePromise = null;
 
 let activeSessionId = makeActiveSessionId();
 let activeSessionRoomCode = null;
@@ -647,7 +653,7 @@ function syncMainScreenRoute(screenName) {
   if (!currentRoomCode || !window.history?.replaceState) return;
   const routeUrl = new URL(window.location.href);
   routeUrl.searchParams.set("room", currentRoomCode);
-  if (["battle", "characterCreator", "monsterCreator", "magicItemCreator", "workshop"].includes(screenName)) {
+  if (["battle", "characterCreator", "monsterCreator", "magicItemCreator", "spellCreator", "workshop"].includes(screenName)) {
     routeUrl.searchParams.set("view", screenName);
   } else {
     routeUrl.searchParams.delete("view");
@@ -668,6 +674,7 @@ function navigateMainScreen(screenName) {
   E.monsterCreatorScreen.classList.add("hidden");
   E.characterCreatorScreen.classList.add("hidden");
   E.magicItemCreatorScreen.classList.add("hidden");
+  E.spellCreatorScreen.classList.add("hidden");
   E.workshopScreen.classList.add("hidden");
 
   if (screenName === "auth") E.authScreen.classList.remove("hidden");
@@ -677,6 +684,7 @@ function navigateMainScreen(screenName) {
   if (screenName === "monsterCreator") E.monsterCreatorScreen.classList.remove("hidden");
   if (screenName === "characterCreator") E.characterCreatorScreen.classList.remove("hidden");
   if (screenName === "magicItemCreator") E.magicItemCreatorScreen.classList.remove("hidden");
+  if (screenName === "spellCreator") E.spellCreatorScreen.classList.remove("hidden");
   if (screenName === "workshop") E.workshopScreen.classList.remove("hidden");
 
   if (currentRoomCode && screenName === "characterCreator") {
@@ -687,6 +695,9 @@ function navigateMainScreen(screenName) {
   }
   if (currentRoomCode && screenName === "magicItemCreator") {
     void initMagicItemCreatorSystem();
+  }
+  if (currentRoomCode && screenName === "spellCreator") {
+    void initSpellCreatorSystem();
   }
   if (currentRoomCode && screenName === "workshop") {
     void initWorkshopSystem();
@@ -8762,6 +8773,17 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
     return { assetType: "magic-item", recordId: saved.id };
   }
 
+  if (copy.assetType === "spell") {
+    const recordId = replaceRecordId || copy.recordId;
+    const saved = await getSpellPersistenceSystem().save({
+      ...copy.content,
+      ...provenance,
+      id: recordId
+    });
+    libraryAggregator?.invalidate?.();
+    return { assetType: "spell", recordId: saved.id };
+  }
+
   if (copy.assetType === "map") {
     if (!currentRoomCode || !currentIsDM) {
       throw new Error("Only the room DM can add Workshop maps to this room library.");
@@ -8825,6 +8847,10 @@ async function loadImportedWorkshopAsset(asset) {
     const item = await getMagicItemPersistenceSystem().load(asset.localRecordId);
     return { ...asset, content: item };
   }
+  if (asset.assetType === "spell") {
+    const spell = await getSpellPersistenceSystem().load(asset.localRecordId);
+    return { ...asset, content: spell };
+  }
   if (asset.assetType === "map") {
     if (!currentRoomCode) throw new Error("Open the room that owns this map copy.");
     const snapshot = await getDoc(doc(db, "rooms", currentRoomCode, "maps", asset.localRecordId));
@@ -8872,6 +8898,13 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
     creator.openItem(content, { duplicate: !localRecordId && !asset.libraryRecord });
     return { message: "Independent magic item copy opened in Magic Item Creator." };
   }
+  if (["edit-copy", "assign-animation"].includes(actionId) && asset?.assetType === "spell") {
+    navigateMainScreen("spellCreator");
+    const creator = await initSpellCreatorSystem();
+    creator.openSpell(content, { duplicate: !localRecordId && !asset.libraryRecord });
+    if (actionId === "assign-animation") await creator.editAnimations(false);
+    return { message: actionId === "assign-animation" ? "Spell opened for animation assignment." : "Independent spell copy opened in Spell Creator." };
+  }
   if (actionId === "use-map" && asset?.assetType === "map") {
     if (!currentRoomCode || !currentIsDM) throw new Error("Open a room as its DM before using this map.");
     const map = {
@@ -8906,6 +8939,16 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
         : `Choose a character to add ${content.name || asset.name}.`
     };
   }
+  if (actionId === "add-to-character" && asset?.assetType === "spell") {
+    navigateMainScreen("characterCreator");
+    const creator = await initCharacterCreatorSystem();
+    const queued = creator.queueSpell(content);
+    return {
+      message: queued.added
+        ? `${content.name || asset.name} was added to the current character as an independent copy.`
+        : `Choose a character to add ${content.name || asset.name}.`
+    };
+  }
   if (actionId === "add-to-character") {
     navigateMainScreen("characterCreator");
     document.dispatchEvent(new CustomEvent("homebrewgod:library-use", { detail: { actionId, asset, localRecordId } }));
@@ -8923,6 +8966,16 @@ function getMagicItemPersistenceSystem() {
     getUserId: () => currentUser?.uid || ""
   });
   return magicItemPersistence;
+}
+
+function getSpellPersistenceSystem() {
+  if (spellPersistence) return spellPersistence;
+  spellPersistence = createSpellPersistence({
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+    query, orderBy, limit, startAfter, serverTimestamp,
+    getUserId: () => currentUser?.uid || ""
+  });
+  return spellPersistence;
 }
 
 async function initMagicItemCreatorSystem() {
@@ -8953,6 +9006,54 @@ async function initMagicItemCreatorSystem() {
   return magicItemCreatorSystem;
 }
 
+async function initSpellCreatorSystem() {
+  if (spellCreatorSystem) {
+    await spellCreatorSystem.refresh();
+    return spellCreatorSystem;
+  }
+  if (!spellCreatorModulePromise) {
+    spellCreatorModulePromise = import("./spells/spellCreator.js");
+  }
+  let creatorModule;
+  try {
+    creatorModule = await spellCreatorModulePromise;
+  } catch (error) {
+    spellCreatorModulePromise = null;
+    console.error("Spell Creator module failed to load:", error);
+    throw error;
+  }
+  spellCreatorSystem = creatorModule.createSpellCreator({
+    screen: E.spellCreatorScreen,
+    persistence: getSpellPersistenceSystem(),
+    onBack: () => navigateMainScreen("battle"),
+    onPublishToWorkshop: publishToWorkshop,
+    onBrowseWorkshop: browseWorkshop,
+    onAddToCharacter: async (spell) => {
+      navigateMainScreen("characterCreator");
+      const creator = await initCharacterCreatorSystem();
+      const queued = creator.queueSpell(spell);
+      return { message: queued.added ? `${spell.name} was added as an independent character spell.` : `Choose a character to add ${spell.name}.` };
+    },
+    onEditAnimations: async ({ name, animations, previewOnly }) => {
+      await animationDocumentSession.persistence?.load?.();
+      const [{ openSpellAnimationPanel }, { assertPersistentAnimationReferences }] = await Promise.all([
+        import("./vfx/spellAnimationPanel.js"),
+        import("./vfx/animationReferences.js")
+      ]);
+      const result = await openSpellAnimationPanel({ name, animations, previewOnly });
+      if (result && !previewOnly) {
+        assertPersistentAnimationReferences(
+          { animations: result },
+          { library: animationDocumentSession.library, allowMissing: false, allowRoom: false }
+        );
+      }
+      return result;
+    },
+    getUserId: () => currentUser?.uid || ""
+  });
+  return spellCreatorSystem;
+}
+
 async function initWorkshopSystem() {
   if (workshopSystem) return workshopSystem;
   workshopPersistence = createWorkshopPersistence({
@@ -8977,7 +9078,8 @@ async function initWorkshopSystem() {
         ensureIndex: () => getAccountLibraryIndexSystem().ensure()
       }),
       createAnimationLibraryAdapter(adapterConfig),
-      createMagicItemLibraryAdapter(adapterConfig)
+      createMagicItemLibraryAdapter(adapterConfig),
+      createSpellLibraryAdapter(adapterConfig)
     ],
     persistence: workshopPersistence,
     loadImportedRecord: loadImportedWorkshopAsset,
@@ -9411,6 +9513,12 @@ async function openStartupViewIfNeeded() {
     return;
   }
 
+  if (startupView === "spellCreator") {
+    navigateMainScreen("spellCreator");
+    await initSpellCreatorSystem();
+    return;
+  }
+
   if (startupView === "workshop") {
     navigateMainScreen("workshop");
     await initWorkshopSystem();
@@ -9442,6 +9550,7 @@ window.addEventListener("pagehide", function () {
   characterCreatorSystem?.cleanupListeners?.();
   monsterCreatorSystem?.cleanupListeners?.();
   magicItemCreatorSystem?.destroy?.();
+  spellCreatorSystem?.destroy?.();
   tokenSystem?.stopTokenListener?.();
   battleMapVfxSequences?.destroy();
   battleMapVfxSequences = null;
@@ -9470,6 +9579,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       "monsterCreator",
       "characterCreator",
       "magicItemCreator",
+      "spellCreator",
       "workshop"
     ]);
   const releaseScreenElements = {
@@ -9487,6 +9597,8 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       E.characterCreatorScreen,
     magicItemCreator:
       E.magicItemCreatorScreen,
+    spellCreator:
+      E.spellCreatorScreen,
     workshop:
       E.workshopScreen
   };
@@ -9637,6 +9749,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             await initMagicItemCreatorSystem();
           }
 
+          if (screenName === "spellCreator") {
+            await initSpellCreatorSystem();
+          }
+
           if (screenName === "workshop") {
             await initWorkshopSystem();
           }
@@ -9662,6 +9778,10 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             magicItemCreatorReady:
               Boolean(
                 magicItemCreatorSystem
+              ),
+            spellCreatorReady:
+              Boolean(
+                spellCreatorSystem
               )
           };
         },

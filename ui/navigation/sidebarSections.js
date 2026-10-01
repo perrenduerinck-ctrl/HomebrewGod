@@ -38,6 +38,7 @@ export const SIDEBAR_SECTIONS = Object.freeze([
       { id: "create-character", label: "Character Creator", action: "screen", target: "characterCreator", room: true },
       { id: "create-monster", label: "Monster Creator", action: "screen", target: "monsterCreator", room: true, roles: ["dm"] },
       { id: "create-magic-item", label: "Magic Item Creator", action: "screen", target: "magicItemCreator", room: true },
+      { id: "create-spell", label: "Spell Creator", action: "screen", target: "spellCreator", room: true },
       { id: "create-animation", label: "Animation Creator", action: "tool", target: "animationCreator", room: true }
     ]
   },
@@ -57,6 +58,7 @@ export const SIDEBAR_SECTIONS = Object.freeze([
       { id: "library-characters", label: "Characters", action: "screen", target: "characterCreator", room: true },
       { id: "library-monsters", label: "Monsters", action: "screen", target: "monsterCreator", room: true, roles: ["dm"] },
       { id: "library-items", label: "Magic Items", action: "screen", target: "magicItemCreator", room: true },
+      { id: "library-spells", label: "Spells", action: "screen", target: "spellCreator", room: true },
       { id: "library-animations", label: "Animations", action: "tool", target: "animationLibrary", room: true },
       { id: "library-workshop", label: "Homebrew Workshop", action: "screen", target: "workshop", room: true }
     ]

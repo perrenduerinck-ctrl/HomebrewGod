@@ -172,6 +172,10 @@ import {
   normalizeMagicItem
 } from "../items/magicItemModel.js";
 import {
+  homebrewSpellToCharacterCopy,
+  normalizeHomebrewSpell
+} from "../spells/spellModel.js";
+import {
   createDerivedSignature,
   createScopedDerivedCache,
   getDerivedObjectIdentity
@@ -11072,6 +11076,7 @@ export function createCharacterCreator(options = {}) {
     openContainerId: "",
     showContainedItems: false,
     pendingMagicItem: null,
+    pendingSpell: null,
     magicItemLibraryCache: [],
     magicItemLibraryLoaded: false,
     magicItemLibraryLoading: false,
@@ -20520,6 +20525,26 @@ export function createCharacterCreator(options = {}) {
               : ""
           }
 
+          ${
+            creatorState.pendingSpell
+              ? `
+                <button
+                  type="button"
+                  class="primary"
+                  data-cc-action="add-pending-library-spell"
+                  data-character-id="${escapeHtml(
+                    characterId
+                  )}"
+                  ${disabled ? "disabled" : ""}
+                >
+                  Add ${escapeHtml(
+                    creatorState.pendingSpell.name
+                  )}
+                </button>
+              `
+              : ""
+          }
+
           <button
             type="button"
             class="primary"
@@ -21023,6 +21048,16 @@ export function createCharacterCreator(options = {}) {
 
     ({ button }) => {
       addPendingMagicItemToCharacter(
+        button.dataset.characterId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "add-pending-library-spell",
+
+    ({ button }) => {
+      addPendingLibrarySpellToCharacter(
         button.dataset.characterId
       );
     }
@@ -29762,6 +29797,61 @@ export function createCharacterCreator(options = {}) {
     navigateToStep("equipment");
 
     return true;
+  }
+
+  function addLibrarySpellToCurrentCharacter(rawSpell) {
+    const source = normalizeHomebrewSpell(rawSpell);
+    const copy = normalizeSection16Spell(
+      homebrewSpellToCharacterCopy(source),
+      "library"
+    );
+    const spells = getSection16CustomSpells();
+    while (spells.some((spell) => spell.id === copy.id)) {
+      copy.id = makeSafeId(
+        `${source.name}-${Date.now()}-${Math.random()}`,
+        "custom-spell"
+      );
+    }
+    spells.push(copy);
+    creatorState.draft.magic.unassignedKnownSpellIds = [
+      ...new Set([
+        ...cleanArray(
+          creatorState.draft.magic.unassignedKnownSpellIds
+        ),
+        copy.id
+      ])
+    ];
+    syncSection16LegacySpellAliases();
+    markDraftChanged();
+    return copy;
+  }
+
+  function queueLibrarySpellForCharacter(rawSpell) {
+    const spell = normalizeHomebrewSpell(rawSpell);
+    if (creatorState.viewMode === "builder") {
+      const added = addLibrarySpellToCurrentCharacter(spell);
+      setStatus(
+        `${spell.name} was added as an independent custom spell.`
+      );
+      navigateToStep("spells");
+      return { added: true, pending: false, spell: added };
+    }
+    creatorState.pendingSpell = spell;
+    setStatus(`Choose a character below to add ${spell.name}.`);
+    renderCharacterLibraryView();
+    return { added: false, pending: true, spell };
+  }
+
+  function addPendingLibrarySpellToCharacter(characterId) {
+    const pending = creatorState.pendingSpell;
+    if (!pending || !openCharacterFromLibrary(characterId)) return false;
+    const added = addLibrarySpellToCurrentCharacter(pending);
+    creatorState.pendingSpell = null;
+    setStatus(
+      `${pending.name} was added as an independent custom spell. Save the character to keep it.`
+    );
+    navigateToStep("spells");
+    return added;
   }
 
   function getSection15TransferTargets() {
@@ -38663,6 +38753,8 @@ export function createCharacterCreator(options = {}) {
     replaceDraft: replaceSection20Draft,
     queueMagicItem:
       queueMagicItemForCharacter,
+    queueSpell:
+      queueLibrarySpellForCharacter,
     refreshMagicItemLibrary:
       refreshSection15MagicItemLibrary,
 

@@ -26,6 +26,10 @@ test(
       appSource,
       /monsterCreatorModulePromise\s*=\s*import\(\s*["']\.\/monsters\/creator\.js["']\s*\)/
     );
+    assert.match(
+      appSource,
+      /spellCreatorModulePromise\s*=\s*import\(\s*["']\.\/spells\/spellCreator\.js["']\s*\)/
+    );
   }
 );
 
@@ -102,6 +106,10 @@ test(
     assert.match(
       appSource,
       /startupView === "monsterCreator"[\s\S]*?await initMonsterCreatorSystem\(\)/
+    );
+    assert.match(
+      appSource,
+      /startupView === "spellCreator"[\s\S]*?await initSpellCreatorSystem\(\)/
     );
     assert.match(
       appSource,
