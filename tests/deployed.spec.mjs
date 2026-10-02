@@ -80,6 +80,13 @@ test(
         "encounters/encounterLoader.js",
         "encounters/encounterCreator.js",
         "library/adapters/encounterLibraryAdapter.js",
+        "effects/effectModel.js",
+        "effects/effectDuration.js",
+        "effects/effectRegistry.js",
+        "effects/effectModifiers.js",
+        "effects/effectRuntime.js",
+        "effects/effectPersistence.js",
+        "effects/effectPanel.js",
         "vfx/animationWorkspace.js",
         "vfx/summonAutomation.js",
         "vfx/summonAutomationPanel.js"

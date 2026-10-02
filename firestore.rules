@@ -152,6 +152,40 @@ service cloud.firestore {
         && request.resource.data.ownerUid == roomData(roomCode).dmUid;
     }
 
+    function validGameplayEffect(roomCode, effectId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'definitionId', 'name', 'type', 'icon', 'description',
+          'roomCode', 'sourceId', 'sourceType', 'targetTokenId',
+          'targetCharacterId', 'duration', 'timing', 'modifiers', 'tags',
+          'animation', 'createdByUid', 'createdAtMillis', 'updatedAtMillis',
+          'updatedAt'
+        ])
+        && request.resource.data.id == effectId
+        && request.resource.data.roomCode == roomCode
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.definitionId is string
+        && request.resource.data.definitionId.size() > 0
+        && request.resource.data.definitionId.size() <= 180
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.type in [
+          'condition', 'buff', 'debuff', 'other'
+        ]
+        && request.resource.data.targetTokenId is string
+        && request.resource.data.targetTokenId.size() > 0
+        && request.resource.data.targetTokenId.size() <= 180
+        && request.resource.data.duration is map
+        && request.resource.data.timing is map
+        && request.resource.data.modifiers is list
+        && request.resource.data.modifiers.size() <= 24
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 20
+        && request.resource.data.animation is map
+        && request.resource.data.createdAtMillis is number
+        && request.resource.data.updatedAtMillis is number;
+    }
+
     function validWorkshopAssetType(value) {
       return value in [
         'monster', 'magic-item', 'spell', 'animation', 'npc',
@@ -671,6 +705,26 @@ service cloud.firestore {
             isRoomMember(roomCode)
             && resource.data.get('createdByUid', '') == request.auth.uid
           );
+      }
+
+      match /effects/{effectId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if isRoomDm(roomCode)
+          && validGameplayEffect(roomCode, effectId);
+
+        allow update:
+          if isRoomDm(roomCode)
+          && validGameplayEffect(roomCode, effectId)
+          && request.resource.data.createdByUid
+            == resource.data.createdByUid
+          && request.resource.data.createdAtMillis
+            == resource.data.createdAtMillis;
+
+        allow delete:
+          if isRoomDm(roomCode);
       }
 
       match /maps/{mapId} {

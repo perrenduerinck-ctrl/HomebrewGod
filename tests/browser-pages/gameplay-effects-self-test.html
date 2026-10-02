@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gameplay Effects Test</title>
+  <link rel="stylesheet" href="../../assets/styles/app.css">
+  <style>body{margin:0;background:#070b18}main{box-sizing:border-box;width:min(860px,100%);margin:auto;padding:1rem}</style>
+</head>
+<body>
+  <main id="effects"></main>
+  <script type="module">
+    import { createEffectRegistry } from "../../effects/effectRegistry.js";
+    import { createEffectRuntime } from "../../effects/effectRuntime.js";
+    import { createEffectPanel } from "../../effects/effectPanel.js";
+    import { calculateEffectModifiers } from "../../effects/effectModifiers.js";
+
+    const tokens = [
+      { id: "caster", name: "Aria" },
+      { id: "target", name: "Ogre", armorClass: 12, movementSpeed: 40 }
+    ];
+    let isDm = true;
+    const registry = createEffectRegistry();
+    const runtime = createEffectRuntime({ registry, onVisual: () => { throw new Error("diagnostic VFX failure"); } });
+    const context = {
+      worldTime: 600,
+      initiative: {
+        combatActive: true,
+        turnCounter: 8,
+        currentCombatantId: "caster",
+        initiativeOrder: tokens.map((token) => ({ tokenId: token.id }))
+      }
+    };
+    const panel = createEffectPanel({
+      root: document.getElementById("effects"), registry, runtime,
+      getTokens: () => tokens, getIsDm: () => isDm,
+      getRoomCode: () => "PLAY-1", getUserId: () => "dm-1", getContext: () => context,
+      onApply: async (input) => runtime.applyEffect(input, context),
+      onRemove: async (record) => runtime.removeEffect(record.id, "manual")
+    });
+    window.effectTest = {
+      runtime,
+      panel,
+      setDm(value) { isDm = value; panel.refresh(); },
+      effectiveTarget() {
+        return calculateEffectModifiers({
+          base: { ac: 12, speed: 40 },
+          effects: runtime.getForToken("target")
+        });
+      }
+    };
+  </script>
+</body>
+</html>

@@ -64,6 +64,10 @@ export function createTokenSystem(options) {
     setCurrentRoomData: options.setCurrentRoomData,
     getCurrentIsDM: options.getCurrentIsDM,
     getCurrentUserUid: options.getCurrentUserUid,
+    getGameplayEffectsForToken:
+      options.getGameplayEffectsForToken,
+    getEffectiveTokenStats:
+      options.getEffectiveTokenStats,
     getTokenMovementMode: options.getTokenMovementMode,
     previewTokenMovement: options.previewTokenMovement,
     getPendingMovement: options.getPendingMovement,
@@ -950,6 +954,31 @@ export function createTokenSystem(options) {
         opacity: 1;
       }
 
+      .hg-token-effects {
+        position: absolute;
+        right: -8px;
+        top: -8px;
+        display: flex;
+        gap: 2px;
+        max-width: calc(100% + 16px);
+        pointer-events: none;
+        z-index: 5;
+      }
+
+      .hg-token-effect-badge {
+        display: grid;
+        place-items: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 1px solid rgba(220, 226, 255, .65);
+        background: rgba(15, 18, 38, .94);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+        font-size: 10px;
+        line-height: 1;
+      }
+
       .hg-token-elevation-badge {
         position: absolute;
         left: 50%;
@@ -1823,12 +1852,45 @@ export function createTokenSystem(options) {
         tokenEl.appendChild(elevationBadge);
       }
 
+      const gameplayEffects = deps.getGameplayEffectsForToken
+        ? deps.getGameplayEffectsForToken(token.id) || []
+        : [];
+      if (gameplayEffects.length > 0) {
+        const effects = document.createElement("div");
+        effects.className = "hg-token-effects";
+        effects.setAttribute(
+          "aria-label",
+          `Active effects: ${gameplayEffects.map((entry) => entry.name).join(", ")}`
+        );
+        gameplayEffects.slice(0, 3).forEach((entry) => {
+          const badge = document.createElement("span");
+          badge.className = "hg-token-effect-badge";
+          badge.textContent = entry.icon || "◆";
+          badge.title = entry.name || "Effect";
+          effects.appendChild(badge);
+        });
+        if (gameplayEffects.length > 3) {
+          const more = document.createElement("span");
+          more.className = "hg-token-effect-badge";
+          more.textContent = `+${gameplayEffects.length - 3}`;
+          more.title = `${gameplayEffects.length - 3} more active effects`;
+          effects.appendChild(more);
+        }
+        tokenEl.appendChild(effects);
+      }
+
       const label = document.createElement("div");
       label.className = "hg-token-label";
       label.textContent = token.name || "Token";
       tokenEl.appendChild(label);
 
       const tokenStats = [];
+      const effectiveStats = deps.getEffectiveTokenStats
+        ? deps.getEffectiveTokenStats(token) || {}
+        : {};
+      const effectiveArmorClass = Number.isFinite(Number(effectiveStats.armorClass))
+        ? Number(effectiveStats.armorClass)
+        : token.armorClass;
 
       if (
         token.display?.hpText === true &&
@@ -1844,10 +1906,10 @@ export function createTokenSystem(options) {
 
       if (
         token.display?.ac === true &&
-        token.armorClass > 0
+        effectiveArmorClass > 0
       ) {
         tokenStats.push(
-          "AC " + token.armorClass
+          "AC " + effectiveArmorClass
         );
       }
 

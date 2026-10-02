@@ -102,6 +102,14 @@ import {
   getCombatEffectEndReason
 } from "./vfx/combatEffectLifecycle.js?v=foundation-milestone-20260915";
 import { createCombatEffectPersistence } from "./vfx/combatEffectPersistence.js?v=foundation-milestone-20260915";
+import { createEffectRegistry } from "./effects/effectRegistry.js";
+import { createEffectRuntime } from "./effects/effectRuntime.js";
+import { createEffectPersistence } from "./effects/effectPersistence.js";
+import { createEffectPanel } from "./effects/effectPanel.js";
+import {
+  calculateEffectModifiers,
+  hasEffectRestriction
+} from "./effects/effectModifiers.js";
 import { createTokenAutomation } from "./vfx/tokenAutomation.js?v=foundation-milestone-20260915";
 import { findNearestFreeSummonPoint } from "./vfx/summonAutomation.js";
 import { getSpellVfxProfile } from "./vfx/spellVfxProfiles.js?v=complete-spell-vfx-20260903";
@@ -140,6 +148,7 @@ import {
   createMovementSystem,
   createPendingMovement,
   getTokenMovementMode,
+  readTokenBaseSpeed,
   synchronizeMovementState,
   toRoomMovementFields
 } from "./combat/movementSystem.js?v=movement-robustness-20260906";
@@ -462,6 +471,29 @@ combatEffectPersistence = createCombatEffectPersistence({
   getIsDm: () => currentIsDM === true,
   onWarning: (message) => console.warn(message)
 });
+let gameplayEffectPersistence = null;
+let latestGameplayEffectRecords = [];
+let gameplayEffectPanelSystem = null;
+const gameplayEffectVisualHandles = new Map();
+const gameplayEffectRegistry = createEffectRegistry();
+const gameplayEffectRuntime = createEffectRuntime({
+  registry: gameplayEffectRegistry,
+  onChange: handleGameplayEffectRuntimeChange,
+  onVisual: playGameplayEffectVisual
+});
+gameplayEffectPersistence = createEffectPersistence({
+  db,
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp,
+  getRoomId: () => currentRoomCode || "",
+  getUserId: () => currentUser?.uid || "",
+  getIsDm: () => currentIsDM === true,
+  onWarning: (message) => console.warn(message)
+});
 async function uploadAnimationSprite(file) {
   const uploaded = await uploadMapToCloudinary(file);
   return {
@@ -584,7 +616,8 @@ const ROOM_OWNED_SUBCOLLECTIONS = [
   "characters",
   "activePlayers",
   "animations",
-  "combatEffects"
+  "combatEffects",
+  "effects"
 ];
 const MAX_IMAGE_UPLOAD_BYTES =
   MAX_SECURE_IMAGE_BYTES;
@@ -819,6 +852,12 @@ movementSystem = createMovementSystem({
   },
   getTokens: function () {
     return tokenSystem?.getRoomTokens?.() || [];
+  },
+  getEffectiveBaseSpeed: function (token, baseSpeed) {
+    return calculateEffectModifiers({
+      base: { speed: baseSpeed },
+      effects: getGameplayEffectsForToken(token?.id || token?.tokenId)
+    }).speed;
   },
   getUserUid: function () {
     return currentUser?.uid || "";
@@ -1567,6 +1606,7 @@ campaignTimeSystem.subscribe(
       initiative: initiativeSystem?.getState?.(),
       tokenIds: tokenSystem?.getRoomTokens?.().map((token) => token.id)
     });
+    reconcileGameplayEffects();
   }
 );
 initiativeSystem.subscribe(
@@ -1579,6 +1619,7 @@ initiativeSystem.subscribe(
       initiative: initiativeSystem.getState(),
       tokenIds: tokenSystem?.getRoomTokens?.().map((token) => token.id)
     });
+    reconcileGameplayEffects();
   }
 );
 initializeCampaignTimeControls();
@@ -1603,6 +1644,7 @@ function makeRoomCode() {
 function clearRoomListeners() {
   appRealtimeListeners.stop("room");
   combatEffectPersistence?.stop();
+  gameplayEffectPersistence?.stop();
   stopRoomViewListeners();
 
   if (
@@ -1879,6 +1921,7 @@ async function showLoggedOut() {
     playEnd: false
   });
   latestCombatEffectRecords = [];
+  clearGameplayEffectsForRoomExit();
 
   currentUser = null;
   currentRoomCode = null;
@@ -2374,6 +2417,7 @@ function openRoom(roomCode, screenToShow = "room") {
     playEnd: false
   });
   latestCombatEffectRecords = [];
+  clearGameplayEffectsForRoomExit();
   currentRoomCode = cleanCode;
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
@@ -2381,6 +2425,7 @@ function openRoom(roomCode, screenToShow = "room") {
   hasMigratedLegacyPuzzleTiles = false;
 
   combatEffectPersistence?.listen(cleanCode, synchronizePersistedCombatEffects);
+  gameplayEffectPersistence?.listen(cleanCode, synchronizePersistedGameplayEffects);
 
   appRealtimeListeners.connect(
     "room",
@@ -2491,6 +2536,7 @@ async function leaveCurrentRoomView() {
     playEnd: false
   });
   latestCombatEffectRecords = [];
+  clearGameplayEffectsForRoomExit();
 
   currentRoomCode = null;
   currentRoomData = null;
@@ -2637,6 +2683,7 @@ async function deleteCurrentRoomPermanently() {
       playEnd: false
     });
     latestCombatEffectRecords = [];
+    clearGameplayEffectsForRoomExit();
 
     await updateDoc(roomRef, {
       deletingAt: serverTimestamp()
@@ -5464,6 +5511,162 @@ function restoreCombatEffectController(record) {
   };
 }
 
+function gameplayEffectContext() {
+  return {
+    worldTime: campaignTimeSystem?.getState?.().worldTime || 0,
+    initiative: initiativeSystem?.getState?.() || {}
+  };
+}
+
+function stopGameplayEffectVisual(effectId) {
+  const handles = gameplayEffectVisualHandles.get(String(effectId || "")) || [];
+  gameplayEffectVisualHandles.delete(String(effectId || ""));
+  for (const handle of handles) {
+    try { handle?.cancel?.(); } catch {}
+  }
+}
+
+async function playGameplayEffectVisual(record, phase) {
+  const key = {
+    start: "startAnimationId",
+    sustain: "sustainAnimationId",
+    end: "endAnimationId"
+  }[phase];
+  const animationId = String(record?.animation?.[key] || "").trim();
+  if (phase === "end") stopGameplayEffectVisual(record?.id);
+  if (!animationId || activeMainScreenName !== "battle") return null;
+  try {
+    const engine = battleMapVfx || initializeBattleMapVfx();
+    const target = E.tokenLayer?.querySelector(
+      `.hg-token[data-token-id="${CSS.escape(String(record.targetTokenId || ""))}"]`
+    );
+    if (!engine || !target) return null;
+    if (animationId.startsWith("status-")) {
+      const handle = engine.play({
+        type: animationId,
+        attachment: {
+          tokenId: record.targetTokenId,
+          position: "overhead"
+        },
+        duration: phase === "sustain" ? 60000 : 1000,
+        persistent: phase === "sustain",
+        persistentLifetime: 60000
+      });
+      if (phase === "sustain" && handle?.ok) {
+        gameplayEffectVisualHandles.set(record.id, [handle]);
+      }
+      return handle;
+    }
+    const source = E.tokenLayer?.querySelector(
+      `.hg-token[data-token-id="${CSS.escape(String(record.sourceId || ""))}"]`
+    ) || target;
+    const result = await battleMapAnimations?.player?.playAnimation?.(
+      animationId,
+      {
+        source,
+        target,
+        sourceTokenId: record.sourceId || record.targetTokenId,
+        targetTokenId: record.targetTokenId,
+        placement: {
+          mode: "TARGET",
+          followTarget: true
+        },
+        playback: phase === "sustain" ? "hold" : "once"
+      }
+    );
+    if (phase === "sustain" && result?.ok !== false) {
+      gameplayEffectVisualHandles.set(record.id, [result]);
+    }
+    return result;
+  } catch (error) {
+    console.warn("Gameplay effect VFX was skipped:", error);
+    return null;
+  }
+}
+
+function clearGameplayEffectsForRoomExit() {
+  for (const id of [...gameplayEffectVisualHandles.keys()]) {
+    stopGameplayEffectVisual(id);
+  }
+  gameplayEffectRuntime.clear("room-left", {
+    visualPhase: false,
+    emitChange: false
+  });
+  latestGameplayEffectRecords = [];
+  gameplayEffectPanelSystem?.refresh?.();
+}
+
+function getGameplayEffectsForToken(tokenId) {
+  return gameplayEffectRuntime.getForToken(tokenId);
+}
+
+function getEffectiveTokenStats(token = {}) {
+  const calculated = calculateEffectModifiers({
+    base: {
+      ac: Number(token.armorClass) || 0,
+      speed: readTokenBaseSpeed(token)
+    },
+    effects: getGameplayEffectsForToken(token.id || token.tokenId)
+  });
+  return {
+    armorClass: calculated.ac,
+    movementSpeed: calculated.speed,
+    ...calculated
+  };
+}
+
+async function applyGameplayEffect(input, context = gameplayEffectContext()) {
+  if (currentIsDM !== true) throw new Error("Only the room DM can apply gameplay effects.");
+  const record = gameplayEffectRuntime.applyEffect(input, context);
+  try {
+    await gameplayEffectPersistence.save(record);
+    return record;
+  } catch (error) {
+    gameplayEffectRuntime.removeEffect(record.id, "save-failed", {
+      visualPhase: true,
+      emitChange: true
+    });
+    throw error;
+  }
+}
+
+async function removeGameplayEffect(record) {
+  if (currentIsDM !== true) throw new Error("Only the room DM can remove gameplay effects.");
+  await gameplayEffectPersistence.remove(record);
+  gameplayEffectRuntime.removeEffect(record.id, "manual");
+  return true;
+}
+
+function synchronizePersistedGameplayEffects(records = latestGameplayEffectRecords) {
+  latestGameplayEffectRecords = Array.isArray(records) ? records : [];
+  gameplayEffectRuntime.hydrate(latestGameplayEffectRecords);
+  reconcileGameplayEffects();
+  gameplayEffectPanelSystem?.refresh?.();
+}
+
+function reconcileGameplayEffects() {
+  return gameplayEffectRuntime.reconcile(gameplayEffectContext(), {
+    canExpire: currentIsDM === true
+  });
+}
+
+function handleGameplayEffectRuntimeChange(_snapshot, reason, record) {
+  renderActiveEffectsPanel();
+  if (activeMainScreenName === "battle" && tokenSystem) {
+    tokenSystem.render?.(currentRoomData || {});
+  }
+  movementSystem?.sync?.(currentRoomData || movementSystem.getState(), "gameplay-effects");
+  if (
+    record?.id &&
+    currentIsDM === true &&
+    ["turn-duration-expired", "world-time-expired"].includes(reason)
+  ) {
+    void gameplayEffectPersistence.remove(record).catch((error) => {
+      console.warn("Could not remove an expired gameplay effect:", error);
+    });
+  }
+}
+
 function synchronizePersistedCombatEffects(records = latestCombatEffectRecords) {
   latestCombatEffectRecords = Array.isArray(records) ? records : [];
   const context = combatEffectContext();
@@ -5491,7 +5694,12 @@ function handleCombatEffectLifecycleChange(_snapshot, reason, record) {
 
 function renderActiveEffectsPanel() {
   if (!activeEffectsPanel) return;
+  gameplayEffectPanelSystem?.refresh?.();
+  gameplayEffectPanelSystem?.setVisualEffects?.(
+    combatEffectLifecycle.getSnapshot()
+  );
   const list = activeEffectsPanel.querySelector("[data-active-effects-list]");
+  if (!list) return;
   const records = combatEffectLifecycle.getSnapshot();
   if (!records.length) {
     list.innerHTML = '<p class="small">No active persistent effects.</p>';
@@ -5700,6 +5908,12 @@ async function beginCombatActionTargeting({
     throw new Error(
       `Create or synchronize this ${characterId ? "character" : "monster"}'s linked token before using its actions.`
     );
+  }
+  if (hasEffectRestriction(
+    "action-restriction",
+    getGameplayEffectsForToken(sourceElement.dataset.tokenId)
+  )) {
+    throw new Error("That token cannot take actions while its active effect remains.");
   }
 
   clearCombatActionTargeting();
@@ -8436,6 +8650,9 @@ if (!tokenSystem) {
       return currentUser?.uid || "";
     },
 
+    getGameplayEffectsForToken,
+    getEffectiveTokenStats,
+
     getTokenMovementMode: function (token) {
       return getTokenMovementMode(
         token,
@@ -8584,7 +8801,25 @@ function initializeApplicationShell() {
   navigationToolDrawer = createToolDrawer({ document });
   activeEffectsPanel = document.createElement("section");
   activeEffectsPanel.className = "hg-active-effects-panel";
-  activeEffectsPanel.innerHTML = '<div class="hg-active-effects-list" data-active-effects-list></div>';
+  activeEffectsPanel.innerHTML = `
+    <div data-gameplay-effect-panel></div>
+    <section class="hg-effect-visual-list">
+      <h4>Presentation-only effects</h4>
+      <div class="hg-active-effects-list" data-active-effects-list></div>
+    </section>`;
+  gameplayEffectPanelSystem = createEffectPanel({
+    root: activeEffectsPanel.querySelector("[data-gameplay-effect-panel]"),
+    registry: gameplayEffectRegistry,
+    runtime: gameplayEffectRuntime,
+    getTokens: () => tokenSystem?.getRoomTokens?.() || [],
+    getIsDm: () => currentIsDM === true,
+    getRoomCode: () => currentRoomCode || "",
+    getUserId: () => currentUser?.uid || "",
+    getContext: gameplayEffectContext,
+    getAnimationOptions: () => battleMapAnimations?.library?.list?.() || [],
+    onApply: applyGameplayEffect,
+    onRemove: removeGameplayEffect
+  });
   renderActiveEffectsPanel();
   navigationController = createSidebarNavigation({
     document,

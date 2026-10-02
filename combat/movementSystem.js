@@ -218,6 +218,11 @@ export function synchronizeMovementState(
   if (sameTurn) {
     return normalizeMovementState({
       ...current,
+      baseSpeed: speed,
+      movementRemaining: Math.max(
+        0,
+        speed - current.movementSpent
+      ),
       activeTokenName:
         cleanText(activeToken?.name ?? combatant?.name) ||
         current.activeTokenName,
@@ -393,6 +398,7 @@ export function createMovementSystem({
   initialState = {},
   getInitiativeState = () => ({}),
   getTokens = () => [],
+  getEffectiveBaseSpeed = (_token, baseSpeed) => baseSpeed,
   getUserUid = () => "",
   getIsDm = () => false,
   commit = null
@@ -429,8 +435,12 @@ export function createMovementSystem({
   function sync(value = state, reason = "initiative") {
     const initiative = getInitiativeState() || {};
     const activeToken = findToken(initiative.currentCombatantId);
+    const baseSpeed = activeToken
+      ? getEffectiveBaseSpeed(activeToken, readTokenBaseSpeed(activeToken))
+      : undefined;
     const next = synchronizeMovementState(value, initiative, {
       activeToken,
+      baseSpeed,
       tokenExists: Boolean(activeToken)
     });
     const changed = !movementStatesEqual(state, next);
@@ -442,8 +452,12 @@ export function createMovementSystem({
   function applyRoomSnapshot(value) {
     const initiative = getInitiativeState() || value || {};
     const activeToken = findToken(initiative.currentCombatantId);
+    const baseSpeed = activeToken
+      ? getEffectiveBaseSpeed(activeToken, readTokenBaseSpeed(activeToken))
+      : undefined;
     let next = synchronizeMovementState(value, initiative, {
       activeToken,
+      baseSpeed,
       tokenExists: Boolean(activeToken)
     });
     const localPending = state.pendingMovement;
