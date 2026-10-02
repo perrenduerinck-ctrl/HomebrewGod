@@ -75,8 +75,9 @@ const definitions = [
   },
   {
     id: "encounter", label: "Encounters", singular: "Encounter", icon: "🎲", preview: "card",
-    filters: [filter("difficulty", "Difficulty")], quickActions: [action("edit-copy", "Edit Copy"), action("use-encounter", "Use Encounter")],
-    metadata(content = {}) { return { difficulty: clean(content.difficulty, 60) }; }, card(asset) { return asset.typeMetadata?.difficulty || ""; }
+    filters: [filter("difficulty", "Difficulty")], quickActions: [action("edit-copy", "Edit"), action("duplicate", "Duplicate"), action("use-encounter", "Load Encounter")],
+    metadata(content = {}) { return { difficulty: clean(content.difficulty, 60), combatantCount: Math.max(0, Math.min(50, Number(content.combatants?.length) || 0)), mapName: clean(content.mapRef?.name, 120) }; },
+    card(asset) { return [asset.typeMetadata?.difficulty, asset.typeMetadata?.combatantCount ? `${asset.typeMetadata.combatantCount} combatants` : "", asset.typeMetadata?.mapName].filter(Boolean).join(" · "); }
   },
   {
     id: "summon", label: "Summons", singular: "Summon", icon: "🜲", preview: "card",

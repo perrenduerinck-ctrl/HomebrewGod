@@ -18,6 +18,7 @@ test("player navigation exposes play tools without DM creation and world control
   assert.ok(ids.includes("create-spell"));
   assert.ok(ids.includes("library-spells"));
   assert.ok(ids.includes("create-npc"));
+  assert.ok(!ids.includes("create-encounter"));
   assert.ok(ids.includes("library-npcs"));
   assert.ok(ids.includes("library-workshop"));
   assert.ok(!ids.includes("create-monster"));
@@ -32,6 +33,8 @@ test("DM navigation groups every connected creator, campaign and world tool once
   assert.ok(ids.includes("create-magic-item"));
   assert.ok(ids.includes("create-spell"));
   assert.ok(ids.includes("create-npc"));
+  assert.ok(ids.includes("create-encounter"));
+  assert.ok(ids.includes("library-encounters"));
   assert.ok(ids.includes("tool-token"));
   assert.ok(ids.includes("campaign-room"));
   assert.ok(ids.includes("world-time"));

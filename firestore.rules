@@ -331,6 +331,39 @@ service cloud.firestore {
           && request.resource.data.updatedAtMillis is number;
       }
 
+      match /encounters/{encounterId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.id == encounterId
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.description is string
+          && request.resource.data.description.size() <= 5000
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() <= 12000
+          && request.resource.data.environment is string
+          && request.resource.data.environment.size() <= 2000
+          && request.resource.data.roomCode is string
+          && request.resource.data.roomCode.size() <= 40
+          && (
+            request.resource.data.roomCode == ''
+            || isRoomMember(request.resource.data.roomCode)
+          )
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 24
+          && (
+            request.resource.data.mapRef == null
+            || request.resource.data.mapRef is map
+          )
+          && request.resource.data.combatants is list
+          && request.resource.data.combatants.size() <= 50
+          && request.resource.data.lighting is map
+          && request.resource.data.updatedAtMillis is number;
+      }
+
       match /libraryIndex/{libraryId} {
         allow read, delete: if isSelf(userId);
         allow create, update:

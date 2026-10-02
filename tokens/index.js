@@ -2423,7 +2423,7 @@ export function createTokenSystem(options) {
       elevation: normalizeElevation(spec.elevation),
       elevationFeet: normalizeElevation(spec.elevation),
       automation: {
-        kind: "summon",
+        kind: String(spec.automationKind || "summon").trim().slice(0, 40) || "summon",
         effectId: String(spec.effectId || "").trim() || null,
         sourceTokenId: String(spec.sourceTokenId || "").trim() || null,
         createdByUid: String(spec.createdByUid || deps.getCurrentUserUid?.() || "").trim() || null,

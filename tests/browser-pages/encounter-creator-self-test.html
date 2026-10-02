@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Encounter Creator Test</title><link rel="stylesheet" href="../../assets/styles/app.css"><link rel="stylesheet" href="../../encounters/encounterCreator.css"></head><body>
+<main id="screen"></main>
+<script type="module">
+  import { createEncounterCreator } from "../../encounters/encounterCreator.js";
+  import { normalizeEncounter } from "../../encounters/encounterModel.js";
+  const records = new Map(); let next = 0;
+  const persistence = {
+    async save(raw) { const encounter = normalizeEncounter({ ...raw, id: raw.id || `encounter-${++next}`, updatedAtMillis: Date.now() }); records.set(encounter.id, encounter); return encounter; },
+    async load(id) { return records.get(id); }, async list() { return [...records.values()]; }, async remove(id) { records.delete(id); }
+  };
+  const library = [
+    { libraryId: "map:docks", assetType: "map", sourceRecordId: "docks", sourceRoomCode: "SEA-1", sourceRoomName: "Sea of Glass", name: "Glass Harbor", thumbnailUrl: "https://example.com/docks.webp" },
+    { libraryId: "monster:wight", assetType: "monster", sourceRecordId: "wight", sourceRoomCode: "SEA-1", sourceRoomName: "Sea of Glass", name: "Wight" },
+    { libraryId: "npc:captain", assetType: "npc", sourceRecordId: "captain", name: "Captain Elara" }
+  ];
+  window.__published = null; window.__loaded = null;
+  window.creator = createEncounterCreator({
+    screen: document.getElementById("screen"), persistence, listLibraryRecords: async () => library,
+    getUserId: () => "user-1", getCurrentRoomCode: () => "SEA-1", getCurrentRoomName: () => "Sea of Glass",
+    onPublishToWorkshop: (request) => { window.__published = request; },
+    onLoadEncounter: async (encounter) => { window.__loaded = encounter; return { message: "Encounter loaded." }; },
+    onCaptureCurrentBattle: async () => ({ mapRef: library[0], combatants: [{ ...library[1], id: "captured", x: 20, y: 30, elevation: 10, initiativePreset: 18 }] })
+  });
+  window.encounterRecords = () => [...records.values()];
+</script></body></html>

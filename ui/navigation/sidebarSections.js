@@ -40,6 +40,7 @@ export const SIDEBAR_SECTIONS = Object.freeze([
       { id: "create-magic-item", label: "Magic Item Creator", action: "screen", target: "magicItemCreator", room: true },
       { id: "create-spell", label: "Spell Creator", action: "screen", target: "spellCreator", room: true },
       { id: "create-npc", label: "NPC Creator", action: "screen", target: "npcCreator", room: true },
+      { id: "create-encounter", label: "Encounter Creator", action: "screen", target: "encounterCreator", room: true, roles: ["dm"] },
       { id: "create-animation", label: "Animation Creator", action: "tool", target: "animationCreator", room: true }
     ]
   },
@@ -61,6 +62,7 @@ export const SIDEBAR_SECTIONS = Object.freeze([
       { id: "library-items", label: "Magic Items", action: "screen", target: "magicItemCreator", room: true },
       { id: "library-spells", label: "Spells", action: "screen", target: "spellCreator", room: true },
       { id: "library-npcs", label: "NPCs", action: "screen", target: "npcCreator", room: true },
+      { id: "library-encounters", label: "Encounters", action: "screen", target: "encounterCreator", room: true, roles: ["dm"] },
       { id: "library-animations", label: "Animations", action: "tool", target: "animationLibrary", room: true },
       { id: "library-workshop", label: "Homebrew Workshop", action: "screen", target: "workshop", room: true }
     ]

@@ -2284,7 +2284,8 @@ test(
         "monsterCreator",
         "magicItemCreator",
         "spellCreator",
-        "npcCreator"
+        "npcCreator",
+        "encounterCreator"
       ]
     ) {
       const state =
@@ -2388,6 +2389,24 @@ test(
     await expect(
       page.getByRole("heading", {
         name: "NPC Creator"
+      })
+    ).toBeVisible();
+
+    const encounterState =
+      await page.evaluate(() => {
+        return window
+          .__HOMEBREW_GOD_RELEASE_TEST__
+          .openScreen(
+            "encounterCreator"
+          );
+      });
+
+    expect(
+      encounterState.encounterCreatorReady
+    ).toBe(true);
+    await expect(
+      page.getByRole("heading", {
+        name: "Encounter Creator"
       })
     ).toBeVisible();
   }
