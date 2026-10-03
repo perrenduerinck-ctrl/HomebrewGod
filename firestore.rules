@@ -215,7 +215,8 @@ service cloud.firestore {
           'assetId', 'assetType', 'name', 'nameSearch', 'description',
           'authorUid', 'authorName', 'visibility', 'roomCode', 'tags',
           'thumbnailUrl', 'version', 'forkedFrom', 'sourceKey',
-          'sourceRecordId', 'collectionIds', 'saveCount', 'createdAt',
+          'sourceType', 'sourceRecordId', 'typeMetadata',
+          'collectionIds', 'saveCount', 'createdAt',
           'updatedAt', 'createdAtMillis', 'updatedAtMillis'
         ])
         && request.resource.data.assetId == assetId
@@ -226,6 +227,9 @@ service cloud.firestore {
         && request.resource.data.description is string
         && request.resource.data.description.size() <= 2000
         && validWorkshopAssetType(request.resource.data.assetType)
+        && request.resource.data.sourceType is string
+        && request.resource.data.sourceType.size() <= 80
+        && request.resource.data.typeMetadata is map
         && validWorkshopVisibility(request.resource.data.visibility)
         && request.resource.data.tags is list
         && request.resource.data.tags.size() <= 16

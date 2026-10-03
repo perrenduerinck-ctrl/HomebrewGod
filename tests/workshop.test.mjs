@@ -102,6 +102,54 @@ test("publishes lightweight monster and animation summaries with lazy full versi
   assert.deepEqual(loadedAnimation.content.timeline, animation.timeline);
 });
 
+test("a normal signed-in player can publish their personal magic item as PUBLIC or ROOM", async () => {
+  const { persistence, store, state } = setup();
+  state.uid = "normal-player";
+  state.name = "Bryn";
+  state.room = "MEMBER-ROOM";
+  const content = {
+    id: "permission-test-sword",
+    name: "Workshop Permission Test Sword",
+    itemType: "weapon",
+    rarity: "rare",
+    description: "A personal reusable item.",
+    imageUrl: "https://example.com/test-sword.png",
+    tags: ["weapon", "permission-test"],
+    effects: []
+  };
+  const creatorRequest = {
+    assetType: "magic-item",
+    sourceRecordId: content.id,
+    sourceKey: `magic-item:${content.id}`,
+    sourceType: "magic-item",
+    name: content.name,
+    description: content.description,
+    thumbnailUrl: content.imageUrl,
+    tags: content.tags,
+    content
+  };
+
+  const published = await persistence.publish({ ...creatorRequest, visibility: "PUBLIC" });
+  const publicSummary = store.records.get(`workshopAssets/${published.assetId}`);
+  assert.equal(publicSummary.authorUid, "normal-player");
+  assert.equal(publicSummary.assetType, "magic-item");
+  assert.equal(publicSummary.sourceType, "magic-item");
+  assert.equal(publicSummary.sourceRecordId, content.id);
+  assert.equal(publicSummary.sourceKey, `magic-item:${content.id}`);
+  assert.deepEqual(publicSummary.typeMetadata, { itemType: "weapon", rarity: "rare", attunement: false });
+  assert.equal(Object.hasOwn(publicSummary, "content"), false);
+  assert.deepEqual(store.records.get(`workshopAssets/${published.assetId}/versions/1`).content, content);
+
+  const roomPublished = await persistence.publish(
+    { ...creatorRequest, visibility: "ROOM", roomCode: state.room },
+    { assetId: published.assetId, mode: "new-version" }
+  );
+  assert.equal(roomPublished.authorUid, "normal-player");
+  assert.equal(roomPublished.visibility, "ROOM");
+  assert.equal(roomPublished.roomCode, "MEMBER-ROOM");
+  assert.equal(Object.hasOwn(roomPublished, "dmUid"), false);
+});
+
 test("room/private visibility and author mutation checks are enforced by the API", async () => {
   const { persistence, state } = setup();
   const roomAsset = await persistence.publish({ assetType: "monster", name: "Room Beast", visibility: "ROOM", content: monster });
