@@ -1,3 +1,9 @@
+import {
+  buildMonsterAttackDescription,
+  createMonsterAttackBuilder,
+  normalizeMonsterAttack
+} from "./attackBuilder.js";
+
 export const MONSTER_ENTRY_FIELDS = Object.freeze([
   "traits",
   "actions",
@@ -32,7 +38,8 @@ function parseNamedEntry(value) {
       id: text(value.id),
       name: name || "Feature",
       description,
-      ...(Array.isArray(value.sequence) ? { sequence: normalizeSequence(value.sequence) } : {})
+      ...(Array.isArray(value.sequence) ? { sequence: normalizeSequence(value.sequence) } : {}),
+      ...(value.attack ? { attack: normalizeMonsterAttack(value.attack) } : {})
     };
   }
   const source = text(value);
@@ -70,10 +77,17 @@ function uniqueId(field, name, entries, preferred = "") {
 
 function cloneEntry(entry) {
   return { id: entry.id, name: entry.name, description: entry.description,
-    ...(entry.sequence ? { sequence: normalizeSequence(entry.sequence) } : {}) };
+    ...(entry.sequence ? { sequence: normalizeSequence(entry.sequence) } : {}),
+    ...(entry.attack ? { attack: normalizeMonsterAttack(entry.attack) } : {}) };
 }
 
-export function createMonsterEntryEditor({ root, legacyControls = {}, onChange = () => {} } = {}) {
+export function createMonsterEntryEditor({
+  root,
+  legacyControls = {},
+  onChange = () => {},
+  onConfigureAnimation = () => {},
+  hasAnimation = () => false
+} = {}) {
   if (!root) return null;
   const document = root.ownerDocument || globalThis.document;
   root.replaceChildren();
@@ -147,7 +161,18 @@ export function createMonsterEntryEditor({ root, legacyControls = {}, onChange =
       const name = document.createElement("input"); name.type = "text"; name.value = entry.name; name.dataset.entryField = "name"; name.disabled = disabled; nameLabel.append(name);
       const descriptionLabel = document.createElement("label"); descriptionLabel.textContent = "Description";
       const description = document.createElement("textarea"); description.value = entry.description; description.dataset.entryField = "description"; description.disabled = disabled; descriptionLabel.append(description);
-      body.append(nameLabel, descriptionLabel); card.append(body); list.append(card);
+      body.append(nameLabel, descriptionLabel);
+      if (field !== "traits") {
+        const attackBuilder = createMonsterAttackBuilder({
+          document,
+          entry,
+          disabled,
+          hasAnimation: hasAnimation({ field, entry })
+        });
+        attackBuilder.classList.add("monster-entry-wide");
+        body.append(attackBuilder);
+      }
+      card.append(body); list.append(card);
       for (const control of [toggle, duplicate, remove]) control.disabled = disabled;
     });
     section.querySelector('[data-entry-action="add"]').disabled = disabled;
@@ -179,15 +204,55 @@ export function createMonsterEntryEditor({ root, legacyControls = {}, onChange =
   }
 
   listen(root, "input", event => {
+    const attackInput = event.target.closest("[data-attack-field]");
+    if (attackInput) {
+      const section = attackInput.closest("[data-monster-entry-section]");
+      const card = attackInput.closest("[data-entry-id]");
+      const field = section?.dataset.monsterEntrySection;
+      const entry = entriesFor(field).find(item => item.id === card?.dataset.entryId);
+      if (!entry) return;
+      entry.attack = normalizeMonsterAttack(entry.attack || {});
+      entry.attack[attackInput.dataset.attackField] = attackInput.type === "checkbox"
+        ? attackInput.checked
+        : attackInput.value;
+      entry.attack = normalizeMonsterAttack(entry.attack);
+      if (entry.attack.autoDescription) {
+        entry.description = buildMonsterAttackDescription(entry.attack);
+        const description = card.querySelector('[data-entry-field="description"]');
+        if (description) description.value = entry.description;
+      }
+      notify(field);
+      return;
+    }
     const input = event.target.closest("[data-entry-field]"); if (!input) return;
     const section = input.closest("[data-monster-entry-section]"), card = input.closest("[data-entry-id]");
     const field = section.dataset.monsterEntrySection, entry = entriesFor(field).find(item => item.id === card.dataset.entryId);
     if (!entry) return;
     entry[input.dataset.entryField] = input.value;
+    if (input.dataset.entryField === "description" && entry.attack?.autoDescription) {
+      entry.attack = { ...entry.attack, autoDescription: false };
+    }
     if (input.dataset.entryField === "name") card.querySelector("[data-entry-title]").textContent = input.value.trim() || "Untitled entry";
     notify(field);
   });
   listen(root, "click", event => {
+    const attackAction = event.target.closest("[data-attack-action]");
+    if (attackAction && !disabled) {
+      const section = attackAction.closest("[data-monster-entry-section]");
+      const card = attackAction.closest("[data-entry-id]");
+      const field = section?.dataset.monsterEntrySection;
+      const entry = entriesFor(field).find(item => item.id === card?.dataset.entryId);
+      if (!entry) return;
+      if (attackAction.dataset.attackAction === "animation") {
+        onConfigureAnimation({ field, entry: cloneEntry(entry) });
+        return;
+      }
+      entry.attack = normalizeMonsterAttack({ ...(entry.attack || {}), autoDescription: true });
+      entry.description = buildMonsterAttackDescription(entry.attack);
+      renderSection(field);
+      notify(field);
+      return;
+    }
     const action = event.target.closest("[data-entry-action]"); if (!action || disabled) return;
     const section = action.closest("[data-monster-entry-section]"), field = section.dataset.monsterEntrySection;
     const entries = entriesFor(field), card = action.closest("[data-entry-id]"), index = card ? entries.findIndex(entry => entry.id === card.dataset.entryId) : -1;
@@ -239,7 +304,11 @@ export function createMonsterEntryEditor({ root, legacyControls = {}, onChange =
     write,
     writeAll(monster, options = {}) { for (const field of MONSTER_ENTRY_FIELDS) write(field, monster?.[field], options); },
     setDisabled(value) { disabled = Boolean(value); for (const field of MONSTER_ENTRY_FIELDS) renderSection(field); },
-    getControls() { return [...root.querySelectorAll("input, textarea, button")]; },
+    refresh(field) {
+      if (field) renderSection(field);
+      else for (const entryField of MONSTER_ENTRY_FIELDS) renderSection(entryField);
+    },
+    getControls() { return [...root.querySelectorAll("input, textarea, select, button")]; },
     destroy() { listeners.splice(0).forEach(remove => remove()); }
   });
 }

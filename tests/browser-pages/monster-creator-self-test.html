@@ -371,6 +371,11 @@
           ? "dm-1"
           : "player-1";
       },
+      listSpellReferences: async function () {
+        return [
+          { sourceRecordId: "spell-library-fireball", name: "Fireball" }
+        ];
+      },
       createMonsterLinkedToken: async function (monster) {
         tokenRequests.push(monster);
         return {

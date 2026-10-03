@@ -22,6 +22,15 @@ import {
   ensureMonsterCreatorWorkspace
 } from "./statBlockPreview.js";
 import { ensureMonsterCreatorStyles } from "./monsterCreatorStyles.js";
+import {
+  createMonsterSpellcastingEditor,
+  normalizeMonsterSpellcasting
+} from "./spellcastingEditor.js";
+import {
+  createMonsterBossTools,
+  normalizeMonsterBossTools
+} from "./bossTools.js";
+import { createMonsterMathPanel } from "./monsterMathPanel.js";
 
 export { parseMonsterNamedEntries, stableMonsterActionId } from "./entryEditor.js";
 
@@ -87,6 +96,8 @@ export const DEFAULT_MONSTER = {
   reactions: [],
   legendaryActions: [],
   lairActions: [],
+  spellcasting: normalizeMonsterSpellcasting(),
+  boss: normalizeMonsterBossTools(),
   actionAnimations: {},
   senses: [],
   savingThrows: [],
@@ -231,6 +242,8 @@ export function normalizeMonsterRecord(rawMonster) {
       !Array.isArray(source.actionAnimations)
         ? JSON.parse(JSON.stringify(source.actionAnimations))
         : {},
+    spellcasting: normalizeMonsterSpellcasting(source.spellcasting),
+    boss: normalizeMonsterBossTools(source.boss),
     notes: normalizeText(source.notes)
   };
 
@@ -354,6 +367,29 @@ function ensureLabeledControl(control, labelText) {
   label.appendChild(control);
 }
 
+function ensureMonsterAdvancedPanel(editorGrid) {
+  if (!editorGrid) return {};
+  let panel = getElement("monsterAdvancedCreatorPanel");
+  if (!panel) {
+    panel = document.createElement("section");
+    panel.id = "monsterAdvancedCreatorPanel";
+    panel.className = "toolPanelMini creatorWidePanel monster-advanced-panel";
+    panel.innerHTML = `
+      <div id="monsterSpellcastingEditor"></div>
+      <div id="monsterMathGuidance"></div>
+      <div id="monsterBossTools"></div>
+    `;
+    const entriesPanel = getElement("monsterEntryEditors")?.closest(".toolPanelMini");
+    if (entriesPanel?.parentNode === editorGrid) entriesPanel.insertAdjacentElement("afterend", panel);
+    else editorGrid.append(panel);
+  }
+  return {
+    spellcastingRoot: getElement("monsterSpellcastingEditor"),
+    mathRoot: getElement("monsterMathGuidance"),
+    bossRoot: getElement("monsterBossTools")
+  };
+}
+
 function ensureMonsterCreatorUi() {
   const screen = getElement("monsterCreatorScreen");
 
@@ -470,6 +506,7 @@ function ensureMonsterCreatorUi() {
     entriesPanel.insertBefore(entryRoot, elements.traits);
   }
   elements.entryRoot = entryRoot;
+  Object.assign(elements, ensureMonsterAdvancedPanel(editorGrid));
 
   if (elements.actions && !getElement("monsterActionAnimationControls")) {
     const controls = document.createElement("div");
@@ -556,8 +593,27 @@ export function createMonsterCreator(config) {
       actionIdentities[field] = entries.map((entry) => ({ ...entry }));
       renderMonsterActionAnimations();
       renderMonsterPreview();
+    },
+    hasAnimation({ field, entry }) {
+      const legacyKey = monsterActionKey(field, entry.name);
+      return Boolean(actionAnimations[entry.id] || actionAnimations[legacyKey]);
+    },
+    onConfigureAnimation({ entry }) {
+      if (elements.animationActionSelect) elements.animationActionSelect.value = entry.id;
+      renderMonsterActionAnimations();
+      configureMonsterActionAnimation();
     }
   });
+  const spellcastingEditor = createMonsterSpellcastingEditor({
+    root: elements.spellcastingRoot,
+    onChange: renderMonsterPreview,
+    listSpellReferences: config.listSpellReferences
+  });
+  const bossTools = createMonsterBossTools({
+    root: elements.bossRoot,
+    onChange: renderMonsterPreview
+  });
+  const mathPanel = createMonsterMathPanel({ root: elements.mathRoot });
   const realtimeListeners =
     createRealtimeListenerRegistry({
       onStopError: (error) => {
@@ -698,7 +754,9 @@ export function createMonsterCreator(config) {
   }
 
   function renderMonsterPreview() {
-    statBlockPreview.render(readMonsterForm());
+    const monster = readMonsterForm();
+    statBlockPreview.render(monster);
+    mathPanel?.render(monster);
   }
 
   function monsterActionKey(field, name) {
@@ -835,6 +893,7 @@ export function createMonsterCreator(config) {
           }
         : {})
     };
+    entryEditor?.refresh(action.field);
     renderMonsterActionAnimations();
     setStatus(`${action.name} animation attached. Save the monster to publish it.`);
     return content.animation;
@@ -912,6 +971,8 @@ export function createMonsterCreator(config) {
       control.disabled = !editable || isBusy;
     });
     entryEditor?.setDisabled(!editable || isBusy);
+    spellcastingEditor?.setDisabled(!editable || isBusy);
+    bossTools?.setDisabled(!editable || isBusy);
 
     if (elements.newButton) {
       elements.newButton.disabled = !editable || isBusy;
@@ -1008,6 +1069,8 @@ export function createMonsterCreator(config) {
         elements.conditionImmunities &&
         elements.conditionImmunities.value,
       notes: elements.notes && elements.notes.value,
+      spellcasting: spellcastingEditor?.read() || normalizeMonsterSpellcasting(),
+      boss: bossTools?.read() || normalizeMonsterBossTools(),
       actionAnimations: JSON.parse(JSON.stringify(actionAnimations))
     };
 
@@ -1074,8 +1137,11 @@ export function createMonsterCreator(config) {
     }
 
     actionAnimations = JSON.parse(JSON.stringify(source.actionAnimations || {}));
+    spellcastingEditor?.write(source.spellcasting, { silent: true });
+    bossTools?.write(source.boss, { silent: true });
     renderMonsterActionAnimations();
     statBlockPreview.render(source);
+    mathPanel?.render(source);
 
     syncPermissionState();
     renderMonsterList();
@@ -2079,6 +2145,8 @@ export function createMonsterCreator(config) {
     destroy: function () {
       cleanupListeners();
       entryEditor?.destroy();
+      spellcastingEditor?.destroy();
+      bossTools?.destroy();
       removeDomListeners.forEach(
         function (removeListener) {
           removeListener();

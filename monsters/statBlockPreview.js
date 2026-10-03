@@ -28,11 +28,62 @@ function appendEntrySection(document, root, label, entries) {
   } else {
     for (const entry of normalized) {
       const paragraph = node(document, "p", "monster-stat-entry");
-      paragraph.append(node(document, "strong", "", `${text(entry?.name, "Feature")}. `),
+      const suffix = [
+        entry?.attack?.recharge ? `Recharge ${entry.attack.recharge}` : "",
+        Number(entry?.attack?.legendaryCost) > 0 ? `Costs ${entry.attack.legendaryCost} Actions` : ""
+      ].filter(Boolean).join("; ");
+      const name = `${text(entry?.name, "Feature")}${suffix ? ` (${suffix})` : ""}`;
+      paragraph.append(node(document, "strong", "", `${name}. `),
         document.createTextNode(text(entry?.description)));
       section.append(paragraph);
     }
   }
+  root.append(section);
+}
+
+function appendSpellcasting(document, root, spellcasting) {
+  if (!spellcasting?.enabled) return;
+  const section = node(document, "section", "monster-stat-section");
+  section.dataset.statSection = "spellcasting";
+  section.append(node(document, "h4", "", "Spellcasting"));
+  const caster = node(document, "p", "monster-stat-entry");
+  const values = [
+    spellcasting.casterLevel !== "" ? `level ${spellcasting.casterLevel}` : "",
+    `${text(spellcasting.ability, "int").toUpperCase()} spellcasting`,
+    spellcasting.saveDc !== "" ? `spell save DC ${spellcasting.saveDc}` : "",
+    spellcasting.attackBonus !== "" ? `${Number(spellcasting.attackBonus) >= 0 ? "+" : ""}${spellcasting.attackBonus} to hit with spell attacks` : ""
+  ].filter(Boolean);
+  caster.textContent = values.join(", ") + ".";
+  section.append(caster);
+  const groups = [
+    ["atWill", "At will"],
+    ["daily", "Daily"],
+    ["slot", "Spell slots"],
+    ["innate", "Innate"]
+  ];
+  for (const [usage, label] of groups) {
+    const spells = (spellcasting.spells || []).filter((spell) => spell.usage === usage);
+    if (!spells.length) continue;
+    const paragraph = node(document, "p", "monster-stat-entry");
+    const names = spells.map((spell) => {
+      if (usage === "daily") return `${spell.name} (${spell.uses}/day)`;
+      if (usage === "slot") return `${spell.name} (level ${spell.level}, ${spell.slots} slots)`;
+      return spell.name;
+    }).join(", ");
+    paragraph.append(node(document, "strong", "", `${label}: `), document.createTextNode(names));
+    section.append(paragraph);
+  }
+  root.append(section);
+}
+
+function appendBossNotes(document, root, boss) {
+  if (!boss || (!boss.mythicPhaseNotes && !boss.secondPhaseNotes && !boss.legendaryActionBudget)) return;
+  const section = node(document, "section", "monster-stat-section");
+  section.dataset.statSection = "boss-tools";
+  section.append(node(document, "h4", "", "Boss Features"));
+  if (boss.legendaryActionBudget) appendDetail(document, section, "Legendary Action Budget", boss.legendaryActionBudget);
+  if (boss.mythicPhaseNotes) appendDetail(document, section, "Mythic Phase", boss.mythicPhaseNotes);
+  if (boss.secondPhaseNotes) appendDetail(document, section, "Second Phase", boss.secondPhaseNotes);
   root.append(section);
 }
 
@@ -77,6 +128,8 @@ export function renderMonsterStatBlock(container, monster = {}) {
   appendDetail(document, details, "Challenge", monster.cr);
   article.append(details);
 
+  appendSpellcasting(document, article, monster.spellcasting);
+
   for (const [field, label] of [
     ["traits", "Traits"],
     ["actions", "Actions"],
@@ -85,6 +138,8 @@ export function renderMonsterStatBlock(container, monster = {}) {
     ["legendaryActions", "Legendary Actions"],
     ["lairActions", "Lair Actions"]
   ]) appendEntrySection(document, article, label, monster[field]);
+
+  appendBossNotes(document, article, monster.boss);
 
   container.append(article);
   return article;

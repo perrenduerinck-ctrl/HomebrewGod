@@ -316,6 +316,169 @@
   resize: vertical;
 }
 
+#monsterCreatorScreen .monster-entry-wide {
+  grid-column: 1 / -1;
+}
+
+#monsterCreatorScreen .monster-attack-builder,
+#monsterCreatorScreen .monster-advanced-card > details {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(96, 165, 250, .28);
+  border-radius: 8px;
+  background: rgba(8, 14, 28, .66);
+}
+
+#monsterCreatorScreen .monster-attack-builder > summary,
+#monsterCreatorScreen .monster-advanced-card summary {
+  color: #dbeafe;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+#monsterCreatorScreen .monster-attack-grid,
+#monsterCreatorScreen .monster-spellcasting-basics,
+#monsterCreatorScreen .monster-boss-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#monsterCreatorScreen .monster-attack-field,
+#monsterCreatorScreen .monster-spellcasting-basics label,
+#monsterCreatorScreen .monster-boss-grid label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #b8c4e5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#monsterCreatorScreen .monster-attack-field input,
+#monsterCreatorScreen .monster-attack-field select,
+#monsterCreatorScreen .monster-spellcasting-basics input,
+#monsterCreatorScreen .monster-spellcasting-basics select,
+#monsterCreatorScreen .monster-boss-grid input,
+#monsterCreatorScreen .monster-boss-grid textarea {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+#monsterCreatorScreen .monster-check-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#monsterCreatorScreen .monster-check-field input {
+  width: auto;
+}
+
+#monsterCreatorScreen .monster-attack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  margin-top: 9px;
+}
+
+#monsterCreatorScreen .monster-attack-actions button,
+#monsterCreatorScreen .monster-spell-list-heading button,
+#monsterCreatorScreen .monster-spell-reference button {
+  width: auto;
+  margin: 0;
+}
+
+#monsterCreatorScreen .monster-attack-actions small {
+  flex: 1 1 260px;
+  color: #9fb2dd;
+}
+
+#monsterCreatorScreen .monster-advanced-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+  gap: 10px;
+}
+
+#monsterCreatorScreen .monster-spellcasting-editor {
+  grid-row: span 2;
+}
+
+#monsterCreatorScreen .monster-advanced-card,
+#monsterCreatorScreen .monster-advanced-card > details {
+  min-width: 0;
+}
+
+#monsterCreatorScreen .monster-advanced-card p {
+  margin: 8px 0;
+  color: #9fb2dd;
+  font-size: 12px;
+}
+
+#monsterCreatorScreen .monster-spell-list-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  color: #e7ecff;
+}
+
+#monsterCreatorScreen .monster-spell-list-heading select {
+  flex: 1 1 190px;
+  min-width: 0;
+}
+
+#monsterCreatorScreen .monster-spell-library-status {
+  display: block;
+  margin-top: 8px;
+  color: #a7f3d0;
+}
+
+#monsterCreatorScreen .monster-spell-reference-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+#monsterCreatorScreen .monster-spell-reference {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+#monsterCreatorScreen .monster-spell-reference > * {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+}
+
+#monsterCreatorScreen .monster-math-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+#monsterCreatorScreen .monster-math-grid dt {
+  color: #a7f3d0;
+  font-weight: 800;
+}
+
+#monsterCreatorScreen .monster-math-grid dd {
+  min-width: 0;
+  margin: 0;
+  color: #e7ecff;
+  overflow-wrap: anywhere;
+}
+
 #monsterCreatorScreen .monster-entry-empty {
   margin: 3px 0;
   padding: 10px;
@@ -414,6 +577,14 @@
   #monsterCreatorScreen .monster-entry-card-header {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+
+  #monsterCreatorScreen .monster-attack-grid,
+  #monsterCreatorScreen .monster-spellcasting-basics,
+  #monsterCreatorScreen .monster-boss-grid,
+  #monsterCreatorScreen .monster-advanced-panel,
+  #monsterCreatorScreen .monster-spell-reference {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   #monsterCreatorScreen .monster-entry-card-actions {

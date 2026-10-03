@@ -115,3 +115,90 @@ test("Monster Creator cards save/reload, export, create tokens and fit laptop/mo
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
+
+test("Monster Creator builds attacks, keeps spell references lightweight and exposes optional boss guidance", async ({ page }) => {
+  await openFixture(page);
+  await page.evaluate(() => window.__MONSTER_CREATOR_MODERN_TEST__.creator.newMonster());
+  await page.locator("#monsterNameInput").fill("Ash Regent");
+  await page.locator("#monsterCrInput").fill("13");
+
+  const actions = section(page, "actions");
+  await actions.getByRole("button", { name: "Add Action", exact: true }).click();
+  let card = actions.locator("[data-entry-id]").first();
+  await card.locator('[data-entry-field="name"]').fill("Cinder Glaive");
+  await card.getByText("Add Structured Attack", { exact: true }).click();
+  await card.locator('[data-attack-field="type"]').selectOption("Melee Weapon Attack");
+  await card.locator('[data-attack-field="attackBonus"]').fill("8");
+  await card.locator('[data-attack-field="reach"]').fill("10 ft.");
+  await card.locator('[data-attack-field="targetCount"]').fill("2");
+  await card.locator('[data-attack-field="damageDice"]').fill("2d10");
+  await card.locator('[data-attack-field="damageBonus"]').fill("5");
+  await card.locator('[data-attack-field="damageType"]').selectOption("slashing");
+  await card.locator('[data-attack-field="secondaryDamage"]').fill("1d8 fire damage");
+  await card.locator('[data-attack-field="recharge"]').fill("5–6");
+  await card.locator('[data-attack-field="legendaryCost"]').fill("2");
+  await card.getByRole("button", { name: "Generate Description" }).click();
+  card = actions.locator("[data-entry-id]").first();
+  await expect(card.locator('[data-entry-field="description"]')).toHaveValue(/Melee Weapon Attack: \+8 to hit/);
+  await expect(page.locator("[data-monster-stat-preview]")).toContainText("2d10 + 5 slashing damage");
+  await expect(page.locator("[data-monster-stat-preview]")).toContainText("Recharge 5–6; Costs 2 Actions");
+
+  await card.locator('[data-entry-field="description"]').fill("The regent makes a deliberately custom attack.");
+  expect(await page.evaluate(() => window.__MONSTER_CREATOR_MODERN_TEST__.creator.readMonsterForm().actions[0].attack.autoDescription)).toBe(false);
+
+  const spellcasting = page.locator("#monsterSpellcastingEditor");
+  await spellcasting.getByText("Monster Spellcasting", { exact: true }).click();
+  await spellcasting.locator('[data-spellcasting-field="enabled"]').check();
+  await spellcasting.locator('[data-spellcasting-field="ability"]').selectOption("cha");
+  await spellcasting.locator('[data-spellcasting-field="saveDc"]').fill("17");
+  await spellcasting.locator('[data-spellcasting-field="attackBonus"]').fill("9");
+  await spellcasting.locator('[data-spellcasting-field="casterLevel"]').fill("12");
+  await spellcasting.getByRole("button", { name: "Add Spell" }).click();
+  const spell = spellcasting.locator("[data-spell-id]").first();
+  await spell.locator('[data-spell-field="source"]').selectOption("custom");
+  await spell.locator('[data-spell-field="name"]').fill("Ashen Hex");
+  await spell.locator('[data-spell-field="sourceId"]').fill("homebrew-ashen-hex");
+  await spell.locator('[data-spell-field="usage"]').selectOption("daily");
+  await spell.locator('[data-spell-field="uses"]').fill("3");
+  await spellcasting.getByRole("button", { name: "Browse Spell Library" }).click();
+  await expect(spellcasting.locator("[data-spell-library-choice]")).toBeVisible();
+  await spellcasting.locator("[data-spell-library-choice]").selectOption("spell-library-fireball");
+  await spellcasting.getByRole("button", { name: "Add Selected Spell" }).click();
+  await expect(page.locator("[data-monster-stat-preview]")).toContainText("Ashen Hex (3/day)");
+  await expect(page.locator("[data-monster-stat-preview]")).toContainText("Fireball");
+
+  const boss = page.locator("#monsterBossTools");
+  await boss.getByText("Advanced Boss Tools", { exact: true }).click();
+  await boss.locator('[data-boss-field="legendaryActionBudget"]').fill("3");
+  await boss.locator('[data-boss-field="mythicPhaseNotes"]').fill("Returns in a crown of flame.");
+  await boss.locator('[data-boss-field="secondPhaseNotes"]').fill("The arena begins to burn.");
+  await expect(page.locator("#monsterMathGuidance summary")).toContainText("CR 13 Balance Guidance");
+  await expect(page.locator("[data-monster-stat-preview]")).toContainText("Returns in a crown of flame");
+
+  const savedId = await page.evaluate(() => window.__MONSTER_CREATOR_MODERN_TEST__.creator.saveMonster());
+  const record = await page.evaluate((id) => {
+    const api = window.__MONSTER_CREATOR_MODERN_TEST__;
+    const saved = api.storedMonsters.find((monster) => monster.id === id);
+    api.creator.loadMonsterIntoForm(saved, true);
+    return saved;
+  }, savedId);
+  expect(record.actions[0].attack.damageDice).toBe("2d10");
+  expect(record.actions[0].description).toBe("The regent makes a deliberately custom attack.");
+  expect(record.spellcasting.spells[0]).toEqual(expect.objectContaining({
+    source: "custom",
+    sourceId: "homebrew-ashen-hex",
+    name: "Ashen Hex",
+    usage: "daily",
+    uses: 3
+  }));
+  expect(record.spellcasting.spells[0].description).toBeUndefined();
+  expect(record.spellcasting.spells[1]).toEqual(expect.objectContaining({
+    source: "library",
+    sourceId: "spell-library-fireball",
+    name: "Fireball"
+  }));
+  expect(record.boss.legendaryActionBudget).toBe(3);
+  expect(record.boss.secondPhaseNotes).toBe("The arena begins to burn.");
+  await expect(actions.locator('[data-entry-field="description"]')).toHaveValue("The regent makes a deliberately custom attack.");
+  await expect(spellcasting.locator('[data-spell-field="sourceId"]').first()).toHaveValue("homebrew-ashen-hex");
+});

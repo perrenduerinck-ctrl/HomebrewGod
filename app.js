@@ -9919,6 +9919,15 @@ async function initMonsterCreatorSystem() {
       return animationDocumentSession.library;
     },
     getSummonCatalog: getCombatSummonCatalog,
+    listSpellReferences: async function () {
+      await initWorkshopSystem();
+      const adapter = libraryAggregator?.registry?.get("spell");
+      if (!adapter) return [];
+      const page = typeof adapter.listPage === "function"
+        ? await adapter.listPage({ pageSize: 100 })
+        : { entries: await adapter.listSummaries() };
+      return page.entries || [];
+    },
     onPublishToWorkshop: publishToWorkshop,
     onBrowseWorkshop: browseWorkshop,
     syncLibraryIndex: function ({ assetType, sourceRecordId, record }) {
