@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Summon Creator Test</title><link rel="stylesheet" href="../../assets/styles/app.css"></head><body>
+<main id="screen"></main>
+<script type="module">
+  import { createSummonCreator } from "../../summons/summonCreator.js";
+  import { normalizeSummonPreset } from "../../summons/summonPresetModel.js";
+  const records = new Map(); let next = 0;
+  const persistence = {
+    async save(raw) { const preset = normalizeSummonPreset({ ...raw, id: raw.id || `summon-${++next}`, updatedAtMillis: Date.now() }); records.set(preset.id, preset); return preset; },
+    async load(id) { return records.get(id); }, async list() { return [...records.values()]; }, async remove(id) { records.delete(id); }
+  };
+  const library = [
+    { libraryId: "monster:wolf", assetType: "monster", sourceType: "monster", sourceRecordId: "wolf", sourceRoomCode: "FOREST", sourceRoomName: "Old Forest", name: "Wolf", thumbnailUrl: "https://example.test/wolf.webp", metadata: { size: "medium" }, libraryRecord: true },
+    { libraryId: "npc:dryad", assetType: "npc", sourceType: "npc", sourceRecordId: "dryad", name: "Dryad", libraryRecord: true }
+  ];
+  window.__published = null; window.__used = null;
+  window.creator = createSummonCreator({
+    screen: document.getElementById("screen"), persistence,
+    listLibraryRecords: async () => library,
+    loadLibraryRecord: async (record) => ({ ...record, content: { id: record.sourceRecordId, name: record.name, size: "medium" } }),
+    getUserId: () => "user-1",
+    onPublishToWorkshop: (request) => { window.__published = request; },
+    onUsePreset: async (preset) => { window.__used = preset; return { message: "Summon preset prepared." }; }
+  });
+  window.summonRecords = () => [...records.values()];
+</script></body></html>

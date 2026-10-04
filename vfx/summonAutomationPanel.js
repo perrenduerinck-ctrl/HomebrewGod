@@ -3,8 +3,11 @@ import { normalizeSummonAutomation } from "./summonAutomation.js";
 function normalizeCatalog(value = {}) {
   return {
     tokens: (Array.isArray(value.tokens) ? value.tokens : [])
-      .filter((entry) => entry?.id && ["monster", "character"].includes(entry.type))
+      .filter((entry) => entry?.id && ["monster", "character", "npc"].includes(entry.type))
       .map((entry) => ({ ...entry, id: String(entry.id), name: String(entry.name || "Unnamed") })),
+    presets: (Array.isArray(value.presets) ? value.presets : [])
+      .filter((entry) => entry?.id)
+      .map((entry) => ({ ...entry, id: String(entry.id), name: String(entry.name || "Unnamed Summon") })),
     players: (Array.isArray(value.players) ? value.players : [])
       .filter((entry) => entry?.uid)
       .map((entry) => ({ uid: String(entry.uid), name: String(entry.name || entry.displayName || "Player") }))
@@ -21,9 +24,9 @@ export function createSummonAutomationPanel({
   root.className = "hg-summon-automation-settings";
   root.dataset.combatSummonSettings = "true";
   root.innerHTML = `<legend>Summoned Token</legend>
-    <div class="hg-animation-buttons"><button type="button" data-summon-browse-library>Browse Library Monsters</button></div>
+    <div class="hg-animation-buttons"><label>Saved preset<select data-summon-preset><option value="">Choose a Summon preset</option></select></label><button type="button" data-summon-load-preset>Load Preset</button><button type="button" data-summon-browse-presets>Browse Summon Library</button><button type="button" data-summon-browse-library>Browse Library Monsters</button></div>
     <div class="hg-spell-animation-overrides">
-      <label>Token source<select data-summon-source-type><option value="monster">Choose Monster</option><option value="character">Choose Character</option><option value="custom">Custom Token</option></select></label>
+      <label>Token source<select data-summon-source-type><option value="monster">Choose Monster</option><option value="character">Choose Character</option><option value="npc">Choose NPC</option><option value="custom">Custom Token</option></select></label>
       <label data-summon-source-record>Saved source<select data-summon-source-id></select></label>
       <label data-summon-custom>Name<input data-summon-name maxlength="120" placeholder="Summon"></label>
       <label data-summon-custom>Image URL<input data-summon-image type="url" maxlength="2048" placeholder="https://..."></label>
@@ -36,8 +39,9 @@ export function createSummonAutomationPanel({
       <label>Ownership<select data-summon-ownership><option value="dm">DM Controlled</option><option value="caster">Caster Controlled</option><option value="player">Specific Player</option></select></label>
       <label data-summon-player-row>Specific player<select data-summon-player></select></label>
       <label>Initiative<select data-summon-initiative><option value="after-caster">Immediately after caster</option><option value="roll">Roll initiative</option><option value="shared">Shared initiative</option><option value="none">Do not add automatically</option></select></label>
-      <label>Duration<select data-summon-duration><option value="permanent">Permanent</option><option value="dismissed">Until dismissed</option><option value="rounds">X rounds</option><option value="minutes">X minutes</option><option value="concentration">Concentration linked</option></select></label>
+      <label>Duration<select data-summon-duration><option value="permanent">Permanent</option><option value="dismissed">Until dismissed</option><option value="rounds">X rounds</option><option value="turns">X turns</option><option value="world-time">World time</option><option value="minutes">X minutes (legacy)</option><option value="concentration">Concentration linked</option></select></label>
       <label data-summon-duration-row>Duration amount<input data-summon-duration-value type="number" min="1" max="1000000" step="1" value="1"></label>
+      <label data-summon-duration-unit-row>World-time unit<select data-summon-duration-unit><option value="seconds">Seconds</option><option value="minutes">Minutes</option><option value="hours">Hours</option></select></label>
       <label>On end<select data-summon-on-end><option value="remove">Remove token</option><option value="dismiss">Play dismiss animation</option><option value="leave">Leave token</option></select></label>
       <label data-summon-dismiss-row>Dismiss animation<select data-summon-dismiss-animation></select></label>
       <label class="hg-animation-toggle"><input data-summon-prevent-overlap type="checkbox" checked>Prevent overlap</label>
@@ -46,6 +50,7 @@ export function createSummonAutomationPanel({
     </div>`;
 
   const field = (name) => root.querySelector(`[data-summon-${name}]`);
+  for (const preset of options.presets) field("preset").append(new Option(preset.name, preset.id));
   for (const animation of library?.list?.() || []) {
     field("dismiss-animation").append(new Option(animation.name, animation.id));
   }
@@ -74,7 +79,8 @@ export function createSummonAutomationPanel({
     root.querySelectorAll("[data-summon-custom]").forEach((row) => { row.hidden = !custom; });
     root.querySelector("[data-summon-event-row]").hidden = field("timing").value !== "event";
     root.querySelector("[data-summon-player-row]").hidden = field("ownership").value !== "player";
-    root.querySelector("[data-summon-duration-row]").hidden = !["rounds", "minutes"].includes(field("duration").value);
+    root.querySelector("[data-summon-duration-row]").hidden = !["rounds", "turns", "world-time", "minutes"].includes(field("duration").value);
+    root.querySelector("[data-summon-duration-unit-row]").hidden = field("duration").value !== "world-time";
     root.querySelector("[data-summon-dismiss-row]").hidden = field("on-end").value !== "dismiss";
   }
 
@@ -83,6 +89,15 @@ export function createSummonAutomationPanel({
     document.dispatchEvent(new CustomEvent("homebrewgod:workshop-browse", {
       detail: { assetType: "monster", tab: "library" }
     }));
+  });
+  field("browse-presets").addEventListener("click", () => {
+    document.dispatchEvent(new CustomEvent("homebrewgod:workshop-browse", {
+      detail: { assetType: "summon", tab: "library" }
+    }));
+  });
+  field("load-preset").addEventListener("click", () => {
+    const preset = options.presets.find((entry) => entry.id === field("preset").value);
+    if (preset) write(preset.automation || preset);
   });
   for (const name of ["timing", "ownership", "duration", "on-end"]) {
     field(name).addEventListener("change", sync);
@@ -108,6 +123,7 @@ export function createSummonAutomationPanel({
     field("initiative").value = summon.initiative;
     field("duration").value = summon.duration.mode;
     field("duration-value").value = summon.duration.value;
+    field("duration-unit").value = summon.duration.unit || "minutes";
     field("on-end").value = summon.onEnd.mode;
     const dismissId = summon.onEnd.dismissAnimationId;
     if (dismissId && ![...field("dismiss-animation").options].some((option) => option.value === dismissId)) {
@@ -133,17 +149,22 @@ export function createSummonAutomationPanel({
     return normalizeSummonAutomation({
       sourceType: field("source-type").value,
       sourceId: field("source-id").value,
+      sourceLibraryId: selected?.libraryId || "",
       name: field("source-type").value === "custom" ? field("name").value : selected?.name,
       imageUrl: field("source-type").value === "custom" ? field("image").value : selected?.imageUrl,
       sizeCategory: field("source-type").value === "custom" ? field("size").value : selected?.sizeCategory,
       tokenType: field("source-type").value === "custom" ? field("token-type").value : selected?.tokenType,
+      ac: selected?.ac,
+      maxHp: selected?.maxHp,
+      speed: selected?.speed,
+      combatEnabled: selected?.combatEnabled,
       spawnLocation: field("location").value,
       count: field("count").value,
       spawnTiming: field("timing").value,
       eventName: field("event").value,
       ownership: { mode: field("ownership").value, playerUid: field("player").value },
       initiative: field("initiative").value,
-      duration: { mode: field("duration").value, value: field("duration-value").value },
+      duration: { mode: field("duration").value, value: field("duration-value").value, unit: field("duration-unit").value },
       onEnd: { mode: field("on-end").value, dismissAnimationId: field("dismiss-animation").value },
       placement: {
         preventOverlap: field("prevent-overlap").checked,
@@ -155,5 +176,9 @@ export function createSummonAutomationPanel({
 
   populateSources();
   write({});
+  if (document.__homebrewGodPendingSummonAutomation) {
+    write(document.__homebrewGodPendingSummonAutomation);
+    document.__homebrewGodPendingSummonAutomation = null;
+  }
   return Object.freeze({ root, read, write, sync, field });
 }

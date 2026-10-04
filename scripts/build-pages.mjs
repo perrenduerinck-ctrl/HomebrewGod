@@ -111,6 +111,7 @@ for (
     "combat",
     "data",
     "encounters",
+    "summons",
     "effects",
     "library",
     "items",

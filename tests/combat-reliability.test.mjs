@@ -335,9 +335,17 @@ test("timed automation creates and removes its summon and safely restores a tran
   const summon = await tokens.createAutomationToken({
     name: "Wolf",
     effectId: "summon-effect",
-    sourceTokenId: "hero"
+    sourceTokenId: "hero",
+    sourceType: "custom",
+    maxHp: 11,
+    ac: 13,
+    speed: "40 ft.",
+    combatEnabled: true
   });
   assert.equal(records.get(summon.id).automation.effectId, "summon-effect");
+  assert.equal(records.get(summon.id).maxHp, 11);
+  assert.equal(records.get(summon.id).ac, 13);
+  assert.equal(records.get(summon.id).speed, "40 ft.");
   const cleanup = [];
   const lifecycle = createCombatEffectLifecycle({
     onEnd: (record) => {

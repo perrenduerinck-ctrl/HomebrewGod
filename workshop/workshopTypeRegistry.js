@@ -82,7 +82,7 @@ const definitions = [
   {
     id: "summon", label: "Summons", singular: "Summon", icon: "🜲", preview: "card",
     filters: [filter("sourceType", "Token Source")], quickActions: [action("edit-copy", "Edit Copy"), action("use-summon", "Use in Spell / Ability")],
-    metadata(content = {}) { return { sourceType: clean(content.sourceType || content.tokenSource, 60), count: Math.max(1, Math.min(20, Math.trunc(Number(content.count) || 1))) }; },
+    metadata(content = {}) { return { sourceType: clean(content.source?.assetType || content.sourceType || content.tokenSource, 60), sourceName: clean(content.source?.name, 120), count: Math.max(1, Math.min(20, Math.trunc(Number(content.count) || 1))) }; },
     card(asset) { return [asset.typeMetadata?.sourceType, asset.typeMetadata?.count > 1 ? `×${asset.typeMetadata.count}` : ""].filter(Boolean).join(" · "); }
   },
   { id: "feat", label: "Feats", singular: "Feat", icon: "◆", preview: "card", filters: [], quickActions: [action("edit-copy", "Edit Copy"), action("add-to-character", "Add to Character")] },

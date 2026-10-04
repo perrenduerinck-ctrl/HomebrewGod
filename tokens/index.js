@@ -2442,7 +2442,7 @@ export function createTokenSystem(options) {
       sourcePatch = spec.sourceType === "monster"
         ? buildMonsterLinkedTokenPatch(source, roomData)
         : buildCharacterLinkedTokenPatch(source, roomData);
-    } else if (spec.sourceType === "npc") {
+    } else if (["npc", "custom"].includes(spec.sourceType)) {
       const maxHp = Number.isFinite(Number(spec.maxHp)) && Number(spec.maxHp) > 0
         ? Math.round(Number(spec.maxHp))
         : null;
@@ -2450,9 +2450,9 @@ export function createTokenSystem(options) {
         ? Math.round(Number(spec.ac))
         : null;
       sourcePatch = {
-        sourceType: "npc",
+        sourceType: spec.sourceType,
         sourceId: String(spec.sourceId || "").trim() || null,
-        linkedNpcId: String(spec.sourceId || "").trim() || null,
+        linkedNpcId: spec.sourceType === "npc" ? String(spec.sourceId || "").trim() || null : null,
         maxHp,
         currentHp: maxHp == null ? null : Math.max(0, Math.min(maxHp, Math.round(Number(spec.currentHp) || maxHp))),
         ac,

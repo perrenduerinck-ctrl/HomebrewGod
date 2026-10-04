@@ -402,6 +402,38 @@ service cloud.firestore {
           && request.resource.data.updatedAtMillis is number;
       }
 
+      match /summons/{summonId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.id == summonId
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.description is string
+          && request.resource.data.description.size() <= 2000
+          && request.resource.data.sourceLibraryId is string
+          && request.resource.data.sourceLibraryId.size() <= 241
+          && request.resource.data.source is map
+          && request.resource.data.source.get('assetType', '') in [
+            'monster', 'npc', 'character', 'custom'
+          ]
+          && request.resource.data.source.get('libraryId', '') is string
+          && request.resource.data.source.get('sourceRecordId', '') is string
+          && request.resource.data.count is int
+          && request.resource.data.count >= 1
+          && request.resource.data.count <= 20
+          && request.resource.data.placement is map
+          && request.resource.data.ownership is map
+          && request.resource.data.initiative is map
+          && request.resource.data.duration is map
+          && request.resource.data.endBehavior is map
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 20
+          && request.resource.data.updatedAtMillis is number;
+      }
+
       match /libraryIndex/{libraryId} {
         allow read, delete: if isSelf(userId);
         allow create, update:

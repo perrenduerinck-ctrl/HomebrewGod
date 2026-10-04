@@ -1,9 +1,10 @@
-const SOURCE_TYPES = new Set(["monster", "character", "custom"]);
+const SOURCE_TYPES = new Set(["monster", "character", "npc", "custom"]);
 const SPAWN_LOCATIONS = new Set(["target", "caster", "around-caster", "around-target", "manual"]);
 const SPAWN_TIMINGS = new Set(["start", "event", "end"]);
 const OWNERSHIP_MODES = new Set(["dm", "caster", "player"]);
 const INITIATIVE_MODES = new Set(["after-caster", "roll", "shared", "none"]);
-const DURATION_MODES = new Set(["permanent", "dismissed", "rounds", "minutes", "concentration"]);
+const DURATION_MODES = new Set(["permanent", "dismissed", "rounds", "turns", "world-time", "minutes", "concentration"]);
+const WORLD_TIME_UNITS = new Set(["seconds", "minutes", "hours"]);
 const END_MODES = new Set(["remove", "dismiss", "leave"]);
 const TOKEN_TYPES = new Set(["player", "enemy", "npc", "object"]);
 const SIZE_CATEGORIES = new Set(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
@@ -55,7 +56,7 @@ export function normalizeSummonAutomation(value = {}) {
     DURATION_MODES,
     "permanent"
   );
-  const durationValue = ["rounds", "minutes"].includes(durationMode)
+  const durationValue = ["rounds", "turns", "world-time", "minutes"].includes(durationMode)
     ? boundedInteger(requestedDuration.value ?? value.durationValue ?? legacy?.value, 1, 1, 1000000)
     : 1;
   const onEnd = choice(
@@ -68,10 +69,15 @@ export function normalizeSummonAutomation(value = {}) {
     type: "summon-token",
     sourceType: choice(value.sourceType || value.tokenSource, SOURCE_TYPES, "custom"),
     sourceId: text(value.sourceId || value.monsterId || value.characterId, "", 180),
+    sourceLibraryId: text(value.sourceLibraryId || value.libraryId, "", 241),
     name: text(value.name, "Summon", 120),
     imageUrl: safeHttps(value.imageUrl),
     sizeCategory: choice(value.sizeCategory, SIZE_CATEGORIES, "medium"),
     tokenType: choice(value.tokenType, TOKEN_TYPES, "npc"),
+    ac: Number.isFinite(Number(value.ac)) ? Math.max(0, Math.round(Number(value.ac))) : null,
+    maxHp: Number.isFinite(Number(value.maxHp)) ? Math.max(1, Math.round(Number(value.maxHp))) : null,
+    speed: text(value.speed, "", 160),
+    combatEnabled: value.combatEnabled === true,
     spawnLocation: choice(value.spawnLocation || value.location, SPAWN_LOCATIONS, "target"),
     count: boundedInteger(value.count, 1, 1, 20),
     spawnTiming: choice(value.spawnTiming || value.timing, SPAWN_TIMINGS, "event"),
@@ -81,7 +87,13 @@ export function normalizeSummonAutomation(value = {}) {
       playerUid: text(value.ownership?.playerUid || value.playerUid || value.ownerUid, "", 180)
     }),
     initiative: choice(value.initiative?.mode || value.initiative, INITIATIVE_MODES, "none"),
-    duration: Object.freeze({ mode: durationMode, value: durationValue }),
+    duration: Object.freeze({
+      mode: durationMode,
+      value: durationValue,
+      ...(durationMode === "world-time" ? {
+        unit: choice(requestedDuration.unit || value.durationUnit, WORLD_TIME_UNITS, "minutes")
+      } : {})
+    }),
     onEnd: Object.freeze({
       mode: onEnd,
       dismissAnimationId: text(
@@ -103,6 +115,9 @@ export function summonEffectDuration(value) {
   if (summon.duration.mode === "permanent") return null;
   if (summon.duration.mode === "dismissed") return { unit: "manual", value: 1, concentration: false };
   if (summon.duration.mode === "concentration") return { unit: "manual", value: 1, concentration: true };
+  if (summon.duration.mode === "world-time") {
+    return { unit: summon.duration.unit, value: summon.duration.value, concentration: false };
+  }
   return {
     unit: summon.duration.mode,
     value: summon.duration.value,
