@@ -34,7 +34,10 @@ export function normalizeNpcKnowledge(raw = {}, index = 0) {
     description: clean(source.description, 5000),
     tags: Object.freeze(uniqueList(source.tags, 16, 60).map((tag) => tag.toLowerCase())),
     secret: source.secret === true,
-    learnedAt: clean(source.learnedAt, 240)
+    learnedAt: clean(source.learnedAt, 240),
+    knownByNpcIds: Object.freeze(uniqueList(source.knownByNpcIds, 100, 160)),
+    sourceNpcId: clean(source.sourceNpcId, 160),
+    sharedAtWorldTime: nullableNumber(source.sharedAtWorldTime, { minimum: 0, maximum: Number.MAX_SAFE_INTEGER })
   });
 }
 

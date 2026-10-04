@@ -187,6 +187,7 @@ import { copyLibraryRecordToRoom } from "./library/copyToRoom.js";
 import { createMagicItemPersistence } from "./items/magicItemPersistence.js";
 import { createSpellPersistence } from "./spells/spellPersistence.js";
 import { createNpcPersistence } from "./npcs/npcPersistence.js";
+import { createNpcRelationshipPersistence } from "./npcs/relationshipPersistence.js";
 import { createEncounterPersistence } from "./encounters/encounterPersistence.js";
 import { loadEncounter } from "./encounters/encounterLoader.js";
 import { createSummonPersistence } from "./summons/summonPersistence.js";
@@ -586,6 +587,7 @@ let spellCreatorSystem = null;
 let spellPersistence = null;
 let npcCreatorSystem = null;
 let npcPersistence = null;
+let npcRelationshipPersistence = null;
 let encounterCreatorSystem = null;
 let encounterPersistence = null;
 let summonCreatorSystem = null;
@@ -9366,6 +9368,15 @@ function getNpcPersistenceSystem() {
   });
   return npcPersistence;
 }
+function getNpcRelationshipPersistenceSystem() {
+  if (npcRelationshipPersistence) return npcRelationshipPersistence;
+  npcRelationshipPersistence = createNpcRelationshipPersistence({
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+    query, orderBy, limit, startAfter, serverTimestamp,
+    getUserId: () => currentUser?.uid || ""
+  });
+  return npcRelationshipPersistence;
+}
 
 function getEncounterPersistenceSystem() {
   if (encounterPersistence) return encounterPersistence;
@@ -9668,6 +9679,7 @@ async function initNpcCreatorSystem() {
   npcCreatorSystem = creatorModule.createNpcCreator({
     screen: E.npcCreatorScreen,
     persistence: getNpcPersistenceSystem(),
+    relationshipPersistence: getNpcRelationshipPersistenceSystem(),
     onBack: () => navigateMainScreen("battle"),
     onPublishToWorkshop: publishToWorkshop,
     onBrowseLibrary: browseWorkshop,
@@ -9675,6 +9687,7 @@ async function initNpcCreatorSystem() {
     getUserId: () => currentUser?.uid || "",
     getCurrentRoomCode: () => currentRoomCode || "",
     getCurrentRoomName: () => currentRoomData?.roomName || currentRoomCode || "",
+    getWorldTime: () => campaignTimeSystem?.getState?.().worldTime || 0,
     uploadImage: uploadMapToCloudinary
   });
   return npcCreatorSystem;

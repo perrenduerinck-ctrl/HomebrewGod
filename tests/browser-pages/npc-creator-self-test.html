@@ -3,20 +3,30 @@
 <script type="module">
   import { createNpcCreator } from "../../npcs/npcCreator.js";
   import { normalizeNpc } from "../../npcs/npcModel.js";
+  import { normalizeNpcRelationship } from "../../npcs/relationshipModel.js";
   const records = new Map(); let next = 0;
+  const relationshipRecords = new Map(); let nextRelationship = 0;
   const persistence = {
     async save(raw) { const npc = normalizeNpc({ ...raw, id: raw.id || `npc-${++next}`, updatedAtMillis: Date.now() }); records.set(npc.id, npc); return npc; },
     async load(id) { return records.get(id); },
     async list() { return [...records.values()]; },
     async remove(id) { records.delete(id); }
   };
+  const relationshipPersistence = {
+    async save(raw) { const relationship = normalizeNpcRelationship({ ...raw, id: raw.id || `relationship-${++nextRelationship}`, updatedAtMillis: Date.now() }); relationshipRecords.set(relationship.id, relationship); return relationship; },
+    async load(id) { return relationshipRecords.get(id); },
+    async list() { return [...relationshipRecords.values()]; },
+    async remove(id) { relationshipRecords.delete(id); }
+  };
   window.__published = null; window.__token = null; window.__browse = null;
   window.creator = createNpcCreator({
-    screen: document.getElementById("screen"), persistence,
+    screen: document.getElementById("screen"), persistence, relationshipPersistence,
     getUserId: () => "user-1", getCurrentRoomCode: () => "SEA-1", getCurrentRoomName: () => "Sea of Glass",
+    getWorldTime: () => 86400,
     onPublishToWorkshop: (request) => { window.__published = request; },
     onBrowseLibrary: (request) => { window.__browse = request; },
     onCreateToken: async (npc) => { window.__token = npc; return { message: "NPC token created." }; }
   });
   window.npcRecords = () => [...records.values()];
+  window.relationshipRecords = () => [...relationshipRecords.values()];
 </script></body></html>

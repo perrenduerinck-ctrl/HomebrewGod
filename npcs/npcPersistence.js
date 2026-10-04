@@ -6,7 +6,11 @@ const mutableNpc = (npc) => ({
   tags: [...npc.tags],
   relationshipIds: [...npc.relationshipIds],
   factionIds: [...npc.factionIds],
-  knowledge: npc.knowledge.map((entry) => ({ ...entry, tags: [...entry.tags] })),
+  knowledge: npc.knowledge.map((entry) => ({
+    ...entry,
+    tags: [...entry.tags],
+    knownByNpcIds: [...entry.knownByNpcIds]
+  })),
   combat: {
     ...npc.combat,
     abilities: { ...npc.combat.abilities },

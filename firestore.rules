@@ -368,6 +368,39 @@ service cloud.firestore {
           && request.resource.data.combat is map
           && request.resource.data.updatedAtMillis is number;
       }
+      match /npcRelationships/{relationshipId} {
+        allow read, delete: if isSelf(userId);
+        allow create, update:
+          if isSelf(userId)
+          && request.resource.data.id == relationshipId
+          && request.resource.data.ownerUid == userId
+          && request.resource.data.sourceNpcId is string
+          && request.resource.data.sourceNpcId.size() > 0
+          && request.resource.data.sourceNpcId.size() <= 160
+          && request.resource.data.targetNpcId is string
+          && request.resource.data.targetNpcId.size() > 0
+          && request.resource.data.targetNpcId.size() <= 160
+          && request.resource.data.sourceNpcId != request.resource.data.targetNpcId
+          && request.resource.data.relationshipType in [
+            'Friend', 'Ally', 'Enemy', 'Rival', 'Family', 'Lover',
+            'Employer', 'Employee', 'Leader', 'Follower', 'Contact',
+            'Knows', 'Distrusts', 'Owes', 'Custom'
+          ]
+          && request.resource.data.direction in ['directed', 'mutual']
+          && request.resource.data.trust is number
+          && request.resource.data.trust >= 0
+          && request.resource.data.trust <= 100
+          && request.resource.data.hostility is number
+          && request.resource.data.hostility >= 0
+          && request.resource.data.hostility <= 100
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() <= 5000
+          && request.resource.data.tags is list
+          && request.resource.data.tags.size() <= 20
+          && request.resource.data.createdAtMillis is number
+          && request.resource.data.updatedAtMillis is number;
+      }
+
 
       match /encounters/{encounterId} {
         allow read, delete: if isSelf(userId);

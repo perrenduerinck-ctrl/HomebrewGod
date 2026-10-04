@@ -1,12 +1,16 @@
 import { NPC_ABILITY_KEYS, normalizeNpc, validateNpc } from "./npcModel.js";
 import { renderNpcPreview } from "./npcPreview.js";
+import { createNpcRelationshipNetwork } from "./npcRelationshipNetwork.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
 
 const newId = (prefix) => globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const blankKnowledge = (index = 0) => ({ id: newId("knowledge"), title: `Knowledge ${index + 1}`, description: "", tags: [], secret: false, learnedAt: "" });
+const blankKnowledge = (index = 0) => ({
+  id: newId("knowledge"), title: `Knowledge ${index + 1}`, description: "", tags: [], secret: false,
+  learnedAt: "", knownByNpcIds: [], sourceNpcId: "", sharedAtWorldTime: null
+});
 const blankAction = (index = 0) => ({ id: newId("action"), name: `Action ${index + 1}`, description: "", attackBonus: null, damage: "" });
 
 function ensureStyles(document) {
@@ -21,6 +25,7 @@ function ensureStyles(document) {
 export function createNpcCreator({
   screen,
   persistence,
+  relationshipPersistence = null,
   onBack = () => {},
   onPublishToWorkshop = () => {},
   onBrowseLibrary = () => {},
@@ -28,6 +33,7 @@ export function createNpcCreator({
   getUserId = () => "",
   getCurrentRoomCode = () => "",
   getCurrentRoomName = () => "",
+  getWorldTime = () => 0,
   uploadImage = null
 } = {}) {
   if (!screen || !persistence) throw new Error("NPC Creator needs a screen and persistence.");
@@ -44,9 +50,11 @@ export function createNpcCreator({
         <button type="button" data-npc-action="token">Create Token</button>
         <button type="button" data-npc-action="publish">Publish to Workshop</button>
         <button type="button" data-npc-action="browse">Open NPC Library</button>
+        <button type="button" data-npc-action="network" ${relationshipPersistence ? "" : "disabled"}>Relationship Network</button>
       </div>
       <p class="npc-status" role="status" data-npc-status>NPC Creator ready.</p>
-      <div class="npc-workspace">
+      <div class="npc-network-shell hidden" data-npc-network></div>
+      <div class="npc-workspace" data-npc-workspace>
         <form class="npc-editor" data-npc-form>
           <section class="npc-panel"><h3>Identity</h3>
             <label>Name<input required maxlength="120" data-npc-field="name" placeholder="Captain Elara Voss"></label>
@@ -103,6 +111,8 @@ export function createNpcCreator({
   const libraryRoot = screen.querySelector("[data-npc-library]");
   const statusRoot = screen.querySelector("[data-npc-status]");
   const campaignHelp = screen.querySelector("[data-npc-campaign-help]");
+  const workspaceRoot = screen.querySelector("[data-npc-workspace]");
+  const networkRoot = screen.querySelector("[data-npc-network]");
   const listeners = [];
   let selectedId = "";
   let createdAtMillis = 0;
@@ -113,6 +123,8 @@ export function createNpcCreator({
   let records = [];
   let busy = false;
   let provenance = {};
+  let networkOpen = false;
+  let relationshipNetwork = null;
 
   const on = (element, event, handler) => {
     element?.addEventListener(event, handler);
@@ -169,7 +181,11 @@ export function createNpcCreator({
       relationshipIds: field("relationshipIds").value,
       factionIds: field("factionIds").value,
       locationId: field("locationId").value,
-      knowledge: knowledge.map((entry) => ({ ...entry, tags: [...(entry.tags || [])] })),
+      knowledge: knowledge.map((entry) => ({
+        ...entry,
+        tags: [...(entry.tags || [])],
+        knownByNpcIds: [...(entry.knownByNpcIds || [])]
+      })),
       combat: {
         enabled: field("combatEnabled").checked,
         ac: field("ac").value,
@@ -186,7 +202,7 @@ export function createNpcCreator({
   function renderPreview() { renderNpcPreview(previewRoot, rawDraft()); }
 
   function renderKnowledge() {
-    knowledgeRoot.innerHTML = knowledge.length ? knowledge.map((entry, index) => `<details class="npc-entry" data-npc-knowledge-index="${index}" open><summary><strong>${escapeHtml(entry.title || `Knowledge ${index + 1}`)}</strong><span>${entry.secret ? "Secret" : "Known"}</span></summary><div class="npc-entry-actions"><button type="button" data-entry-action="up" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-entry-action="down" ${index === knowledge.length - 1 ? "disabled" : ""}>↓</button><button type="button" data-entry-action="duplicate">Duplicate</button><button type="button" data-entry-action="delete">Delete</button></div><label>Title<input maxlength="160" data-knowledge-field="title" value="${escapeHtml(entry.title)}"></label><label>Description<textarea rows="4" maxlength="5000" data-knowledge-field="description">${escapeHtml(entry.description)}</textarea></label><div class="npc-row"><label>Tags<input maxlength="500" data-knowledge-field="tags" value="${escapeHtml((entry.tags || []).join(", "))}"></label><label>Learned At<input maxlength="240" data-knowledge-field="learnedAt" value="${escapeHtml(entry.learnedAt)}"></label></div><label class="npc-check"><input type="checkbox" data-knowledge-field="secret" ${entry.secret ? "checked" : ""}> DM-only secret</label></details>`).join("") : `<p class="npc-empty">No knowledge entries yet.</p>`;
+    knowledgeRoot.innerHTML = knowledge.length ? knowledge.map((entry, index) => `<details class="npc-entry" data-npc-knowledge-index="${index}" open><summary><strong>${escapeHtml(entry.title || `Knowledge ${index + 1}`)}</strong><span>${entry.secret ? "Secret" : "Known"}</span></summary><div class="npc-entry-actions"><button type="button" data-entry-action="up" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-entry-action="down" ${index === knowledge.length - 1 ? "disabled" : ""}>↓</button><button type="button" data-entry-action="duplicate">Duplicate</button><button type="button" data-entry-action="delete">Delete</button></div><label>Title<input maxlength="160" data-knowledge-field="title" value="${escapeHtml(entry.title)}"></label><label>Description<textarea rows="4" maxlength="5000" data-knowledge-field="description">${escapeHtml(entry.description)}</textarea></label><div class="npc-row"><label>Tags<input maxlength="500" data-knowledge-field="tags" value="${escapeHtml((entry.tags || []).join(", "))}"></label><label>Learned At<input maxlength="240" data-knowledge-field="learnedAt" value="${escapeHtml(entry.learnedAt)}"></label></div><details class="npc-knowledge-links"><summary>Knowledge references</summary><label>Known By NPC IDs<input maxlength="4000" data-knowledge-field="knownByNpcIds" value="${escapeHtml((entry.knownByNpcIds || []).join(", "))}"></label><div class="npc-row"><label>Source NPC ID<input maxlength="160" data-knowledge-field="sourceNpcId" value="${escapeHtml(entry.sourceNpcId || "")}"></label><label>Shared at World Time<input type="number" min="0" data-knowledge-field="sharedAtWorldTime" value="${entry.sharedAtWorldTime ?? ""}"></label></div></details><label class="npc-check"><input type="checkbox" data-knowledge-field="secret" ${entry.secret ? "checked" : ""}> DM-only secret</label></details>`).join("") : `<p class="npc-empty">No knowledge entries yet.</p>`;
   }
 
   function renderCombatActions() {
@@ -217,7 +233,11 @@ export function createNpcCreator({
     field("speed").value = npc.combat.speed;
     field("monsterId").value = npc.combat.monsterId;
     for (const key of NPC_ABILITY_KEYS) screen.querySelector(`[data-npc-ability="${key}"]`).value = npc.combat.abilities[key];
-    knowledge = npc.knowledge.map((entry) => ({ ...entry, tags: [...entry.tags] }));
+    knowledge = npc.knowledge.map((entry) => ({
+      ...entry,
+      tags: [...entry.tags],
+      knownByNpcIds: [...entry.knownByNpcIds]
+    }));
     combatActions = npc.combat.actions.map((entry) => ({ ...entry }));
     renderKnowledge(); renderCombatActions(); syncCampaign(); renderPreview();
   }
@@ -295,8 +315,9 @@ export function createNpcCreator({
     const key = kind === "knowledge" ? input.dataset.knowledgeField : input.dataset.combatField;
     if (!Number.isInteger(index) || !list[index] || !key) return;
     let value = input.type === "checkbox" ? input.checked : input.value;
-    if (key === "tags") value = value.split(",").map((entry) => entry.trim()).filter(Boolean);
+    if (key === "tags" || key === "knownByNpcIds") value = value.split(",").map((entry) => entry.trim()).filter(Boolean);
     if (key === "attackBonus") value = value === "" ? null : Number(value);
+    if (key === "sharedAtWorldTime") value = value === "" ? null : Number(value);
     list[index] = { ...list[index], [key]: value };
     renderPreview();
   }
@@ -352,6 +373,13 @@ export function createNpcCreator({
     if (action === "publish") publish();
     if (action === "browse") onBrowseLibrary({ assetType: "npc", tab: "library" });
     if (action === "refresh") void refresh();
+    if (action === "network" && relationshipNetwork) {
+      networkOpen = !networkOpen;
+      workspaceRoot.classList.toggle("hidden", networkOpen);
+      networkRoot.classList.toggle("hidden", !networkOpen);
+      button.textContent = networkOpen ? "Back to NPC Editor" : "Relationship Network";
+      if (networkOpen) void relationshipNetwork.refresh();
+    }
   });
   const upload = screen.querySelector("[data-npc-image-upload]");
   on(upload, "change", async () => {
@@ -363,6 +391,25 @@ export function createNpcCreator({
     finally { upload.value = ""; setBusy(false); }
   });
 
+  if (relationshipPersistence) {
+    relationshipNetwork = createNpcRelationshipNetwork({
+      root: networkRoot,
+      npcPersistence: persistence,
+      relationshipPersistence,
+      getWorldTime,
+      onOpenNpc: (npc) => {
+        applyNpc(npc);
+        networkOpen = false;
+        workspaceRoot.classList.remove("hidden");
+        networkRoot.classList.add("hidden");
+        const button = screen.querySelector('[data-npc-action="network"]');
+        if (button) button.textContent = "Relationship Network";
+        setStatus(`${npc.name} opened from the relationship network.`);
+      },
+      onStatus: setStatus
+    });
+  }
+
   applyNpc({});
   void refresh();
   return Object.freeze({
@@ -371,6 +418,6 @@ export function createNpcCreator({
       applyNpc(makeCopy ? { ...npc, id: "", createdAtMillis: 0, name: `${npc?.name || "NPC"} Copy`, copiedFromNpcId: npc?.id || "" } : npc);
       setStatus(makeCopy ? "Independent copy opened. Save it to My Library." : "NPC opened.");
     },
-    destroy() { listeners.forEach((removeListener) => removeListener()); }
+    destroy() { relationshipNetwork?.destroy(); listeners.forEach((removeListener) => removeListener()); }
   });
 }
