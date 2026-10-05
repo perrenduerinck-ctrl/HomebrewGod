@@ -173,7 +173,14 @@
   .encounter-actions,
   .summon-actions { margin-right: -2px; margin-left: -2px; padding: 7px; }
   #battleTopBar { left: 54px; max-width: calc(100% - 60px); }
-  #zoomResetButton { display: none; }
+  #zoomResetButton {
+    display: inline-flex;
+    width: 32px;
+    min-width: 32px;
+    padding: 0 !important;
+    font-size: 0 !important;
+  }
+  #zoomResetButton::before { content: "↺"; font-size: 1.1rem; }
   .battleToolbarPanel { inset-inline: 6px; }
 }
 

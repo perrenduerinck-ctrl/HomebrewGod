@@ -214,8 +214,12 @@
   box-shadow: var(--hg-shadow-lg);
 }
 
-#battleToolsMenu .battleToolbarPanel {
-  width: min(680px, calc(100vw - 24px));
+@media (min-width: 641px) {
+  #battleToolsMenu .battleToolbarPanel {
+    right: 0;
+    left: auto;
+    width: min(680px, calc(100vw - 24px));
+  }
 }
 
 #battleMapSurface,
@@ -519,6 +523,7 @@
   position: fixed;
   inset: 10px 50% auto auto;
   z-index: 11000;
+  pointer-events: none;
   width: auto;
   max-width: min(480px, calc(100vw - 24px));
   margin: 0;

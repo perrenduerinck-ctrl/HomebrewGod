@@ -132,6 +132,7 @@ test("collections create, rename, mix native types, allow multiple membership, a
 
   await page.getByRole("button", { name: "Collections", exact: true }).click();
   await page.locator(".workshop-collection").filter({ hasText: "Campaign Bosses" }).getByRole("button", { name: "Delete", exact: true }).click();
+  await page.locator(".hg-confirm-dialog").getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Campaign Bosses" })).toHaveCount(0);
   await page.getByRole("button", { name: "My Library", exact: true }).click();
   await expect(page.locator(".workshop-card")).toHaveCount(9);
