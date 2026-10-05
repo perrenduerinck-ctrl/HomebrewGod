@@ -7,7 +7,7 @@ async function openBattle(page, mode = "auto") {
   const tools = page.locator("#battleToolsMenu");
   if (!await tools.evaluate(element => element.open)) await tools.locator("summary").click();
   await page.locator("#battleVfxModeSelect").selectOption("full");
-  await page.locator("#battleTopBar").click({ position: { x: 5, y: 30 } });
+  await page.keyboard.press("Escape");
 }
 
 for (const { mode, failModern, version } of [

@@ -267,7 +267,7 @@ export async function openVfxAuditMap(page) {
   const menu = page.locator("#battleToolsMenu");
   if (!await menu.evaluate(element => element.open)) await menu.locator("summary").click();
   await page.locator("#battleVfxModeSelect").selectOption("full");
-  await page.locator("#battleTopBar").click({ position: { x: 5, y: 30 } });
+  await page.keyboard.press("Escape");
 }
 
 test("production token elevation: all five attachments follow children at 0/20/40 ft", async ({ page }) => {

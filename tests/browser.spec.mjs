@@ -13,8 +13,9 @@ async function openMapTools(page) {
 
 async function closeMapTools(page) {
   const menu = page.locator("#battleToolsMenu");
-  // Clicking outside is idempotent if an async targeting load also closes it.
-  if (await menu.evaluate(el => el.open)) await page.locator("#battleTopBar").click({position:{x:5,y:30}});
+  // The floating toolbar intentionally lets empty space pass pointer events
+  // through to the map. Escape exercises its supported dismissal path.
+  if (await menu.evaluate(el => el.open)) await page.keyboard.press("Escape");
   await expect(menu).toHaveJSProperty("open", false);
 }
 
