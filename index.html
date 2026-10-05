@@ -11,7 +11,21 @@
 
   <link rel="stylesheet" href="./assets/styles/app.css?v=foundation-milestone-20260915">
   <link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-vfx-polish-20260902">
-  <link rel="stylesheet" href="./spells/spellCreator.css?v=spell-library-20261001">
+  <link id="monsterCreatorModernStyles" rel="stylesheet" href="./monsters/monsterCreator.css?v=ui-polish-20261004">
+  <link id="characterCreatorUiEnhancements" rel="stylesheet" href="./characterCreator/uiEnhancements.css?v=ui-polish-20261004">
+  <link id="magicItemCreatorStyles" rel="stylesheet" href="./items/magicItemCreator.css?v=ui-polish-20261004">
+  <link id="spellCreatorStyles" rel="stylesheet" href="./spells/spellCreator.css?v=ui-polish-20261004">
+  <link id="npcCreatorStyles" rel="stylesheet" href="./npcs/npcCreator.css?v=ui-polish-20261004">
+  <link id="npcRelationshipNetworkStyles" rel="stylesheet" href="./npcs/npcRelationshipNetwork.css?v=ui-polish-20261004">
+  <link id="encounterCreatorStyles" rel="stylesheet" href="./encounters/encounterCreator.css?v=ui-polish-20261004">
+  <link id="summonCreatorStyles" rel="stylesheet" href="./summons/summonCreator.css?v=ui-polish-20261004">
+  <link id="gameplayEffectPanelStyles" rel="stylesheet" href="./effects/effectPanel.css?v=ui-polish-20261004">
+  <link id="homebrewGodWorkshopStyles" rel="stylesheet" href="./workshop/workshop.css?v=ui-polish-20261004">
+  <link rel="stylesheet" href="./assets/styles/tokens.css?v=ui-polish-20261004">
+  <link rel="stylesheet" href="./assets/styles/foundation.css?v=ui-polish-20261004">
+  <link rel="stylesheet" href="./assets/styles/components.css?v=ui-polish-20261004">
+  <link rel="stylesheet" href="./assets/styles/screens.css?v=ui-polish-20261004">
+  <link rel="stylesheet" href="./assets/styles/responsive.css?v=ui-polish-20261004">
 </head>
 
 <body>
@@ -27,97 +41,156 @@
   <!-- =====================================================
        INDEX SECTION 2 — AUTH / START SCREEN
   ====================================================== -->
-  <main id="authScreen" class="screen">
-    <h1>Homebrew God</h1>
-    <p>Free D&D room tool. No D&D Beyond nonsense.</p>
+  <main id="authScreen" class="screen hg-public-shell">
+    <header class="hg-public-hero">
+      <span class="hg-eyebrow">Your table, your rules</span>
+      <h1>Homebrew <span>God</span></h1>
+      <p>Build a campaign, bring your homebrew, and run the whole table from one focused workspace.</p>
+    </header>
 
-    <section class="box">
-      <h2>Start</h2>
+    <section class="hg-auth-grid" aria-label="Choose how to continue">
+      <article class="hg-panel hg-auth-card">
+        <header class="hg-auth-card-header">
+          <span class="hg-eyebrow">Quick start</span>
+          <h2>Continue as a guest</h2>
+          <p class="small">Jump into a room without creating an account.</p>
+        </header>
+        <label for="guestNameInput">Display name</label>
+        <input id="guestNameInput" autocomplete="nickname" placeholder="Big Fluffy">
+        <button id="guestButton" class="hg-button-primary">Continue as Guest</button>
+      </article>
 
-      <h3>Guest Mode</h3>
-      <input id="guestNameInput" placeholder="Display name, like Big Fluffy">
-      <button id="guestButton">Continue as Guest</button>
+      <article class="hg-panel hg-auth-card" data-variant="featured">
+        <header class="hg-auth-card-header">
+          <span class="hg-eyebrow">New here</span>
+          <h2>Create an account</h2>
+          <p class="small">Keep your campaigns and personal library together.</p>
+        </header>
+        <div class="hg-form-stack">
+          <label for="signupNameInput">Display name</label>
+          <input id="signupNameInput" autocomplete="nickname" placeholder="Your table name">
+          <label for="signupEmailInput">Email</label>
+          <input id="signupEmailInput" type="email" autocomplete="email" placeholder="you@example.com">
+          <label for="signupPasswordInput">Password</label>
+          <input id="signupPasswordInput" type="password" autocomplete="new-password" placeholder="Choose a secure password">
+        </div>
+        <button id="signupButton" class="hg-button-primary">Create Account</button>
+      </article>
 
-      <hr>
-
-      <h3>Create Account</h3>
-      <input id="signupNameInput" placeholder="Display name">
-      <input id="signupEmailInput" placeholder="Email">
-      <input id="signupPasswordInput" type="password" placeholder="Password">
-      <button id="signupButton">Create Account</button>
-
-      <hr>
-
-      <h3>Log In</h3>
-      <input id="loginEmailInput" placeholder="Email">
-      <input id="loginPasswordInput" type="password" placeholder="Password">
-      <button id="loginButton">Log In</button>
+      <article class="hg-panel hg-auth-card">
+        <header class="hg-auth-card-header">
+          <span class="hg-eyebrow">Welcome back</span>
+          <h2>Log in</h2>
+          <p class="small">Return to your rooms, characters, and creations.</p>
+        </header>
+        <div class="hg-form-stack">
+          <label for="loginEmailInput">Email</label>
+          <input id="loginEmailInput" type="email" autocomplete="email" placeholder="you@example.com">
+          <label for="loginPasswordInput">Password</label>
+          <input id="loginPasswordInput" type="password" autocomplete="current-password" placeholder="Your password">
+        </div>
+        <button id="loginButton" class="hg-button-primary">Log In</button>
+      </article>
     </section>
   </main>
 
   <!-- =====================================================
        INDEX SECTION 3 — LOBBY SCREEN
   ====================================================== -->
-  <main id="lobbyScreen" class="screen hidden">
-    <h1>Homebrew God</h1>
-    <p>Your table. Your maps. Your chaos.</p>
+  <main id="lobbyScreen" class="screen hidden hg-public-shell">
+    <header class="hg-page-header">
+      <div>
+        <span class="hg-eyebrow">Campaign lobby</span>
+        <h1>Choose your table</h1>
+        <p>Return to a saved campaign, create a new room, or join friends with a room code.</p>
+      </div>
+    </header>
 
-    <section class="box">
-      <h2>Lobby</h2>
+    <div class="hg-lobby-grid">
+      <section class="hg-panel hg-account-card" aria-labelledby="lobbyAccountTitle">
+        <div class="hg-panel-header">
+          <h2 id="lobbyAccountTitle">Your account</h2>
+          <button id="logoutButton" class="hg-button-ghost">Log Out</button>
+        </div>
+        <dl class="hg-account-meta">
+          <div><dt>Name</dt><dd id="userNameText"></dd></div>
+          <div><dt>Access</dt><dd id="userTypeText"></dd></div>
+          <div><dt>User ID</dt><dd id="userIdText" class="small"></dd></div>
+        </dl>
+      </section>
 
-      <p><b>Name:</b> <span id="userNameText"></span></p>
-      <p><b>Type:</b> <span id="userTypeText"></span></p>
-      <p class="small"><b>User ID:</b> <span id="userIdText"></span></p>
+      <section class="hg-panel hg-rooms-card" aria-labelledby="savedRoomsTitle">
+        <div class="hg-panel-header">
+          <div>
+            <h2 id="savedRoomsTitle">Saved rooms</h2>
+            <p class="small">Campaigns connected to this account appear here.</p>
+          </div>
+        </div>
+        <div id="myRoomsList" class="hg-skeleton" aria-busy="true">Loading saved rooms…</div>
+      </section>
 
-      <button id="logoutButton">Log Out</button>
-    </section>
+      <section class="hg-panel hg-room-action-card hg-form-stack" aria-labelledby="createRoomTitle">
+        <div>
+          <span class="hg-eyebrow">Dungeon Master</span>
+          <h2 id="createRoomTitle">Create a campaign room</h2>
+          <p class="small">Start a private table and invite players with a room code.</p>
+        </div>
+        <label for="roomNameInput">Room name</label>
+        <input id="roomNameInput" placeholder="Vampire Castle">
+        <button id="createRoomButton" class="hg-button-primary">Create Room</button>
+      </section>
 
-    <section class="box">
-      <h2>My Saved Rooms</h2>
-      <div id="myRoomsList">Loading saved rooms...</div>
-
-      <hr>
-
-      <h3>Create Room as DM</h3>
-      <input id="roomNameInput" placeholder="Room name, like Vampire Castle">
-      <button id="createRoomButton">Create Room</button>
-
-      <hr>
-
-      <h3>Join Room</h3>
-      <input id="joinRoomCodeInput" placeholder="Room code, like ABC-123">
-      <button id="joinRoomButton">Join Room</button>
-
-      <p id="roomStatusText" class="status"></p>
-    </section>
+      <section class="hg-panel hg-room-action-card hg-form-stack" aria-labelledby="joinRoomTitle">
+        <div>
+          <span class="hg-eyebrow">Player</span>
+          <h2 id="joinRoomTitle">Join a room</h2>
+          <p class="small">Enter the code shared by your Dungeon Master.</p>
+        </div>
+        <label for="joinRoomCodeInput">Room code</label>
+        <input id="joinRoomCodeInput" autocomplete="off" placeholder="ABC-123">
+        <button id="joinRoomButton" class="hg-button-primary">Join Room</button>
+      </section>
+    </div>
+    <p id="roomStatusText" class="status" aria-live="polite"></p>
   </main>
 
   <!-- =====================================================
        INDEX SECTION 4 — ROOM DASHBOARD SCREEN
   ====================================================== -->
   <main id="roomDashboardScreen" class="screen hidden">
-    <h1>Room Dashboard</h1>
+    <header class="hg-page-header">
+      <div>
+        <span class="hg-eyebrow">Campaign home</span>
+        <h1>Room Dashboard</h1>
+        <p>Manage the current table, campaign time, players, and shared maps.</p>
+      </div>
+      <div class="hg-page-header-actions creatorTopActions">
+        <button id="backToLobbyButton" class="hg-button-ghost">Back to Lobby</button>
+        <button id="openBattleMapButton" class="hg-button-primary">Open Battle Map</button>
+      </div>
+    </header>
 
-    <section class="box">
-      <button id="backToLobbyButton">Back To Lobby</button>
-      <button id="openBattleMapButton">Open Battle Map In New Tab</button>
-
-      <h2>Current Room</h2>
-
-      <p><b>Room Name:</b> <span id="currentRoomNameText"></span></p>
-
-      <p><b>Room Code:</b></p>
-      <p id="roomCodeText"></p>
-
-      <button id="copyRoomCodeButton">Copy Room Code</button>
-      <button id="saveThisRoomButton">Save This Room To My Rooms</button>
-
-      <p><b>Your Role:</b> <span id="yourRoleText"></span></p>
+    <div class="hg-room-grid">
+    <section class="hg-panel hg-room-summary">
+      <div class="hg-panel-header">
+        <div>
+          <span class="hg-eyebrow">Current room</span>
+          <h2 id="currentRoomNameText"></h2>
+        </div>
+        <span id="roomCodeText" class="hg-room-code" aria-label="Room code"></span>
+      </div>
+      <dl class="hg-room-meta">
+        <div><dt>Your role</dt><dd id="yourRoleText"></dd></div>
+      </dl>
+      <div class="creatorTopActions">
+        <button id="copyRoomCodeButton">Copy Room Code</button>
+        <button id="saveThisRoomButton">Save to My Rooms</button>
+      </div>
     </section>
 
     <section
       id="roomCampaignTimeCard"
-      class="box campaignTimeCard"
+      class="box campaignTimeCard hg-room-time"
       data-time-panel
     >
       <div class="campaignTimeHeading">
@@ -183,12 +256,12 @@
       </details>
     </section>
 
-    <section class="box">
+    <section class="box hg-room-players">
       <h2>Players In Room</h2>
       <div id="playersList">No players in the room right now.</div>
     </section>
 
-    <section id="dmMapControls" class="box hidden">
+    <section id="dmMapControls" class="box hidden hg-room-map-tools">
       <h2>DM Map Library</h2>
 
       <p class="small">
@@ -214,14 +287,14 @@
       <p id="mapUploadStatus" class="status"></p>
     </section>
 
-    <section class="box">
+    <section class="box hg-room-map-library">
       <h2>Saved Maps In This Room</h2>
       <div id="roomMapsList">
         No maps saved in this room yet.
       </div>
     </section>
 
-    <section class="box">
+    <section class="box hg-room-map-preview">
       <h2>Current Map Preview</h2>
       <p>
         <b>Map Name:</b>
@@ -238,7 +311,7 @@
         >
       </div>
     </section>
-
+    </div>
   </main>
 
 <!-- =====================================================
@@ -1213,15 +1286,19 @@
 
     <div class="creatorActionBar">
       <button id="newMonsterButton" type="button">New Monster</button>
-      <button id="saveMonsterButton" type="button">Save Monster</button>
+      <button id="saveMonsterButton" class="hg-button-primary" type="button">Save Monster</button>
       <button id="createMonsterTokenButton" type="button">Create Map Token</button>
-      <button id="copyMonsterJsonButton" type="button">Copy JSON</button>
-      <button id="exportMonsterJsonButton" type="button">Export JSON</button>
-
-      <label class="fileButtonLabel">
-        Import JSON
-        <input id="importMonsterJsonInput" type="file" accept="application/json,.json">
-      </label>
+      <details class="hg-overflow-menu">
+        <summary>More</summary>
+        <div class="hg-overflow-menu-panel">
+          <button id="copyMonsterJsonButton" type="button">Copy JSON</button>
+          <button id="exportMonsterJsonButton" type="button">Export JSON</button>
+          <label class="fileButtonLabel">
+            Import JSON
+            <input id="importMonsterJsonInput" type="file" accept="application/json,.json">
+          </label>
+        </div>
+      </details>
     </div>
 
     <div class="creatorFullGrid">
@@ -1334,14 +1411,18 @@
 
     <div class="creatorActionBar">
       <button id="newCharacterButton" type="button">New Character</button>
-      <button id="saveCharacterButton" type="button">Save Character</button>
-      <button id="copyCharacterJsonButton" type="button">Copy JSON</button>
-      <button id="exportCharacterJsonButton" type="button">Export JSON</button>
-
-      <label class="fileButtonLabel">
-        Import JSON
-        <input id="importCharacterJsonInput" type="file" accept="application/json,.json">
-      </label>
+      <button id="saveCharacterButton" class="hg-button-primary" type="button">Save Character</button>
+      <details class="hg-overflow-menu">
+        <summary>More</summary>
+        <div class="hg-overflow-menu-panel">
+          <button id="copyCharacterJsonButton" type="button">Copy JSON</button>
+          <button id="exportCharacterJsonButton" type="button">Export JSON</button>
+          <label class="fileButtonLabel">
+            Import JSON
+            <input id="importCharacterJsonInput" type="file" accept="application/json,.json">
+          </label>
+        </div>
+      </details>
     </div>
 
     <div class="creatorFullGrid">

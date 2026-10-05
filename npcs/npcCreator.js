@@ -1,6 +1,7 @@
 import { NPC_ABILITY_KEYS, normalizeNpc, validateNpc } from "./npcModel.js";
 import { renderNpcPreview } from "./npcPreview.js";
 import { createNpcRelationshipNetwork } from "./npcRelationshipNetwork.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -45,12 +46,17 @@ export function createNpcCreator({
       <div class="npc-creator-actions">
         <button type="button" data-npc-action="new">New NPC</button>
         <button type="button" class="npc-primary" data-npc-action="save">Save to My Library</button>
-        <button type="button" data-npc-action="duplicate">Duplicate</button>
-        <button type="button" data-npc-action="delete">Delete</button>
         <button type="button" data-npc-action="token">Create Token</button>
-        <button type="button" data-npc-action="publish">Publish to Workshop</button>
-        <button type="button" data-npc-action="browse">Open NPC Library</button>
         <button type="button" data-npc-action="network" ${relationshipPersistence ? "" : "disabled"}>Relationship Network</button>
+        <details class="hg-overflow-menu">
+          <summary>More</summary>
+          <div class="hg-overflow-menu-panel">
+            <button type="button" data-npc-action="duplicate">Duplicate</button>
+            <button type="button" data-npc-action="publish">Publish to Workshop</button>
+            <button type="button" data-npc-action="browse">Open NPC Library</button>
+            <button type="button" data-npc-action="delete">Delete</button>
+          </div>
+        </details>
       </div>
       <p class="npc-status" role="status" data-npc-status>NPC Creator ready.</p>
       <div class="npc-network-shell hidden" data-npc-network></div>
@@ -278,7 +284,7 @@ export function createNpcCreator({
 
   async function remove() {
     if (!selectedId) { setStatus("Select a saved NPC to delete."); return false; }
-    if (globalThis.confirm && !globalThis.confirm("Delete this NPC from My Library?")) return false;
+    if (!await requestAppConfirmation("Delete this NPC from My Library?", { title: "Delete NPC", confirmLabel: "Delete" })) return false;
     setBusy(true);
     try { await persistence.remove(selectedId); applyNpc({}); await refresh(); setStatus("NPC deleted."); return true; }
     catch (error) { setStatus(`NPC could not be deleted: ${error.message}`); return false; }

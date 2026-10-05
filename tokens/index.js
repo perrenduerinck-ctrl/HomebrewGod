@@ -4,6 +4,8 @@
 // Tokens live at rooms/{roomCode}/tokens/{tokenId}
 // =====================================================
 
+import { requestAppConfirmation } from "../ui/visualPolish.js";
+
 import {
   createRealtimeListenerRegistry
 } from "../shared/realtimeListeners.js";
@@ -2895,7 +2897,7 @@ export function createTokenSystem(options) {
         return;
       }
 
-      if (!confirm("Delete this token? This does not delete the image from Cloudinary.")) {
+      if (!await requestAppConfirmation("Delete this token? This does not delete the image from Cloudinary.", { title: "Delete token", confirmLabel: "Delete" })) {
         return;
       }
 

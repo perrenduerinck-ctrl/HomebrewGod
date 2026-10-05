@@ -7,6 +7,7 @@ import {
   validateHomebrewSpell
 } from "./spellModel.js";
 import { spellAnimationSummary } from "../vfx/spellAnimationSection.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -49,11 +50,16 @@ export function createSpellCreator({
       <div class="spell-creator-actions">
         <button type="button" data-spell-action="new">New Spell</button>
         <button type="button" class="spell-creator-primary" data-spell-action="save">Save to My Library</button>
-        <button type="button" data-spell-action="duplicate">Duplicate</button>
-        <button type="button" data-spell-action="delete">Delete</button>
         <button type="button" data-spell-action="add-character">Add to Character</button>
-        <button type="button" data-spell-action="publish">Publish to Workshop</button>
-        <button type="button" data-spell-action="browse">Browse Workshop Spells</button>
+        <details class="hg-overflow-menu">
+          <summary>More</summary>
+          <div class="hg-overflow-menu-panel">
+            <button type="button" data-spell-action="duplicate">Duplicate</button>
+            <button type="button" data-spell-action="publish">Publish to Workshop</button>
+            <button type="button" data-spell-action="browse">Browse Workshop Spells</button>
+            <button type="button" data-spell-action="delete">Delete</button>
+          </div>
+        </details>
       </div>
       <p class="spell-creator-status" role="status" data-spell-status>Spell Library ready.</p>
       <div class="spell-creator-workspace">
@@ -272,7 +278,7 @@ export function createSpellCreator({
 
   async function remove() {
     if (!selectedId) { setStatus("Select a saved spell to delete."); return false; }
-    if (globalThis.confirm && !globalThis.confirm("Delete this spell from My Library?")) return false;
+    if (!await requestAppConfirmation("Delete this spell from My Library?", { title: "Delete spell", confirmLabel: "Delete" })) return false;
     setBusy(true);
     try {
       await persistence.remove(selectedId);

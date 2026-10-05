@@ -37,11 +37,16 @@ export function createSummonCreator({
     <div class="summon-actions">
       <button type="button" data-summon-creator-action="new">New Preset</button>
       <button type="button" class="summon-primary" data-summon-creator-action="save">Save to My Library</button>
-      <button type="button" data-summon-creator-action="duplicate">Duplicate</button>
-      <button type="button" data-summon-creator-action="delete">Delete</button>
       <button type="button" data-summon-creator-action="use">Use in Spell / Ability</button>
-      <button type="button" data-summon-creator-action="publish">Publish to Workshop</button>
-      <button type="button" data-summon-creator-action="browse">Open Summon Library</button>
+      <details class="hg-overflow-menu">
+        <summary>More</summary>
+        <div class="hg-overflow-menu-panel">
+          <button type="button" data-summon-creator-action="duplicate">Duplicate</button>
+          <button type="button" data-summon-creator-action="publish">Publish to Workshop</button>
+          <button type="button" data-summon-creator-action="browse">Open Summon Library</button>
+          <button type="button" data-summon-creator-action="delete">Delete</button>
+        </div>
+      </details>
     </div>
     <p class="summon-status" role="status" data-summon-creator-status>Summon presets ready.</p>
     <div class="summon-workspace">

@@ -34,6 +34,7 @@ test("NPC Creator saves, previews, filters, preserves knowledge and combat, publ
   await expect(page.locator("[data-npc-library]")).toContainText("No NPCs match");
   await page.locator('[data-npc-filter="occupation"]').fill("");
 
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Publish to Workshop" }).click();
   expect((await page.evaluate(() => window.__published)).assetType).toBe("npc");
   await page.getByRole("button", { name: "Create Token" }).click();
@@ -46,6 +47,7 @@ test("NPC Creator duplicates independently and does not overflow a mobile viewpo
   await page.goto("/tests/browser-pages/npc-creator-self-test.html");
   await page.locator('[data-npc-field="name"]').fill("Mira Vale");
   await page.getByRole("button", { name: "Save to My Library" }).click();
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Duplicate" }).click();
   await expect(page.locator('[data-npc-field="name"]')).toHaveValue("Mira Vale Copy");
   await page.getByRole("button", { name: "Save to My Library" }).click();

@@ -6,6 +6,7 @@ import {
   normalizeMagicItem,
   validateMagicItem
 } from "./magicItemModel.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -47,10 +48,15 @@ export function createMagicItemCreator({
       <div class="magic-item-actions">
         <button type="button" data-item-action="new">New Item</button>
         <button type="button" class="magic-item-primary" data-item-action="save">Save to My Library</button>
-        <button type="button" data-item-action="duplicate">Duplicate</button>
-        <button type="button" data-item-action="delete">Delete</button>
-        <button type="button" data-item-action="publish">Publish to Workshop</button>
-        <button type="button" data-item-action="browse">Browse Workshop Items</button>
+        <details class="hg-overflow-menu">
+          <summary>More</summary>
+          <div class="hg-overflow-menu-panel">
+            <button type="button" data-item-action="duplicate">Duplicate</button>
+            <button type="button" data-item-action="publish">Publish to Workshop</button>
+            <button type="button" data-item-action="browse">Browse Workshop Items</button>
+            <button type="button" data-item-action="delete">Delete</button>
+          </div>
+        </details>
       </div>
       <p class="magic-item-status" role="status" data-item-status>Magic Item Creator ready.</p>
       <div class="magic-item-workspace">
@@ -233,7 +239,7 @@ export function createMagicItemCreator({
 
   async function remove() {
     if (!selectedId) { setStatus("Select a saved item to delete."); return false; }
-    if (globalThis.confirm && !globalThis.confirm("Delete this magic item from My Library?")) return false;
+    if (!await requestAppConfirmation("Delete this magic item from My Library?", { title: "Delete magic item", confirmLabel: "Delete" })) return false;
     setBusy(true);
     try {
       await persistence.remove(selectedId);

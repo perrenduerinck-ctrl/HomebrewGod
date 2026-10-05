@@ -5,6 +5,7 @@ import {
   validateEncounter
 } from "./encounterModel.js";
 import { renderEncounterPreview } from "./encounterPreview.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -43,11 +44,16 @@ export function createEncounterCreator({
         <button type="button" data-encounter-action="new">New Encounter</button>
         <button type="button" data-encounter-action="capture">Capture Current Battle</button>
         <button type="button" class="encounter-primary" data-encounter-action="save">Save to My Library</button>
-        <button type="button" data-encounter-action="duplicate">Duplicate</button>
-        <button type="button" data-encounter-action="delete">Delete</button>
         <button type="button" data-encounter-action="load">Load Encounter</button>
-        <button type="button" data-encounter-action="publish">Publish to Workshop</button>
-        <button type="button" data-encounter-action="browse">Open Encounter Library</button>
+        <details class="hg-overflow-menu">
+          <summary>More</summary>
+          <div class="hg-overflow-menu-panel">
+            <button type="button" data-encounter-action="duplicate">Duplicate</button>
+            <button type="button" data-encounter-action="publish">Publish to Workshop</button>
+            <button type="button" data-encounter-action="browse">Open Encounter Library</button>
+            <button type="button" data-encounter-action="delete">Delete</button>
+          </div>
+        </details>
       </div>
       <p class="encounter-status" role="status" data-encounter-status>Encounter Creator ready.</p>
       <div class="encounter-workspace">
@@ -217,7 +223,7 @@ export function createEncounterCreator({
 
   async function remove() {
     if (!selectedId) { setStatus("Select a saved encounter to delete."); return false; }
-    if (globalThis.confirm && !globalThis.confirm("Delete this encounter from My Library? Referenced content will not be deleted.")) return false;
+    if (!await requestAppConfirmation("Delete this encounter from My Library? Referenced content will not be deleted.", { title: "Delete encounter", confirmLabel: "Delete" })) return false;
     setBusy(true);
     try { await persistence.remove(selectedId); applyEncounter({}); await refresh(); setStatus("Encounter deleted. Referenced content was left unchanged."); return true; }
     catch (error) { setStatus(`Encounter could not be deleted: ${error.message}`); return false; }

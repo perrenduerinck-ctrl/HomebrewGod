@@ -17,6 +17,7 @@ test("Encounter Creator saves stable references, positions, initiative, publishe
   expect(saved.mapRef.libraryId).toBe("map:docks");
   expect(saved.combatants[0].libraryId).toBe("monster:wight");
   expect(saved.combatants[0].initiativePreset).toBe(17);
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Publish to Workshop" }).click();
   expect((await page.evaluate(() => window.__published)).assetType).toBe("encounter");
   await page.getByRole("button", { name: "Load Encounter" }).click();
@@ -31,6 +32,7 @@ test("Encounter Creator captures current setup, duplicates independently, and fi
   await page.getByRole("button", { name: "Capture Current Battle" }).click();
   await expect(page.locator("[data-encounter-preview]")).toContainText("Wight");
   await page.getByRole("button", { name: "Save to My Library" }).click();
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.locator('[data-encounter-action="duplicate"]').click();
   await expect(page.locator('[data-encounter-field="name"]')).toHaveValue("Captured Battle Copy");
   await page.getByRole("button", { name: "Save to My Library" }).click();

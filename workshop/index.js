@@ -6,6 +6,7 @@ import { ensureWorkshopStyles } from "./workshopStyles.js";
 import { filterWorkshopAssets } from "./workshopFilters.js";
 import { applyWorkshopFavorites, updateWorkshopFavoriteState } from "./workshopFavorites.js";
 import { applyWorkshopRecent, createWorkshopRecentStore } from "./workshopRecent.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
 import {
   WORKSHOP_TYPE_FILTERS,
   getWorkshopTypeDefinition
@@ -430,7 +431,7 @@ export function createWorkshop({
   }
 
   async function deleteAsset(asset) {
-    if (!globalThis.confirm?.(`Delete “${asset.name}” from the Workshop? Imported copies will not be deleted.`)) return;
+    if (!await requestAppConfirmation(`Delete “${asset.name}” from the Workshop? Imported copies will not be deleted.`, { title: "Delete Workshop asset", confirmLabel: "Delete" })) return;
     try { await persistence.deleteAsset(asset.assetId); entries = entries.filter((entry) => entry.assetId !== asset.assetId); render(); status("Workshop asset deleted. Existing imported copies were not changed."); }
     catch (error) { status(error.message); }
   }
@@ -493,7 +494,7 @@ export function createWorkshop({
       deleteAsset,
       removeFromRoom: async (asset) => {
         try {
-          if (!globalThis.confirm?.(`Remove “${asset.name}” from this room library?`)) return;
+          if (!await requestAppConfirmation(`Remove “${asset.name}” from this room library?`, { title: "Remove from room", confirmLabel: "Remove" })) return;
           await persistence.removeFromRoom(asset.assetId);
           entries = entries.filter((entry) => entry.assetId !== asset.assetId);
           render(); status("Asset removed from the room library. The author's asset and imported copies remain intact.");
@@ -597,7 +598,7 @@ export function createWorkshop({
         rename.addEventListener("click", () => openCollectionEditor(item, () => renderCollections()));
         const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "Delete";
         remove.addEventListener("click", async () => {
-          if (!globalThis.confirm?.("Delete this collection?\nThe assets inside it will not be deleted.")) return;
+          if (!await requestAppConfirmation("Delete this collection?\nThe assets inside it will not be deleted.", { title: "Delete collection", confirmLabel: "Delete" })) return;
           await persistence.deleteCollection(item.collectionId);
           await renderCollections();
         });

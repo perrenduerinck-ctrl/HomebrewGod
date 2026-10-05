@@ -171,6 +171,10 @@ import {
 } from "./shared/securityPersistence.js";
 import { createSidebarNavigation } from "./ui/navigation/sidebar.js?v=foundation-milestone-20260915";
 import { createToolDrawer } from "./ui/navigation/toolDrawer.js?v=foundation-milestone-20260915";
+import {
+  installVisualPolish,
+  requestAppConfirmation
+} from "./ui/visualPolish.js?v=ui-polish-20261004";
 import { createWorkshop } from "./workshop/index.js";
 import { createWorkshopPersistence } from "./workshop/workshopPersistence.js";
 import { prepareWorkshopCopy } from "./workshop/workshopImport.js";
@@ -192,6 +196,8 @@ import { createEncounterPersistence } from "./encounters/encounterPersistence.js
 import { loadEncounter } from "./encounters/encounterLoader.js";
 import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
+
+const visualPolish = installVisualPolish({ document, window });
 
 console.log("Homebrew God app.js loaded");
 
@@ -2112,7 +2118,7 @@ function listenToMyRooms() {
       const removeButton = document.createElement("button");
       removeButton.textContent = "Remove From My List";
       removeButton.addEventListener("click", async function () {
-        if (!confirm("Remove this room from your saved list? The room itself will still exist.")) return;
+        if (!await requestAppConfirmation("Remove this room from your saved list? The room itself will still exist.", { title: "Remove saved room", confirmLabel: "Remove" })) return;
         await deleteDoc(doc(db, "users", currentUser.uid, "rooms", roomCode));
       });
 
@@ -2186,7 +2192,7 @@ function appendSavedRoomRow(roomDoc) {
   const removeButton = document.createElement("button");
   removeButton.textContent = "Remove From My List";
   removeButton.addEventListener("click", async function () {
-    if (!confirm("Remove this room from your saved list? The room itself will still exist.")) return;
+    if (!await requestAppConfirmation("Remove this room from your saved list? The room itself will still exist.", { title: "Remove saved room", confirmLabel: "Remove" })) return;
     if (!currentUser) return;
 
     try {
@@ -3698,7 +3704,7 @@ async function forgetSavedMap(mapId) {
       savedToLibrary: true
     };
 
-    if (!confirm("Forget this map from the room list? The Cloudinary image will be deleted if no other room reference uses it.")) {
+    if (!await requestAppConfirmation("Forget this map from the room list? The Cloudinary image will be deleted if no other room reference uses it.", { title: "Forget saved map", confirmLabel: "Forget" })) {
       return;
     }
 
@@ -3925,7 +3931,7 @@ addOptionalEventListener(E.removeRoomMapButton, "click", async function () {
       return;
     }
 
-    if (!confirm("Remove the current shared map? It will stay in Saved Maps if it was saved there.")) {
+    if (!await requestAppConfirmation("Remove the current shared map? It will stay in Saved Maps if it was saved there.", { title: "Remove shared map", confirmLabel: "Remove" })) {
       return;
     }
 
@@ -8323,7 +8329,7 @@ async function deletePuzzleTile(tileKey) {
       return;
     }
 
-    if (!confirm("Delete this puzzle tile from the board? The Cloudinary image will be deleted if no other room reference uses it.")) {
+    if (!await requestAppConfirmation("Delete this puzzle tile from the board? The Cloudinary image will be deleted if no other room reference uses it.", { title: "Delete puzzle tile", confirmLabel: "Delete" })) {
       return;
     }
 
@@ -8838,7 +8844,8 @@ function initializeApplicationShell() {
   navigationController = createSidebarNavigation({
     document,
     onNavigate: (screenName) => navigateMainScreen(screenName),
-    onOpenTool: openNavigationTool
+    onOpenTool: openNavigationTool,
+    onOpenWorkshop: (request) => { void browseWorkshop(request); }
   });
   navigationController.setContext({
     screen: activeMainScreenName || "auth",
@@ -9580,9 +9587,10 @@ async function loadEncounterIntoCurrentRoom(encounter) {
       || buildMapFromRoomFields(currentRoomData || {})
       || initiativeSystem?.getState?.().initiativeOrder?.length
     ),
-    confirmReplace: async (prepared) => globalThis.confirm?.(
-      `Load “${prepared.encounter.name}” into ${currentRoomData?.roomName || currentRoomCode}? This replaces current tokens and initiative. The current map changes only when the encounter includes a map.`
-    ) !== false,
+    confirmReplace: async (prepared) => requestAppConfirmation(
+      `Load “${prepared.encounter.name}” into ${currentRoomData?.roomName || currentRoomCode}? This replaces current tokens and initiative. The current map changes only when the encounter includes a map.`,
+      { title: "Replace current battle", confirmLabel: "Load Encounter" }
+    ),
     replaceBattleState: replaceCurrentBattleWithEncounter
   });
 }
@@ -9863,6 +9871,7 @@ async function browseWorkshop(request = {}) {
 async function initCharacterCreatorSystem() {
   if (characterCreatorSystem) {
     characterCreatorSystem.connectListeners();
+    visualPolish?.refresh();
     return characterCreatorSystem;
   }
 
@@ -9888,6 +9897,7 @@ async function initCharacterCreatorSystem() {
 
   if (characterCreatorSystem) {
     characterCreatorSystem.connectListeners();
+    visualPolish?.refresh();
     return characterCreatorSystem;
   }
 
@@ -9998,12 +10008,15 @@ async function initCharacterCreatorSystem() {
     getSummonCatalog: getCombatSummonCatalog
     });
 
+  visualPolish?.refresh();
+
   return characterCreatorSystem;
 }
 
 async function initMonsterCreatorSystem() {
   if (monsterCreatorSystem) {
     monsterCreatorSystem.refresh();
+    visualPolish?.refresh();
     return monsterCreatorSystem;
   }
 
@@ -10029,6 +10042,7 @@ async function initMonsterCreatorSystem() {
 
   if (monsterCreatorSystem) {
     monsterCreatorSystem.refresh();
+    visualPolish?.refresh();
     return monsterCreatorSystem;
   }
 
@@ -10130,6 +10144,8 @@ async function initMonsterCreatorSystem() {
       }
     }
     });
+
+  visualPolish?.refresh();
 
   return monsterCreatorSystem;
 }

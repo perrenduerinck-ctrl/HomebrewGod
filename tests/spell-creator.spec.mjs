@@ -29,6 +29,7 @@ test("Spell Creator saves, filters, previews, attaches animations, and publishes
 
   await page.getByRole("button", { name: "Preview Animation" }).click();
   expect(await page.evaluate(() => window.__animationPreviews)).toBe(1);
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Publish to Workshop" }).click();
   const published = await page.evaluate(() => window.__published);
   expect(published.assetType).toBe("spell");
@@ -45,6 +46,7 @@ test("Spell Creator duplicates independently and fits a mobile viewport", async 
   await page.goto("/tests/browser-pages/spell-creator-self-test.html");
   await page.locator('[data-spell-field="name"]').fill("Moon Ward");
   await page.getByRole("button", { name: "Save to My Library" }).click();
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Duplicate" }).click();
   await expect(page.locator('[data-spell-field="name"]')).toHaveValue("Moon Ward Copy");
   await page.getByRole("button", { name: "Save to My Library" }).click();

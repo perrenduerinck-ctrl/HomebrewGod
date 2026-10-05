@@ -14,6 +14,7 @@ test("Summon Creator saves, publishes, and prepares a reusable preset", async ({
   const saved = await page.evaluate(() => window.summonRecords()[0]);
   expect(saved.sourceLibraryId).toBe("monster:wolf");
   expect(saved.count).toBe(4);
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Publish to Workshop" }).click();
   expect((await page.evaluate(() => window.__published)).assetType).toBe("summon");
   await page.getByRole("button", { name: "Use in Spell / Ability" }).click();
@@ -27,6 +28,7 @@ test("Summon Creator duplicates independently and fits mobile", async ({ page })
   await page.locator('[data-summon-creator-field="name"]').fill("Dryad Ally");
   await page.locator("[data-summon-creator-source]").selectOption("npc:dryad");
   await page.getByRole("button", { name: "Save to My Library" }).click();
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Duplicate" }).click();
   await expect(page.locator('[data-summon-creator-field="name"]')).toHaveValue("Dryad Ally Copy");
   await page.getByRole("button", { name: "Save to My Library" }).click();

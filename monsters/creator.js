@@ -31,6 +31,7 @@ import {
   normalizeMonsterBossTools
 } from "./bossTools.js";
 import { createMonsterMathPanel } from "./monsterMathPanel.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
 
 export { parseMonsterNamedEntries, stableMonsterActionId } from "./entryEditor.js";
 
@@ -425,6 +426,12 @@ function ensureMonsterCreatorUi() {
     "Browse Workshop Monsters",
     publishButton
   );
+  const overflowPanel = actionBar?.querySelector(".hg-overflow-menu-panel");
+  if (overflowPanel) {
+    [duplicateButton, publishButton, browseWorkshopButton, deleteButton]
+      .filter(Boolean)
+      .forEach((button) => overflowPanel.append(button));
+  }
 
   const basicsPanel = getElement("monsterNameInput")
     ? getElement("monsterNameInput").closest(".toolPanelMini")
@@ -1495,16 +1502,15 @@ export function createMonsterCreator(config) {
     const confirmDelete =
       typeof config.confirmDelete === "function"
         ? config.confirmDelete
-        : function (message) {
-            return window.confirm(message);
-          };
+        : requestAppConfirmation;
 
     if (
       !skipConfirmation &&
-      !confirmDelete(
+      !await confirmDelete(
         "Delete " +
         (monster.name || "this monster") +
-        "?"
+        "?",
+        { title: "Delete monster", confirmLabel: "Delete" }
       )
     ) {
       return false;

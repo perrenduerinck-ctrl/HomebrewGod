@@ -5,6 +5,7 @@ import {
   relationshipLabel,
   validateNpcRelationship
 } from "./relationshipModel.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
 import { applyNpcKnowledgeShare, knowledgeKnownByNpc } from "./knowledgeSharing.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -266,7 +267,7 @@ export function createNpcRelationshipNetwork({
   async function deleteRelationship() {
     const relationship = relationships.find((entry) => entry.id === selectedRelationshipId);
     if (!relationship) return;
-    if (globalThis.confirm && !globalThis.confirm("Delete this NPC relationship?")) return;
+    if (!await requestAppConfirmation("Delete this NPC relationship?", { title: "Delete relationship", confirmLabel: "Delete" })) return;
     try {
       await relationshipPersistence.remove(relationship.id);
       await syncRelationshipReference(relationship.id, [relationship.sourceNpcId, relationship.targetNpcId], []);

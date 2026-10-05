@@ -9,5 +9,5 @@ test("deployed application shell opens Homebrew Workshop without losing room nav
   await expect(page.getByRole("heading", { name: "Homebrew Workshop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Browse", exact: true })).toBeVisible();
   const navigation = await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setNavigationContext({ role: "player", roomOpen: true, screen: "workshop" }));
-  expect(navigation.labels).toContain("Homebrew Workshop");
+  expect(navigation.labels.some((label) => label.endsWith("My Library"))).toBe(true);
 });

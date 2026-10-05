@@ -1,10 +1,12 @@
 import { visibleSidebarSections } from "./sidebarSections.js?v=foundation-milestone-20260915";
 
 const STORAGE_KEY = "homebrewgod.sidebar.collapsed.v1";
+const DEFAULT_COLLAPSED = ["create", "campaign", "library", "world", "settings"];
 
 function readCollapsed(storage) {
   try {
-    const value = JSON.parse(storage?.getItem(STORAGE_KEY) || "[]");
+    const stored = storage?.getItem(STORAGE_KEY);
+    const value = JSON.parse(stored == null ? JSON.stringify(DEFAULT_COLLAPSED) : stored);
     return new Set(Array.isArray(value) ? value : []);
   } catch {
     return new Set();
@@ -15,7 +17,8 @@ export function createSidebarNavigation({
   document,
   storage = globalThis.localStorage,
   onNavigate = () => {},
-  onOpenTool = () => {}
+  onOpenTool = () => {},
+  onOpenWorkshop = () => {}
 } = {}) {
   const collapsed = readCollapsed(storage);
   const state = { role: "player", roomOpen: false, screen: "auth", visible: false };
@@ -90,7 +93,13 @@ export function createSidebarNavigation({
         itemButton.type = "button";
         itemButton.dataset.sidebarAction = item.action;
         itemButton.dataset.sidebarTarget = item.target;
-        itemButton.textContent = item.label;
+        const icon = document.createElement("span");
+        icon.className = "hg-sidebar-item-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = item.icon || "•";
+        const label = document.createElement("span");
+        label.textContent = item.label;
+        itemButton.append(icon, label);
         if (item.action === "screen" && item.target === state.screen) {
           itemButton.setAttribute("aria-current", "page");
         }
@@ -130,6 +139,7 @@ export function createSidebarNavigation({
     const target = actionButton.dataset.sidebarTarget;
     if (action === "screen") onNavigate(target, actionButton);
     else if (action === "tool") onOpenTool(target, actionButton);
+    else if (action === "workshop") onOpenWorkshop({ tab: target }, actionButton);
     closeMobile();
   });
 

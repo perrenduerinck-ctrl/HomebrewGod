@@ -19369,37 +19369,42 @@ export function createCharacterCreator(options = {}) {
           Finalize Character
         </button>
 
-        <button
-          type="button"
-          id="characterWizardSaveCopyButton"
-          data-cc-action="save-copy"
-        >
-          Save Draft Copy
-        </button>
+        <details class="hg-overflow-menu">
+          <summary>More</summary>
+          <div class="hg-overflow-menu-panel">
+            <button
+              type="button"
+              id="characterWizardSaveCopyButton"
+              data-cc-action="save-copy"
+            >
+              Save Draft Copy
+            </button>
 
-        <button
-          type="button"
-          data-cc-action="copy-json"
-        >
-          Copy JSON
-        </button>
+            <button
+              type="button"
+              data-cc-action="copy-json"
+            >
+              Copy JSON
+            </button>
 
-        <button
-          type="button"
-          data-cc-action="export-json"
-        >
-          Export JSON
-        </button>
+            <button
+              type="button"
+              data-cc-action="export-json"
+            >
+              Export JSON
+            </button>
 
-        <label class="fileButtonLabel">
-          Import JSON
+            <label class="fileButtonLabel">
+              Import JSON
 
-          <input
-            id="characterWizardImportInput"
-            type="file"
-            accept="application/json,.json"
-          >
-        </label>
+              <input
+                id="characterWizardImportInput"
+                type="file"
+                accept="application/json,.json"
+              >
+            </label>
+          </div>
+        </details>
       `;
 
       C.grid.innerHTML = `

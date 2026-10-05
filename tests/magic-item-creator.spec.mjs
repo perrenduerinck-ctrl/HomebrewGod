@@ -20,6 +20,7 @@ test("Magic Item Creator saves native Library records and publishes their mechan
   await expect(page.locator("[data-item-preview]")).toContainText("Cinder Strike");
   await page.getByRole("button", { name: "Save to My Library" }).click();
   await expect(page.locator("[data-item-library]")).toContainText("Cinder Blade");
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Publish to Workshop" }).click();
   const published = await page.evaluate(() => window.__published);
   expect(published.assetType).toBe("magic-item");
@@ -34,6 +35,7 @@ test("Magic Item Creator duplicates independently and fits a mobile viewport", a
   await page.goto("/tests/browser-pages/magic-item-creator-self-test.html");
   await page.locator('[data-item-field="name"]').fill("Moon Shield");
   await page.getByRole("button", { name: "Save to My Library" }).click();
+  await page.locator(".hg-overflow-menu > summary").click();
   await page.getByRole("button", { name: "Duplicate" }).click();
   await expect(page.locator('[data-item-field="name"]')).toHaveValue("Moon Shield Copy");
   await page.getByRole("button", { name: "Save to My Library" }).click();
