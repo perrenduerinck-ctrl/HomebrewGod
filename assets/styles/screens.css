@@ -328,6 +328,12 @@
   align-items: start;
 }
 
+#characterCreatorScreen .creatorFullGrid > .hg-character-wizard-root {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
 .creatorWidePanel,
 .creatorLibraryPanel {
   grid-column: 1 / -1;

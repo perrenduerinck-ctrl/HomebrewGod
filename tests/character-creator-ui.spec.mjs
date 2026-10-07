@@ -408,6 +408,92 @@ test(
 );
 
 test(
+  "Character Creator wizard uses the full desktop workspace",
+  async ({ page }) => {
+    await page.setViewportSize({
+      width: 1600,
+      height: 900
+    });
+
+    await page.goto(
+      "?smokeTest=1&view=characterCreator&release=character-full-width",
+      {
+        waitUntil: "domcontentloaded"
+      }
+    );
+
+    await expect(
+      page.locator("#homebrewGodSmokeResult")
+    ).toContainText(
+      "SMOKE TEST PASS",
+      {
+        timeout: 30000
+      }
+    );
+
+    await page.evaluate(() => {
+      return window
+        .__HOMEBREW_GOD_RELEASE_TEST__
+        .openScreen("characterCreator");
+    });
+
+    await page
+      .locator('[data-cc-action="new-character"]')
+      .first()
+      .click();
+
+    const root = page.locator(
+      "#characterWizardRoot"
+    );
+    const layout = page.locator(
+      ".hg-character-builder-layout"
+    );
+
+    await expect(root).toBeVisible();
+    await expect(layout).toBeVisible();
+
+    const dimensions = await page.evaluate(() => {
+      const grid = document.querySelector(
+        "#characterCreatorScreen .creatorFullGrid"
+      ).getBoundingClientRect();
+      const wizard = document.querySelector(
+        "#characterWizardRoot"
+      ).getBoundingClientRect();
+      const builder = document.querySelector(
+        ".hg-character-builder-layout"
+      ).getBoundingClientRect();
+      const rail = document.querySelector(
+        ".hg-character-step-rail"
+      ).getBoundingClientRect();
+      const main = document.querySelector(
+        ".hg-character-builder-main"
+      ).getBoundingClientRect();
+
+      return {
+        rootRatio: wizard.width / grid.width,
+        leftGap: wizard.left - grid.left,
+        rightGap: grid.right - wizard.right,
+        layoutRatio: builder.width / wizard.width,
+        railWidth: rail.width,
+        mainWidth: main.width,
+        pageOverflows:
+          document.documentElement.scrollWidth >
+          document.documentElement.clientWidth
+      };
+    });
+
+    expect(dimensions.rootRatio).toBeGreaterThanOrEqual(0.9);
+    expect(Math.abs(dimensions.leftGap)).toBeLessThanOrEqual(2);
+    expect(Math.abs(dimensions.rightGap)).toBeLessThanOrEqual(2);
+    expect(dimensions.layoutRatio).toBeGreaterThanOrEqual(0.95);
+    expect(dimensions.railWidth).toBeGreaterThanOrEqual(230);
+    expect(dimensions.railWidth).toBeLessThanOrEqual(290);
+    expect(dimensions.mainWidth).toBeGreaterThan(700);
+    expect(dimensions.pageOverflows).toBe(false);
+  }
+);
+
+test(
   "core progress and sticky actions remain usable on a smaller laptop",
   async ({ page }) => {
     await page.setViewportSize({
