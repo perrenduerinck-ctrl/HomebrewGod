@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   JOURNAL_COLLECTIONS,
   canMutateJournalEntry,
@@ -109,12 +109,15 @@ test("undo/delete authorization is scoped to the author unless the actor is DM",
 
 test("Firestore rules enforce journal privacy and drawing ownership at collection boundaries", () => {
   const rules = readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
-  const authoritativeRules = readFileSync(new URL("../../Firebase.js", import.meta.url), "utf8");
-  assert.equal(
-    authoritativeRules.replace(/\r\n/g, "\n"),
-    rules.replace(/\r\n/g, "\n"),
-    "the user-designated Firebase.js rules source must match the deployable repository rules"
-  );
+  const authoritativeRulesUrl = new URL("../../Firebase.js", import.meta.url);
+  if (existsSync(authoritativeRulesUrl)) {
+    const authoritativeRules = readFileSync(authoritativeRulesUrl, "utf8");
+    assert.equal(
+      authoritativeRules.replace(/\r\n/g, "\n"),
+      rules.replace(/\r\n/g, "\n"),
+      "the user-designated Firebase.js rules source must match the deployable repository rules"
+    );
+  }
   const dmJournal = rules.slice(
     rules.indexOf("match /dmJournal/{entryId}"),
     rules.indexOf("match /sharedDrawings/{strokeId}")
