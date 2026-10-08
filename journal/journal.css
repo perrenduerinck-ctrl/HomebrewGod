@@ -1,0 +1,151 @@
+.hg-journal {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  color: var(--text, #eef1ff);
+}
+
+.hg-journal-header,
+.hg-journal-editor-footer,
+.hg-journal-actions,
+.hg-journal-formatting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hg-journal-header h3,
+.hg-journal-editor-footer p {
+  margin: 0;
+}
+
+.hg-journal-filters,
+.hg-journal-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr);
+  gap: 10px;
+}
+
+.hg-journal-workspace {
+  display: grid;
+  grid-template-columns: minmax(170px, .55fr) minmax(280px, 1.45fr);
+  gap: 12px;
+  min-height: min(62vh, 650px);
+}
+
+.hg-journal-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  max-height: 68vh;
+  overflow: auto;
+}
+
+.hg-journal-list-item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 11px;
+  text-align: left;
+  border: 1px solid rgba(116, 138, 255, .24);
+  border-radius: 11px;
+  background: rgba(8, 12, 27, .72);
+}
+
+.hg-journal-list-item.is-active {
+  border-color: rgba(133, 104, 255, .85);
+  background: rgba(59, 42, 118, .48);
+  box-shadow: inset 3px 0 #8c6eff;
+}
+
+.hg-journal-list-item span,
+.hg-journal-list-item small,
+.hg-journal-editor-footer small {
+  color: var(--text-dim, #aab3d6);
+  font-size: 12px;
+}
+
+.hg-journal-editor {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.hg-journal-editor[hidden] {
+  display: none;
+}
+
+.hg-journal-editor-grid label,
+.hg-journal-custom-category {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.hg-journal-formatting {
+  justify-content: flex-start;
+  padding: 7px;
+  border: 1px solid rgba(116, 138, 255, .22);
+  border-radius: 11px;
+  background: rgba(5, 8, 20, .68);
+}
+
+.hg-journal-formatting button {
+  min-height: 32px;
+  margin: 0;
+  padding: 5px 9px;
+}
+
+.hg-journal-content {
+  min-height: 310px;
+  max-height: 56vh;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(116, 138, 255, .3);
+  border-radius: 12px;
+  outline: none;
+  background: rgba(5, 8, 20, .86);
+  color: #eef1ff;
+  line-height: 1.55;
+}
+
+.hg-journal-content:focus {
+  border-color: #8c6eff;
+  box-shadow: 0 0 0 3px rgba(140, 110, 255, .16);
+}
+
+.hg-journal-content:empty::before {
+  content: "Write campaign notes here…";
+  color: #7f89ac;
+  pointer-events: none;
+}
+
+.hg-journal-editor-footer {
+  align-items: flex-start;
+}
+
+.hg-journal-editor-footer > div:last-child {
+  margin-left: auto;
+  text-align: right;
+}
+
+.hg-journal [data-journal-status][data-state="saved"] { color: #72e8ab; }
+.hg-journal [data-journal-status][data-state="error"] { color: #ff8d9d; }
+.hg-journal [data-journal-status][data-state="saving"],
+.hg-journal [data-journal-status][data-state="pending"] { color: #ffd987; }
+
+@media (max-width: 760px) {
+  .hg-journal-filters,
+  .hg-journal-editor-grid,
+  .hg-journal-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .hg-journal-workspace { min-height: 0; }
+  .hg-journal-list { max-height: 210px; }
+  .hg-journal-content { min-height: 240px; }
+}

@@ -115,6 +115,7 @@ for (
     "effects",
     "library",
     "items",
+    "journal",
     "monsters",
     "npcs",
     "spells",

@@ -186,6 +186,73 @@ service cloud.firestore {
         && request.resource.data.updatedAtMillis is number;
     }
 
+    function validJournalEntry(roomCode, entryId, visibility) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'roomCode', 'ownerUid', 'ownerName', 'title', 'category',
+          'visibility', 'contentHtml', 'searchText', 'createdAtMillis',
+          'updatedAtMillis', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == entryId
+        && request.resource.data.roomCode == roomCode
+        && request.resource.data.visibility == visibility
+        && request.resource.data.ownerUid is string
+        && request.resource.data.ownerUid.size() > 0
+        && request.resource.data.ownerUid.size() <= 180
+        && request.resource.data.ownerName is string
+        && request.resource.data.ownerName.size() <= 160
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 160
+        && request.resource.data.category is string
+        && request.resource.data.category.size() > 0
+        && request.resource.data.category.size() <= 80
+        && request.resource.data.contentHtml is string
+        && request.resource.data.contentHtml.size() <= 50000
+        && request.resource.data.searchText is string
+        && request.resource.data.searchText.size() <= 50000
+        && request.resource.data.createdAtMillis is number
+        && request.resource.data.updatedAtMillis is number;
+    }
+
+    function validDrawingStroke(roomCode, strokeId, layer) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'roomCode', 'mapId', 'authorUid', 'authorName', 'layer',
+          'tool', 'color', 'size', 'points', 'start', 'end',
+          'createdAtMillis', 'updatedAtMillis', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == strokeId
+        && request.resource.data.roomCode == roomCode
+        && request.resource.data.layer == layer
+        && request.resource.data.mapId is string
+        && request.resource.data.mapId.size() > 0
+        && request.resource.data.mapId.size() <= 180
+        && request.resource.data.authorUid is string
+        && request.resource.data.authorUid.size() > 0
+        && request.resource.data.authorUid.size() <= 180
+        && request.resource.data.authorName is string
+        && request.resource.data.authorName.size() <= 160
+        && request.resource.data.tool in [
+          'pen', 'line', 'rectangle', 'circle', 'arrow'
+        ]
+        && request.resource.data.color is string
+        && request.resource.data.color.matches('^#[0-9a-fA-F]{6}$')
+        && request.resource.data.size is number
+        && request.resource.data.size >= 1
+        && request.resource.data.size <= 48
+        && request.resource.data.points is list
+        && request.resource.data.points.size() <= 512
+        && request.resource.data.start is map
+        && request.resource.data.end is map
+        && request.resource.data.createdAtMillis is number
+        && request.resource.data.updatedAtMillis is number;
+    }
+
+    function playerDrawingEnabled(roomCode) {
+      return roomData(roomCode)
+        .get('drawingSettings', {})
+        .get('playersEnabled', false) == true;
+    }
+
     function validWorkshopAssetType(value) {
       return value in [
         'monster', 'magic-item', 'spell', 'animation', 'npc',
@@ -791,6 +858,117 @@ service cloud.firestore {
             == resource.data.createdByUid
           && request.resource.data.createdAtMillis
             == resource.data.createdAtMillis;
+
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /sharedJournal/{entryId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if isRoomMember(roomCode)
+          && validJournalEntry(roomCode, entryId, 'shared')
+          && (
+            isRoomDm(roomCode)
+            || request.resource.data.ownerUid == request.auth.uid
+          );
+
+        allow update:
+          if isRoomMember(roomCode)
+          && validJournalEntry(roomCode, entryId, 'shared')
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.createdAtMillis == resource.data.createdAtMillis
+          && (
+            isRoomDm(roomCode)
+            || resource.data.ownerUid == request.auth.uid
+          );
+
+        allow delete:
+          if isRoomDm(roomCode)
+          || (
+            isRoomMember(roomCode)
+            && resource.data.ownerUid == request.auth.uid
+          );
+      }
+
+      match /personalJournal/{entryId} {
+        allow read:
+          if isRoomMember(roomCode)
+          && resource.data.ownerUid == request.auth.uid;
+
+        allow create:
+          if isRoomMember(roomCode)
+          && validJournalEntry(roomCode, entryId, 'personal')
+          && request.resource.data.ownerUid == request.auth.uid;
+
+        allow update:
+          if isRoomMember(roomCode)
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.createdAtMillis == resource.data.createdAtMillis
+          && validJournalEntry(roomCode, entryId, 'personal');
+
+        allow delete:
+          if isRoomMember(roomCode)
+          && resource.data.ownerUid == request.auth.uid;
+      }
+
+      match /dmJournal/{entryId} {
+        allow read:
+          if isRoomDm(roomCode);
+
+        allow create:
+          if isRoomDm(roomCode)
+          && validJournalEntry(roomCode, entryId, 'dm');
+
+        allow update:
+          if isRoomDm(roomCode)
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.createdAtMillis == resource.data.createdAtMillis
+          && validJournalEntry(roomCode, entryId, 'dm');
+
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /sharedDrawings/{strokeId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if isRoomMember(roomCode)
+          && request.resource.data.authorUid == request.auth.uid
+          && validDrawingStroke(roomCode, strokeId, 'shared')
+          && (
+            isRoomDm(roomCode)
+            || playerDrawingEnabled(roomCode)
+          );
+
+        allow update:
+          if false;
+
+        allow delete:
+          if isRoomDm(roomCode)
+          || (
+            isRoomMember(roomCode)
+            && resource.data.authorUid == request.auth.uid
+            && playerDrawingEnabled(roomCode)
+          );
+      }
+
+      match /dmDrawings/{strokeId} {
+        allow read:
+          if isRoomDm(roomCode);
+
+        allow create:
+          if isRoomDm(roomCode)
+          && request.resource.data.authorUid == request.auth.uid
+          && validDrawingStroke(roomCode, strokeId, 'dm');
+
+        allow update:
+          if false;
 
         allow delete:
           if isRoomDm(roomCode);

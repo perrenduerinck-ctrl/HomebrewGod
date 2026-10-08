@@ -10,7 +10,9 @@ test("player navigation exposes play tools without DM creation and world control
   const player = items("player");
   const ids = player.map((item) => item.id);
   assert.ok(ids.includes("play-battle"));
+  assert.ok(ids.includes("play-journal"));
   assert.ok(ids.includes("tool-combat"));
+  assert.ok(ids.includes("tool-drawing"));
   assert.ok(ids.includes("tool-effects"));
   assert.ok(ids.includes("library-characters"));
   assert.ok(ids.includes("library-items"));
@@ -36,6 +38,8 @@ test("DM navigation groups every connected creator, campaign and world tool once
   assert.ok(ids.includes("create-encounter"));
   assert.ok(ids.includes("library-encounters"));
   assert.ok(ids.includes("tool-token"));
+  assert.ok(ids.includes("play-journal"));
+  assert.ok(ids.includes("tool-drawing"));
   assert.ok(ids.includes("campaign-room"));
   assert.ok(ids.includes("world-time"));
   assert.ok(ids.includes("library-workshop"));

@@ -196,6 +196,8 @@ import { createEncounterPersistence } from "./encounters/encounterPersistence.js
 import { loadEncounter } from "./encounters/encounterLoader.js";
 import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
+import { createJournalSystem } from "./journal/journal.js?v=journal-drawing-20261008";
+import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
 
 const visualPolish = installVisualPolish({ document, window });
 
@@ -402,6 +404,7 @@ const E = {
   battleManagerBar: $("battleManagerBar"),
   battleManagerInner: $("battleManagerInner"),
   battleMapSurface: $("battleMapSurface"),
+  battleQuickActions: $("battleQuickActions"),
   battleInitiativePanel: $("battleInitiativePanel"),
   battleCampaignTimePanel: $("battleCampaignTimePanel"),
   battleToolsMenu: $("battleToolsMenu"),
@@ -454,6 +457,41 @@ let legacyPuzzleTileMigrationPromise = null;
 let hasMigratedLegacyPuzzleTiles = false;
 
 let battleZoom = 1;
+const journalSystem = createJournalSystem({
+  document,
+  db,
+  collection,
+  doc,
+  query,
+  where,
+  onSnapshot,
+  setDoc,
+  deleteDoc,
+  writeBatch,
+  serverTimestamp,
+  requestConfirmation: requestAppConfirmation
+});
+const mapDrawingSystem = createMapDrawingSystem({
+  document,
+  surface: E.battleMapSurface,
+  quickActions: E.battleQuickActions,
+  mapViewer: E.battleMapViewer,
+  mapImage: E.battleMapImage,
+  puzzleBoard: E.puzzleMapBoard,
+  db,
+  collection,
+  doc,
+  query,
+  where,
+  onSnapshot,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  writeBatch,
+  serverTimestamp,
+  requestConfirmation: requestAppConfirmation,
+  getMapContext: getCurrentDrawingMapContext
+});
 let battleMapRuler = null;
 let battleMapTemplates = null;
 let battleMapVfx = null;
@@ -632,7 +670,12 @@ const ROOM_OWNED_SUBCOLLECTIONS = [
   "activePlayers",
   "animations",
   "combatEffects",
-  "effects"
+  "effects",
+  "sharedJournal",
+  "personalJournal",
+  "dmJournal",
+  "sharedDrawings",
+  "dmDrawings"
 ];
 const MAX_IMAGE_UPLOAD_BYTES =
   MAX_SECURE_IMAGE_BYTES;
@@ -1662,6 +1705,8 @@ function makeRoomCode() {
 }
 
 function clearRoomListeners() {
+  journalSystem.disconnect();
+  mapDrawingSystem.disconnect();
   appRealtimeListeners.stop("room");
   combatEffectPersistence?.stop();
   gameplayEffectPersistence?.stop();
@@ -1783,6 +1828,41 @@ function syncRealtimeListenersForScreen(
   ) {
     monsterCreatorSystem.cleanupListeners();
   }
+
+  if (screenName === "battle") {
+    queueMicrotask(() => mapDrawingSystem.syncContext());
+  } else {
+    mapDrawingSystem.disconnect();
+  }
+}
+
+function getCurrentDrawingMapContext() {
+  if (!currentRoomCode || activeMainScreenName !== "battle") return {};
+
+  if (E.puzzleMapBoard && !E.puzzleMapBoard.classList.contains("hidden")) {
+    return {
+      mapId: "puzzle-board",
+      target: E.puzzleMapBoard,
+      mode: "puzzle",
+      zoom: battleZoom
+    };
+  }
+
+  const currentMap = buildMapFromRoomFields(currentRoomData || {});
+  const mapIdentity =
+    currentMapId ||
+    currentMap?.publicId ||
+    currentMap?.url ||
+    displayedSharedMapUrl;
+
+  if (!mapIdentity || !E.battleMapViewer) return {};
+
+  return {
+    mapId: mapIdentity,
+    target: E.battleMapViewer,
+    mode: "single",
+    zoom: battleZoom
+  };
 }
 
 function getSafeMapName(fileName) {
@@ -2300,6 +2380,9 @@ async function createRoom() {
         currentMap: null,
         puzzleTiles: [],
         activePuzzleTileKey: null,
+        drawingSettings: {
+          playersEnabled: false
+        },
         ...toRoomTimeFields(
           normalizeTimeState({})
         ),
@@ -2484,6 +2567,23 @@ function openRoom(roomCode, screenToShow = "room") {
 
     currentRoomData = room;
     currentIsDM = room.dmUid === currentUser.uid;
+    const realtimeUserName =
+      currentUser.displayName ||
+      room.dmName ||
+      "Player";
+    journalSystem.setContext({
+      roomCode: cleanCode,
+      userId: currentUser.uid,
+      userName: realtimeUserName,
+      isDm: currentIsDM
+    });
+    mapDrawingSystem.setContext({
+      roomCode: cleanCode,
+      userId: currentUser.uid,
+      userName: realtimeUserName,
+      isDm: currentIsDM,
+      playersEnabled: room.drawingSettings?.playersEnabled === true
+    });
     campaignTimeSystem.applyRoomSnapshot(
       room
     );
@@ -3777,6 +3877,7 @@ function showSharedMap(currentMap) {
     text(E.noBattleMapText, "No battle map loaded yet.");
     E.noBattleMapText.style.display = "block";
     battleMapLighting?.setMap(null);
+    mapDrawingSystem.syncContext();
 
     return;
   }
@@ -3798,6 +3899,7 @@ function showSharedMap(currentMap) {
     E.battleMapImage.getAttribute("src")
   ) {
     battleMapLighting?.setMap(map);
+    mapDrawingSystem.syncContext();
     return;
   }
 
@@ -3842,6 +3944,7 @@ function showSharedMap(currentMap) {
     E.noBattleMapText.style.display = "none";
     E.battleMapImage.style.display = "block";
     applyBattleZoom();
+    mapDrawingSystem.syncContext();
   };
 
   E.battleMapImage.onerror = function () {
@@ -3852,6 +3955,7 @@ function showSharedMap(currentMap) {
 
   E.battleMapImage.src = imageUrl;
   battleMapLighting?.setMap(map);
+  mapDrawingSystem.syncContext();
 }
 
 addOptionalEventListener(E.uploadRoomMapButton, "click", async function () {
@@ -7816,6 +7920,7 @@ function showPuzzleBoardView() {
   battleMapRuler?.refresh();
   battleMapTemplates?.refresh();
   battleMapVfx?.refresh();
+  mapDrawingSystem.syncContext();
 }
 
 function showSingleBattleMapView() {
@@ -7830,6 +7935,7 @@ function showSingleBattleMapView() {
   battleMapRuler?.refresh();
   battleMapTemplates?.refresh();
   battleMapVfx?.refresh();
+  mapDrawingSystem.syncContext();
 }
 
 function keepTokenLayerReadyForExternalFile() {
@@ -7934,6 +8040,7 @@ function renderPuzzleBoard(room) {
 
   keepTokenLayerReadyForExternalFile();
   notifyExternalTokenSystem(safeRoom);
+  mapDrawingSystem.syncContext();
 }
 
 function createPuzzleTileElement(tile, activeTile) {
@@ -8793,6 +8900,18 @@ initiativeSystem.subscribe(function () {
 
 function openNavigationTool(toolName, trigger) {
   if (!currentRoomCode) return false;
+  if (toolName === "journal") {
+    return navigationToolDrawer?.open({
+      label: "Campaign Journal",
+      element: journalSystem.root,
+      trigger
+    }) || false;
+  }
+  if (toolName === "drawing") {
+    if (activeMainScreenName !== "battle") navigateMainScreen("battle");
+    mapDrawingSystem.open();
+    return true;
+  }
   if (toolName === "animationLibrary") {
     E.animationLibraryButton?.click();
     return true;
@@ -8881,6 +9000,7 @@ function applyBattleZoom() {
   battleMapRuler?.refresh();
   battleMapTemplates?.refresh();
   battleMapVfx?.refresh();
+  mapDrawingSystem.syncContext();
 }
 
 function openToolTab(viewName) {

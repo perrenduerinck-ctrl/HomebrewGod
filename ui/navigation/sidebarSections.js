@@ -4,7 +4,8 @@ export const SIDEBAR_SECTIONS = Object.freeze([
     label: "Play",
     items: [
       { id: "play-battle", icon: "◆", label: "Battle Map", action: "screen", target: "battle", room: true },
-      { id: "play-characters", icon: "♙", label: "Characters", action: "screen", target: "characterCreator", room: true }
+      { id: "play-characters", icon: "♙", label: "Characters", action: "screen", target: "characterCreator", room: true },
+      { id: "play-journal", icon: "▤", label: "Journal", action: "tool", target: "journal", room: true }
     ]
   },
   {
@@ -16,6 +17,7 @@ export const SIDEBAR_SECTIONS = Object.freeze([
       { id: "tool-effects", icon: "✦", label: "Effects", action: "tool", target: "effects", room: true },
       { id: "tool-token", icon: "⬡", label: "Token Builder", action: "tool", target: "tokenBuilder", room: true, roles: ["dm"] },
       { id: "tool-map", icon: "▦", label: "Map Builder", action: "tool", target: "mapBuilder", room: true, roles: ["dm"] },
+      { id: "tool-drawing", icon: "✎", label: "Map Drawing", action: "tool", target: "drawing", room: true },
       { id: "tool-options", icon: "⚙", label: "Display / Audio", action: "tool", target: "displayOptions", room: true }
     ]
   },

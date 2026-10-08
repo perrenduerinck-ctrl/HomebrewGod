@@ -1,0 +1,121 @@
+.hg-drawing-toolbar {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 420;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  gap: 9px;
+  width: min(620px, calc(100vw - 24px), calc(100% - 24px));
+  padding: 11px;
+  border: 1px solid rgba(136, 113, 255, .54);
+  border-radius: 14px;
+  background: rgba(6, 9, 22, .96);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .42);
+  backdrop-filter: blur(12px);
+}
+
+.hg-drawing-toolbar[hidden] { display: none; }
+
+.hg-drawing-toolbar header,
+.hg-drawing-tools,
+.hg-drawing-options,
+.hg-drawing-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.hg-drawing-toolbar header { justify-content: space-between; }
+
+.hg-drawing-toolbar button,
+.hg-drawing-toolbar input,
+.hg-drawing-toolbar select {
+  margin: 0;
+}
+
+.hg-drawing-toolbar button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.hg-drawing-toolbar button.is-active,
+#drawingToggleButton.is-active {
+  border-color: #a18cff;
+  color: #fff;
+  background: linear-gradient(135deg, #7159df, #9b67ee);
+}
+
+.hg-drawing-options label,
+.hg-drawing-actions label,
+.hg-drawing-player-permission {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #dce4ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hg-drawing-options input[type="color"] {
+  width: 42px;
+  height: 34px;
+  padding: 2px;
+}
+
+.hg-drawing-options input[type="range"] { width: 120px; }
+
+.hg-drawing-options select {
+  width: auto;
+  min-height: 34px;
+  padding: 4px 28px 4px 8px;
+}
+
+.hg-drawing-toolbar .status {
+  min-height: 18px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.hg-drawing-toolbar [data-drawing-status][data-state="saved"] { color: #72e8ab; }
+.hg-drawing-toolbar [data-drawing-status][data-state="error"] { color: #ff8d9d; }
+.hg-drawing-toolbar [data-drawing-status][data-state="active"] { color: #ffd987; }
+
+.hg-map-drawing-layer {
+  position: absolute;
+  z-index: 220;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hg-map-drawing-layer.is-active {
+  z-index: 220;
+  cursor: crosshair;
+}
+
+.hg-map-drawing-layer [data-drawing-stroke-id] {
+  pointer-events: stroke;
+}
+
+.hg-map-drawing-layer .is-preview {
+  opacity: .8;
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .hg-drawing-toolbar {
+    top: 8px;
+    left: 8px;
+    width: min(calc(100vw - 16px), calc(100% - 16px));
+    max-height: 52vh;
+    overflow: auto;
+  }
+
+  .hg-drawing-options,
+  .hg-drawing-actions {
+    align-items: flex-start;
+  }
+}

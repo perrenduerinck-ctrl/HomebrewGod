@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Journal and drawing integration fixture</title>
+  <link rel="stylesheet" href="../../journal/journal.css">
+  <link rel="stylesheet" href="../../battleMap/drawingTools.css">
+  <style>
+    body { margin: 0; background: #080b17; color: #eef1ff; font: 14px system-ui; }
+    button, input, select { font: inherit; }
+    #surface { position: relative; width: 900px; min-height: 520px; }
+    #map { position: relative; width: 800px; height: 400px; margin: 60px 40px; background: #26304b; }
+    #token { position: absolute; z-index: 300; left: 370px; top: 300px; width: 60px; height: 60px; }
+    #journal { width: min(850px, calc(100vw - 40px)); padding: 20px; }
+  </style>
+</head>
+<body>
+  <div id="quick"></div>
+  <section id="surface"><div id="map"><button id="token" type="button">Token</button></div></section>
+  <div id="journal"></div>
+  <script type="module">
+    import { createMapDrawingSystem } from "../../battleMap/drawingTools.js";
+    import { createJournalSystem } from "../../journal/journal.js";
+
+    const operations = [];
+    const listeners = [];
+    const pathOf = (...parts) => parts.map((part) => part?.path || String(part)).join("/");
+    const collection = (...parts) => ({ path: pathOf(...parts) });
+    const doc = (...parts) => ({ path: pathOf(...parts) });
+    const query = (source, ...filters) => ({ path: source.path, filters });
+    const where = (...parts) => ({ where: parts });
+    const onSnapshot = (source, options, next) => {
+      const record = { source, active: true };
+      listeners.push(record);
+      queueMicrotask(() => {
+        if (record.active) next({ docs: [], metadata: { hasPendingWrites: false } });
+      });
+      return () => { record.active = false; };
+    };
+    const setDoc = async (reference, payload, options) => {
+      operations.push({ type: "set", path: reference.path, payload, options });
+    };
+    const deleteDoc = async (reference) => {
+      operations.push({ type: "delete", path: reference.path });
+    };
+    const updateDoc = async (reference, payload) => {
+      operations.push({ type: "update", path: reference.path, payload });
+    };
+    const writeBatch = () => {
+      const entries = [];
+      return {
+        set(reference, payload) { entries.push({ type: "set", path: reference.path, payload }); },
+        delete(reference) { entries.push({ type: "delete", path: reference.path }); },
+        async commit() { operations.push({ type: "batch", entries }); }
+      };
+    };
+    const serverTimestamp = () => "SERVER_TIMESTAMP";
+    const fakeDb = { path: "db" };
+    let mapId = "map-one";
+    let tokenClicks = 0;
+    document.querySelector("#token").addEventListener("click", () => { tokenClicks += 1; });
+
+    const drawing = createMapDrawingSystem({
+      document,
+      surface: document.querySelector("#surface"),
+      quickActions: document.querySelector("#quick"),
+      mapViewer: document.querySelector("#map"),
+      puzzleBoard: document.querySelector("#map"),
+      db: fakeDb,
+      collection,
+      doc,
+      query,
+      where,
+      onSnapshot,
+      setDoc,
+      deleteDoc,
+      updateDoc,
+      writeBatch,
+      serverTimestamp,
+      requestConfirmation: async () => true,
+      getMapContext: () => ({
+        mapId,
+        target: document.querySelector("#map"),
+        mode: "puzzle",
+        zoom: 1
+      })
+    });
+    drawing.setContext({
+      roomCode: "ROOM-1",
+      userId: "dm-1",
+      userName: "DM",
+      isDm: true,
+      playersEnabled: true
+    });
+
+    const journal = createJournalSystem({
+      document,
+      db: fakeDb,
+      collection,
+      doc,
+      query,
+      where,
+      onSnapshot,
+      setDoc,
+      deleteDoc,
+      writeBatch,
+      serverTimestamp,
+      requestConfirmation: async () => true
+    });
+    document.querySelector("#journal").append(journal.root);
+    journal.setContext({
+      roomCode: "ROOM-1",
+      userId: "dm-1",
+      userName: "DM",
+      isDm: true
+    });
+
+    window.fixture = {
+      drawing,
+      journal,
+      operations,
+      listeners,
+      getTokenClicks: () => tokenClicks,
+      setMapId(value) { mapId = value; drawing.syncContext(); }
+    };
+  </script>
+</body>
+</html>
