@@ -118,6 +118,7 @@ for (
     "journal",
     "monsters",
     "npcs",
+    "rooms",
     "spells",
     "shared",
     "tokens",

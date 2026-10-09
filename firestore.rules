@@ -91,7 +91,8 @@ service cloud.firestore {
       let initiative = resource.data.get('initiativeState', {});
       let tokenId = movement.get('activeTokenId', '');
       let position = movement.get('lastConfirmedPosition', {});
-      return isRoomMember(roomCode)
+      return roomAcceptsWrites(roomCode)
+        && isRoomMember(roomCode)
         && changed.hasOnly(['movementState', 'updatedAt'])
         && initiative.get('combatActive', false) == true
         && tokenId == initiative.get('currentCombatantId', '')
@@ -134,6 +135,19 @@ service cloud.firestore {
           isRoomDm(roomCode)
           || exists(membershipPath(roomCode, request.auth.uid))
         );
+    }
+
+    function roomAcceptsWrites(roomCode) {
+      return roomExists(roomCode)
+        && roomData(roomCode).get('deletingAt', null) == null;
+    }
+
+    function deletionLifecycleFieldsOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'deletionState', 'deletionUpdatedAt'
+      ])
+        && request.resource.data.get('deletingAt', null)
+          == resource.data.get('deletingAt', null);
     }
 
     function ownsCharacter(data) {
@@ -190,7 +204,7 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
           'id', 'roomCode', 'ownerUid', 'ownerName', 'title', 'category',
           'visibility', 'contentHtml', 'searchText', 'createdAtMillis',
-          'updatedAtMillis', 'createdAt', 'updatedAt'
+          'updatedAtMillis', 'revision', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.id == entryId
         && request.resource.data.roomCode == roomCode
@@ -210,6 +224,8 @@ service cloud.firestore {
         && request.resource.data.contentHtml.size() <= 50000
         && request.resource.data.searchText is string
         && request.resource.data.searchText.size() <= 50000
+        && request.resource.data.revision is int
+        && request.resource.data.revision >= 1
         && request.resource.data.createdAtMillis is number
         && request.resource.data.updatedAtMillis is number;
     }
@@ -659,6 +675,10 @@ service cloud.firestore {
           isRoomDm(roomCode)
           && request.resource.data.get('dmUid', resource.data.dmUid)
             == resource.data.dmUid
+          && (
+            roomAcceptsWrites(roomCode)
+            || deletionLifecycleFieldsOnly()
+          )
         )
         || validPlayerMovementRoomUpdate(roomCode);
 
@@ -673,6 +693,7 @@ service cloud.firestore {
           if signedIn()
           && request.auth.uid == playerUid
           && roomExists(roomCode)
+          && roomAcceptsWrites(roomCode)
           && request.resource.data.uid == request.auth.uid
           && (
             request.resource.data.role == 'player'
@@ -683,12 +704,15 @@ service cloud.firestore {
           );
 
         allow update:
-          if isRoomDm(roomCode)
-          || (
-            isSelf(playerUid)
-            && resource.data.uid == request.auth.uid
-            && request.resource.data.uid == request.auth.uid
-            && request.resource.data.role == resource.data.role
+          if roomAcceptsWrites(roomCode)
+          && (
+            isRoomDm(roomCode)
+            || (
+              isSelf(playerUid)
+              && resource.data.uid == request.auth.uid
+              && request.resource.data.uid == request.auth.uid
+              && request.resource.data.role == resource.data.role
+            )
           );
 
         allow delete:
@@ -704,17 +728,21 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.sessionId == sessionId;
 
         allow update:
-          if isRoomDm(roomCode)
-          || (
-            isRoomMember(roomCode)
-            && resource.data.uid == request.auth.uid
-            && request.resource.data.uid == request.auth.uid
-            && request.resource.data.sessionId == sessionId
+          if roomAcceptsWrites(roomCode)
+          && (
+            isRoomDm(roomCode)
+            || (
+              isRoomMember(roomCode)
+              && resource.data.uid == request.auth.uid
+              && request.resource.data.uid == request.auth.uid
+              && request.resource.data.sessionId == sessionId
+            )
           );
 
         allow delete:
@@ -730,12 +758,14 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && validCharacterWrite(roomCode)
           && request.resource.data.ownerUid == request.auth.uid;
 
         allow update:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && validCharacterWrite(roomCode)
           && (
             request.resource.data.ownerUid
@@ -764,11 +794,13 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && validDmOwnedWrite(roomCode);
 
         allow update:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && validDmOwnedWrite(roomCode)
           && (
             request.resource.data.ownerUid
@@ -794,7 +826,8 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create, update:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && request.resource.data.get('id', '') == animationId
           && request.resource.data.get('roomCode', '') == roomCode
           && request.resource.data.get('ownerId', '') == roomCode
@@ -817,13 +850,15 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && request.resource.data.get('id', '') == effectId
           && request.resource.data.get('roomCode', '') == roomCode
           && request.resource.data.get('createdByUid', '') == request.auth.uid;
 
         allow update:
-          if (
+          if roomAcceptsWrites(roomCode)
+          && (
             isRoomDm(roomCode)
             || (
               isRoomMember(roomCode)
@@ -848,11 +883,13 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && validGameplayEffect(roomCode, effectId);
 
         allow update:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && validGameplayEffect(roomCode, effectId)
           && request.resource.data.createdByUid
             == resource.data.createdByUid
@@ -868,7 +905,8 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && validJournalEntry(roomCode, entryId, 'shared')
           && (
             isRoomDm(roomCode)
@@ -876,8 +914,11 @@ service cloud.firestore {
           );
 
         allow update:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && validJournalEntry(roomCode, entryId, 'shared')
+          && request.resource.data.revision
+            == resource.data.get('revision', 0) + 1
           && request.resource.data.ownerUid == resource.data.ownerUid
           && request.resource.data.createdAtMillis == resource.data.createdAtMillis
           && (
@@ -899,14 +940,18 @@ service cloud.firestore {
           && resource.data.ownerUid == request.auth.uid;
 
         allow create:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && validJournalEntry(roomCode, entryId, 'personal')
           && request.resource.data.ownerUid == request.auth.uid;
 
         allow update:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && resource.data.ownerUid == request.auth.uid
           && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.revision
+            == resource.data.get('revision', 0) + 1
           && request.resource.data.createdAtMillis == resource.data.createdAtMillis
           && validJournalEntry(roomCode, entryId, 'personal');
 
@@ -920,12 +965,16 @@ service cloud.firestore {
           if isRoomDm(roomCode);
 
         allow create:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && validJournalEntry(roomCode, entryId, 'dm');
 
         allow update:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.revision
+            == resource.data.get('revision', 0) + 1
           && request.resource.data.createdAtMillis == resource.data.createdAtMillis
           && validJournalEntry(roomCode, entryId, 'dm');
 
@@ -938,7 +987,8 @@ service cloud.firestore {
           if isRoomMember(roomCode);
 
         allow create:
-          if isRoomMember(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomMember(roomCode)
           && request.resource.data.authorUid == request.auth.uid
           && validDrawingStroke(roomCode, strokeId, 'shared')
           && (
@@ -963,7 +1013,8 @@ service cloud.firestore {
           if isRoomDm(roomCode);
 
         allow create:
-          if isRoomDm(roomCode)
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
           && request.resource.data.authorUid == request.auth.uid
           && validDrawingStroke(roomCode, strokeId, 'dm');
 
@@ -977,53 +1028,74 @@ service cloud.firestore {
       match /maps/{mapId} {
         allow read:
           if isRoomMember(roomCode);
-        allow create, update, delete:
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode);
+        allow delete:
           if isRoomDm(roomCode);
       }
 
       match /puzzleTiles/{tileId} {
         allow read:
           if isRoomMember(roomCode);
-        allow create, update, delete:
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode);
+        allow delete:
           if isRoomDm(roomCode);
       }
 
       match /tokens/{tokenId} {
         allow read:
           if isRoomMember(roomCode);
-        allow create, delete:
+        allow create:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode);
+        allow delete:
           if isRoomDm(roomCode);
         allow update:
-          if isRoomDm(roomCode)
-          || (
-            isRoomMember(roomCode)
-            && resource.data.get('ownerUid', '') == request.auth.uid
-            && request.resource.data.get('ownerUid', '')
-              == resource.data.get('ownerUid', '')
-            && tokenMovementFieldsOnly()
-            && tokenIsCurrentOrExploring(roomCode, tokenId)
-            && trackedTokenMoveIsConfirmed(roomCode, tokenId)
+          if roomAcceptsWrites(roomCode)
+          && (
+            isRoomDm(roomCode)
+            || (
+              isRoomMember(roomCode)
+              && resource.data.get('ownerUid', '') == request.auth.uid
+              && request.resource.data.get('ownerUid', '')
+                == resource.data.get('ownerUid', '')
+              && tokenMovementFieldsOnly()
+              && tokenIsCurrentOrExploring(roomCode, tokenId)
+              && trackedTokenMoveIsConfirmed(roomCode, tokenId)
+            )
           );
       }
 
       match /classes/{classId} {
         allow read:
           if isRoomMember(roomCode);
-        allow create, update, delete:
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode);
+        allow delete:
           if isRoomDm(roomCode);
       }
 
       match /species/{speciesId} {
         allow read:
           if isRoomMember(roomCode);
-        allow create, update, delete:
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode);
+        allow delete:
           if isRoomDm(roomCode);
       }
 
       match /backgrounds/{backgroundId} {
         allow read:
           if isRoomMember(roomCode);
-        allow create, update, delete:
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode);
+        allow delete:
           if isRoomDm(roomCode);
       }
 

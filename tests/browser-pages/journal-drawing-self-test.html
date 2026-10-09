@@ -25,24 +25,46 @@
 
     const operations = [];
     const listeners = [];
+    const documents = new Map();
+    let writeGate = null;
+    let nextWriteError = null;
     const pathOf = (...parts) => parts.map((part) => part?.path || String(part)).join("/");
     const collection = (...parts) => ({ path: pathOf(...parts) });
     const doc = (...parts) => ({ path: pathOf(...parts) });
     const query = (source, ...filters) => ({ path: source.path, filters });
     const where = (...parts) => ({ where: parts });
-    const onSnapshot = (source, options, next) => {
-      const record = { source, active: true };
+    const onSnapshot = (source, options, next, error) => {
+      const record = { source, active: true, next, error };
       listeners.push(record);
       queueMicrotask(() => {
         if (record.active) next({ docs: [], metadata: { hasPendingWrites: false } });
       });
       return () => { record.active = false; };
     };
+    const beforeWrite = async () => {
+      if (writeGate) {
+        const gate = writeGate;
+        await gate.promise;
+        if (writeGate === gate) writeGate = null;
+      }
+      if (nextWriteError) {
+        const error = nextWriteError;
+        nextWriteError = null;
+        throw error;
+      }
+    };
+    const mergeDocument = (path, payload, merge = false) => {
+      documents.set(path, merge ? { ...(documents.get(path) || {}), ...payload } : { ...payload });
+    };
     const setDoc = async (reference, payload, options) => {
+      await beforeWrite();
       operations.push({ type: "set", path: reference.path, payload, options });
+      mergeDocument(reference.path, payload, options?.merge === true);
     };
     const deleteDoc = async (reference) => {
+      await beforeWrite();
       operations.push({ type: "delete", path: reference.path });
+      documents.delete(reference.path);
     };
     const updateDoc = async (reference, payload) => {
       operations.push({ type: "update", path: reference.path, payload });
@@ -52,8 +74,45 @@
       return {
         set(reference, payload) { entries.push({ type: "set", path: reference.path, payload }); },
         delete(reference) { entries.push({ type: "delete", path: reference.path }); },
-        async commit() { operations.push({ type: "batch", entries }); }
+        async commit() {
+          await beforeWrite();
+          operations.push({ type: "batch", entries });
+          entries.forEach((entry) => {
+            if (entry.type === "delete") documents.delete(entry.path);
+            else mergeDocument(entry.path, entry.payload, false);
+          });
+        }
       };
+    };
+    const runTransaction = async (_db, callback) => {
+      const entries = [];
+      const transaction = {
+        async get(reference) {
+          const value = documents.get(reference.path);
+          return {
+            exists: () => value !== undefined,
+            data: () => value ? { ...value } : undefined
+          };
+        },
+        set(reference, payload, options) {
+          entries.push({ type: "set", path: reference.path, payload, options });
+        },
+        delete(reference) {
+          entries.push({ type: "delete", path: reference.path });
+        }
+      };
+      const result = await callback(transaction);
+      await beforeWrite();
+      if (entries.some((entry) => entry.type === "delete")) {
+        operations.push({ type: "batch", entries });
+      } else {
+        entries.forEach((entry) => operations.push({ ...entry }));
+      }
+      entries.forEach((entry) => {
+        if (entry.type === "delete") documents.delete(entry.path);
+        else mergeDocument(entry.path, entry.payload, entry.options?.merge === true);
+      });
+      return result;
     };
     const serverTimestamp = () => "SERVER_TIMESTAMP";
     const fakeDb = { path: "db" };
@@ -104,6 +163,7 @@
       onSnapshot,
       setDoc,
       deleteDoc,
+      runTransaction,
       writeBatch,
       serverTimestamp,
       requestConfirmation: async () => true
@@ -121,6 +181,30 @@
       journal,
       operations,
       listeners,
+      delayNextWrite() {
+        if (writeGate) return;
+        let release;
+        const promise = new Promise((resolve) => { release = resolve; });
+        writeGate = { promise, release };
+      },
+      releaseWrite() { writeGate?.release(); },
+      failNextWrite(message = "simulated save failure") {
+        nextWriteError = new Error(message);
+      },
+      emitJournal(visibility, records) {
+        const collectionName = visibility === "dm"
+          ? "dmJournal"
+          : visibility === "shared" ? "sharedJournal" : "personalJournal";
+        const sourceSuffix = `/rooms/${journal.getState().roomCode}/${collectionName}`;
+        const docs = records.map((record) => {
+          const path = `db${sourceSuffix}/${record.id}`;
+          documents.set(path, { ...record });
+          return { id: record.id, data: () => ({ ...record }) };
+        });
+        listeners
+          .filter((listener) => listener.active && listener.source.path.endsWith(sourceSuffix))
+          .forEach((listener) => listener.next({ docs, metadata: { hasPendingWrites: false } }));
+      },
       getTokenClicks: () => tokenClicks,
       setMapId(value) { mapId = value; drawing.syncContext(); }
     };

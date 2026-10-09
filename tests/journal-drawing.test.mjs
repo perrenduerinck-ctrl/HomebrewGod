@@ -36,6 +36,7 @@ test("journal content is searchable, bounded, and sanitized before persistence",
   assert.equal(entry.ownerUid, "user-1");
   assert.equal(entry.contentHtml.includes("script"), false);
   assert.equal(entry.contentHtml.includes("onclick"), false);
+  assert.equal(entry.revision, 0);
   assert.equal(journalEntryMatches(entry, { search: "moon door" }), true);
   assert.equal(journalEntryMatches(entry, { search: "dragon" }), false);
   assert.equal(sanitizeJournalHtml("<b>safe</b><img src=x onerror=x>"), "<b>safe</b>");
@@ -136,8 +137,10 @@ test("Firestore rules enforce journal privacy and drawing ownership at collectio
   );
 
   assert.match(dmJournal, /allow read:\s*if isRoomDm\(roomCode\)/);
+  assert.match(dmJournal, /resource\.data\.get\('revision', 0\) \+ 1/);
   assert.doesNotMatch(dmJournal, /isRoomMember\(roomCode\)/);
   assert.match(personalJournal, /resource\.data\.ownerUid == request\.auth\.uid/);
+  assert.match(personalJournal, /resource\.data\.get\('revision', 0\) \+ 1/);
   assert.match(sharedDrawings, /playerDrawingEnabled\(roomCode\)/);
   assert.match(sharedDrawings, /resource\.data\.authorUid == request\.auth\.uid/);
   assert.match(sharedDrawings, /allow update:\s*if false/);
@@ -147,6 +150,10 @@ test("Firestore rules enforce journal privacy and drawing ownership at collectio
 
 test("app integration keeps new listeners modular and cleans room-owned records", () => {
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const deletionPolicy = readFileSync(
+    new URL("../rooms/roomDeletionPolicy.js", import.meta.url),
+    "utf8"
+  );
   const build = readFileSync(new URL("../scripts/build-pages.mjs", import.meta.url), "utf8");
   const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(app, /createJournalSystem/);
@@ -156,7 +163,7 @@ test("app integration keeps new listeners modular and cleans room-owned records"
   for (const collection of [
     "sharedJournal", "personalJournal", "dmJournal", "sharedDrawings", "dmDrawings"
   ]) {
-    assert.match(app, new RegExp(`"${collection}"`));
+    assert.match(deletionPolicy, new RegExp(`"${collection}"`));
   }
   assert.match(build, /"journal"/);
   assert.match(index, /journal\/journal\.css/);

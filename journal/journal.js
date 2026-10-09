@@ -42,8 +42,10 @@ export function createJournalSystem(options = {}) {
     onSnapshot,
     setDoc,
     deleteDoc,
+    runTransaction,
     writeBatch,
     serverTimestamp,
+    storage = globalThis.localStorage,
     requestConfirmation = async (message) => globalThis.confirm?.(message) === true
   } = options;
   const listeners = createRealtimeListenerRegistry({
@@ -62,7 +64,16 @@ export function createJournalSystem(options = {}) {
     current: null,
     saveTimer: null,
     saving: false,
-    dirty: false
+    savePromise: null,
+    saveQueued: false,
+    dirty: false,
+    editRevision: 0,
+    contextVersion: 0,
+    deletingKey: "",
+    pendingDeletes: new Set(),
+    conflict: false,
+    statusMessage: "",
+    statusKind: ""
   };
 
   const root = document.createElement("section");
@@ -114,6 +125,7 @@ export function createJournalSystem(options = {}) {
             <button type="button" data-journal-duplicate>Duplicate</button>
             <button type="button" data-journal-reveal hidden></button>
             <button type="button" class="hg-button-danger" data-journal-delete>Delete</button>
+            <button type="button" data-journal-retry hidden>Retry save</button>
           </div>
           <div>
             <small data-journal-timestamp></small>
@@ -141,13 +153,117 @@ export function createJournalSystem(options = {}) {
     reveal: root.querySelector("[data-journal-reveal]"),
     delete: root.querySelector("[data-journal-delete]"),
     duplicate: root.querySelector("[data-journal-duplicate]"),
+    retry: root.querySelector("[data-journal-retry]"),
     timestamp: root.querySelector("[data-journal-timestamp]"),
     status: root.querySelector("[data-journal-status]")
   };
 
   function setStatus(message, kind = "") {
-    elements.status.textContent = message || "";
-    elements.status.dataset.state = kind;
+    state.statusMessage = message || "";
+    state.statusKind = kind;
+    elements.status.textContent = state.statusMessage;
+    elements.status.dataset.state = state.statusKind;
+    elements.retry.hidden = !["error", "conflict"].includes(kind);
+    elements.retry.textContent = kind === "conflict" ? "Save draft as copy" : "Retry save";
+  }
+
+  const RECOVERY_PREFIX = "homebrew-god:journal-draft:v1";
+
+  function recoveryContextKey(roomCode = state.roomCode, userId = state.userId) {
+    return `${RECOVERY_PREFIX}:${encodeURIComponent(userId)}:${encodeURIComponent(roomCode)}`;
+  }
+
+  function recoveryEntryKey(entry) {
+    return `${recoveryContextKey(entry.roomCode, entry._recoveryUserId || state.userId)}:${encodeURIComponent(entry.id)}`;
+  }
+
+  function readStorage(key) {
+    try {
+      return storage?.getItem?.(key) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function writeStorage(key, value) {
+    try {
+      storage?.setItem?.(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function removeStorage(key) {
+    try {
+      storage?.removeItem?.(key);
+    } catch {
+      // Recovery is best-effort when browser storage is unavailable.
+    }
+  }
+
+  function recoveryIds(roomCode = state.roomCode, userId = state.userId) {
+    try {
+      const parsed = JSON.parse(readStorage(`${recoveryContextKey(roomCode, userId)}:index`) || "[]");
+      return Array.isArray(parsed) ? parsed.filter(Boolean).slice(-100) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function persistRecovery(entry) {
+    if (!entry?.id || !state.roomCode || !state.userId) return false;
+    const record = {
+      ...entry,
+      roomCode: state.roomCode,
+      _recoveryUserId: state.userId,
+      _persistedVisibility: entry._persistedVisibility || entry.visibility,
+      _isNew: entry._isNew === true,
+      _recovered: true,
+      recoveredAtMillis: Date.now()
+    };
+    const key = recoveryEntryKey(record);
+    if (!writeStorage(key, JSON.stringify(record))) return false;
+    const ids = recoveryIds();
+    if (!ids.includes(entry.id)) ids.push(entry.id);
+    writeStorage(`${recoveryContextKey()}:index`, JSON.stringify(ids.slice(-100)));
+    return true;
+  }
+
+  function clearRecovery(entry) {
+    if (!entry?.id || !entry?.roomCode || !state.userId) return;
+    removeStorage(recoveryEntryKey(entry));
+    const ids = recoveryIds(entry.roomCode, state.userId).filter((id) => id !== entry.id);
+    const indexKey = `${recoveryContextKey(entry.roomCode, state.userId)}:index`;
+    if (ids.length) writeStorage(indexKey, JSON.stringify(ids));
+    else removeStorage(indexKey);
+  }
+
+  function loadRecoveries() {
+    if (!state.roomCode || !state.userId) return;
+    recoveryIds().forEach((id) => {
+      try {
+        const raw = readStorage(`${recoveryContextKey()}:${encodeURIComponent(id)}`);
+        const record = raw ? JSON.parse(raw) : null;
+        if (
+          !record
+          || record.roomCode !== state.roomCode
+          || record._recoveryUserId !== state.userId
+          || record.id !== id
+        ) return;
+        const entry = normalizeJournalEntry(record, { ...state, document });
+        const recovered = {
+          ...entry,
+          _persistedVisibility: record._persistedVisibility || entry.visibility,
+          _isNew: record._isNew === true,
+          _recovered: true,
+          _recoveryUserId: state.userId
+        };
+        state.entriesByVisibility.get(recovered.visibility)?.set(recovered.id, recovered);
+      } catch {
+        // Ignore a single damaged recovery record without hiding healthy notes.
+      }
+    });
   }
 
   function allEntries() {
@@ -222,7 +338,8 @@ export function createJournalSystem(options = {}) {
     elements.visibility.value = entry.visibility;
     elements.dmOption.hidden = !state.isDm;
     elements.content.innerHTML = sanitizeJournalHtml(entry.contentHtml, document);
-    const mutable = canMutateJournalEntry(entry, state);
+    const mutable = canMutateJournalEntry(entry, state)
+      && state.deletingKey !== entryKey(entry);
     [elements.title, elements.category, elements.customCategory, elements.visibility]
       .forEach((control) => { control.disabled = !mutable; });
     elements.content.contentEditable = mutable ? "true" : "false";
@@ -237,16 +354,41 @@ export function createJournalSystem(options = {}) {
     elements.reveal.hidden = !state.isDm || !["shared", "dm"].includes(entry.visibility);
     elements.reveal.textContent = entry.visibility === "dm" ? "Reveal to players" : "Hide from players";
     elements.timestamp.textContent = `Last modified ${timestampLabel(entry)}`;
-    setStatus(state.dirty ? "Unsaved changes" : "Saved", state.dirty ? "pending" : "saved");
+    setStatus(
+      state.statusMessage || (state.dirty ? "Unsaved changes" : "Saved"),
+      state.statusKind || (state.dirty ? "pending" : "saved")
+    );
   }
 
-  function selectEntry(entry) {
+  function applySelection(entry) {
     clearTimeout(state.saveTimer);
     state.saveTimer = null;
-    state.current = entry ? { ...entry, _persistedVisibility: entry.visibility } : null;
-    state.dirty = false;
+    state.current = entry ? {
+      ...entry,
+      _persistedVisibility: entry._persistedVisibility || entry.visibility
+    } : null;
+    state.dirty = entry?._recovered === true;
+    state.conflict = false;
+    state.editRevision += 1;
+    state.statusMessage = state.dirty ? "Recovered unsaved changes" : "";
+    state.statusKind = state.dirty ? "pending" : "";
     renderList();
     renderEditor();
+  }
+
+  async function selectEntry(entry) {
+    if (state.current && entry && entryKey(entry) === entryKey(state.current)) {
+      return true;
+    }
+    if (state.current && (!entry || entryKey(entry) !== entryKey(state.current))) {
+      const saved = state.dirty ? await saveCurrent({ immediate: true }) : true;
+      if (!saved) {
+        setStatus("Save or resolve this note before switching.", "error");
+        return false;
+      }
+    }
+    applySelection(entry);
+    return true;
   }
 
   function payloadFor(entry, { create = false } = {}) {
@@ -260,6 +402,7 @@ export function createJournalSystem(options = {}) {
       visibility: entry.visibility,
       contentHtml: entry.contentHtml,
       searchText: entry.searchText,
+      revision: entry.revision,
       createdAtMillis: entry.createdAtMillis,
       updatedAtMillis: entry.updatedAtMillis,
       updatedAt: serverTimestamp()
@@ -300,57 +443,217 @@ export function createJournalSystem(options = {}) {
     });
   }
 
+  function captureEditorDraft() {
+    if (!state.current || elements.editor.hidden) return null;
+    const draft = collectEditorEntry();
+    if (!draft) return null;
+    state.current = {
+      ...draft,
+      _persistedVisibility: state.current._persistedVisibility || state.current.visibility,
+      _persistedRevision: Number(
+        state.current._persistedRevision ?? state.current.revision ?? 0
+      ),
+      _isNew: state.current._isNew === true,
+      _recovered: true,
+      _recoveryUserId: state.userId
+    };
+    state.entriesByVisibility.forEach((records) => records.delete(state.current.id));
+    state.entriesByVisibility.get(state.current.visibility)?.set(
+      state.current.id,
+      state.current
+    );
+    state.editRevision += 1;
+    state.dirty = true;
+    persistRecovery(state.current);
+    return state.current;
+  }
+
+  function conflictError(message = "This note changed in another tab.") {
+    const error = new Error(message);
+    error.code = "journal/conflict";
+    return error;
+  }
+
+  async function persistEntry(entry, previous) {
+    const oldVisibility = previous._persistedVisibility || previous.visibility;
+    const moved = oldVisibility !== entry.visibility;
+    const expectedRevision = Math.max(0, Number(
+      previous._persistedRevision ?? previous.revision ?? 0
+    ) || 0);
+    let committed = { ...entry, revision: expectedRevision + 1 };
+
+    if (typeof runTransaction === "function") {
+      await runTransaction(db, async (transaction) => {
+        const oldReference = entryRef(previous, oldVisibility);
+        const oldSnapshot = await transaction.get(oldReference);
+        const oldExists = oldSnapshot.exists();
+        const remoteRevision = oldExists
+          ? Math.max(0, Number(oldSnapshot.data()?.revision) || 0)
+          : 0;
+        const expectedExisting = previous._isNew !== true;
+        if (oldExists !== expectedExisting || remoteRevision !== expectedRevision) {
+          throw conflictError();
+        }
+
+        let destinationReference = oldReference;
+        if (moved) {
+          destinationReference = entryRef(entry);
+          const destinationSnapshot = await transaction.get(destinationReference);
+          if (destinationSnapshot.exists()) {
+            throw conflictError("A note already exists at the requested access level.");
+          }
+        }
+
+        committed = { ...entry, revision: remoteRevision + 1 };
+        transaction.set(
+          destinationReference,
+          payloadFor(committed, { create: !oldExists || moved }),
+          { merge: !moved }
+        );
+        if (moved) transaction.delete(oldReference);
+      });
+      return committed;
+    }
+
+    if (moved) {
+      const batch = writeBatch(db);
+      batch.set(entryRef(committed), payloadFor(committed, { create: true }));
+      batch.delete(entryRef(previous, oldVisibility));
+      await batch.commit();
+    } else {
+      await setDoc(
+        entryRef(committed),
+        payloadFor(committed, { create: previous._isNew === true }),
+        { merge: true }
+      );
+    }
+    return committed;
+  }
+
   async function saveCurrent({ immediate = false } = {}) {
     clearTimeout(state.saveTimer);
     state.saveTimer = null;
-    if (!state.current || state.saving) return false;
-    const previous = state.current;
-    const entry = collectEditorEntry();
-    if (!entry || !canMutateJournalEntry(previous, state)) return false;
-    const oldVisibility = previous._persistedVisibility || previous.visibility;
-    const moved = oldVisibility !== entry.visibility;
-    state.saving = true;
-    setStatus(immediate ? "Saving…" : "Auto-saving…", "saving");
-
-    try {
-      if (moved) {
-        const batch = writeBatch(db);
-        batch.set(entryRef(entry), payloadFor(entry, { create: true }));
-        batch.delete(entryRef(entry, oldVisibility));
-        await batch.commit();
-        state.entriesByVisibility.get(oldVisibility)?.delete(entry.id);
-      } else {
-        const existing = state.entriesByVisibility.get(entry.visibility)?.has(entry.id)
-          && previous._isNew !== true;
-        await setDoc(entryRef(entry), payloadFor(entry, { create: !existing }), { merge: true });
-      }
-      const saved = { ...entry, _persistedVisibility: entry.visibility };
-      state.entriesByVisibility.get(entry.visibility).set(entry.id, saved);
-      state.current = saved;
-      state.dirty = false;
-      setStatus("Saved", "saved");
-      elements.timestamp.textContent = `Last modified ${timestampLabel(saved)}`;
-      renderList();
-      return true;
-    } catch (error) {
-      state.dirty = true;
-      setStatus(`Save failed: ${error.message}`, "error");
-      return false;
-    } finally {
-      state.saving = false;
+    if (!state.current || !canMutateJournalEntry(state.current, state)) return false;
+    const contextVersion = state.contextVersion;
+    const activeSession = state.savePromise;
+    if (activeSession?.contextVersion === contextVersion) {
+      activeSession.queued = true;
+      activeSession.immediate ||= immediate;
+      return activeSession.promise;
     }
+
+    const session = {
+      contextVersion,
+      queued: true,
+      immediate,
+      promise: null
+    };
+    session.promise = (async () => {
+      while (
+        session.queued
+        && session.contextVersion === state.contextVersion
+        && state.current
+        && state.deletingKey !== entryKey(state.current)
+      ) {
+        session.queued = false;
+        if (!state.dirty) continue;
+        const previous = { ...state.current };
+        const entry = normalizeJournalEntry(previous, { ...state, document });
+        const capturedEditRevision = state.editRevision;
+        const capturedKey = entryKey(entry);
+        state.saving = true;
+        setStatus(session.immediate ? "Saving…" : "Auto-saving…", "saving");
+
+        try {
+          const committed = await persistEntry(entry, previous);
+          if (
+            session.contextVersion !== state.contextVersion
+            || state.deletingKey === capturedKey
+          ) continue;
+
+          state.entriesByVisibility.forEach((records) => records.delete(committed.id));
+          if (state.current && entryKey(state.current) === capturedKey) {
+            const hasNewerEdits = state.editRevision !== capturedEditRevision;
+            state.current = hasNewerEdits
+              ? {
+                  ...state.current,
+                  revision: committed.revision,
+                  _persistedRevision: committed.revision,
+                  _persistedVisibility: committed.visibility,
+                  _isNew: false,
+                  _recovered: true
+                }
+              : {
+                  ...committed,
+                  _persistedRevision: committed.revision,
+                  _persistedVisibility: committed.visibility,
+                  _isNew: false
+                };
+            state.entriesByVisibility.get(state.current.visibility)?.set(
+              state.current.id,
+              state.current
+            );
+            state.dirty = hasNewerEdits;
+            if (hasNewerEdits) {
+              persistRecovery(state.current);
+              session.queued = true;
+              session.immediate = true;
+              setStatus("Saving newer changes…", "saving");
+            } else {
+              state.conflict = false;
+              clearRecovery(state.current);
+              setStatus("Saved", "saved");
+              elements.timestamp.textContent = `Last modified ${timestampLabel(state.current)}`;
+            }
+          }
+          renderList();
+        } catch (error) {
+          if (session.contextVersion !== state.contextVersion) return false;
+          state.dirty = true;
+          state.conflict = error?.code === "journal/conflict";
+          persistRecovery(state.current);
+          setStatus(
+            error?.code === "journal/conflict"
+              ? `${error.message} Your draft is safe in this browser.`
+              : `Save failed: ${error.message}. Your draft is safe in this browser.`,
+            error?.code === "journal/conflict" ? "conflict" : "error"
+          );
+          return false;
+        }
+      }
+      return session.contextVersion === state.contextVersion && !state.dirty;
+    })().finally(() => {
+      if (state.savePromise === session) {
+        state.savePromise = null;
+        state.saving = false;
+      }
+    });
+    state.savePromise = session;
+    return session.promise;
   }
 
   function scheduleSave() {
     if (!state.current || !canMutateJournalEntry(state.current, state)) return;
-    state.dirty = true;
-    setStatus("Unsaved changes", "pending");
+    captureEditorDraft();
+    setStatus(
+      state.conflict
+        ? "This note changed in another tab. Your local draft is safe."
+        : "Unsaved changes",
+      state.conflict ? "conflict" : "pending"
+    );
     clearTimeout(state.saveTimer);
     state.saveTimer = setTimeout(() => { void saveCurrent(); }, 700);
+    if (state.savePromise?.contextVersion === state.contextVersion) {
+      state.savePromise.queued = true;
+    }
   }
 
-  async function createEntry(seed = {}) {
+  async function createEntry(seed = {}, { skipCurrentSave = false } = {}) {
     if (!state.roomCode || !state.userId) return null;
+    if (!skipCurrentSave && state.current && state.dirty) {
+      const saved = await saveCurrent({ immediate: true });
+      if (!saved) return null;
+    }
     const visibility = seed.visibility || (state.isDm ? "dm" : "personal");
     const entry = normalizeJournalEntry({
       ...seed,
@@ -363,9 +666,13 @@ export function createJournalSystem(options = {}) {
       updatedAtMillis: Date.now()
     }, { ...state, document });
     state.entriesByVisibility.get(entry.visibility).set(entry.id, entry);
-    selectEntry(entry);
+    applySelection(entry);
     state.current._isNew = true;
+    state.current._persistedRevision = 0;
+    state.current._recovered = true;
     state.dirty = true;
+    state.editRevision += 1;
+    persistRecovery(state.current);
     await saveCurrent({ immediate: true });
     elements.title.focus();
     elements.title.select();
@@ -380,29 +687,67 @@ export function createJournalSystem(options = {}) {
       { title: "Delete journal note", confirmLabel: "Delete" }
     );
     if (!confirmed) return false;
+    clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+    const key = entryKey(entry);
+    state.deletingKey = key;
+    state.pendingDeletes.add(key);
+    renderEditor();
     try {
-      await deleteDoc(entryRef(entry));
-      state.entriesByVisibility.get(entry.visibility)?.delete(entry.id);
-      selectEntry(null);
+      const activeSave = state.savePromise?.contextVersion === state.contextVersion
+        ? state.savePromise.promise
+        : null;
+      if (activeSave) await activeSave;
+      const latest = state.current && entryKey(state.current) === key
+        ? state.current
+        : entry;
+      if (latest._isNew !== true || Number(latest._persistedRevision ?? latest.revision) > 0) {
+        await deleteDoc(entryRef(latest, latest._persistedVisibility || latest.visibility));
+      }
+      state.entriesByVisibility.forEach((records) => records.delete(entry.id));
+      clearRecovery(latest);
+      applySelection(null);
       renderList();
       return true;
     } catch (error) {
+      state.pendingDeletes.delete(key);
       setStatus(`Delete failed: ${error.message}`, "error");
       return false;
+    } finally {
+      state.deletingKey = "";
+      if (state.current) renderEditor();
     }
   }
 
   async function duplicateCurrent() {
     if (!state.current) return null;
+    const source = { ...state.current };
+    if (state.dirty && !await saveCurrent({ immediate: true })) return null;
     return createEntry({
-      ...state.current,
-      title: `${state.current.title} (Copy)`,
+      ...source,
+      title: `${source.title} (Copy)`,
       ownerUid: state.userId,
       ownerName: state.userName,
-      visibility: state.current.visibility === "dm" && !state.isDm
+      visibility: source.visibility === "dm" && !state.isDm
         ? "personal"
-        : state.current.visibility
+        : source.visibility,
+      revision: 0
     });
+  }
+
+  async function saveConflictAsCopy() {
+    if (!state.current || !state.conflict) return null;
+    const source = { ...state.current };
+    return createEntry({
+      ...source,
+      title: `${source.title} (Conflict Copy)`,
+      ownerUid: state.userId,
+      ownerName: state.userName,
+      visibility: source.visibility === "dm" && !state.isDm
+        ? "personal"
+        : source.visibility,
+      revision: 0
+    }, { skipCurrentSave: true });
   }
 
   function applySnapshot(visibility, snapshot, isCurrent) {
@@ -416,14 +761,34 @@ export function createJournalSystem(options = {}) {
       }, { ...state, document });
       records.set(entry.id, entry);
     });
+    const localRecords = state.entriesByVisibility.get(visibility) || new Map();
+    localRecords.forEach((entry, id) => {
+      if (entry?._recovered && !records.has(id)) records.set(id, entry);
+      if (
+        entry?._recovered
+        && records.has(id)
+        && Number(entry.updatedAtMillis || 0) > Number(records.get(id)?.updatedAtMillis || 0)
+      ) records.set(id, entry);
+    });
+    state.pendingDeletes.forEach((key) => {
+      const [pendingVisibility, id] = key.split("/");
+      if (pendingVisibility !== visibility) return;
+      const deletionStillVisibleRemotely = records.has(id);
+      records.delete(id);
+      if (!deletionStillVisibleRemotely) state.pendingDeletes.delete(key);
+    });
     state.entriesByVisibility.set(visibility, records);
-    if (state.current && state.current.visibility === visibility && !state.dirty) {
+    if (state.current && state.current.visibility === visibility && !state.dirty && !state.saving) {
       const fresh = records.get(state.current.id);
-      if (fresh) state.current = { ...fresh, _persistedVisibility: visibility };
+      if (fresh) state.current = {
+        ...fresh,
+        _persistedRevision: fresh.revision,
+        _persistedVisibility: visibility
+      };
       else state.current = null;
     }
     renderList();
-    renderEditor();
+    if (!state.dirty && !state.saving) renderEditor();
   }
 
   function connectVisibility(visibility) {
@@ -467,6 +832,11 @@ export function createJournalSystem(options = {}) {
       state.entriesByVisibility.forEach((records) => records.clear());
       state.current = null;
       state.dirty = false;
+      state.deletingKey = "";
+      state.pendingDeletes.clear();
+      state.conflict = false;
+      state.statusMessage = "";
+      state.statusKind = "";
       renderList();
       renderEditor();
     }
@@ -482,12 +852,21 @@ export function createJournalSystem(options = {}) {
     const changed = nextContext.roomCode !== state.roomCode
       || nextContext.userId !== state.userId
       || nextContext.isDm !== state.isDm;
-    Object.assign(state, nextContext);
-    elements.dmOption.hidden = !state.isDm;
     if (changed) {
+      if (state.current && state.dirty) {
+        captureEditorDraft();
+        persistRecovery(state.current);
+      }
+      state.contextVersion += 1;
       disconnect();
+      Object.assign(state, nextContext);
+      loadRecoveries();
       connect();
+      renderList();
+    } else {
+      Object.assign(state, nextContext);
     }
+    elements.dmOption.hidden = !state.isDm;
     return getState();
   }
 
@@ -495,7 +874,7 @@ export function createJournalSystem(options = {}) {
     const listButton = event.target.closest("[data-journal-key]");
     if (listButton) {
       const entry = findEntry(listButton.dataset.journalKey);
-      if (entry) selectEntry(entry);
+      if (entry) void selectEntry(entry);
       return;
     }
     const commandButton = event.target.closest("[data-journal-command]");
@@ -509,8 +888,13 @@ export function createJournalSystem(options = {}) {
     if (event.target.closest("[data-journal-new]")) void createEntry();
     if (event.target.closest("[data-journal-delete]")) void deleteCurrent();
     if (event.target.closest("[data-journal-duplicate]")) void duplicateCurrent();
+    if (event.target.closest("[data-journal-retry]")) {
+      if (state.conflict) void saveConflictAsCopy();
+      else void saveCurrent({ immediate: true });
+    }
     if (event.target.closest("[data-journal-reveal]") && state.current) {
       elements.visibility.value = state.current.visibility === "dm" ? "shared" : "dm";
+      scheduleSave();
       void saveCurrent({ immediate: true });
     }
   });
@@ -524,8 +908,11 @@ export function createJournalSystem(options = {}) {
     scheduleSave();
   });
   elements.content.addEventListener("input", scheduleSave);
-  elements.content.addEventListener("blur", () => {
-    if (state.dirty) void saveCurrent({ immediate: true });
+  elements.content.addEventListener("blur", (event) => {
+    if (event.relatedTarget?.closest?.("[data-journal-retry]")) return;
+    globalThis.setTimeout(() => {
+      if (state.dirty && !state.saving) void saveCurrent({ immediate: true });
+    }, 0);
   });
   elements.search.addEventListener("input", renderList);
   elements.filter.addEventListener("change", renderList);
@@ -538,6 +925,9 @@ export function createJournalSystem(options = {}) {
       entryCount: allEntries().length,
       currentId: state.current?.id || "",
       dirty: state.dirty,
+      saving: state.saving,
+      conflict: state.conflict,
+      statusKind: state.statusKind,
       listeners: listeners.getSnapshot()
     };
   }

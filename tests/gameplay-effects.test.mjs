@@ -193,6 +193,9 @@ test("application, token badges, movement, build and Firestore contracts are wir
   assert.match(build, /"effects"/);
   assert.match(rules, /match \/effects\/\{effectId\}/);
   assert.match(rules, /allow read:\s*if isRoomMember\(roomCode\)/);
-  assert.match(rules, /allow create:\s*if isRoomDm\(roomCode\)/);
+  assert.match(
+    rules,
+    /allow create:\s*if roomAcceptsWrites\(roomCode\)\s*&& isRoomDm\(roomCode\)/
+  );
   assert.match(rules, /allow delete:\s*if isRoomDm\(roomCode\)/);
 });

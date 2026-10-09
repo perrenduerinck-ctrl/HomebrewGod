@@ -126,6 +126,7 @@ export function normalizeJournalEntry(value = {}, context = {}) {
       `${title} ${category} ${journalPlainText(contentHtml)}`.toLowerCase(),
       JOURNAL_LIMITS.searchText
     ),
+    revision: Math.max(0, Math.floor(Number(value.revision) || 0)),
     createdAtMillis: Number(value.createdAtMillis) || now,
     updatedAtMillis: Number(value.updatedAtMillis) || now,
     createdAt: value.createdAt || null,

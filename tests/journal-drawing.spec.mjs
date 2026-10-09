@@ -30,6 +30,116 @@ test("journal creates, edits, auto-saves, sanitizes, and moves visibility", asyn
   expect(batches.at(-1).entries.some((entry) => entry.path.includes("dmJournal") && entry.type === "delete")).toBe(true);
 });
 
+test("journal serializes edits made during a delayed save", async ({ page }) => {
+  await page.evaluate(() => window.fixture.delayNextWrite());
+  await page.locator("[data-journal-new]").click();
+  await expect(page.locator("[data-journal-editor]")).toBeVisible();
+  await page.locator("[data-journal-title]").fill("Newest title wins");
+  await page.locator("[data-journal-content]").fill("This was typed while the first save was waiting.");
+  await page.evaluate(() => window.fixture.releaseWrite());
+
+  await expect.poll(() => page.evaluate(() => window.fixture.journal.getState().dirty)).toBe(false);
+  const saves = await page.evaluate(() => window.fixture.operations.filter((entry) => entry.type === "set"));
+  expect(saves.at(-1).payload.title).toBe("Newest title wins");
+  expect(saves.at(-1).payload.contentHtml).toContain("first save was waiting");
+  expect(saves.at(-1).payload.revision).toBe(2);
+});
+
+test("journal preserves a local draft when a conflicting snapshot arrives", async ({ page }) => {
+  await page.evaluate(() => window.fixture.emitJournal("dm", [{
+    id: "conflict-note",
+    roomCode: "ROOM-1",
+    ownerUid: "dm-1",
+    ownerName: "DM",
+    title: "Remote title",
+    category: "Lore",
+    visibility: "dm",
+    contentHtml: "<p>Remote version one</p>",
+    searchText: "remote title lore remote version one",
+    revision: 1,
+    createdAtMillis: 10,
+    updatedAtMillis: 10
+  }]));
+  await page.locator('[data-journal-key="dm/conflict-note"]').click();
+  await page.locator("[data-journal-title]").fill("Unsaved local title");
+
+  await page.evaluate(() => window.fixture.emitJournal("dm", [{
+    id: "conflict-note",
+    roomCode: "ROOM-1",
+    ownerUid: "dm-1",
+    ownerName: "DM",
+    title: "Other tab title",
+    category: "Lore",
+    visibility: "dm",
+    contentHtml: "<p>Remote version two</p>",
+    searchText: "other tab title lore remote version two",
+    revision: 2,
+    createdAtMillis: 10,
+    updatedAtMillis: 20
+  }]));
+
+  await expect(page.locator("[data-journal-title]")).toHaveValue("Unsaved local title");
+  await page.evaluate(() => window.fixture.journal.saveCurrent({ immediate: true }));
+  await expect(page.locator("[data-journal-status]")).toHaveAttribute("data-state", "conflict");
+  await expect(page.locator("[data-journal-retry]")).toBeVisible();
+  await expect(page.locator("[data-journal-retry]")).toHaveText("Save draft as copy");
+  await expect(page.locator("[data-journal-title]")).toHaveValue("Unsaved local title");
+  await page.locator("[data-journal-retry]").click();
+  await expect(page.locator("[data-journal-title]")).toHaveValue("Unsaved local title (Conflict Copy)");
+  const conflictCopy = await page.evaluate(() => window.fixture.operations.filter(
+    (entry) => entry.type === "set" && entry.payload?.title === "Unsaved local title (Conflict Copy)"
+  ).at(-1));
+  expect(conflictCopy.payload.contentHtml).toContain("Remote version one");
+});
+
+test("journal saves before switching notes and duplicates the current draft", async ({ page }) => {
+  await page.evaluate(() => window.fixture.emitJournal("dm", [
+    {
+      id: "note-a", roomCode: "ROOM-1", ownerUid: "dm-1", ownerName: "DM",
+      title: "Note A", category: "Lore", visibility: "dm", contentHtml: "<p>A</p>",
+      searchText: "note a lore a", revision: 1, createdAtMillis: 10, updatedAtMillis: 10
+    },
+    {
+      id: "note-b", roomCode: "ROOM-1", ownerUid: "dm-1", ownerName: "DM",
+      title: "Note B", category: "Lore", visibility: "dm", contentHtml: "<p>B</p>",
+      searchText: "note b lore b", revision: 1, createdAtMillis: 11, updatedAtMillis: 11
+    }
+  ]));
+  await page.locator('[data-journal-key="dm/note-a"]').click();
+  await page.locator("[data-journal-content]").fill("Latest A draft");
+  await page.locator('[data-journal-key="dm/note-b"]').click();
+  await expect(page.locator("[data-journal-title]")).toHaveValue("Note B");
+  const savedA = await page.evaluate(() => window.fixture.operations.findLast(
+    (entry) => entry.type === "set" && entry.path.endsWith("/dmJournal/note-a")
+  ));
+  expect(savedA.payload.contentHtml).toContain("Latest A draft");
+
+  await page.locator("[data-journal-content]").fill("Latest B draft");
+  await page.locator("[data-journal-duplicate]").click();
+  await expect(page.locator("[data-journal-title]")).toHaveValue("Note B (Copy)");
+  const copySave = await page.evaluate(() => window.fixture.operations.filter(
+    (entry) => entry.type === "set" && entry.payload?.title === "Note B (Copy)"
+  ).at(-1));
+  expect(copySave.payload.contentHtml).toContain("Latest B draft");
+});
+
+test("journal recovers a room-scoped draft and ignores a late save completion", async ({ page }) => {
+  await page.evaluate(() => window.fixture.delayNextWrite());
+  await page.locator("[data-journal-new]").click();
+  await page.locator("[data-journal-title]").fill("Recovered room draft");
+  await page.evaluate(() => window.fixture.journal.setContext({
+    roomCode: "ROOM-2", userId: "dm-1", userName: "DM", isDm: true
+  }));
+  await page.evaluate(() => window.fixture.releaseWrite());
+  await page.waitForTimeout(50);
+  expect(await page.evaluate(() => window.fixture.journal.getState().roomCode)).toBe("ROOM-2");
+
+  await page.evaluate(() => window.fixture.journal.setContext({
+    roomCode: "ROOM-1", userId: "dm-1", userName: "DM", isDm: true
+  }));
+  await expect(page.locator("[data-journal-list]")).toContainText("Recovered room draft");
+});
+
 test("mouse and touch each save one completed stroke, maps stay isolated", async ({ page }) => {
   await page.evaluate(() => window.fixture.drawing.open());
   const overlay = page.locator(".hg-map-drawing-layer");

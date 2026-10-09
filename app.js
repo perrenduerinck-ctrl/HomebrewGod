@@ -117,6 +117,10 @@ import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
 import {
+  ROOM_CLIENT_CLEANUP_COLLECTIONS,
+  createRoomDeletionProgress
+} from "./rooms/roomDeletionPolicy.js";
+import {
   DAY,
   HOUR,
   LONG_REST_SECONDS,
@@ -196,7 +200,7 @@ import { createEncounterPersistence } from "./encounters/encounterPersistence.js
 import { loadEncounter } from "./encounters/encounterLoader.js";
 import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
-import { createJournalSystem } from "./journal/journal.js?v=journal-drawing-20261008";
+import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261008";
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
 
 const visualPolish = installVisualPolish({ document, window });
@@ -467,6 +471,7 @@ const journalSystem = createJournalSystem({
   onSnapshot,
   setDoc,
   deleteDoc,
+  runTransaction,
   writeBatch,
   serverTimestamp,
   requestConfirmation: requestAppConfirmation
@@ -661,22 +666,6 @@ const COLLECTION_PAGE_SIZE = 20;
 const PUZZLE_COORDINATE_LIMIT = 50;
 const PUZZLE_MAX_GRID_SPAN = 12;
 const ROOM_DELETE_BATCH_SIZE = 400;
-const ROOM_OWNED_SUBCOLLECTIONS = [
-  "players",
-  "maps",
-  "puzzleTiles",
-  "tokens",
-  "characters",
-  "activePlayers",
-  "animations",
-  "combatEffects",
-  "effects",
-  "sharedJournal",
-  "personalJournal",
-  "dmJournal",
-  "sharedDrawings",
-  "dmDrawings"
-];
 const MAX_IMAGE_UPLOAD_BYTES =
   MAX_SECURE_IMAGE_BYTES;
 
@@ -2783,6 +2772,8 @@ async function deleteCurrentRoomPermanently() {
 
   const roomRef = doc(db, "rooms", roomCode);
   const roomAssets = new Map();
+  const completedCollections = [];
+  let activeDeletionCollection = "";
   rememberRoomCloudinaryAsset(
     roomAssets,
     buildMapFromRoomFields(currentRoomData)
@@ -2805,23 +2796,37 @@ async function deleteCurrentRoomPermanently() {
     latestCombatEffectRecords = [];
     clearGameplayEffectsForRoomExit();
 
-    await updateDoc(roomRef, {
-      deletingAt: serverTimestamp()
-    });
+    const deletionStartPatch = {
+      deletionState: createRoomDeletionProgress([], {
+        status: "in-progress"
+      }),
+      deletionUpdatedAt: serverTimestamp()
+    };
+    if (!currentRoomData.deletingAt) {
+      deletionStartPatch.deletingAt = serverTimestamp();
+    }
+    await updateDoc(roomRef, deletionStartPatch);
 
-    for (const subcollectionName of ROOM_OWNED_SUBCOLLECTIONS) {
-      const shouldCollectAssets =
-        subcollectionName === "maps" || subcollectionName === "puzzleTiles";
+    for (const collectionPolicy of ROOM_CLIENT_CLEANUP_COLLECTIONS) {
+      const subcollectionName = collectionPolicy.name;
+      activeDeletionCollection = subcollectionName;
 
       await deleteRoomSubcollectionInBatches(
         roomCode,
         subcollectionName,
-        shouldCollectAssets
+        collectionPolicy.collectsAssets
           ? function (documentSnapshot) {
               rememberRoomCloudinaryAsset(roomAssets, documentSnapshot.data());
             }
           : null
       );
+      completedCollections.push(subcollectionName);
+      await updateDoc(roomRef, {
+        deletionState: createRoomDeletionProgress(completedCollections, {
+          status: "in-progress"
+        }),
+        deletionUpdatedAt: serverTimestamp()
+      });
     }
 
     await deleteDoc(roomRef);
@@ -2837,31 +2842,39 @@ async function deleteCurrentRoomPermanently() {
     latestMapsSnapshot = [];
 
     for (const asset of roomAssets.values()) {
-      await deleteCloudinaryAssetIfUnreferenced(asset, {
-        ignoreCurrentMap: true,
-        reason: "delete-room"
-      });
+      try {
+        await deleteCloudinaryAssetIfUnreferenced(asset, {
+          ignoreCurrentMap: true,
+          reason: "delete-room"
+        });
+      } catch (error) {
+        console.warn("Room data was deleted, but an uploaded asset could not be cleaned up:", error);
+      }
     }
 
     resetDeletedRoomState();
     text(E.roomStatusText, "Room permanently deleted.");
   } catch (error) {
     try {
-      const remainingRoom = await getDoc(roomRef);
-
-      if (remainingRoom.exists()) {
-        await updateDoc(roomRef, {
-          deletingAt: deleteField()
-        });
-        openRoom(roomCode, "room");
-      } else {
-        resetDeletedRoomState();
-      }
+      await updateDoc(roomRef, {
+        deletionState: createRoomDeletionProgress(completedCollections, {
+          status: "incomplete",
+          failedCollection: activeDeletionCollection,
+          errorMessage: error.message
+        }),
+        deletionUpdatedAt: serverTimestamp()
+      });
     } catch (recoveryError) {
-      console.warn("Could not restore the room after an incomplete deletion:", recoveryError);
+      console.warn("Could not record incomplete room-deletion progress:", recoveryError);
     }
 
-    alert("Room deletion did not finish: " + error.message);
+    resetDeletedRoomState();
+    text(E.roomStatusText, "Room deletion paused safely. Reopen it as DM to retry cleanup.");
+    alert(
+      "Room deletion did not finish and the campaign remains locked. "
+      + "Reopen it as the DM and choose Delete Room Permanently again to retry.\n\n"
+      + error.message
+    );
   } finally {
     if (E.deleteRoomButton) {
       E.deleteRoomButton.disabled = false;
