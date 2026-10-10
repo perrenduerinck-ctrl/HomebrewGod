@@ -85,6 +85,43 @@ export function createCharacterPersistence(
 
   const guardedDependencies = {
     ...dependencies,
+    prepareExistingCharacterUpdate:
+      (remoteRecord, nextRecord) => {
+        context?.validateAnimationReferences?.(nextRecord);
+        normalizeCharacterTextFields(nextRecord);
+        normalizeCharacterWalkingSpeed(nextRecord);
+        assertCharacterSerializedSize(nextRecord);
+
+        const payload =
+          mergeCharacterRecordPreservingUnknownFields(
+            remoteRecord,
+            nextRecord
+          );
+
+        normalizeCharacterWalkingSpeed(payload);
+        normalizeCharacterTextFields(payload);
+
+        payload.ownerUid =
+          remoteRecord.ownerUid ||
+          nextRecord.ownerUid;
+        payload.roomCode =
+          remoteRecord.roomCode ||
+          remoteRecord.roomId ||
+          nextRecord.roomCode;
+
+        if (
+          Object.hasOwn(
+            remoteRecord,
+            "createdAt"
+          )
+        ) {
+          payload.createdAt =
+            remoteRecord.createdAt;
+        }
+
+        assertCharacterSerializedSize(payload);
+        return payload;
+      },
     addDoc:
       typeof originalAddDoc ===
         "function"
@@ -145,39 +182,11 @@ export function createCharacterPersistence(
         }
 
         const payload =
-          mergeCharacterRecordPreservingUnknownFields(
-            remoteRecord,
-            nextRecord
-          );
-
-        normalizeCharacterWalkingSpeed(
-          payload
-        );
-        normalizeCharacterTextFields(
-          payload
-        );
-
-        payload.ownerUid =
-          remoteRecord.ownerUid ||
-          nextRecord.ownerUid;
-        payload.roomCode =
-          remoteRecord.roomCode ||
-          remoteRecord.roomId ||
-          nextRecord.roomCode;
-
-        if (
-          Object.hasOwn(
-            remoteRecord,
-            "createdAt"
-          )
-        ) {
-          payload.createdAt =
-            remoteRecord.createdAt;
-        }
-
-        assertCharacterSerializedSize(
-          payload
-        );
+          guardedDependencies
+            .prepareExistingCharacterUpdate(
+              remoteRecord,
+              nextRecord
+            );
 
         return originalUpdateDoc(
           documentRef,

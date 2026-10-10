@@ -74,6 +74,14 @@ test("drawing coordinates stay normalized through pan, resize, and zoom", () => 
   );
   assert.deepEqual(pointAtNormalSize, { x: 500, y: 500 });
   assert.deepEqual(pointAtDoubleSizeAndPan, pointAtNormalSize);
+
+  const worldPoint = clientPointToDrawingSpace(
+    { left: 100, top: 50, width: 800, height: 400 },
+    500,
+    250,
+    { x: 300, y: 200, width: 200, height: 100 }
+  );
+  assert.deepEqual(worldPoint, { x: 400, y: 250 });
 });
 
 test("drawing payloads are bounded per completed stroke and map IDs are stable", () => {
@@ -99,6 +107,22 @@ test("drawing payloads are bounded per completed stroke and map IDs are stable",
     stableDrawingMapId(`https://cdn.example/${"same-prefix/".repeat(30)}one.png`),
     stableDrawingMapId(`https://cdn.example/${"same-prefix/".repeat(30)}two.png`)
   );
+
+  const zigzag = Array.from({ length: 1800 }, (_, index) => ({
+    x: index / 2,
+    y: index % 2 ? 800 : 200
+  }));
+  const wholePath = simplifyDrawingPoints(zigzag, 0.5);
+  assert.ok(wholePath.length <= MAX_DRAWING_POINTS);
+  assert.ok(wholePath.some((point) => point.x > 800), "the tail of a long path must remain represented");
+});
+
+test("drawing and token gestures ignore unrelated pointers and cancel without saving", () => {
+  const drawing = readFileSync(new URL("../battleMap/drawingTools.js", import.meta.url), "utf8");
+  const tokens = readFileSync(new URL("../tokens/index.js", import.meta.url), "utf8");
+  assert.match(drawing, /event\.pointerId !== state\.pointerId/);
+  assert.match(drawing, /pointercancel", cancelDrawing/);
+  assert.match(tokens, /event\.pointerId !== activeTokenDrag\.pointerId/);
 });
 
 test("undo/delete authorization is scoped to the author unless the actor is DM", () => {

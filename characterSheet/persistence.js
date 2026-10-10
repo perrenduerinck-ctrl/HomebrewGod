@@ -276,6 +276,8 @@ export function buildExistingGameplayCharacterUpdate({
 
 export async function persistExistingGameplayCharacter({
   updateDoc,
+  runTransaction,
+  db,
   documentRef,
   remoteRecord,
   nextRecord,
@@ -287,7 +289,10 @@ export async function persistExistingGameplayCharacter({
   savedAtMillis,
   timestamp
 }) {
-  if (typeof updateDoc !== "function") {
+  if (
+    typeof updateDoc !== "function" &&
+    typeof runTransaction !== "function"
+  ) {
     throw new Error(
       "Firestore updateDoc is unavailable."
     );
@@ -299,53 +304,132 @@ export async function persistExistingGameplayCharacter({
     );
   }
 
-  const ownerUid =
-    cleanText(
-      remoteRecord?.ownerUid
-    );
-  const actor =
-    cleanText(actorUid);
-  const dm =
-    cleanText(roomDmUid);
+  const persistAgainstRecord = async (
+    currentRecord,
+    write
+  ) => {
+    const ownerUid =
+      cleanText(
+        currentRecord?.ownerUid
+      );
+    const actor = cleanText(actorUid);
+    const dm = cleanText(roomDmUid);
 
-  assertCharacterMutationAccess({
-    actorUid: actor,
-    roomDmUid: dm,
-    ownerUid,
-    label: "character"
-  });
-
-  assertNoStaleRevision({
-    remoteRecord,
-    expectedRevisionMillis,
-    label: "character"
-  });
-
-  const payload =
-    buildExistingGameplayCharacterUpdate({
-      remoteRecord,
-      nextRecord,
-      characterId,
-      roomCode,
-      resolvedOwnerUid:
-        ownerUid ||
-        (
-          actor === dm
-            ? actor
-            : ""
-        ),
-      savedAtMillis,
-      timestamp
+    assertCharacterMutationAccess({
+      actorUid: actor,
+      roomDmUid: dm,
+      ownerUid,
+      label: "character"
     });
 
-  await updateDoc(
-    documentRef,
-    payload
+    const remoteRevision = Math.max(
+      0,
+      Math.floor(
+        Number(currentRecord?.revision) || 0
+      )
+    );
+    const expectedRevision = Math.max(
+      0,
+      Math.floor(
+        Number(nextRecord?.revision) || 0
+      )
+    );
+
+    if (
+      remoteRevision > 0 ||
+      expectedRevision > 0
+    ) {
+      if (remoteRevision !== expectedRevision) {
+        throw new Error(
+          "The character has a newer version. Reload it before saving again."
+        );
+      }
+    } else {
+      assertNoStaleRevision({
+        remoteRecord: currentRecord,
+        expectedRevisionMillis,
+        label: "character"
+      });
+    }
+
+    const payload =
+      buildExistingGameplayCharacterUpdate({
+        remoteRecord: currentRecord,
+        nextRecord,
+        characterId,
+        roomCode,
+        resolvedOwnerUid:
+          ownerUid ||
+          (
+            actor === dm
+              ? actor
+              : ""
+          ),
+        savedAtMillis,
+        timestamp
+      });
+
+    payload.revision = remoteRevision + 1;
+    await write(payload);
+    return payload;
+  };
+
+  if (typeof runTransaction === "function") {
+    const payload = await runTransaction(
+      db,
+      async (transaction) => {
+        const snapshot =
+          await transaction.get(documentRef);
+        const currentRecord =
+          typeof snapshot?.data === "function"
+            ? snapshot.data()
+            : snapshot?.data;
+
+        if (
+          !currentRecord ||
+          snapshot?.exists === false ||
+          (
+            typeof snapshot?.exists ===
+              "function" &&
+            !snapshot.exists()
+          )
+        ) {
+          throw new Error(
+            "The saved character no longer exists."
+          );
+        }
+
+        return persistAgainstRecord(
+          currentRecord,
+          async (nextPayload) => {
+            transaction.update(
+              documentRef,
+              nextPayload
+            );
+          }
+        );
+      }
+    );
+
+    return {
+      characterId: cleanText(characterId),
+      payload,
+      writeMethod: "transaction"
+    };
+  }
+
+  const payload = await persistAgainstRecord(
+    remoteRecord,
+    async (nextPayload) => {
+      await updateDoc(
+        documentRef,
+        nextPayload
+      );
+    }
   );
 
   return {
-    characterId:
-      cleanText(characterId),
+    characterId: cleanText(characterId),
     payload,
     writeMethod: "updateDoc"
   };

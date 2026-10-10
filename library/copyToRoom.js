@@ -22,7 +22,18 @@ export async function copyLibraryRecordToRoom({
     updatedAt: serverTimestamp(),
     updatedAtMillis: now
   };
+  if (assetType === "monster") record.revision = 1;
   const createdRef = await addDoc(collection(db, "rooms", destination, collectionName), record);
-  await updateDoc(createdRef, { id: createdRef.id, updatedAt: serverTimestamp(), updatedAtMillis: now });
-  return Object.freeze({ assetType, recordId: createdRef.id, record: { ...record, id: createdRef.id } });
+  const finalized = {
+    id: createdRef.id,
+    updatedAt: serverTimestamp(),
+    updatedAtMillis: now,
+    ...(assetType === "monster" ? { revision: 2 } : {})
+  };
+  await updateDoc(createdRef, finalized);
+  return Object.freeze({
+    assetType,
+    recordId: createdRef.id,
+    record: { ...record, ...finalized }
+  });
 }

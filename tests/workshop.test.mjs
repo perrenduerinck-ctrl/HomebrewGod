@@ -52,7 +52,25 @@ function memoryFirestore() {
     const writes = [];
     return { set(reference, value, options) { writes.push([reference, value, options]); }, async commit() { for (const item of writes) await setDoc(...item); } };
   };
-  return { db, records, collection, doc, getDoc, getDocs, setDoc, deleteDoc, where, limit, startAfter, query, writeBatch, serverTimestamp: () => "SERVER_TIMESTAMP" };
+  let transactionTail = Promise.resolve();
+  const runTransaction = (_db, callback) => {
+    const execute = async () => {
+      const writes = [];
+      const transaction = {
+        get: getDoc,
+        set(reference, value, options) {
+          writes.push([reference, value, options]);
+        }
+      };
+      const result = await callback(transaction);
+      for (const write of writes) await setDoc(...write);
+      return result;
+    };
+    const result = transactionTail.then(execute, execute);
+    transactionTail = result.then(() => undefined, () => undefined);
+    return result;
+  };
+  return { db, records, collection, doc, getDoc, getDocs, setDoc, deleteDoc, where, limit, startAfter, query, writeBatch, runTransaction, serverTimestamp: () => "SERVER_TIMESTAMP" };
 }
 
 function setup() {
@@ -173,6 +191,40 @@ test("independent import survives source deletion and new versions never overwri
   assert.equal(imported.content.name, "Ash Drake");
 });
 
+test("simultaneous Workshop publishes allocate distinct immutable versions", async () => {
+  const { persistence, store } = setup();
+  const first = await persistence.publish({
+    assetType: "monster",
+    name: monster.name,
+    visibility: "PRIVATE",
+    content: monster
+  });
+
+  const [left, right] = await Promise.all([
+    persistence.publish(
+      { ...first, content: { ...monster, hp: 111 } },
+      { assetId: first.assetId, mode: "new-version" }
+    ),
+    persistence.publish(
+      { ...first, content: { ...monster, hp: 222 } },
+      { assetId: first.assetId, mode: "new-version" }
+    )
+  ]);
+
+  assert.deepEqual(
+    new Set([left.version, right.version]),
+    new Set([2, 3])
+  );
+  assert.equal(
+    store.records.get(`workshopAssets/${first.assetId}/versions/2`).content.hp,
+    111
+  );
+  assert.equal(
+    store.records.get(`workshopAssets/${first.assetId}/versions/3`).content.hp,
+    222
+  );
+});
+
 test("remix, favorites, and mixed collections preserve references and ownership", async () => {
   const { persistence, state } = setup();
   const first = await persistence.publish({ assetType: "monster", name: monster.name, visibility: "ROOM", content: monster });
@@ -279,6 +331,8 @@ test("Firestore rules scope Workshop assets, versions, favorites, imports, and c
   assert.match(rules, /data\.visibility == 'ROOM'[\s\S]*isRoomMember\(data\.roomCode\)/);
   assert.match(rules, /match \/versions\/\{versionId\}/);
   assert.match(rules, /getAfter\([\s\S]*workshopAssets/);
+  assert.match(rules, /versionId == string\(request\.resource\.data\.version\)/);
+  assert.match(rules, /request\.resource\.data\.version <= resource\.data\.version \+ 1/);
   assert.match(rules, /match \/workshopFavorites\/\{assetId\}/);
   assert.match(rules, /match \/workshopImports\/\{assetId\}/);
   assert.match(rules, /match \/workshopCollections\/\{collectionId\}/);

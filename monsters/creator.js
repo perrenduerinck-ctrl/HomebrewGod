@@ -1,6 +1,5 @@
 import {
   assertMonsterMutationAccess,
-  assertNoStaleRevision,
   friendlyServiceError,
   getRecordRevisionMillis
 } from "../shared/securityPersistence.js";
@@ -32,6 +31,7 @@ import {
 } from "./bossTools.js";
 import { createMonsterMathPanel } from "./monsterMathPanel.js";
 import { requestAppConfirmation } from "../ui/visualPolish.js";
+import { createCreatorDraftLifecycle } from "../shared/creatorDraftLifecycle.js";
 
 export { parseMonsterNamedEntries, stableMonsterActionId } from "./entryEditor.js";
 
@@ -266,6 +266,7 @@ export function normalizeMonsterRecord(rawMonster) {
     "roomCode",
     "ownerUid",
     "ownerName",
+    "revision",
     "updatedAtMillis",
     "createdAt",
     "updatedAt"
@@ -582,6 +583,9 @@ export function createMonsterCreator(config) {
   }
 
   let selectedMonsterId = null;
+  let loadedMonsterRevision = 0;
+  let loadedMonsterUpdatedAtMillis = 0;
+  let remoteMonsterChanged = false;
   let monsters = [];
   let actionAnimations = {};
   let actionIdentities = {};
@@ -1104,6 +1108,13 @@ export function createMonsterCreator(config) {
         normalizeText(source.id) ||
         null;
     }
+    loadedMonsterRevision = selectedMonsterId
+      ? Math.max(0, Math.trunc(Number(source.revision) || 0))
+      : 0;
+    loadedMonsterUpdatedAtMillis = selectedMonsterId
+      ? getRecordRevisionMillis(source)
+      : 0;
+    remoteMonsterChanged = false;
 
     writeValue(elements.name, source.name);
     writeValue(elements.size, source.size);
@@ -1155,7 +1166,7 @@ export function createMonsterCreator(config) {
     return source;
   }
 
-  function newMonster() {
+  async function newMonster() {
     if (!canEdit()) {
       setStatus(
         "Players can view and export saved monsters, but only the room DM can edit."
@@ -1163,13 +1174,21 @@ export function createMonsterCreator(config) {
       return null;
     }
 
+    if (!await draftLifecycle.confirmReplacement("start a new monster")) {
+      return null;
+    }
+
     selectedMonsterId = null;
+    loadedMonsterRevision = 0;
+    loadedMonsterUpdatedAtMillis = 0;
+    remoteMonsterChanged = false;
     const monster =
       loadMonsterIntoForm(
         DEFAULT_MONSTER,
         false
       );
     setStatus("New monster ready.");
+    draftLifecycle.markClean();
     return monster;
   }
 
@@ -1246,6 +1265,7 @@ export function createMonsterCreator(config) {
           id: null,
           ownerUid:
             mutationIdentity.roomDmUid,
+          revision: 1,
           updatedAtMillis,
           createdAt:
             config.serverTimestamp(),
@@ -1258,6 +1278,7 @@ export function createMonsterCreator(config) {
       createdRef,
       {
         id: createdRef.id,
+        revision: 2,
         updatedAtMillis,
         updatedAt:
           config.serverTimestamp()
@@ -1265,9 +1286,13 @@ export function createMonsterCreator(config) {
     );
 
     selectedMonsterId = createdRef.id;
+    loadedMonsterRevision = 2;
+    loadedMonsterUpdatedAtMillis = updatedAtMillis;
+    remoteMonsterChanged = false;
     await syncMonsterLibraryIndex(createdRef.id, {
       ...monsterData,
       ownerUid: mutationIdentity.roomDmUid,
+      revision: 2,
       updatedAtMillis
     });
     return createdRef.id;
@@ -1315,41 +1340,64 @@ export function createMonsterCreator(config) {
       let saveStatus = "Monster saved.";
 
       if (selectedMonsterId) {
-        const validatedDocument =
-          await getValidatedMonsterDocument(
-            selectedMonsterId,
-            "update"
-          );
-
-        assertNoStaleRevision({
-          remoteRecord:
-            validatedDocument.data,
-          expectedRevisionMillis:
-            getRecordRevisionMillis(
-              existingMonster
-            ),
-          label: "monster"
-        });
-
+        if (typeof config.runTransaction !== "function") {
+          throw new Error("Atomic monster saving is unavailable. Reload the page and try again.");
+        }
         const updatedAtMillis = Date.now();
-        await config.updateDoc(
-          validatedDocument.ref,
-          {
+        const roomCode = getRoomCode();
+        const monsterId = selectedMonsterId;
+        const reference = config.doc(
+          config.db,
+          "rooms",
+          roomCode,
+          "monsters",
+          monsterId
+        );
+        const committed = await config.runTransaction(
+          config.db,
+          async (transaction) => {
+            const snapshot = await transaction.get(reference);
+            if (!snapshotExists(snapshot)) {
+              throw new Error("Cannot update this monster because the saved document no longer exists. Reload the monster library.");
+            }
+            const remote = snapshotData(snapshot);
+            if (normalizeText(remote.roomCode) !== roomCode) {
+              throw new Error("Cannot update this monster because it belongs to a different room.");
+            }
+            assertMonsterMutationAccess({
+              ...getMutationIdentity(),
+              ownerUid: remote.ownerUid || ""
+            });
+            const remoteRevision = Math.max(0, Math.trunc(Number(remote.revision) || 0));
+            const revisionMatches = remoteRevision > 0 || loadedMonsterRevision > 0
+              ? remoteRevision === loadedMonsterRevision
+              : getRecordRevisionMillis(remote) === loadedMonsterUpdatedAtMillis;
+            if (!revisionMatches) {
+              throw new Error("This monster changed in another tab. Your unsaved version is still in the editor; reload the saved monster before trying again.");
+            }
+            const next = {
             ...monsterData,
-            id: selectedMonsterId,
+            id: monsterId,
             ownerUid:
-              validatedDocument.data
-                .ownerUid ||
+              remote.ownerUid ||
               getMutationIdentity()
                 .roomDmUid,
+            revision: remoteRevision + 1,
             updatedAtMillis,
             updatedAt:
               config.serverTimestamp()
+            };
+            transaction.update(reference, next);
+            return next;
           }
         );
+        loadedMonsterRevision = committed.revision;
+        loadedMonsterUpdatedAtMillis = committed.updatedAtMillis;
+        remoteMonsterChanged = false;
         await syncMonsterLibraryIndex(selectedMonsterId, {
           ...monsterData,
-          ownerUid: validatedDocument.data.ownerUid || getMutationIdentity().roomDmUid,
+          ownerUid: committed.ownerUid,
+          revision: committed.revision,
           updatedAtMillis
         });
         saveStatus = "Monster updated.";
@@ -1385,6 +1433,7 @@ export function createMonsterCreator(config) {
         }
       }
 
+      draftLifecycle.markClean();
       setStatus(saveStatus);
 
       return selectedMonsterId;
@@ -1441,6 +1490,13 @@ export function createMonsterCreator(config) {
         await createMonsterDocument(
           monsterData
         );
+      loadMonsterIntoForm({
+        ...monsterData,
+        id: duplicatedId,
+        revision: loadedMonsterRevision,
+        updatedAtMillis: loadedMonsterUpdatedAtMillis
+      });
+      draftLifecycle.markClean();
       setStatus("Monster duplicated.");
       return duplicatedId;
     } catch (error) {
@@ -1525,15 +1581,16 @@ export function createMonsterCreator(config) {
           "delete"
         );
 
-      assertNoStaleRevision({
-        remoteRecord:
-          validatedDocument.data,
-        expectedRevisionMillis:
-          getRecordRevisionMillis(
-            monster
-          ),
-        label: "monster"
-      });
+      const remoteRevision = Math.max(
+        0,
+        Math.trunc(Number(validatedDocument.data.revision) || 0)
+      );
+      const revisionMatches = remoteRevision > 0 || loadedMonsterRevision > 0
+        ? remoteRevision === loadedMonsterRevision
+        : getRecordRevisionMillis(validatedDocument.data) === loadedMonsterUpdatedAtMillis;
+      if (!revisionMatches) {
+        throw new Error("This monster changed in another tab. Reload it before deleting; your current edits are still here.");
+      }
 
       await config.deleteDoc(
         validatedDocument.ref
@@ -1550,6 +1607,7 @@ export function createMonsterCreator(config) {
         DEFAULT_MONSTER,
         false
       );
+      draftLifecycle.markClean();
       setStatus("Monster deleted.");
       return true;
     } catch (error) {
@@ -1738,6 +1796,11 @@ export function createMonsterCreator(config) {
 
     if (!file) return null;
 
+    if (!await draftLifecycle.confirmReplacement("import this monster JSON")) {
+      event.target.value = "";
+      return null;
+    }
+
     try {
       const parsed =
         JSON.parse(
@@ -1870,11 +1933,15 @@ export function createMonsterCreator(config) {
       button.appendChild(meta);
       button.addEventListener(
         "click",
-        function () {
+        async function () {
+          if (!await draftLifecycle.confirmReplacement("open the selected monster")) {
+            return;
+          }
           loadMonsterIntoForm(
             monster,
             true
           );
+          draftLifecycle.markClean();
           setStatus(
             canEdit()
               ? "Loaded " +
@@ -1922,7 +1989,7 @@ export function createMonsterCreator(config) {
     realtimeListeners.connect(
       "monsters",
       roomCode,
-      ({ isCurrent }) => {
+      ({ fail, isCurrent }) => {
         return config.onSnapshot(
           config.collection(
             config.db,
@@ -1987,12 +2054,28 @@ export function createMonsterCreator(config) {
             })
           ) {
             selectedMonsterId = null;
+            loadedMonsterRevision = 0;
+            loadedMonsterUpdatedAtMillis = 0;
+            remoteMonsterChanged = false;
+          }
+
+          const currentRemote = monsters.find((monster) => monster.id === selectedMonsterId);
+          if (currentRemote && (
+            (Number(currentRemote.revision) || 0) !== loadedMonsterRevision ||
+            (
+              loadedMonsterRevision === 0 &&
+              getRecordRevisionMillis(currentRemote) !== loadedMonsterUpdatedAtMillis
+            )
+          )) {
+            remoteMonsterChanged = true;
           }
 
           renderMonsterList();
           syncPermissionState();
           setStatus(
-            canEdit()
+            remoteMonsterChanged
+              ? "This monster changed in another tab. Reload it from the library before saving; your current edits are still here."
+              : canEdit()
               ? "Monster Creator ready."
               : "Viewing saved monsters. Only the room DM can edit."
           );
@@ -2001,6 +2084,8 @@ export function createMonsterCreator(config) {
           if (!isCurrent()) {
             return;
           }
+
+          fail(error);
 
           console.error(
             "Could not load saved monsters:",
@@ -2023,7 +2108,10 @@ export function createMonsterCreator(config) {
     listeningRoomCode = null;
   }
 
-  function backToBattleMap() {
+  async function backToBattleMap() {
+    if (!await draftLifecycle.confirmReplacement("return to the battle map", { restoreBaseline: true })) {
+      return;
+    }
     if (
       typeof config.onBack ===
       "function"
@@ -2042,6 +2130,21 @@ export function createMonsterCreator(config) {
       battleUrl.toString()
     );
   }
+
+  const draftLifecycle = createCreatorDraftLifecycle({
+    root: elements.screen,
+    creatorId: "monster",
+    getUserId: () => config.getCurrentUserUid?.() || "",
+    getDraft: () => ({
+      ...readMonsterForm(),
+      id: selectedMonsterId,
+      revision: loadedMonsterRevision,
+      updatedAtMillis: loadedMonsterUpdatedAtMillis
+    }),
+    applyDraft: (draft) => loadMonsterIntoForm(draft, Boolean(draft?.id)),
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setStatus
+  });
 
   addDomListener(
     elements.newButton,
@@ -2145,11 +2248,15 @@ export function createMonsterCreator(config) {
     );
   }
 
+  draftLifecycle.markClean();
+  draftLifecycle.recover();
+
   subscribeToRoomMonsters();
 
   return {
     destroy: function () {
       cleanupListeners();
+      draftLifecycle.destroy();
       entryEditor?.destroy();
       spellcastingEditor?.destroy();
       bossTools?.destroy();
@@ -2180,6 +2287,9 @@ export function createMonsterCreator(config) {
     publishMonsterToWorkshop,
     browseWorkshopMonsters,
     deleteMonster,
+    confirmNavigation: function () {
+      return draftLifecycle.confirmReplacement("navigate away", { restoreBaseline: true });
+    },
     createMonsterToken,
     configureMonsterActionAnimation,
     useMonsterActionOnMap,

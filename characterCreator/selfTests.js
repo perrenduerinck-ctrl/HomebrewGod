@@ -402,6 +402,14 @@ export function runCharacterCreatorSelfTests(context) {
         values,
         metrics,
 
+        get length() {
+          return values.size;
+        },
+
+        key(index) {
+          return [...values.keys()][index] || null;
+        },
+
         getItem(key) {
           return values.has(key)
             ? values.get(key)
@@ -1547,6 +1555,29 @@ export function runCharacterCreatorSelfTests(context) {
       4321
     );
 
+    const normalizedRevisionEnvelope =
+      normalizeCharacter({
+        revision: 7,
+        updatedAtMillis: 6543,
+        identity: {
+          name: "Revision Round Trip"
+        }
+      });
+
+    record(
+      "Character normalization preserves optimistic concurrency metadata",
+      {
+        revision:
+          normalizedRevisionEnvelope.revision,
+        updatedAtMillis:
+          normalizedRevisionEnvelope.updatedAtMillis
+      },
+      {
+        revision: 7,
+        updatedAtMillis: 6543
+      }
+    );
+
     const sessionStorageMock =
       createSelfTestStorage();
 
@@ -1580,14 +1611,14 @@ export function runCharacterCreatorSelfTests(context) {
     const sessionStoredDraft =
       JSON.parse(
         sessionStorageMock.getItem(
-          getDraftStorageKey()
+          draftStorageTargets[0].key
         )
       );
 
     const persistentStoredDraft =
       JSON.parse(
         persistentStorageMock.getItem(
-          getPersistentDraftStorageKey()
+          draftStorageTargets[1].key
         )
       );
 
@@ -1631,12 +1662,12 @@ export function runCharacterCreatorSelfTests(context) {
         session:
           Boolean(
             sessionStorageMock.getItem(
-              getDraftStorageKey()
+              draftStorageTargets[0].key
             )
           ),
         persistent:
           persistentStorageMock.getItem(
-            getPersistentDraftStorageKey()
+            draftStorageTargets[1].key
           )
       },
       {
@@ -1646,13 +1677,13 @@ export function runCharacterCreatorSelfTests(context) {
     );
 
     sessionStorageMock.removeItem(
-      getDraftStorageKey()
+      draftStorageTargets[0].key
     );
 
     persistentStorageMock.setItem(
-      getPersistentDraftStorageKey(),
+      draftStorageTargets[1].key,
       JSON.stringify({
-        version: 2,
+        ...createDraftStorageRecord(),
         persistedAtMillis: 100,
         draft: {
           ...createEmptyCharacter(),
@@ -1713,6 +1744,71 @@ export function runCharacterCreatorSelfTests(context) {
         dirty: true
       }
     );
+
+    const originalUserResolver =
+      deps.getCurrentUserUid;
+
+    deps.getCurrentUserUid = () =>
+      "draft-account-a";
+    creatorState.currentCharacterId =
+      "tab-character-a";
+    const accountAKey =
+      getPersistentDraftStorageKey();
+    const accountARecord =
+      createDraftStorageRecord();
+    const accountStorage =
+      createSelfTestStorage({
+        seed: {
+          [accountAKey]:
+            JSON.stringify(accountARecord)
+        }
+      });
+
+    deps.getCurrentUserUid = () =>
+      "draft-account-b";
+
+    record(
+      "Browser drafts are isolated by signed-in account",
+      {
+        keysDiffer:
+          accountAKey !==
+            getPersistentDraftStorageKey(),
+        restoredAcrossAccounts:
+          Boolean(
+            readDraftStorageRecord({
+              name: "persistent",
+              label: "account A backup",
+              persistent: true,
+              key: accountAKey,
+              expectedDraftId:
+                "tab-character-a",
+              storage: accountStorage
+            })
+          )
+      },
+      {
+        keysDiffer: true,
+        restoredAcrossAccounts: false
+      }
+    );
+
+    deps.getCurrentUserUid = () =>
+      "draft-account-a";
+    creatorState.currentCharacterId =
+      "tab-character-b";
+    const accountATabBKey =
+      getPersistentDraftStorageKey();
+
+    record(
+      "Persistent browser backups are separate per character draft",
+      accountATabBKey !== accountAKey,
+      true
+    );
+
+    deps.getCurrentUserUid =
+      originalUserResolver;
+    creatorState.currentCharacterId =
+      "recovered-character-id";
 
     const quotaError =
       new Error(

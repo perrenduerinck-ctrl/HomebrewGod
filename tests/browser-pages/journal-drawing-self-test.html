@@ -11,13 +11,14 @@
     button, input, select { font: inherit; }
     #surface { position: relative; width: 900px; min-height: 520px; }
     #map { position: relative; width: 800px; height: 400px; margin: 60px 40px; background: #26304b; }
+    #mapImage { display: block; position: relative; width: 640px; height: 320px; margin: 40px 80px; transform-origin: center center; pointer-events: none; }
     #token { position: absolute; z-index: 300; left: 370px; top: 300px; width: 60px; height: 60px; }
     #journal { width: min(850px, calc(100vw - 40px)); padding: 20px; }
   </style>
 </head>
 <body>
   <div id="quick"></div>
-  <section id="surface"><div id="map"><button id="token" type="button">Token</button></div></section>
+  <section id="surface"><div id="map"><img id="mapImage" alt="Rectangular test map"><button id="token" type="button">Token</button></div></section>
   <div id="journal"></div>
   <script type="module">
     import { createMapDrawingSystem } from "../../battleMap/drawingTools.js";
@@ -117,6 +118,9 @@
     const serverTimestamp = () => "SERVER_TIMESTAMP";
     const fakeDb = { path: "db" };
     let mapId = "map-one";
+    let mapMode = "puzzle";
+    let mapZoom = 1;
+    let mapSpace = null;
     let tokenClicks = 0;
     document.querySelector("#token").addEventListener("click", () => { tokenClicks += 1; });
 
@@ -125,6 +129,7 @@
       surface: document.querySelector("#surface"),
       quickActions: document.querySelector("#quick"),
       mapViewer: document.querySelector("#map"),
+      mapImage: document.querySelector("#mapImage"),
       puzzleBoard: document.querySelector("#map"),
       db: fakeDb,
       collection,
@@ -141,8 +146,9 @@
       getMapContext: () => ({
         mapId,
         target: document.querySelector("#map"),
-        mode: "puzzle",
-        zoom: 1
+        mode: mapMode,
+        zoom: mapZoom,
+        space: mapSpace
       })
     });
     drawing.setContext({
@@ -205,8 +211,25 @@
           .filter((listener) => listener.active && listener.source.path.endsWith(sourceSuffix))
           .forEach((listener) => listener.next({ docs, metadata: { hasPendingWrites: false } }));
       },
+      emitDrawings(layer, records) {
+        const collectionName = layer === "dm" ? "dmDrawings" : "sharedDrawings";
+        const sourceSuffix = `/rooms/${drawing.getState().roomCode}/${collectionName}`;
+        const docs = records.map((record) => {
+          const path = `db${sourceSuffix}/${record.id}`;
+          documents.set(path, { ...record });
+          return { id: record.id, data: () => ({ ...record }) };
+        });
+        listeners
+          .filter((listener) => listener.active && listener.source.path.endsWith(sourceSuffix))
+          .forEach((listener) => listener.next({ docs, metadata: { hasPendingWrites: false } }));
+      },
       getTokenClicks: () => tokenClicks,
-      setMapId(value) { mapId = value; drawing.syncContext(); }
+      setMapId(value) { mapId = value; drawing.syncContext(); },
+      setMapContext({ id = mapId, mode = mapMode, zoom = mapZoom, space = mapSpace } = {}) {
+        mapId = id; mapMode = mode; mapZoom = zoom; mapSpace = space;
+        document.querySelector("#mapImage").style.transform = mode === "single" ? `scale(${zoom})` : "none";
+        drawing.syncContext();
+      }
     };
   </script>
 </body>

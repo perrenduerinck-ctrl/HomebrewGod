@@ -8,6 +8,10 @@ import {
 } from "./spellModel.js";
 import { spellAnimationSummary } from "../vfx/spellAnimationSection.js";
 import { requestAppConfirmation } from "../ui/visualPolish.js";
+import { setCreatorControlsBusy } from "../shared/creatorFormState.js";
+import { createCreatorDraftLifecycle } from "../shared/creatorDraftLifecycle.js";
+import { creatorSaveRefreshMessage } from "../shared/creatorRefreshState.js";
+import { createPaginatedCreatorLibrary } from "../shared/paginatedCreatorLibrary.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -141,9 +145,12 @@ export function createSpellCreator({
   const listeners = [];
   let selectedId = "";
   let createdAtMillis = 0;
+  let loadedRevision = 0;
   let animations = {};
   let records = [];
   let busy = false;
+  let refreshError = null;
+  const libraryPager = createPaginatedCreatorLibrary({ persistence });
 
   const on = (element, event, handler) => {
     element?.addEventListener(event, handler);
@@ -152,12 +159,13 @@ export function createSpellCreator({
   const setStatus = (message) => { statusRoot.textContent = message; };
   const setBusy = (value) => {
     busy = value;
-    for (const button of screen.querySelectorAll("button")) button.disabled = value;
+    setCreatorControlsBusy(screen, value);
   };
 
   function rawDraft() {
     return {
       id: selectedId,
+      revision: loadedRevision,
       createdAtMillis,
       name: field("name").value,
       level: field("level").value,
@@ -202,6 +210,7 @@ export function createSpellCreator({
   function applySpell(raw = {}) {
     const spell = normalizeHomebrewSpell(raw);
     selectedId = raw.id ? spell.id : "";
+    loadedRevision = raw.id ? spell.revision : 0;
     createdAtMillis = raw.createdAtMillis ? spell.createdAtMillis : 0;
     field("name").value = raw.name || "";
     field("level").value = String(spell.level);
@@ -243,22 +252,41 @@ export function createSpellCreator({
 
   function renderLibrary() {
     const visible = visibleRecords();
-    libraryRoot.innerHTML = visible.length ? visible.map((spell) => `<button type="button" data-library-spell-id="${escapeHtml(spell.id)}" class="${spell.id === selectedId ? "selected" : ""}">
+    const pageState = libraryPager.getState();
+    const entries = visible.length ? visible.map((spell) => `<button type="button" data-library-spell-id="${escapeHtml(spell.id)}" class="${spell.id === selectedId ? "selected" : ""}">
       <span aria-hidden="true">${spell.level || "C"}</span><span><strong>${escapeHtml(spell.name)}</strong><small>${escapeHtml(spellLevelLabel(spell.level))} · ${escapeHtml(spell.school)}${spell.damageType ? ` · ${escapeHtml(spell.damageType)}` : ""}</small></span>
-    </button>`).join("") : `<p class="spell-creator-empty">No personal spells match these filters.</p>`;
+    </button>`).join("") : `<p class="spell-creator-empty">${refreshError ? "Saved spells remain unavailable. Use Refresh to retry." : "No personal spells match these filters."}</p>`;
+    libraryRoot.innerHTML = entries + (records.length ? `<div class="spell-creator-library-more"><small>${records.length} spell${records.length === 1 ? "" : "s"} loaded${pageState.hasMore ? "; filters apply to loaded spells" : ""}</small>${pageState.hasMore ? `<button type="button" data-spell-action="load-more">Load more</button>` : ""}</div>` : "");
   }
 
   async function refresh() {
+    refreshError = null;
     try {
-      records = await persistence.list();
+      records = (await libraryPager.refresh()).records;
       renderLibrary();
       return records;
     } catch (error) {
-      records = [];
+      refreshError = error;
+      records = libraryPager.getState().records;
       renderLibrary();
       setStatus(`Spell Library could not load: ${error.message}`);
-      return [];
+      return records;
     }
+  }
+
+  async function loadMore() {
+    if (!libraryPager.getState().hasMore) return records;
+    setStatus("Loading more spells…");
+    try {
+      records = (await libraryPager.loadMore()).records;
+      renderLibrary();
+      setStatus(`${records.length} spells loaded.`);
+    } catch (error) {
+      records = libraryPager.getState().records;
+      renderLibrary();
+      setStatus(`More spells could not load: ${error.message}`);
+    }
+    return records;
   }
 
   async function save() {
@@ -269,8 +297,9 @@ export function createSpellCreator({
     setBusy(true); setStatus("Saving to My Library…");
     try {
       const saved = await persistence.save(draft);
-      applySpell(saved); await refresh();
-      setStatus(`${saved.name} saved to My Library.`);
+      records = libraryPager.retain(saved).records;
+      applySpell(saved); draftLifecycle.markClean(); renderLibrary(); await refresh();
+      setStatus(refreshError ? creatorSaveRefreshMessage(saved.name, refreshError) : `${saved.name} saved to My Library.`);
       return saved;
     } catch (error) { setStatus(`Spell could not be saved: ${error.message}`); return null; }
     finally { setBusy(false); }
@@ -282,14 +311,15 @@ export function createSpellCreator({
     setBusy(true);
     try {
       await persistence.remove(selectedId);
-      applySpell({}); await refresh(); setStatus("Spell deleted."); return true;
+      libraryPager.remove(selectedId);
+      applySpell({}); draftLifecycle.markClean(); await refresh(); setStatus("Spell deleted."); return true;
     } catch (error) { setStatus(`Spell could not be deleted: ${error.message}`); return false; }
     finally { setBusy(false); }
   }
 
   function duplicate() {
     const draft = rawDraft();
-    applySpell({ ...draft, id: "", createdAtMillis: 0, name: `${draft.name || "Spell"} Copy` });
+    applySpell({ ...draft, id: "", revision: 0, createdAtMillis: 0, name: `${draft.name || "Spell"} Copy` });
     setStatus("Independent copy ready. Save it to add it to My Library.");
   }
 
@@ -322,26 +352,38 @@ export function createSpellCreator({
     finally { setBusy(false); }
   }
 
+  const draftLifecycle = createCreatorDraftLifecycle({
+    root: screen,
+    creatorId: "spell",
+    getUserId,
+    getDraft: rawDraft,
+    applyDraft: applySpell,
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setStatus
+  });
+
   on(form, "input", renderPreview);
   for (const control of screen.querySelectorAll("[data-spell-filter]")) on(control, "input", renderLibrary);
   on(libraryRoot, "click", async (event) => {
     const button = event.target.closest("[data-library-spell-id]");
     if (!button) return;
-    try { applySpell(await persistence.load(button.dataset.librarySpellId)); renderLibrary(); setStatus("Saved spell loaded."); }
+    if (!await draftLifecycle.confirmReplacement("open the selected spell")) return;
+    try { applySpell(await persistence.load(button.dataset.librarySpellId)); draftLifecycle.markClean(); renderLibrary(); setStatus("Saved spell loaded."); }
     catch (error) { setStatus(error.message); }
   });
-  on(screen, "click", (event) => {
+  on(screen, "click", async (event) => {
     const button = event.target.closest("[data-spell-action]");
     if (!button) return;
     const action = button.dataset.spellAction;
-    if (action === "back") onBack();
-    if (action === "new") { applySpell({}); setStatus("New spell ready."); }
+    if (action === "back" && await draftLifecycle.confirmReplacement("return to the battle map", { restoreBaseline: true })) onBack();
+    if (action === "new" && await draftLifecycle.confirmReplacement("start a new spell")) { applySpell({}); draftLifecycle.markClean(); setStatus("New spell ready."); }
     if (action === "save") void save();
     if (action === "duplicate") duplicate();
     if (action === "delete") void remove();
     if (action === "publish") publish();
     if (action === "browse") onBrowseWorkshop({ assetType: "spell", tab: "browse" });
     if (action === "refresh") void refresh();
+    if (action === "load-more") void loadMore();
     if (action === "animations") void editAnimations(false);
     if (action === "preview-animations") void editAnimations(true);
     if (action === "add-character") void (async () => {
@@ -353,6 +395,8 @@ export function createSpellCreator({
   });
 
   applySpell({});
+  draftLifecycle.markClean();
+  draftLifecycle.recover();
   void refresh();
   return Object.freeze({
     refresh,
@@ -360,10 +404,17 @@ export function createSpellCreator({
     remove,
     getDraft: rawDraft,
     async editAnimations(previewOnly = false) { return editAnimations(previewOnly); },
-    openSpell(spell, { duplicate: makeCopy = false } = {}) {
-      applySpell(makeCopy ? { ...spell, id: "", createdAtMillis: 0, name: `${spell?.name || "Spell"} Copy` } : spell);
+    async openSpell(spell, { duplicate: makeCopy = false } = {}) {
+      if (!await draftLifecycle.confirmReplacement("open another spell")) return false;
+      applySpell(makeCopy ? { ...spell, id: "", revision: 0, createdAtMillis: 0, name: `${spell?.name || "Spell"} Copy` } : spell);
+      if (makeCopy) draftLifecycle.markChanged();
+      else draftLifecycle.markClean();
       setStatus(makeCopy ? "Independent copy opened. Save it to My Library." : "Spell opened.");
+      return true;
     },
-    destroy() { listeners.forEach((removeListener) => removeListener()); }
+    confirmNavigation() {
+      return draftLifecycle.confirmReplacement("navigate away", { restoreBaseline: true });
+    },
+    destroy() { draftLifecycle.destroy(); listeners.forEach((removeListener) => removeListener()); }
   });
 }

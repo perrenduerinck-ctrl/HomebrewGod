@@ -43,3 +43,16 @@ test("Magic Item Creator duplicates independently and fits a mobile viewport", a
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test("a saved item stays visible and reports when the follow-up library refresh fails", async ({ page }) => {
+  await page.goto("/tests/browser-pages/magic-item-creator-self-test.html");
+  await page.locator('[data-item-field="name"]').fill("Offline Acknowledged Blade");
+  await page.evaluate(() => window.failNextMagicItemList());
+
+  await page.getByRole("button", { name: "Save to My Library" }).click();
+
+  await expect(page.locator("[data-item-library]")).toContainText("Offline Acknowledged Blade");
+  await expect(page.locator("[data-item-status]")).toContainText("was saved, but the library list could not refresh");
+  await expect(page.locator("[data-item-status]")).toContainText("Use Refresh to retry");
+  expect(await page.evaluate(() => window.magicItemRecords().length)).toBe(1);
+});

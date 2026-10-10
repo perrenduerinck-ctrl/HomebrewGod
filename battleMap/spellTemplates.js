@@ -41,7 +41,7 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
   // Saved custom spells retain plain range/area fields. Derive the same
   // targeting schema used by the catalog at this shared preview/cast boundary.
   // Explicit targeting remains authoritative; unknown ranges still fail safely.
-  const targeting = spell.targeting || (spell.source === "custom" ? createSpellTargetingData(spell) : null);
+  const targeting = spell.targeting || createSpellTargetingData(spell);
   const area = targeting?.area;
   const templateShape = SHAPE_MAP[area?.shape];
   const targetType = cleanText(

@@ -45,12 +45,16 @@ export function normalizeDrawingPoint(point = {}) {
   };
 }
 
-export function clientPointToDrawingSpace(rect, clientX, clientY) {
+export function clientPointToDrawingSpace(rect, clientX, clientY, space = null) {
   const width = Math.max(1, Number(rect?.width) || 1);
   const height = Math.max(1, Number(rect?.height) || 1);
+  const spaceX = Number(space?.x) || 0;
+  const spaceY = Number(space?.y) || 0;
+  const spaceWidth = Math.max(0.0001, Number(space?.width) || 1000);
+  const spaceHeight = Math.max(0.0001, Number(space?.height) || 1000);
   return normalizeDrawingPoint({
-    x: ((Number(clientX) - (Number(rect?.left) || 0)) / width) * 1000,
-    y: ((Number(clientY) - (Number(rect?.top) || 0)) / height) * 1000
+    x: spaceX + ((Number(clientX) - (Number(rect?.left) || 0)) / width) * spaceWidth,
+    y: spaceY + ((Number(clientY) - (Number(rect?.top) || 0)) / height) * spaceHeight
   });
 }
 
@@ -76,6 +80,9 @@ export function normalizeDrawingStroke(value = {}, context = {}) {
     mapId: cleanId(value.mapId || context.mapId, "current-map"),
     authorUid: cleanId(value.authorUid || context.userId),
     authorName: String(value.authorName || context.userName || "Player").slice(0, 160),
+    originalAuthorUid: cleanId(value.originalAuthorUid),
+    originalAuthorName: String(value.originalAuthorName || "").slice(0, 160),
+    restoredByUid: cleanId(value.restoredByUid),
     layer,
     tool,
     color,
@@ -93,16 +100,31 @@ export function normalizeDrawingStroke(value = {}, context = {}) {
 export function simplifyDrawingPoints(points, minimumDistance = 3) {
   const normalized = Array.isArray(points) ? points.map(normalizeDrawingPoint) : [];
   if (normalized.length <= 2) return normalized;
-  const kept = [normalized[0]];
-  for (let index = 1; index < normalized.length - 1; index += 1) {
-    const previous = kept[kept.length - 1];
-    const next = normalized[index];
-    const distance = Math.hypot(next.x - previous.x, next.y - previous.y);
-    if (distance >= minimumDistance) kept.push(next);
-    if (kept.length >= MAX_DRAWING_POINTS - 1) break;
+
+  function simplifyAtTolerance(tolerance) {
+    const kept = [normalized[0]];
+    for (let index = 1; index < normalized.length - 1; index += 1) {
+      const previous = kept[kept.length - 1];
+      const next = normalized[index];
+      if (Math.hypot(next.x - previous.x, next.y - previous.y) >= tolerance) {
+        kept.push(next);
+      }
+    }
+    kept.push(normalized[normalized.length - 1]);
+    return kept;
   }
-  kept.push(normalized[normalized.length - 1]);
-  return kept.slice(0, MAX_DRAWING_POINTS);
+
+  let tolerance = Math.max(0.25, Number(minimumDistance) || 3);
+  let kept = simplifyAtTolerance(tolerance);
+  while (kept.length > MAX_DRAWING_POINTS && tolerance < 2000) {
+    tolerance *= 1.5;
+    kept = simplifyAtTolerance(tolerance);
+  }
+  if (kept.length <= MAX_DRAWING_POINTS) return kept;
+
+  return Array.from({ length: MAX_DRAWING_POINTS }, (_, index) => (
+    kept[Math.round(index * (kept.length - 1) / (MAX_DRAWING_POINTS - 1))]
+  ));
 }
 
 export function stableDrawingMapId(value) {

@@ -1,4 +1,5 @@
 import { normalizeSpellAnimations } from "../vfx/animationReferences.js";
+import { createSpellTargetingData } from "../data/spellTargeting.js";
 
 export const SPELL_SCHOOLS = Object.freeze([
   "Abjuration", "Conjuration", "Divination", "Enchantment", "Evocation",
@@ -53,16 +54,36 @@ export function normalizeHomebrewSpell(raw = {}, {
   const damageType = normalizedDamageType(source.damageType || source.damage?.type || source.damage?.damage_type?.name);
   const createdAtMillis = Number(source.createdAtMillis) || now;
   const animations = normalizeSpellAnimations(source.animations || {});
+  const range = clean(source.range, 160) || "Self";
+  const duration = clean(source.duration, 160) || "Instantaneous";
+  const attackType = clean(source.attackType, 40).toLowerCase();
+  const saveAbility = clean(source.saveAbility, 20).toLowerCase();
+  const saveSuccess = clean(source.saveSuccess, 40).toLowerCase();
+  const targeting =
+    source.targeting &&
+    typeof source.targeting === "object"
+      ? clone(source.targeting)
+      : createSpellTargetingData({
+          ...source,
+          id: spellId(source.id, name),
+          name,
+          range,
+          duration,
+          attackType,
+          saveAbility,
+          saveSuccess
+        });
 
   return Object.freeze({
     id: spellId(source.id, idFactory()),
+    revision: Math.max(0, Math.trunc(Number(source.revision) || 0)),
     name,
     level,
     school: normalizedSchool(source.school),
     classes: Object.freeze(classes),
     castingTime: clean(source.castingTime, 160) || "1 action",
-    range: clean(source.range, 160) || "Self",
-    duration: clean(source.duration, 160) || "Instantaneous",
+    range,
+    duration,
     components,
     componentLetters: Object.freeze(componentLetters),
     material: clean(source.material, 1000),
@@ -71,14 +92,14 @@ export function normalizeHomebrewSpell(raw = {}, {
     higherLevel: clean(source.higherLevel || source.atHigherLevels, 6000),
     damageType,
     damageDice: clean(source.damageDice || source.damage?.dice, 120),
-    attackType: clean(source.attackType, 40).toLowerCase(),
-    saveAbility: clean(source.saveAbility, 20).toLowerCase(),
-    saveSuccess: clean(source.saveSuccess, 40).toLowerCase(),
+    attackType,
+    saveAbility,
+    saveSuccess,
     concentration: source.concentration === true,
     ritual: source.ritual === true,
     tags: Object.freeze([...new Set(cleanList(source.tags, 20).map((entry) => entry.toLowerCase()))]),
     animations: Object.freeze(clone(animations)),
-    targeting: source.targeting && typeof source.targeting === "object" ? Object.freeze(clone(source.targeting)) : null,
+    targeting: Object.freeze(targeting),
     areaOfEffect: source.areaOfEffect && typeof source.areaOfEffect === "object" ? Object.freeze(clone(source.areaOfEffect)) : null,
     damage: source.damage && typeof source.damage === "object" ? Object.freeze(clone(source.damage)) : null,
     source: clean(source.source, 80) || "custom",

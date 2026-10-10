@@ -66,7 +66,8 @@ export function reconcileInitiativeTimeState(
 
 export function buildInitiativeRoomTransition(
   room,
-  command
+  command,
+  { getEffectiveBaseSpeed = null } = {}
 ) {
   const previousInitiativeState =
     normalizeInitiativeState(room);
@@ -86,6 +87,10 @@ export function buildInitiativeRoomTransition(
       combatant.tokenId === initiativeResult.state.currentCombatantId
     )
   );
+  const effectiveBaseSpeed =
+    typeof getEffectiveBaseSpeed === "function" && activeCombatant
+      ? getEffectiveBaseSpeed(activeCombatant)
+      : activeCombatant?.baseSpeed;
   // Previous Turn deliberately starts a valid, fresh budget for the
   // restored actor. Token positions are not rewound in this first version.
   const movementState = synchronizeMovementState(
@@ -93,7 +98,7 @@ export function buildInitiativeRoomTransition(
     initiativeResult.state,
     {
       activeToken: activeCombatant || null,
-      baseSpeed: activeCombatant?.baseSpeed,
+      baseSpeed: effectiveBaseSpeed,
       tokenExists:
         !initiativeResult.state.combatActive || Boolean(activeCombatant)
     }

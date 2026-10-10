@@ -67,6 +67,7 @@ export function normalizeMagicItem(raw = {}, { idFactory = () => globalThis.cryp
 
   return Object.freeze({
     id,
+    revision: Math.max(0, Math.trunc(Number(source.revision) || 0)),
     name: clean(source.name, 120) || "Unnamed Magic Item",
     itemType: normalizeType(source.itemType || source.type),
     rarity: normalizeRarity(source.rarity),

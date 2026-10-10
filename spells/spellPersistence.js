@@ -1,4 +1,5 @@
 import { normalizeHomebrewSpell, validateHomebrewSpell } from "./spellModel.js";
+import { saveRevisionedRecord } from "../shared/revisionedPersistence.js";
 
 const docsOf = (snapshot) => Array.isArray(snapshot?.docs) ? snapshot.docs : [];
 const mutableSpell = (spell) => ({
@@ -13,7 +14,7 @@ const mutableSpell = (spell) => ({
 });
 
 export function createSpellPersistence({
-  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp,
+  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
   getUserId = () => "", now = () => Date.now()
 } = {}) {
   const requireUid = () => {
@@ -35,8 +36,11 @@ export function createSpellPersistence({
       updatedAtMillis: now()
     };
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
-    await setDoc(spellRef(uid, spell.id), record, { merge: true });
-    return normalizeHomebrewSpell(record, { now: record.updatedAtMillis });
+    const committed = await saveRevisionedRecord({
+      db, reference: spellRef(uid, spell.id), raw, record,
+      label: "spell", runTransaction, getDoc, setDoc
+    });
+    return normalizeHomebrewSpell(committed, { now: committed.updatedAtMillis });
   }
 
   async function load(spellId) {

@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createRealtimeListenerRegistry
+  createRealtimeListenerRegistry,
+  isTerminalRealtimeError
 } from "../shared/realtimeListeners.js";
 
 test("realtime listeners reuse one subscription for the same scope", () => {
@@ -84,4 +85,51 @@ test("stop and stopAll unsubscribe each active listener exactly once", () => {
   assert.deepEqual(stopped, ["room", "tokens"]);
   assert.deepEqual(stopErrors, []);
   assert.equal(registry.getSnapshot().activeCount, 0);
+});
+
+test("a failed subscription is removed so the same scope can reconnect", () => {
+  const registry = createRealtimeListenerRegistry();
+  const failures = [];
+  let subscriptions = 0;
+  let unsubscriptions = 0;
+
+  function subscribe({ fail }) {
+    subscriptions += 1;
+    failures.push(fail);
+    return () => {
+      unsubscriptions += 1;
+    };
+  }
+
+  registry.connect("room", "ROOM-A", subscribe);
+  const result = failures[0]({
+    code: "permission-denied"
+  });
+
+  assert.deepEqual(result, {
+    handled: true,
+    terminal: true
+  });
+  assert.equal(registry.has("room", "ROOM-A"), false);
+  assert.equal(registry.getSnapshot().metrics.failed, 1);
+
+  assert.equal(
+    registry.connect("room", "ROOM-A", subscribe),
+    true
+  );
+  assert.equal(subscriptions, 2);
+  assert.equal(unsubscriptions, 0);
+});
+
+test("terminal realtime errors are classified without treating outages as permission failures", () => {
+  assert.equal(
+    isTerminalRealtimeError({
+      code: "firestore/permission-denied"
+    }),
+    true
+  );
+  assert.equal(
+    isTerminalRealtimeError({ code: "unavailable" }),
+    false
+  );
 });

@@ -15,12 +15,12 @@ const docsOf = (snapshot) => Array.isArray(snapshot?.docs) ? snapshot.docs : [];
 export function createWorkshopPersistence(options = {}) {
   const {
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, where, limit, startAfter, serverTimestamp, writeBatch,
+    query, where, limit, startAfter, serverTimestamp, runTransaction,
     getUserId = () => "", getUserName = () => "", getRoomCode = () => "",
     publicBrowse = false,
     idFactory = () => globalThis.crypto.randomUUID()
   } = options;
-  const configured = [collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, limit]
+  const configured = [collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, limit, runTransaction]
     .every((entry) => typeof entry === "function");
   if (!configured) throw new Error("Workshop persistence is not configured.");
 
@@ -48,52 +48,66 @@ export function createWorkshopPersistence(options = {}) {
 
   async function publish(input = {}, { assetId = "", mode = "new-version" } = {}) {
     const actor = requireUser();
-    let existing = null;
-    let resolvedId = String(assetId || input.assetId || "").trim();
-    if (resolvedId) {
-      existing = await getSummary(resolvedId);
-      if (!existing) throw new Error("That published Workshop asset no longer exists.");
-      if (existing.authorUid !== actor.uid) throw new Error("Only the author can update this Workshop asset.");
-    } else resolvedId = newId("asset");
-    const version = existing ? nextWorkshopVersion(existing.version, mode) : 1;
-    const normalized = normalizeWorkshopAsset({
-      ...existing,
-      ...input,
-      assetId: resolvedId,
-      version,
-      forkedFrom: input.forkedFrom ?? existing?.forkedFrom ?? null,
-      content: input.content
-    }, actor);
-    const nowMillis = Date.now();
-    const createdAt = existing?.createdAt || stamp();
-    const createdAtMillis = existing?.createdAtMillis || nowMillis;
-    const updatedAt = stamp();
-    const versionDocument = {
-      assetId: resolvedId,
-      version,
-      authorUid: actor.uid,
-      createdAt: updatedAt,
-      createdAtMillis: nowMillis,
-      content: normalized.content
-    };
-    const summary = createWorkshopSummary(normalized, {
-      createdAt, updatedAt, createdAtMillis, updatedAtMillis: nowMillis
-    });
-    if (actor.uid !== context().uid) throw new Error("Your account changed while publishing. Try again.");
-    if (typeof writeBatch === "function") {
-      const batch = writeBatch(db);
-      batch.set(versionRef(resolvedId, version), versionDocument);
-      batch.set(summaryRef(resolvedId), summary);
-      await batch.commit();
-    } else {
-      await setDoc(summaryRef(resolvedId), summary);
-      try { await setDoc(versionRef(resolvedId, version), versionDocument); }
-      catch (error) {
-        if (!existing) await deleteDoc(summaryRef(resolvedId)).catch(() => {});
-        throw error;
+    const requestedId = String(assetId || input.assetId || "").trim();
+    const resolvedId = requestedId || newId("asset");
+
+    return runTransaction(db, async (transaction) => {
+      const summaryReference = summaryRef(resolvedId);
+      const summarySnapshot = await transaction.get(summaryReference);
+      const existing = exists(summarySnapshot)
+        ? { ...dataOf(summarySnapshot), assetId: summarySnapshot.id || resolvedId }
+        : null;
+
+      if (requestedId && !existing) {
+        throw new Error("That published Workshop asset no longer exists.");
       }
-    }
-    return { ...summary, content: normalized.content };
+      if (!requestedId && existing) {
+        throw new Error("A Workshop asset already uses that generated ID. Try again.");
+      }
+      if (existing?.authorUid !== undefined && existing.authorUid !== actor.uid) {
+        throw new Error("Only the author can update this Workshop asset.");
+      }
+
+      const version = existing ? nextWorkshopVersion(existing.version, mode) : 1;
+      const versionReference = versionRef(resolvedId, version);
+      const versionSnapshot = await transaction.get(versionReference);
+      const replacingCurrentVersion = Boolean(existing) && mode !== "new-version";
+
+      if (!replacingCurrentVersion && exists(versionSnapshot)) {
+        throw new Error("That Workshop version already exists. Reload and try again.");
+      }
+      if (actor.uid !== context().uid) {
+        throw new Error("Your account changed while publishing. Try again.");
+      }
+
+      const normalized = normalizeWorkshopAsset({
+        ...existing,
+        ...input,
+        assetId: resolvedId,
+        version,
+        forkedFrom: input.forkedFrom ?? existing?.forkedFrom ?? null,
+        content: input.content
+      }, actor);
+      const nowMillis = Date.now();
+      const createdAt = existing?.createdAt || stamp();
+      const createdAtMillis = existing?.createdAtMillis || nowMillis;
+      const updatedAt = stamp();
+      const versionDocument = {
+        assetId: resolvedId,
+        version,
+        authorUid: actor.uid,
+        createdAt: updatedAt,
+        createdAtMillis: nowMillis,
+        content: normalized.content
+      };
+      const summary = createWorkshopSummary(normalized, {
+        createdAt, updatedAt, createdAtMillis, updatedAtMillis: nowMillis
+      });
+
+      transaction.set(versionReference, versionDocument);
+      transaction.set(summaryReference, summary);
+      return { ...summary, content: normalized.content };
+    });
   }
 
   async function loadAsset(assetId, requestedVersion = null) {

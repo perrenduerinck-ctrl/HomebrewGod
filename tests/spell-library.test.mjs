@@ -56,13 +56,24 @@ test("homebrew spells normalize mechanics and animation references without mutat
 });
 
 test("character spell copies get independent IDs and retain mechanics and animation stages", () => {
-  const source = normalizeHomebrewSpell({ id: "ward", name: "Ward", level: 2, classes: ["Wizard"], animations: { sustain: "ward-loop" } });
+  const source = normalizeHomebrewSpell({
+    id: "ward",
+    name: "Ward",
+    level: 2,
+    classes: ["Wizard"],
+    range: "60 feet",
+    attackType: "ranged",
+    animations: { sustain: "ward-loop" }
+  });
   const first = homebrewSpellToCharacterCopy(source, { idFactory: () => "character-spell-1" });
   const second = homebrewSpellToCharacterCopy(source, { idFactory: () => "character-spell-2" });
   assert.notEqual(first.id, second.id);
   assert.equal(first.sourceLibrarySpellId, "ward");
   assert.equal(first.animations.sustain, "ward-loop");
   assert.equal(first.manualOverride, true);
+  assert.equal(first.targeting.range.feet, 60);
+  assert.equal(first.targeting.target.type, "creature");
+  assert.equal(first.targeting.attack.type, "ranged");
 });
 
 test("personal spell persistence saves, pages, reloads and deletes", async () => {

@@ -18,6 +18,14 @@ function memoryFirestore() {
   const doc = (_db, ...segments) => ref("document", path(segments));
   const getDoc = async (reference) => ({ id: reference.id, exists: () => records.has(reference.path), data: () => structuredClone(records.get(reference.path) || {}) });
   const setDoc = async (reference, value, options = {}) => records.set(reference.path, structuredClone(options.merge ? { ...(records.get(reference.path) || {}), ...value } : value));
+  const runTransaction = async (_database, work) => work({
+    get: getDoc,
+    set(reference, value, options = {}) {
+      records.set(reference.path, structuredClone(options.merge
+        ? { ...(records.get(reference.path) || {}), ...value }
+        : value));
+    }
+  });
   const deleteDoc = async (reference) => records.delete(reference.path);
   const orderBy = (field, direction = "asc") => ({ type: "orderBy", field, direction });
   const limit = (value) => ({ type: "limit", value });
@@ -34,7 +42,7 @@ function memoryFirestore() {
     }
     return { docs };
   };
-  return { db, records, collection, doc, getDoc, getDocs, setDoc, deleteDoc, orderBy, limit, startAfter, query, serverTimestamp: () => "SERVER" };
+  return { db, records, collection, doc, getDoc, getDocs, setDoc, deleteDoc, orderBy, limit, startAfter, query, runTransaction, serverTimestamp: () => "SERVER" };
 }
 
 test("magic items normalize creator fields without changing source data", () => {
@@ -76,6 +84,33 @@ test("personal magic item persistence saves, pages, reloads and deletes", async 
   assert.deepEqual((await persistence.listPage({ pageSize: 10 })).entries.map((item) => item.id), ["staff"]);
   await persistence.remove("staff");
   assert.equal(store.records.has("users/user-1/magicItems/staff"), false);
+});
+
+test("personal library revisions reject stale saves from another tab", async () => {
+  const store = memoryFirestore();
+  let now = 200;
+  const persistence = createMagicItemPersistence({
+    ...store,
+    getUserId: () => "user-1",
+    now: () => ++now
+  });
+  const created = await persistence.save({
+    id: "shared-staff",
+    name: "Shared Staff",
+    itemType: "weapon",
+    rarity: "rare",
+    effects: []
+  });
+  assert.equal(created.revision, 1);
+  const tabA = await persistence.load(created.id);
+  const tabB = await persistence.load(created.id);
+  const newer = await persistence.save({ ...tabB, description: "Saved by B" });
+  assert.equal(newer.revision, 2);
+  await assert.rejects(
+    persistence.save({ ...tabA, description: "Stale save by A" }),
+    /changed in another tab/i
+  );
+  assert.equal((await persistence.load(created.id)).description, "Saved by B");
 });
 
 test("magic item Library adapter returns lightweight cards and lazily loads effects", async () => {

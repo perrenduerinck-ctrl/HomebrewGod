@@ -82,6 +82,7 @@ export function normalizeNpc(raw = {}, {
   const knownInformation = clean(source.knownInformation, 8000);
   return Object.freeze({
     id: safeId(source.id, idFactory()),
+    revision: Math.max(0, Math.trunc(Number(source.revision) || 0)),
     name: clean(source.name, 120) || "Unnamed NPC",
     portraitUrl: safeUrl(source.portraitUrl || source.portrait || source.imageUrl),
     description: clean(source.description, 8000),
@@ -144,6 +145,7 @@ export function duplicateNpc(raw, {
   return normalizeNpc({
     ...clone(npc),
     id: idFactory(),
+    revision: 0,
     name: `${npc.name} Copy`,
     roomCode: roomCode === undefined ? npc.roomCode : roomCode,
     roomName: roomName === undefined ? npc.roomName : roomName,

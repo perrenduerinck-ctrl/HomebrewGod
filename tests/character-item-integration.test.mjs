@@ -187,6 +187,14 @@ test("saved-character transfer persistence updates both inventories atomically",
   assert.equal(writes[0].patch.equipment.items.length, 0);
   assert.equal(writes[1].patch.equipment.items[0].id, "transferred-copy");
   assert.equal(writes[1].patch.equipment.items[0].equipped, false);
+  assert.equal(writes[0].patch.builder.lastSavedAtMillis, 300);
+  assert.equal(writes[1].patch.builder.lastSavedAtMillis, 300);
+  assert.equal(result.sourceCharacter.updatedAtMillis, 300);
+  assert.equal(result.sourceCharacter.builder.lastSavedAtMillis, 300);
+  assert.equal(result.sourceCharacter.revision, 1);
+  assert.equal(result.targetCharacter.updatedAtMillis, 300);
+  assert.equal(result.targetCharacter.builder.lastSavedAtMillis, 300);
+  assert.equal(result.targetCharacter.revision, 1);
   assert.equal(result.transferredItem.attuned, false);
   assert.equal(records.get("rooms/ROOM/characters/hero-a").identity.name, "hero-a");
   assert.equal(records.get("rooms/ROOM/characters/hero-b").equipment.notes, "preserve me");

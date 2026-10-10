@@ -272,6 +272,47 @@ test("resolution reports concentration and attack/save mechanics without rolling
   );
 });
 
+test("homebrew flat spell fields resolve damage, save and attack mechanics", () => {
+  const resolution = createCastResolution({
+    spell: {
+      id: "cinder-bolt",
+      name: "Cinder Bolt",
+      damageDice: "1d8",
+      damageType: "fire",
+      saveAbility: "dex",
+      saveSuccess: "half",
+      attackType: "ranged"
+    },
+    spellSaveDc: 14,
+    spellAttackBonus: 0
+  });
+
+  assert.deepEqual(resolution.damage, ["1d8 fire"]);
+  assert.deepEqual(resolution.save, {
+    ability: "dex",
+    dc: 14,
+    success: "half"
+  });
+  assert.deepEqual(resolution.attack, {
+    type: "ranged",
+    bonus: 0
+  });
+});
+
+test("unknown save DC and attack bonus stay unknown instead of becoming zero", () => {
+  const resolution = createCastResolution({
+    spell: {
+      saveAbility: "wis",
+      attackType: "ranged"
+    },
+    spellSaveDc: null,
+    spellAttackBonus: ""
+  });
+
+  assert.equal(resolution.save.dc, null);
+  assert.equal(resolution.attack.bonus, null);
+});
+
 test("active concentration is normalized and can be ended explicitly", () => {
   const character = {
     combat: {

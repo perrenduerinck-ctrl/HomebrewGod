@@ -329,6 +329,19 @@
           emitMonsterSnapshot();
         }
       },
+      runTransaction: async function (_database, operation) {
+        return operation({
+          get: creatorConfig.getDoc,
+          update: function (reference, patch) {
+            const record = storedMonsters.find(function (entry) {
+              return entry.id === reference.id;
+            });
+            if (!record) throw new Error("Missing monster transaction target.");
+            Object.assign(record, patch);
+            emitMonsterSnapshot();
+          }
+        });
+      },
       deleteDoc: async function (reference) {
         const index = storedMonsters.findIndex(function (entry) {
           return entry.id === reference.id;
@@ -473,14 +486,17 @@
     assert(storedMonsters.length === 1, "Saving a selected monster updates instead of duplicating.");
     assert(storedMonsters[0].notes === "Updated guardian.", "Update persists current form fields.");
 
+    storedMonsters[0].revision += 1;
     storedMonsters[0].updatedAtMillis += 1000;
+    storedMonsters[0].notes = "Remote guardian.";
+    emitMonsterSnapshot();
     setValue("monsterNotesInput", "Stale overwrite attempt.");
     assert(
       await creator.saveMonster() === null,
       "A stale monster update is rejected."
     );
     assert(
-      storedMonsters[0].notes === "Updated guardian.",
+      storedMonsters[0].notes === "Remote guardian.",
       "A rejected stale update does not overwrite the remote monster."
     );
     emitMonsterSnapshot();

@@ -6,6 +6,10 @@ import {
 } from "./encounterModel.js";
 import { renderEncounterPreview } from "./encounterPreview.js";
 import { requestAppConfirmation } from "../ui/visualPolish.js";
+import { setCreatorControlsBusy } from "../shared/creatorFormState.js";
+import { createCreatorDraftLifecycle } from "../shared/creatorDraftLifecycle.js";
+import { creatorSaveRefreshMessage } from "../shared/creatorRefreshState.js";
+import { createPaginatedCreatorLibrary } from "../shared/paginatedCreatorLibrary.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -97,12 +101,16 @@ export function createEncounterCreator({
   const listeners = [];
   let selectedId = "";
   let createdAtMillis = 0;
+  let loadedRevision = 0;
   let mapRef = null;
   let combatants = [];
   let records = [];
   let libraryRecords = [];
   let provenance = {};
   let busy = false;
+  let refreshError = null;
+  let sourceRefreshError = null;
+  const libraryPager = createPaginatedCreatorLibrary({ persistence });
 
   const on = (element, event, handler) => {
     element?.addEventListener(event, handler);
@@ -111,12 +119,13 @@ export function createEncounterCreator({
   const setStatus = (message) => { statusRoot.textContent = message; };
   const setBusy = (value) => {
     busy = value;
-    for (const button of screen.querySelectorAll("button")) button.disabled = value;
+    setCreatorControlsBusy(screen, value);
   };
 
   function rawDraft() {
     return {
       id: selectedId,
+      revision: loadedRevision,
       createdAtMillis,
       name: field("name").value,
       description: field("description").value,
@@ -161,12 +170,15 @@ export function createEncounterCreator({
   function renderLibrary() {
     const search = searchInput.value.trim().toLowerCase();
     const shown = records.filter((encounter) => !search || [encounter.name, encounter.description, encounter.environment, ...encounter.tags].join(" ").toLowerCase().includes(search));
-    libraryRoot.innerHTML = shown.length ? shown.map((encounter) => `<button type="button" data-library-encounter-id="${escapeHtml(encounter.id)}" class="${encounter.id === selectedId ? "selected" : ""}"><span aria-hidden="true">🎲</span><span><strong>${escapeHtml(encounter.name)}</strong><small>${escapeHtml([encounter.difficulty, `${encounter.combatants.length} combatant${encounter.combatants.length === 1 ? "" : "s"}`, encounter.mapRef?.name].filter(Boolean).join(" · "))}</small></span></button>`).join("") : `<p class="encounter-empty">No encounters match this search.</p>`;
+    const pageState = libraryPager.getState();
+    const entries = shown.length ? shown.map((encounter) => `<button type="button" data-library-encounter-id="${escapeHtml(encounter.id)}" class="${encounter.id === selectedId ? "selected" : ""}"><span aria-hidden="true">🎲</span><span><strong>${escapeHtml(encounter.name)}</strong><small>${escapeHtml([encounter.difficulty, `${encounter.combatants.length} combatant${encounter.combatants.length === 1 ? "" : "s"}`, encounter.mapRef?.name].filter(Boolean).join(" · "))}</small></span></button>`).join("") : `<p class="encounter-empty">${refreshError ? "Saved encounters remain unavailable. Use Refresh to retry." : "No loaded encounters match this search."}</p>`;
+    libraryRoot.innerHTML = entries + (records.length ? `<div class="encounter-library-more"><small>${records.length} encounter${records.length === 1 ? "" : "s"} loaded${pageState.hasMore ? "; search applies to loaded encounters" : ""}</small>${pageState.hasMore ? `<button type="button" data-encounter-action="load-more">Load more</button>` : ""}</div>` : "");
   }
 
   function applyEncounter(raw = {}) {
     const encounter = normalizeEncounter(raw);
     selectedId = raw.id ? encounter.id : "";
+    loadedRevision = raw.id ? encounter.revision : 0;
     createdAtMillis = raw.id ? encounter.createdAtMillis : 0;
     mapRef = encounter.mapRef ? { ...encounter.mapRef } : null;
     combatants = encounter.combatants.map((entry) => ({ ...entry }));
@@ -183,29 +195,48 @@ export function createEncounterCreator({
   }
 
   async function refreshSources() {
+    sourceRefreshError = null;
     try {
       libraryRecords = (await listLibraryRecords()).filter((record) => ["monster", "npc", "map"].includes(record.assetType));
       renderLibraryOptions();
       return libraryRecords;
     } catch (error) {
+      sourceRefreshError = error;
       setStatus(`Reusable content could not load: ${error.message}`);
-      libraryRecords = [];
       renderLibraryOptions();
-      return [];
+      return libraryRecords;
     }
   }
 
   async function refresh() {
+    refreshError = null;
     try {
-      [records] = await Promise.all([persistence.list(), refreshSources()]);
+      const [page] = await Promise.all([libraryPager.refresh(), refreshSources()]);
+      records = page.records;
       renderLibrary();
       return records;
     } catch (error) {
-      records = [];
+      refreshError = error;
+      records = libraryPager.getState().records;
       renderLibrary();
       setStatus(`Encounter Library could not load: ${error.message}`);
-      return [];
+      return records;
     }
+  }
+
+  async function loadMore() {
+    if (!libraryPager.getState().hasMore) return records;
+    setStatus("Loading more encounters…");
+    try {
+      records = (await libraryPager.loadMore()).records;
+      renderLibrary();
+      setStatus(`${records.length} encounters loaded.`);
+    } catch (error) {
+      records = libraryPager.getState().records;
+      renderLibrary();
+      setStatus(`More encounters could not load: ${error.message}`);
+    }
+    return records;
   }
 
   async function save() {
@@ -216,7 +247,11 @@ export function createEncounterCreator({
     setBusy(true); setStatus("Saving to My Library…");
     try {
       const saved = await persistence.save(draft);
-      applyEncounter(saved); await refresh(); setStatus(`${saved.name} saved to My Library.`); return saved;
+      records = libraryPager.retain(saved).records;
+      applyEncounter(saved); draftLifecycle.markClean(); renderLibrary(); await refresh();
+      setStatus(refreshError || sourceRefreshError
+        ? creatorSaveRefreshMessage(saved.name, refreshError || sourceRefreshError)
+        : `${saved.name} saved to My Library.`); return saved;
     } catch (error) { setStatus(`Encounter could not be saved: ${error.message}`); return null; }
     finally { setBusy(false); }
   }
@@ -225,14 +260,15 @@ export function createEncounterCreator({
     if (!selectedId) { setStatus("Select a saved encounter to delete."); return false; }
     if (!await requestAppConfirmation("Delete this encounter from My Library? Referenced content will not be deleted.", { title: "Delete encounter", confirmLabel: "Delete" })) return false;
     setBusy(true);
-    try { await persistence.remove(selectedId); applyEncounter({}); await refresh(); setStatus("Encounter deleted. Referenced content was left unchanged."); return true; }
+    try { await persistence.remove(selectedId); libraryPager.remove(selectedId); applyEncounter({}); draftLifecycle.markClean(); await refresh(); setStatus("Encounter deleted. Referenced content was left unchanged."); return true; }
     catch (error) { setStatus(`Encounter could not be deleted: ${error.message}`); return false; }
     finally { setBusy(false); }
   }
 
   function duplicate() {
     const draft = rawDraft();
-    applyEncounter({ ...draft, id: "", createdAtMillis: 0, name: `${draft.name || "Encounter"} Copy`, copiedFromEncounterId: selectedId, copiedFromLibraryId: selectedId ? `encounter:${selectedId}` : "" });
+    applyEncounter({ ...draft, id: "", revision: 0, createdAtMillis: 0, name: `${draft.name || "Encounter"} Copy`, copiedFromEncounterId: selectedId, copiedFromLibraryId: selectedId ? `encounter:${selectedId}` : "" });
+    draftLifecycle.markChanged();
     setStatus("Independent copy ready. Save it to add it to My Library.");
   }
 
@@ -288,6 +324,16 @@ export function createEncounterCreator({
     renderCombatants(); renderPreview();
   }
 
+  const draftLifecycle = createCreatorDraftLifecycle({
+    root: screen,
+    creatorId: "encounter",
+    getUserId,
+    getDraft: rawDraft,
+    applyDraft: applyEncounter,
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setStatus
+  });
+
   on(form, "input", (event) => {
     if (event.target.matches("[data-combatant-field]")) updateCombatant(event.target);
     else renderPreview();
@@ -302,15 +348,16 @@ export function createEncounterCreator({
   on(libraryRoot, "click", async (event) => {
     const button = event.target.closest("[data-library-encounter-id]");
     if (!button) return;
-    try { applyEncounter(await persistence.load(button.dataset.libraryEncounterId)); setStatus("Saved encounter loaded."); }
+    if (!await draftLifecycle.confirmReplacement("open the selected encounter")) return;
+    try { applyEncounter(await persistence.load(button.dataset.libraryEncounterId)); draftLifecycle.markClean(); setStatus("Saved encounter loaded."); }
     catch (error) { setStatus(error.message); }
   });
-  on(screen, "click", (event) => {
+  on(screen, "click", async (event) => {
     const button = event.target.closest("[data-encounter-action]");
     if (!button) return;
     const action = button.dataset.encounterAction;
-    if (action === "back") onBack();
-    if (action === "new") { applyEncounter({}); setStatus("New encounter ready."); }
+    if (action === "back" && await draftLifecycle.confirmReplacement("return to the battle map", { restoreBaseline: true })) onBack();
+    if (action === "new" && await draftLifecycle.confirmReplacement("start a new encounter")) { applyEncounter({}); draftLifecycle.markClean(); setStatus("New encounter ready."); }
     if (action === "capture") void capture();
     if (action === "save") void save();
     if (action === "duplicate") duplicate();
@@ -319,6 +366,7 @@ export function createEncounterCreator({
     if (action === "publish") publish();
     if (action === "browse") onBrowseLibrary({ assetType: "encounter", tab: "library" });
     if (action === "refresh") void refresh();
+    if (action === "load-more") void loadMore();
     if (action === "clear-map") { mapRef = null; mapSelect.value = ""; renderMapReference(); renderPreview(); }
     if (action === "add-combatant") {
       const record = libraryRecords.find((entry) => entry.libraryId === combatantSelect.value);
@@ -329,13 +377,22 @@ export function createEncounterCreator({
   });
 
   applyEncounter({});
+  draftLifecycle.markClean();
+  draftLifecycle.recover();
   void refresh();
   return Object.freeze({
     refresh, save, remove, load, getDraft: rawDraft,
-    openEncounter(encounter, { duplicate: makeCopy = false } = {}) {
-      applyEncounter(makeCopy ? { ...encounter, id: "", createdAtMillis: 0, name: `${encounter?.name || "Encounter"} Copy`, copiedFromEncounterId: encounter?.id || "" } : encounter);
+    async openEncounter(encounter, { duplicate: makeCopy = false } = {}) {
+      if (!await draftLifecycle.confirmReplacement("open another encounter")) return false;
+      applyEncounter(makeCopy ? { ...encounter, id: "", revision: 0, createdAtMillis: 0, name: `${encounter?.name || "Encounter"} Copy`, copiedFromEncounterId: encounter?.id || "" } : encounter);
+      if (makeCopy) draftLifecycle.markChanged();
+      else draftLifecycle.markClean();
       setStatus(makeCopy ? "Independent copy opened. Save it to My Library." : "Encounter opened.");
+      return true;
     },
-    destroy() { listeners.forEach((removeListener) => removeListener()); }
+    confirmNavigation() {
+      return draftLifecycle.confirmReplacement("navigate away", { restoreBaseline: true });
+    },
+    destroy() { draftLifecycle.destroy(); listeners.forEach((removeListener) => removeListener()); }
   });
 }

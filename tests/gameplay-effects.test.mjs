@@ -118,6 +118,40 @@ test("world-time and permanent effects reconcile and survive reload", () => {
   assert.deepEqual(restored.reconcile({ worldTime: 999999 }), []);
 });
 
+test("effect hydration keeps every persisted record beyond the old 256 limit", () => {
+  const runtime = createEffectRuntime({ registry: createEffectRegistry() });
+  const records = Array.from({ length: 300 }, (_, index) => effectInput({
+    id: `effect-${index}`,
+    name: "Poisoned",
+    targetTokenId: `token-${index}`,
+    duration: { mode: "permanent" }
+  }));
+  runtime.hydrate(records);
+  assert.equal(runtime.getSnapshot().length, 300);
+  assert.equal(runtime.getById("effect-299").targetTokenId, "token-299");
+});
+
+test("expired effects stay pending without restarting sustain visuals until deletion is confirmed", () => {
+  const visuals = [];
+  const runtime = createEffectRuntime({
+    registry: createEffectRegistry(),
+    onVisual: (record, phase) => visuals.push(`${record.id}:${phase}`)
+  });
+  const record = runtime.applyEffect(effectInput({
+    id: "expiring-effect",
+    animation: { sustainAnimationId: "status-buff-blessing" },
+    duration: { mode: "world-time", value: 1, unit: "minutes" }
+  }), { worldTime: 100 });
+  runtime.reconcile({ worldTime: 160 });
+  assert.equal(runtime.getSnapshot().length, 0);
+  assert.equal(runtime.getPendingExpirations().length, 1);
+  const sustainCount = visuals.filter((entry) => entry === `${record.id}:sustain`).length;
+  runtime.hydrate([record]);
+  assert.equal(visuals.filter((entry) => entry === `${record.id}:sustain`).length, sustainCount);
+  assert.equal(runtime.confirmExpiration(record.id, "world-time-expired"), true);
+  assert.equal(runtime.getPendingExpirations().length, 0);
+});
+
 test("generic modifiers stack and resolve conflicts deterministically", () => {
   const effects = [
     { id: "bless", modifiers: [
@@ -148,6 +182,19 @@ test("generic modifiers stack and resolve conflicts deterministically", () => {
   assert.deepEqual(result.damage.vulnerability, ["cold"]);
   assert.equal(resolveNumericEffectValue("speed", 30, [...effects].reverse()), 15);
   assert.equal(resolveRollMode("attack-roll", effects), "normal");
+
+  const capped = [
+    { id: "bonus", modifiers: [{ kind: "speed", mode: "bonus", value: 10 }] },
+    { id: "cap", modifiers: [{ kind: "speed", mode: "maximum", value: 30 }] },
+    { id: "floor", modifiers: [{ kind: "speed", mode: "minimum", value: 20 }] }
+  ];
+  for (const permutation of [
+    capped,
+    [capped[2], capped[0], capped[1]],
+    [...capped].reverse()
+  ]) {
+    assert.equal(resolveNumericEffectValue("speed", 30, permutation), 30);
+  }
 });
 
 test("persistence uses room effects and refuses non-DM writes", async () => {

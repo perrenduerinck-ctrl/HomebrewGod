@@ -69,6 +69,8 @@ export function createLibraryRecord(input = {}) {
     typeMetadata: createWorkshopTypeMetadata(assetType, metadata, input.typeMetadata),
     nativeRecord: input.nativeRecord !== false,
     libraryRecord: true,
+    unavailable: input.unavailable === true,
+    unavailableReason: clean(input.unavailableReason, 240),
     origin: clean(input.origin, 40) || "native",
     version: Math.max(1, Math.trunc(Number(input.version) || 1)),
     saveCount: Math.max(0, Math.trunc(Number(input.saveCount) || 0))

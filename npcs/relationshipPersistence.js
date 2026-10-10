@@ -1,10 +1,11 @@
 import { normalizeNpcRelationship, validateNpcRelationship } from "./relationshipModel.js";
+import { saveRevisionedRecord } from "../shared/revisionedPersistence.js";
 
 const docsOf = (snapshot) => Array.isArray(snapshot?.docs) ? snapshot.docs : [];
 const mutableRelationship = (relationship) => ({ ...relationship, tags: [...relationship.tags] });
 
 export function createNpcRelationshipPersistence({
-  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp,
+  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
   getUserId = () => "", now = () => Date.now()
 } = {}) {
   const requireUid = () => {
@@ -27,8 +28,11 @@ export function createNpcRelationshipPersistence({
       updatedAtMillis: timestamp
     };
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
-    await setDoc(relationshipRef(uid, relationship.id), record, { merge: true });
-    return normalizeNpcRelationship(record, { now: timestamp });
+    const committed = await saveRevisionedRecord({
+      db, reference: relationshipRef(uid, relationship.id), raw, record,
+      label: "NPC relationship", runTransaction, getDoc, setDoc
+    });
+    return normalizeNpcRelationship(committed, { now: timestamp });
   }
 
   async function load(relationshipId) {

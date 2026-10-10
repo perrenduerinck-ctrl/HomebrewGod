@@ -151,7 +151,7 @@ export function createCharacterRealtimePersistence({
       listeners.connect(
         descriptor.listenerName,
         roomCode,
-        ({ isCurrent }) => {
+        ({ fail, isCurrent }) => {
           return deps.onSnapshot(
             getRoomCollection(
               roomCode,
@@ -182,6 +182,7 @@ export function createCharacterRealtimePersistence({
                 return;
               }
 
+              fail(error);
               stop(descriptor);
               reportConnectionError(
                 descriptor,

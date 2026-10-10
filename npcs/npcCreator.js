@@ -2,6 +2,10 @@ import { NPC_ABILITY_KEYS, normalizeNpc, validateNpc } from "./npcModel.js";
 import { renderNpcPreview } from "./npcPreview.js";
 import { createNpcRelationshipNetwork } from "./npcRelationshipNetwork.js";
 import { requestAppConfirmation } from "../ui/visualPolish.js";
+import { setCreatorControlsBusy } from "../shared/creatorFormState.js";
+import { createCreatorDraftLifecycle } from "../shared/creatorDraftLifecycle.js";
+import { creatorSaveRefreshMessage } from "../shared/creatorRefreshState.js";
+import { createPaginatedCreatorLibrary } from "../shared/paginatedCreatorLibrary.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -122,12 +126,15 @@ export function createNpcCreator({
   const listeners = [];
   let selectedId = "";
   let createdAtMillis = 0;
+  let loadedRevision = 0;
   let assignedRoomCode = "";
   let assignedRoomName = "";
   let knowledge = [];
   let combatActions = [];
   let records = [];
   let busy = false;
+  let refreshError = null;
+  const libraryPager = createPaginatedCreatorLibrary({ persistence });
   let provenance = {};
   let networkOpen = false;
   let relationshipNetwork = null;
@@ -139,7 +146,7 @@ export function createNpcCreator({
   const setStatus = (message) => { statusRoot.textContent = message; };
   const setBusy = (value) => {
     busy = value;
-    for (const button of screen.querySelectorAll("button")) button.disabled = value;
+    setCreatorControlsBusy(screen, value);
   };
 
   function syncCampaign() {
@@ -161,6 +168,7 @@ export function createNpcCreator({
     syncCampaign();
     return {
       id: selectedId,
+      revision: loadedRevision,
       createdAtMillis,
       name: field("name").value,
       portraitUrl: field("portraitUrl").value,
@@ -218,6 +226,7 @@ export function createNpcCreator({
   function applyNpc(raw = {}) {
     const npc = normalizeNpc(raw);
     selectedId = raw.id ? npc.id : "";
+    loadedRevision = raw.id ? npc.revision : 0;
     createdAtMillis = raw.id ? npc.createdAtMillis : 0;
     assignedRoomCode = npc.roomCode;
     assignedRoomName = npc.roomName;
@@ -261,12 +270,30 @@ export function createNpcCreator({
 
   function renderLibrary() {
     const shown = filteredRecords();
-    libraryRoot.innerHTML = shown.length ? shown.map((npc) => `<button type="button" data-library-npc-id="${escapeHtml(npc.id)}" class="${npc.id === selectedId ? "selected" : ""}">${npc.portraitUrl ? `<img src="${escapeHtml(npc.portraitUrl)}" alt="">` : `<span aria-hidden="true">🧙</span>`}<span><strong>${escapeHtml(npc.name)}</strong><small>${escapeHtml([npc.species, npc.occupation, npc.roomCode ? npc.roomName || npc.roomCode : "Personal"].filter(Boolean).join(" · "))}</small></span></button>`).join("") : `<p class="npc-empty">No NPCs match these filters.</p>`;
+    const pageState = libraryPager.getState();
+    const entries = shown.length ? shown.map((npc) => `<button type="button" data-library-npc-id="${escapeHtml(npc.id)}" class="${npc.id === selectedId ? "selected" : ""}">${npc.portraitUrl ? `<img src="${escapeHtml(npc.portraitUrl)}" alt="" loading="lazy" decoding="async">` : `<span aria-hidden="true">🧙</span>`}<span><strong>${escapeHtml(npc.name)}</strong><small>${escapeHtml([npc.species, npc.occupation, npc.roomCode ? npc.roomName || npc.roomCode : "Personal"].filter(Boolean).join(" · "))}</small></span></button>`).join("") : `<p class="npc-empty">${refreshError ? "Saved NPCs remain unavailable. Use Refresh to retry." : "No NPCs match these filters."}</p>`;
+    libraryRoot.innerHTML = entries + (records.length ? `<div class="npc-library-more"><small>${records.length} NPC${records.length === 1 ? "" : "s"} loaded${pageState.hasMore ? "; filters apply to loaded NPCs" : ""}</small>${pageState.hasMore ? `<button type="button" data-npc-action="load-more">Load more</button>` : ""}</div>` : "");
   }
 
   async function refresh() {
-    try { records = await persistence.list(); renderLibrary(); return records; }
-    catch (error) { records = []; renderLibrary(); setStatus(`NPC Library could not load: ${error.message}`); return []; }
+    refreshError = null;
+    try { records = (await libraryPager.refresh()).records; renderLibrary(); return records; }
+    catch (error) { refreshError = error; records = libraryPager.getState().records; renderLibrary(); setStatus(`NPC Library could not load: ${error.message}`); return records; }
+  }
+
+  async function loadMore() {
+    if (!libraryPager.getState().hasMore) return records;
+    setStatus("Loading more NPCs…");
+    try {
+      records = (await libraryPager.loadMore()).records;
+      renderLibrary();
+      setStatus(`${records.length} NPCs loaded.`);
+    } catch (error) {
+      records = libraryPager.getState().records;
+      renderLibrary();
+      setStatus(`More NPCs could not load: ${error.message}`);
+    }
+    return records;
   }
 
   async function save() {
@@ -277,7 +304,9 @@ export function createNpcCreator({
     setBusy(true); setStatus("Saving to My Library…");
     try {
       const saved = await persistence.save(draft);
-      applyNpc(saved); await refresh(); setStatus(`${saved.name} saved to My Library.`); return saved;
+      records = libraryPager.retain(saved).records;
+      applyNpc(saved); draftLifecycle.markClean(); renderLibrary(); await refresh();
+      setStatus(refreshError ? creatorSaveRefreshMessage(saved.name, refreshError) : `${saved.name} saved to My Library.`); return saved;
     } catch (error) { setStatus(`NPC could not be saved: ${error.message}`); return null; }
     finally { setBusy(false); }
   }
@@ -286,14 +315,15 @@ export function createNpcCreator({
     if (!selectedId) { setStatus("Select a saved NPC to delete."); return false; }
     if (!await requestAppConfirmation("Delete this NPC from My Library?", { title: "Delete NPC", confirmLabel: "Delete" })) return false;
     setBusy(true);
-    try { await persistence.remove(selectedId); applyNpc({}); await refresh(); setStatus("NPC deleted."); return true; }
+    try { await persistence.remove(selectedId); libraryPager.remove(selectedId); applyNpc({}); draftLifecycle.markClean(); await refresh(); setStatus("NPC deleted."); return true; }
     catch (error) { setStatus(`NPC could not be deleted: ${error.message}`); return false; }
     finally { setBusy(false); }
   }
 
   function duplicate() {
     const draft = rawDraft();
-    applyNpc({ ...draft, id: "", createdAtMillis: 0, name: `${draft.name || "NPC"} Copy`, copiedFromNpcId: selectedId, copiedFromLibraryId: selectedId ? `npc:${selectedId}` : "" });
+    applyNpc({ ...draft, id: "", revision: 0, createdAtMillis: 0, name: `${draft.name || "NPC"} Copy`, copiedFromNpcId: selectedId, copiedFromLibraryId: selectedId ? `npc:${selectedId}` : "" });
+    draftLifecycle.markChanged();
     setStatus("Independent copy ready. Save it to add it to My Library.");
   }
 
@@ -342,6 +372,16 @@ export function createNpcCreator({
     renderPreview();
   }
 
+  const draftLifecycle = createCreatorDraftLifecycle({
+    root: screen,
+    creatorId: "npc",
+    getUserId,
+    getDraft: rawDraft,
+    applyDraft: applyNpc,
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setStatus
+  });
+
   on(form, "input", (event) => {
     if (event.target.matches("[data-knowledge-field]")) updateEntry(event.target, "knowledge");
     else if (event.target.matches("[data-combat-field]")) updateEntry(event.target, "combat");
@@ -363,15 +403,16 @@ export function createNpcCreator({
   on(libraryRoot, "click", async (event) => {
     const button = event.target.closest("[data-library-npc-id]");
     if (!button) return;
-    try { applyNpc(await persistence.load(button.dataset.libraryNpcId)); renderLibrary(); setStatus("Saved NPC loaded."); }
+    if (!await draftLifecycle.confirmReplacement("open the selected NPC")) return;
+    try { applyNpc(await persistence.load(button.dataset.libraryNpcId)); draftLifecycle.markClean(); renderLibrary(); setStatus("Saved NPC loaded."); }
     catch (error) { setStatus(error.message); }
   });
-  on(screen, "click", (event) => {
+  on(screen, "click", async (event) => {
     const button = event.target.closest("[data-npc-action]");
     if (!button) return;
     const action = button.dataset.npcAction;
-    if (action === "back") onBack();
-    if (action === "new") { applyNpc({}); setStatus("New NPC ready."); }
+    if (action === "back" && await draftLifecycle.confirmReplacement("return to the battle map", { restoreBaseline: true })) onBack();
+    if (action === "new" && await draftLifecycle.confirmReplacement("start a new NPC")) { applyNpc({}); draftLifecycle.markClean(); setStatus("New NPC ready."); }
     if (action === "save") void save();
     if (action === "duplicate") duplicate();
     if (action === "delete") void remove();
@@ -379,6 +420,7 @@ export function createNpcCreator({
     if (action === "publish") publish();
     if (action === "browse") onBrowseLibrary({ assetType: "npc", tab: "library" });
     if (action === "refresh") void refresh();
+    if (action === "load-more") void loadMore();
     if (action === "network" && relationshipNetwork) {
       networkOpen = !networkOpen;
       workspaceRoot.classList.toggle("hidden", networkOpen);
@@ -403,8 +445,10 @@ export function createNpcCreator({
       npcPersistence: persistence,
       relationshipPersistence,
       getWorldTime,
-      onOpenNpc: (npc) => {
+      onOpenNpc: async (npc) => {
+        if (!await draftLifecycle.confirmReplacement("open this NPC from the relationship network")) return;
         applyNpc(npc);
+        draftLifecycle.markClean();
         networkOpen = false;
         workspaceRoot.classList.remove("hidden");
         networkRoot.classList.add("hidden");
@@ -417,13 +461,22 @@ export function createNpcCreator({
   }
 
   applyNpc({});
+  draftLifecycle.markClean();
+  draftLifecycle.recover();
   void refresh();
   return Object.freeze({
     refresh, save, remove, createToken, getDraft: rawDraft,
-    openNpc(npc, { duplicate: makeCopy = false } = {}) {
-      applyNpc(makeCopy ? { ...npc, id: "", createdAtMillis: 0, name: `${npc?.name || "NPC"} Copy`, copiedFromNpcId: npc?.id || "" } : npc);
+    async openNpc(npc, { duplicate: makeCopy = false } = {}) {
+      if (!await draftLifecycle.confirmReplacement("open another NPC")) return false;
+      applyNpc(makeCopy ? { ...npc, id: "", revision: 0, createdAtMillis: 0, name: `${npc?.name || "NPC"} Copy`, copiedFromNpcId: npc?.id || "" } : npc);
+      if (makeCopy) draftLifecycle.markChanged();
+      else draftLifecycle.markClean();
       setStatus(makeCopy ? "Independent copy opened. Save it to My Library." : "NPC opened.");
+      return true;
     },
-    destroy() { relationshipNetwork?.destroy(); listeners.forEach((removeListener) => removeListener()); }
+    confirmNavigation() {
+      return draftLifecycle.confirmReplacement("navigate away", { restoreBaseline: true });
+    },
+    destroy() { draftLifecycle.destroy(); relationshipNetwork?.destroy(); listeners.forEach((removeListener) => removeListener()); }
   });
 }

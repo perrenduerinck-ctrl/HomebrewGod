@@ -19,9 +19,12 @@ export function createEffectRuntime({
 } = {}) {
   if (!registry?.get) throw new Error("Effect runtime requires an effect registry.");
   const records = new Map();
+  const pendingExpirations = new Map();
 
   function snapshot() {
-    return [...records.values()].map((record) => clone(record));
+    return [...records.values()]
+      .filter((record) => !pendingExpirations.has(record.id))
+      .map((record) => clone(record));
   }
 
   function emit(reason, detail = null) {
@@ -73,6 +76,7 @@ export function createEffectRuntime({
       updatedAtMillis: Date.now()
     });
     if (!record) throw new Error("Choose a named effect, room, and target token.");
+    pendingExpirations.delete(record.id);
     records.set(record.id, record);
     emit("applied", record);
     visual(record, "start");
@@ -83,6 +87,7 @@ export function createEffectRuntime({
   function removeEffect(id, reason = "removed", { visualPhase = true, emitChange = true } = {}) {
     const record = records.get(text(id));
     if (!record) return false;
+    pendingExpirations.delete(record.id);
     records.delete(record.id);
     if (visualPhase) visual(record, "end");
     if (emitChange) emit(reason, record);
@@ -91,7 +96,7 @@ export function createEffectRuntime({
 
   function hydrate(values = [], { replace = true } = {}) {
     const incoming = new Map();
-    for (const value of Array.isArray(values) ? values.slice(0, 256) : []) {
+    for (const value of Array.isArray(values) ? values : []) {
       const record = normalizeEffectInstance(value);
       if (record) incoming.set(record.id, record);
     }
@@ -99,14 +104,18 @@ export function createEffectRuntime({
     const removed = [];
     for (const [id, record] of incoming) {
       const previous = records.get(id);
-      if (!previous || JSON.stringify(previous) !== JSON.stringify(record)) added.push(record);
+      if (
+        !pendingExpirations.has(id) &&
+        (!previous || JSON.stringify(previous) !== JSON.stringify(record))
+      ) added.push(record);
       records.set(id, record);
     }
     if (replace) {
       for (const [id, record] of [...records]) {
         if (incoming.has(id)) continue;
         records.delete(id);
-        removed.push(record);
+        if (pendingExpirations.has(id)) pendingExpirations.delete(id);
+        else removed.push(record);
       }
     }
     for (const record of added) {
@@ -120,16 +129,29 @@ export function createEffectRuntime({
     if (!canExpire) return [];
     const expired = [];
     for (const record of records.values()) {
+      if (pendingExpirations.has(record.id)) continue;
       const reason = getEffectExpirationReason(record, context);
       if (reason) expired.push({ record, reason });
     }
-    for (const { record, reason } of expired) removeEffect(record.id, reason);
+    for (const { record, reason } of expired) {
+      pendingExpirations.set(record.id, { record, reason });
+      visual(record, "end");
+      emit("expiration-pending", { ...record, expirationReason: reason });
+    }
     return expired.map(({ record, reason }) => ({ id: record.id, reason }));
   }
 
   return Object.freeze({
     applyEffect,
     removeEffect,
+    confirmExpiration(id, reason = "duration-expired") {
+      if (!pendingExpirations.has(text(id))) return false;
+      return removeEffect(id, reason, { visualPhase: false, emitChange: true });
+    },
+    getPendingExpirations: () => [...pendingExpirations.values()].map(({ record, reason }) => ({
+      record: clone(record),
+      reason
+    })),
     hydrate,
     reconcile,
     getSnapshot: snapshot,
@@ -139,6 +161,7 @@ export function createEffectRuntime({
       for (const id of [...records.keys()]) {
         removeEffect(id, reason, { visualPhase, emitChange: false });
       }
+      pendingExpirations.clear();
       if (emitChange) emit(reason);
     }
   });

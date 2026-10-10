@@ -117,6 +117,10 @@ import {
   createRealtimeListenerRegistry
 } from "./shared/realtimeListeners.js";
 import {
+  isBackForwardCacheEvent,
+  shouldTearDownPage
+} from "./shared/pageLifecycle.js";
+import {
   ROOM_CLIENT_CLEANUP_COLLECTIONS,
   createRoomDeletionProgress
 } from "./rooms/roomDeletionPolicy.js";
@@ -136,6 +140,7 @@ import {
   toRoomTimeFields
 } from "./timeSystem.js?v=movement-robustness-20260906";
 import {
+  combatantFromToken,
   createInitiativeSystem,
   normalizeInitiativeState,
   toRoomInitiativeFields
@@ -151,6 +156,7 @@ import {
   confirmPendingMovement,
   createMovementSystem,
   createPendingMovement,
+  deriveMovementDistance,
   getTokenMovementMode,
   readTokenBaseSpeed,
   synchronizeMovementState,
@@ -198,6 +204,13 @@ import { createNpcPersistence } from "./npcs/npcPersistence.js";
 import { createNpcRelationshipPersistence } from "./npcs/relationshipPersistence.js";
 import { createEncounterPersistence } from "./encounters/encounterPersistence.js";
 import { loadEncounter } from "./encounters/encounterLoader.js";
+import {
+  assertEncounterOperationCurrent,
+  buildEncounterBattleResetFields,
+  createEncounterOperationContext,
+  preflightEncounterReplacement,
+  runRecoverableEncounterStaging
+} from "./encounters/battleReplacement.js";
 import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
 import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261008";
@@ -529,6 +542,7 @@ let gameplayEffectPersistence = null;
 let latestGameplayEffectRecords = [];
 let gameplayEffectPanelSystem = null;
 const gameplayEffectVisualHandles = new Map();
+const gameplayEffectExpirationRetries = new Map();
 const gameplayEffectRegistry = createEffectRegistry();
 const gameplayEffectRuntime = createEffectRuntime({
   registry: gameplayEffectRegistry,
@@ -735,7 +749,8 @@ function initializeBattleMapToolbar() {
       });
     });
     observer.observe(E.battleMapSurface);
-    window.addEventListener("pagehide", () => {
+    window.addEventListener("pagehide", (event) => {
+      if (!shouldTearDownPage(event)) return;
       observer.disconnect();
       cancelAnimationFrame(frame);
     }, { once: true });
@@ -824,6 +839,31 @@ function navigateMainScreen(screenName) {
     role: currentIsDM ? "dm" : "player",
     roomOpen: Boolean(currentRoomCode)
   });
+}
+
+function getActiveDraftCreator() {
+  const creators = {
+    monsterCreator: monsterCreatorSystem,
+    magicItemCreator: magicItemCreatorSystem,
+    spellCreator: spellCreatorSystem,
+    npcCreator: npcCreatorSystem,
+    encounterCreator: encounterCreatorSystem,
+    summonCreator: summonCreatorSystem
+  };
+  return creators[activeMainScreenName] || null;
+}
+
+async function confirmActiveCreatorNavigation(nextScreenName) {
+  if (nextScreenName === activeMainScreenName) return true;
+  const creator = getActiveDraftCreator();
+  if (typeof creator?.confirmNavigation !== "function") return true;
+  return creator.confirmNavigation();
+}
+
+async function requestMainScreenNavigation(screenName) {
+  if (!await confirmActiveCreatorNavigation(screenName)) return false;
+  navigateMainScreen(screenName);
+  return true;
 }
 
 function text(el, value) {
@@ -1176,6 +1216,17 @@ async function commitCampaignTimeCommand(
   return committedState;
 }
 
+function getEffectiveMovementSpeedForCombatant(combatant) {
+  const token = tokenSystem?.getRoomTokens?.().find(
+    (entry) => entry.id === combatant?.tokenId
+  );
+  if (!token) return combatant?.baseSpeed;
+  return calculateEffectModifiers({
+    base: { speed: readTokenBaseSpeed(token) },
+    effects: getGameplayEffectsForToken(token.id)
+  }).speed;
+}
+
 async function commitInitiativeCommand(
   command,
   context
@@ -1225,7 +1276,11 @@ async function commitInitiativeCommand(
       committedTransition =
         buildInitiativeRoomTransition(
         latestRoom,
-        command
+          command,
+          {
+            getEffectiveBaseSpeed:
+              getEffectiveMovementSpeedForCombatant
+          }
       );
 
       if (
@@ -1273,7 +1328,7 @@ async function commitMovementCommand(command, context) {
     };
     tokenSystem?.applyConfirmedPosition?.(
       command.tokenId,
-      command.endPosition
+      context.previewState?.lastConfirmedPosition || command.endPosition
     );
     return { state: context.previewState };
   }
@@ -1319,7 +1374,11 @@ async function commitMovementCommand(command, context) {
     const latestMovement = synchronizeMovementState(
       latestRoom,
       initiative,
-      { activeToken: token, tokenExists: true }
+      {
+        activeToken: token,
+        baseSpeed: latestRoom.movementState?.baseSpeed,
+        tokenExists: true
+      }
     );
     if (latestMovement.movementTurnKey !== command.turnKey) {
       throw new Error("That movement preview belongs to an expired turn.");
@@ -1331,14 +1390,22 @@ async function commitMovementCommand(command, context) {
       throw new Error("The token moved on another client. Preview the move again.");
     }
 
-    const withPending = createPendingMovement(latestMovement, command);
+    if (!command.measurement) {
+      throw new Error("That movement preview is missing map measurement data. Preview the move again.");
+    }
+    const verifiedDistanceFeet = deriveMovementDistance(command);
+    const withPending = createPendingMovement(latestMovement, {
+      ...command,
+      distanceFeet: verifiedDistanceFeet
+    });
     committedState = confirmPendingMovement(withPending, {
       force: command.force === true
     });
+    const confirmedPosition = committedState.lastConfirmedPosition;
     const now = Date.now();
     transaction.update(tokenRef, {
-      x: command.endPosition.x,
-      y: command.endPosition.y,
+      x: confirmedPosition.x,
+      y: confirmedPosition.y,
       movedAtMillis: now,
       updatedAtMillis: now,
       updatedAt: serverTimestamp()
@@ -1357,7 +1424,7 @@ async function commitMovementCommand(command, context) {
     };
     tokenSystem?.applyConfirmedPosition?.(
       command.tokenId,
-      command.endPosition
+      committedState.lastConfirmedPosition
     );
   }
   return { state: committedState };
@@ -1710,6 +1777,14 @@ function clearRoomListeners() {
   }
 
   if (
+    characterCreatorSystem &&
+    typeof characterCreatorSystem.resetContext ===
+      "function"
+  ) {
+    characterCreatorSystem.resetContext();
+  }
+
+  if (
     monsterCreatorSystem &&
     typeof monsterCreatorSystem.cleanupListeners ===
       "function"
@@ -1829,11 +1904,20 @@ function getCurrentDrawingMapContext() {
   if (!currentRoomCode || activeMainScreenName !== "battle") return {};
 
   if (E.puzzleMapBoard && !E.puzzleMapBoard.classList.contains("hidden")) {
+    const puzzleTiles = getPuzzleTiles(currentRoomData || {});
+    const puzzleBounds = getPuzzleBounds(puzzleTiles);
+    const puzzleWorldSpan = PUZZLE_COORDINATE_LIMIT * 2 + 1;
     return {
       mapId: "puzzle-board",
       target: E.puzzleMapBoard,
       mode: "puzzle",
-      zoom: battleZoom
+      zoom: battleZoom,
+      space: {
+        x: ((puzzleBounds.minX + PUZZLE_COORDINATE_LIMIT) / puzzleWorldSpan) * 1000,
+        y: ((puzzleBounds.minY + PUZZLE_COORDINATE_LIMIT) / puzzleWorldSpan) * 1000,
+        width: ((puzzleBounds.maxX - puzzleBounds.minX + 1) / puzzleWorldSpan) * 1000,
+        height: ((puzzleBounds.maxY - puzzleBounds.minY + 1) / puzzleWorldSpan) * 1000
+      }
     };
   }
 
@@ -2131,7 +2215,7 @@ function listenToMyRooms() {
   return appRealtimeListeners.connect(
     "my-rooms",
     userId,
-    ({ isCurrent }) => onSnapshot(roomsQuery, {
+    ({ fail, isCurrent }) => onSnapshot(roomsQuery, {
       includeMetadataChanges: true
     }, function (snap) {
     if (
@@ -2205,6 +2289,7 @@ function listenToMyRooms() {
       return;
     }
 
+    fail(error);
     text(E.myRoomsList, "Could not load saved rooms: " + error.message);
     })
   );
@@ -2522,7 +2607,7 @@ function openRoom(roomCode, screenToShow = "room") {
   appRealtimeListeners.connect(
     "room",
     cleanCode,
-    ({ isCurrent }) => onSnapshot(doc(db, "rooms", cleanCode), {
+    ({ fail, isCurrent }) => onSnapshot(doc(db, "rooms", cleanCode), {
       includeMetadataChanges: true
     }, async function (roomSnap) {
     if (
@@ -2623,6 +2708,7 @@ function openRoom(roomCode, screenToShow = "room") {
       return;
     }
 
+    fail(error);
     alert("Room listener failed: " + error.message);
     })
   );
@@ -3103,7 +3189,7 @@ function listenToPlayers(roomCode) {
   return appRealtimeListeners.connect(
     "players",
     roomCode,
-    ({ isCurrent }) => onSnapshot(
+    ({ fail, isCurrent }) => onSnapshot(
       collection(db, "rooms", roomCode, "activePlayers"),
       function (playersSnap) {
       if (
@@ -3125,6 +3211,7 @@ function listenToPlayers(roomCode) {
         return;
       }
 
+      fail(error);
       E.playersList.textContent = "Could not load players: " + error.message;
       }
     )
@@ -3542,7 +3629,7 @@ function listenToRoomMaps(roomCode) {
   return appRealtimeListeners.connect(
     "maps",
     roomCode,
-    ({ isCurrent }) => onSnapshot(
+    ({ fail, isCurrent }) => onSnapshot(
       mapsQuery,
       { includeMetadataChanges: true },
       function (mapsSnap) {
@@ -3579,6 +3666,7 @@ function listenToRoomMaps(roomCode) {
         return;
       }
 
+      fail(error);
       text(E.roomMapsList, "Could not load saved maps: " + error.message);
       }
     )
@@ -5722,6 +5810,10 @@ async function playGameplayEffectVisual(record, phase) {
 }
 
 function clearGameplayEffectsForRoomExit() {
+  for (const retry of gameplayEffectExpirationRetries.values()) {
+    if (retry.timer) clearTimeout(retry.timer);
+  }
+  gameplayEffectExpirationRetries.clear();
   for (const id of [...gameplayEffectVisualHandles.keys()]) {
     stopGameplayEffectVisual(id);
   }
@@ -5778,6 +5870,9 @@ function synchronizePersistedGameplayEffects(records = latestGameplayEffectRecor
   latestGameplayEffectRecords = Array.isArray(records) ? records : [];
   gameplayEffectRuntime.hydrate(latestGameplayEffectRecords);
   reconcileGameplayEffects();
+  for (const pending of gameplayEffectRuntime.getPendingExpirations()) {
+    queueGameplayEffectExpiration(pending.record, pending.reason);
+  }
   gameplayEffectPanelSystem?.refresh?.();
 }
 
@@ -5787,20 +5882,41 @@ function reconcileGameplayEffects() {
   });
 }
 
+function queueGameplayEffectExpiration(record, reason) {
+  if (!record?.id || currentIsDM !== true) return;
+  const previous = gameplayEffectExpirationRetries.get(record.id);
+  if (previous?.inFlight || previous?.timer) return;
+  const attempts = (previous?.attempts || 0) + 1;
+  const retry = { record, reason, attempts, inFlight: true, timer: null };
+  gameplayEffectExpirationRetries.set(record.id, retry);
+  void gameplayEffectPersistence.remove(record).then((removed) => {
+    if (!removed) throw new Error("The expired effect could not be removed with the current permissions.");
+    gameplayEffectExpirationRetries.delete(record.id);
+    latestGameplayEffectRecords = latestGameplayEffectRecords.filter((entry) => entry.id !== record.id);
+    gameplayEffectRuntime.confirmExpiration(record.id, reason);
+    gameplayEffectPanelSystem?.setStatus?.(`${record.name} expired and was removed.`);
+  }).catch((error) => {
+    const delay = Math.min(30000, 1000 * (2 ** Math.min(attempts - 1, 5)));
+    console.warn("Could not remove an expired gameplay effect; retrying:", error);
+    gameplayEffectPanelSystem?.setStatus?.(
+      `${record.name} expired. Server cleanup failed and will retry automatically.`
+    );
+    retry.inFlight = false;
+    retry.timer = setTimeout(() => {
+      retry.timer = null;
+      queueGameplayEffectExpiration(record, reason);
+    }, delay);
+  });
+}
+
 function handleGameplayEffectRuntimeChange(_snapshot, reason, record) {
   renderActiveEffectsPanel();
   if (activeMainScreenName === "battle" && tokenSystem) {
     tokenSystem.render?.(currentRoomData || {});
   }
   movementSystem?.sync?.(currentRoomData || movementSystem.getState(), "gameplay-effects");
-  if (
-    record?.id &&
-    currentIsDM === true &&
-    ["turn-duration-expired", "world-time-expired"].includes(reason)
-  ) {
-    void gameplayEffectPersistence.remove(record).catch((error) => {
-      console.warn("Could not remove an expired gameplay effect:", error);
-    });
+  if (record?.id && currentIsDM === true && reason === "expiration-pending") {
+    queueGameplayEffectExpiration(record, record.expirationReason || "duration-expired");
   }
 }
 
@@ -7542,7 +7658,7 @@ function listenToPuzzleTiles(roomCode) {
   return appRealtimeListeners.connect(
     "puzzle-tiles",
     roomCode,
-    ({ isCurrent }) => onSnapshot(
+    ({ fail, isCurrent }) => onSnapshot(
       getPuzzleTileCollection(roomCode),
       { includeMetadataChanges: true },
       function (tilesSnap) {
@@ -7588,6 +7704,7 @@ function listenToPuzzleTiles(roomCode) {
         return;
       }
 
+      fail(error);
       text(E.puzzleMapStatus, "Could not load puzzle tiles: " + error.message);
       }
     )
@@ -7667,11 +7784,9 @@ async function ensurePuzzleTilesStoredInSubcollection() {
 }
 
 function getPuzzleViewMode(room) {
-  if (!room || room.puzzleViewMode !== "focus") {
-    return "board";
-  }
-
-  return "focus";
+  return ["focus", "single"].includes(room?.puzzleViewMode)
+    ? room.puzzleViewMode
+    : "board";
 }
 
 function getActivePuzzleTile(room) {
@@ -8018,6 +8133,13 @@ function renderPuzzleBoard(room) {
     }
 
     showSingleBattleMapView();
+    notifyExternalTokenSystem(safeRoom);
+    return;
+  }
+
+  if (viewMode === "single") {
+    showSingleBattleMapView();
+    showSharedMap(buildMapFromRoomFields(safeRoom));
     notifyExternalTokenSystem(safeRoom);
     return;
   }
@@ -8975,9 +9097,21 @@ function initializeApplicationShell() {
   renderActiveEffectsPanel();
   navigationController = createSidebarNavigation({
     document,
-    onNavigate: (screenName) => navigateMainScreen(screenName),
-    onOpenTool: openNavigationTool,
-    onOpenWorkshop: (request) => { void browseWorkshop(request); }
+    onNavigate: (screenName) => { void requestMainScreenNavigation(screenName); },
+    onOpenTool: (toolName, trigger) => {
+      void (async () => {
+        if (await confirmActiveCreatorNavigation("battle")) {
+          openNavigationTool(toolName, trigger);
+        }
+      })();
+    },
+    onOpenWorkshop: (request) => {
+      void (async () => {
+        if (await confirmActiveCreatorNavigation("workshop")) {
+          await browseWorkshop(request);
+        }
+      })();
+    }
   });
   navigationController.setContext({
     screen: activeMainScreenName || "auth",
@@ -9137,21 +9271,25 @@ async function importWorkshopAsset(asset, replaceRecordId = "") {
     }
     const monsterId = replaceRecordId || copy.recordId;
     const reference = doc(db, "rooms", currentRoomCode, "monsters", monsterId);
-    const previous = replaceRecordId ? await getDoc(reference) : null;
-    const previousData = previous?.exists?.() ? previous.data() : {};
     const updatedAtMillis = Date.now();
-    const monsterRecord = {
-      ...copy.content,
-      ...provenance,
-      id: monsterId,
-      roomCode: currentRoomCode,
-      ownerUid: currentRoomData?.dmUid || currentUser.uid,
-      ownerName: currentRoomData?.dmName || currentUser.displayName || "Unnamed DM",
-      createdAt: previousData.createdAt || serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      updatedAtMillis
-    };
-    await setDoc(reference, monsterRecord);
+    const monsterRecord = await runTransaction(db, async (transaction) => {
+      const previous = await transaction.get(reference);
+      const previousData = previous.exists() ? previous.data() : {};
+      const record = {
+        ...copy.content,
+        ...provenance,
+        id: monsterId,
+        roomCode: currentRoomCode,
+        ownerUid: previousData.ownerUid || currentRoomData?.dmUid || currentUser.uid,
+        ownerName: currentRoomData?.dmName || currentUser.displayName || "Unnamed DM",
+        revision: previous.exists() ? (Number(previousData.revision) || 0) + 1 : 1,
+        createdAt: previousData.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        updatedAtMillis
+      };
+      transaction.set(reference, record);
+      return record;
+    });
     try {
       await syncAccountLibraryRecord({ assetType: "monster", sourceRecordId: monsterId, record: monsterRecord });
     } catch (error) {
@@ -9374,20 +9512,26 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
   if (actionId === "edit-copy" && ["magic-item", "weapon", "armor"].includes(asset?.assetType)) {
     navigateMainScreen("magicItemCreator");
     const creator = await initMagicItemCreatorSystem();
-    creator.openItem(content, { duplicate: !localRecordId && !asset.libraryRecord });
+    if (!await creator.openItem(content, { duplicate: !localRecordId && !asset.libraryRecord })) {
+      return { message: "Kept the unsaved magic item draft." };
+    }
     return { message: "Independent magic item copy opened in Magic Item Creator." };
   }
   if (["edit-copy", "assign-animation"].includes(actionId) && asset?.assetType === "spell") {
     navigateMainScreen("spellCreator");
     const creator = await initSpellCreatorSystem();
-    creator.openSpell(content, { duplicate: !localRecordId && !asset.libraryRecord });
+    if (!await creator.openSpell(content, { duplicate: !localRecordId && !asset.libraryRecord })) {
+      return { message: "Kept the unsaved spell draft." };
+    }
     if (actionId === "assign-animation") await creator.editAnimations(false);
     return { message: actionId === "assign-animation" ? "Spell opened for animation assignment." : "Independent spell copy opened in Spell Creator." };
   }
   if (["edit-copy", "duplicate"].includes(actionId) && asset?.assetType === "npc") {
     navigateMainScreen("npcCreator");
     const creator = await initNpcCreatorSystem();
-    creator.openNpc(content, { duplicate: actionId === "duplicate" || (!localRecordId && !asset.libraryRecord) });
+    if (!await creator.openNpc(content, { duplicate: actionId === "duplicate" || (!localRecordId && !asset.libraryRecord) })) {
+      return { message: "Kept the unsaved NPC draft." };
+    }
     return { message: actionId === "duplicate" ? "Independent NPC copy opened in NPC Creator." : "NPC opened in NPC Creator." };
   }
   if (actionId === "copy-to-current-room" && asset?.assetType === "npc") {
@@ -9412,7 +9556,9 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
   if (["edit-copy", "duplicate"].includes(actionId) && asset?.assetType === "encounter") {
     navigateMainScreen("encounterCreator");
     const creator = await initEncounterCreatorSystem();
-    creator.openEncounter(content, { duplicate: actionId === "duplicate" || (!localRecordId && !asset.libraryRecord) });
+    if (!await creator.openEncounter(content, { duplicate: actionId === "duplicate" || (!localRecordId && !asset.libraryRecord) })) {
+      return { message: "Kept the unsaved encounter draft." };
+    }
     return { message: actionId === "duplicate" ? "Independent encounter copy opened in Encounter Creator." : "Encounter opened in Encounter Creator." };
   }
   if (actionId === "use-encounter" && asset?.assetType === "encounter") {
@@ -9422,7 +9568,9 @@ async function useWorkshopAsset({ actionId, asset, localRecordId }) {
   if (["edit-copy", "use-summon"].includes(actionId) && asset?.assetType === "summon") {
     navigateMainScreen("summonCreator");
     const creator = await initSummonCreatorSystem();
-    creator.openPreset(content, { duplicate: actionId === "edit-copy" && !localRecordId && !asset.libraryRecord });
+    if (!await creator.openPreset(content, { duplicate: actionId === "edit-copy" && !localRecordId && !asset.libraryRecord })) {
+      return { message: "Kept the unsaved summon draft." };
+    }
     if (actionId === "use-summon") return creator.usePreset();
     return { message: "Summon preset opened in Summon Creator." };
   }
@@ -9483,7 +9631,7 @@ function getMagicItemPersistenceSystem() {
   if (magicItemPersistence) return magicItemPersistence;
   magicItemPersistence = createMagicItemPersistence({
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, orderBy, limit, startAfter, serverTimestamp,
+    query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
     getUserId: () => currentUser?.uid || ""
   });
   return magicItemPersistence;
@@ -9493,7 +9641,7 @@ function getSpellPersistenceSystem() {
   if (spellPersistence) return spellPersistence;
   spellPersistence = createSpellPersistence({
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, orderBy, limit, startAfter, serverTimestamp,
+    query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
     getUserId: () => currentUser?.uid || ""
   });
   return spellPersistence;
@@ -9503,7 +9651,7 @@ function getNpcPersistenceSystem() {
   if (npcPersistence) return npcPersistence;
   npcPersistence = createNpcPersistence({
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, orderBy, limit, startAfter, serverTimestamp,
+    query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
     getUserId: () => currentUser?.uid || ""
   });
   return npcPersistence;
@@ -9512,7 +9660,7 @@ function getNpcRelationshipPersistenceSystem() {
   if (npcRelationshipPersistence) return npcRelationshipPersistence;
   npcRelationshipPersistence = createNpcRelationshipPersistence({
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, orderBy, limit, startAfter, serverTimestamp,
+    query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
     getUserId: () => currentUser?.uid || ""
   });
   return npcRelationshipPersistence;
@@ -9522,7 +9670,7 @@ function getEncounterPersistenceSystem() {
   if (encounterPersistence) return encounterPersistence;
   encounterPersistence = createEncounterPersistence({
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, orderBy, limit, startAfter, serverTimestamp,
+    query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
     getUserId: () => currentUser?.uid || ""
   });
   return encounterPersistence;
@@ -9532,7 +9680,7 @@ function getSummonPersistenceSystem() {
   if (summonPersistence) return summonPersistence;
   summonPersistence = createSummonPersistence({
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, orderBy, limit, startAfter, serverTimestamp,
+    query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
     getUserId: () => currentUser?.uid || ""
   });
   return summonPersistence;
@@ -9611,20 +9759,36 @@ function captureCurrentEncounterDraft() {
   };
 }
 
-async function copyEncounterRoomAsset(record, content) {
-  if (String(record.sourceRoomCode || "").toUpperCase() === String(currentRoomCode || "").toUpperCase()) {
+function currentEncounterOperationIdentity() {
+  return {
+    roomCode: currentRoomCode || "",
+    userId: currentUser?.uid || "",
+    isDm: currentIsDM === true
+  };
+}
+
+async function copyEncounterRoomAsset(record, content, context) {
+  assertEncounterOperationCurrent(context, currentEncounterOperationIdentity());
+  if (String(record.sourceRoomCode || "").toUpperCase() === context.roomCode) {
     return { assetType: record.assetType, recordId: record.sourceRecordId, record: { ...content, id: record.sourceRecordId } };
   }
   const copied = await copyLibraryRecordToRoom({
     db, collection, addDoc, updateDoc, serverTimestamp,
     asset: record,
     content,
-    roomCode: currentRoomCode,
-    roomData: currentRoomData || {},
-    user: currentUser || {}
+    roomCode: context.roomCode,
+    roomData: context.roomData,
+    user: { uid: context.userId, displayName: context.roomData.dmName || "Unnamed DM" }
   });
+  assertEncounterOperationCurrent(context, currentEncounterOperationIdentity());
   try {
-    await syncAccountLibraryRecord({ assetType: copied.assetType, sourceRecordId: copied.recordId, record: copied.record });
+    await syncAccountLibraryRecord({
+      assetType: copied.assetType,
+      sourceRecordId: copied.recordId,
+      roomCode: context.roomCode,
+      roomName: context.roomData.roomName,
+      record: copied.record
+    });
   } catch (error) {
     console.warn("Could not update the account library index:", error);
   }
@@ -9632,35 +9796,47 @@ async function copyEncounterRoomAsset(record, content) {
 }
 
 async function replaceCurrentBattleWithEncounter(prepared) {
-  if (!currentRoomCode || !currentIsDM) throw new Error("Open the destination room as its DM before loading an encounter.");
   if (!tokenSystem?.createAutomationToken) throw new Error("The token system is not ready.");
-  const retainedMap = buildMapFromRoomFields(currentRoomData || {});
-  if (!prepared.map && !retainedMap && prepared.combatants.length) {
-    throw new Error("Load a battle map or add a map reference before spawning encounter combatants.");
+  const context = createEncounterOperationContext({
+    roomCode: currentRoomCode,
+    roomData: currentRoomData,
+    userId: currentUser?.uid,
+    isDm: currentIsDM
+  });
+  const retainedMap = buildMapFromRoomFields(context.roomData);
+  preflightEncounterReplacement(prepared, { retainedMap });
+  const [tokenSnapshot, gameplayEffectSnapshot, combatEffectSnapshot] = await Promise.all([
+    getDocs(collection(db, "rooms", context.roomCode, "tokens")),
+    getDocs(collection(db, "rooms", context.roomCode, "effects")),
+    getDocs(collection(db, "rooms", context.roomCode, "combatEffects"))
+  ]);
+  assertEncounterOperationCurrent(context, currentEncounterOperationIdentity());
+  const replacementWriteCount = 1 + tokenSnapshot.docs.length
+    + gameplayEffectSnapshot.docs.length + combatEffectSnapshot.docs.length
+    + prepared.combatants.length;
+  if (replacementWriteCount > 500) {
+    throw new Error("This battle is too large to replace safely in one atomic operation. Remove some tokens or effects first.");
   }
 
   const stagedMap = prepared.map
-    ? await copyEncounterRoomAsset(prepared.map.record, prepared.map.content)
+    ? await copyEncounterRoomAsset(prepared.map.record, prepared.map.content, context)
     : null;
   const stagedCombatants = [];
   for (const entry of prepared.combatants) {
     if (entry.placement.assetType === "monster") {
-      stagedCombatants.push({ ...entry, staged: await copyEncounterRoomAsset(entry.record, entry.content) });
+      stagedCombatants.push({
+        ...entry,
+        staged: await copyEncounterRoomAsset(entry.record, entry.content, context)
+      });
     } else {
       stagedCombatants.push({ ...entry, staged: { recordId: entry.record.sourceRecordId, record: entry.content } });
     }
   }
-
-  const existingTokens = [...(tokenSystem.getRoomTokens?.() || [])];
-  await Promise.all(existingTokens.map((token) => deleteDoc(doc(db, "rooms", currentRoomCode, "tokens", token.id))));
-  const emptyInitiative = toRoomInitiativeFields(normalizeInitiativeState({}));
-  await updateDoc(doc(db, "rooms", currentRoomCode), { ...emptyInitiative, updatedAt: serverTimestamp() });
-  initiativeSystem?.applyRoomSnapshot?.(emptyInitiative);
-  currentRoomData = { ...(currentRoomData || {}), ...emptyInitiative };
-
+  assertEncounterOperationCurrent(context, currentEncounterOperationIdentity());
+  let selectedMap = retainedMap;
   if (stagedMap) {
     const content = stagedMap.record || {};
-    const selectedMap = {
+    selectedMap = {
       id: stagedMap.recordId,
       name: content.name || prepared.map.reference.name || "Encounter Map",
       url: content.url || content.imageUrl,
@@ -9670,43 +9846,117 @@ async function replaceCurrentBattleWithEncounter(prepared) {
       savedToLibrary: true,
       timeVariants: content.timeVariants || content.timeOfDayVariants || null
     };
-    if (!selectedMap.url) throw new Error("The encounter map image is unavailable.");
-    await setCurrentRoomMap(selectedMap);
-    currentRoomData = withoutLegacyCurrentMapFields(currentRoomData, selectedMap);
-    showSharedMap(selectedMap);
+    preflightEncounterReplacement({ ...prepared, map: { ...prepared.map, content } }, { retainedMap });
   }
 
-  const createdTokens = [];
-  for (const entry of stagedCombatants) {
-    const placement = entry.placement;
-    let token;
-    if (placement.assetType === "npc") {
-      token = await createNpcMapToken(entry.content, { ...placement, automationKind: "encounter" });
-    } else {
-      token = await tokenSystem.createAutomationToken({
-        sourceType: "monster",
-        sourceId: entry.staged.recordId,
+  const result = await runRecoverableEncounterStaging({
+    entries: stagedCombatants,
+    stageToken: async (entry) => {
+      assertEncounterOperationCurrent(context, currentEncounterOperationIdentity());
+      const placement = entry.placement;
+      const combat = entry.content.combat || {};
+      return tokenSystem.createAutomationToken({
+        sourceType: placement.assetType,
+        sourceId: placement.assetType === "monster" ? entry.staged.recordId : entry.content.id,
         name: entry.content.name || placement.name,
+        imageUrl: entry.content.portraitUrl || entry.content.imageUrl || "",
+        tokenType: placement.assetType === "monster" ? "enemy" : "npc",
+        ac: combat.ac,
+        maxHp: combat.hp,
+        currentHp: combat.hp,
+        speed: combat.speed,
+        combatEnabled: combat.enabled === true,
         ownership: { mode: "dm" },
         initiative: "none",
         duration: { mode: "permanent", value: 1 },
         onEnd: { mode: "leave", dismissAnimationId: "" },
         automationKind: "encounter",
-        createdByUid: currentUser?.uid || "",
+        createdByUid: context.userId,
         x: placement.x,
         y: placement.y,
-        elevation: placement.elevation
+        elevation: placement.elevation,
+        mapMode: stagedMap ? "single" : undefined,
+        tileKey: stagedMap ? null : undefined,
+        expectedRoomCode: context.roomCode,
+        expectedUserUid: context.userId,
+        activationState: "pending",
+        encounterOperationId: context.operationId
       });
+    },
+    cleanupToken: (token) => deleteDoc(
+      doc(db, "rooms", context.roomCode, "tokens", token.id)
+    ),
+    activate: async (createdTokens) => {
+      assertEncounterOperationCurrent(context, currentEncounterOperationIdentity());
+      const initiativeOrder = createdTokens.map(({ token, entry }) => ({
+        ...combatantFromToken(token),
+        ...(entry.placement.initiativePreset == null
+          ? {}
+          : { totalInitiative: entry.placement.initiativePreset })
+      }));
+      const resetFields = buildEncounterBattleResetFields(context.roomData, initiativeOrder);
+      const batch = writeBatch(db);
+      for (const tokenDoc of tokenSnapshot.docs) batch.delete(tokenDoc.ref);
+      for (const effectDoc of gameplayEffectSnapshot.docs) batch.delete(effectDoc.ref);
+      for (const effectDoc of combatEffectSnapshot.docs) batch.delete(effectDoc.ref);
+      for (const { token } of createdTokens) {
+        batch.update(doc(db, "rooms", context.roomCode, "tokens", token.id), {
+          activationState: "active",
+          encounterOperationId: deleteField(),
+          updatedAtMillis: Date.now(),
+          updatedAt: serverTimestamp()
+        });
+      }
+      const roomPatch = {
+        ...resetFields,
+        ...(stagedMap ? {
+          currentMap: normalizeCurrentMapData(selectedMap),
+          activePuzzleTileKey: null,
+          puzzleViewMode: "single",
+          ...legacyCurrentMapFieldDeletions()
+        } : {}),
+        updatedAt: serverTimestamp()
+      };
+      batch.update(doc(db, "rooms", context.roomCode), roomPatch);
+      await batch.commit();
+      return { createdTokens, resetFields };
     }
-    createdTokens.push({ token, placement });
-  }
+  });
 
-  for (const { token, placement } of createdTokens) {
-    await initiativeSystem.addToken(token);
-    if (placement.initiativePreset != null) await initiativeSystem.setInitiative(token.id, placement.initiativePreset);
+  const stillCurrent = currentRoomCode === context.roomCode
+    && currentUser?.uid === context.userId
+    && currentIsDM === true;
+  if (!stillCurrent) {
+    return {
+      tokenIds: result.createdTokens.map(({ token }) => token.id),
+      mapId: selectedMap?.id || null,
+      activatedInBackground: true
+    };
   }
+  currentRoomData = {
+    ...withoutLegacyCurrentMapFields(context.roomData, selectedMap),
+    ...result.resetFields,
+    ...(stagedMap ? { activePuzzleTileKey: null, puzzleViewMode: "single" } : {})
+  };
+  initiativeSystem?.applyRoomSnapshot?.(currentRoomData);
+  movementSystem?.applyRoomSnapshot?.(currentRoomData);
+  campaignTimeSystem?.applyRoomSnapshot?.(currentRoomData);
+  cancelActiveSpellCasting();
+  clearCombatActionTargeting();
+  combatEffectLifecycle.clear("battle-replaced", {
+    emit: false,
+    cleanup: false,
+    playEnd: false
+  });
+  latestCombatEffectRecords = [];
+  clearGameplayEffectsForRoomExit();
+  showSharedMap(selectedMap);
+  renderPuzzleBoard(currentRoomData);
   navigateMainScreen("battle");
-  return { tokenIds: createdTokens.map(({ token }) => token.id), mapId: stagedMap?.recordId || retainedMap?.id || null };
+  return {
+    tokenIds: result.createdTokens.map(({ token }) => token.id),
+    mapId: selectedMap?.id || null
+  };
 }
 
 async function loadEncounterIntoCurrentRoom(encounter) {
@@ -9943,7 +10193,7 @@ async function initWorkshopSystem() {
   if (workshopSystem) return workshopSystem;
   workshopPersistence = createWorkshopPersistence({
     db, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
-    query, where, limit, startAfter, serverTimestamp, writeBatch,
+    query, where, limit, startAfter, serverTimestamp, runTransaction,
     getUserId: () => currentUser?.uid || "",
     getUserName: () => currentUser?.displayName || currentRoomData?.dmName || "Homebrew God Creator",
     getRoomCode: () => currentRoomCode || "",
@@ -10189,6 +10439,7 @@ async function initMonsterCreatorSystem() {
     updateDoc,
     deleteDoc,
     onSnapshot,
+    runTransaction,
     serverTimestamp,
 
     getCurrentRoomCode: function () {
@@ -10464,11 +10715,28 @@ window.addEventListener("focus", function () {
   touchActivePlayerSession();
 });
 
-window.addEventListener("pageshow", function () {
+window.addEventListener("pageshow", function (event) {
   touchActivePlayerSession();
+
+  if (!isBackForwardCacheEvent(event)) {
+    return;
+  }
+
+  syncRealtimeListenersForScreen(
+    activeMainScreenName
+  );
+  battleMapRuler?.refresh();
+  battleMapTemplates?.refresh();
+  battleMapVfx?.refresh();
+  battleMapLighting?.refresh();
+  mapDrawingSystem?.syncContext?.();
 });
 
-window.addEventListener("pagehide", function () {
+window.addEventListener("pagehide", function (event) {
+  if (!shouldTearDownPage(event)) {
+    return;
+  }
+
   appRealtimeListeners.stopAll();
   characterCreatorSystem?.cleanupListeners?.();
   monsterCreatorSystem?.cleanupListeners?.();
@@ -11094,9 +11362,19 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
           }
           const state =
             characterCreatorSystem.getState?.();
+          const draft =
+            characterCreatorSystem.getDraft?.() || {};
           return {
             currentStepId:
               state?.currentStepId || "",
+            currentCharacterId:
+              state?.currentCharacterId || "",
+            revision:
+              Number(draft.revision) || 0,
+            isSaving:
+              state?.isSaving === true,
+            dirty:
+              state?.dirty === true,
             statusMessage:
               state?.statusMessage || "",
             multiclassAddStatus:
@@ -11105,9 +11383,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
                 : null,
             classProgression:
               JSON.parse(JSON.stringify(
-                characterCreatorSystem
-                  .getDraft?.()
-                  ?.classProgression || {}
+                draft.classProgression || {}
               ))
           };
         },

@@ -285,6 +285,7 @@ export function createEffectPanel({
   return Object.freeze({
     refresh,
     renderActive,
+    setStatus,
     setVisualEffects(records = []) {
       const list = root.querySelector("[data-visual-effect-list]");
       if (!list) return;

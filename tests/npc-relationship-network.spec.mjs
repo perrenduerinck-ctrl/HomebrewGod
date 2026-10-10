@@ -23,7 +23,7 @@ test("NPC network creates, edits, reloads, and deletes explicit relationships", 
   await page.getByRole("button", { name: "Save Relationship" }).click();
   await expect(page.locator("[data-network-scene]")).toContainText("Ally");
   expect((await page.evaluate(() => window.relationshipRecords()))[0].direction).toBe("mutual");
-  expect((await page.evaluate(() => window.npcRecords())).every((npc) => npc.relationshipIds.length === 1)).toBe(true);
+  expect((await page.evaluate(() => window.npcRecords())).every((npc) => npc.relationshipIds.length === 0)).toBe(true);
 
   await page.getByRole("button", { name: "Refresh Network" }).click();
   await page.locator("[data-network-edge-id]").click();

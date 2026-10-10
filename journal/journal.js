@@ -798,7 +798,7 @@ export function createJournalSystem(options = {}) {
       ? query(base, where("ownerUid", "==", state.userId))
       : base;
     const scope = `${state.roomCode}/${state.userId}/${state.isDm}/${visibility}`;
-    listeners.connect(`journal-${visibility}`, scope, ({ isCurrent }) => onSnapshot(
+    listeners.connect(`journal-${visibility}`, scope, ({ fail, isCurrent }) => onSnapshot(
       source,
       { includeMetadataChanges: true },
       (snapshot) => {
@@ -806,7 +806,14 @@ export function createJournalSystem(options = {}) {
         applySnapshot(visibility, snapshot, isCurrent);
       },
       (error) => {
-        if (isCurrent()) setStatus(`Journal sync failed: ${error.message}`, "error");
+        if (!isCurrent()) return;
+        const failure = fail(error);
+        if (failure.terminal) {
+          state.entriesByVisibility.set(visibility, new Map());
+          renderList();
+          if (!state.dirty && !state.saving) renderEditor();
+        }
+        setStatus(`Journal sync failed: ${error.message}`, "error");
       }
     ));
   }

@@ -1,9 +1,10 @@
 import { normalizeMagicItem, validateMagicItem } from "./magicItemModel.js";
+import { saveRevisionedRecord } from "../shared/revisionedPersistence.js";
 
 const docsOf = (snapshot) => Array.isArray(snapshot?.docs) ? snapshot.docs : [];
 
 export function createMagicItemPersistence({
-  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp,
+  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
   getUserId = () => "", now = () => Date.now()
 } = {}) {
   const uid = () => String(getUserId() || "");
@@ -28,8 +29,11 @@ export function createMagicItemPersistence({
       updatedAtMillis: now()
     };
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
-    await setDoc(itemRef(userId, item.id), record, { merge: true });
-    return normalizeMagicItem(record, { now: record.updatedAtMillis });
+    const committed = await saveRevisionedRecord({
+      db, reference: itemRef(userId, item.id), raw, record,
+      label: "magic item", runTransaction, getDoc, setDoc
+    });
+    return normalizeMagicItem(committed, { now: committed.updatedAtMillis });
   }
 
   async function load(itemId) {

@@ -69,9 +69,33 @@ export function createCastResolution({
   spellSaveDc = null,
   spellAttackBonus = null
 } = {}) {
-  const save = spell.targeting?.save || spell.save || null;
-  const attack = spell.targeting?.attack || null;
-  const damage = (Array.isArray(spell.damage) ? spell.damage : [])
+  const save = spell.targeting?.save || spell.save || (
+    cleanText(spell.saveAbility)
+      ? {
+          ability: spell.saveAbility,
+          success: spell.saveSuccess
+        }
+      : null
+  );
+  const attack = spell.targeting?.attack || spell.attack || (
+    cleanText(spell.attackType)
+      ? { type: spell.attackType }
+      : null
+  );
+  const structuredDamage = Array.isArray(spell.damage)
+    ? spell.damage
+    : spell.damage && typeof spell.damage === "object"
+      ? [spell.damage]
+      : [];
+  const damageEntries = structuredDamage.length
+    ? structuredDamage
+    : cleanText(spell.damageDice)
+      ? [{
+          dice: spell.damageDice,
+          damageType: spell.damageType
+        }]
+      : [];
+  const damage = damageEntries
     .map((entry) => {
       const expression = getDamageExpression(entry, slotLevel);
       const damageType = cleanText(
@@ -88,10 +112,20 @@ export function createCastResolution({
     spell.concentration === true ||
     spell.targeting?.duration?.concentration === true
   );
-  const normalizedSaveDc = Number.isFinite(Number(spellSaveDc))
+  const hasSaveDc = !(
+    spellSaveDc === null ||
+    spellSaveDc === undefined ||
+    String(spellSaveDc).trim() === ""
+  );
+  const hasAttackBonus = !(
+    spellAttackBonus === null ||
+    spellAttackBonus === undefined ||
+    String(spellAttackBonus).trim() === ""
+  );
+  const normalizedSaveDc = hasSaveDc && Number.isFinite(Number(spellSaveDc))
     ? finiteInteger(spellSaveDc, 0, 0)
     : null;
-  const normalizedAttackBonus = Number.isFinite(Number(spellAttackBonus))
+  const normalizedAttackBonus = hasAttackBonus && Number.isFinite(Number(spellAttackBonus))
     ? Math.round(Number(spellAttackBonus))
     : null;
 

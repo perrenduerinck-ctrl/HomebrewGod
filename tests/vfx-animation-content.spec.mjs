@@ -23,7 +23,11 @@ async function choose(page, row, id) {
 const records = page => page.evaluate(() => JSON.parse(localStorage.getItem("acceptance-firestore") || "{}"));
 async function saveCharacter(page) {
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("basics"));
-  await page.locator("#ccCharacterName").fill("Gary UX Wizard"); await page.locator("#characterWizardSaveButton").click();
+  await page.locator("#ccCharacterName").fill("Gary UX Wizard");
+  const saveButton = page.locator("#characterWizardSaveButton");
+  await saveButton.click();
+  await expect(page.locator("#characterCreatorStatus")).toContainText("draft was saved");
+  await expect(saveButton).toBeEnabled();
   await expect.poll(async () => Object.values(await records(page)).flatMap(x => x.magic?.customSpells || []).length).toBe(1);
 }
 
@@ -100,6 +104,7 @@ test("Gary Fireball normal spell save/reopen restores stages and both directions
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("spells"));
   await page.locator('[data-cc-action="edit-custom-spell"]').click();
   await choose(page, section.locator('[data-content-stage="impact"]'), "healing_burst_01");
+  await expect(section.locator('[data-content-stage="impact"]')).toContainText("Healing burst");
   await page.getByRole("button", { name: "Save Spell", exact: true }).click(); await saveCharacter(page);
   current = (await records(page))[path].magic.customSpells[0];
   expect(current.animations.impact.animationId).toBe("healing_burst_01"); expect(current.range).toBe("150 feet"); expect(current.description).toBe("Gary mechanics stay intact.");

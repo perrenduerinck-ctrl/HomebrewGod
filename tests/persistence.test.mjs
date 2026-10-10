@@ -466,3 +466,63 @@ test(
     );
   }
 );
+
+test(
+  "transactional gameplay saves reject an interleaved stale revision",
+  async () => {
+    const documentRef = {
+      id: "saved-character-17"
+    };
+    const remoteRecord = makeSavedCharacter({
+      revision: 4,
+      updatedAtMillis: 4000,
+      builder: {
+        status: "finalized",
+        finalizedAtMillis: 900,
+        lastSavedAtMillis: 4000
+      }
+    });
+    const staleDraft = clone(remoteRecord);
+    const currentRecord = {
+      ...clone(remoteRecord),
+      revision: 5,
+      updatedAtMillis: 5000,
+      builder: {
+        ...remoteRecord.builder,
+        lastSavedAtMillis: 5000
+      }
+    };
+    let transactionWrites = 0;
+
+    await assert.rejects(
+      persistExistingGameplayCharacter({
+        runTransaction:
+          async (_db, callback) => {
+            return callback({
+              get: async () => ({
+                exists: () => true,
+                data: () => clone(currentRecord)
+              }),
+              update() {
+                transactionWrites += 1;
+              }
+            });
+          },
+        db: {},
+        documentRef,
+        remoteRecord,
+        nextRecord: staleDraft,
+        characterId: documentRef.id,
+        roomCode: "TEST",
+        actorUid: "owner-1",
+        roomDmUid: "dm-1",
+        expectedRevisionMillis: 4000,
+        savedAtMillis: 6000,
+        timestamp: {}
+      }),
+      /newer version/i
+    );
+
+    assert.equal(transactionWrites, 0);
+  }
+);

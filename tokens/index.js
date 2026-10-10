@@ -424,6 +424,10 @@ export function createTokenSystem(options) {
         fields.characterId,
       sheetId: fields.characterId,
       sourceType: "character",
+      linkedCharacterRevision: Math.max(
+        0,
+        Math.floor(Number(character?.revision) || 0)
+      ),
       linkedCharacter: {
         id: fields.characterId,
         hpAuthority: "character",
@@ -1559,7 +1563,7 @@ export function createTokenSystem(options) {
     realtimeListeners.connect(
       "tokens",
       roomCode,
-      ({ isCurrent }) => {
+      ({ fail, isCurrent }) => {
         return deps.onSnapshot(
           tokenCollectionRef,
           function (snapshot) {
@@ -1592,6 +1596,8 @@ export function createTokenSystem(options) {
               return;
             }
 
+            fail(error);
+
             console.error(
               "Could not load room tokens:",
               error
@@ -1608,7 +1614,7 @@ export function createTokenSystem(options) {
     const viewMode = deps.getPuzzleViewMode ? deps.getPuzzleViewMode(safeRoom) : "board";
     const activeTile = deps.getActivePuzzleTile ? deps.getActivePuzzleTile(safeRoom) : null;
 
-    if (tiles.length > 0) {
+    if (tiles.length > 0 && viewMode !== "single") {
       if (viewMode === "focus" && activeTile) {
         return {
           mapMode: "puzzle",
@@ -1781,7 +1787,7 @@ export function createTokenSystem(options) {
       : null;
 
     const visibleTokens = getRoomTokens().filter(function (token) {
-      return tokenMatchesCurrentView(token, safeRoom);
+      return token.activationState !== "pending" && tokenMatchesCurrentView(token, safeRoom);
     });
 
     visibleTokens.forEach(function (token) {
@@ -2427,7 +2433,17 @@ export function createTokenSystem(options) {
     if (!roomCode || deps.getCurrentIsDM?.() !== true) {
       throw new Error("Only the room DM can create an automated summon token.");
     }
-    const target = getCurrentTokenTarget(roomData);
+    const expectedRoomCode = String(spec.expectedRoomCode || roomCode).trim().toUpperCase();
+    const expectedUserUid = String(spec.expectedUserUid || deps.getCurrentUserUid?.() || "").trim();
+    if (
+      String(roomCode).toUpperCase() !== expectedRoomCode ||
+      (expectedUserUid && String(deps.getCurrentUserUid?.() || "") !== expectedUserUid)
+    ) {
+      throw new Error("The active room or account changed before the token could be staged.");
+    }
+    const target = spec.mapMode
+      ? { mapMode: String(spec.mapMode), tileKey: spec.tileKey ?? null }
+      : getCurrentTokenTarget(roomData);
     if (!target.mapMode) throw new Error("Load a map before creating a summon token.");
     let sourcePatch = {};
     if (["monster", "character"].includes(spec.sourceType) && spec.sourceId) {
@@ -2511,8 +2527,18 @@ export function createTokenSystem(options) {
       createdAt: deps.serverTimestamp(),
       updatedAt: deps.serverTimestamp()
     };
+    if (spec.activationState === "pending") {
+      newToken.activationState = "pending";
+      newToken.encounterOperationId = String(spec.encounterOperationId || "").trim() || null;
+    }
+    if (
+      String(deps.getCurrentRoomCode?.() || "").toUpperCase() !== expectedRoomCode ||
+      (expectedUserUid && String(deps.getCurrentUserUid?.() || "") !== expectedUserUid)
+    ) {
+      throw new Error("The active room or account changed while the token was being staged.");
+    }
     const created = await deps.addDoc(
-      deps.collection(deps.db, "rooms", roomCode, "tokens"),
+      deps.collection(deps.db, "rooms", expectedRoomCode, "tokens"),
       newToken
     );
     return normalizeToken({ ...newToken, id: created?.id || null });
@@ -2666,9 +2692,29 @@ export function createTokenSystem(options) {
     if (!linkedTokenDocuments.length) {
       return {
         characterId,
-        updatedCount: 0
+        updatedCount: 0,
+        skippedCount: 0
       };
     }
+
+    const actorUid = String(
+      deps.getCurrentUserUid
+        ? deps.getCurrentUserUid()
+        : ""
+    ).trim();
+    const isDm = deps.getCurrentIsDM
+      ? deps.getCurrentIsDM() === true
+      : false;
+    const writableTokenDocuments = linkedTokenDocuments.filter(
+      (tokenDocument) => {
+        if (isDm) return true;
+        const tokenData = typeof tokenDocument?.data === "function"
+          ? tokenDocument.data()
+          : tokenDocument?.data || {};
+        return Boolean(actorUid) &&
+          String(tokenData?.ownerUid || "").trim() === actorUid;
+      }
+    );
 
     const updatedAtMillis = Date.now();
 
@@ -2682,7 +2728,7 @@ export function createTokenSystem(options) {
     };
 
     await Promise.all(
-      linkedTokenDocuments.map((tokenDocument) => {
+      writableTokenDocuments.map((tokenDocument) => {
         return deps.updateDoc(
           tokenDocument.ref ||
           deps.doc(
@@ -2697,7 +2743,14 @@ export function createTokenSystem(options) {
       })
     );
 
+    const writableTokenIds = new Set(
+      writableTokenDocuments.map((tokenDocument) => String(tokenDocument.id || ""))
+    );
+
     tokenCache = tokenCache.map((token) => {
+      if (!isDm && !writableTokenIds.has(String(token?.id || ""))) {
+        return token;
+      }
       if (
         String(
           token?.linkedCharacterId ||
@@ -2719,7 +2772,9 @@ export function createTokenSystem(options) {
     return {
       characterId,
       updatedCount:
-        linkedTokenDocuments.length
+        writableTokenDocuments.length,
+      skippedCount:
+        linkedTokenDocuments.length - writableTokenDocuments.length
     };
   }
 
@@ -3023,7 +3078,7 @@ export function createTokenSystem(options) {
   }
 
   function handleTokenPointerMove(event) {
-    if (!activeTokenDrag) {
+    if (!activeTokenDrag || event.pointerId !== activeTokenDrag.pointerId) {
       return;
     }
 
@@ -3082,15 +3137,24 @@ export function createTokenSystem(options) {
           y: drag.currentY,
           elevation: drag.elevation
         },
-        distanceFeet: measurement.feet
+        distanceFeet: measurement.feet,
+        measurement: {
+          viewportWidth: drag.rectWidth,
+          viewportHeight: drag.rectHeight,
+          ...(deps.getMovementMeasurementOptions
+            ? deps.getMovementMeasurementOptions(drag.tokenId)
+            : {})
+        }
       });
     }
   }
 
-  async function handleTokenPointerUp() {
-    if (!activeTokenDrag) {
+  async function handleTokenPointerUp(event) {
+    if (!activeTokenDrag || event.pointerId !== activeTokenDrag.pointerId) {
       return;
     }
+
+    handleTokenPointerMove(event);
 
     const drag = activeTokenDrag;
     activeTokenDrag = null;
@@ -3131,11 +3195,17 @@ export function createTokenSystem(options) {
     }
   }
 
-  function cancelTokenDrag() {
-    if (!activeTokenDrag) {
+  function cancelTokenDrag(event = null) {
+    if (
+      !activeTokenDrag ||
+      (event?.pointerId != null && event.pointerId !== activeTokenDrag.pointerId)
+    ) {
       return;
     }
 
+    try {
+      activeTokenDrag.tokenEl.releasePointerCapture(activeTokenDrag.pointerId);
+    } catch {}
     activeTokenDrag.tokenEl.classList.remove("hg-token-dragging");
     activeTokenDrag = null;
 

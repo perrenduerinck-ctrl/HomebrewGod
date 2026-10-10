@@ -338,6 +338,8 @@ export function createCharacterCreator(options = {}) {
 
     return {
       id: null,
+      revision: 0,
+      updatedAtMillis: 0,
       sheetType: "character",
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       rulesetId: ACTIVE_RULESET.id,
@@ -3313,6 +3315,19 @@ export function createCharacterCreator(options = {}) {
 
       id: raw.id || null,
       ownerUid: cleanString(raw.ownerUid),
+      revision: Math.max(
+        0,
+        Math.floor(
+          safeNumber(raw.revision, 0)
+        )
+      ),
+      updatedAtMillis: Math.max(
+        0,
+        safeNumber(
+          raw.updatedAtMillis,
+          raw.builder?.lastSavedAtMillis || 0
+        )
+      ),
       schemaVersion: CHARACTER_SCHEMA_VERSION,
       rulesetId: ACTIVE_RULESET.id,
       rulesEdition: ACTIVE_RULESET.edition,
@@ -11057,11 +11072,26 @@ export function createCharacterCreator(options = {}) {
     libraryList: null
   };
 
+  function createDraftRecoveryId() {
+    if (
+      typeof globalThis?.crypto
+        ?.randomUUID === "function"
+    ) {
+      return `draft-${globalThis.crypto.randomUUID()}`;
+    }
+
+    return `draft-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+  }
+
   const creatorState = {
     viewMode: "library",
     currentStepId: "basics",
     currentStepIndex: 0,
     currentCharacterId: null,
+    draftRecoveryId: createDraftRecoveryId(),
+    draftRecoveryCandidates: [],
     draft: createEmptyCharacter(),
     reviewRevision: 0,
     dirty: false,
@@ -11109,6 +11139,7 @@ export function createCharacterCreator(options = {}) {
   const draftPersistenceRuntime = {
     timerId: null,
     targets: null,
+    record: null,
     scheduleCount: 0,
     flushCount: 0,
     storageWriteCount: 0
@@ -16568,6 +16599,10 @@ export function createCharacterCreator(options = {}) {
   }
 
   function startNewDraft() {
+    creatorState.draftRecoveryId =
+      createDraftRecoveryId();
+    creatorState.draftRecoveryCandidates = [];
+
     replaceDraft(
       createEmptyCharacter(),
       {
@@ -16863,6 +16898,28 @@ export function createCharacterCreator(options = {}) {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
         gap: 14px;
+      }
+
+      .hg-character-recovery-panel {
+        margin: 0 0 16px;
+        padding: 14px;
+        border: 1px solid rgba(255, 193, 92, 0.45);
+        border-radius: 12px;
+        background: rgba(89, 58, 10, 0.2);
+      }
+
+      .hg-character-recovery-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .hg-character-recovery-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
       }
 
       .hg-character-card,
@@ -17779,17 +17836,61 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function getDraftStorageIdentity(
+    draftId = null
+  ) {
+    const accountUid = cleanString(
+      deps.getCurrentUserUid?.(),
+      "signed-out"
+    );
+    const roomCode = cleanString(
+      getRoomCode(),
+      "no-room"
+    ).toUpperCase();
+
+    return {
+      accountUid,
+      roomCode,
+      draftId: cleanString(
+        draftId ||
+        creatorState.currentCharacterId ||
+        creatorState.draftRecoveryId,
+        "new-draft"
+      )
+    };
+  }
+
+  function getDraftStorageScopeKey() {
+    const identity = getDraftStorageIdentity();
+    return `${encodeURIComponent(identity.accountUid)}:${encodeURIComponent(identity.roomCode)}`;
+  }
+
   function getDraftStorageKey() {
     return (
-      "homebrewGodCharacterDraft:" +
-      (getRoomCode() || "no-room")
+      "homebrewGodCharacterDraft:v3:" +
+      getDraftStorageScopeKey()
     );
   }
 
-  function getPersistentDraftStorageKey() {
+  function getPersistentDraftStorageKey(
+    draftId = null
+  ) {
+    const identity =
+      getDraftStorageIdentity(draftId);
+
     return (
-      "homebrewGodCharacterDraftBackup:" +
-      (getRoomCode() || "no-room")
+      "homebrewGodCharacterDraftBackup:v3:" +
+      getDraftStorageScopeKey() +
+      ":" +
+      encodeURIComponent(identity.draftId)
+    );
+  }
+
+  function getPersistentDraftStoragePrefix() {
+    return (
+      "homebrewGodCharacterDraftBackup:v3:" +
+      getDraftStorageScopeKey() +
+      ":"
     );
   }
 
@@ -17830,6 +17931,8 @@ export function createCharacterCreator(options = {}) {
         label: "local browser backup",
         persistent: true,
         key: getPersistentDraftStorageKey(),
+        expectedDraftId:
+          getDraftStorageIdentity().draftId,
         storage:
           getBrowserStorage(
             "localStorage"
@@ -17841,9 +17944,14 @@ export function createCharacterCreator(options = {}) {
   }
 
   function createDraftStorageRecord() {
+    const identity = getDraftStorageIdentity();
+
     return {
-      version: 2,
+      version: 3,
       persistedAtMillis: Date.now(),
+      accountUid: identity.accountUid,
+      roomCode: identity.roomCode,
+      draftId: identity.draftId,
       draft:
         normalizeCharacterTextFields(
           cloneData(
@@ -17996,11 +18104,15 @@ export function createCharacterCreator(options = {}) {
 
     draftPersistenceRuntime.targets =
       null;
+    draftPersistenceRuntime.record =
+      null;
   }
 
   function flushPendingDraftPersistence() {
     const targets =
       draftPersistenceRuntime.targets;
+    const record =
+      draftPersistenceRuntime.record;
 
     if (!targets) {
       return false;
@@ -18020,6 +18132,8 @@ export function createCharacterCreator(options = {}) {
 
     draftPersistenceRuntime.targets =
       null;
+    draftPersistenceRuntime.record =
+      null;
 
     if (targets.length) {
       draftPersistenceRuntime.flushCount += 1;
@@ -18027,7 +18141,8 @@ export function createCharacterCreator(options = {}) {
         targets,
         {
           fromScheduledFlush: true,
-          skipInputFlush: true
+          skipInputFlush: true,
+          record
         }
       );
     }
@@ -18063,6 +18178,8 @@ export function createCharacterCreator(options = {}) {
 
     draftPersistenceRuntime.targets =
       targets;
+    draftPersistenceRuntime.record =
+      createDraftStorageRecord();
     draftPersistenceRuntime.scheduleCount += 1;
 
     if (
@@ -18145,6 +18262,24 @@ export function createCharacterCreator(options = {}) {
     handleDraftPageHide();
   }
 
+  function resetCharacterCreatorContext() {
+    handleDraftPageHide();
+    cleanupSection19PermanentListeners();
+    clearPendingDraftPersistence();
+    creatorState.draft = createEmptyCharacter();
+    creatorState.currentCharacterId = null;
+    creatorState.draftRecoveryId =
+      createDraftRecoveryId();
+    creatorState.draftRecoveryCandidates = [];
+    creatorState.dirty = false;
+    creatorState.viewMode = "library";
+    creatorState.characterCache = [];
+    creatorState.characterRoomCode = null;
+    wizardRuntime.initialRouteApplied = false;
+    setCurrentStep("basics");
+    return creatorState;
+  }
+
   function persistDraftToSession(
     targets = getDraftStorageTargets(),
     options = {}
@@ -18162,6 +18297,7 @@ export function createCharacterCreator(options = {}) {
     }
 
     const record =
+      options.record ||
       createDraftStorageRecord();
 
     const text =
@@ -18218,7 +18354,26 @@ export function createCharacterCreator(options = {}) {
       if (
         !stored ||
         typeof stored !== "object" ||
-        !stored.draft
+        !stored.draft ||
+        safeNumber(stored.version, 0) < 3
+      ) {
+        return null;
+      }
+
+      const identity = getDraftStorageIdentity();
+
+      if (
+        cleanString(stored.accountUid) !==
+          identity.accountUid ||
+        cleanString(stored.roomCode)
+          .toUpperCase() !==
+          identity.roomCode ||
+        !cleanString(stored.draftId) ||
+        (
+          cleanString(target.expectedDraftId) &&
+          cleanString(stored.draftId) !==
+            cleanString(target.expectedDraftId)
+        )
       ) {
         return null;
       }
@@ -18244,6 +18399,54 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function getPersistentDraftRecoveryRecords() {
+    const storage =
+      getBrowserStorage("localStorage");
+
+    if (!storage) {
+      return [];
+    }
+
+    const prefix =
+      getPersistentDraftStoragePrefix();
+    const targets = [];
+
+    for (
+      let index = 0;
+      index < safeNumber(storage.length, 0);
+      index += 1
+    ) {
+      const key = storage.key(index);
+
+      if (
+        typeof key === "string" &&
+        key.startsWith(prefix)
+      ) {
+        const expectedDraftId =
+          decodeURIComponent(
+            key.slice(prefix.length)
+          );
+
+        targets.push({
+          name: "persistent",
+          label: "local browser backup",
+          persistent: true,
+          key,
+          expectedDraftId,
+          storage
+        });
+      }
+    }
+
+    return targets
+      .map(readDraftStorageRecord)
+      .filter(Boolean)
+      .sort((a, b) => {
+        return b.persistedAtMillis -
+          a.persistedAtMillis;
+      });
+  }
+
   function chooseStoredDraftRecord(records) {
     return records
       .filter(Boolean)
@@ -18265,33 +18468,67 @@ export function createCharacterCreator(options = {}) {
     targets = getDraftStorageTargets()
   ) {
     try {
-      const stored =
-        chooseStoredDraftRecord(
-          targets.map(readDraftStorageRecord)
+      const sessionRecords = targets
+        .filter((target) => {
+          return target.persistent !== true;
+        })
+        .map(readDraftStorageRecord)
+        .filter(Boolean);
+      const explicitPersistentRecords = targets
+        .filter((target) => {
+          return target.persistent === true;
+        })
+        .map(readDraftStorageRecord)
+        .filter(Boolean);
+      const persistentRecords =
+        explicitPersistentRecords.length
+          ? explicitPersistentRecords
+          : getPersistentDraftRecoveryRecords();
+      const stored = chooseStoredDraftRecord(
+        sessionRecords
+      );
+
+      creatorState.draftRecoveryCandidates =
+        persistentRecords.length > 1
+          ? persistentRecords
+          : [];
+
+      const selected = stored ||
+        (
+          persistentRecords.length === 1
+            ? persistentRecords[0]
+            : null
         );
 
-      if (!stored) {
+      if (!selected) {
+        if (persistentRecords.length > 1) {
+          setStatus(
+            `${persistentRecords.length} unsaved character drafts are available to recover. Choose the correct draft below.`
+          );
+        }
         return false;
       }
 
       creatorState.draft =
-        sanitizeDraftStrings(stored.draft);
+        sanitizeDraftStrings(selected.draft);
 
       refreshLoadedClassDerivedValues();
 
       creatorState.currentCharacterId =
-        stored.currentCharacterId || null;
+        selected.currentCharacterId || null;
+      creatorState.draftRecoveryId =
+        selected.draftId;
 
       creatorState.dirty =
-        stored.dirty === true;
+        selected.dirty === true;
 
       setCurrentStep(
-        stored.currentStepId || "basics"
+        selected.currentStepId || "basics"
       );
 
       if (
-        stored.persistent &&
-        stored.dirty === true
+        selected.persistent &&
+        selected.dirty === true
       ) {
         setStatus(
           "Restored an unsaved character draft from local browser storage. Save it or download a JSON backup; browser storage is not permanent."
@@ -18307,6 +18544,73 @@ export function createCharacterCreator(options = {}) {
 
       return false;
     }
+  }
+
+  function recoverStoredDraft(draftId) {
+    const storage =
+      getBrowserStorage("localStorage");
+
+    if (!storage) {
+      return false;
+    }
+
+    const target = {
+      name: "persistent",
+      label: "local browser backup",
+      persistent: true,
+      key: getPersistentDraftStorageKey(draftId),
+      expectedDraftId: draftId,
+      storage
+    };
+    const stored = readDraftStorageRecord(target);
+
+    if (!stored) {
+      setStatus(
+        "That browser draft is no longer available."
+      );
+      return false;
+    }
+
+    creatorState.draft =
+      sanitizeDraftStrings(stored.draft);
+    creatorState.currentCharacterId =
+      stored.currentCharacterId || null;
+    creatorState.draftRecoveryId =
+      stored.draftId;
+    creatorState.dirty =
+      stored.dirty === true;
+    creatorState.draftRecoveryCandidates = [];
+    refreshLoadedClassDerivedValues();
+    setCurrentStep(
+      stored.currentStepId || "basics"
+    );
+    creatorState.viewMode = "builder";
+    setStatus(
+      "Recovered the selected unsaved character draft."
+    );
+    navigateToStep(creatorState.currentStepId);
+    return true;
+  }
+
+  function discardStoredDraft(draftId) {
+    const storage =
+      getBrowserStorage("localStorage");
+
+    if (!storage) {
+      return false;
+    }
+
+    storage.removeItem(
+      getPersistentDraftStorageKey(draftId)
+    );
+    creatorState.draftRecoveryCandidates =
+      creatorState.draftRecoveryCandidates
+        .filter((record) => {
+          return record.draftId !== draftId;
+        });
+    setStatus("Browser draft discarded.");
+    renderCreatorView();
+    return true;
   }
 
   function clearStoredDraft(
@@ -19722,6 +20026,59 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
+  function renderDraftRecoveryCandidates() {
+    const records = Array.isArray(
+      creatorState.draftRecoveryCandidates
+    )
+      ? creatorState.draftRecoveryCandidates
+      : [];
+
+    if (records.length < 2) {
+      return "";
+    }
+
+    return `
+      <section class="hg-character-recovery-panel">
+        <strong>Unsaved character drafts found</strong>
+        <p class="small">
+          Choose the draft you intended to continue. Drafts are kept separately for this account and campaign.
+        </p>
+        <div class="hg-character-recovery-list">
+          ${records.map((record) => {
+            const name = cleanString(
+              record.draft?.identity?.name,
+              "Unnamed Character"
+            );
+            const savedTime = new Date(
+              record.persistedAtMillis
+            ).toLocaleString();
+
+            return `
+              <div class="hg-character-recovery-row">
+                <span>
+                  <b>${escapeHtml(name)}</b>
+                  <span class="small">${escapeHtml(savedTime)}</span>
+                </span>
+                <span>
+                  <button
+                    type="button"
+                    data-cc-action="recover-browser-draft"
+                    data-draft-id="${escapeHtml(record.draftId)}"
+                  >Recover</button>
+                  <button
+                    type="button"
+                    data-cc-action="discard-browser-draft"
+                    data-draft-id="${escapeHtml(record.draftId)}"
+                  >Discard</button>
+                </span>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
   function renderBuilderView() {
     const step =
       getStepById(
@@ -19747,6 +20104,7 @@ export function createCharacterCreator(options = {}) {
       getCharacterBusyLabel();
 
     W.root.innerHTML = `
+      ${renderDraftRecoveryCandidates()}
       <div class="hg-character-builder-header">
         <div>
           <h2 id="characterBuilderTitle">
@@ -20675,6 +21033,7 @@ export function createCharacterCreator(options = {}) {
         .join("");
 
     W.root.innerHTML = `
+      ${renderDraftRecoveryCandidates()}
       <div class="hg-character-library-header">
         <div>
           <h2>
@@ -20765,6 +21124,7 @@ export function createCharacterCreator(options = {}) {
     }
 
     try {
+    clearStoredDraft();
     const requestedStep =
       getStepById(
         character?.builder?.currentStep ||
@@ -20892,6 +21252,8 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    clearStoredDraft();
+
     replaceDraft(
       character,
       {
@@ -20971,6 +21333,9 @@ export function createCharacterCreator(options = {}) {
     }
 
     try {
+    clearStoredDraft();
+    creatorState.draftRecoveryId =
+      createDraftRecoveryId();
     duplicateIntoDraft(
       character
     );
@@ -21006,6 +21371,24 @@ export function createCharacterCreator(options = {}) {
 
   registerCharacterLibraryRenderer(
     renderCharacterLibraryView
+  );
+
+  registerCharacterCreatorAction(
+    "recover-browser-draft",
+    ({ button }) => {
+      recoverStoredDraft(
+        button.dataset.draftId
+      );
+    }
+  );
+
+  registerCharacterCreatorAction(
+    "discard-browser-draft",
+    ({ button }) => {
+      discardStoredDraft(
+        button.dataset.draftId
+      );
+    }
   );
 
   registerCharacterCreatorAction(
@@ -29980,8 +30363,19 @@ export function createCharacterCreator(options = {}) {
         itemId: item.id
       });
 
-    creatorState.draft.equipment =
-      result.sourceCharacter.equipment;
+    creatorState.draft = normalizeCharacter({
+      ...creatorState.draft,
+      equipment:
+        result.sourceCharacter.equipment,
+      builder: {
+        ...(creatorState.draft.builder || {}),
+        ...(result.sourceCharacter.builder || {})
+      },
+      updatedAt:
+        result.sourceCharacter.updatedAt,
+      updatedAtMillis:
+        result.sourceCharacter.updatedAtMillis
+    });
     creatorState.dirty = false;
     creatorState.characterCache =
       creatorState.characterCache.map((character) => {
@@ -37306,6 +37700,13 @@ export function createCharacterCreator(options = {}) {
       return false;
     }
 
+    const preMutationDraft = cloneData(
+      creatorState.draft
+    );
+    const preMutationDirty =
+      creatorState.dirty === true;
+    const preMutationStepId =
+      creatorState.currentStepId;
     const builderState = {
       status:
         creatorState.draft
@@ -37365,6 +37766,20 @@ export function createCharacterCreator(options = {}) {
       });
 
     if (!saved) {
+      replaceDraft(
+        preMutationDraft,
+        {
+          characterId:
+            creatorState.currentCharacterId,
+          dirty: preMutationDirty,
+          stepId: preMutationStepId
+        }
+      );
+      persistDraftToSession();
+      setStatus(
+        "The gameplay change was not saved, so the local character was restored to its previous state."
+      );
+      renderCurrentStep();
       return false;
     }
 
@@ -38834,6 +39249,8 @@ export function createCharacterCreator(options = {}) {
       connectSection19PermanentListeners,
     cleanupListeners:
       cleanupSection19PermanentListeners,
+    resetContext:
+      resetCharacterCreatorContext,
     getListenerSnapshot() {
       return section19Listeners.getSnapshot();
     },

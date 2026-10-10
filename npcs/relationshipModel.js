@@ -35,6 +35,7 @@ export function normalizeNpcRelationship(raw = {}, {
     : "directed";
   return Object.freeze({
     id: safeId(source.id, idFactory()),
+    revision: Math.max(0, Math.trunc(Number(source.revision) || 0)),
     sourceNpcId: clean(source.sourceNpcId, 160),
     targetNpcId: clean(source.targetNpcId, 160),
     relationshipType,

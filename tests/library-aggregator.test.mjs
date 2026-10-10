@@ -140,3 +140,65 @@ test("native adapters read lightweight summaries and defer full records until lo
   assert.equal((await adapters[1].load("animation_1")).sprite, "https://example.com/large-sheet.png");
   assert.equal((await adapters[2].load("map_1")).url, "https://example.com/large-map.png");
 });
+
+test("load more skips exhausted adapters instead of restarting them at page one", async () => {
+  const calls = { exhausted: 0, continuing: 0 };
+  const exhausted = {
+    sourceType: "exhausted",
+    sourceTypes: ["monster"],
+    async listSummaries() { return []; },
+    async load() { return {}; },
+    async listPage() {
+      calls.exhausted += 1;
+      return {
+        entries: native("monster", 1),
+        cursor: null,
+        hasMore: false,
+        readCount: 1
+      };
+    }
+  };
+  const continuing = {
+    sourceType: "continuing",
+    sourceTypes: ["map"],
+    async listSummaries() { return []; },
+    async load() { return {}; },
+    async listPage({ cursor }) {
+      calls.continuing += 1;
+      if (!cursor) {
+        return {
+          entries: native("map", 1),
+          cursor: "page-1",
+          hasMore: true,
+          readCount: 1
+        };
+      }
+      return {
+        entries: [],
+        cursor: null,
+        hasMore: false,
+        readCount: 0
+      };
+    }
+  };
+  const aggregator = createLibraryAggregator({
+    adapters: [exhausted, continuing],
+    persistence: persistence(),
+    getUserId: () => "owner-1"
+  });
+
+  const first = await aggregator.listPage({ pageSize: 1 });
+  assert.equal(first.cursors.exhausted, "complete");
+  assert.equal(first.cursors.continuing, "page-1");
+  assert.equal(first.hasMore, true);
+
+  const second = await aggregator.listPage({
+    pageSize: 1,
+    cursors: first.cursors
+  });
+  assert.equal(second.cursors.exhausted, "complete");
+  assert.equal(second.cursors.continuing, "complete");
+  assert.equal(second.hasMore, false);
+  assert.deepEqual(calls, { exhausted: 1, continuing: 2 });
+  assert.equal(second.metrics.summaryReads, 0);
+});

@@ -63,6 +63,8 @@ export function createAccountLibraryIndexEntry({ assetType, sourceRecordId, room
     copiedFromLibraryId: normalized.copiedFromLibraryId,
     copiedFromRoomCode: normalized.copiedFromRoomCode,
     copiedFromRecordId: normalized.copiedFromRecordId,
+    unavailable: false,
+    unavailableReason: "",
     metadata: normalized.metadata,
     indexedAtMillis: now
   });
@@ -131,12 +133,26 @@ export function createAccountLibraryIndex({
       .filter((entry) => String(entry.role || "").toLowerCase() === "dm");
     const expected = new Map();
     const repairedRooms = new Set();
+    const deletedRooms = new Set();
+    const inaccessibleRooms = new Set();
+    const incompleteRooms = new Set();
     let reads = 1 + docsOf(roomSnapshot).length;
 
     for (const room of rooms) {
       const roomCode = String(room.roomCode || room.id || "").toUpperCase();
       if (!roomCode) continue;
       try {
+        const sourceRoomSnapshot = await getDoc(doc(db, "rooms", roomCode));
+        reads += 1;
+        if (!sourceRoomSnapshot.exists?.()) {
+          deletedRooms.add(roomCode);
+          continue;
+        }
+        const sourceRoomData = dataOf(sourceRoomSnapshot);
+        if (sourceRoomData.dmUid && sourceRoomData.dmUid !== uid) {
+          inaccessibleRooms.add(roomCode);
+          continue;
+        }
         const [monsters, maps] = await Promise.all([
           getDocs(collection(db, "rooms", roomCode, "monsters")),
           getDocs(collection(db, "rooms", roomCode, "maps"))
@@ -153,7 +169,14 @@ export function createAccountLibraryIndex({
             expected.set(value.libraryId, value);
           }
         }
-      } catch {}
+      } catch (error) {
+        const code = String(error?.code || "").replace(/^firestore\//, "");
+        if (["permission-denied", "unauthenticated", "not-found"].includes(code)) {
+          inaccessibleRooms.add(roomCode);
+        } else {
+          incompleteRooms.add(roomCode);
+        }
+      }
     }
 
     const existingSnapshot = await getDocs(collection(db, "users", uid, "libraryIndex"));
@@ -161,16 +184,47 @@ export function createAccountLibraryIndex({
     const operations = [...expected.values()].map((value) => ({ kind: "set", id: value.libraryId, value }));
     for (const entry of docsOf(existingSnapshot)) {
       const value = dataOf(entry);
-      if (["monster", "map"].includes(value.assetType) && repairedRooms.has(String(value.sourceRoomCode || value.roomCode || "").toUpperCase()) && !expected.has(entry.id)) {
+      const sourceRoomCode = String(value.sourceRoomCode || value.roomCode || "").toUpperCase();
+      if (
+        ["monster", "map"].includes(value.assetType) &&
+        (repairedRooms.has(sourceRoomCode) || deletedRooms.has(sourceRoomCode)) &&
+        !expected.has(entry.id)
+      ) {
         operations.push({ kind: "delete", id: entry.id });
+      } else if (["monster", "map"].includes(value.assetType) && inaccessibleRooms.has(sourceRoomCode)) {
+        operations.push({
+          kind: "set",
+          id: entry.id,
+          value: {
+            unavailable: true,
+            unavailableReason: "Campaign access is unavailable.",
+            indexedAtMillis: timestamp
+          }
+        });
       }
     }
     const writes = await writeOperations(uid, operations);
-    await setDoc(userRef, {
+    const incomplete = inaccessibleRooms.size > 0 || incompleteRooms.size > 0;
+    await setDoc(userRef, incomplete ? {
+      libraryIndexRepairAttemptedAtMillis: timestamp,
+      libraryIndexRepairIncomplete: true
+    } : {
       libraryIndexVersion: ACCOUNT_LIBRARY_INDEX_VERSION,
-      libraryIndexRepairedAtMillis: timestamp
+      libraryIndexRepairedAtMillis: timestamp,
+      libraryIndexRepairAttemptedAtMillis: timestamp,
+      libraryIndexRepairIncomplete: false
     }, { merge: true });
-    return { skipped: false, reads, writes: writes + 1, rooms: repairedRooms.size, records: expected.size };
+    return {
+      skipped: false,
+      incomplete,
+      reads,
+      writes: writes + 1,
+      rooms: repairedRooms.size,
+      records: expected.size,
+      deletedRooms: [...deletedRooms],
+      inaccessibleRooms: [...inaccessibleRooms],
+      incompleteRooms: [...incompleteRooms]
+    };
   }
 
   async function ensure() {

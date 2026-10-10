@@ -21,12 +21,22 @@ export function resolveNumericEffectValue(kind, baseValue, effects = [], context
       left.effectId.localeCompare(right.effectId) ||
       left.index - right.index);
   let value = sets.length ? sets[0].modifier.value : Number(baseValue) || 0;
-  for (const { modifier } of candidates) {
-    if (modifier.mode === "bonus") value += modifier.value;
-    else if (modifier.mode === "penalty") value -= Math.abs(modifier.value);
-    else if (modifier.mode === "minimum") value = Math.max(value, modifier.value);
-    else if (modifier.mode === "maximum") value = Math.min(value, modifier.value);
-  }
+  // Numeric stacking has fixed phases so snapshot order never changes the
+  // answer: chosen set, all arithmetic, strongest floor, then strictest cap.
+  value += candidates
+    .filter(({ modifier }) => modifier.mode === "bonus")
+    .reduce((sum, { modifier }) => sum + modifier.value, 0);
+  value -= candidates
+    .filter(({ modifier }) => modifier.mode === "penalty")
+    .reduce((sum, { modifier }) => sum + Math.abs(modifier.value), 0);
+  const minimums = candidates
+    .filter(({ modifier }) => modifier.mode === "minimum")
+    .map(({ modifier }) => modifier.value);
+  if (minimums.length) value = Math.max(value, ...minimums);
+  const maximums = candidates
+    .filter(({ modifier }) => modifier.mode === "maximum")
+    .map(({ modifier }) => modifier.value);
+  if (maximums.length) value = Math.min(value, ...maximums);
   return value;
 }
 

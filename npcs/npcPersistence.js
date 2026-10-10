@@ -1,4 +1,5 @@
 import { normalizeNpc, validateNpc } from "./npcModel.js";
+import { saveRevisionedRecord } from "../shared/revisionedPersistence.js";
 
 const docsOf = (snapshot) => Array.isArray(snapshot?.docs) ? snapshot.docs : [];
 const mutableNpc = (npc) => ({
@@ -19,7 +20,7 @@ const mutableNpc = (npc) => ({
 });
 
 export function createNpcPersistence({
-  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp,
+  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
   getUserId = () => "", now = () => Date.now()
 } = {}) {
   const requireUid = () => {
@@ -41,8 +42,11 @@ export function createNpcPersistence({
       updatedAtMillis: now()
     };
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
-    await setDoc(npcRef(uid, npc.id), record, { merge: true });
-    return normalizeNpc(record, { now: record.updatedAtMillis });
+    const committed = await saveRevisionedRecord({
+      db, reference: npcRef(uid, npc.id), raw, record,
+      label: "NPC", runTransaction, getDoc, setDoc
+    });
+    return normalizeNpc(committed, { now: committed.updatedAtMillis });
   }
 
   async function load(npcId) {

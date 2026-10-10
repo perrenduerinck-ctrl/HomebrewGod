@@ -8,6 +8,7 @@ import {
   confirmPendingMovement,
   createMovementSystem,
   createPendingMovement,
+  deriveMovementDistance,
   getTokenMovementMode,
   measureMovementDistance,
   normalizeBaseMovementSpeed,
@@ -86,6 +87,35 @@ test("a current turn starts full, rerenders preserve it, and a new turn resets i
   });
   assert.equal(newTurn.movementRemaining, 30);
   assert.equal(newTurn.movementSpent, 0);
+});
+
+test("effect-adjusted speed is locked for the turn and recalculated next turn", () => {
+  const slowed = synchronizeMovementState({}, initiative("hero", 1, 30), {
+    activeToken: { id: "hero", x: 10, y: 10, movementSpeed: 30 },
+    baseSpeed: 10
+  });
+  assert.equal(slowed.baseSpeed, 10);
+  const partlyMoved = confirmPendingMovement(preview(slowed, 5));
+  const effectExpiredMidTurn = synchronizeMovementState(
+    partlyMoved,
+    initiative("hero", 1, 30),
+    {
+      activeToken: { id: "hero", x: 20, y: 10, movementSpeed: 30 },
+      baseSpeed: 30
+    }
+  );
+  assert.equal(effectExpiredMidTurn.baseSpeed, 10);
+  assert.equal(effectExpiredMidTurn.movementRemaining, 5);
+  const nextTurn = synchronizeMovementState(
+    effectExpiredMidTurn,
+    initiative("hero", 2, 30),
+    {
+      activeToken: { id: "hero", x: 20, y: 10, movementSpeed: 30 },
+      baseSpeed: 30
+    }
+  );
+  assert.equal(nextTurn.baseSpeed, 30);
+  assert.equal(nextTurn.movementRemaining, 30);
 });
 
 test("confirmed moves accumulate while cancelled and unconfirmed moves consume zero", () => {
@@ -209,6 +239,15 @@ test("initiative transitions atomically switch budgets and Previous Turn resets 
   assert.equal(previous.movementState.activeTokenId, "hero");
   assert.equal(previous.movementState.movementRemaining, 30);
   assert.equal(previous.movementState.lastConfirmedPosition, null);
+
+  const grappled = buildInitiativeRoomTransition(
+    room,
+    { type: "next-turn" },
+    { getEffectiveBaseSpeed: () => 0 }
+  );
+  assert.equal(grappled.movementState.activeTokenId, "goblin");
+  assert.equal(grappled.movementState.baseSpeed, 0);
+  assert.equal(grappled.movementState.movementRemaining, 0);
 });
 
 test("ownership rejects other characters/enemies and permits the DM", async () => {
@@ -217,6 +256,10 @@ test("ownership rejects other characters/enemies and permits the DM", async () =
   assert.equal(canControlToken(hero, { userUid: "other" }), false);
   assert.equal(canControlToken({ id: "enemy", type: "enemy" }, { userUid: "owner" }), false);
   assert.equal(canControlToken({ id: "enemy" }, { isDm: true }), true);
+  assert.equal(canControlToken({ ownerId: "owner" }, { userUid: "owner" }), false);
+  assert.equal(canControlToken({ userUid: "owner" }, { userUid: "owner" }), false);
+  assert.equal(canControlToken({ controllerUids: ["owner"] }, { userUid: "owner" }), false);
+  assert.equal(canControlToken({ linkedCharacter: { ownerUid: "owner" } }, { userUid: "owner" }), false);
 
   const owner = createMovementSystem({
     initialState: fresh(), getInitiativeState: () => initiative(),
@@ -276,6 +319,73 @@ test("movement distance exactly matches canonical flat and elevation-aware ruler
   assert.equal(elevated.feet, 25);
 });
 
+test("confirmed movement distance is derived from positions instead of a client claim", () => {
+  const command = {
+    startPosition: { x: 10, y: 20, elevation: 0 },
+    endPosition: { x: 30, y: 20, elevation: 0 },
+    distanceFeet: 0.1,
+    measurement: {
+      viewportWidth: 640,
+      viewportHeight: 480,
+      pixelsPerSquare: 64,
+      feetPerSquare: 5
+    }
+  };
+  assert.equal(deriveMovementDistance(command), 10);
+  const pending = createPendingMovement(fresh(), {
+    ...command,
+    tokenId: "hero"
+  });
+  assert.equal(pending.pendingMovement.distanceFeet, 10);
+  assert.throws(
+    () => deriveMovementDistance({ ...command, measurement: null }),
+    /measurement context/i
+  );
+});
+
+test("player character saves refresh only canonically owned linked tokens", async () => {
+  const updates = [];
+  const tokens = createTokenSystem({
+    autoInit: false,
+    db: {},
+    collection: (...parts) => parts,
+    doc: (...parts) => parts,
+    query: (collection) => collection,
+    where: () => ({}),
+    getDocs: async () => ({
+      docs: [
+        { id: "mine", ref: "mine", data: () => ({ ownerUid: "owner" }) },
+        { id: "legacy-alias", ref: "legacy-alias", data: () => ({ ownerId: "owner" }) }
+      ]
+    }),
+    updateDoc: async (reference, patch) => updates.push({ reference, patch }),
+    serverTimestamp: () => "server-time",
+    getCurrentRoomCode: () => "ROOM",
+    getCurrentRoomData: () => ({ tokenMediumSize: 64 }),
+    getCurrentIsDM: () => false,
+    getCurrentUserUid: () => "owner"
+  });
+  const result = await tokens.syncLinkedCharacterTokens({
+    id: "sheet",
+    roomCode: "ROOM",
+    ownerUid: "owner",
+    revision: 4,
+    identity: { name: "Hero", size: "medium" },
+    abilities: { scores: { dex: 14 } },
+    combat: {
+      currentHp: 12,
+      maxHp: 20,
+      armorClass: 15,
+      baseSpeed: { walk: 30 }
+    }
+  });
+  assert.equal(result.updatedCount, 1);
+  assert.equal(result.skippedCount, 1);
+  assert.equal(updates[0].reference, "mine");
+  assert.equal(updates[0].patch.linkedCharacterRevision, 4);
+  assert.equal(updates[0].patch.ownerUid, "owner");
+});
+
 test("full rounds remain exactly six seconds with two and twenty combatants", () => {
   for (const count of [2, 20]) {
     const order = Array.from({ length: count }, (_, index) => ({
@@ -311,6 +421,8 @@ test("integration remains modular and Firestore validates meaningful confirmed w
   assert.match(rules, /tokenMovementFieldsOnly/);
   assert.match(rules, /ownsRoomToken/);
   assert.match(rules, /trackedTokenMoveIsConfirmed/);
+  assert.match(rules, /validLinkedCharacterTokenSync/);
+  assert.match(rules, /linkedCharacterRevision/);
   assert.match(rules, /movementRemaining[\s\S]*< previous\.get\('movementRemaining'/);
   assert.match(html, /data-movement-action="confirm"/);
 });

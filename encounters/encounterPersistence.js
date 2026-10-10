@@ -1,4 +1,5 @@
 import { normalizeEncounter, validateEncounter } from "./encounterModel.js";
+import { saveRevisionedRecord } from "../shared/revisionedPersistence.js";
 
 const docsOf = (snapshot) => Array.isArray(snapshot?.docs) ? snapshot.docs : [];
 const mutableEncounter = (encounter) => ({
@@ -10,7 +11,7 @@ const mutableEncounter = (encounter) => ({
 });
 
 export function createEncounterPersistence({
-  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp,
+  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
   getUserId = () => "", now = () => Date.now()
 } = {}) {
   const requireUid = () => {
@@ -33,8 +34,11 @@ export function createEncounterPersistence({
       updatedAtMillis: timestamp
     };
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
-    await setDoc(encounterRef(uid, encounter.id), record, { merge: true });
-    return normalizeEncounter(record, { now: timestamp });
+    const committed = await saveRevisionedRecord({
+      db, reference: encounterRef(uid, encounter.id), raw, record,
+      label: "encounter", runTransaction, getDoc, setDoc
+    });
+    return normalizeEncounter(committed, { now: timestamp });
   }
 
   async function load(encounterId) {

@@ -6,6 +6,7 @@ export function createRealtimeListenerRegistry({
     started: 0,
     reused: 0,
     stopped: 0,
+    failed: 0,
     staleCallbacksBlocked: 0
   };
   let nextGeneration = 1;
@@ -100,8 +101,33 @@ export function createRealtimeListenerRegistry({
       return current;
     };
 
+    const fail = (error = null) => {
+      if (
+        !listener.active ||
+        listeners.get(cleanName) !== listener
+      ) {
+        return Object.freeze({
+          handled: false,
+          terminal: isTerminalRealtimeError(error)
+        });
+      }
+
+      // Firestore snapshot error callbacks end that subscription. Remove the
+      // dead entry without calling its unsubscribe function so a later
+      // connect for the same scope can create a fresh listener.
+      listener.active = false;
+      listeners.delete(cleanName);
+      metrics.failed += 1;
+
+      return Object.freeze({
+        handled: true,
+        terminal: isTerminalRealtimeError(error)
+      });
+    };
+
     try {
       const unsubscribe = subscribe({
+        fail,
         isCurrent,
         name: cleanName,
         scopeKey: cleanScopeKey
@@ -180,4 +206,23 @@ export function createRealtimeListenerRegistry({
     stopAll,
     getSnapshot
   });
+}
+
+const TERMINAL_REALTIME_ERROR_CODES = new Set([
+  "cancelled",
+  "failed-precondition",
+  "invalid-argument",
+  "not-found",
+  "permission-denied",
+  "unauthenticated",
+  "unimplemented"
+]);
+
+export function isTerminalRealtimeError(error) {
+  const code = String(error?.code || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^firestore\//, "");
+
+  return TERMINAL_REALTIME_ERROR_CODES.has(code);
 }

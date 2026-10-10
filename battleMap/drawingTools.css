@@ -96,8 +96,23 @@
   cursor: crosshair;
 }
 
-.hg-map-drawing-layer [data-drawing-stroke-id] {
+.hg-map-drawing-layer.is-active [data-drawing-stroke-id] {
   pointer-events: stroke;
+}
+
+.hg-map-drawing-layer:not(.is-active) * {
+  pointer-events: none;
+}
+
+.hg-map-drawing-layer .is-pending {
+  opacity: .72;
+  stroke-dasharray: 8 5;
+}
+
+.hg-map-drawing-layer .is-failed {
+  opacity: .9;
+  stroke: #ff8d9d;
+  stroke-dasharray: 5 4;
 }
 
 .hg-map-drawing-layer .is-preview {

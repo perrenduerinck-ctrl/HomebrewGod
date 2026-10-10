@@ -75,6 +75,7 @@ export function normalizeEncounter(raw = {}, {
     : {};
   return Object.freeze({
     id: safeId(source.id, idFactory()),
+    revision: Math.max(0, Math.trunc(Number(source.revision) || 0)),
     name: clean(source.name, 120) || "Unnamed Encounter",
     description: clean(source.description, 5000),
     difficulty: clean(source.difficulty, 60),
@@ -122,6 +123,7 @@ export function duplicateEncounter(raw, {
   return normalizeEncounter({
     ...clone(encounter),
     id: idFactory(),
+    revision: 0,
     name: `${encounter.name} Copy`,
     combatants: encounter.combatants.map((entry, index) => ({ ...entry, id: `${entry.id}-copy-${index + 1}` })),
     copiedFromEncounterId: encounter.id,

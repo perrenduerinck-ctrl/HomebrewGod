@@ -8,8 +8,8 @@ import {
   formatSpellTemplateInstruction
 } from "../battleMap/spellTemplates.js";
 
-test("saved custom spells derive catalog targeting from range without mutating their record", () => {
-  const spell = Object.freeze({ id: "gary-fireball-test", name: "Gary Fireball Test", source: "custom", range: "120 feet", animations: { travel: "gary_missile" } });
+test("saved and copied homebrew spells derive targeting from range without mutating their record", () => {
+  const spell = Object.freeze({ id: "gary-fireball-test", name: "Gary Fireball Test", source: "library", range: "120 feet", animations: { travel: "gary_missile" } });
   const instruction = createSpellTemplateInstruction(spell);
   assert.equal(instruction.supported, true);
   assert.equal(instruction.singleTarget, true);

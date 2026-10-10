@@ -295,18 +295,60 @@ export function createCharacterItemTransferPersistence({
         ? serverTimestamp()
         : new Date(updatedAtMillis);
 
+      const sourceCharacter = {
+        ...result.sourceCharacter,
+        revision:
+          Math.max(
+            0,
+            Math.floor(
+              Number(sourceRecord.revision) || 0
+            )
+          ) + 1,
+        builder: {
+          ...(result.sourceCharacter.builder || {}),
+          lastSavedAtMillis: updatedAtMillis
+        },
+        updatedAt: timestamp,
+        updatedAtMillis
+      };
+      const targetCharacter = {
+        ...result.targetCharacter,
+        revision:
+          Math.max(
+            0,
+            Math.floor(
+              Number(targetRecord.revision) || 0
+            )
+          ) + 1,
+        builder: {
+          ...(result.targetCharacter.builder || {}),
+          lastSavedAtMillis: updatedAtMillis
+        },
+        updatedAt: timestamp,
+        updatedAtMillis
+      };
+
       transaction.update(sourceRef, {
-        equipment: result.sourceCharacter.equipment,
+        equipment: sourceCharacter.equipment,
+        builder: sourceCharacter.builder,
+        revision: sourceCharacter.revision,
         updatedAt: timestamp,
         updatedAtMillis
       });
       transaction.update(targetRef, {
-        equipment: result.targetCharacter.equipment,
+        equipment: targetCharacter.equipment,
+        builder: targetCharacter.builder,
+        revision: targetCharacter.revision,
         updatedAt: timestamp,
         updatedAtMillis
       });
 
-      return result;
+      return {
+        ...result,
+        sourceCharacter,
+        targetCharacter,
+        updatedAtMillis
+      };
     });
   }
 

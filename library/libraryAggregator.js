@@ -3,6 +3,7 @@ import { createLibraryRegistry } from "./libraryRegistry.js";
 
 const valuesOf = (value) => value instanceof Map ? [...value.values()] : Array.isArray(value) ? value : [];
 const sourceIdentity = (value = {}) => `${value.assetType || value.sourceType || "other"}:${value.sourceRecordId || ""}`;
+const COMPLETE_CURSOR = "complete";
 
 export function createLibraryAggregator({ adapters = [], persistence = null, loadImportedRecord = null, getUserId = () => "" } = {}) {
   const registry = createLibraryRegistry(adapters);
@@ -145,10 +146,21 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
     const [pages, details] = await Promise.all([
       Promise.all(registry.list().map(async (adapter) => {
         const key = adapter.sourceType;
-        if (typeof adapter.listPage === "function") return { key, ...(await adapter.listPage({ cursor: cursors?.[key] || null, pageSize })) };
-        if (cursors?.[key] === "complete") return { key, entries: [], cursor: "complete", hasMore: false, readCount: 0 };
+        if (cursors?.[key] === COMPLETE_CURSOR) {
+          return { key, entries: [], cursor: COMPLETE_CURSOR, hasMore: false, readCount: 0 };
+        }
+        if (typeof adapter.listPage === "function") {
+          const page = await adapter.listPage({ cursor: cursors?.[key] || null, pageSize });
+          const hasMore = page?.hasMore === true && Boolean(page?.cursor);
+          return {
+            key,
+            ...page,
+            cursor: hasMore ? page.cursor : COMPLETE_CURSOR,
+            hasMore
+          };
+        }
         const entries = await adapter.listSummaries();
-        return { key, entries, cursor: "complete", hasMore: false, readCount: entries.length };
+        return { key, entries, cursor: COMPLETE_CURSOR, hasMore: false, readCount: entries.length };
       })),
       metadata(firstPage)
     ]);
@@ -156,7 +168,7 @@ export function createLibraryAggregator({ adapters = [], persistence = null, loa
     const records = applyScope(mergeRecords(native, details.publications, details.libraryState, { includeFallbacks: firstPage }), scope);
     return {
       entries: records,
-      cursors: Object.fromEntries(pages.map((page) => [page.key, page.cursor || null])),
+      cursors: Object.fromEntries(pages.map((page) => [page.key, page.cursor || COMPLETE_CURSOR])),
       hasMore: pages.some((page) => page.hasMore),
       metrics: {
         summaryReads: pages.reduce((total, page) => total + (Number(page.readCount) || 0), 0)

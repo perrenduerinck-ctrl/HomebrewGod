@@ -103,6 +103,7 @@ test("backfill repairs missing and stale entries once, then create/edit/delete k
   const store = memoryFirestore();
   store.records.set("users/user-1/rooms/ROOM-1", { role: "dm", roomCode: "ROOM-1", roomName: "First Campaign" });
   store.records.set("users/user-1/rooms/ROOM-X", { role: "player", roomCode: "ROOM-X", roomName: "Someone Else's Campaign" });
+  store.records.set("rooms/ROOM-1", { roomCode: "ROOM-1", dmUid: "user-1" });
   store.records.set("rooms/ROOM-1/monsters/monster-1", { name: "Skeleton", type: "Undead", updatedAtMillis: 10 });
   store.records.set("rooms/ROOM-1/maps/map-1", { name: "Crypt", url: "https://example.com/full-map.png", updatedAtMillis: 11 });
   store.records.set("users/user-1/libraryIndex/monster:stale", { assetType: "monster", sourceRoomCode: "ROOM-1", sourceRecordId: "stale" });
@@ -125,6 +126,72 @@ test("backfill repairs missing and stale entries once, then create/edit/delete k
   assert.equal(store.records.has("users/user-1/libraryIndex/monster:monster-1"), false);
 });
 
+test("account index removes proven-deleted campaigns and keeps incomplete repairs stale", async () => {
+  const store = memoryFirestore();
+  store.records.set("users/user-1/rooms/ROOM-DELETED", {
+    role: "dm",
+    roomCode: "ROOM-DELETED"
+  });
+  store.records.set("users/user-1/rooms/ROOM-OFFLINE", {
+    role: "dm",
+    roomCode: "ROOM-OFFLINE"
+  });
+  store.records.set("rooms/ROOM-OFFLINE", {
+    roomCode: "ROOM-OFFLINE",
+    dmUid: "user-1"
+  });
+  store.records.set("users/user-1/libraryIndex/monster:deleted", {
+    assetType: "monster",
+    sourceRoomCode: "ROOM-DELETED",
+    sourceRecordId: "deleted"
+  });
+  store.records.set("users/user-1/libraryIndex/map:offline", {
+    assetType: "map",
+    sourceRoomCode: "ROOM-OFFLINE",
+    sourceRecordId: "offline"
+  });
+  const getDocs = async (reference) => {
+    if (reference.path === "rooms/ROOM-OFFLINE/maps") {
+      const error = new Error("network unavailable");
+      error.code = "unavailable";
+      throw error;
+    }
+    return store.getDocs(reference);
+  };
+  const index = createAccountLibraryIndex({
+    ...store,
+    getDocs,
+    getUserId: () => "user-1",
+    getUserName: () => "Aster",
+    now: () => 500
+  });
+
+  const result = await index.repair({ force: true });
+
+  assert.equal(result.incomplete, true);
+  assert.deepEqual(result.deletedRooms, ["ROOM-DELETED"]);
+  assert.deepEqual(result.incompleteRooms, ["ROOM-OFFLINE"]);
+  assert.equal(
+    store.records.has("users/user-1/libraryIndex/monster:deleted"),
+    false
+  );
+  assert.equal(
+    store.records.has("users/user-1/libraryIndex/map:offline"),
+    true
+  );
+  assert.equal(
+    store.records.get("users/user-1").libraryIndexRepairIncomplete,
+    true
+  );
+  assert.equal(
+    Object.hasOwn(
+      store.records.get("users/user-1"),
+      "libraryIndexRepairedAtMillis"
+    ),
+    false
+  );
+});
+
 test("cross-campaign copy creates a new independent record and preserves provenance", async () => {
   const store = memoryFirestore();
   const source = { id: "monster-1", name: "Ash Drake", hp: 99, roomCode: "ROOM-OLD" };
@@ -143,8 +210,10 @@ test("cross-campaign copy creates a new independent record and preserves provena
   assert.equal(copied.record.copiedFromLibraryId, "monster:monster-1");
   assert.equal(copied.record.copiedFromRoomCode, "ROOM-OLD");
   assert.equal(copied.record.copiedFromRecordId, "monster-1");
+  assert.equal(copied.record.revision, 2);
   assert.deepEqual(source, before, "the original campaign record must remain untouched");
   assert.equal(store.records.get("rooms/ROOM-NEW/monsters/copy-1").id, "copy-1");
+  assert.equal(store.records.get("rooms/ROOM-NEW/monsters/copy-1").revision, 2);
 });
 
 test("account adapter paginates 100, 500, 1000 and 5000 summaries without loading full assets", async () => {

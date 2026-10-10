@@ -74,6 +74,7 @@ export function normalizeSummonPreset(raw = {}, {
   const createdAtMillis = Number(source.createdAtMillis) || now;
   return Object.freeze({
     id: safeId(source.id, idFactory()),
+    revision: Math.max(0, Math.trunc(Number(source.revision) || 0)),
     name: clean(source.name, 120) || "Unnamed Summon",
     description: clean(source.description, 2000),
     sourceLibraryId: tokenSource.libraryId,
@@ -153,6 +154,7 @@ export function duplicateSummonPreset(raw, {
   return normalizeSummonPreset({
     ...clone(preset),
     id: idFactory(),
+    revision: 0,
     name: `${preset.name} Copy`,
     copiedFromSummonId: preset.id,
     copiedFromLibraryId: `summon:${preset.id}`,

@@ -64,6 +64,7 @@ export function createMapDrawingSystem(options = {}) {
     target: null,
     mode: "single",
     zoom: 1,
+    space: null,
     active: false,
     visible: true,
     tool: "pen",
@@ -75,8 +76,11 @@ export function createMapDrawingSystem(options = {}) {
       ["shared", new Map()],
       ["dm", new Map()]
     ]),
+    pendingStrokes: new Map(),
     undoStack: [],
-    redoStack: []
+    redoStack: [],
+    historyBusy: false,
+    pointerId: null
   };
 
   const toggleButton = document.createElement("button");
@@ -95,7 +99,7 @@ export function createMapDrawingSystem(options = {}) {
     <header><strong>Drawing</strong><button type="button" data-drawing-close aria-label="Close drawing tools">×</button></header>
     <div class="hg-drawing-tools" role="toolbar" aria-label="Drawing shape">
       <button type="button" data-drawing-tool="pen">Pen</button>
-      <button type="button" data-drawing-tool="eraser">Eraser</button>
+      <button type="button" data-drawing-tool="eraser" title="Click one complete stroke to erase it">Erase stroke</button>
       <button type="button" data-drawing-tool="line">Line</button>
       <button type="button" data-drawing-tool="rectangle">Rectangle</button>
       <button type="button" data-drawing-tool="circle">Circle</button>
@@ -113,6 +117,7 @@ export function createMapDrawingSystem(options = {}) {
       <button type="button" data-drawing-undo disabled>Undo</button>
       <button type="button" data-drawing-redo disabled>Redo</button>
       <button type="button" data-drawing-clear>Clear</button>
+      <button type="button" data-drawing-retry hidden>Retry failed</button>
       <label><input type="checkbox" checked data-drawing-visible> Show drawings</label>
     </div>
     <label class="hg-drawing-player-permission" data-drawing-player-wrap hidden>
@@ -156,13 +161,16 @@ export function createMapDrawingSystem(options = {}) {
     undo: toolbar.querySelector("[data-drawing-undo]"),
     redo: toolbar.querySelector("[data-drawing-redo]"),
     clear: toolbar.querySelector("[data-drawing-clear]"),
+    retry: toolbar.querySelector("[data-drawing-retry]"),
     visible: toolbar.querySelector("[data-drawing-visible]"),
     playerWrap: toolbar.querySelector("[data-drawing-player-wrap]"),
     playerEnabled: toolbar.querySelector("[data-drawing-player-enabled]"),
     status: toolbar.querySelector("[data-drawing-status]")
   };
   let previewElement = null;
+  let previewFrame = 0;
   let resizeObserver = null;
+  const renderedStrokes = new Map();
 
   function setStatus(message, kind = "") {
     elements.status.textContent = message || "";
@@ -190,6 +198,9 @@ export function createMapDrawingSystem(options = {}) {
       mapId: stroke.mapId,
       authorUid: stroke.authorUid,
       authorName: stroke.authorName,
+      originalAuthorUid: stroke.originalAuthorUid || "",
+      originalAuthorName: stroke.originalAuthorName || "",
+      restoredByUid: stroke.restoredByUid || "",
       layer: stroke.layer,
       tool: stroke.tool,
       color: stroke.color,
@@ -205,7 +216,7 @@ export function createMapDrawingSystem(options = {}) {
     return payload;
   }
 
-  function createStrokeElement(stroke, { preview = false } = {}) {
+  function createStrokeElement(stroke, { preview = false, pending = false, failed = false } = {}) {
     const common = {
       stroke: stroke.color,
       "stroke-width": stroke.size,
@@ -213,7 +224,7 @@ export function createMapDrawingSystem(options = {}) {
       "stroke-linejoin": "round",
       "vector-effect": "non-scaling-stroke",
       fill: "none",
-      "pointer-events": "stroke"
+      "pointer-events": "none"
     };
     let element;
     if (stroke.tool === "pen") {
@@ -251,28 +262,86 @@ export function createMapDrawingSystem(options = {}) {
       element.dataset.drawingStrokeId = stroke.id;
       element.dataset.drawingLayer = stroke.layer;
       element.dataset.drawingAuthorUid = stroke.authorUid;
+      if (pending) element.classList.add("is-pending");
+      if (failed) element.classList.add("is-failed");
     } else {
       element.classList.add("is-preview");
     }
     return element;
   }
 
+  function currentScopeKey() {
+    return `${state.roomCode}/${state.userId}/${state.isDm}/${state.mapId}`;
+  }
+
+  function strokeRenderKey(stroke) {
+    return `${stroke.layer}/${stroke.id}`;
+  }
+
+  function strokeSignature(stroke, status = "saved") {
+    return JSON.stringify([
+      status, stroke.tool, stroke.color, stroke.size, stroke.points,
+      stroke.start, stroke.end, stroke.authorUid
+    ]);
+  }
+
+  function renderPreview() {
+    previewElement?.remove();
+    previewElement = null;
+    if (!state.visible || !state.drawing) return;
+    previewElement = createStrokeElement(state.drawing, { preview: true });
+    overlay.append(previewElement);
+  }
+
+  function schedulePreviewRender() {
+    if (previewFrame) return;
+    const requestFrame = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0));
+    previewFrame = requestFrame(() => {
+      previewFrame = 0;
+      renderPreview();
+    });
+  }
+
   function render() {
-    [...overlay.querySelectorAll("[data-drawing-stroke-id], .is-preview")]
-      .forEach((element) => element.remove());
-    if (!state.visible) return;
+    const desired = new Map();
     const strokes = [
       ...state.strokesByLayer.get("shared").values(),
       ...(state.isDm ? state.strokesByLayer.get("dm").values() : [])
     ].filter((stroke) => stroke.mapId === state.mapId)
       .sort((left, right) => left.createdAtMillis - right.createdAtMillis);
-    strokes.forEach((stroke) => overlay.append(createStrokeElement(stroke)));
-    if (state.drawing) {
-      previewElement = createStrokeElement(state.drawing, { preview: true });
-      overlay.append(previewElement);
-    } else {
-      previewElement = null;
+    strokes.forEach((stroke) => desired.set(strokeRenderKey(stroke), {
+      stroke,
+      status: "saved"
+    }));
+    for (const pending of state.pendingStrokes.values()) {
+      if (pending.scopeKey !== currentScopeKey()) continue;
+      desired.set(strokeRenderKey(pending.stroke), {
+        stroke: pending.stroke,
+        status: pending.status
+      });
     }
+
+    for (const [key, record] of renderedStrokes) {
+      if (!state.visible || !desired.has(key)) {
+        record.element.remove();
+        renderedStrokes.delete(key);
+      }
+    }
+    if (state.visible) {
+      for (const [key, item] of desired) {
+        const signature = strokeSignature(item.stroke, item.status);
+        const existing = renderedStrokes.get(key);
+        if (existing?.signature === signature) continue;
+        existing?.element.remove();
+        const element = createStrokeElement(item.stroke, {
+          pending: item.status !== "saved",
+          failed: item.status === "failed"
+        });
+        overlay.insertBefore(element, previewElement);
+        renderedStrokes.set(key, { element, signature });
+      }
+    }
+    renderPreview();
   }
 
   function updateControls() {
@@ -292,16 +361,25 @@ export function createMapDrawingSystem(options = {}) {
     elements.playerWrap.hidden = !state.isDm;
     elements.playerEnabled.checked = state.playersEnabled;
     elements.layer.value = state.isDm ? state.layer : "shared";
-    elements.undo.disabled = !canDraw() || state.undoStack.length === 0;
-    elements.redo.disabled = !canDraw() || state.redoStack.length === 0;
+    elements.undo.disabled = state.historyBusy || !canDraw() || state.undoStack.length === 0;
+    elements.redo.disabled = state.historyBusy || !canDraw() || state.redoStack.length === 0;
     elements.visible.checked = state.visible;
-    elements.clear.textContent = state.isDm ? "Clear map" : "Clear mine";
+    elements.clear.textContent = state.isDm ? "Clear all layers" : "Clear my strokes";
+    elements.clear.title = state.isDm
+      ? "Remove every shared and DM-only stroke on this map"
+      : "Remove only strokes you created on this map";
     toolbar.querySelectorAll("[data-drawing-tool]").forEach((button) => {
       button.disabled = !canDraw();
     });
     elements.color.disabled = !canDraw();
     elements.size.disabled = !canDraw();
-    elements.clear.disabled = !canDraw();
+    elements.clear.disabled = state.historyBusy || !canDraw();
+    const failedCount = [...state.pendingStrokes.values()].filter((entry) => (
+      entry.scopeKey === currentScopeKey() && entry.status === "failed"
+    )).length;
+    elements.retry.hidden = failedCount === 0;
+    elements.retry.disabled = state.historyBusy || failedCount === 0;
+    elements.retry.textContent = failedCount > 1 ? `Retry failed (${failedCount})` : "Retry failed";
   }
 
   function setActive(active) {
@@ -322,6 +400,10 @@ export function createMapDrawingSystem(options = {}) {
       );
     }
     state.drawing = null;
+    if (state.pointerId != null) {
+      try { overlay.releasePointerCapture?.(state.pointerId); } catch {}
+    }
+    state.pointerId = null;
     updateControls();
     render();
     return true;
@@ -339,6 +421,7 @@ export function createMapDrawingSystem(options = {}) {
     if (computed?.position === "static") state.target.style.position = "relative";
 
     if (state.mode === "single" && mapImage?.offsetWidth && mapImage?.offsetHeight) {
+      overlay.setAttribute("viewBox", "0 0 1000 1000");
       overlay.style.left = `${mapImage.offsetLeft}px`;
       overlay.style.top = `${mapImage.offsetTop}px`;
       overlay.style.width = `${mapImage.offsetWidth}px`;
@@ -346,6 +429,8 @@ export function createMapDrawingSystem(options = {}) {
       overlay.style.transform = `scale(${state.zoom || 1})`;
       overlay.style.transformOrigin = "center center";
     } else {
+      const space = state.space || { x: 0, y: 0, width: 1000, height: 1000 };
+      overlay.setAttribute("viewBox", `${space.x} ${space.y} ${space.width} ${space.height}`);
       overlay.style.left = "0";
       overlay.style.top = "0";
       overlay.style.width = "100%";
@@ -376,7 +461,7 @@ export function createMapDrawingSystem(options = {}) {
       where("mapId", "==", state.mapId)
     );
     const scope = `${state.roomCode}/${state.mapId}/${state.userId}/${state.isDm}/${layer}`;
-    listeners.connect(`drawings-${layer}`, scope, ({ isCurrent }) => onSnapshot(
+    listeners.connect(`drawings-${layer}`, scope, ({ fail, isCurrent }) => onSnapshot(
       source,
       { includeMetadataChanges: true },
       (snapshot) => {
@@ -384,7 +469,13 @@ export function createMapDrawingSystem(options = {}) {
         applySnapshot(layer, snapshot, isCurrent);
       },
       (error) => {
-        if (isCurrent()) setStatus(`Drawing sync failed: ${error.message}`, "error");
+        if (!isCurrent()) return;
+        const failure = fail(error);
+        if (failure.terminal) {
+          state.strokesByLayer.set(layer, new Map());
+          render();
+        }
+        setStatus(`Drawing sync failed: ${error.message}`, "error");
       }
     ));
   }
@@ -426,14 +517,24 @@ export function createMapDrawingSystem(options = {}) {
     state.target = target;
     state.mode = context.mode === "puzzle" ? "puzzle" : "single";
     state.zoom = Number(context.zoom) || 1;
+    state.space = context.space && typeof context.space === "object"
+      ? {
+          x: Number(context.space.x) || 0,
+          y: Number(context.space.y) || 0,
+          width: Math.max(0.0001, Number(context.space.width) || 1000),
+          height: Math.max(0.0001, Number(context.space.height) || 1000)
+        }
+      : null;
     if (changed) {
       listeners.stopAll();
       state.strokesByLayer.forEach((records) => records.clear());
       state.undoStack = [];
       state.redoStack = [];
       state.drawing = null;
-      if (state.mapId && state.target) connect();
+      state.pointerId = null;
+      state.historyBusy = false;
     }
+    if (state.mapId && state.target) connect();
     syncOverlayGeometry();
     updateControls();
     render();
@@ -453,6 +554,11 @@ export function createMapDrawingSystem(options = {}) {
     if (previousScope !== nextScope) {
       listeners.stopAll();
       state.strokesByLayer.forEach((records) => records.clear());
+      state.undoStack = [];
+      state.redoStack = [];
+      state.drawing = null;
+      state.pointerId = null;
+      state.historyBusy = false;
     }
     if (!canDraw() && state.active) {
       state.drawing = null;
@@ -469,72 +575,140 @@ export function createMapDrawingSystem(options = {}) {
     return syncContext();
   }
 
-  async function persistStroke(stroke, { restore = false } = {}) {
+  async function persistStroke(stroke, { restore = false, scopeKey = currentScopeKey() } = {}) {
     const normalized = normalizeDrawingStroke(stroke, state);
+    if (!restore) {
+      state.pendingStrokes.set(normalized.id, {
+        stroke: normalized,
+        scopeKey,
+        status: "saving",
+        error: ""
+      });
+      updateControls();
+      render();
+    }
     try {
       await setDoc(strokeRef(normalized), strokePayload(normalized, { create: true }));
-      state.strokesByLayer.get(normalized.layer).set(normalized.id, normalized);
-      if (!restore) {
+      state.pendingStrokes.delete(normalized.id);
+      if (scopeKey === currentScopeKey()) {
+        state.strokesByLayer.get(normalized.layer).set(normalized.id, normalized);
+      }
+      if (!restore && scopeKey === currentScopeKey()) {
         state.undoStack.push({ type: "create", stroke: normalized });
         state.redoStack = [];
       }
-      setStatus("Drawing saved.", "saved");
+      if (scopeKey === currentScopeKey()) setStatus("Drawing saved.", "saved");
       updateControls();
       render();
       return normalized;
     } catch (error) {
-      setStatus(`Drawing save failed: ${error.message}`, "error");
+      if (!restore) {
+        state.pendingStrokes.set(normalized.id, {
+          stroke: normalized,
+          scopeKey,
+          status: "failed",
+          error: error.message || "Drawing save failed."
+        });
+      }
+      if (scopeKey === currentScopeKey()) {
+        setStatus(`Drawing save failed: ${error.message}. Use Retry failed to try again.`, "error");
+        updateControls();
+        render();
+      }
       return null;
     }
   }
 
-  async function removeStroke(stroke, { record = true } = {}) {
+  async function removeStroke(stroke, { record = true, scopeKey = currentScopeKey() } = {}) {
     if (!canDeleteDrawingStroke(stroke, state)) {
       setStatus("You can only erase your own shared drawings.", "error");
       return false;
     }
     try {
       await deleteDoc(strokeRef(stroke));
-      state.strokesByLayer.get(stroke.layer)?.delete(stroke.id);
-      if (record) {
-        state.undoStack.push({ type: "delete", stroke });
+      if (scopeKey === currentScopeKey()) {
+        state.strokesByLayer.get(stroke.layer)?.delete(stroke.id);
+      }
+      if (record && scopeKey === currentScopeKey()) {
+        const restoreStroke = state.isDm && stroke.authorUid !== state.userId
+          ? normalizeDrawingStroke({
+              ...stroke,
+              id: makeId(),
+              authorUid: state.userId,
+              authorName: state.userName,
+              originalAuthorUid: stroke.originalAuthorUid || stroke.authorUid,
+              originalAuthorName: stroke.originalAuthorName || stroke.authorName,
+              restoredByUid: state.userId,
+              createdAt: null,
+              createdAtMillis: Date.now(),
+              updatedAt: null,
+              updatedAtMillis: Date.now()
+            }, state)
+          : stroke;
+        state.undoStack.push({ type: "delete", stroke: restoreStroke });
         state.redoStack = [];
       }
-      setStatus("Drawing removed.", "saved");
-      updateControls();
-      render();
+      if (scopeKey === currentScopeKey()) {
+        setStatus("Drawing removed.", "saved");
+        updateControls();
+        render();
+      }
       return true;
     } catch (error) {
-      setStatus(`Could not remove drawing: ${error.message}`, "error");
+      if (scopeKey === currentScopeKey()) {
+        setStatus(`Could not remove drawing: ${error.message}`, "error");
+      }
       return false;
     }
   }
 
   async function undo() {
-    const action = state.undoStack.pop();
-    if (!action) return false;
-    let succeeded = false;
-    if (action.type === "create") succeeded = await removeStroke(action.stroke, { record: false });
-    else succeeded = Boolean(await persistStroke(action.stroke, { restore: true }));
-    if (succeeded) state.redoStack.push(action);
-    else state.undoStack.push(action);
+    if (state.historyBusy) return false;
+    state.historyBusy = true;
     updateControls();
-    return succeeded;
+    const scopeKey = currentScopeKey();
+    const action = state.undoStack.pop();
+    try {
+      if (!action) return false;
+      let succeeded = false;
+      if (action.type === "create") succeeded = await removeStroke(action.stroke, { record: false, scopeKey });
+      else succeeded = Boolean(await persistStroke(action.stroke, { restore: true, scopeKey }));
+      if (scopeKey === currentScopeKey()) {
+        if (succeeded) state.redoStack.push(action);
+        else state.undoStack.push(action);
+      }
+      return succeeded;
+    } finally {
+      state.historyBusy = false;
+      updateControls();
+    }
   }
 
   async function redo() {
-    const action = state.redoStack.pop();
-    if (!action) return false;
-    let succeeded = false;
-    if (action.type === "create") succeeded = Boolean(await persistStroke(action.stroke, { restore: true }));
-    else succeeded = await removeStroke(action.stroke, { record: false });
-    if (succeeded) state.undoStack.push(action);
-    else state.redoStack.push(action);
+    if (state.historyBusy) return false;
+    state.historyBusy = true;
     updateControls();
-    return succeeded;
+    const scopeKey = currentScopeKey();
+    const action = state.redoStack.pop();
+    try {
+      if (!action) return false;
+      let succeeded = false;
+      if (action.type === "create") succeeded = Boolean(await persistStroke(action.stroke, { restore: true, scopeKey }));
+      else succeeded = await removeStroke(action.stroke, { record: false, scopeKey });
+      if (scopeKey === currentScopeKey()) {
+        if (succeeded) state.undoStack.push(action);
+        else state.redoStack.push(action);
+      }
+      return succeeded;
+    } finally {
+      state.historyBusy = false;
+      updateControls();
+    }
   }
 
   async function clearDrawings() {
+    if (state.historyBusy) return false;
+    const scopeKey = currentScopeKey();
     const candidates = [
       ...state.strokesByLayer.get("shared").values(),
       ...(state.isDm ? state.strokesByLayer.get("dm").values() : [])
@@ -545,36 +719,49 @@ export function createMapDrawingSystem(options = {}) {
     if (!candidates.length) return false;
     const confirmed = await requestConfirmation(
       state.isDm
-        ? "Clear every drawing on this map?"
-        : "Clear your drawings on this map?",
-      { title: "Clear map drawings", confirmLabel: "Clear" }
+        ? "Clear every shared and DM-only drawing on this map? Other users' strokes will also be removed."
+        : "Clear only the drawings you created on this map?",
+      { title: state.isDm ? "Clear all drawing layers" : "Clear my drawings", confirmLabel: "Clear" }
     );
     if (!confirmed) return false;
+    state.historyBusy = true;
+    updateControls();
     try {
       for (let offset = 0; offset < candidates.length; offset += 400) {
         const batch = writeBatch(db);
         candidates.slice(offset, offset + 400).forEach((stroke) => batch.delete(strokeRef(stroke)));
         await batch.commit();
       }
-      candidates.forEach((stroke) => state.strokesByLayer.get(stroke.layer)?.delete(stroke.id));
-      state.undoStack = [];
-      state.redoStack = [];
-      setStatus("Drawings cleared.", "saved");
-      updateControls();
-      render();
+      if (scopeKey === currentScopeKey()) {
+        candidates.forEach((stroke) => state.strokesByLayer.get(stroke.layer)?.delete(stroke.id));
+        state.undoStack = [];
+        state.redoStack = [];
+        setStatus("Drawings cleared.", "saved");
+        render();
+      }
       return true;
     } catch (error) {
-      setStatus(`Could not clear drawings: ${error.message}`, "error");
+      if (scopeKey === currentScopeKey()) {
+        setStatus(`Could not clear drawings: ${error.message}`, "error");
+      }
       return false;
+    } finally {
+      state.historyBusy = false;
+      updateControls();
     }
   }
 
   function pointFromEvent(event) {
-    return clientPointToDrawingSpace(overlay.getBoundingClientRect(), event.clientX, event.clientY);
+    return clientPointToDrawingSpace(
+      overlay.getBoundingClientRect(),
+      event.clientX,
+      event.clientY,
+      state.space
+    );
   }
 
   function startDrawing(event) {
-    if (!state.active || !state.visible || event.isPrimary === false || (event.button ?? 0) !== 0) return;
+    if (!state.active || !state.visible || state.historyBusy || event.isPrimary === false || (event.button ?? 0) !== 0) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (state.tool === "eraser") {
@@ -582,7 +769,14 @@ export function createMapDrawingSystem(options = {}) {
       if (!target) return;
       const layer = target.dataset.drawingLayer;
       const stroke = state.strokesByLayer.get(layer)?.get(target.dataset.drawingStrokeId);
-      if (stroke) void removeStroke(stroke);
+      if (stroke) {
+        state.historyBusy = true;
+        updateControls();
+        void removeStroke(stroke).finally(() => {
+          state.historyBusy = false;
+          updateControls();
+        });
+      }
       return;
     }
     if (!canDraw()) {
@@ -591,6 +785,7 @@ export function createMapDrawingSystem(options = {}) {
     }
     const point = pointFromEvent(event);
     overlay.setPointerCapture?.(event.pointerId);
+    state.pointerId = event.pointerId;
     state.drawing = normalizeDrawingStroke({
       id: makeId(),
       roomCode: state.roomCode,
@@ -611,7 +806,7 @@ export function createMapDrawingSystem(options = {}) {
   }
 
   function continueDrawing(event) {
-    if (!state.drawing || event.pointerId == null) return;
+    if (!state.drawing || event.pointerId !== state.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const point = pointFromEvent(event);
@@ -625,25 +820,57 @@ export function createMapDrawingSystem(options = {}) {
         }
       }
     }
-    render();
+    schedulePreviewRender();
   }
 
   function finishDrawing(event) {
-    if (!state.drawing) return;
+    if (!state.drawing || event.pointerId !== state.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    overlay.releasePointerCapture?.(event.pointerId);
+    const finalPoint = pointFromEvent(event);
+    state.drawing.end = finalPoint;
+    if (state.drawing.tool === "pen") {
+      const last = state.drawing.points[state.drawing.points.length - 1];
+      if (!last || last.x !== finalPoint.x || last.y !== finalPoint.y) {
+        state.drawing.points.push(finalPoint);
+      }
+    }
+    try { overlay.releasePointerCapture?.(event.pointerId); } catch {}
     const stroke = normalizeDrawingStroke({
       ...state.drawing,
       points: simplifyDrawingPoints(state.drawing.points, 2.5),
       updatedAtMillis: Date.now()
     }, state);
     state.drawing = null;
+    state.pointerId = null;
     render();
     const hasLength = stroke.tool === "pen"
       ? stroke.points.length > 1
       : Math.hypot(stroke.end.x - stroke.start.x, stroke.end.y - stroke.start.y) > 2;
     if (hasLength) void persistStroke(stroke);
+  }
+
+  function cancelDrawing(event) {
+    if (!state.drawing || event.pointerId !== state.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    try { overlay.releasePointerCapture?.(event.pointerId); } catch {}
+    state.drawing = null;
+    state.pointerId = null;
+    render();
+    setStatus("Drawing cancelled.", "active");
+  }
+
+  async function retryFailedStrokes() {
+    if (state.historyBusy) return false;
+    const failed = [...state.pendingStrokes.values()].filter((entry) => (
+      entry.scopeKey === currentScopeKey() && entry.status === "failed"
+    ));
+    if (!failed.length) return false;
+    for (const entry of failed) {
+      await persistStroke(entry.stroke, { scopeKey: entry.scopeKey });
+    }
+    return failed.every((entry) => !state.pendingStrokes.has(entry.stroke.id));
   }
 
   toolbar.addEventListener("click", (event) => {
@@ -652,6 +879,9 @@ export function createMapDrawingSystem(options = {}) {
       state.tool = DRAWING_TOOLS.includes(toolButton.dataset.drawingTool)
         ? toolButton.dataset.drawingTool
         : "pen";
+      if (state.tool === "eraser") {
+        setStatus("Click a complete stroke to erase it. Each erased stroke can be undone.", "active");
+      }
       updateControls();
       return;
     }
@@ -659,6 +889,7 @@ export function createMapDrawingSystem(options = {}) {
     if (event.target.closest("[data-drawing-undo]")) void undo();
     if (event.target.closest("[data-drawing-redo]")) void redo();
     if (event.target.closest("[data-drawing-clear]")) void clearDrawings();
+    if (event.target.closest("[data-drawing-retry]")) void retryFailedStrokes();
   });
 
   toggleButton.addEventListener("click", () => setActive(!state.active));
@@ -698,7 +929,7 @@ export function createMapDrawingSystem(options = {}) {
   overlay.addEventListener("pointerdown", startDrawing, true);
   overlay.addEventListener("pointermove", continueDrawing, true);
   overlay.addEventListener("pointerup", finishDrawing, true);
-  overlay.addEventListener("pointercancel", finishDrawing, true);
+  overlay.addEventListener("pointercancel", cancelDrawing, true);
 
   if (globalThis.ResizeObserver && surface) {
     resizeObserver = new ResizeObserver(() => syncOverlayGeometry());
@@ -710,6 +941,11 @@ export function createMapDrawingSystem(options = {}) {
 
   function destroy() {
     disconnect();
+    const cancelFrame = globalThis.cancelAnimationFrame || globalThis.clearTimeout;
+    if (previewFrame) cancelFrame(previewFrame);
+    previewFrame = 0;
+    state.pendingStrokes.clear();
+    renderedStrokes.clear();
     resizeObserver?.disconnect();
     overlay.remove();
     toolbar.remove();
@@ -730,6 +966,9 @@ export function createMapDrawingSystem(options = {}) {
       dmCount: state.strokesByLayer.get("dm").size,
       undoCount: state.undoStack.length,
       redoCount: state.redoStack.length,
+      pendingCount: [...state.pendingStrokes.values()].filter((entry) => entry.scopeKey === currentScopeKey()).length,
+      failedCount: [...state.pendingStrokes.values()].filter((entry) => entry.scopeKey === currentScopeKey() && entry.status === "failed").length,
+      historyBusy: state.historyBusy,
       listeners: listeners.getSnapshot()
     };
   }

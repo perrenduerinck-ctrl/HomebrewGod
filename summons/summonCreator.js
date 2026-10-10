@@ -4,6 +4,10 @@ import {
   normalizeSummonSource,
   summonPresetAutomation
 } from "./summonPresetModel.js";
+import { setCreatorControlsBusy } from "../shared/creatorFormState.js";
+import { createCreatorDraftLifecycle } from "../shared/creatorDraftLifecycle.js";
+import { requestAppConfirmation } from "../ui/visualPolish.js";
+import { creatorSaveRefreshMessage, retainAcknowledgedCreatorRecord } from "../shared/creatorRefreshState.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -107,11 +111,13 @@ export function createSummonCreator({
   const listeners = [];
   let selectedId = "";
   let createdAtMillis = 0;
+  let loadedRevision = 0;
   let source = null;
   let records = [];
   let libraryRecords = [];
   let provenance = {};
   let busy = false;
+  let refreshError = null;
 
   const on = (element, event, handler) => {
     element?.addEventListener(event, handler);
@@ -120,13 +126,14 @@ export function createSummonCreator({
   const setStatus = (message) => { statusRoot.textContent = message; };
   const setBusy = (value) => {
     busy = value;
-    for (const button of screen.querySelectorAll("button")) button.disabled = value;
+    setCreatorControlsBusy(screen, value);
   };
 
   function rawDraft() {
     const placementMode = field("placementMode").value;
     return {
       id: selectedId,
+      revision: loadedRevision,
       createdAtMillis,
       name: field("name").value,
       description: field("description").value,
@@ -191,6 +198,7 @@ export function createSummonCreator({
     const preset = normalizeSummonPreset(value);
     const empty = !value?.id && !value?.name;
     selectedId = empty ? "" : preset.id;
+    loadedRevision = empty ? 0 : preset.revision;
     createdAtMillis = empty ? 0 : preset.createdAtMillis;
     source = value?.sourceLibraryId || value?.source?.libraryId ? { ...preset.source } : null;
     provenance = Object.fromEntries(["sourceWorkshopAssetId", "sourceWorkshopVersion", "sourceAuthorUid", "copiedFromLibraryId", "copiedFromSummonId"]
@@ -218,13 +226,14 @@ export function createSummonCreator({
     renderSourceOptions(); renderSourceSummary(); syncConditionalFields(); renderPreview();
   }
 
-  async function refresh() {
-    if (busy) return records;
+  async function refresh({ allowBusy = false } = {}) {
+    if (busy && !allowBusy) return records;
+    refreshError = null;
     try {
       [records, libraryRecords] = await Promise.all([persistence.list(), listLibraryRecords()]);
       renderLibrary(); renderSourceOptions();
       return records;
-    } catch (error) { setStatus(`Summon Library could not load: ${error.message}`); return []; }
+    } catch (error) { refreshError = error; renderLibrary(); renderSourceOptions(); setStatus(`Summon Library could not load: ${error.message}`); return records; }
   }
 
   async function save() {
@@ -238,7 +247,9 @@ export function createSummonCreator({
         source = { ...normalizeSummonSource({ ...selectedRecord, ...(loaded.content || {}) }) };
       }
       const saved = await persistence.save(rawDraft());
-      applyPreset(saved); await refresh(); setStatus("Summon preset saved to My Library."); return saved;
+      records = retainAcknowledgedCreatorRecord(records, saved);
+      applyPreset(saved); draftLifecycle.markClean(); renderLibrary(); await refresh({ allowBusy: true });
+      setStatus(refreshError ? creatorSaveRefreshMessage(saved.name, refreshError) : "Summon preset saved to My Library."); return saved;
     } catch (error) { setStatus(`Summon preset could not be saved: ${error.message}`); return null; }
     finally { setBusy(false); }
   }
@@ -246,15 +257,16 @@ export function createSummonCreator({
   async function remove() {
     if (!selectedId || busy) { setStatus("Choose a saved summon preset first."); return false; }
     setBusy(true);
-    try { await persistence.remove(selectedId); applyPreset({}); await refresh(); setStatus("Summon preset deleted. Its source content was left unchanged."); return true; }
+    try { await persistence.remove(selectedId); applyPreset({}); draftLifecycle.markClean(); await refresh(); setStatus("Summon preset deleted. Its source content was left unchanged."); return true; }
     catch (error) { setStatus(`Summon preset could not be deleted: ${error.message}`); return false; }
     finally { setBusy(false); }
   }
 
   function duplicate() {
     const copied = duplicateSummonPreset(rawDraft());
-    applyPreset({ ...copied, id: "", createdAtMillis: 0 });
+    applyPreset({ ...copied, id: "", revision: 0, createdAtMillis: 0 });
     provenance = { copiedFromSummonId: selectedId, copiedFromLibraryId: selectedId ? `summon:${selectedId}` : "" };
+    draftLifecycle.markChanged();
     setStatus("Independent copy ready. Save it to add it to My Library.");
   }
 
@@ -278,6 +290,16 @@ export function createSummonCreator({
     finally { setBusy(false); }
   }
 
+  const draftLifecycle = createCreatorDraftLifecycle({
+    root: screen,
+    creatorId: "summon",
+    getUserId,
+    getDraft: rawDraft,
+    applyDraft: applyPreset,
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setStatus
+  });
+
   on(form, "input", () => { syncConditionalFields(); renderPreview(); });
   on(sourceSelect, "change", () => {
     const record = libraryRecords.find((entry) => entry.libraryId === sourceSelect.value);
@@ -288,15 +310,16 @@ export function createSummonCreator({
   on(libraryRoot, "click", async (event) => {
     const button = event.target.closest("[data-summon-library-id]");
     if (!button) return;
-    try { applyPreset(await persistence.load(button.dataset.summonLibraryId)); setStatus("Saved summon preset loaded."); }
+    if (!await draftLifecycle.confirmReplacement("open the selected summon preset")) return;
+    try { applyPreset(await persistence.load(button.dataset.summonLibraryId)); draftLifecycle.markClean(); setStatus("Saved summon preset loaded."); }
     catch (error) { setStatus(error.message); }
   });
-  on(screen, "click", (event) => {
+  on(screen, "click", async (event) => {
     const button = event.target.closest("[data-summon-creator-action]");
     if (!button) return;
     const action = button.dataset.summonCreatorAction;
-    if (action === "back") onBack();
-    if (action === "new") { applyPreset({}); setStatus("New summon preset ready."); }
+    if (action === "back" && await draftLifecycle.confirmReplacement("return to the battle map", { restoreBaseline: true })) onBack();
+    if (action === "new" && await draftLifecycle.confirmReplacement("start a new summon preset")) { applyPreset({}); draftLifecycle.markClean(); setStatus("New summon preset ready."); }
     if (action === "save") void save();
     if (action === "duplicate") duplicate();
     if (action === "delete") void remove();
@@ -307,16 +330,25 @@ export function createSummonCreator({
   });
 
   applyPreset({});
+  draftLifecycle.markClean();
+  draftLifecycle.recover();
   void refresh();
   return Object.freeze({
     refresh, save, remove, usePreset, getDraft: rawDraft,
-    openPreset(preset, { duplicate: makeCopy = false } = {}) {
+    async openPreset(preset, { duplicate: makeCopy = false } = {}) {
+      if (!await draftLifecycle.confirmReplacement("open another summon preset")) return false;
       if (makeCopy) {
         const copy = duplicateSummonPreset(preset);
-        applyPreset({ ...copy, id: "", createdAtMillis: 0 });
+        applyPreset({ ...copy, id: "", revision: 0, createdAtMillis: 0 });
       } else applyPreset(preset);
+      if (makeCopy) draftLifecycle.markChanged();
+      else draftLifecycle.markClean();
       setStatus(makeCopy ? "Independent copy opened. Save it to My Library." : "Summon preset opened.");
+      return true;
     },
-    destroy() { listeners.forEach((removeListener) => removeListener()); }
+    confirmNavigation() {
+      return draftLifecycle.confirmReplacement("navigate away", { restoreBaseline: true });
+    },
+    destroy() { draftLifecycle.destroy(); listeners.forEach((removeListener) => removeListener()); }
   });
 }

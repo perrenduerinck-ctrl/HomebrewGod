@@ -3,11 +3,11 @@
 <script type="module">
   import { createMagicItemCreator } from "../../items/magicItemCreator.js";
   import { normalizeMagicItem } from "../../items/magicItemModel.js";
-  const records = new Map(); let next = 0;
+  const records = new Map(); let next = 0; let failNextList = false;
   const persistence = {
     async save(raw) { const item = normalizeMagicItem({ ...raw, id: raw.id || `item-${++next}`, updatedAtMillis: Date.now() }); records.set(item.id, item); return item; },
     async load(id) { return records.get(id); },
-    async list() { return [...records.values()]; },
+    async list() { if (failNextList) { failNextList = false; throw new Error("test refresh offline"); } return [...records.values()]; },
     async remove(id) { records.delete(id); }
   };
   window.__published = null;
@@ -19,4 +19,5 @@
     onBrowseWorkshop: (request) => { window.__browse = request; }
   });
   window.magicItemRecords = () => [...records.values()];
+  window.failNextMagicItemList = () => { failNextList = true; };
 </script></body></html>

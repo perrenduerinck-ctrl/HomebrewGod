@@ -38,6 +38,54 @@ function cleanPosition(value) {
   });
 }
 
+export function normalizeMovementMeasurement(value = {}) {
+  if (!value || typeof value !== "object") return null;
+  const viewportWidth = finiteNumber(value.viewportWidth, Number.NaN);
+  const viewportHeight = finiteNumber(value.viewportHeight, Number.NaN);
+  const pixelsPerSquare = finiteNumber(value.pixelsPerSquare, Number.NaN);
+  const feetPerSquare = finiteNumber(value.feetPerSquare, Number.NaN);
+  if (
+    !Number.isFinite(viewportWidth) || viewportWidth <= 0 || viewportWidth > 100000 ||
+    !Number.isFinite(viewportHeight) || viewportHeight <= 0 || viewportHeight > 100000 ||
+    !Number.isFinite(pixelsPerSquare) || pixelsPerSquare <= 0 || pixelsPerSquare > 10000 ||
+    !Number.isFinite(feetPerSquare) || feetPerSquare < 1 || feetPerSquare > 1000
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    viewportWidth,
+    viewportHeight,
+    pixelsPerSquare,
+    feetPerSquare
+  });
+}
+
+export function deriveMovementDistance({
+  startPosition,
+  endPosition,
+  measurement
+} = {}) {
+  const start = cleanPosition(startPosition);
+  const end = cleanPosition(endPosition);
+  const context = normalizeMovementMeasurement(measurement);
+  if (!start || !end || !context) {
+    throw new Error("Movement distance needs a valid map measurement context.");
+  }
+  return roundDistance(measureMapDistance(
+    {
+      x: context.viewportWidth * start.x / 100,
+      y: context.viewportHeight * start.y / 100,
+      elevation: start.elevation
+    },
+    {
+      x: context.viewportWidth * end.x / 100,
+      y: context.viewportHeight * end.y / 100,
+      elevation: end.elevation
+    },
+    context
+  ).feet);
+}
+
 export function normalizeBaseMovementSpeed(
   value,
   fallback = DEFAULT_BASE_MOVEMENT_SPEED
@@ -137,6 +185,7 @@ export function normalizeMovementState(source = {}) {
         startPosition: cleanPosition(pending.startPosition),
         endPosition: cleanPosition(pending.endPosition),
         distanceFeet: roundDistance(pending.distanceFeet),
+        measurement: normalizeMovementMeasurement(pending.measurement),
         afterMove: roundDistance(
           Math.max(0, movementRemaining - finiteNumber(pending.distanceFeet, 0))
         ),
@@ -218,10 +267,13 @@ export function synchronizeMovementState(
   if (sameTurn) {
     return normalizeMovementState({
       ...current,
-      baseSpeed: speed,
+      // A turn's budget is fixed when that turn begins. Effects gained or
+      // removed mid-turn apply to the next turn instead of refunding or
+      // silently consuming movement that was already spent.
+      baseSpeed: current.baseSpeed,
       movementRemaining: Math.max(
         0,
-        speed - current.movementSpent
+        current.baseSpeed - current.movementSpent
       ),
       activeTokenName:
         cleanText(activeToken?.name ?? combatant?.name) ||
@@ -255,6 +307,7 @@ export function createPendingMovement(
     startPosition,
     endPosition,
     distanceFeet,
+    measurement,
     turnKey
   } = {}
 ) {
@@ -268,12 +321,19 @@ export function createPendingMovement(
   if (turnKey && cleanText(turnKey) !== state.movementTurnKey) {
     throw new Error("That movement preview belongs to an expired turn.");
   }
-  const distance = roundDistance(distanceFeet);
   const start = cleanPosition(startPosition) ?? state.lastConfirmedPosition;
   const end = cleanPosition(endPosition);
   if (!start || !end) {
     throw new Error("Movement preview requires valid map positions.");
   }
+  const normalizedMeasurement = normalizeMovementMeasurement(measurement);
+  const distance = normalizedMeasurement
+    ? deriveMovementDistance({
+        startPosition: start,
+        endPosition: end,
+        measurement: normalizedMeasurement
+      })
+    : roundDistance(distanceFeet);
 
   return normalizeMovementState({
     ...state,
@@ -282,7 +342,8 @@ export function createPendingMovement(
       turnKey: state.movementTurnKey,
       startPosition: start,
       endPosition: end,
-      distanceFeet: distance
+      distanceFeet: distance,
+      measurement: normalizedMeasurement
     }
   });
 }
@@ -360,15 +421,9 @@ export function canControlToken(
   if (isDm === true) return true;
   const uid = cleanText(userUid);
   if (!uid) return false;
-  const owners = [
-    token.ownerUid,
-    token.ownerId,
-    token.userUid,
-    token.linkedCharacter?.ownerUid,
-    token.linkedMonster?.ownerUid,
-    ...(Array.isArray(token.controllerUids) ? token.controllerUids : [])
-  ].map(cleanText);
-  return owners.includes(uid);
+  // Firestore authorizes player token writes with this one canonical field.
+  // Legacy aliases are deliberately not treated as write authority.
+  return cleanText(token.ownerUid) === uid;
 }
 
 export function getTokenMovementMode(
@@ -523,6 +578,9 @@ export function createMovementSystem({
       startPosition: { ...pending.startPosition },
       endPosition: { ...pending.endPosition },
       distanceFeet: pending.distanceFeet,
+      measurement: pending.measurement
+        ? { ...pending.measurement }
+        : null,
       force: force === true
     });
 

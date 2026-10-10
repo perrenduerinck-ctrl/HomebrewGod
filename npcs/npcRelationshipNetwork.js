@@ -231,22 +231,9 @@ export function createNpcRelationshipNetwork({
       hostility: relationshipField("hostility").value,
       notes: relationshipField("notes").value,
       tags: relationshipField("tags").value,
+      revision: relationships.find((entry) => entry.id === relationshipField("id").value)?.revision || 0,
       createdAtMillis: relationships.find((entry) => entry.id === relationshipField("id").value)?.createdAtMillis
     };
-  }
-
-  async function syncRelationshipReference(relationshipId, previousNpcIds, nextNpcIds) {
-    const previous = new Set(previousNpcIds);
-    const next = new Set(nextNpcIds);
-    const impacted = new Set([...previous, ...next]);
-    for (const npcId of impacted) {
-      const npc = npcs.find((entry) => entry.id === npcId);
-      if (!npc) continue;
-      const relationshipIds = npc.relationshipIds.filter((id) => id !== relationshipId);
-      if (next.has(npcId)) relationshipIds.push(relationshipId);
-      const saved = await npcPersistence.save({ ...npc, relationshipIds });
-      npcs = npcs.map((entry) => entry.id === saved.id ? saved : entry);
-    }
   }
 
   async function saveRelationship(event) {
@@ -254,11 +241,9 @@ export function createNpcRelationshipNetwork({
     const draft = relationshipDraft();
     const errors = validateNpcRelationship(draft);
     if (errors.length) { onStatus(errors.join(" ")); return; }
-    const previous = relationships.find((entry) => entry.id === draft.id);
     try {
       const saved = await relationshipPersistence.save(draft);
       relationships = relationships.filter((entry) => entry.id !== saved.id).concat(saved);
-      await syncRelationshipReference(saved.id, previous ? [previous.sourceNpcId, previous.targetNpcId] : [], [saved.sourceNpcId, saved.targetNpcId]);
       selectRelationship(saved.id);
       onStatus(`${relationshipLabel(saved, npcById())} saved.`);
     } catch (error) { onStatus(`Relationship could not be saved: ${error.message}`); }
@@ -270,7 +255,6 @@ export function createNpcRelationshipNetwork({
     if (!await requestAppConfirmation("Delete this NPC relationship?", { title: "Delete relationship", confirmLabel: "Delete" })) return;
     try {
       await relationshipPersistence.remove(relationship.id);
-      await syncRelationshipReference(relationship.id, [relationship.sourceNpcId, relationship.targetNpcId], []);
       relationships = relationships.filter((entry) => entry.id !== relationship.id);
       clearRelationshipForm();
       onStatus("NPC relationship deleted.");

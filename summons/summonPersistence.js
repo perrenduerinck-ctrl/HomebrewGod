@@ -1,4 +1,5 @@
 import { normalizeSummonPreset, validateSummonPreset } from "./summonPresetModel.js";
+import { saveRevisionedRecord } from "../shared/revisionedPersistence.js";
 
 const docsOf = (snapshot) => Array.isArray(snapshot?.docs) ? snapshot.docs : [];
 const mutable = (preset) => ({
@@ -13,7 +14,7 @@ const mutable = (preset) => ({
 });
 
 export function createSummonPersistence({
-  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp,
+  db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, orderBy, limit, startAfter, serverTimestamp, runTransaction,
   getUserId = () => "", now = () => Date.now()
 } = {}) {
   const requireUid = () => {
@@ -36,8 +37,11 @@ export function createSummonPersistence({
       updatedAtMillis: timestamp
     };
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
-    await setDoc(summonRef(uid, preset.id), record, { merge: true });
-    return normalizeSummonPreset(record, { now: timestamp });
+    const committed = await saveRevisionedRecord({
+      db, reference: summonRef(uid, preset.id), raw, record,
+      label: "summon preset", runTransaction, getDoc, setDoc
+    });
+    return normalizeSummonPreset(committed, { now: timestamp });
   }
 
   async function load(summonId) {

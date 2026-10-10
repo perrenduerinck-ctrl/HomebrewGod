@@ -36,6 +36,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/rooms/$(roomCode)/tokens/$(tokenId);
     }
 
+    function characterPath(roomCode, characterId) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/characters/$(characterId);
+    }
+
     function ownsRoomToken(roomCode, tokenId) {
       return signedIn()
         && exists(tokenPath(roomCode, tokenId))
@@ -51,6 +55,75 @@ service cloud.firestore {
         'updatedAtMillis',
         'updatedAt'
       ]);
+    }
+
+    function linkedCharacterSyncFieldsOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'name',
+        'imageUrl',
+        'publicId',
+        'sizeCategory',
+        'creatureSize',
+        'size',
+        'armorClass',
+        'ac',
+        'dexterity',
+        'initiativeBonus',
+        'movementSpeed',
+        'baseSpeed',
+        'ownerUid',
+        'currentHp',
+        'maxHp',
+        'hp',
+        'hpAuthority',
+        'linkedCharacterId',
+        'sheetId',
+        'sourceType',
+        'linkedCharacterRevision',
+        'linkedCharacter',
+        'updatedAtMillis',
+        'updatedAt'
+      ]);
+    }
+
+    function validLinkedCharacterTokenSync(roomCode) {
+      let characterId = resource.data.get('linkedCharacterId', '');
+      let character = get(characterPath(roomCode, characterId)).data;
+      let combat = character.get('combat', {});
+      let identity = character.get('identity', {});
+      let baseSpeed = combat.get('baseSpeed', {});
+      return characterId != ''
+        && exists(characterPath(roomCode, characterId))
+        && linkedCharacterSyncFieldsOnly()
+        && resource.data.get('sourceType', '') == 'character'
+        && request.resource.data.get('sourceType', '') == 'character'
+        && request.resource.data.get('linkedCharacterId', '') == characterId
+        && request.resource.data.get('sheetId', '') == characterId
+        && request.resource.data.get('ownerUid', '') == request.auth.uid
+        && character.get('ownerUid', '') == request.auth.uid
+        && character.get('roomCode', '') == roomCode
+        && request.resource.data.get('linkedCharacterRevision', 0)
+          == character.get('revision', -1)
+        && request.resource.data.get('linkedCharacterRevision', 0)
+          > resource.data.get('linkedCharacterRevision', 0)
+        && request.resource.data.get('hpAuthority', '') == 'character'
+        && request.resource.data.get('name', '') == identity.get('name', '')
+        && request.resource.data.get('currentHp', -1)
+          == combat.get('currentHp', -2)
+        && request.resource.data.get('maxHp', -1)
+          == combat.get('maxHp', -2)
+        && request.resource.data.get('armorClass', -1)
+          == combat.get('armorClass', -2)
+        && request.resource.data.get('ac', -1)
+          == combat.get('armorClass', -2)
+        && request.resource.data.get('movementSpeed', -1)
+          == baseSpeed.get('walk', -2)
+        && request.resource.data.get('baseSpeed', -1)
+          == baseSpeed.get('walk', -2)
+        && request.resource.data.get('linkedCharacter', {}).get('id', '')
+          == characterId
+        && request.resource.data.get('linkedCharacter', {}).get('ownerUid', '')
+          == request.auth.uid;
     }
 
     function tokenIsCurrentOrExploring(roomCode, tokenId) {
@@ -155,10 +228,29 @@ service cloud.firestore {
         && data.get('ownerUid', '') == request.auth.uid;
     }
 
+    function validPersonalLibraryRevision(userId) {
+      let nextRevision = request.resource.data.get('revision', 0);
+      return nextRevision is int
+        && nextRevision >= 1
+        && (
+          (
+            resource == null
+            && nextRevision == 1
+          )
+          || (
+            resource != null
+            && resource.data.get('ownerUid', '') == userId
+            && nextRevision == resource.data.get('revision', 0) + 1
+          )
+        );
+    }
+
     function validCharacterWrite(roomCode) {
       return request.resource.data.roomCode == roomCode
         && request.resource.data.ownerUid is string
-        && request.resource.data.ownerUid.size() > 0;
+        && request.resource.data.ownerUid.size() > 0
+        && request.resource.data.revision is int
+        && request.resource.data.revision >= 1;
     }
 
     function validDmOwnedWrite(roomCode) {
@@ -234,6 +326,7 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
           'id', 'roomCode', 'mapId', 'authorUid', 'authorName', 'layer',
           'tool', 'color', 'size', 'points', 'start', 'end',
+          'originalAuthorUid', 'originalAuthorName', 'restoredByUid',
           'createdAtMillis', 'updatedAtMillis', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.id == strokeId
@@ -247,6 +340,12 @@ service cloud.firestore {
         && request.resource.data.authorUid.size() <= 180
         && request.resource.data.authorName is string
         && request.resource.data.authorName.size() <= 160
+        && request.resource.data.originalAuthorUid is string
+        && request.resource.data.originalAuthorUid.size() <= 180
+        && request.resource.data.originalAuthorName is string
+        && request.resource.data.originalAuthorName.size() <= 160
+        && request.resource.data.restoredByUid is string
+        && request.resource.data.restoredByUid.size() <= 180
         && request.resource.data.tool in [
           'pen', 'line', 'rectangle', 'circle', 'arrow'
         ]
@@ -367,6 +466,7 @@ service cloud.firestore {
           if isSelf(userId)
           && request.resource.data.id == itemId
           && request.resource.data.ownerUid == userId
+          && validPersonalLibraryRevision(userId)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
@@ -397,6 +497,7 @@ service cloud.firestore {
           if isSelf(userId)
           && request.resource.data.id == spellId
           && request.resource.data.ownerUid == userId
+          && validPersonalLibraryRevision(userId)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
@@ -422,6 +523,7 @@ service cloud.firestore {
           if isSelf(userId)
           && request.resource.data.id == npcId
           && request.resource.data.ownerUid == userId
+          && validPersonalLibraryRevision(userId)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
@@ -457,6 +559,7 @@ service cloud.firestore {
           if isSelf(userId)
           && request.resource.data.id == relationshipId
           && request.resource.data.ownerUid == userId
+          && validPersonalLibraryRevision(userId)
           && request.resource.data.sourceNpcId is string
           && request.resource.data.sourceNpcId.size() > 0
           && request.resource.data.sourceNpcId.size() <= 160
@@ -491,6 +594,7 @@ service cloud.firestore {
           if isSelf(userId)
           && request.resource.data.id == encounterId
           && request.resource.data.ownerUid == userId
+          && validPersonalLibraryRevision(userId)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
@@ -524,6 +628,7 @@ service cloud.firestore {
           if isSelf(userId)
           && request.resource.data.id == summonId
           && request.resource.data.ownerUid == userId
+          && validPersonalLibraryRevision(userId)
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
@@ -614,6 +719,8 @@ service cloud.firestore {
           (
             resource.data.authorUid == request.auth.uid
             && validWorkshopSummary(assetId)
+            && request.resource.data.version >= resource.data.version
+            && request.resource.data.version <= resource.data.version + 1
           )
           || (
             resource.data.visibility == 'ROOM'
@@ -638,7 +745,7 @@ service cloud.firestore {
             get(/databases/$(database)/documents/workshopAssets/$(assetId)).data
           );
 
-        allow create, update:
+        allow create:
           if signedIn()
           && existsAfter(/databases/$(database)/documents/workshopAssets/$(assetId))
           && getAfter(/databases/$(database)/documents/workshopAssets/$(assetId)).data.authorUid
@@ -647,6 +754,26 @@ service cloud.firestore {
           && request.resource.data.authorUid == request.auth.uid
           && request.resource.data.version is int
           && request.resource.data.version >= 1
+          && versionId == string(request.resource.data.version)
+          && getAfter(/databases/$(database)/documents/workshopAssets/$(assetId)).data.version
+            == request.resource.data.version
+          && request.resource.data.content is map
+          && request.resource.data.keys().hasOnly([
+            'assetId', 'version', 'authorUid', 'createdAt',
+            'createdAtMillis', 'content'
+          ]);
+
+        allow update:
+          if signedIn()
+          && existsAfter(/databases/$(database)/documents/workshopAssets/$(assetId))
+          && getAfter(/databases/$(database)/documents/workshopAssets/$(assetId)).data.authorUid
+            == request.auth.uid
+          && getAfter(/databases/$(database)/documents/workshopAssets/$(assetId)).data.version
+            == resource.data.version
+          && request.resource.data.assetId == resource.data.assetId
+          && request.resource.data.authorUid == resource.data.authorUid
+          && request.resource.data.version == resource.data.version
+          && versionId == string(resource.data.version)
           && request.resource.data.content is map
           && request.resource.data.keys().hasOnly([
             'assetId', 'version', 'authorUid', 'createdAt',
@@ -767,6 +894,8 @@ service cloud.firestore {
           if roomAcceptsWrites(roomCode)
           && isRoomMember(roomCode)
           && validCharacterWrite(roomCode)
+          && request.resource.data.revision
+            == resource.data.get('revision', 0) + 1
           && (
             request.resource.data.ownerUid
               == resource.data.get('ownerUid', '')
@@ -796,12 +925,15 @@ service cloud.firestore {
         allow create:
           if roomAcceptsWrites(roomCode)
           && isRoomDm(roomCode)
-          && validDmOwnedWrite(roomCode);
+          && validDmOwnedWrite(roomCode)
+          && request.resource.data.get('revision', 0) == 1;
 
         allow update:
           if roomAcceptsWrites(roomCode)
           && isRoomDm(roomCode)
           && validDmOwnedWrite(roomCode)
+          && request.resource.data.get('revision', 0)
+            == resource.data.get('revision', 0) + 1
           && (
             request.resource.data.ownerUid
               == resource.data.get('ownerUid', '')
@@ -1062,9 +1194,14 @@ service cloud.firestore {
               && resource.data.get('ownerUid', '') == request.auth.uid
               && request.resource.data.get('ownerUid', '')
                 == resource.data.get('ownerUid', '')
-              && tokenMovementFieldsOnly()
-              && tokenIsCurrentOrExploring(roomCode, tokenId)
-              && trackedTokenMoveIsConfirmed(roomCode, tokenId)
+              && (
+                (
+                  tokenMovementFieldsOnly()
+                  && tokenIsCurrentOrExploring(roomCode, tokenId)
+                  && trackedTokenMoveIsConfirmed(roomCode, tokenId)
+                )
+                || validLinkedCharacterTokenSync(roomCode)
+              )
             )
           );
       }

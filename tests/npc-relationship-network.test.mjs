@@ -83,6 +83,12 @@ test("old NPC knowledge remains backward compatible and network modules are ship
   assert.match(css, /@media\(max-width:650px\)/);
 });
 
+test("relationship records are authoritative and do not rewrite cached NPC records", () => {
+  const network = fs.readFileSync(new URL("../npcs/npcRelationshipNetwork.js", import.meta.url), "utf8");
+  assert.doesNotMatch(network, /syncRelationshipReference/);
+  assert.doesNotMatch(network, /npcPersistence\.save\(\{ \.\.\.npc, relationshipIds \}\)/);
+});
+
 test("Firestore rules protect relationship records and mirror the authoritative rules", () => {
   const rules = fs.readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
   assert.match(rules, /match \/npcRelationships\/\{relationshipId\}/);

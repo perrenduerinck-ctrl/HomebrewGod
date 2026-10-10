@@ -980,6 +980,19 @@ export function createCharacterPersistence(context) {
           : getSection18RecordRevisionMillis(
               creatorState.draft
             );
+      const expectedRevision =
+        saveAsNew
+          ? 0
+          : Math.max(
+              0,
+              Math.floor(
+                safeNumber(
+                  creatorState.draft
+                    ?.revision,
+                  0
+                )
+              )
+            );
 
       const character =
         prepareSection18Character({
@@ -1080,6 +1093,9 @@ export function createCharacterPersistence(context) {
         roomCode,
         ownerUid:
           mutationIdentity.actorUid,
+        revision: saveAsNew
+          ? 1
+          : expectedRevision,
         updatedAtMillis:
           savedAtMillis,
         updatedAt: timestamp
@@ -1092,41 +1108,138 @@ export function createCharacterPersistence(context) {
               .currentCharacterId;
 
       let linkedTokenSyncWarning = "";
+      let savedCharacterPayload =
+        firestorePayload;
 
       if (savedId) {
-        const validatedDocument =
-          await getValidatedSection18CharacterDocument(
-            savedId,
-            "update"
-          );
+        const characterDocument =
+          getSection18CharacterDocument(savedId);
 
-        validateSection18NoRemoteConflict({
-          data: validatedDocument.data,
-          expectedRevisionMillis,
-          actionLabel: "update"
-        });
-
-        firestorePayload.ownerUid =
-          validatedDocument.data
-            .ownerUid ||
-          (
-            mutationIdentity.actorUid ===
-              mutationIdentity.roomDmUid
-              ? mutationIdentity.actorUid
-              : ""
-          );
-
-        if (!firestorePayload.ownerUid) {
+        if (
+          typeof deps.runTransaction !==
+            "function"
+        ) {
           throw new Error(
-            "Only the room DM can repair this legacy character before it is changed."
+            "Atomic character saving is unavailable. Reload the page before trying again."
           );
         }
 
-        await deps.updateDoc(
-          validatedDocument.ref,
+        savedCharacterPayload =
+          await deps.runTransaction(
+            deps.db,
+            async (transaction) => {
+              const snapshot =
+                await transaction.get(
+                  characterDocument
+                );
 
-          firestorePayload
-        );
+              if (
+                !section18SnapshotExists(
+                  snapshot
+                )
+              ) {
+                throw new Error(
+                  "Cannot update this character because the saved document no longer exists. Reload the library and try again."
+                );
+              }
+
+              const remoteData =
+                getSection18DocumentSnapshotData(
+                  snapshot
+                );
+
+              validateSection18FirestoreRecord({
+                characterId: savedId,
+                data: remoteData,
+                roomCode,
+                actionLabel: "update"
+              });
+
+              assertCharacterMutationAccess({
+                ...mutationIdentity,
+                ownerUid:
+                  remoteData.ownerUid || "",
+                label: "character"
+              });
+
+              const remoteRevision =
+                Math.max(
+                  0,
+                  Math.floor(
+                    safeNumber(
+                      remoteData.revision,
+                      0
+                    )
+                  )
+                );
+
+              if (
+                remoteRevision > 0 ||
+                expectedRevision > 0
+              ) {
+                if (
+                  remoteRevision !==
+                    expectedRevision
+                ) {
+                  throw new Error(
+                    "Cannot update this character because it was changed in another tab or window after this tab loaded it. Reload the character library before saving again."
+                  );
+                }
+              } else {
+                validateSection18NoRemoteConflict({
+                  data: remoteData,
+                  expectedRevisionMillis,
+                  actionLabel: "update"
+                });
+              }
+
+              const ownerUid =
+                remoteData.ownerUid ||
+                (
+                  mutationIdentity.actorUid ===
+                    mutationIdentity.roomDmUid
+                    ? mutationIdentity.actorUid
+                    : ""
+                );
+
+              if (!ownerUid) {
+                throw new Error(
+                  "Only the room DM can repair this legacy character before it is changed."
+                );
+              }
+
+              let payload = {
+                ...firestorePayload,
+                ownerUid,
+                revision:
+                  remoteRevision + 1
+              };
+
+              if (
+                typeof deps
+                  .prepareExistingCharacterUpdate ===
+                  "function"
+              ) {
+                payload =
+                  deps.prepareExistingCharacterUpdate(
+                    remoteData,
+                    payload
+                  );
+              }
+
+              transaction.update(
+                characterDocument,
+                payload
+              );
+
+              return payload;
+            }
+          );
+
+        firestorePayload.ownerUid =
+          savedCharacterPayload.ownerUid;
+        firestorePayload.revision =
+          savedCharacterPayload.revision;
       } else {
         const createdDocument =
           await deps.addDoc(
@@ -1155,7 +1268,11 @@ export function createCharacterPersistence(context) {
             ownerUid:
               firestorePayload.ownerUid ||
               character.ownerUid ||
-              null
+              null,
+            revision:
+              savedCharacterPayload.revision,
+            updatedAtMillis:
+              savedCharacterPayload.updatedAtMillis
           });
         } catch (tokenSyncError) {
           linkedTokenSyncWarning =
@@ -1168,9 +1285,19 @@ export function createCharacterPersistence(context) {
         }
       }
 
+      clearStoredDraft();
+
       replaceDraft(
         {
           ...character,
+          revision:
+            savedCharacterPayload.revision,
+          updatedAt:
+            savedCharacterPayload.updatedAt,
+          updatedAtMillis:
+            savedCharacterPayload.updatedAtMillis,
+          ownerUid:
+            savedCharacterPayload.ownerUid,
           id: savedId
         },
 

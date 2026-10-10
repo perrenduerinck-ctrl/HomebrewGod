@@ -7,6 +7,10 @@ import {
   validateMagicItem
 } from "./magicItemModel.js";
 import { requestAppConfirmation } from "../ui/visualPolish.js";
+import { setCreatorControlsBusy } from "../shared/creatorFormState.js";
+import { createCreatorDraftLifecycle } from "../shared/creatorDraftLifecycle.js";
+import { creatorSaveRefreshMessage } from "../shared/creatorRefreshState.js";
+import { createPaginatedCreatorLibrary } from "../shared/paginatedCreatorLibrary.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -108,9 +112,12 @@ export function createMagicItemCreator({
   const listeners = [];
   let selectedId = "";
   let createdAtMillis = 0;
+  let loadedRevision = 0;
   let effects = [];
   let records = [];
   let busy = false;
+  let refreshError = null;
+  const libraryPager = createPaginatedCreatorLibrary({ persistence });
 
   const on = (element, event, handler) => {
     element?.addEventListener(event, handler);
@@ -119,12 +126,13 @@ export function createMagicItemCreator({
   const setStatus = (message) => { statusRoot.textContent = message; };
   const setBusy = (value) => {
     busy = value;
-    for (const button of screen.querySelectorAll("button")) button.disabled = value;
+    setCreatorControlsBusy(screen, value);
   };
 
   function rawDraft() {
     return {
       id: selectedId,
+      revision: loadedRevision,
       createdAtMillis,
       name: field("name").value,
       itemType: field("itemType").value,
@@ -182,6 +190,7 @@ export function createMagicItemCreator({
   function applyItem(raw = {}) {
     const item = normalizeMagicItem(raw);
     selectedId = raw.id ? item.id : "";
+    loadedRevision = raw.id ? item.revision : 0;
     createdAtMillis = item.createdAtMillis;
     field("name").value = raw.name || "";
     field("itemType").value = item.itemType;
@@ -200,26 +209,45 @@ export function createMagicItemCreator({
   }
 
   function renderLibrary() {
+    const pageState = libraryPager.getState();
     if (!records.length) {
-      libraryRoot.innerHTML = `<p class="magic-item-empty">No saved magic items yet.</p>`;
+      libraryRoot.innerHTML = `<p class="magic-item-empty">${refreshError ? "Saved items remain unavailable. Use Refresh to retry." : "No saved magic items yet."}</p>`;
       return;
     }
     libraryRoot.innerHTML = records.map((item) => `
       <button type="button" data-library-item-id="${escapeHtml(item.id)}" class="${item.id === selectedId ? "selected" : ""}">
-        ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" alt="">` : `<span aria-hidden="true">⚔</span>`}
+        ${item.imageUrl ? `<img src="${escapeHtml(item.imageUrl)}" alt="" loading="lazy" decoding="async">` : `<span aria-hidden="true">⚔</span>`}
         <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(magicItemRarityLabel(item.rarity))} · ${escapeHtml(magicItemTypeLabel(item.itemType))}</small></span>
-      </button>`).join("");
+      </button>`).join("") + `<div class="magic-item-library-more"><small>${records.length} item${records.length === 1 ? "" : "s"} loaded</small>${pageState.hasMore ? `<button type="button" data-item-action="load-more">Load more</button>` : ""}</div>`;
   }
 
   async function refresh() {
+    refreshError = null;
     try {
-      records = await persistence.list();
+      records = (await libraryPager.refresh()).records;
       renderLibrary();
       return records;
     } catch (error) {
+      refreshError = error;
+      records = libraryPager.getState().records;
       setStatus(`Magic Item Library could not load: ${error.message}`);
-      records = []; renderLibrary(); return [];
+      renderLibrary(); return records;
     }
+  }
+
+  async function loadMore() {
+    if (!libraryPager.getState().hasMore) return records;
+    setStatus("Loading more magic items…");
+    try {
+      records = (await libraryPager.loadMore()).records;
+      renderLibrary();
+      setStatus(`${records.length} magic items loaded.`);
+    } catch (error) {
+      records = libraryPager.getState().records;
+      renderLibrary();
+      setStatus(`More magic items could not load: ${error.message}`);
+    }
+    return records;
   }
 
   async function save() {
@@ -230,8 +258,9 @@ export function createMagicItemCreator({
     setBusy(true); setStatus("Saving to My Library…");
     try {
       const saved = await persistence.save(draft);
-      applyItem(saved); await refresh();
-      setStatus(`${saved.name} saved to My Library.`);
+      records = libraryPager.retain(saved).records;
+      applyItem(saved); draftLifecycle.markClean(); renderLibrary(); await refresh();
+      setStatus(refreshError ? creatorSaveRefreshMessage(saved.name, refreshError) : `${saved.name} saved to My Library.`);
       return saved;
     } catch (error) { setStatus(`Item could not be saved: ${error.message}`); return null; }
     finally { setBusy(false); }
@@ -243,14 +272,15 @@ export function createMagicItemCreator({
     setBusy(true);
     try {
       await persistence.remove(selectedId);
-      applyItem({}); await refresh(); setStatus("Magic item deleted."); return true;
+      libraryPager.remove(selectedId);
+      applyItem({}); draftLifecycle.markClean(); await refresh(); setStatus("Magic item deleted."); return true;
     } catch (error) { setStatus(`Item could not be deleted: ${error.message}`); return false; }
     finally { setBusy(false); }
   }
 
   function duplicate() {
     const draft = rawDraft();
-    applyItem({ ...draft, id: "", createdAtMillis: 0, name: `${draft.name || "Magic Item"} Copy` });
+    applyItem({ ...draft, id: "", revision: 0, createdAtMillis: 0, name: `${draft.name || "Magic Item"} Copy` });
     setStatus("Independent copy ready. Save it to add it to My Library.");
   }
 
@@ -279,6 +309,16 @@ export function createMagicItemCreator({
     renderPreview();
   }
 
+  const draftLifecycle = createCreatorDraftLifecycle({
+    root: screen,
+    creatorId: "magic-item",
+    getUserId,
+    getDraft: rawDraft,
+    applyDraft: applyItem,
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setStatus
+  });
+
   on(form, "input", (event) => {
     if (event.target.matches("[data-effect-field]")) updateEffectFromInput(event.target);
     else { syncConditionalFields(); renderPreview(); }
@@ -298,21 +338,23 @@ export function createMagicItemCreator({
   on(libraryRoot, "click", async (event) => {
     const button = event.target.closest("[data-library-item-id]");
     if (!button) return;
-    try { applyItem(await persistence.load(button.dataset.libraryItemId)); renderLibrary(); setStatus("Saved magic item loaded."); }
+    if (!await draftLifecycle.confirmReplacement("open the selected magic item")) return;
+    try { applyItem(await persistence.load(button.dataset.libraryItemId)); draftLifecycle.markClean(); renderLibrary(); setStatus("Saved magic item loaded."); }
     catch (error) { setStatus(error.message); }
   });
-  on(screen, "click", (event) => {
+  on(screen, "click", async (event) => {
     const button = event.target.closest("[data-item-action]");
     if (!button) return;
     const action = button.dataset.itemAction;
-    if (action === "back") onBack();
-    if (action === "new") { applyItem({}); setStatus("New magic item ready."); }
+    if (action === "back" && await draftLifecycle.confirmReplacement("return to the battle map", { restoreBaseline: true })) onBack();
+    if (action === "new" && await draftLifecycle.confirmReplacement("start a new magic item")) { applyItem({}); draftLifecycle.markClean(); setStatus("New magic item ready."); }
     if (action === "save") void save();
     if (action === "duplicate") duplicate();
     if (action === "delete") void remove();
     if (action === "publish") publish();
     if (action === "browse") onBrowseWorkshop({ assetType: "magic-item", tab: "browse" });
     if (action === "refresh") void refresh();
+    if (action === "load-more") void loadMore();
     if (action === "add-effect") { effects.push(newEffect(effects.length)); renderEffects(); renderPreview(); }
   });
   const upload = screen.querySelector("[data-item-image-upload]");
@@ -329,16 +371,25 @@ export function createMagicItemCreator({
   });
 
   applyItem({});
+  draftLifecycle.markClean();
+  draftLifecycle.recover();
   void refresh();
   return Object.freeze({
     refresh,
     save,
     remove,
     getDraft: rawDraft,
-    openItem(item, { duplicate: makeCopy = false } = {}) {
-      applyItem(makeCopy ? { ...item, id: "", createdAtMillis: 0, name: `${item?.name || "Magic Item"} Copy` } : item);
+    async openItem(item, { duplicate: makeCopy = false } = {}) {
+      if (!await draftLifecycle.confirmReplacement("open another magic item")) return false;
+      applyItem(makeCopy ? { ...item, id: "", revision: 0, createdAtMillis: 0, name: `${item?.name || "Magic Item"} Copy` } : item);
+      if (makeCopy) draftLifecycle.markChanged();
+      else draftLifecycle.markClean();
       setStatus(makeCopy ? "Independent copy opened. Save it to My Library." : "Magic item opened.");
+      return true;
     },
-    destroy() { listeners.forEach((removeListener) => removeListener()); }
+    confirmNavigation() {
+      return draftLifecycle.confirmReplacement("navigate away", { restoreBaseline: true });
+    },
+    destroy() { draftLifecycle.destroy(); listeners.forEach((removeListener) => removeListener()); }
   });
 }
