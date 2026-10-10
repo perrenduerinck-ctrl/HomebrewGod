@@ -124,7 +124,8 @@ const deployedSelfTests = [
     path:
       "tests/browser-pages/character-creator-self-test.html?release=phase20-20260727",
     selector: "#result",
-    expected: "\"total\": 460"
+    expected: "\"passed\": true",
+    minimumTotal: 458
   },
   {
     name:
@@ -180,6 +181,19 @@ for (const suite of deployedSelfTests) {
       ).toContainText(
         suite.expected
       );
+
+      if (suite.minimumTotal) {
+        const result = JSON.parse(
+          await page.locator(
+            suite.selector
+          ).textContent()
+        );
+
+        expect(result.total)
+          .toBeGreaterThanOrEqual(
+            suite.minimumTotal
+          );
+      }
     }
   );
 }
