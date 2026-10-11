@@ -1,3 +1,8 @@
+import {
+  friendlyServiceError,
+  reportPersistenceFailure
+} from "./securityPersistence.js";
+
 function snapshotExists(snapshot) {
   return typeof snapshot?.exists === "function"
     ? snapshot.exists()
@@ -75,21 +80,78 @@ export async function saveRevisionedRecord({
     return next;
   };
 
-  if (typeof runTransaction === "function") {
-    return runTransaction(db, (transaction) => commit(
-      (target) => transaction.get(target),
-      (target, next) => transaction.set(target, next, { merge: true })
-    ));
-  }
+  try {
+    if (typeof runTransaction === "function") {
+      return await runTransaction(db, (transaction) => commit(
+        (target) => transaction.get(target),
+        (target, next) => transaction.set(target, next, { merge: true })
+      ));
+    }
 
-  // Kept for isolated adapters/tests. The application always supplies a
-  // transaction; callers without one still get conflict detection, but not
-  // cross-client atomicity.
-  if (typeof getDoc !== "function" || typeof setDoc !== "function") {
-    throw new Error(`Atomic ${label} saving is unavailable.`);
+    // Kept for isolated adapters/tests. The application always supplies a
+    // transaction; callers without one still get conflict detection, but not
+    // cross-client atomicity.
+    if (typeof getDoc !== "function" || typeof setDoc !== "function") {
+      throw new Error(`Atomic ${label} saving is unavailable.`);
+    }
+    return await commit(
+      getDoc,
+      (target, next) => setDoc(target, next, { merge: true })
+    );
+  } catch (error) {
+    const code = String(error?.code || "")
+      .toLowerCase();
+    const serviceFailure = [
+      "permission-denied",
+      "unauthenticated",
+      "unavailable",
+      "resource-exhausted",
+      "failed-precondition",
+      "aborted"
+    ].some((value) => code.includes(value));
+    const options = {
+      service: "Firebase",
+      feature: label,
+      operation:
+        expectedRevision > 0
+          ? "update"
+          : "create",
+      action: `save this ${label}`,
+      path:
+        typeof reference?.path === "string"
+          ? reference.path
+          : String(reference || "unknown"),
+      authenticated:
+        Boolean(record?.ownerUid),
+      membershipState: "unknown",
+      expectedRole: "record owner",
+      revisionState:
+        code.includes("aborted") ||
+        code.includes("failed-precondition") ||
+        error?.code === "revision-conflict"
+          ? "stale"
+          : expectedRevision > 0
+            ? "current"
+            : "new"
+    };
+
+    reportPersistenceFailure(
+      error,
+      options
+    );
+
+    if (serviceFailure) {
+      const friendlyError = new Error(
+        friendlyServiceError(
+          error,
+          options
+        )
+      );
+      friendlyError.code = error?.code || "";
+      friendlyError.cause = error;
+      throw friendlyError;
+    }
+
+    throw error;
   }
-  return commit(
-    getDoc,
-    (target, next) => setDoc(target, next, { merge: true })
-  );
 }

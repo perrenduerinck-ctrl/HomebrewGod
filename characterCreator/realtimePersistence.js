@@ -1,3 +1,8 @@
+import {
+  friendlyServiceError,
+  reportPersistenceFailure
+} from "../shared/securityPersistence.js";
+
 export function readRealtimeSnapshotRecords(
   snapshot
 ) {
@@ -30,6 +35,7 @@ export function createCharacterRealtimePersistence({
   deps,
   listeners,
   getRoomCode,
+  getUserId = () => "",
   hasFirestoreTools,
   getState,
   onCacheChanged,
@@ -95,22 +101,42 @@ export function createCharacterRealtimePersistence({
     const permissionDenied =
       error?.code === "permission-denied";
     const label = descriptor.label;
+    const roomCode = getRoomCode();
+    const options = {
+      service: "Firebase",
+      feature: "Character Creator",
+      operation: "listen",
+      action: `load ${label}`,
+      path:
+        `rooms/${roomCode || "{room}"}/${descriptor.collectionName}`,
+      authenticated:
+        Boolean(getUserId()),
+      membershipState:
+        permissionDenied
+          ? "missing"
+          : "unknown",
+      expectedRole: "room member",
+      revisionState: "unknown"
+    };
+
+    reportPersistenceFailure(
+      error,
+      options
+    );
 
     if (
       descriptor.optional &&
       permissionDenied
     ) {
       console.warn(
-        `Optional room ${label} ${phase} unavailable due to permissions. Default character creator templates still work.`,
-        error
+        `Optional room ${label} ${phase} unavailable due to permissions. Default character creator templates still work.`
       );
       return;
     }
 
     if (descriptor.optional) {
       console.warn(
-        `Optional room ${label} ${phase} failed. Default character creator templates still work.`,
-        error
+        `Optional room ${label} ${phase} failed (${String(error?.code || "unknown")}). Default character creator templates still work.`
       );
       setStatus?.(
         `Could not load optional room ${label}; using defaults.`
@@ -118,11 +144,12 @@ export function createCharacterRealtimePersistence({
       return;
     }
 
-    console.error(
-      `Could not load character creator ${label}:`,
-      error
+    setStatus?.(
+      friendlyServiceError(
+        error,
+        options
+      )
     );
-    setStatus?.(`Could not load ${label}.`);
   }
 
   function connect(descriptor) {

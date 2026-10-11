@@ -60,7 +60,8 @@ import {
 } from "../data/defaultSpeciesBackgroundContent.js?v=phase14-20260726";
 import {
   assertCharacterMutationAccess,
-  friendlyServiceError
+  friendlyServiceError,
+  reportPersistenceFailure
 } from "../shared/securityPersistence.js";
 
 import { createCharacterCatalogs } from "./catalogs.js";
@@ -38595,7 +38596,7 @@ export function createCharacterCreator(options = {}) {
     renderSection17ContainerSummary, renderSection17FeatureReviewItem, renderSection17FeatureSummary, renderSection17HitDice, renderSection17InnateSpells, renderSection17Inventory,
     renderSection17List, renderSection17MigrationWarnings, renderSection17PassiveScores, renderSection17SavingThrows, renderSection17Skills, renderSection17SpellcastingSummary,
     renderSection17Warnings, renderSection17WeaponAttacks, renderSelectedClassMechanicsSummary, renderSelectedFeatSummary, renderSkillsStep, renderSpeciesStep,
-    renderSpellsStep, renderStepContent, renderStepRail, renderSubclassStep, repairContainerState, replaceDraft,
+    renderSpellsStep, renderStepContent, renderStepRail, renderSubclassStep, repairContainerState, replaceDraft, reportPersistenceFailure,
     replaceSection11Portrait, replaceSection20Draft, resolveClassTemplateForEntry, restoreDraftFromSession, restoreSection16ResourceList, retiredCharacterStepIds,
     rollSection13AbilityScore, rollSection13ScorePool, runCharacterCreatorAction, runCharacterStepRegistrationAudit, runWizardHandlers, safeDisplayString,
     safeNumber, sanitizeDraftStrings, saveSection12ArtificerInfusionState, scheduleDraftPersistence, section16RechargeMatchesRest, section16SelectedSpellSourceIds,
@@ -38916,6 +38917,8 @@ export function createCharacterCreator(options = {}) {
       deps,
       listeners: section19Listeners,
       getRoomCode,
+      getUserId: () =>
+        deps.getCurrentUserUid?.() || "",
       hasFirestoreTools,
       getState: () => creatorState,
       onCacheChanged:

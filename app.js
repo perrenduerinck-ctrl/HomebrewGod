@@ -179,6 +179,7 @@ import {
   MAX_SECURE_IMAGE_BYTES,
   createPersistenceMonitor,
   friendlyServiceError,
+  reportPersistenceFailure,
   validateSecureImageDescriptor
 } from "./shared/securityPersistence.js";
 import { createSidebarNavigation } from "./ui/navigation/sidebar.js?v=foundation-milestone-20260915";
@@ -2741,6 +2742,56 @@ async function saveRoomToMyRooms(roomCode, roomName, role) {
   }, { merge: true });
 }
 
+async function openSavedRoom(
+  roomCode,
+  role = "player"
+) {
+  const cleanCode =
+    normalizeRoomCode(roomCode);
+
+  try {
+    await joinRoom(
+      cleanCode,
+      role,
+      "room"
+    );
+    return true;
+  } catch (error) {
+    const options = {
+      service: "Firebase",
+      feature: "Saved Rooms",
+      operation: "join",
+      action: "open that campaign",
+      path:
+        `rooms/${cleanCode || "{room}"}`,
+      authenticated:
+        Boolean(currentUser?.uid),
+      membershipState: "missing",
+      expectedRole: "room member",
+      revisionState: "unknown"
+    };
+
+    reportPersistenceFailure(
+      error,
+      options
+    );
+
+    const message =
+      friendlyServiceError(
+        error,
+        options
+      );
+
+    text(E.roomStatusText, message);
+
+    if (typeof alert === "function") {
+      alert(message);
+    }
+
+    return false;
+  }
+}
+
 function listenToMyRooms() {
   if (!currentUser) return false;
 
@@ -2820,7 +2871,12 @@ function listenToMyRooms() {
 
       const openButton = document.createElement("button");
       openButton.textContent = "Open Room";
-      openButton.addEventListener("click", () => openRoom(roomCode, "room"));
+      openButton.addEventListener("click", () => {
+        void openSavedRoom(
+          roomCode,
+          room.role || "player"
+        );
+      });
 
       const removeButton = document.createElement("button");
       removeButton.textContent = "Remove From My List";
@@ -2894,7 +2950,10 @@ function appendSavedRoomRow(roomDoc) {
   const openButton = document.createElement("button");
   openButton.textContent = "Open Room";
   openButton.addEventListener("click", function () {
-    openRoom(roomCode, "room");
+    void openSavedRoom(
+      roomCode,
+      room.role || "player"
+    );
   });
 
   const removeButton = document.createElement("button");
@@ -3062,15 +3121,21 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
     );
     membershipCreated = true;
   } catch (error) {
-    throw new Error(
+    const joinError = new Error(
       friendlyServiceError(
         error,
         {
           service: "Firebase",
-          action: "join that room"
+          action: "join that room",
+          authenticated:
+            Boolean(currentUser?.uid),
+          membershipState: "missing",
+          expectedRole: "room member"
         }
       )
     );
+    joinError.code = error?.code || "";
+    throw joinError;
   }
 
   const roomSnap =

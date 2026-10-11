@@ -48,6 +48,22 @@ function getFileExtension(fileName) {
     : "";
 }
 
+function sanitizeDiagnosticPath(value) {
+  return cleanText(value, "unknown")
+    .replace(
+      /(^|\/)users\/[^/]+/gi,
+      "$1users/{current-user}"
+    )
+    .replace(
+      /(^|\/)players\/[^/]+/gi,
+      "$1players/{member}"
+    )
+    .replace(
+      /(^|\/)activePlayers\/[^/]+/gi,
+      "$1activePlayers/{session}"
+    );
+}
+
 export function validateSecureImageDescriptor(
   file,
   options = {}
@@ -320,6 +336,96 @@ export function classifyConnectionState({
   };
 }
 
+const DIAGNOSTIC_MEMBERSHIP_STATES =
+  new Set([
+    "member",
+    "missing",
+    "unknown"
+  ]);
+
+const DIAGNOSTIC_REVISION_STATES =
+  new Set([
+    "current",
+    "new",
+    "stale",
+    "unknown"
+  ]);
+
+export function buildSafePersistenceDiagnostic(
+  error,
+  options = {}
+) {
+  const membershipState =
+    cleanText(
+      options.membershipState,
+      "unknown"
+    ).toLowerCase();
+  const revisionState =
+    cleanText(
+      options.revisionState,
+      "unknown"
+    ).toLowerCase();
+
+  return {
+    service: cleanText(
+      options.service,
+      "Firebase"
+    ),
+    feature: cleanText(
+      options.feature,
+      "Unknown feature"
+    ),
+    operation: cleanText(
+      options.operation,
+      "unknown"
+    ).toLowerCase(),
+    path: sanitizeDiagnosticPath(
+      options.path
+    ),
+    code: cleanText(
+      error?.code,
+      "unknown"
+    ).toLowerCase(),
+    authenticated:
+      options.authenticated === true,
+    membershipState:
+      DIAGNOSTIC_MEMBERSHIP_STATES
+        .has(membershipState)
+        ? membershipState
+        : "unknown",
+    expectedRole: cleanText(
+      options.expectedRole,
+      "unknown"
+    ),
+    revisionState:
+      DIAGNOSTIC_REVISION_STATES
+        .has(revisionState)
+        ? revisionState
+        : "unknown"
+  };
+}
+
+export function reportPersistenceFailure(
+  error,
+  options = {},
+  logger = console.error
+) {
+  const diagnostic =
+    buildSafePersistenceDiagnostic(
+      error,
+      options
+    );
+
+  if (typeof logger === "function") {
+    logger(
+      `[${diagnostic.service}] ${diagnostic.feature} ${diagnostic.operation} failed`,
+      diagnostic
+    );
+  }
+
+  return diagnostic;
+}
+
 export function friendlyServiceError(
   error,
   options = {}
@@ -340,14 +446,56 @@ export function friendlyServiceError(
   const message =
     cleanText(error?.message)
       .toLowerCase();
+  const membershipState =
+    cleanText(options.membershipState)
+      .toLowerCase();
+  const expectedRole =
+    cleanText(options.expectedRole)
+      .toLowerCase();
+  const revisionState =
+    cleanText(options.revisionState)
+      .toLowerCase();
+  const revisionConflict =
+    revisionState === "stale" ||
+    code.includes("aborted") ||
+    code.includes("failed-precondition") ||
+    message.includes("revision") ||
+    message.includes("newer version") ||
+    message.includes("changed in another");
+
+  if (revisionConflict) {
+    return (
+      "A newer version was saved elsewhere. " +
+      "Reload the record, review the latest changes, and try again."
+    );
+  }
 
   if (
     code.includes("permission-denied") ||
     message.includes("permission")
   ) {
+    if (options.authenticated === false) {
+      return (
+        `Sign in again before trying to ${action}.`
+      );
+    }
+
+    if (membershipState === "missing") {
+      return (
+        "Your campaign access is missing or expired. " +
+        "Check the room code or rejoin the room, then try again."
+      );
+    }
+
+    if (expectedRole === "room dm") {
+      return (
+        `Only the room DM can ${action}.`
+      );
+    }
+
     return (
       `The ${service} blocked this request. ` +
-      "Check your room membership or ownership and try again."
+      "Confirm that you still own this record or rejoin the room, then try again."
     );
   }
 

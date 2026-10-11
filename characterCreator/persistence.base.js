@@ -3,6 +3,10 @@ import {
   assertCharacterSerializedSize
 } from "./fieldLimits.js?v=creator-fix-pass-20260730";
 
+import {
+  planCharacterWrite
+} from "./persistenceContract.js";
+
 export function createCharacterPersistence(context) {
   const {
     $, ABILITY_DEFINITIONS, ABILITY_SCORE_METHODS, ACTIVE_RULESET, ADDITIONAL_CANTRIP_COUNT_2014, ADDITIONAL_CANTRIP_EXPECTATIONS_2014,
@@ -137,7 +141,7 @@ export function createCharacterPersistence(context) {
     renderSection17ContainerSummary, renderSection17FeatureReviewItem, renderSection17FeatureSummary, renderSection17HitDice, renderSection17InnateSpells, renderSection17Inventory,
     renderSection17List, renderSection17MigrationWarnings, renderSection17PassiveScores, renderSection17SavingThrows, renderSection17Skills, renderSection17SpellcastingSummary,
     renderSection17Warnings, renderSection17WeaponAttacks, renderSelectedClassMechanicsSummary, renderSelectedFeatSummary, renderSkillsStep, renderSpeciesStep,
-    renderSpellsStep, renderStepContent, renderStepRail, renderSubclassStep, repairContainerState, replaceDraft,
+    renderSpellsStep, renderStepContent, renderStepRail, renderSubclassStep, repairContainerState, replaceDraft, reportPersistenceFailure,
     replaceSection11Portrait, replaceSection20Draft, resolveClassTemplateForEntry, restoreDraftFromSession, restoreSection16ResourceList, retiredCharacterStepIds,
     rollSection13AbilityScore, rollSection13ScorePool, runCharacterCreatorAction, runCharacterStepRegistrationAudit, runWizardHandlers, safeDisplayString,
     safeNumber, sanitizeDraftStrings, saveSection12ArtificerInfusionState, scheduleDraftPersistence, section16RechargeMatchesRest, section16SelectedSpellSourceIds,
@@ -974,25 +978,22 @@ export function createCharacterPersistence(context) {
         }
       }
 
+      const writePlan =
+        planCharacterWrite({
+          currentCharacterId:
+            creatorState.currentCharacterId,
+          saveAsNew,
+          loadedRevision:
+            creatorState.draft?.revision
+        });
       const expectedRevisionMillis =
-        saveAsNew
+        writePlan.createsDocument
           ? 0
           : getSection18RecordRevisionMillis(
               creatorState.draft
             );
       const expectedRevision =
-        saveAsNew
-          ? 0
-          : Math.max(
-              0,
-              Math.floor(
-                safeNumber(
-                  creatorState.draft
-                    ?.revision,
-                  0
-                )
-              )
-            );
+        writePlan.expectedRevision;
 
       const character =
         prepareSection18Character({
@@ -1093,19 +1094,14 @@ export function createCharacterPersistence(context) {
         roomCode,
         ownerUid:
           mutationIdentity.actorUid,
-        revision: saveAsNew
-          ? 1
-          : expectedRevision,
+        revision:
+          writePlan.writeRevision,
         updatedAtMillis:
           savedAtMillis,
         updatedAt: timestamp
       };
 
-      let savedId =
-        saveAsNew
-          ? null
-          : creatorState
-              .currentCharacterId;
+      let savedId = writePlan.savedId;
 
       let linkedTokenSyncWarning = "";
       let savedCharacterPayload =
@@ -1352,30 +1348,78 @@ export function createCharacterPersistence(context) {
               .finalizedAtMillis;
       }
 
-      console.error(
-        "Could not save character:",
-        error
-      );
+      const roomCode = getRoomCode();
+      const actorUid =
+        getSection18MutationIdentity()
+          .actorUid;
+      const currentId = String(
+        creatorState.currentCharacterId || ""
+      ).trim();
+      const code = String(
+        error?.code || ""
+      ).toLowerCase();
+      const errorMessage = String(
+        error?.message || ""
+      ).toLowerCase();
+      const firebaseFailure = [
+        "permission-denied",
+        "unauthenticated",
+        "unavailable",
+        "resource-exhausted",
+        "failed-precondition",
+        "aborted"
+      ].some((value) => {
+        return code.includes(value);
+      });
+      const failureOptions = {
+        service: "Firebase",
+        feature: "Character Creator",
+        operation:
+          currentId && !saveAsNew
+            ? "update"
+            : "create",
+        action:
+          finalizeRequested
+            ? "finalize this character"
+            : "save this character",
+        path:
+          `rooms/${roomCode || "{room}"}/characters/${currentId || "{new}"}`,
+        authenticated: Boolean(actorUid),
+        membershipState:
+          roomCode && actorUid
+            ? "member"
+            : "unknown",
+        expectedRole:
+          "character owner or room DM",
+        revisionState:
+          code.includes("aborted") ||
+          code.includes("failed-precondition") ||
+          errorMessage.includes("revision") ||
+          errorMessage.includes("changed in another")
+            ? "stale"
+            : currentId
+              ? "current"
+              : "new"
+      };
 
-      setStatus(
-        friendlyServiceError(
-          error,
-          {
-            service: "Firebase",
-            action: "save this character"
-          }
-        )
+      reportPersistenceFailure?.(
+        error,
+        failureOptions
       );
 
       const message =
-        error?.message ||
-        friendlyServiceError(
-          error,
-          {
-            service: "Firebase",
-            action: "save this character"
-          }
-        );
+        firebaseFailure
+          ? friendlyServiceError(
+              error,
+              failureOptions
+            )
+          : error?.message ||
+            friendlyServiceError(
+              error,
+              failureOptions
+            );
+
+      setStatus(message);
 
       if (typeof alert === "function") {
         alert(message);

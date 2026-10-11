@@ -58,6 +58,126 @@ function databaseFor(uid) {
   return environment.authenticatedContext(uid, { email: `${uid}@example.test` }).firestore();
 }
 
+function characterRecord(ownerUid, revision = 1, overrides = {}) {
+  return {
+    roomCode: ROOM,
+    ownerUid,
+    revision,
+    identity: { name: "Rules Hero" },
+    schemaVersion: 13,
+    updatedAtMillis: revision,
+    ...overrides
+  };
+}
+
+const personalLibraryFixtures = Object.freeze([
+  {
+    collection: "magicItems",
+    id: "item-1",
+    record: {
+      id: "item-1",
+      name: "Rules Blade",
+      itemType: "weapon",
+      rarity: "common",
+      description: "",
+      imageUrl: "",
+      tags: [],
+      effects: [],
+      updatedAtMillis: 1
+    }
+  },
+  {
+    collection: "spells",
+    id: "spell-1",
+    record: {
+      id: "spell-1",
+      name: "Rules Spark",
+      level: 0,
+      school: "Evocation",
+      classes: ["Wizard"],
+      description: "",
+      tags: [],
+      animations: {},
+      updatedAtMillis: 1
+    }
+  },
+  {
+    collection: "npcs",
+    id: "npc-1",
+    record: {
+      id: "npc-1",
+      name: "Rules NPC",
+      portraitUrl: "",
+      roomCode: ROOM,
+      description: "",
+      notes: "",
+      tags: [],
+      relationshipIds: [],
+      factionIds: [],
+      knowledge: [],
+      combat: {},
+      updatedAtMillis: 1
+    }
+  },
+  {
+    collection: "npcRelationships",
+    id: "relationship-1",
+    record: {
+      id: "relationship-1",
+      sourceNpcId: "npc-1",
+      targetNpcId: "npc-2",
+      relationshipType: "Ally",
+      direction: "mutual",
+      trust: 60,
+      hostility: 0,
+      notes: "",
+      tags: [],
+      createdAtMillis: 1,
+      updatedAtMillis: 1
+    }
+  },
+  {
+    collection: "encounters",
+    id: "encounter-1",
+    record: {
+      id: "encounter-1",
+      name: "Rules Encounter",
+      description: "",
+      notes: "",
+      environment: "",
+      roomCode: ROOM,
+      tags: [],
+      mapRef: null,
+      combatants: [],
+      lighting: {},
+      updatedAtMillis: 1
+    }
+  },
+  {
+    collection: "summons",
+    id: "summon-1",
+    record: {
+      id: "summon-1",
+      name: "Rules Summon",
+      description: "",
+      sourceLibraryId: "monster:source-1",
+      source: {
+        assetType: "monster",
+        libraryId: "monster:source-1",
+        sourceRecordId: "source-1"
+      },
+      count: 1,
+      placement: {},
+      ownership: {},
+      initiative: {},
+      duration: {},
+      endBehavior: {},
+      tags: [],
+      updatedAtMillis: 1
+    }
+  }
+]);
+
 async function seedRoom() {
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
@@ -115,6 +235,368 @@ test("personal and DM journal contents are physically private", async () => {
   await assertFails(getDoc(doc(owner, "rooms", ROOM, "dmJournal", "dm-1")));
   await assertSucceeds(getDoc(doc(owner, "rooms", ROOM, "sharedJournal", "shared-1")));
   await assertSucceeds(getDoc(doc(dm, "rooms", ROOM, "sharedJournal", "shared-1")));
+});
+
+test("character creates require authentication, membership, room identity, ownership, and revision one", async () => {
+  const signedOut = environment.unauthenticatedContext().firestore();
+  const owner = databaseFor("player-1");
+  const outsider = databaseFor("outside-user");
+
+  await assertFails(setDoc(
+    doc(signedOut, "rooms", ROOM, "characters", "signed-out"),
+    characterRecord("signed-out")
+  ));
+  await assertFails(setDoc(
+    doc(outsider, "rooms", ROOM, "characters", "outsider"),
+    characterRecord("outside-user")
+  ));
+  await assertFails(setDoc(
+    doc(owner, "rooms", ROOM, "characters", "revision-zero"),
+    characterRecord("player-1", 0)
+  ));
+  await assertFails(setDoc(
+    doc(owner, "rooms", ROOM, "characters", "wrong-room"),
+    characterRecord("player-1", 1, { roomCode: "OTHER-ROOM" })
+  ));
+  await assertFails(setDoc(
+    doc(owner, "rooms", ROOM, "characters", "wrong-owner"),
+    characterRecord("player-2")
+  ));
+  await assertSucceeds(setDoc(
+    doc(owner, "rooms", ROOM, "characters", "owned-hero"),
+    characterRecord("player-1")
+  ));
+});
+
+test("character updates enforce sequential revisions while allowing the owner or room DM", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(
+      doc(db, "rooms", ROOM, "characters", "owned-hero"),
+      characterRecord("player-1")
+    );
+  });
+
+  const owner = databaseFor("player-1");
+  const nonOwner = databaseFor("player-2");
+  const dm = databaseFor("dm-1");
+  const ownerRef = doc(owner, "rooms", ROOM, "characters", "owned-hero");
+
+  await assertSucceeds(setDoc(
+    ownerRef,
+    characterRecord("player-1", 2, { identity: { name: "Owner Update" } })
+  ));
+  await assertFails(setDoc(
+    ownerRef,
+    characterRecord("player-1", 2, { identity: { name: "Stale Update" } })
+  ));
+  await assertFails(setDoc(
+    doc(nonOwner, "rooms", ROOM, "characters", "owned-hero"),
+    characterRecord("player-1", 3, { identity: { name: "Hijacked" } })
+  ));
+  await assertSucceeds(setDoc(
+    doc(dm, "rooms", ROOM, "characters", "owned-hero"),
+    characterRecord("player-1", 3, { identity: { name: "DM Update" } })
+  ));
+  await assertFails(setDoc(
+    doc(dm, "rooms", ROOM, "characters", "owned-hero"),
+    characterRecord("dm-1", 4, { identity: { name: "Ownership Rewrite" } })
+  ));
+});
+
+test("only the room DM can claim a legacy character without ownership metadata", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), "rooms", ROOM, "characters", "legacy-hero"),
+      characterRecord("", 0)
+    );
+  });
+
+  await assertFails(setDoc(
+    doc(databaseFor("player-1"), "rooms", ROOM, "characters", "legacy-hero"),
+    characterRecord("player-1", 1)
+  ));
+  await assertSucceeds(setDoc(
+    doc(databaseFor("dm-1"), "rooms", ROOM, "characters", "legacy-hero"),
+    characterRecord("dm-1", 1)
+  ));
+});
+
+test("personal creator libraries are owner-only and revisioned", async () => {
+  const owner = databaseFor("player-1");
+  const other = databaseFor("player-2");
+
+  for (const fixture of personalLibraryFixtures) {
+    const ownerRef = doc(
+      owner,
+      "users",
+      "player-1",
+      fixture.collection,
+      fixture.id
+    );
+    const initial = {
+      ...fixture.record,
+      ownerUid: "player-1",
+      revision: 1
+    };
+    await assertSucceeds(setDoc(ownerRef, initial));
+    await assertFails(getDoc(doc(
+      other,
+      "users",
+      "player-1",
+      fixture.collection,
+      fixture.id
+    )));
+    await assertFails(setDoc(doc(
+      other,
+      "users",
+      "player-1",
+      fixture.collection,
+      fixture.id
+    ), {
+      ...initial,
+      revision: 2
+    }));
+    await assertFails(setDoc(ownerRef, initial));
+    await assertSucceeds(setDoc(ownerRef, {
+      ...initial,
+      revision: 2,
+      updatedAtMillis: 2
+    }));
+  }
+});
+
+test("personal animations and account indexes cannot cross account boundaries", async () => {
+  const owner = databaseFor("player-1");
+  const other = databaseFor("player-2");
+  const animation = {
+    id: "animation-1",
+    ownerId: "player-1",
+    ownership: {
+      scope: "user",
+      ownerId: "player-1"
+    },
+    sprite: "https://example.test/sprite.png",
+    sound: null
+  };
+  const index = {
+    libraryId: "monster:monster-1",
+    assetType: "monster",
+    sourceRecordId: "monster-1",
+    sourceRoomCode: ROOM,
+    ownerUid: "player-1",
+    name: "Indexed Monster",
+    updatedAtMillis: 1
+  };
+
+  await assertSucceeds(setDoc(
+    doc(owner, "users", "player-1", "animations", "animation-1"),
+    animation
+  ));
+  await assertFails(getDoc(doc(
+    other,
+    "users",
+    "player-1",
+    "animations",
+    "animation-1"
+  )));
+  await assertFails(setDoc(
+    doc(owner, "users", "player-1", "animations", "spoofed"),
+    {
+      ...animation,
+      id: "spoofed",
+      ownerId: "player-2"
+    }
+  ));
+
+  await assertSucceeds(setDoc(
+    doc(owner, "users", "player-1", "libraryIndex", index.libraryId),
+    index
+  ));
+  await assertFails(getDoc(doc(
+    other,
+    "users",
+    "player-1",
+    "libraryIndex",
+    index.libraryId
+  )));
+});
+
+test("room-scoped DM content stays writable only by the room DM", async () => {
+  const dm = databaseFor("dm-1");
+  const player = databaseFor("player-1");
+  const records = [
+    {
+      collection: "monsters",
+      id: "monster-1",
+      value: {
+        id: "monster-1",
+        roomCode: ROOM,
+        ownerUid: "dm-1",
+        revision: 1,
+        name: "Rules Monster"
+      }
+    },
+    {
+      collection: "maps",
+      id: "map-1",
+      value: { id: "map-1", roomCode: ROOM }
+    },
+    {
+      collection: "classes",
+      id: "class-1",
+      value: { id: "class-1", name: "Rules Class" }
+    },
+    {
+      collection: "species",
+      id: "species-1",
+      value: { id: "species-1", name: "Rules Species" }
+    },
+    {
+      collection: "backgrounds",
+      id: "background-1",
+      value: { id: "background-1", name: "Rules Background" }
+    }
+  ];
+
+  for (const record of records) {
+    await assertFails(setDoc(
+      doc(player, "rooms", ROOM, record.collection, record.id),
+      record.value
+    ));
+    await assertSucceeds(setDoc(
+      doc(dm, "rooms", ROOM, record.collection, record.id),
+      record.value
+    ));
+  }
+});
+
+test("room animations, gameplay effects, and combat effects retain their intended roles", async () => {
+  const dm = databaseFor("dm-1");
+  const player = databaseFor("player-1");
+  const roomAnimation = {
+    id: "room-animation",
+    roomCode: ROOM,
+    ownerId: ROOM,
+    ownership: {
+      scope: "room",
+      ownerId: ROOM
+    },
+    sprite: "https://example.test/room-sprite.png",
+    sound: null
+  };
+  const gameplayEffect = {
+    id: "effect-1",
+    definitionId: "bless",
+    name: "Bless",
+    type: "buff",
+    icon: "",
+    description: "",
+    roomCode: ROOM,
+    sourceId: "spell-1",
+    sourceType: "spell",
+    targetTokenId: "hero",
+    targetCharacterId: "owned-hero",
+    duration: {},
+    timing: {},
+    modifiers: [],
+    tags: [],
+    animation: {},
+    createdByUid: "dm-1",
+    createdAtMillis: 1,
+    updatedAtMillis: 1
+  };
+  const combatEffect = {
+    id: "combat-effect-1",
+    roomCode: ROOM,
+    createdByUid: "player-1",
+    createdAtMillis: 1
+  };
+
+  await assertFails(setDoc(
+    doc(player, "rooms", ROOM, "animations", "room-animation"),
+    roomAnimation
+  ));
+  await assertSucceeds(setDoc(
+    doc(dm, "rooms", ROOM, "animations", "room-animation"),
+    roomAnimation
+  ));
+  await assertFails(setDoc(
+    doc(player, "rooms", ROOM, "effects", "effect-1"),
+    { ...gameplayEffect, createdByUid: "player-1" }
+  ));
+  await assertSucceeds(setDoc(
+    doc(dm, "rooms", ROOM, "effects", "effect-1"),
+    gameplayEffect
+  ));
+  await assertSucceeds(setDoc(
+    doc(player, "rooms", ROOM, "combatEffects", "combat-effect-1"),
+    combatEffect
+  ));
+  await assertFails(setDoc(
+    doc(databaseFor("player-2"), "rooms", ROOM, "combatEffects", "spoofed-effect"),
+    {
+      ...combatEffect,
+      id: "spoofed-effect"
+    }
+  ));
+});
+
+test("Workshop visibility protects private content and permits authenticated public reads", async () => {
+  const author = databaseFor("player-1");
+  const peer = databaseFor("player-2");
+  const signedOut = environment.unauthenticatedContext().firestore();
+  const base = {
+    assetId: "public-asset",
+    assetType: "spell",
+    name: "Rules Asset",
+    nameSearch: "rules asset",
+    description: "",
+    authorUid: "player-1",
+    authorName: "Player One",
+    visibility: "PUBLIC",
+    roomCode: "",
+    tags: [],
+    thumbnailUrl: "",
+    version: 1,
+    forkedFrom: null,
+    sourceKey: "spell:rules-asset",
+    sourceType: "spell",
+    sourceRecordId: "spell-1",
+    typeMetadata: {},
+    collectionIds: [],
+    saveCount: 0,
+    createdAtMillis: 1,
+    updatedAtMillis: 1
+  };
+
+  await assertSucceeds(setDoc(
+    doc(author, "workshopAssets", "public-asset"),
+    base
+  ));
+  await assertSucceeds(getDoc(
+    doc(peer, "workshopAssets", "public-asset")
+  ));
+  await assertFails(getDoc(
+    doc(signedOut, "workshopAssets", "public-asset")
+  ));
+
+  await assertSucceeds(setDoc(
+    doc(author, "workshopAssets", "private-asset"),
+    {
+      ...base,
+      assetId: "private-asset",
+      sourceKey: "spell:private-asset",
+      visibility: "PRIVATE"
+    }
+  ));
+  await assertFails(getDoc(
+    doc(peer, "workshopAssets", "private-asset")
+  ));
+  await assertFails(updateDoc(
+    doc(peer, "workshopAssets", "public-asset"),
+    { name: "Hijacked" }
+  ));
 });
 
 test("journal revisions and ownership prevent silent cross-user replacement", async () => {
