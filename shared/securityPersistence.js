@@ -495,7 +495,7 @@ export function friendlyServiceError(
 
     return (
       `The ${service} blocked this request. ` +
-      "Confirm that you still own this record or rejoin the room, then try again."
+      "Confirm your ownership or room membership, then try again."
     );
   }
 

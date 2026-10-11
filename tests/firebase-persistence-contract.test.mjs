@@ -158,6 +158,10 @@ test("Firebase permission messages distinguish sign-in, membership, DM, and stal
     /room DM/i
   );
   assert.match(
+    friendlyServiceError(denied),
+    /ownership|membership/i
+  );
+  assert.match(
     friendlyServiceError({
       code: "aborted",
       message: "revision conflict"
