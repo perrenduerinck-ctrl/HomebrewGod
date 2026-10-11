@@ -76,6 +76,7 @@ export function createTokenSystem(options) {
     confirmFreeTokenPosition: options.confirmFreeTokenPosition,
     getMovementMeasurementOptions:
       options.getMovementMeasurementOptions,
+    canStartTokenDrag: options.canStartTokenDrag,
 
     getPuzzleTiles: options.getPuzzleTiles,
     getActivePuzzleTile: options.getActivePuzzleTile,
@@ -111,6 +112,8 @@ export function createTokenSystem(options) {
   let tokenRoomCode = null;
   let tokenCache = [];
   let tokenTestMode = false;
+  let selectedTokenId = null;
+  const selectionSubscribers = new Set();
 
 
 // =====================================================
@@ -241,6 +244,28 @@ export function createTokenSystem(options) {
       : fallback;
   }
 
+  function getMovementSpeeds(source = {}, fallback = 30) {
+    const movement = source?.combat?.baseSpeed || source?.combat?.speed || source?.speed || {};
+    const result = {};
+    ["walk", "fly", "swim", "climb", "burrow"].forEach((mode) => {
+      const direct = mode === "walk"
+        ? source?.walkingSpeed ?? source?.movementSpeed ?? movement?.walk ?? (typeof movement === "number" ? movement : null)
+        : movement?.[mode] ?? source?.[`${mode}Speed`];
+      const parsed = Number(direct);
+      if (Number.isFinite(parsed) && parsed > 0) result[mode] = normalizeBaseMovementSpeed(parsed);
+    });
+    if (!result.walk) result.walk = normalizeBaseMovementSpeed(fallback);
+    if (typeof source?.speed === "string") {
+      const expression = /(?:(walk|fly|swim|climb|burrow)\s*)?(\d+)\s*ft/gi;
+      let match;
+      while ((match = expression.exec(source.speed))) {
+        const mode = String(match[1] || "walk").toLowerCase();
+        result[mode] = normalizeBaseMovementSpeed(match[2]);
+      }
+    }
+    return result;
+  }
+
   function getLinkedCharacterId(character) {
     return String(
       character?.firestoreDocumentId ||
@@ -363,6 +388,7 @@ export function createTokenSystem(options) {
       character?.speed?.walk ??
       character?.speed
     );
+    const movementSpeeds = getMovementSpeeds(character, movementSpeed);
 
     const mediumSize =
       getMediumSize(roomData || {});
@@ -383,6 +409,7 @@ export function createTokenSystem(options) {
       dexterity,
       initiativeBonus,
       movementSpeed,
+      movementSpeeds,
       ownerUid
     };
   }
@@ -412,6 +439,7 @@ export function createTokenSystem(options) {
         fields.initiativeBonus,
       movementSpeed: fields.movementSpeed,
       baseSpeed: fields.movementSpeed,
+      movementSpeeds: fields.movementSpeeds,
       ownerUid: fields.ownerUid,
       currentHp: fields.currentHp,
       maxHp: fields.maximumHp,
@@ -436,6 +464,7 @@ export function createTokenSystem(options) {
           fields.initiativeBonus,
         movementSpeed: fields.movementSpeed,
         walkingSpeed: fields.movementSpeed,
+        movementSpeeds: fields.movementSpeeds,
         ownerUid: fields.ownerUid
       }
     };
@@ -521,6 +550,7 @@ export function createTokenSystem(options) {
       monster?.speed?.walk ??
       monster?.speed
     );
+    const movementSpeeds = getMovementSpeeds(monster, movementSpeed);
 
     const mediumSize =
       getMediumSize(roomData || {});
@@ -550,6 +580,7 @@ export function createTokenSystem(options) {
       initiativeBonus,
       movementSpeed,
       baseSpeed: movementSpeed,
+      movementSpeeds,
       ownerUid,
       currentHp: maximumHp,
       maxHp: maximumHp,
@@ -568,6 +599,7 @@ export function createTokenSystem(options) {
         initiativeBonus,
         movementSpeed,
         walkingSpeed: movementSpeed,
+        movementSpeeds,
         ownerUid
       }
     };
@@ -1438,6 +1470,12 @@ export function createTokenSystem(options) {
       ),
       movementSpeed: readTokenBaseSpeed(token),
       baseSpeed: readTokenBaseSpeed(token),
+      movementSpeeds: {
+        walk: readTokenBaseSpeed(token),
+        ...(token.movementSpeeds && typeof token.movementSpeeds === "object"
+          ? token.movementSpeeds
+          : {})
+      },
       ownerUid:
         token.ownerUid ??
         token.linkedCharacter?.ownerUid ??
@@ -1459,6 +1497,56 @@ export function createTokenSystem(options) {
     return tokenCache.map(function (token) {
       return normalizeToken(token);
     });
+  }
+
+  function getSelectedToken() {
+    if (!selectedTokenId) return null;
+    return getRoomTokens().find((token) => token.id === selectedTokenId) || null;
+  }
+
+  function notifySelection(reason = "selection") {
+    const selected = getSelectedToken();
+    selectionSubscribers.forEach((subscriber) => subscriber(selected, reason));
+  }
+
+  function setSelectedToken(tokenOrId, reason = "selection") {
+    const nextId = typeof tokenOrId === "string"
+      ? String(tokenOrId).trim()
+      : String(tokenOrId?.id || tokenOrId?.tokenId || "").trim();
+    if (nextId === selectedTokenId) {
+      notifySelection(reason === "selection" ? "refresh" : reason);
+      return getSelectedToken();
+    }
+    selectedTokenId = nextId || null;
+    if (T.tokenLayer) {
+      T.tokenLayer.querySelectorAll(".hg-token[data-token-id]").forEach((element) => {
+        const selected = element.dataset.tokenId === selectedTokenId;
+        element.classList.toggle("is-selected", selected);
+        element.setAttribute("aria-pressed", String(selected));
+      });
+    }
+    notifySelection(reason);
+    return getSelectedToken();
+  }
+
+  function clearSelection(reason = "cleared") {
+    if (!selectedTokenId) return false;
+    selectedTokenId = null;
+    if (T.tokenLayer) {
+      T.tokenLayer.querySelectorAll(".hg-token.is-selected").forEach((element) => {
+        element.classList.remove("is-selected");
+        element.setAttribute("aria-pressed", "false");
+      });
+    }
+    notifySelection(reason);
+    return true;
+  }
+
+  function subscribeSelection(subscriber) {
+    if (typeof subscriber !== "function") return () => {};
+    selectionSubscribers.add(subscriber);
+    subscriber(getSelectedToken(), "subscribe");
+    return () => selectionSubscribers.delete(subscriber);
   }
 
   function getCharacterLinkedToken(
@@ -1554,6 +1642,9 @@ export function createTokenSystem(options) {
       return;
     }
 
+    if (tokenRoomCode && tokenRoomCode !== roomCode) {
+      clearSelection("room-change");
+    }
     stopTokenListener();
 
     tokenRoomCode = roomCode;
@@ -1584,6 +1675,12 @@ export function createTokenSystem(options) {
                 id: tokenDoc.id
               });
             });
+
+            if (selectedTokenId && !tokenCache.some((token) => token.id === selectedTokenId)) {
+              clearSelection("token-removed");
+            } else if (selectedTokenId) {
+              notifySelection("token-updated");
+            }
 
             render(
               deps.getCurrentRoomData
@@ -1804,6 +1901,11 @@ export function createTokenSystem(options) {
       tokenEl.title = `${token.name || "Token"} · ${
         formatElevation(token.elevation)
       }`;
+      tokenEl.tabIndex = 0;
+      tokenEl.setAttribute("role", "button");
+      tokenEl.setAttribute("aria-label", `Select ${token.name || "token"}`);
+      tokenEl.setAttribute("aria-pressed", String(selectedTokenId === token.id));
+      tokenEl.classList.toggle("is-selected", selectedTokenId === token.id);
       tokenEl.classList.toggle(
         "is-elevated",
         token.elevation > 0
@@ -1943,11 +2045,23 @@ export function createTokenSystem(options) {
         movementMode !== "blocked"
       );
 
-      if (movementMode !== "blocked") {
-        tokenEl.addEventListener("pointerdown", function (event) {
-          startTokenDrag(event, token, tokenEl);
-        });
-      }
+      tokenEl.addEventListener("pointerdown", function (event) {
+        if (event.target.closest(".hg-token-delete, .hg-token-elevation-controls")) return;
+        if (typeof deps.canStartTokenDrag !== "function" || deps.canStartTokenDrag(token)) {
+          setSelectedToken(token.id, "pointer");
+        }
+        if (movementMode !== "blocked") startTokenDrag(event, token, tokenEl);
+      });
+
+      tokenEl.addEventListener("click", function (event) {
+        if (event.target.closest(".hg-token-delete, .hg-token-elevation-controls")) return;
+        setSelectedToken(token.id);
+      });
+      tokenEl.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        setSelectedToken(token.id, "keyboard");
+      });
 
       if (isDM) {
         const deleteButton = document.createElement("button");
@@ -2967,6 +3081,8 @@ export function createTokenSystem(options) {
         deps.doc(deps.db, "rooms", roomCode, "tokens", tokenId)
       );
 
+      if (selectedTokenId === tokenId) clearSelection("token-deleted");
+
       setStatus("Token deleted.");
     } catch (error) {
       console.error(error);
@@ -3015,6 +3131,9 @@ export function createTokenSystem(options) {
   }
 
   function startTokenDrag(event, token, tokenEl) {
+    if (typeof deps.canStartTokenDrag === "function" && !deps.canStartTokenDrag(token)) {
+      return;
+    }
     const movementMode = deps.getTokenMovementMode
       ? deps.getTokenMovementMode(token)
       : ((deps.getCurrentIsDM?.() === true) ? "free" : "blocked");
@@ -3243,6 +3362,11 @@ export function createTokenSystem(options) {
     tokenCache = (Array.isArray(tokens) ? tokens : []).map((token) => (
       normalizeToken(token)
     ));
+    if (selectedTokenId && !tokenCache.some((token) => token.id === selectedTokenId)) {
+      clearSelection("token-removed");
+    } else if (selectedTokenId) {
+      notifySelection("token-updated");
+    }
     render(
       deps.getCurrentRoomData
         ? deps.getCurrentRoomData()
@@ -3289,6 +3413,11 @@ export function createTokenSystem(options) {
     getCharacterLinkedToken,
     loadCharacterLinkedToken,
     getRoomTokens,
+    getSelectedToken,
+    getSelectedTokenId: () => selectedTokenId,
+    setSelectedToken,
+    clearSelection,
+    subscribeSelection,
     syncLinkedCharacterTokens,
     syncLinkedMonsterTokens,
     updateTokenElevation,

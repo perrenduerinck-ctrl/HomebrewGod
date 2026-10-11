@@ -36,6 +36,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/rooms/$(roomCode)/tokens/$(tokenId);
     }
 
+    function combatTurnPath(roomCode, tokenId) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/combatTurns/$(tokenId);
+    }
+
     function characterPath(roomCode, characterId) {
       return /databases/$(database)/documents/rooms/$(roomCode)/characters/$(characterId);
     }
@@ -71,6 +75,7 @@ service cloud.firestore {
         'initiativeBonus',
         'movementSpeed',
         'baseSpeed',
+        'movementSpeeds',
         'ownerUid',
         'currentHp',
         'maxHp',
@@ -119,6 +124,8 @@ service cloud.firestore {
         && request.resource.data.get('movementSpeed', -1)
           == baseSpeed.get('walk', -2)
         && request.resource.data.get('baseSpeed', -1)
+          == baseSpeed.get('walk', -2)
+        && request.resource.data.get('movementSpeeds', {}).get('walk', -1)
           == baseSpeed.get('walk', -2)
         && request.resource.data.get('linkedCharacter', {}).get('id', '')
           == characterId
@@ -176,9 +183,15 @@ service cloud.firestore {
         && movement.get('activeTokenId', '')
           == previous.get('activeTokenId', '')
         && movement.get('baseSpeed', -1) >= 0
-        && movement.get('baseSpeed', 101) <= 100
+        && movement.get('baseSpeed', 201) <= 200
         && movement.get('baseSpeed', -1)
           == previous.get('baseSpeed', -2)
+        && movement.get('movementMode', 'walk')
+          == previous.get('movementMode', 'walk')
+        && movement.get('movementModeBaseSpeed', movement.get('baseSpeed', 0))
+          == previous.get('movementModeBaseSpeed', previous.get('baseSpeed', 0))
+        && movement.get('dashCount', 0)
+          == previous.get('dashCount', 0)
         && movement.get('movementRemaining', -1) >= 0
         && movement.get('movementRemaining', 101)
           <= movement.get('baseSpeed', 0)
@@ -200,6 +213,235 @@ service cloud.firestore {
           == position.get('x', -1)
         && getAfter(tokenPath(roomCode, tokenId)).data.y
           == position.get('y', -1);
+    }
+
+    function tokenMovementModeSpeed(roomCode, tokenId, mode) {
+      let token = get(tokenPath(roomCode, tokenId)).data;
+      return mode == 'walk'
+        ? token.get('movementSpeeds', {}).get('walk', token.get('movementSpeed', token.get('baseSpeed', 0)))
+        : token.get('movementSpeeds', {}).get(mode, 0);
+    }
+
+    function validPlayerMovementModeRoomUpdate(roomCode) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let movement = request.resource.data.get('movementState', {});
+      let previous = resource.data.get('movementState', {});
+      let initiative = resource.data.get('initiativeState', {});
+      let tokenId = movement.get('activeTokenId', '');
+      let mode = movement.get('movementMode', '');
+      let speed = tokenMovementModeSpeed(roomCode, tokenId, mode);
+      return roomAcceptsWrites(roomCode)
+        && isRoomMember(roomCode)
+        && changed.hasOnly(['movementState', 'updatedAt'])
+        && initiative.get('combatActive', false) == true
+        && tokenId == initiative.get('currentCombatantId', '')
+        && ownsRoomToken(roomCode, tokenId)
+        && movement.get('movementTurnKey', '') == previous.get('movementTurnKey', '')
+        && movement.get('activeTokenId', '') == previous.get('activeTokenId', '')
+        && mode in ['walk', 'fly', 'swim', 'climb', 'burrow']
+        && speed > 0
+        && speed <= 100
+        && movement.get('movementModeBaseSpeed', -1) == speed
+        && movement.get('dashCount', -1) == previous.get('dashCount', 0)
+        && movement.get('movementSpent', -1) == previous.get('movementSpent', -2)
+        && movement.get('baseSpeed', -1)
+          == speed * (1 + movement.get('dashCount', 0))
+        && movement.get('movementRemaining', -1)
+          == movement.get('baseSpeed', 0) - movement.get('movementSpent', 0)
+        && movement.get('lastConfirmedPosition', {})
+          == previous.get('lastConfirmedPosition', {});
+    }
+
+    function validPlayerDashRoomUpdate(roomCode) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let movement = request.resource.data.get('movementState', {});
+      let previous = resource.data.get('movementState', {});
+      let initiative = resource.data.get('initiativeState', {});
+      let tokenId = movement.get('activeTokenId', '');
+      return roomAcceptsWrites(roomCode)
+        && isRoomMember(roomCode)
+        && changed.hasOnly(['movementState', 'updatedAt'])
+        && initiative.get('combatActive', false) == true
+        && tokenId == initiative.get('currentCombatantId', '')
+        && ownsRoomToken(roomCode, tokenId)
+        && movement.get('movementTurnKey', '') == previous.get('movementTurnKey', '')
+        && movement.get('movementMode', 'walk') == previous.get('movementMode', 'walk')
+        && movement.get('movementModeBaseSpeed', -1)
+          == previous.get('movementModeBaseSpeed', -2)
+        && previous.get('dashCount', 0) == 0
+        && movement.get('dashCount', -1) == 1
+        && movement.get('movementSpent', -1) == previous.get('movementSpent', -2)
+        && movement.get('baseSpeed', -1)
+          == previous.get('baseSpeed', 0) + previous.get('movementModeBaseSpeed', 0)
+        && movement.get('movementRemaining', -1)
+          == previous.get('movementRemaining', 0) + previous.get('movementModeBaseSpeed', 0)
+        && getAfter(combatTurnPath(roomCode, tokenId)).data.get('lastCommand', '') == 'dash';
+    }
+
+    function validPlayerTurnAdvanceRequest(roomCode) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let initiative = resource.data.get('initiativeState', {});
+      let advance = request.resource.data.get('turnAdvanceRequest', {});
+      return roomAcceptsWrites(roomCode)
+        && isRoomMember(roomCode)
+        && changed.hasOnly(['turnAdvanceRequest', 'updatedAt'])
+        && advance.keys().hasOnly([
+          'requestId', 'tokenId', 'requestedByUid', 'turnCounter', 'requestedAtMillis'
+        ])
+        && advance.get('requestId', '') is string
+        && advance.get('requestId', '').size() > 0
+        && advance.get('tokenId', '') == initiative.get('currentCombatantId', '')
+        && advance.get('requestedByUid', '') == request.auth.uid
+        && advance.get('turnCounter', -1) == initiative.get('turnCounter', -2)
+        && ownsRoomToken(roomCode, advance.get('tokenId', ''));
+    }
+
+    function validCombatTurnShape(roomCode, tokenId) {
+      let turn = request.resource.data;
+      let initiative = roomData(roomCode).get('initiativeState', {});
+      return turn.keys().hasOnly([
+          'schemaVersion', 'tokenId', 'combatActive', 'turnKey',
+          'roundNumber', 'turnCounter', 'actionsRemaining',
+          'bonusActionsRemaining', 'reactionAvailable',
+          'attackActionStarted', 'attacksRemaining', 'actionSurgeUsed',
+          'dashUsed', 'disengaged', 'dodging', 'hidden', 'helping',
+          'lastCommand', 'lastResource', 'lastCommandByUid',
+          'revision', 'updatedAtMillis', 'updatedAt'
+        ])
+        && turn.get('schemaVersion', 0) == 1
+        && turn.get('tokenId', '') == tokenId
+        && turn.get('combatActive', false) == true
+        && initiative.get('combatActive', false) == true
+        && initiative.get('currentCombatantId', '') == tokenId
+        && turn.get('roundNumber', -1) == initiative.get('roundNumber', -2)
+        && turn.get('turnCounter', -1) == initiative.get('turnCounter', -2)
+        && turn.get('turnKey', '') is string
+        && turn.get('turnKey', '').size() > 0
+        && turn.get('turnKey', '').size() <= 128
+        && turn.get('actionsRemaining', -1) >= 0
+        && turn.get('actionsRemaining', 3) <= 2
+        && turn.get('bonusActionsRemaining', -1) >= 0
+        && turn.get('bonusActionsRemaining', 2) <= 1
+        && turn.get('reactionAvailable', null) is bool
+        && turn.get('attackActionStarted', null) is bool
+        && turn.get('attacksRemaining', -1) >= 0
+        && turn.get('attacksRemaining', 21) <= 20
+        && turn.get('actionSurgeUsed', null) is bool
+        && turn.get('dashUsed', null) is bool
+        && turn.get('disengaged', null) is bool
+        && turn.get('dodging', null) is bool
+        && turn.get('hidden', null) is bool
+        && turn.get('helping', null) is bool
+        && turn.get('lastResource', '') in ['action', 'bonus', 'reaction', 'free']
+        && turn.get('lastCommandByUid', '') == request.auth.uid;
+    }
+
+    function validFreshCombatTurnOutcome() {
+      let turn = request.resource.data;
+      return (
+          turn.get('lastCommand', '') == 'action-surge'
+          && turn.get('lastResource', '') == 'free'
+          && turn.get('actionsRemaining', -1) == 2
+          && turn.get('actionSurgeUsed', false) == true
+        ) || (
+          turn.get('lastResource', '') == 'action'
+          && turn.get('actionsRemaining', -1) == 0
+          && turn.get('bonusActionsRemaining', -1) == 1
+          && turn.get('reactionAvailable', false) == true
+        ) || (
+          turn.get('lastResource', '') == 'bonus'
+          && turn.get('actionsRemaining', -1) == 1
+          && turn.get('bonusActionsRemaining', -1) == 0
+          && turn.get('reactionAvailable', false) == true
+        ) || (
+          turn.get('lastResource', '') == 'reaction'
+          && turn.get('actionsRemaining', -1) == 1
+          && turn.get('bonusActionsRemaining', -1) == 1
+          && turn.get('reactionAvailable', true) == false
+        ) || (
+          turn.get('lastResource', '') == 'free'
+          && turn.get('actionsRemaining', -1) == 1
+          && turn.get('bonusActionsRemaining', -1) == 1
+          && turn.get('reactionAvailable', false) == true
+        );
+    }
+
+    function validSameTurnCombatStep() {
+      let turn = request.resource.data;
+      let previous = resource.data;
+      let command = turn.get('lastCommand', '');
+      let paidWith = turn.get('lastResource', '');
+      let standardSpend = (
+          paidWith == 'action'
+          && previous.get('actionsRemaining', 0) > 0
+          && turn.get('actionsRemaining', -1) == previous.get('actionsRemaining', 0) - 1
+          && turn.get('bonusActionsRemaining', -1) == previous.get('bonusActionsRemaining', -2)
+          && turn.get('reactionAvailable', false) == previous.get('reactionAvailable', false)
+        ) || (
+          paidWith == 'bonus'
+          && previous.get('bonusActionsRemaining', 0) > 0
+          && turn.get('bonusActionsRemaining', -1) == previous.get('bonusActionsRemaining', 0) - 1
+          && turn.get('actionsRemaining', -1) == previous.get('actionsRemaining', -2)
+          && turn.get('reactionAvailable', false) == previous.get('reactionAvailable', false)
+        ) || (
+          paidWith == 'reaction'
+          && previous.get('reactionAvailable', false) == true
+          && turn.get('reactionAvailable', true) == false
+          && turn.get('actionsRemaining', -1) == previous.get('actionsRemaining', -2)
+          && turn.get('bonusActionsRemaining', -1) == previous.get('bonusActionsRemaining', -2)
+        ) || (
+          paidWith == 'free'
+          && turn.get('actionsRemaining', -1) == previous.get('actionsRemaining', -2)
+          && turn.get('bonusActionsRemaining', -1) == previous.get('bonusActionsRemaining', -2)
+          && turn.get('reactionAvailable', false) == previous.get('reactionAvailable', false)
+        );
+      let extraAttack = command == 'weapon-attack'
+        && previous.get('attackActionStarted', false) == true
+        && previous.get('attacksRemaining', 0) > 0
+        && turn.get('actionsRemaining', -1) == previous.get('actionsRemaining', -2)
+        && turn.get('bonusActionsRemaining', -1) == previous.get('bonusActionsRemaining', -2)
+        && turn.get('reactionAvailable', false) == previous.get('reactionAvailable', false)
+        && turn.get('attacksRemaining', -1) == previous.get('attacksRemaining', 0) - 1;
+      let actionSurge = command == 'action-surge'
+        && previous.get('actionSurgeUsed', false) == false
+        && turn.get('actionSurgeUsed', false) == true
+        && turn.get('actionsRemaining', -1) == previous.get('actionsRemaining', 0) + 1
+        && turn.get('actionsRemaining', -1) <= 2
+        && turn.get('bonusActionsRemaining', -1) == previous.get('bonusActionsRemaining', -2)
+        && turn.get('reactionAvailable', false) == previous.get('reactionAvailable', false);
+      return (standardSpend || extraAttack || actionSurge)
+        && turn.get('revision', -1) == previous.get('revision', 0) + 1
+        && (previous.get('actionSurgeUsed', false) == false || turn.get('actionSurgeUsed', false) == true)
+        && (previous.get('dashUsed', false) == false || turn.get('dashUsed', false) == true);
+    }
+
+    function validCombatTurnActor(roomCode, tokenId) {
+      return roomAcceptsWrites(roomCode)
+        && isRoomMember(roomCode)
+        && validCombatTurnShape(roomCode, tokenId)
+        && (
+          isRoomDm(roomCode)
+          || ownsRoomToken(roomCode, tokenId)
+        );
+    }
+
+    function validCombatTurnCreate(roomCode, tokenId) {
+      return validCombatTurnActor(roomCode, tokenId)
+        && request.resource.data.get('revision', -1) == 1
+        && validFreshCombatTurnOutcome();
+    }
+
+    function validCombatTurnUpdate(roomCode, tokenId) {
+      let sameTurn = request.resource.data.get('turnKey', '')
+        == resource.data.get('turnKey', '');
+      return validCombatTurnActor(roomCode, tokenId)
+        && (
+          sameTurn
+            ? validSameTurnCombatStep()
+            : request.resource.data.get('revision', -1)
+                == resource.data.get('revision', 0) + 1
+              && validFreshCombatTurnOutcome()
+        );
     }
 
     function isRoomMember(roomCode) {
@@ -807,7 +1049,10 @@ service cloud.firestore {
             || deletionLifecycleFieldsOnly()
           )
         )
-        || validPlayerMovementRoomUpdate(roomCode);
+        || validPlayerMovementRoomUpdate(roomCode)
+        || validPlayerMovementModeRoomUpdate(roomCode)
+        || validPlayerDashRoomUpdate(roomCode)
+        || validPlayerTurnAdvanceRequest(roomCode);
 
       allow delete:
         if isRoomDm(roomCode);
@@ -1204,6 +1449,17 @@ service cloud.firestore {
               )
             )
           );
+      }
+
+      match /combatTurns/{tokenId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create:
+          if validCombatTurnCreate(roomCode, tokenId);
+        allow update:
+          if validCombatTurnUpdate(roomCode, tokenId);
+        allow delete:
+          if isRoomDm(roomCode);
       }
 
       match /classes/{classId} {

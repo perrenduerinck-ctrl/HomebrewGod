@@ -12,6 +12,7 @@ export const ROOM_OWNED_COLLECTIONS = Object.freeze([
   { name: "animations", clientCleanup: true },
   { name: "combatEffects", clientCleanup: true },
   { name: "effects", clientCleanup: true },
+  { name: "combatTurns", clientCleanup: true },
   { name: "sharedJournal", clientCleanup: true },
   {
     name: "personalJournal",

@@ -152,6 +152,8 @@ import {
   createInitiativePanel
 } from "./combat/initiativePanel.js?v=movement-robustness-20260906";
 import {
+  applyMovementDash,
+  applyMovementMode,
   canControlToken,
   confirmPendingMovement,
   createMovementSystem,
@@ -215,6 +217,20 @@ import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
 import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261008";
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
+import { createMapInteractionController } from "./battleMap/interactionController.js";
+import { subscribeToActionBarDocument } from "./combat/actionBarPersistence.js";
+import {
+  applyActionEconomyCommand,
+  synchronizeActionEconomy,
+  toCombatTurnDocument
+} from "./combat/actionEconomy.js";
+import {
+  applyCharacterActionResource,
+  applyConfirmedSpellCast,
+  consumeCharacterInventoryItem,
+  getCharacterSpellSlotOptions,
+  setCombatActionBarFavorite
+} from "./combat/characterCombatCommands.js";
 
 const visualPolish = installVisualPolish({ document, window });
 
@@ -300,6 +316,7 @@ const E = {
 
   backToLobbyButton: $("backToLobbyButton"),
   openBattleMapButton: $("openBattleMapButton"),
+  openBattleMapSeparateButton: $("openBattleMapSeparateButton"),
   currentRoomNameText: $("currentRoomNameText"),
   roomCodeText: $("roomCodeText"),
   copyRoomCodeButton: $("copyRoomCodeButton"),
@@ -510,6 +527,11 @@ const mapDrawingSystem = createMapDrawingSystem({
   requestConfirmation: requestAppConfirmation,
   getMapContext: getCurrentDrawingMapContext
 });
+const mapInteractionController = createMapInteractionController({
+  onOwnerChange: (owner) => {
+    if (owner) mapDrawingSystem.setActive?.(false);
+  }
+});
 let battleMapRuler = null;
 let battleMapTemplates = null;
 let battleMapVfx = null;
@@ -621,6 +643,7 @@ let activeSpellCastingSession = null;
 let activeSpellCastingCasterPoint = null;
 let activeSpellCastingCasterElevationFeet = 0;
 let activeSpellCastingConfirm = null;
+let activeSpellInteractionRelease = null;
 
 const appRealtimeListeners =
   createRealtimeListenerRegistry({
@@ -641,6 +664,7 @@ let initiativeSystem = null;
 let initiativePanelSystem = null;
 let movementSystem = null;
 let movementPanelSystem = null;
+let combatActionBarSystem = null;
 let battleMapLighting = null;
 let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
@@ -666,6 +690,8 @@ let spellCreatorModulePromise = null;
 let npcCreatorModulePromise = null;
 let encounterCreatorModulePromise = null;
 let summonCreatorModulePromise = null;
+let combatActionBarModulePromise = null;
+let lastHandledTurnAdvanceRequestId = "";
 
 let activeSessionId = makeActiveSessionId();
 let activeSessionRoomCode = null;
@@ -834,6 +860,8 @@ function navigateMainScreen(screenName) {
   }
 
   syncRealtimeListenersForScreen(screenName);
+  combatActionBarSystem?.setScreen?.(screenName);
+  if (screenName === "battle") void ensureCombatActionBar();
   navigationController?.setContext({
     screen: screenName,
     role: currentIsDM ? "dm" : "player",
@@ -1293,6 +1321,9 @@ async function commitInitiativeCommand(
 
       transaction.update(roomRef, {
         ...committedTransition.roomFields,
+        ...(latestRoom.turnAdvanceRequest
+          ? { turnAdvanceRequest: deleteField() }
+          : {}),
         updatedAt: serverTimestamp()
       });
     }
@@ -1383,6 +1414,24 @@ async function commitMovementCommand(command, context) {
     if (latestMovement.movementTurnKey !== command.turnKey) {
       throw new Error("That movement preview belongs to an expired turn.");
     }
+    if (command.type === "select-movement-mode") {
+      const mode = String(command.mode || "").toLowerCase();
+      const allowedSpeed = mode === "walk"
+        ? Number(token.movementSpeeds?.walk ?? readTokenBaseSpeed(token))
+        : Number(token.movementSpeeds?.[mode]);
+      if (!Number.isFinite(allowedSpeed) || allowedSpeed <= 0 || allowedSpeed !== Number(command.speed)) {
+        throw new Error("That movement mode is not available to this token.");
+      }
+      committedState = applyMovementMode(latestMovement, { mode, speed: allowedSpeed });
+      transaction.update(roomRef, {
+        ...toRoomMovementFields(committedState),
+        updatedAt: serverTimestamp()
+      });
+      return;
+    }
+    if (command.type !== "confirm-movement") {
+      throw new Error("That movement command is not supported.");
+    }
     const positionChanged =
       Math.abs(Number(token.x) - Number(command.startPosition?.x)) > 0.001 ||
       Math.abs(Number(token.y) - Number(command.startPosition?.y)) > 0.001;
@@ -1428,6 +1477,509 @@ async function commitMovementCommand(command, context) {
     );
   }
   return { state: committedState };
+}
+
+function canOperateCombatToken(token) {
+  return canControlToken(token || {}, {
+    isDm: currentIsDM === true,
+    userUid: currentUser?.uid || ""
+  });
+}
+
+function watchCombatActionActor(token, onChange) {
+  const roomCode = currentRoomCode;
+  const characterId = String(token?.linkedCharacterId || "").trim();
+  const monsterId = String(token?.linkedMonsterId || token?.linkedMonster?.id || "").trim();
+  const userUid = currentUser?.uid || "";
+  if (characterId) {
+    if (!currentIsDM && String(token?.ownerUid || "") !== userUid) {
+      onChange({ actor: null, kind: "generic", private: true });
+      return () => {};
+    }
+    const listenerName = "combat-action-actor";
+    const scopeKey = `${roomCode}:character:${characterId}`;
+    appRealtimeListeners.connect(listenerName, scopeKey, ({ fail, isCurrent }) => subscribeToActionBarDocument({
+      onSnapshot,
+      reference: doc(db, "rooms", roomCode, "characters", characterId),
+      onNext: (snapshot) => {
+        if (!isCurrent() || currentRoomCode !== roomCode) return;
+        onChange(snapshot.exists()
+          ? { actor: { ...snapshot.data(), firestoreDocumentId: snapshot.id }, kind: "character", private: false }
+          : { actor: null, kind: "generic", private: false });
+      },
+      onError: (error) => {
+        if (fail(error).handled) onChange({ actor: null, kind: "generic", private: true });
+      }
+    }));
+    return () => {
+      if (appRealtimeListeners.has(listenerName, scopeKey)) appRealtimeListeners.stop(listenerName);
+    };
+  }
+  if (monsterId && currentIsDM) {
+    const listenerName = "combat-action-actor";
+    const scopeKey = `${roomCode}:monster:${monsterId}`;
+    appRealtimeListeners.connect(listenerName, scopeKey, ({ fail, isCurrent }) => subscribeToActionBarDocument({
+      onSnapshot,
+      reference: doc(db, "rooms", roomCode, "monsters", monsterId),
+      onNext: (snapshot) => {
+        if (!isCurrent() || currentRoomCode !== roomCode) return;
+        onChange(snapshot.exists()
+          ? { actor: { ...snapshot.data(), firestoreDocumentId: snapshot.id }, kind: "monster", private: false }
+          : { actor: null, kind: "generic", private: false });
+      },
+      onError: (error) => {
+        if (fail(error).handled) onChange({ actor: null, kind: "generic", private: true });
+      }
+    }));
+    return () => {
+      if (appRealtimeListeners.has(listenerName, scopeKey)) appRealtimeListeners.stop(listenerName);
+    };
+  }
+  onChange({ actor: null, kind: "generic", private: Boolean(monsterId) });
+  return () => {};
+}
+
+function watchCombatTurnEconomy(token, onChange) {
+  const roomCode = currentRoomCode;
+  const tokenId = String(token?.id || "").trim();
+  if (!roomCode || !tokenId) {
+    onChange(synchronizeActionEconomy({}, initiativeSystem?.getState?.(), tokenId));
+    return () => {};
+  }
+  const listenerName = "combat-action-economy";
+  const scopeKey = `${roomCode}:${tokenId}`;
+  appRealtimeListeners.connect(listenerName, scopeKey, ({ fail, isCurrent }) => subscribeToActionBarDocument({
+    onSnapshot,
+    reference: doc(db, "rooms", roomCode, "combatTurns", tokenId),
+    onNext: (snapshot) => {
+      if (!isCurrent() || currentRoomCode !== roomCode) return;
+      onChange(synchronizeActionEconomy(
+        snapshot.exists() ? snapshot.data() : {},
+        initiativeSystem?.getState?.() || {},
+        tokenId
+      ));
+    },
+    onError: (error) => {
+      if (fail(error).handled) {
+        onChange(synchronizeActionEconomy({}, initiativeSystem?.getState?.(), tokenId));
+      }
+    }
+  }));
+  return () => {
+    if (appRealtimeListeners.has(listenerName, scopeKey)) appRealtimeListeners.stop(listenerName);
+  };
+}
+
+async function ensureCombatActionBar() {
+  if (combatActionBarSystem || !E.battleMapScreen || !tokenSystem) {
+    return combatActionBarSystem;
+  }
+  if (!combatActionBarModulePromise) {
+    combatActionBarModulePromise = import("./combat/actionBar.js");
+  }
+  let actionBarModule;
+  try {
+    actionBarModule = await combatActionBarModulePromise;
+  } catch (error) {
+    combatActionBarModulePromise = null;
+    console.error("Could not load the Combat Action Bar:", error);
+    return null;
+  }
+  if (combatActionBarSystem || !tokenSystem) return combatActionBarSystem;
+  combatActionBarSystem = actionBarModule.createCombatActionBar({
+    root: E.battleMapScreen,
+    tokenSystem,
+    initiativeSystem,
+    movementSystem,
+    watchActor: watchCombatActionActor,
+    watchEconomy: watchCombatTurnEconomy,
+    getEffects: getGameplayEffectsForToken,
+    canControl: canOperateCombatToken,
+    onExecute: executeCombatActionBarEntry,
+    onToggleFavorite: async (action, pinned, { token }) => {
+      await commitCombatActionBarMutation({
+        token,
+        characterMutator: (remote) => setCombatActionBarFavorite(remote, action, pinned)
+      });
+    },
+    onEndTurn: ({ token }) => requestCombatTurnAdvance(token),
+    onMovementMode: (mode) => movementSystem.changeMode(mode)
+  });
+  combatActionBarSystem.setScreen(activeMainScreenName);
+  return combatActionBarSystem;
+}
+
+async function commitCombatActionBarMutation({
+  token,
+  economyCommand = null,
+  characterMutator = null,
+  movementMutator = null
+} = {}) {
+  if (!currentRoomCode || !currentUser || !token?.id) {
+    throw new Error("Open a room and select a token first.");
+  }
+  const roomCode = currentRoomCode;
+  const userUid = currentUser.uid;
+  const tokenId = String(token.id);
+  const roomRef = doc(db, "rooms", roomCode);
+  const tokenRef = doc(db, "rooms", roomCode, "tokens", tokenId);
+  const economyRef = doc(db, "rooms", roomCode, "combatTurns", tokenId);
+  const characterId = String(token.linkedCharacterId || "").trim();
+  const characterRef = characterMutator && characterId
+    ? doc(db, "rooms", roomCode, "characters", characterId)
+    : null;
+  let committedEconomy = null;
+  let committedMovement = null;
+  let committedCharacter = null;
+
+  await runTransaction(db, async (transaction) => {
+    const roomSnapshot = await transaction.get(roomRef);
+    if (!roomSnapshot.exists()) throw new Error("Room not found.");
+    const latestRoom = roomSnapshot.data() || {};
+    const tokenSnapshot = await transaction.get(tokenRef);
+    if (!tokenSnapshot.exists()) throw new Error("The selected token no longer exists.");
+    const latestToken = { ...tokenSnapshot.data(), id: tokenSnapshot.id };
+    const isDm = latestRoom.dmUid === userUid;
+    if (!canControlToken(latestToken, { isDm, userUid })) {
+      throw new Error("You do not control that token.");
+    }
+    const initiative = normalizeInitiativeState(latestRoom);
+    const activeCombatTurn = initiative.combatActive === true;
+    if (activeCombatTurn && initiative.currentCombatantId !== tokenId) {
+      throw new Error("It is not that token's turn.");
+    }
+
+    let economySnapshot = null;
+    if (activeCombatTurn && economyCommand) economySnapshot = await transaction.get(economyRef);
+    let characterSnapshot = null;
+    if (characterRef) characterSnapshot = await transaction.get(characterRef);
+
+    if (activeCombatTurn && economyCommand) {
+      const latestEconomy = synchronizeActionEconomy(
+        economySnapshot?.exists() ? economySnapshot.data() : {},
+        initiative,
+        tokenId
+      );
+      committedEconomy = applyActionEconomyCommand(latestEconomy, {
+        ...economyCommand,
+        actorUid: userUid,
+        updatedAtMillis: Date.now()
+      });
+      transaction.set(economyRef, {
+        ...toCombatTurnDocument(committedEconomy),
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    if (movementMutator) {
+      const latestMovement = synchronizeMovementState(latestRoom, initiative, {
+        activeToken: latestToken,
+        baseSpeed: latestRoom.movementState?.baseSpeed ?? readTokenBaseSpeed(latestToken),
+        tokenExists: true
+      });
+      committedMovement = movementMutator(latestMovement, latestToken);
+      transaction.update(roomRef, {
+        ...toRoomMovementFields(committedMovement),
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    if (characterMutator) {
+      if (!characterSnapshot?.exists()) throw new Error("The linked character no longer exists.");
+      const remote = characterSnapshot.data() || {};
+      if (!isDm && String(remote.ownerUid || "") !== userUid) {
+        throw new Error("You cannot change another player's character.");
+      }
+      const next = characterMutator(remote);
+      const now = Date.now();
+      committedCharacter = {
+        ...next,
+        ownerUid: remote.ownerUid,
+        roomCode: remote.roomCode || roomCode,
+        revision: Math.max(0, Math.floor(Number(remote.revision) || 0)) + 1,
+        updatedAtMillis: now,
+        updatedAt: serverTimestamp()
+      };
+      transaction.update(characterRef, committedCharacter);
+    }
+  });
+
+  if (currentRoomCode === roomCode && committedMovement) {
+    currentRoomData = {
+      ...(currentRoomData || {}),
+      ...toRoomMovementFields(committedMovement)
+    };
+    movementSystem?.applyRoomSnapshot?.(currentRoomData);
+  }
+  return {
+    economy: committedEconomy,
+    movement: committedMovement,
+    character: committedCharacter
+  };
+}
+
+async function requestCombatTurnAdvance(token) {
+  const initiative = initiativeSystem?.getState?.() || {};
+  if (initiative.combatActive !== true || initiative.currentCombatantId !== token?.id) {
+    throw new Error("Only the active combatant can end its turn.");
+  }
+  if (currentIsDM) {
+    await initiativeSystem.nextTurn();
+    return;
+  }
+  if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
+  const requestId = `${initiative.turnCounter}:${token.id}:${currentUser.uid}`;
+  await updateDoc(doc(db, "rooms", currentRoomCode), {
+    turnAdvanceRequest: {
+      requestId,
+      tokenId: token.id,
+      requestedByUid: currentUser.uid,
+      turnCounter: initiative.turnCounter,
+      requestedAtMillis: Date.now()
+    },
+    updatedAt: serverTimestamp()
+  });
+}
+
+function maybeHandleRequestedTurnAdvance(room) {
+  const request = room?.turnAdvanceRequest;
+  const requestId = String(request?.requestId || "").trim();
+  const initiative = normalizeInitiativeState(room || {});
+  if (
+    currentIsDM !== true ||
+    !requestId ||
+    requestId === lastHandledTurnAdvanceRequestId ||
+    initiative.combatActive !== true ||
+    request.tokenId !== initiative.currentCombatantId ||
+    Number(request.turnCounter) !== Number(initiative.turnCounter)
+  ) {
+    return;
+  }
+  lastHandledTurnAdvanceRequestId = requestId;
+  queueMicrotask(async () => {
+    try {
+      await initiativeSystem.nextTurn();
+      combatActionBarSystem?.setStatus?.("Player turn ended.", "success");
+    } catch (error) {
+      lastHandledTurnAdvanceRequestId = "";
+      combatActionBarSystem?.setStatus?.(error?.message || "The requested turn advance failed.", "error");
+    }
+  });
+}
+
+function beginJumpTargeting({ token, model } = {}) {
+  const jump = model?.jump;
+  if (!jump) throw new Error("Jump distance needs a linked character's Strength score.");
+  if (movementSystem?.getState?.().combatActive !== true) {
+    return {
+      message: `Jump: STR ${jump.strength}. Outside initiative, use normal token movement; in combat, Jump previews and spends movement.`
+    };
+  }
+  const container = tokenSystem?.getTokenContainerForCurrentView?.();
+  if (!container) throw new Error("The current map is not ready for jump targeting.");
+  let release = () => false;
+  const cleanup = () => {
+    container.removeEventListener("click", onClick, true);
+    document.removeEventListener("keydown", onKeyDown, true);
+  };
+  const onKeyDown = (event) => {
+    if (event.key !== "Escape") return;
+    cleanup();
+    release();
+    combatActionBarSystem?.setStatus?.("Jump targeting cancelled.");
+  };
+  const onClick = (event) => {
+    if (event.target.closest?.(".hg-combat-action-bar, #battleTopBar")) return;
+    const rect = container.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const endPosition = {
+      x: Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100)),
+      y: Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100)),
+      elevation: Number(token.elevation) || 0
+    };
+    const measurement = {
+      viewportWidth: rect.width,
+      viewportHeight: rect.height,
+      pixelsPerSquare: getBattleMapGridPixelSize(),
+      feetPerSquare: getRulerFeetPerSquare()
+    };
+    const distanceFeet = deriveMovementDistance({ startPosition: token, endPosition, measurement });
+    if (distanceFeet > jump.runningLong) {
+      combatActionBarSystem?.setStatus?.(
+        `That landing is ${distanceFeet} ft away. Running long jump maximum: ${jump.runningLong} ft; standing: ${jump.standingLong} ft.`,
+        "error"
+      );
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    movementSystem.previewMove({
+      tokenId: token.id,
+      turnKey: movementSystem.getState().movementTurnKey,
+      startPosition: token,
+      endPosition,
+      distanceFeet,
+      measurement
+    });
+    cleanup();
+    release();
+    tokenSystem.render(currentRoomData || {});
+    combatActionBarSystem?.setStatus?.(
+      `Jump preview: ${distanceFeet} ft. Confirm it in Movement. High jump: ${jump.runningHigh} ft running / ${jump.standingHigh} ft standing.`,
+      "success"
+    );
+  };
+  release = mapInteractionController.acquire({
+    id: "combat-jump",
+    label: "Jump targeting",
+    cancel: cleanup
+  });
+  container.addEventListener("click", onClick, true);
+  document.addEventListener("keydown", onKeyDown, true);
+  return {
+    message: `Jump: STR ${jump.strength}. Click a landing point within ${jump.runningLong} ft (standing ${jump.standingLong} ft); Escape cancels.`
+  };
+}
+
+async function executeCombatActionBarEntry(action, context) {
+  const { token, actor, actorKind, model, initiative } = context;
+  if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
+  const inCombat = initiative.combatActive === true;
+  const economyCommand = { type: action.id || action.kind, resource: action.resource };
+
+  if (action.kind === "universal") {
+    if (action.id === "move") {
+      return { message: "Move ready. Drag the token; the existing movement preview will measure and confirm it." };
+    }
+    if (action.id === "jump") return beginJumpTargeting({ token, model });
+    if (action.id === "throw") {
+      combatActionBarSystem?.openTab?.("items");
+      return { message: "Choose a throwable item. It will not be consumed until a target is confirmed." };
+    }
+    if (["shove", "help"].includes(action.id)) {
+      await beginCombatActionTargeting({
+        action: { ...action, name: action.name },
+        character: actorKind === "character" ? actor : null,
+        characterId: actorKind === "character" ? token.linkedCharacterId : "",
+        monster: actorKind === "monster" ? actor : null,
+        monsterId: actorKind === "monster" ? token.linkedMonsterId : "",
+        sourceTokenId: token.id,
+        manualOnly: true,
+        manualMessage: action.id === "shove"
+          ? "Target selected. Resolve the 2014 Athletics contest, then move the target manually only on success."
+          : "Help target selected. Apply the appropriate advantage manually.",
+        onConfirmAction: () => commitCombatActionBarMutation({ token, economyCommand })
+      });
+      return { message: `${action.name}: choose a target token; Escape cancels without spending the Action.` };
+    }
+    if (action.id === "dash") {
+      if (!inCombat) return { message: "Free exploration does not restrict movement or consume Dash." };
+      await commitCombatActionBarMutation({
+        token,
+        economyCommand,
+        movementMutator: (state) => applyMovementDash(state)
+      });
+      return { message: "Dash confirmed. This turn's movement budget increased without changing base speed." };
+    }
+    if (inCombat) await commitCombatActionBarMutation({ token, economyCommand });
+    return { message: `${action.name} tracked${inCombat ? " for this turn" : " as a manual exploration action"}.` };
+  }
+
+  if (action.kind === "weapon" || action.kind.startsWith("monster-")) {
+    await beginCombatActionTargeting({
+      action: action.raw || action,
+      character: actorKind === "character" ? actor : null,
+      characterId: actorKind === "character" ? token.linkedCharacterId : "",
+      monster: actorKind === "monster" ? actor : null,
+      monsterId: actorKind === "monster" ? token.linkedMonsterId : "",
+      sourceTokenId: token.id,
+      onConfirmAction: () => commitCombatActionBarMutation({
+        token,
+        economyCommand: {
+          type: action.kind === "weapon" ? "weapon-attack" : action.kind,
+          resource: action.resource,
+          numberOfAttacks: action.numberOfAttacks || 1
+        }
+      })
+    });
+    return { message: `${action.name}: choose a target. Economy is spent only when the target is confirmed.` };
+  }
+
+  if (action.kind === "spell") {
+    const slotOptions = getCharacterSpellSlotOptions(actor, action.raw);
+    if (Number(action.raw?.level) > 0 && !slotOptions.some((option) => option.remaining > 0)) {
+      throw new Error("No eligible spell slot remains.");
+    }
+    await beginCharacterSpellTargeting({
+      spell: action.raw,
+      character: actor,
+      characterId: token.linkedCharacterId,
+      slotOptions,
+      onConfirmCast: (selection) => commitCombatActionBarMutation({
+        token,
+        economyCommand: { type: "spell", resource: action.resource },
+        characterMutator: (remote) => applyConfirmedSpellCast(remote, action.raw, selection)
+      })
+    });
+    return { message: `${action.name}: use the existing spell template/target workflow. Cancel spends nothing.` };
+  }
+
+  if (action.kind === "ability") {
+    const isActionSurge = /action\s*surge/i.test(action.name);
+    const useAbility = () => commitCombatActionBarMutation({
+      token,
+      economyCommand: {
+        type: isActionSurge ? "action-surge" : "ability",
+        resource: isActionSurge ? "free" : action.resource
+      },
+      characterMutator: action.raw?.resource
+        ? (remote) => applyCharacterActionResource(remote, action.raw)
+        : null
+    });
+    if (action.raw?.attackBonus != null || action.raw?.damage || action.raw?.target) {
+      await beginCombatActionTargeting({
+        action: action.raw,
+        character: actor,
+        characterId: token.linkedCharacterId,
+        sourceTokenId: token.id,
+        onConfirmAction: useAbility
+      });
+      return { message: `${action.name}: choose a target; cancel spends nothing.` };
+    }
+    if (!await requestAppConfirmation(`Use ${action.name}?`, { title: action.name, confirmLabel: "Use" })) {
+      return { message: `${action.name} cancelled; nothing was spent.` };
+    }
+    await useAbility();
+    return { message: `${action.name} confirmed and its tracked resource was updated.` };
+  }
+
+  if (action.kind === "item") {
+    const isThrowable = action.rawItem?.throwable === true || action.raw?.isWeapon === true || /throw|bomb|flask/i.test(action.name);
+    const confirmItem = () => commitCombatActionBarMutation({
+      token,
+      economyCommand: { type: isThrowable ? "throw" : "item", resource: action.resource },
+      characterMutator: (remote) => consumeCharacterInventoryItem(remote, action.raw)
+    });
+    if (isThrowable) {
+      await beginCombatActionTargeting({
+        action: { ...action.rawItem, name: action.name },
+        character: actor,
+        characterId: token.linkedCharacterId,
+        sourceTokenId: token.id,
+        manualOnly: true,
+        manualMessage: `${action.name} target selected. Resolve the throw manually.`,
+        onConfirmAction: confirmItem
+      });
+      return { message: `${action.name}: choose a target; previewing does not consume it.` };
+    }
+    if (!await requestAppConfirmation(`Use one ${action.name}?`, { title: "Use item", confirmLabel: "Use" })) {
+      return { message: `${action.name} cancelled; quantity was not changed.` };
+    }
+    await confirmItem();
+    return { message: `${action.name} used; inventory quantity saved.` };
+  }
+
+  throw new Error("That action type is not available from the Combat Action Bar yet.");
 }
 
 function readTimeInput(
@@ -1767,6 +2319,8 @@ function clearRoomListeners() {
   combatEffectPersistence?.stop();
   gameplayEffectPersistence?.stop();
   stopRoomViewListeners();
+  tokenSystem?.clearSelection?.("room-left");
+  mapInteractionController.cancel("room-left");
 
   if (
     characterCreatorSystem &&
@@ -2596,6 +3150,7 @@ function openRoom(roomCode, screenToShow = "room") {
   latestCombatEffectRecords = [];
   clearGameplayEffectsForRoomExit();
   currentRoomCode = cleanCode;
+  lastHandledTurnAdvanceRequestId = "";
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   latestPuzzleTiles = null;
@@ -2667,6 +3222,7 @@ function openRoom(roomCode, screenToShow = "room") {
     movementSystem?.applyRoomSnapshot(
       room
     );
+    maybeHandleRequestedTurnAdvance(room);
 
     text(E.currentRoomNameText, room.roomName || "Unnamed Room");
     text(E.roomCodeText, cleanCode);
@@ -5122,7 +5678,8 @@ function syncActiveSpellCastingTarget(
 }
 
 function cancelActiveSpellCasting({
-  clearTemplate = true
+  clearTemplate = true,
+  releaseInteraction = true
 } = {}) {
   const sessionState =
     activeSpellCastingSession?.getState();
@@ -5138,6 +5695,10 @@ function cancelActiveSpellCasting({
   activeSpellCastingCasterPoint = null;
   activeSpellCastingCasterElevationFeet = 0;
   activeSpellCastingConfirm = null;
+  if (releaseInteraction) {
+    activeSpellInteractionRelease?.();
+    activeSpellInteractionRelease = null;
+  }
 
   if (clearTemplate) {
     activeSpellTemplateInstruction = null;
@@ -5165,6 +5726,8 @@ async function confirmActiveSpellCast() {
   renderSpellCastingPanel();
 
   if (result.ok) {
+    activeSpellInteractionRelease?.();
+    activeSpellInteractionRelease = null;
     text(
       E.templateStatus,
       `${result.resolution.spellName} cast confirmed. ${formatCastResolution(result.resolution)}`
@@ -6145,7 +6708,11 @@ async function beginCombatActionTargeting({
   character = null,
   characterId = "",
   monster = null,
-  monsterId = ""
+  monsterId = "",
+  sourceTokenId = "",
+  manualOnly = false,
+  manualMessage = "",
+  onConfirmAction = null
 } = {}) {
   if (!currentRoomCode) {
     throw new Error("Open a room before using an action on its battle map.");
@@ -6153,13 +6720,17 @@ async function beginCombatActionTargeting({
   navigateMainScreen("battle");
   tokenSystem?.render?.(currentRoomData || {});
   initializeBattleMapVfx();
-  const sourceElement = characterId
-    ? findRenderedCharacterToken(characterId)
-    : findRenderedMonsterToken(monsterId);
+  const sourceElement = sourceTokenId
+    ? E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(sourceTokenId))}"]`) || null
+    : characterId
+      ? findRenderedCharacterToken(characterId)
+      : findRenderedMonsterToken(monsterId);
   if (!sourceElement) {
-    navigateMainScreen(characterId ? "characterCreator" : "monsterCreator");
+    if (!sourceTokenId) navigateMainScreen(characterId ? "characterCreator" : "monsterCreator");
     throw new Error(
-      `Create or synchronize this ${characterId ? "character" : "monster"}'s linked token before using its actions.`
+      sourceTokenId
+        ? "The selected token is no longer on this map."
+        : `Create or synchronize this ${characterId ? "character" : "monster"}'s linked token before using its actions.`
     );
   }
   if (hasEffectRestriction(
@@ -6173,7 +6744,8 @@ async function beginCombatActionTargeting({
   const selectedTargets = [];
   sourceElement.classList.add("hg-token-combat-source");
   let cancelled = false;
-  const cleanup = () => {
+  let releaseInteraction = () => false;
+  const cleanup = ({ release = true } = {}) => {
     if (cancelled) return;
     cancelled = true;
     E.battleMapSurface?.removeEventListener("click", onClick, true);
@@ -6181,6 +6753,7 @@ async function beginCombatActionTargeting({
     sourceElement.classList.remove("hg-token-combat-source");
     selectedTargets.forEach((element) => element.classList.remove("hg-token-combat-target"));
     if (activeCombatTargetingCleanup === cleanup) activeCombatTargetingCleanup = null;
+    if (release) releaseInteraction();
   };
   const onKeyDown = (event) => {
     if (event.key === "Escape") {
@@ -6202,7 +6775,29 @@ async function beginCombatActionTargeting({
       return;
     }
     const targets = [...selectedTargets];
+    if (typeof onConfirmAction === "function") {
+      try {
+        await onConfirmAction({
+          sourceElement,
+          targetElements: targets,
+          targetTokenIds: targets.map((element) => element.dataset.tokenId).filter(Boolean)
+        });
+      } catch (error) {
+        selectedTargets.forEach((element) => element.classList.remove("hg-token-combat-target"));
+        selectedTargets.length = 0;
+        text(E.templateStatus, error?.message || "The action could not be saved. Choose a target again or press Escape.");
+        return;
+      }
+    }
     cleanup();
+    if (manualOnly) {
+      text(E.templateStatus, manualMessage || `${action?.name || "Action"} target selected. Resolve it manually.`);
+      combatActionBarSystem?.setStatus?.(
+        manualMessage || `${action?.name || "Action"} target selected. Resolve it manually.`,
+        "success"
+      );
+      return;
+    }
     const sequence = resolveMonsterMultiattackSequence(action, monster);
     await playBattleMapCombatAction({
       content: action,
@@ -6213,6 +6808,11 @@ async function beginCombatActionTargeting({
       sequence
     });
   };
+  releaseInteraction = mapInteractionController.acquire({
+    id: "combat-action-targeting",
+    label: `${action?.name || "Action"} targeting`,
+    cancel: () => cleanup({ release: false })
+  });
   activeCombatTargetingCleanup = cleanup;
   E.battleMapSurface?.addEventListener("click", onClick, true);
   document.addEventListener("keydown", onKeyDown, true);
@@ -6244,6 +6844,16 @@ async function beginCharacterSpellTargeting({
     throw new Error(instruction.reason);
   }
 
+  mapInteractionController.cancel("spell-start");
+  activeSpellInteractionRelease = mapInteractionController.acquire({
+    id: "spell-targeting",
+    label: `${spell?.name || "Spell"} targeting`,
+    cancel: () => cancelActiveSpellCasting({
+      clearTemplate: true,
+      releaseInteraction: false
+    })
+  });
+
   resetSpellPreviewVfxState({
     clearSpell: true
   });
@@ -6269,6 +6879,8 @@ async function beginCharacterSpellTargeting({
       );
     }
   } catch (error) {
+    activeSpellInteractionRelease?.();
+    activeSpellInteractionRelease = null;
     if (allowWithoutRoom !== true) {
       navigateMainScreen(
         "characterCreator"
@@ -6296,6 +6908,8 @@ async function beginCharacterSpellTargeting({
     );
 
   if (!tokenElement) {
+    activeSpellInteractionRelease?.();
+    activeSpellInteractionRelease = null;
     if (allowWithoutRoom !== true) {
       navigateMainScreen(
         "characterCreator"
@@ -8941,6 +9555,10 @@ if (!tokenSystem) {
       };
     },
 
+    canStartTokenDrag: function () {
+      return !mapInteractionController.getState();
+    },
+
     removeTokenFromInitiative:
       async function (tokenId) {
         const initiativeState =
@@ -8963,6 +9581,8 @@ if (!tokenSystem) {
     buildMapFromRoomFields
   });
 }
+
+if (activeMainScreenName === "battle") void ensureCombatActionBar();
 
 if (!initiativePanelSystem && E.battleInitiativePanel) {
   initiativePanelSystem = createInitiativePanel({
@@ -9044,6 +9664,7 @@ function openNavigationTool(toolName, trigger) {
   }
   if (toolName === "drawing") {
     if (activeMainScreenName !== "battle") navigateMainScreen("battle");
+    mapInteractionController.cancel("drawing-start");
     mapDrawingSystem.open();
     return true;
   }
@@ -10541,6 +11162,12 @@ async function initMonsterCreatorSystem() {
 
 if (E.openBattleMapButton) {
   E.openBattleMapButton.addEventListener("click", function () {
+    void requestMainScreenNavigation("battle");
+  });
+}
+
+if (E.openBattleMapSeparateButton) {
+  E.openBattleMapSeparateButton.addEventListener("click", function () {
     openToolTab("battle");
   });
 }

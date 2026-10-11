@@ -150,6 +150,111 @@ test("players can move only their token while exploration is active", async () =
   await assertFails(updateDoc(doc(stranger, "rooms", ROOM, "tokens", "hero"), { x: 80, y: 90, movedAtMillis: 3, updatedAtMillis: 3 }));
 });
 
+test("combat turn economy is owner-scoped, revisioned, and bound to the active turn", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), "rooms", ROOM), {
+      initiativeState: {
+        combatActive: true,
+        roundNumber: 1,
+        turnCounter: 0,
+        currentCombatantId: "hero"
+      },
+      movementState: {
+        combatActive: true,
+        activeTokenId: "hero",
+        activeTokenName: "Hero",
+        baseSpeed: 30,
+        movementMode: "walk",
+        movementModeBaseSpeed: 30,
+        dashCount: 0,
+        movementRemaining: 30,
+        movementSpent: 0,
+        movementTurnKey: "1:hero",
+        turnRoundNumber: 1,
+        lastConfirmedPosition: { x: 10, y: 20, elevation: 0 },
+        lastMoveForced: false,
+        movementOverage: 0
+      }
+    });
+  });
+  const owner = databaseFor("player-1");
+  const stranger = databaseFor("player-2");
+  const turn = {
+    schemaVersion: 1,
+    tokenId: "hero",
+    combatActive: true,
+    turnKey: "1:0:hero",
+    roundNumber: 1,
+    turnCounter: 0,
+    actionsRemaining: 0,
+    bonusActionsRemaining: 1,
+    reactionAvailable: true,
+    attackActionStarted: false,
+    attacksRemaining: 0,
+    actionSurgeUsed: false,
+    dashUsed: false,
+    disengaged: false,
+    dodging: true,
+    hidden: false,
+    helping: false,
+    lastCommand: "dodge",
+    lastResource: "action",
+    lastCommandByUid: "player-1",
+    revision: 1,
+    updatedAtMillis: 2,
+    updatedAt: 2
+  };
+  await assertSucceeds(setDoc(doc(owner, "rooms", ROOM, "combatTurns", "hero"), turn));
+  await assertFails(setDoc(doc(stranger, "rooms", ROOM, "combatTurns", "hero"), {
+    ...turn,
+    lastCommandByUid: "player-2"
+  }));
+  await assertFails(setDoc(doc(owner, "rooms", ROOM, "combatTurns", "hero"), {
+    ...turn,
+    actionsRemaining: 1,
+    revision: 2,
+    updatedAtMillis: 3
+  }));
+});
+
+test("owned active token can request but cannot directly forge an initiative advance", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), "rooms", ROOM), {
+      initiativeState: {
+        combatActive: true,
+        roundNumber: 1,
+        turnCounter: 4,
+        currentCombatantId: "hero"
+      }
+    });
+  });
+  const owner = databaseFor("player-1");
+  const stranger = databaseFor("player-2");
+  const request = {
+    requestId: "4:hero:player-1",
+    tokenId: "hero",
+    requestedByUid: "player-1",
+    turnCounter: 4,
+    requestedAtMillis: 10
+  };
+  await assertSucceeds(updateDoc(doc(owner, "rooms", ROOM), {
+    turnAdvanceRequest: request,
+    updatedAt: 10
+  }));
+  await assertFails(updateDoc(doc(stranger, "rooms", ROOM), {
+    turnAdvanceRequest: { ...request, requestedByUid: "player-2" },
+    updatedAt: 11
+  }));
+  await assertFails(updateDoc(doc(owner, "rooms", ROOM), {
+    initiativeState: {
+      combatActive: true,
+      roundNumber: 1,
+      turnCounter: 5,
+      currentCombatantId: "hero"
+    }
+  }));
+});
+
 test("room tombstones stop joins and content writes without exposing personal notes", async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), "rooms", ROOM), {

@@ -4,6 +4,7 @@ import {
 
 export const MIN_BASE_MOVEMENT_SPEED = 0;
 export const MAX_BASE_MOVEMENT_SPEED = 100;
+export const MAX_TURN_MOVEMENT_BUDGET = 200;
 export const DEFAULT_BASE_MOVEMENT_SPEED = 30;
 
 function finiteNumber(value, fallback = 0) {
@@ -105,6 +106,13 @@ export function normalizeBaseMovementSpeed(
   );
 }
 
+function normalizeMovementBudget(value, fallback = DEFAULT_BASE_MOVEMENT_SPEED) {
+  return Math.min(
+    MAX_TURN_MOVEMENT_BUDGET,
+    Math.max(0, Math.round(finiteNumber(value, fallback)))
+  );
+}
+
 export function readTokenBaseSpeed(token = {}) {
   const value =
     token.movementSpeed ??
@@ -144,6 +152,9 @@ export function createEmptyMovementState() {
     activeTokenId: null,
     activeTokenName: "",
     baseSpeed: 0,
+    movementMode: "walk",
+    movementModeBaseSpeed: 0,
+    dashCount: 0,
     movementRemaining: 0,
     movementSpent: 0,
     movementTurnKey: null,
@@ -161,7 +172,13 @@ export function normalizeMovementState(source = {}) {
   const combatActive = value.combatActive === true && Boolean(activeTokenId);
   if (!combatActive) return createEmptyMovementState();
 
-  const baseSpeed = normalizeBaseMovementSpeed(value.baseSpeed);
+  const baseSpeed = normalizeMovementBudget(value.baseSpeed);
+  const movementMode = cleanText(value.movementMode) || "walk";
+  const movementModeBaseSpeed = normalizeBaseMovementSpeed(
+    value.movementModeBaseSpeed,
+    baseSpeed
+  );
+  const dashCount = Math.max(0, Math.min(1, Math.round(finiteNumber(value.dashCount, 0))));
   const movementSpent = roundDistance(
     Math.min(
       baseSpeed,
@@ -200,6 +217,9 @@ export function normalizeMovementState(source = {}) {
     activeTokenId,
     activeTokenName: cleanText(value.activeTokenName),
     baseSpeed,
+    movementMode,
+    movementModeBaseSpeed,
+    dashCount,
     movementRemaining,
     movementSpent,
     movementTurnKey: cleanText(value.movementTurnKey) || null,
@@ -271,6 +291,9 @@ export function synchronizeMovementState(
       // removed mid-turn apply to the next turn instead of refunding or
       // silently consuming movement that was already spent.
       baseSpeed: current.baseSpeed,
+      movementMode: current.movementMode,
+      movementModeBaseSpeed: current.movementModeBaseSpeed,
+      dashCount: current.dashCount,
       movementRemaining: Math.max(
         0,
         current.baseSpeed - current.movementSpent
@@ -289,6 +312,9 @@ export function synchronizeMovementState(
     activeTokenId,
     activeTokenName: cleanText(activeToken?.name ?? combatant?.name),
     baseSpeed: speed,
+    movementMode: "walk",
+    movementModeBaseSpeed: speed,
+    dashCount: 0,
     movementRemaining: speed,
     movementSpent: 0,
     movementTurnKey: turnKey,
@@ -297,6 +323,43 @@ export function synchronizeMovementState(
     lastConfirmedPosition: position,
     lastMoveForced: false,
     movementOverage: 0
+  });
+}
+
+export function applyMovementMode(currentState, { mode = "walk", speed } = {}) {
+  const state = normalizeMovementState(currentState);
+  if (!state.combatActive) throw new Error("Movement modes are tracked during active initiative.");
+  const movementMode = cleanText(mode).toLowerCase();
+  if (!["walk", "fly", "swim", "climb", "burrow"].includes(movementMode)) {
+    throw new Error("That movement mode is not supported.");
+  }
+  const movementModeBaseSpeed = normalizeBaseMovementSpeed(speed, 0);
+  if (movementModeBaseSpeed <= 0) throw new Error("That movement mode has no usable speed.");
+  const baseSpeed = movementModeBaseSpeed * (1 + state.dashCount);
+  if (state.movementSpent > baseSpeed) {
+    throw new Error("You have already moved farther than that mode allows this turn.");
+  }
+  return normalizeMovementState({
+    ...state,
+    movementMode,
+    movementModeBaseSpeed,
+    baseSpeed,
+    movementRemaining: baseSpeed - state.movementSpent,
+    pendingMovement: null
+  });
+}
+
+export function applyMovementDash(currentState) {
+  const state = normalizeMovementState(currentState);
+  if (!state.combatActive) throw new Error("Dash is only tracked during active initiative.");
+  if (state.dashCount >= 1) throw new Error("The generic Dash has already increased movement this turn.");
+  const increase = normalizeBaseMovementSpeed(state.movementModeBaseSpeed, state.baseSpeed);
+  return normalizeMovementState({
+    ...state,
+    dashCount: 1,
+    baseSpeed: state.baseSpeed + increase,
+    movementRemaining: state.movementRemaining + increase,
+    pendingMovement: null
   });
 }
 
@@ -401,6 +464,9 @@ export function toRoomMovementFields(value) {
       activeTokenId: state.activeTokenId,
       activeTokenName: state.activeTokenName,
       baseSpeed: state.baseSpeed,
+      movementMode: state.movementMode,
+      movementModeBaseSpeed: state.movementModeBaseSpeed,
+      dashCount: state.dashCount,
       movementRemaining: state.movementRemaining,
       movementSpent: state.movementSpent,
       movementTurnKey: state.movementTurnKey,
@@ -601,6 +667,44 @@ export function createMovementSystem({
     return queue;
   }
 
+  function changeMode({ mode, speed } = {}) {
+    const previewState = applyMovementMode(state, { mode, speed });
+    const command = Object.freeze({
+      type: "select-movement-mode",
+      tokenId: state.activeTokenId,
+      turnKey: state.movementTurnKey,
+      mode: previewState.movementMode,
+      speed: previewState.movementModeBaseSpeed
+    });
+    queue = queue.catch(() => {}).then(async () => {
+      const committed = typeof commit === "function"
+        ? await commit(command, { previousState: getState(), previewState })
+        : previewState;
+      state = normalizeMovementState(committed?.state ?? committed ?? previewState);
+      notify("movement-mode");
+      return getState();
+    });
+    return queue;
+  }
+
+  function dash() {
+    const previewState = applyMovementDash(state);
+    const command = Object.freeze({
+      type: "dash-movement",
+      tokenId: state.activeTokenId,
+      turnKey: state.movementTurnKey
+    });
+    queue = queue.catch(() => {}).then(async () => {
+      const committed = typeof commit === "function"
+        ? await commit(command, { previousState: getState(), previewState })
+        : previewState;
+      state = normalizeMovementState(committed?.state ?? committed ?? previewState);
+      notify("dash");
+      return getState();
+    });
+    return queue;
+  }
+
   function subscribe(subscriber) {
     subscribers.add(subscriber);
     subscriber(getState(), "subscribe");
@@ -614,6 +718,8 @@ export function createMovementSystem({
     previewMove,
     cancelPreview,
     confirmMove,
+    changeMode,
+    dash,
     subscribe,
     canControl(token) {
       return canControlToken(token, {
