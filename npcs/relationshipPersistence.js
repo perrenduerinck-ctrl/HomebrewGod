@@ -30,7 +30,7 @@ export function createNpcRelationshipPersistence({
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
     const committed = await saveRevisionedRecord({
       db, reference: relationshipRef(uid, relationship.id), raw, record,
-      label: "NPC relationship", runTransaction, getDoc, setDoc
+      actorUid: uid, label: "NPC relationship", runTransaction, getDoc, setDoc
     });
     return normalizeNpcRelationship(committed, { now: timestamp });
   }

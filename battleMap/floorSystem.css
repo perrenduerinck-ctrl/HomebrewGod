@@ -1,0 +1,117 @@
+.hg-floor-panel {
+  margin: 0.65rem 0;
+  border: 1px solid var(--border-color, #33405c);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-bg, #111827) 94%, transparent);
+}
+
+.hg-floor-panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0.6rem 0.8rem;
+  cursor: pointer;
+}
+
+.hg-floor-panel > summary strong {
+  color: var(--accent-color, #a78bfa);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.hg-floor-panel-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0 0.8rem 0.8rem;
+}
+
+.hg-floor-toolbar,
+.hg-floor-dm-controls,
+.hg-floor-row,
+.hg-floor-connection,
+.hg-floor-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.hg-floor-toolbar > label:first-child {
+  display: grid;
+  gap: 0.25rem;
+  min-width: min(100%, 240px);
+}
+
+.hg-floor-follow-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hg-floor-list,
+.hg-floor-connections {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.hg-floor-row,
+.hg-floor-connection {
+  justify-content: space-between;
+  padding: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--border-color, #33405c) 75%, transparent);
+  border-radius: 9px;
+}
+
+.hg-floor-row.is-active {
+  border-color: var(--accent-color, #8b5cf6);
+  background: color-mix(in srgb, var(--accent-color, #8b5cf6) 14%, transparent);
+}
+
+.hg-floor-choice {
+  flex: 1 1 220px;
+  text-align: left;
+}
+
+.hg-floor-row-actions button,
+.hg-floor-connection button,
+.hg-floor-dm-controls button {
+  min-height: 34px;
+  padding: 0.35rem 0.55rem;
+}
+
+.hg-floor-connections-wrap h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.hg-floor-empty {
+  margin: 0;
+  color: var(--muted-text, #9ca3af);
+  font-size: 0.88rem;
+}
+
+.hg-floor-panel [data-tone="error"] { color: #fca5a5; }
+.hg-floor-panel [data-tone="success"] { color: #86efac; }
+
+@media (max-width: 720px) {
+  .hg-floor-panel > summary,
+  .hg-floor-row,
+  .hg-floor-connection {
+    align-items: stretch;
+  }
+
+  .hg-floor-panel > summary,
+  .hg-floor-row,
+  .hg-floor-connection,
+  .hg-floor-toolbar {
+    flex-direction: column;
+  }
+
+  .hg-floor-choice,
+  .hg-floor-toolbar > label:first-child,
+  .hg-floor-toolbar select {
+    width: 100%;
+  }
+}

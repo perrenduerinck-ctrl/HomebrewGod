@@ -70,6 +70,62 @@ function characterRecord(ownerUid, revision = 1, overrides = {}) {
   };
 }
 
+function sceneRecord(id = "house") {
+  return {
+    id,
+    roomCode: ROOM,
+    name: "Abandoned House",
+    description: "A two-story test location.",
+    schemaVersion: 1,
+    createdAtMillis: 1,
+    updatedAtMillis: 1
+  };
+}
+
+function floorRecord(sceneId, id, baseElevation) {
+  return {
+    id,
+    sceneId,
+    roomCode: ROOM,
+    name: id === "ground" ? "Ground Floor" : "Second Floor",
+    description: "",
+    baseElevation,
+    order: baseElevation,
+    grid: {},
+    lighting: {},
+    map: {
+      id: `map-${id}`,
+      name: `${id} map`,
+      url: `https://example.test/${id}.webp`,
+      publicId: null,
+      savedToLibrary: true,
+      timeVariants: {}
+    },
+    schemaVersion: 1,
+    createdAtMillis: 1,
+    updatedAtMillis: 1
+  };
+}
+
+function connectionRecord() {
+  return {
+    id: "stairs-1",
+    sceneId: "house",
+    roomCode: ROOM,
+    name: "Main Stairs",
+    description: "",
+    type: "stairs",
+    source: { floorId: "ground", x: 20, y: 30 },
+    destination: { floorId: "second", x: 80, y: 70 },
+    bidirectional: true,
+    allowPlayers: true,
+    movementCost: 10,
+    schemaVersion: 1,
+    createdAtMillis: 1,
+    updatedAtMillis: 1
+  };
+}
+
 const personalLibraryFixtures = Object.freeze([
   {
     collection: "magicItems",
@@ -630,6 +686,110 @@ test("players can move only their token while exploration is active", async () =
   const ownerToken = doc(owner, "rooms", ROOM, "tokens", "hero");
   await assertSucceeds(updateDoc(ownerToken, { x: 30, y: 40, movedAtMillis: 2, updatedAtMillis: 2 }));
   await assertFails(updateDoc(doc(stranger, "rooms", ROOM, "tokens", "hero"), { x: 80, y: 90, movedAtMillis: 3, updatedAtMillis: 3 }));
+});
+
+test("only the DM manages scene definitions while every room member can read them", async () => {
+  const dm = databaseFor("dm-1");
+  const player = databaseFor("player-1");
+  await assertFails(setDoc(doc(player, "rooms", ROOM, "scenes", "house"), sceneRecord()));
+  await assertSucceeds(setDoc(doc(dm, "rooms", ROOM, "scenes", "house"), sceneRecord()));
+  await assertSucceeds(setDoc(
+    doc(dm, "rooms", ROOM, "scenes", "house", "floors", "ground"),
+    floorRecord("house", "ground", 0)
+  ));
+  await assertSucceeds(setDoc(
+    doc(dm, "rooms", ROOM, "scenes", "house", "floors", "second"),
+    floorRecord("house", "second", 15)
+  ));
+  await assertSucceeds(getDoc(doc(player, "rooms", ROOM, "scenes", "house")));
+  await assertSucceeds(getDoc(doc(player, "rooms", ROOM, "scenes", "house", "floors", "second")));
+  await assertSucceeds(setDoc(
+    doc(dm, "rooms", ROOM, "scenes", "house", "dmFloorNotes", "second"),
+    {
+      floorId: "second",
+      sceneId: "house",
+      roomCode: ROOM,
+      notes: "The trap is under the rug.",
+      updatedAtMillis: 2
+    }
+  ));
+  await assertFails(getDoc(doc(player, "rooms", ROOM, "scenes", "house", "dmFloorNotes", "second")));
+  await assertFails(updateDoc(
+    doc(player, "rooms", ROOM, "scenes", "house", "floors", "second"),
+    { name: "Player Rewrite" }
+  ));
+});
+
+test("players may use an enabled floor connection only for their own token outside combat", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, "rooms", ROOM, "scenes", "house"), sceneRecord());
+    await setDoc(doc(admin, "rooms", ROOM, "scenes", "house", "floors", "ground"), floorRecord("house", "ground", 0));
+    await setDoc(doc(admin, "rooms", ROOM, "scenes", "house", "floors", "second"), floorRecord("house", "second", 15));
+    await setDoc(doc(admin, "rooms", ROOM, "scenes", "house", "connections", "stairs-1"), connectionRecord());
+    await updateDoc(doc(admin, "rooms", ROOM, "tokens", "hero"), {
+      sceneId: "house",
+      floorId: "ground",
+      elevation: 0,
+      elevationFeet: 0,
+      heightAboveFloor: 0
+    });
+  });
+  const owner = databaseFor("player-1");
+  const stranger = databaseFor("player-2");
+  const validPatch = {
+    sceneId: "house",
+    floorId: "second",
+    x: 80,
+    y: 70,
+    elevation: 15,
+    elevationFeet: 15,
+    heightAboveFloor: 0,
+    lastFloorConnectionId: "stairs-1",
+    floorChangedAtMillis: 2,
+    movedAtMillis: 2,
+    updatedAtMillis: 2
+  };
+  await assertFails(updateDoc(doc(stranger, "rooms", ROOM, "tokens", "hero"), validPatch));
+  await assertFails(updateDoc(doc(owner, "rooms", ROOM, "tokens", "hero"), {
+    ...validPatch,
+    x: 50
+  }));
+  await assertSucceeds(updateDoc(doc(owner, "rooms", ROOM, "tokens", "hero"), validPatch));
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), "rooms", ROOM), {
+      initiativeState: {
+        combatActive: true,
+        roundNumber: 1,
+        turnCounter: 0,
+        currentCombatantId: "hero"
+      }
+    });
+  });
+  await assertFails(updateDoc(doc(owner, "rooms", ROOM, "tokens", "hero"), {
+    ...validPatch,
+    floorId: "ground",
+    x: 20,
+    y: 30,
+    elevation: 0,
+    elevationFeet: 0,
+    floorChangedAtMillis: 3,
+    movedAtMillis: 3,
+    updatedAtMillis: 3
+  }));
+});
+
+test("a former member loses room reads until deliberately rejoining with the room code", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await deleteDoc(doc(context.firestore(), "rooms", ROOM, "players", "player-1"));
+  });
+  const formerMember = databaseFor("player-1");
+  await assertFails(getDoc(doc(formerMember, "rooms", ROOM)));
+  await assertSucceeds(setDoc(doc(formerMember, "rooms", ROOM, "players", "player-1"), {
+    uid: "player-1",
+    role: "player"
+  }));
+  await assertSucceeds(getDoc(doc(formerMember, "rooms", ROOM)));
 });
 
 test("combat turn economy is owner-scoped, revisioned, and bound to the active turn", async () => {

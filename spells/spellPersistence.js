@@ -38,7 +38,7 @@ export function createSpellPersistence({
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
     const committed = await saveRevisionedRecord({
       db, reference: spellRef(uid, spell.id), raw, record,
-      label: "spell", runTransaction, getDoc, setDoc
+      actorUid: uid, label: "spell", runTransaction, getDoc, setDoc
     });
     return normalizeHomebrewSpell(committed, { now: committed.updatedAtMillis });
   }

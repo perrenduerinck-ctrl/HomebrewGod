@@ -11,9 +11,9 @@ import {
 test("room deletion inventory covers every room-owned collection", () => {
   const names = ROOM_OWNED_COLLECTIONS.map((entry) => entry.name);
   assert.deepEqual(names, [
-    "players", "activePlayers", "maps", "puzzleTiles", "tokens",
+    "players", "activePlayers", "maps", "puzzleTiles", "scenes", "tokens",
     "characters", "monsters", "classes", "species", "backgrounds",
-    "animations", "combatEffects", "effects", "sharedJournal",
+    "animations", "combatEffects", "effects", "combatTurns", "sharedJournal",
     "personalJournal", "dmJournal", "sharedDrawings", "dmDrawings"
   ]);
   assert.equal(new Set(names).size, names.length);
@@ -25,6 +25,10 @@ test("room deletion inventory covers every room-owned collection", () => {
     ROOM_CLIENT_CLEANUP_COLLECTIONS.some((entry) => entry.name === "personalJournal"),
     false,
     "DM cleanup must never enumerate private player notes"
+  );
+  assert.deepEqual(
+    ROOM_OWNED_COLLECTIONS.find((entry) => entry.name === "scenes")?.nestedCollections,
+    ["floors", "connections", "dmFloorNotes"]
   );
 });
 

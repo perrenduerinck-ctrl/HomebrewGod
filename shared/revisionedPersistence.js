@@ -38,25 +38,37 @@ export async function saveRevisionedRecord({
   reference,
   raw,
   record,
+  actorUid = "",
   label = "record",
   runTransaction,
   getDoc,
   setDoc
 }) {
   const expectedRevision = normalizeRecordRevision(raw?.revision);
+  const authenticatedActorUid = String(actorUid || "").trim();
+  let observedRemoteOwnerUid = "";
+  let observedRevisionState =
+    expectedRevision > 0
+      ? "unknown"
+      : "new";
 
   const commit = async (reader, writer) => {
     const snapshot = await reader(reference);
     const exists = snapshotExists(snapshot);
     const remote = exists ? snapshotData(snapshot) : {};
     const remoteRevision = normalizeRecordRevision(remote.revision);
+    observedRemoteOwnerUid = String(remote.ownerUid || "").trim();
 
     if (
       (exists && expectedRevision !== remoteRevision) ||
       (!exists && expectedRevision !== 0)
     ) {
+      observedRevisionState = "stale";
       throw createRevisionConflictError(label, raw);
     }
+    observedRevisionState = exists
+      ? "current"
+      : "new";
     if (
       exists &&
       remote.ownerUid &&
@@ -122,17 +134,23 @@ export async function saveRevisionedRecord({
           ? reference.path
           : String(reference || "unknown"),
       authenticated:
-        Boolean(record?.ownerUid),
+        authenticatedActorUid
+          ? true
+          : null,
       membershipState: "unknown",
       expectedRole: "record owner",
+      ownershipState:
+        authenticatedActorUid &&
+        observedRemoteOwnerUid
+          ? authenticatedActorUid ===
+              observedRemoteOwnerUid
+            ? "owner"
+            : "mismatch"
+          : "unknown",
       revisionState:
-        code.includes("aborted") ||
-        code.includes("failed-precondition") ||
         error?.code === "revision-conflict"
           ? "stale"
-          : expectedRevision > 0
-            ? "current"
-            : "new"
+          : observedRevisionState
     };
 
     reportPersistenceFailure(

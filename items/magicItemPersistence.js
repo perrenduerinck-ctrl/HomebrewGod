@@ -31,7 +31,7 @@ export function createMagicItemPersistence({
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
     const committed = await saveRevisionedRecord({
       db, reference: itemRef(userId, item.id), raw, record,
-      label: "magic item", runTransaction, getDoc, setDoc
+      actorUid: userId, label: "magic item", runTransaction, getDoc, setDoc
     });
     return normalizeMagicItem(committed, { now: committed.updatedAtMillis });
   }

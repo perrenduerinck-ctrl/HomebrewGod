@@ -78,7 +78,19 @@ test("the application passes atomic transaction support into Character Creator",
   );
   assert.match(
     appSource,
-    /async function openSavedRoom[\s\S]*?await joinRoom\(/
+    /async function openSavedRoom[\s\S]*?await joinRoom\([\s\S]*?createMembership:\s*false/
+  );
+  assert.match(
+    appSource,
+    /getCurrentMembershipState:\s*function/
+  );
+  assert.match(
+    appSource,
+    /let authStateGeneration = 0;[\s\S]*?const generation\s*=\s*\+\+authStateGeneration;[\s\S]*?previousUserId !== nextUserId[\s\S]*?await showLoggedOut\(\);[\s\S]*?currentUser = user;/
+  );
+  assert.match(
+    appSource,
+    /if \(createMembership \|\| finalRole === "dm"\) \{[\s\S]*?await savePlayerHistory/
   );
   assert.doesNotMatch(
     appSource,
@@ -99,6 +111,7 @@ test("safe Firebase diagnostics contain context but never identity or document d
       authenticated: true,
       membershipState: "member",
       expectedRole: "character owner or room DM",
+      ownershipState: "owner",
       revisionState: "new",
       actorUid: "must-not-appear",
       document: { secret: "must-not-appear" }
@@ -114,6 +127,7 @@ test("safe Firebase diagnostics contain context but never identity or document d
     authenticated: true,
     membershipState: "member",
     expectedRole: "character owner or room DM",
+    ownershipState: "owner",
     revisionState: "new"
   });
   assert.doesNotMatch(
@@ -132,7 +146,7 @@ test("safe Firebase diagnostics contain context but never identity or document d
   );
 });
 
-test("Firebase permission messages distinguish sign-in, membership, DM, and stale revisions", () => {
+test("Firebase permission messages use only verified authentication, membership, ownership, and revision evidence", () => {
   const denied = {
     code: "permission-denied",
     message: "Missing or insufficient permissions."
@@ -143,7 +157,7 @@ test("Firebase permission messages distinguish sign-in, membership, DM, and stal
       action: "save this character",
       authenticated: false
     }),
-    /Sign in again/i
+    /session has expired.*sign in/i
   );
   assert.match(
     friendlyServiceError(denied, {
@@ -153,13 +167,18 @@ test("Firebase permission messages distinguish sign-in, membership, DM, and stal
   );
   assert.match(
     friendlyServiceError(denied, {
-      expectedRole: "room DM"
+      ownershipState: "mismatch",
+      action: "save this character"
     }),
-    /room DM/i
+    /belongs to another user/i
   );
   assert.match(
     friendlyServiceError(denied),
-    /ownership|membership/i
+    /access or the current server rules/i
+  );
+  assert.doesNotMatch(
+    friendlyServiceError(denied),
+    /rejoin|owner|DM/i
   );
   assert.match(
     friendlyServiceError({
@@ -167,6 +186,13 @@ test("Firebase permission messages distinguish sign-in, membership, DM, and stal
       message: "revision conflict"
     }, {
       revisionState: "stale"
+    }),
+    /newer version/i
+  );
+  assert.doesNotMatch(
+    friendlyServiceError({
+      code: "aborted",
+      message: "transaction contention"
     }),
     /newer version/i
   );

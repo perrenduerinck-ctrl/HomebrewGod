@@ -22,6 +22,7 @@ import {
   normalizeBaseMovementSpeed,
   readTokenBaseSpeed
 } from "../combat/movementSystem.js?v=movement-robustness-20260906";
+import { tokenMatchesFloor } from "../battleMap/sceneModel.js?v=multi-floor-20261014";
 
 export function isMatchingAutomationSummon(token, effectId) {
   return token?.automation?.kind === "summon" &&
@@ -82,6 +83,7 @@ export function createTokenSystem(options) {
     getActivePuzzleTile: options.getActivePuzzleTile,
     getPuzzleViewMode: options.getPuzzleViewMode,
     buildMapFromRoomFields: options.buildMapFromRoomFields,
+    getActiveFloorContext: options.getActiveFloorContext,
     removeTokenFromInitiative:
       options.removeTokenFromInitiative
   };
@@ -1489,7 +1491,12 @@ export function createTokenSystem(options) {
         token.sheetId ||
         null,
       mapMode: token.mapMode || "single",
-      tileKey: token.tileKey || null
+      tileKey: token.tileKey || null,
+      sceneId: String(token.sceneId || "").trim() || null,
+      floorId: String(token.floorId || "").trim() || null,
+      heightAboveFloor: Number.isFinite(Number(token.heightAboveFloor))
+        ? normalizeElevation(token.heightAboveFloor)
+        : null
     };
   }
 
@@ -1707,6 +1714,16 @@ export function createTokenSystem(options) {
 
   function getCurrentTokenTarget(room) {
     const safeRoom = room || {};
+    const activeFloor = deps.getActiveFloorContext?.();
+    if (activeFloor?.sceneId && activeFloor?.floorId) {
+      return {
+        mapMode: "single",
+        tileKey: null,
+        sceneId: activeFloor.sceneId,
+        floorId: activeFloor.floorId,
+        baseElevation: normalizeElevation(activeFloor.baseElevation)
+      };
+    }
     const tiles = deps.getPuzzleTiles ? deps.getPuzzleTiles(safeRoom) : [];
     const viewMode = deps.getPuzzleViewMode ? deps.getPuzzleViewMode(safeRoom) : "board";
     const activeTile = deps.getActivePuzzleTile ? deps.getActivePuzzleTile(safeRoom) : null;
@@ -1746,6 +1763,14 @@ export function createTokenSystem(options) {
     const target = getCurrentTokenTarget(room);
 
     if (!target.mapMode) {
+      return false;
+    }
+
+    if (target.sceneId && target.floorId) {
+      return tokenMatchesFloor(token, target);
+    }
+
+    if (token.sceneId || token.floorId) {
       return false;
     }
 
@@ -1887,6 +1912,10 @@ export function createTokenSystem(options) {
       return token.activationState !== "pending" && tokenMatchesCurrentView(token, safeRoom);
     });
 
+    if (selectedTokenId && !visibleTokens.some((token) => token.id === selectedTokenId)) {
+      clearSelection("floor-hidden");
+    }
+
     visibleTokens.forEach(function (token) {
       const tokenEl = document.createElement("div");
       tokenEl.className = "hg-token hg-token-" + token.type;
@@ -1896,6 +1925,8 @@ export function createTokenSystem(options) {
       tokenEl.dataset.tokenSizeCategory = token.sizeCategory;
       tokenEl.dataset.tokenElevation =
         String(token.elevation);
+      tokenEl.dataset.sceneId = token.sceneId || "";
+      tokenEl.dataset.floorId = token.floorId || "";
       tokenEl.dataset.linkedCharacterId =
         token.linkedCharacterId || "";
       tokenEl.title = `${token.name || "Token"} · ${
@@ -2279,6 +2310,11 @@ export function createTokenSystem(options) {
         creatureSize: sizeCategory,
         elevation,
         elevationFeet: elevation,
+        ...(target.sceneId ? {
+          sceneId: target.sceneId,
+          floorId: target.floorId,
+          heightAboveFloor: elevation - target.baseElevation
+        } : {}),
         movementSpeed,
         baseSpeed: movementSpeed,
         size: Math.round(mediumSize * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
@@ -2402,7 +2438,13 @@ export function createTokenSystem(options) {
       x: 50,
       y: 50,
       elevation: 0,
-      elevationFeet: 0,
+      elevationFeet: target.sceneId ? target.baseElevation : 0,
+      ...(target.sceneId ? {
+        sceneId: target.sceneId,
+        floorId: target.floorId,
+        elevation: target.baseElevation,
+        heightAboveFloor: 0
+      } : {}),
       mapMode: target.mapMode,
       tileKey: target.tileKey,
       display: {
@@ -2502,7 +2544,13 @@ export function createTokenSystem(options) {
       x: 50,
       y: 50,
       elevation: 0,
-      elevationFeet: 0,
+      elevationFeet: target.sceneId ? target.baseElevation : 0,
+      ...(target.sceneId ? {
+        sceneId: target.sceneId,
+        floorId: target.floorId,
+        elevation: target.baseElevation,
+        heightAboveFloor: 0
+      } : {}),
       mapMode: target.mapMode,
       tileKey: target.tileKey,
       display: {
@@ -2556,7 +2604,13 @@ export function createTokenSystem(options) {
       throw new Error("The active room or account changed before the token could be staged.");
     }
     const target = spec.mapMode
-      ? { mapMode: String(spec.mapMode), tileKey: spec.tileKey ?? null }
+      ? {
+          mapMode: String(spec.mapMode),
+          tileKey: spec.tileKey ?? null,
+          sceneId: spec.sceneId || null,
+          floorId: spec.floorId || null,
+          baseElevation: normalizeElevation(spec.baseElevation)
+        }
       : getCurrentTokenTarget(roomData);
     if (!target.mapMode) throw new Error("Load a map before creating a summon token.");
     let sourcePatch = {};
@@ -2600,6 +2654,11 @@ export function createTokenSystem(options) {
         ? String(spec.ownership?.playerUid || spec.playerUid || "").trim() || null
         : String(roomData.dmUid || spec.createdByUid || "").trim() || null;
     const now = Date.now();
+    const elevation = normalizeElevation(
+      spec.elevation !== undefined
+        ? spec.elevation
+        : (target.sceneId ? target.baseElevation : 0)
+    );
     const newToken = {
       ...sourcePatch,
       name: sourcePatch.name || String(spec.name || "Summon").trim().slice(0, 120) || "Summon",
@@ -2614,8 +2673,13 @@ export function createTokenSystem(options) {
       creatureSize: sizeCategory,
       size: Math.round(getMediumSize(roomData) * (SIZE_MULTIPLIERS[sizeCategory] || 1)),
       ownerUid,
-      elevation: normalizeElevation(spec.elevation),
-      elevationFeet: normalizeElevation(spec.elevation),
+      elevation,
+      elevationFeet: elevation,
+      ...(target.sceneId ? {
+        sceneId: target.sceneId,
+        floorId: target.floorId,
+        heightAboveFloor: elevation - target.baseElevation
+      } : {}),
       automation: {
         kind: String(spec.automationKind || "summon").trim().slice(0, 40) || "summon",
         effectId: String(spec.effectId || "").trim() || null,

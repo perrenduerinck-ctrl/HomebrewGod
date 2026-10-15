@@ -22,6 +22,7 @@
   <link id="homebrewGodWorkshopStyles" rel="stylesheet" href="./workshop/workshop.css?v=ui-polish-20261004">
   <link id="homebrewGodJournalStyles" rel="stylesheet" href="./journal/journal.css?v=journal-drawing-20261008">
   <link id="homebrewGodDrawingStyles" rel="stylesheet" href="./battleMap/drawingTools.css?v=journal-drawing-20261008">
+  <link id="homebrewGodFloorStyles" rel="stylesheet" href="./battleMap/floorSystem.css?v=multi-floor-20261014">
   <link id="homebrewGodCombatActionBarStyles" rel="stylesheet" href="./combat/actionBar.css?v=combat-action-bar-20261010">
   <link rel="stylesheet" href="./assets/styles/tokens.css?v=ui-polish-20261004">
   <link rel="stylesheet" href="./assets/styles/foundation.css?v=ui-polish-20261004">
@@ -1041,6 +1042,39 @@
     <p id="templateStatus" class="battleTemplateStatus" aria-live="polite">
       Turn on templates to preview a circle, cone, line, or square.
     </p>
+      </div>
+    </details>
+
+    <details id="floorSelectorPanel" class="hg-floor-panel hidden">
+      <summary>
+        <span>Floors</span>
+        <strong data-floor-active>Legacy single map</strong>
+      </summary>
+      <div class="hg-floor-panel-body">
+        <div class="hg-floor-toolbar">
+          <label>
+            <span>Location</span>
+            <select data-floor-location aria-label="Map location"></select>
+          </label>
+          <label class="hg-floor-follow-control">
+            <input data-floor-follow type="checkbox" checked>
+            <span>Follow DM</span>
+          </label>
+          <div data-floor-dm-controls class="hg-floor-dm-controls hidden">
+            <button data-floor-action="create-location" type="button">New Location</button>
+            <button data-floor-action="rename-location" type="button">Rename</button>
+            <button data-floor-action="delete-location" type="button">Delete Location</button>
+            <button data-floor-action="add-floor" type="button">Add Floor</button>
+            <button data-floor-action="add-connection" type="button">Add Connection</button>
+            <button data-floor-action="broadcast" type="button">Broadcast Floor</button>
+          </div>
+        </div>
+        <div data-floor-list class="hg-floor-list" aria-label="Location floors"></div>
+        <div class="hg-floor-connections-wrap">
+          <h3>Floor Connections</h3>
+          <div data-floor-connections class="hg-floor-connections"></div>
+        </div>
+        <p data-floor-status class="status" aria-live="polite"></p>
       </div>
     </details>
 

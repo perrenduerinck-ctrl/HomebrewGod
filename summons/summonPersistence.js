@@ -39,7 +39,7 @@ export function createSummonPersistence({
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
     const committed = await saveRevisionedRecord({
       db, reference: summonRef(uid, preset.id), raw, record,
-      label: "summon preset", runTransaction, getDoc, setDoc
+      actorUid: uid, label: "summon preset", runTransaction, getDoc, setDoc
     });
     return normalizeSummonPreset(committed, { now: timestamp });
   }

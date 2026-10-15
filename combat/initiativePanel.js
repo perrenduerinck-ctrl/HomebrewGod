@@ -17,6 +17,8 @@ export function createInitiativePanel({
   system,
   getTokens = () => [],
   getIsDm = () => false,
+  getTokenFloorLabel = () => "",
+  onLocateToken = null,
   tokenRoot = document
 } = {}) {
   if (!root || !system) {
@@ -149,7 +151,9 @@ export function createInitiativePanel({
       const name = document.createElement("strong");
       name.textContent = combatant.name;
       const detail = document.createElement("small");
-      detail.textContent = `${combatant.tokenType} · bonus ${combatant.initiativeBonus >= 0 ? "+" : ""}${combatant.initiativeBonus}`;
+      const sourceToken = getTokens().find((token) => token.id === combatant.tokenId);
+      const floorLabel = getTokenFloorLabel(sourceToken);
+      detail.textContent = `${combatant.tokenType} · bonus ${combatant.initiativeBonus >= 0 ? "+" : ""}${combatant.initiativeBonus}${floorLabel ? ` · ${floorLabel}` : ""}`;
       identity.append(name, detail);
 
       const marker = document.createElement("span");
@@ -162,6 +166,7 @@ export function createInitiativePanel({
         const actions = document.createElement("span");
         actions.className = "initiativeRowActions";
         actions.append(
+          makeButton("⌖", "locate", combatant.tokenId, "Show this combatant's floor"),
           makeButton("🎲", "roll-one", combatant.tokenId, "Roll initiative"),
           makeButton("↑", "tie-up", combatant.tokenId, "Move up within a tie"),
           makeButton("↓", "tie-down", combatant.tokenId, "Move down within a tie"),
@@ -205,9 +210,14 @@ export function createInitiativePanel({
 
   function onClick(event) {
     const button = event.target.closest("[data-initiative-action]");
-    if (!button || !root.contains(button) || getIsDm() !== true) return;
+    if (!button || !root.contains(button)) return;
     const action = button.dataset.initiativeAction;
     const tokenId = button.dataset.tokenId;
+    if (action === "locate" && getIsDm() === true && typeof onLocateToken === "function") {
+      void onLocateToken(getTokens().find((token) => token.id === tokenId) || null);
+      return;
+    }
+    if (getIsDm() !== true) return;
 
     if (action === "add") {
       const token = getTokens().find(

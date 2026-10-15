@@ -36,7 +36,7 @@ export function createEncounterPersistence({
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
     const committed = await saveRevisionedRecord({
       db, reference: encounterRef(uid, encounter.id), raw, record,
-      label: "encounter", runTransaction, getDoc, setDoc
+      actorUid: uid, label: "encounter", runTransaction, getDoc, setDoc
     });
     return normalizeEncounter(committed, { now: timestamp });
   }

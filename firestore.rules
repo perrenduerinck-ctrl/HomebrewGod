@@ -36,6 +36,18 @@ service cloud.firestore {
       return /databases/$(database)/documents/rooms/$(roomCode)/tokens/$(tokenId);
     }
 
+    function scenePath(roomCode, sceneId) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/scenes/$(sceneId);
+    }
+
+    function floorPath(roomCode, sceneId, floorId) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/scenes/$(sceneId)/floors/$(floorId);
+    }
+
+    function floorConnectionPath(roomCode, sceneId, connectionId) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/scenes/$(sceneId)/connections/$(connectionId);
+    }
+
     function combatTurnPath(roomCode, tokenId) {
       return /databases/$(database)/documents/rooms/$(roomCode)/combatTurns/$(tokenId);
     }
@@ -59,6 +71,76 @@ service cloud.firestore {
         'updatedAtMillis',
         'updatedAt'
       ]);
+    }
+
+    function tokenFloorTransitionFieldsOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'sceneId',
+        'floorId',
+        'x',
+        'y',
+        'elevation',
+        'elevationFeet',
+        'heightAboveFloor',
+        'lastFloorConnectionId',
+        'floorChangedAtMillis',
+        'movedAtMillis',
+        'updatedAtMillis',
+        'updatedAt'
+      ]);
+    }
+
+    function validPlayerFloorTransitionDocuments(roomCode, sceneId, connectionId, oldFloorId, nextFloorId) {
+      let connection = get(floorConnectionPath(roomCode, sceneId, connectionId)).data;
+      let source = connection.get('source', {});
+      let destination = connection.get('destination', {});
+      let routeMatches = (
+          source.get('floorId', '') == oldFloorId
+          && destination.get('floorId', '') == nextFloorId
+          && request.resource.data.x == destination.get('x', -1)
+          && request.resource.data.y == destination.get('y', -1)
+        ) || (
+          connection.get('bidirectional', false) == true
+          && destination.get('floorId', '') == oldFloorId
+          && source.get('floorId', '') == nextFloorId
+          && request.resource.data.x == source.get('x', -1)
+          && request.resource.data.y == source.get('y', -1)
+        );
+      let nextFloor = get(floorPath(roomCode, sceneId, nextFloorId)).data;
+      return connection.get('sceneId', '') == sceneId
+        && connection.get('roomCode', '') == roomCode
+        && connection.get('allowPlayers', false) == true
+        && routeMatches
+        && request.resource.data.get('heightAboveFloor', 1001) >= -1000
+        && request.resource.data.get('heightAboveFloor', -1001) <= 1000
+        && request.resource.data.get('elevation', 1001)
+          == nextFloor.get('baseElevation', 0)
+            + request.resource.data.get('heightAboveFloor', 0)
+        && request.resource.data.get('elevationFeet', 1001)
+          == request.resource.data.get('elevation', -1001);
+    }
+
+    function validPlayerFloorTransition(roomCode, tokenId) {
+      let sceneId = request.resource.data.get('sceneId', '');
+      let connectionId = request.resource.data.get('lastFloorConnectionId', '');
+      let oldFloorId = resource.data.get('floorId', '');
+      let nextFloorId = request.resource.data.get('floorId', '');
+      return roomAcceptsWrites(roomCode)
+        && isRoomMember(roomCode)
+        && resource.data.get('ownerUid', '') == request.auth.uid
+        && request.resource.data.get('ownerUid', '') == resource.data.get('ownerUid', '')
+        && roomData(roomCode).get('initiativeState', {}).get('combatActive', false) != true
+        && tokenFloorTransitionFieldsOnly()
+        && sceneId != ''
+        && connectionId != ''
+        && oldFloorId != ''
+        && nextFloorId != ''
+        && exists(scenePath(roomCode, sceneId))
+        && exists(floorConnectionPath(roomCode, sceneId, connectionId))
+        && exists(floorPath(roomCode, sceneId, nextFloorId))
+        && validPlayerFloorTransitionDocuments(
+          roomCode, sceneId, connectionId, oldFloorId, nextFloorId
+        );
     }
 
     function linkedCharacterSyncFieldsOnly() {
@@ -602,6 +684,77 @@ service cloud.firestore {
         && request.resource.data.end is map
         && request.resource.data.createdAtMillis is number
         && request.resource.data.updatedAtMillis is number;
+    }
+
+    function validScene(roomCode, sceneId) {
+      return request.resource.data.get('id', '') == sceneId
+        && request.resource.data.get('roomCode', '') == roomCode
+        && request.resource.data.get('schemaVersion', 0) == 1
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() > 0
+        && request.resource.data.get('name', '').size() <= 120
+        && request.resource.data.get('description', '') is string
+        && request.resource.data.get('description', '').size() <= 4000
+        && request.resource.data.get('createdAtMillis', -1) is number
+        && request.resource.data.get('updatedAtMillis', -1) is number;
+    }
+
+    function validFloor(roomCode, sceneId, floorId) {
+      let map = request.resource.data.get('map', {});
+      return request.resource.data.get('id', '') == floorId
+        && !request.resource.data.keys().hasAny(['dmNotes', 'privateNotes'])
+        && request.resource.data.get('sceneId', '') == sceneId
+        && request.resource.data.get('roomCode', '') == roomCode
+        && request.resource.data.get('schemaVersion', 0) == 1
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() > 0
+        && request.resource.data.get('name', '').size() <= 120
+        && request.resource.data.get('baseElevation', 1001) >= -1000
+        && request.resource.data.get('baseElevation', -1001) <= 1000
+        && request.resource.data.get('order', 0) is int
+        && request.resource.data.get('description', '') is string
+        && request.resource.data.get('description', '').size() <= 4000
+        && map is map
+        && (
+          map.get('url', '') == ''
+          || map.get('url', '').matches('https://.*')
+        );
+    }
+
+    function validFloorConnection(roomCode, sceneId, connectionId) {
+      let source = request.resource.data.get('source', {});
+      let destination = request.resource.data.get('destination', {});
+      return request.resource.data.get('id', '') == connectionId
+        && request.resource.data.get('sceneId', '') == sceneId
+        && request.resource.data.get('roomCode', '') == roomCode
+        && request.resource.data.get('schemaVersion', 0) == 1
+        && request.resource.data.get('type', '') in [
+          'stairs', 'ladder', 'trapdoor', 'elevator', 'portal', 'custom'
+        ]
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() > 0
+        && request.resource.data.get('name', '').size() <= 120
+        && request.resource.data.get('description', '') is string
+        && request.resource.data.get('description', '').size() <= 1000
+        && source is map
+        && destination is map
+        && source.get('floorId', '') != ''
+        && destination.get('floorId', '') != ''
+        && source.get('floorId', '') != destination.get('floorId', '')
+        && exists(floorPath(roomCode, sceneId, source.get('floorId', '')))
+        && exists(floorPath(roomCode, sceneId, destination.get('floorId', '')))
+        && source.get('x', -1) >= 0
+        && source.get('x', 101) <= 100
+        && source.get('y', -1) >= 0
+        && source.get('y', 101) <= 100
+        && destination.get('x', -1) >= 0
+        && destination.get('x', 101) <= 100
+        && destination.get('y', -1) >= 0
+        && destination.get('y', 101) <= 100
+        && request.resource.data.get('bidirectional', null) is bool
+        && request.resource.data.get('allowPlayers', null) is bool
+        && request.resource.data.get('movementCost', -1) >= 0
+        && request.resource.data.get('movementCost', 1001) <= 1000;
     }
 
     function playerDrawingEnabled(roomCode) {
@@ -1412,6 +1565,59 @@ service cloud.firestore {
           if isRoomDm(roomCode);
       }
 
+      match /scenes/{sceneId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && validScene(roomCode, sceneId);
+        allow delete:
+          if isRoomDm(roomCode);
+
+        match /floors/{floorId} {
+          allow read:
+            if isRoomMember(roomCode);
+          allow create, update:
+            if roomAcceptsWrites(roomCode)
+            && isRoomDm(roomCode)
+            && validFloor(roomCode, sceneId, floorId);
+          allow delete:
+            if isRoomDm(roomCode);
+        }
+
+        match /connections/{connectionId} {
+          allow read:
+            if isRoomMember(roomCode);
+          allow create, update:
+            if roomAcceptsWrites(roomCode)
+            && isRoomDm(roomCode)
+            && validFloorConnection(roomCode, sceneId, connectionId);
+          allow delete:
+            if isRoomDm(roomCode);
+        }
+
+        match /dmFloorNotes/{floorId} {
+          allow read:
+            if isRoomDm(roomCode);
+          allow create, update:
+            if roomAcceptsWrites(roomCode)
+            && isRoomDm(roomCode)
+            && request.resource.data.keys().hasOnly([
+              'floorId', 'sceneId', 'roomCode', 'notes',
+              'updatedAtMillis', 'updatedAt'
+            ])
+            && request.resource.data.get('floorId', '') == floorId
+            && request.resource.data.get('sceneId', '') == sceneId
+            && request.resource.data.get('roomCode', '') == roomCode
+            && request.resource.data.get('notes', '') is string
+            && request.resource.data.get('notes', '').size() <= 12000
+            && request.resource.data.get('updatedAtMillis', -1) is number;
+          allow delete:
+            if isRoomDm(roomCode);
+        }
+      }
+
       match /puzzleTiles/{tileId} {
         allow read:
           if isRoomMember(roomCode);
@@ -1445,6 +1651,7 @@ service cloud.firestore {
                   && tokenIsCurrentOrExploring(roomCode, tokenId)
                   && trackedTokenMoveIsConfirmed(roomCode, tokenId)
                 )
+                || validPlayerFloorTransition(roomCode, tokenId)
                 || validLinkedCharacterTokenSync(roomCode)
               )
             )

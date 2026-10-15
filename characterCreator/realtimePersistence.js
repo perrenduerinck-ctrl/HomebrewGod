@@ -36,6 +36,7 @@ export function createCharacterRealtimePersistence({
   listeners,
   getRoomCode,
   getUserId = () => "",
+  getMembershipState = () => "unknown",
   hasFirestoreTools,
   getState,
   onCacheChanged,
@@ -112,10 +113,9 @@ export function createCharacterRealtimePersistence({
       authenticated:
         Boolean(getUserId()),
       membershipState:
-        permissionDenied
-          ? "missing"
-          : "unknown",
+        getMembershipState(),
       expectedRole: "room member",
+      ownershipState: "unknown",
       revisionState: "unknown"
     };
 

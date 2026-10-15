@@ -3,6 +3,12 @@ export const ROOM_OWNED_COLLECTIONS = Object.freeze([
   { name: "activePlayers", clientCleanup: true },
   { name: "maps", clientCleanup: true, collectsAssets: true },
   { name: "puzzleTiles", clientCleanup: true, collectsAssets: true },
+  {
+    name: "scenes",
+    clientCleanup: true,
+    collectsAssets: true,
+    nestedCollections: ["floors", "connections", "dmFloorNotes"]
+  },
   { name: "tokens", clientCleanup: true },
   { name: "characters", clientCleanup: true },
   { name: "monsters", clientCleanup: true },

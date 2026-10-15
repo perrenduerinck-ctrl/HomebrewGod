@@ -163,7 +163,7 @@
     assert(interruptedDelete.recoverable, "Interrupted deletion remains recoverable.");
     assert(buildDeletionRecoveryState({ roomExists: true, deletionMarkerPresent: false, cleanupCompleted: false }).action === "resume-room", "Healthy rooms resume normally.");
 
-    assert(/membership|ownership/i.test(friendlyServiceError({ code: "permission-denied" }, { service: "Firebase" })), "Permission errors explain membership or ownership.");
+    assert(/access|server rules/i.test(friendlyServiceError({ code: "permission-denied" }, { service: "Firebase" })), "Unverified permission errors avoid claiming a specific cause.");
     assert(/reconnect/i.test(friendlyServiceError({ code: "unavailable" }, { service: "Firebase" })), "Network errors explain reconnection.");
     assert(/too large/i.test(friendlyServiceError({ code: "resource-exhausted" }, { service: "Cloudinary" })), "Size errors are friendly.");
     assert(/Sign in again/.test(friendlyServiceError({ code: "unauthenticated" }, { action: "upload" })), "Authentication errors request sign-in.");

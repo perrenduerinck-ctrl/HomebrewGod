@@ -351,6 +351,13 @@ const DIAGNOSTIC_REVISION_STATES =
     "unknown"
   ]);
 
+const DIAGNOSTIC_OWNERSHIP_STATES =
+  new Set([
+    "owner",
+    "mismatch",
+    "unknown"
+  ]);
+
 export function buildSafePersistenceDiagnostic(
   error,
   options = {}
@@ -363,6 +370,11 @@ export function buildSafePersistenceDiagnostic(
   const revisionState =
     cleanText(
       options.revisionState,
+      "unknown"
+    ).toLowerCase();
+  const ownershipState =
+    cleanText(
+      options.ownershipState,
       "unknown"
     ).toLowerCase();
 
@@ -387,7 +399,11 @@ export function buildSafePersistenceDiagnostic(
       "unknown"
     ).toLowerCase(),
     authenticated:
-      options.authenticated === true,
+      options.authenticated === true
+        ? true
+        : options.authenticated === false
+          ? false
+          : null,
     membershipState:
       DIAGNOSTIC_MEMBERSHIP_STATES
         .has(membershipState)
@@ -397,6 +413,11 @@ export function buildSafePersistenceDiagnostic(
       options.expectedRole,
       "unknown"
     ),
+    ownershipState:
+      DIAGNOSTIC_OWNERSHIP_STATES
+        .has(ownershipState)
+        ? ownershipState
+        : "unknown",
     revisionState:
       DIAGNOSTIC_REVISION_STATES
         .has(revisionState)
@@ -449,17 +470,16 @@ export function friendlyServiceError(
   const membershipState =
     cleanText(options.membershipState)
       .toLowerCase();
-  const expectedRole =
-    cleanText(options.expectedRole)
-      .toLowerCase();
   const revisionState =
     cleanText(options.revisionState)
       .toLowerCase();
+  const ownershipState =
+    cleanText(options.ownershipState)
+      .toLowerCase();
   const revisionConflict =
     revisionState === "stale" ||
-    code.includes("aborted") ||
-    code.includes("failed-precondition") ||
-    message.includes("revision") ||
+    code.includes("revision-conflict") ||
+    message.includes("revision conflict") ||
     message.includes("newer version") ||
     message.includes("changed in another");
 
@@ -476,26 +496,27 @@ export function friendlyServiceError(
   ) {
     if (options.authenticated === false) {
       return (
-        `Sign in again before trying to ${action}.`
+        "Your session has expired. Sign in and try again."
       );
     }
 
     if (membershipState === "missing") {
       return (
-        "Your campaign access is missing or expired. " +
-        "Check the room code or rejoin the room, then try again."
+        "You no longer have access to this room. " +
+        "Rejoin the campaign and try again."
       );
     }
 
-    if (expectedRole === "room dm") {
+    if (ownershipState === "mismatch") {
       return (
-        `Only the room DM can ${action}.`
+        "This record belongs to another user. " +
+        `You cannot ${action}.`
       );
     }
 
     return (
-      `The ${service} blocked this request. ` +
-      "Confirm your ownership or room membership, then try again."
+      `${service} rejected this operation. ` +
+      "Your access or the current server rules may need to be checked."
     );
   }
 
@@ -505,7 +526,17 @@ export function friendlyServiceError(
     message.includes("sign in")
   ) {
     return (
-      `Sign in again before trying to ${action}.`
+      "Your session has expired. Sign in and try again."
+    );
+  }
+
+  if (
+    code.includes("aborted") ||
+    code.includes("failed-precondition")
+  ) {
+    return (
+      `${service} could not complete the operation because its state changed. ` +
+      "Reload the latest data and try again."
     );
   }
 

@@ -19,6 +19,7 @@ function createHarness() {
     roomClassCache: []
   };
   let roomCode = "ROOM-A";
+  let membershipState = "unknown";
   const listeners =
     createRealtimeListenerRegistry();
   const deps = {
@@ -45,15 +46,22 @@ function createHarness() {
     }
   };
   const changedCaches = [];
+  const statusMessages = [];
   const service =
     createCharacterRealtimePersistence({
       deps,
       listeners,
       getRoomCode: () => roomCode,
+      getUserId: () => "user-a",
+      getMembershipState: () =>
+        membershipState,
       hasFirestoreTools: () => true,
       getState: () => state,
       onCacheChanged: (cacheKey) => {
         changedCaches.push(cacheKey);
+      },
+      setStatus: (message) => {
+        statusMessages.push(message);
       }
     });
   const descriptors = [
@@ -84,9 +92,13 @@ function createHarness() {
     descriptors,
     service,
     state,
+    statusMessages,
     stopped,
     setRoomCode(value) {
       roomCode = value;
+    },
+    setMembershipState(value) {
+      membershipState = value;
     }
   };
 }
@@ -244,5 +256,38 @@ test("cleanup unsubscribes and clears room-scoped caches", () => {
   assert.deepEqual(
     harness.state.characterCache,
     []
+  );
+});
+
+test("permission-denied listeners keep unverified membership unknown", () => {
+  const harness = createHarness();
+  const originalError = console.error;
+  console.error = () => {};
+
+  try {
+    harness.service.sync(
+      harness.descriptors,
+      {
+        viewMode: "library",
+        currentStepId: "basics"
+      }
+    );
+    harness.callbacks
+      .get("ROOM-A:characters")
+      .error({
+        code: "permission-denied",
+        message: "Missing or insufficient permissions."
+      });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.match(
+    harness.statusMessages.at(-1),
+    /access or the current server rules/i
+  );
+  assert.doesNotMatch(
+    harness.statusMessages.at(-1),
+    /rejoin/i
   );
 });

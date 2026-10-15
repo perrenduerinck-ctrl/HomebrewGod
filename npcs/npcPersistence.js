@@ -44,7 +44,7 @@ export function createNpcPersistence({
     if (!raw.createdAt && !raw.createdAtMillis) record.createdAt = serverTimestamp?.() || new Date();
     const committed = await saveRevisionedRecord({
       db, reference: npcRef(uid, npc.id), raw, record,
-      label: "NPC", runTransaction, getDoc, setDoc
+      actorUid: uid, label: "NPC", runTransaction, getDoc, setDoc
     });
     return normalizeNpc(committed, { now: committed.updatedAtMillis });
   }

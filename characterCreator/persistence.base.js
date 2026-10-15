@@ -1352,6 +1352,9 @@ export function createCharacterPersistence(context) {
       const actorUid =
         getSection18MutationIdentity()
           .actorUid;
+      const ownerUid = String(
+        creatorState.draft?.ownerUid || ""
+      ).trim();
       const currentId = String(
         creatorState.currentCharacterId || ""
       ).trim();
@@ -1386,19 +1389,23 @@ export function createCharacterPersistence(context) {
           `rooms/${roomCode || "{room}"}/characters/${currentId || "{new}"}`,
         authenticated: Boolean(actorUid),
         membershipState:
-          roomCode && actorUid
-            ? "member"
-            : "unknown",
+          deps.getCurrentMembershipState?.() ||
+          "unknown",
         expectedRole:
           "character owner or room DM",
+        ownershipState:
+          ownerUid && actorUid
+            ? ownerUid === actorUid
+              ? "owner"
+              : "mismatch"
+            : "unknown",
         revisionState:
-          code.includes("aborted") ||
-          code.includes("failed-precondition") ||
-          errorMessage.includes("revision") ||
+          code.includes("revision-conflict") ||
+          errorMessage.includes("revision conflict") ||
           errorMessage.includes("changed in another")
             ? "stale"
             : currentId
-              ? "current"
+              ? "unknown"
               : "new"
       };
 

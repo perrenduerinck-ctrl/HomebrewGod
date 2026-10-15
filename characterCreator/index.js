@@ -221,6 +221,8 @@ export function createCharacterCreator(options = {}) {
     getCurrentRoomData: options.getCurrentRoomData,
     getCurrentIsDM: options.getCurrentIsDM,
     getCurrentUserUid: options.getCurrentUserUid,
+    getCurrentMembershipState:
+      options.getCurrentMembershipState,
 
     createCharacterLinkedToken:
       options.createCharacterLinkedToken,
@@ -38919,6 +38921,9 @@ export function createCharacterCreator(options = {}) {
       getRoomCode,
       getUserId: () =>
         deps.getCurrentUserUid?.() || "",
+      getMembershipState: () =>
+        deps.getCurrentMembershipState?.() ||
+        "unknown",
       hasFirestoreTools,
       getState: () => creatorState,
       onCacheChanged:

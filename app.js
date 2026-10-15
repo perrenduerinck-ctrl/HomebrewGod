@@ -219,6 +219,11 @@ import { summonPresetAutomation } from "./summons/summonPresetModel.js";
 import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261008";
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
 import { createMapInteractionController } from "./battleMap/interactionController.js";
+import { createScenePersistence } from "./battleMap/scenePersistence.js?v=multi-floor-20261014";
+import { createFloorSystem } from "./battleMap/floorSystem.js?v=multi-floor-20261014";
+import {
+  buildFloorTransitionPatch
+} from "./battleMap/sceneModel.js?v=multi-floor-20261014";
 import { subscribeToActionBarDocument } from "./combat/actionBarPersistence.js";
 import {
   applyActionEconomyCommand,
@@ -439,6 +444,7 @@ const E = {
   battleManagerBar: $("battleManagerBar"),
   battleManagerInner: $("battleManagerInner"),
   battleMapSurface: $("battleMapSurface"),
+  floorSelectorPanel: $("floorSelectorPanel"),
   battleQuickActions: $("battleQuickActions"),
   battleInitiativePanel: $("battleInitiativePanel"),
   battleCampaignTimePanel: $("battleCampaignTimePanel"),
@@ -473,6 +479,7 @@ let currentUser = null;
 let currentRoomCode = null;
 let currentRoomData = null;
 let currentIsDM = false;
+let currentRoomMembershipState = "unknown";
 let currentMapId = null;
 let displayedSharedMapUrl = null;
 
@@ -540,6 +547,7 @@ let battleMapVfxSequences = null;
 let battleMapCombatVfx = null;
 let battleMapAnimations = null;
 let battleMapCombatPresentation = null;
+let floorSystem = null;
 let activeCombatTargetingCleanup = null;
 let tokenAutomation = null;
 let combatEffectPersistence = null;
@@ -2458,6 +2466,16 @@ function syncRealtimeListenersForScreen(
 function getCurrentDrawingMapContext() {
   if (!currentRoomCode || activeMainScreenName !== "battle") return {};
 
+  const floorState = floorSystem?.getState?.();
+  if (floorState?.active && floorState.mapScopeId && E.battleMapViewer) {
+    return {
+      mapId: floorState.mapScopeId,
+      target: E.battleMapViewer,
+      mode: "single",
+      zoom: battleZoom
+    };
+  }
+
   if (E.puzzleMapBoard && !E.puzzleMapBoard.classList.contains("hidden")) {
     const puzzleTiles = getPuzzleTiles(currentRoomData || {});
     const puzzleBounds = getPuzzleBounds(puzzleTiles);
@@ -2622,6 +2640,22 @@ function buildMapFromRoomFields(room) {
   });
 }
 
+function buildMapForCurrentFloorOrRoom(room = currentRoomData) {
+  const floorState = floorSystem?.getState?.();
+  if (floorState?.active) {
+    const map = floorState.floor?.map;
+    return map?.url
+      ? {
+          ...map,
+          name: `${floorState.scene?.name || "Location"} · ${floorState.floor?.name || "Floor"}`,
+          floorId: floorState.floorId,
+          sceneId: floorState.sceneId
+        }
+      : null;
+  }
+  return buildMapFromRoomFields(room || {});
+}
+
 // =====================================================
 // APP SECTION 5 — AUTH
 // =====================================================
@@ -2655,7 +2689,9 @@ async function showLoggedOut() {
   currentRoomCode = null;
   currentRoomData = null;
   currentIsDM = false;
+  currentRoomMembershipState = "unknown";
   currentMapId = null;
+  floorSystem?.disconnect?.();
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   campaignTimeSystem.applySnapshot({});
@@ -2753,7 +2789,10 @@ async function openSavedRoom(
     await joinRoom(
       cleanCode,
       role,
-      "room"
+      "room",
+      {
+        createMembership: false
+      }
     );
     return true;
   } catch (error) {
@@ -2766,8 +2805,11 @@ async function openSavedRoom(
         `rooms/${cleanCode || "{room}"}`,
       authenticated:
         Boolean(currentUser?.uid),
-      membershipState: "missing",
+      membershipState:
+        error?.membershipState ||
+        "unknown",
       expectedRole: "room member",
+      ownershipState: "unknown",
       revisionState: "unknown"
     };
 
@@ -3099,11 +3141,17 @@ async function createRoom() {
   await savePlayerHistory(roomCode, "dm");
   await saveRoomToMyRooms(roomCode, roomName, "dm");
 
+  currentRoomMembershipState = "member";
   openRoom(roomCode, "room");
   text(E.roomStatusText, "Room created and saved to My Saved Rooms.");
 }
 
-async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") {
+async function joinRoom(
+  roomCode,
+  wantedRole = "player",
+  screenToShow = "room",
+  { createMembership = true } = {}
+) {
   const cleanCode = normalizeRoomCode(roomCode);
 
   if (!cleanCode) {
@@ -3113,33 +3161,61 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
 
   const roomRef = doc(db, "rooms", cleanCode);
   let membershipCreated = false;
+  currentRoomMembershipState = "unknown";
+
+  if (createMembership) {
+    try {
+      await savePlayerHistory(
+        cleanCode,
+        "player"
+      );
+      membershipCreated = true;
+    } catch (error) {
+      const joinError = new Error(
+        friendlyServiceError(
+          error,
+          {
+            service: "Firebase",
+            action: "join that room",
+            authenticated:
+              Boolean(currentUser?.uid),
+            membershipState: "unknown",
+            expectedRole: "room member",
+            ownershipState: "unknown"
+          }
+        )
+      );
+      joinError.code = error?.code || "";
+      joinError.membershipState = "unknown";
+      throw joinError;
+    }
+  }
+
+  let roomSnap;
 
   try {
-    await savePlayerHistory(
-      cleanCode,
-      "player"
-    );
-    membershipCreated = true;
+    roomSnap = await getDoc(roomRef);
   } catch (error) {
     const joinError = new Error(
       friendlyServiceError(
         error,
         {
           service: "Firebase",
-          action: "join that room",
+          action: createMembership
+            ? "join that room"
+            : "open that campaign",
           authenticated:
             Boolean(currentUser?.uid),
-          membershipState: "missing",
-          expectedRole: "room member"
+          membershipState: "unknown",
+          expectedRole: "room member",
+          ownershipState: "unknown"
         }
       )
     );
     joinError.code = error?.code || "";
+    joinError.membershipState = "unknown";
     throw joinError;
   }
-
-  const roomSnap =
-    await getDoc(roomRef);
 
   if (!roomSnap.exists()) {
     if (membershipCreated) {
@@ -3162,6 +3238,7 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
     }
 
     alert("Room not found.");
+    currentRoomMembershipState = "missing";
     return;
   }
 
@@ -3192,14 +3269,18 @@ async function joinRoom(roomCode, wantedRole = "player", screenToShow = "room") 
     }
 
     alert("This room is being permanently deleted.");
+    currentRoomMembershipState = "unknown";
     return;
   }
 
-  const finalRole = roomData.dmUid === currentUser.uid ? "dm" : wantedRole;
+  const finalRole = roomData.dmUid === currentUser.uid ? "dm" : "player";
 
-  await savePlayerHistory(cleanCode, finalRole);
+  if (createMembership || finalRole === "dm") {
+    await savePlayerHistory(cleanCode, finalRole);
+  }
   await saveRoomToMyRooms(cleanCode, roomData.roomName || "Unnamed Room", finalRole);
 
+  currentRoomMembershipState = "member";
   openRoom(cleanCode, screenToShow);
 }
 
@@ -3246,6 +3327,7 @@ function openRoom(roomCode, screenToShow = "room") {
     }
 
     if (!roomSnap.exists()) {
+      currentRoomMembershipState = "missing";
       alert("This room was deleted or does not exist.");
       await leaveCurrentRoomView();
       return;
@@ -3261,6 +3343,7 @@ function openRoom(roomCode, screenToShow = "room") {
 
     currentRoomData = room;
     currentIsDM = room.dmUid === currentUser.uid;
+    currentRoomMembershipState = "member";
     const realtimeUserName =
       currentUser.displayName ||
       room.dmName ||
@@ -3296,6 +3379,12 @@ function openRoom(roomCode, screenToShow = "room") {
     text(E.yourRoleText, currentIsDM ? "DM" : "Player");
 
     setDmControlsVisible(currentIsDM);
+    floorSystem?.setContext?.({
+      roomCode: cleanCode,
+      userId: currentUser.uid,
+      isDm: currentIsDM,
+      room
+    });
 
     if (room.deletingAt && currentIsDM) {
       text(E.roomStatusText, "Room deletion is incomplete. Use Delete Room Permanently to retry.");
@@ -3315,8 +3404,12 @@ function openRoom(roomCode, screenToShow = "room") {
       activeMainScreenName === "battle";
 
     if (roomViewIsVisible) {
-      showSharedMap(buildMapFromRoomFields(currentRoomData));
-      renderPuzzleBoard(currentRoomData);
+      showSharedMap(buildMapForCurrentFloorOrRoom(currentRoomData));
+      if (floorSystem?.getState?.().active) {
+        showSingleBattleMapView();
+      } else {
+        renderPuzzleBoard(currentRoomData);
+      }
       maybeMigrateLegacyPuzzleTilesToSubcollection();
 
       if (latestMapsSnapshot) renderRoomMaps(latestMapsSnapshot);
@@ -3330,7 +3423,15 @@ function openRoom(roomCode, screenToShow = "room") {
     }
 
     fail(error);
-    alert("Room listener failed: " + error.message);
+    currentRoomMembershipState = "unknown";
+    alert(friendlyServiceError(error, {
+      service: "Firebase",
+      action: "keep that campaign open",
+      authenticated: Boolean(currentUser?.uid),
+      membershipState: "unknown",
+      expectedRole: "room member",
+      ownershipState: "unknown"
+    }));
     })
   );
 
@@ -3357,7 +3458,9 @@ async function leaveCurrentRoomView() {
   currentRoomCode = null;
   currentRoomData = null;
   currentIsDM = false;
+  currentRoomMembershipState = "unknown";
   currentMapId = null;
+  floorSystem?.disconnect?.();
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   campaignTimeSystem.applySnapshot({});
@@ -3414,7 +3517,26 @@ function rememberRoomCloudinaryAsset(assetMap, asset) {
   }
 }
 
-async function deleteRoomSubcollectionInBatches(roomCode, subcollectionName, onDocument) {
+async function deleteNestedSubcollectionInBatches(parentReference, subcollectionName, onDocument) {
+  const subcollectionRef = collection(parentReference, subcollectionName);
+  while (true) {
+    const page = await getDocs(query(subcollectionRef, limit(ROOM_DELETE_BATCH_SIZE)));
+    if (page.empty) return;
+    const batch = writeBatch(db);
+    page.docs.forEach((entry) => {
+      onDocument?.(entry);
+      batch.delete(entry.ref);
+    });
+    await batch.commit();
+  }
+}
+
+async function deleteRoomSubcollectionInBatches(
+  roomCode,
+  subcollectionName,
+  onDocument,
+  nestedCollections = []
+) {
   const subcollectionRef = collection(db, "rooms", roomCode, subcollectionName);
 
   while (true) {
@@ -3425,6 +3547,12 @@ async function deleteRoomSubcollectionInBatches(roomCode, subcollectionName, onD
 
     if (page.empty) {
       return;
+    }
+
+    for (const documentSnapshot of page.docs) {
+      for (const nestedCollection of nestedCollections) {
+        await deleteNestedSubcollectionInBatches(documentSnapshot.ref, nestedCollection, onDocument);
+      }
     }
 
     const batch = writeBatch(db);
@@ -3445,6 +3573,7 @@ function resetDeletedRoomState() {
   currentRoomCode = null;
   currentRoomData = null;
   currentIsDM = false;
+  currentRoomMembershipState = "unknown";
   currentMapId = null;
   displayedSharedMapUrl = null;
   latestMapsSnapshot = null;
@@ -3523,9 +3652,11 @@ async function deleteCurrentRoomPermanently() {
         subcollectionName,
         collectionPolicy.collectsAssets
           ? function (documentSnapshot) {
-              rememberRoomCloudinaryAsset(roomAssets, documentSnapshot.data());
+              const data = documentSnapshot.data();
+              rememberRoomCloudinaryAsset(roomAssets, data?.map || data);
             }
-          : null
+          : null,
+        collectionPolicy.nestedCollections || []
       );
       completedCollections.push(subcollectionName);
       await updateDoc(roomRef, {
@@ -4016,6 +4147,39 @@ function hasFreshCloudinaryDeleteToken(asset) {
   return Date.now() - asset.deleteTokenCreatedAtMillis < CLOUDINARY_DELETE_TOKEN_MAX_AGE_MS;
 }
 
+async function findSceneFloorMapReferences(asset) {
+  if (!currentRoomCode || !asset || (!asset.id && !asset.publicId && !asset.url)) {
+    return [];
+  }
+  const sceneSnapshot = await getDocs(collection(db, "rooms", currentRoomCode, "scenes"));
+  const references = [];
+  for (const sceneDocument of sceneSnapshot.docs) {
+    const floorSnapshot = await getDocs(collection(
+      db,
+      "rooms",
+      currentRoomCode,
+      "scenes",
+      sceneDocument.id,
+      "floors"
+    ));
+    floorSnapshot.docs.forEach((floorDocument) => {
+      const floor = floorDocument.data() || {};
+      const map = floor.map || {};
+      if (
+        (asset.id && map.id === asset.id) ||
+        assetsMatch(asset, map)
+      ) {
+        references.push({
+          sceneId: sceneDocument.id,
+          floorId: floorDocument.id,
+          floorName: floor.name || "Floor"
+        });
+      }
+    });
+  }
+  return references;
+}
+
 async function isCloudinaryAssetStillReferenced(asset, options = {}) {
   if (!asset || (!asset.publicId && !asset.url)) {
     return false;
@@ -4057,6 +4221,10 @@ async function isCloudinaryAssetStillReferenced(asset, options = {}) {
 
   if (!currentRoomCode) {
     return asset.savedToLibrary === true;
+  }
+
+  if ((await findSceneFloorMapReferences(asset)).length > 0) {
+    return true;
   }
 
   const mapsRef = collection(db, "rooms", currentRoomCode, "maps");
@@ -4526,7 +4694,11 @@ async function forgetSavedMap(mapId) {
       savedToLibrary: true
     };
 
-    if (!await requestAppConfirmation("Forget this map from the room list? The Cloudinary image will be deleted if no other room reference uses it.", { title: "Forget saved map", confirmLabel: "Forget" })) {
+    const floorReferences = await findSceneFloorMapReferences(mapToForget);
+    const referenceWarning = floorReferences.length
+      ? ` ${floorReferences.length} floor${floorReferences.length === 1 ? "" : "s"} still reference this image; those floors will keep working and the Cloudinary image will not be deleted.`
+      : " The Cloudinary image will be deleted if no other room reference uses it.";
+    if (!await requestAppConfirmation(`Forget this map from the room list?${referenceWarning}`, { title: "Forget saved map", confirmLabel: "Forget" })) {
       return;
     }
 
@@ -4952,6 +5124,9 @@ initializeBattleMapVfx();
 // =====================================================
 
 function getBattleMapGridPixelSize() {
+  const floorPixels = Number(
+    floorSystem?.getState?.().floor?.grid?.pixelsPerSquare
+  );
   const scaleInput = $("tokenMediumSizeInput");
   const inputValue = Number(
     scaleInput?.value
@@ -4964,6 +5139,7 @@ function getBattleMapGridPixelSize() {
       ?.mediumSize
   );
   const basePixels = [
+    floorPixels,
     inputValue,
     directValue,
     nestedValue,
@@ -5000,7 +5176,8 @@ function getActiveRulerTarget() {
 
 function getRulerFeetPerSquare() {
   return normalizeFeetPerSquare(
-    E.mapFeetPerSquareInput?.value
+    floorSystem?.getState?.().floor?.grid?.feetPerSquare ??
+      E.mapFeetPerSquareInput?.value
   );
 }
 
@@ -9643,7 +9820,136 @@ if (!tokenSystem) {
     getPuzzleTiles,
     getActivePuzzleTile,
     getPuzzleViewMode,
-    buildMapFromRoomFields
+    buildMapFromRoomFields,
+    getActiveFloorContext: function () {
+      const state = floorSystem?.getState?.();
+      return state?.active
+        ? {
+            sceneId: state.sceneId,
+            floorId: state.floorId,
+            baseElevation: state.floor.baseElevation
+          }
+        : null;
+    }
+  });
+}
+
+async function transferTokenToFloor({
+  token,
+  scene,
+  floor,
+  connection = null,
+  dmOverride = false
+} = {}) {
+  if (!currentRoomCode || !currentUser?.uid || !token?.id || !scene?.id || !floor?.id) {
+    throw new Error("The room, token, location, or destination floor is unavailable.");
+  }
+  if (!currentIsDM) {
+    if (token.ownerUid !== currentUser.uid) {
+      throw new Error("You can move only a token you control.");
+    }
+    if (!connection?.allowPlayers) {
+      throw new Error("The DM has not enabled this floor connection for players.");
+    }
+    if (initiativeSystem?.getState?.().combatActive === true) {
+      throw new Error("Player floor transitions during initiative require DM adjudication.");
+    }
+  }
+  const patch = buildFloorTransitionPatch({
+    token: {
+      ...token,
+      heightAboveFloor: Number.isFinite(Number(token.heightAboveFloor))
+        ? token.heightAboveFloor
+        : 0
+    },
+    sceneId: scene.id,
+    floor,
+    connection,
+    fromFloorId: token.floorId,
+    dmOverride: currentIsDM && dmOverride,
+    now: Date.now()
+  });
+  await updateDoc(doc(db, "rooms", currentRoomCode, "tokens", token.id), {
+    ...patch,
+    updatedAt: serverTimestamp()
+  });
+  return patch;
+}
+
+if (!floorSystem && E.floorSelectorPanel) {
+  const scenePersistence = createScenePersistence({
+    db,
+    collection,
+    doc,
+    getDocs,
+    setDoc,
+    updateDoc,
+    deleteDoc,
+    writeBatch,
+    onSnapshot,
+    serverTimestamp
+  });
+  floorSystem = createFloorSystem({
+    root: E.floorSelectorPanel,
+    persistence: scenePersistence,
+    requestConfirmation: requestAppConfirmation,
+    getCurrentMap: () => buildMapForCurrentFloorOrRoom(currentRoomData),
+    getSavedMaps: () => latestMapsSnapshot || [],
+    getGridSettings: () => ({
+      feetPerSquare: getRulerFeetPerSquare(),
+      pixelsPerSquare: Math.max(1, getBattleMapGridPixelSize() / Math.max(0.1, battleZoom))
+    }),
+    getLightingSettings: () => ({
+      timeVariants: buildMapForCurrentFloorOrRoom(currentRoomData)?.timeVariants || {}
+    }),
+    getTokens: () => tokenSystem?.getRoomTokens?.() || [],
+    getSelectedToken: () => tokenSystem?.getSelectedToken?.() || null,
+    onBroadcast: async ({ sceneId, floorId }) => {
+      if (!currentRoomCode || !currentIsDM) return;
+      await updateDoc(doc(db, "rooms", currentRoomCode), {
+        activeSceneId: sceneId || "",
+        activeFloorId: floorId || "",
+        updatedAt: serverTimestamp()
+      });
+    },
+    onViewChanged: (state) => {
+      if (!currentRoomCode) return;
+      if (state.active) {
+        showSingleBattleMapView();
+        const feetPerSquare = Number(state.floor?.grid?.feetPerSquare);
+        if (E.mapFeetPerSquareInput && Number.isFinite(feetPerSquare) && feetPerSquare > 0) {
+          E.mapFeetPerSquareInput.value = String(feetPerSquare);
+        }
+        const floorElevation = normalizeElevation(state.floor?.baseElevation);
+        if (E.rulerStartElevationInput) E.rulerStartElevationInput.value = String(floorElevation);
+        if (E.rulerEndElevationInput) E.rulerEndElevationInput.value = String(floorElevation);
+      }
+      showSharedMap(buildMapForCurrentFloorOrRoom(currentRoomData));
+      tokenSystem?.render?.(currentRoomData || {});
+      initiativePanelSystem?.render?.(initiativeSystem?.getState?.());
+      mapDrawingSystem.syncContext();
+      battleMapRuler?.refresh();
+      battleMapTemplates?.refresh();
+      battleMapVfx?.refresh();
+    },
+    onUseConnection: (context) => transferTokenToFloor(context),
+    onDmTransfer: (context) => transferTokenToFloor({
+      ...context,
+      dmOverride: true
+    }),
+    onAdoptLegacyTokens: async ({ scene, floor, tokens }) => {
+      if (!currentIsDM) return;
+      await Promise.all(tokens.map((token) => {
+        const elevation = normalizeElevation(token.elevation ?? token.elevationFeet);
+        return updateDoc(doc(db, "rooms", currentRoomCode, "tokens", token.id), {
+          sceneId: scene.id,
+          floorId: floor.id,
+          heightAboveFloor: elevation - floor.baseElevation,
+          updatedAtMillis: Date.now(),
+          updatedAt: serverTimestamp()
+        });
+      }));
+    }
   });
 }
 
@@ -9658,6 +9964,16 @@ if (!initiativePanelSystem && E.battleInitiativePanel) {
     },
     getIsDm: function () {
       return currentIsDM === true;
+    },
+    getTokenFloorLabel: function (token) {
+      return floorSystem?.getFloorLabel?.(token) || "";
+    },
+    onLocateToken: async function (token) {
+      if (!token?.floorId || !floorSystem?.getState?.().active) return;
+      await floorSystem.selectFloor(token.floorId, {
+        reason: "initiative-locate",
+        broadcast: currentIsDM === true
+      });
     },
     tokenRoot: E.battleMapSurface || document
   });
@@ -11008,6 +11324,10 @@ async function initCharacterCreatorSystem() {
         : "";
     },
 
+    getCurrentMembershipState: function () {
+      return currentRoomMembershipState;
+    },
+
     uploadCharacterPortrait: function (
       file
     ) {
@@ -11430,6 +11750,7 @@ window.addEventListener("pagehide", function (event) {
   }
 
   appRealtimeListeners.stopAll();
+  floorSystem?.disconnect?.();
   characterCreatorSystem?.cleanupListeners?.();
   monsterCreatorSystem?.cleanupListeners?.();
   magicItemCreatorSystem?.destroy?.();
@@ -11751,6 +12072,11 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
               monsterCreatorSystem?.getListenerSnapshot?.() ||
               null
           };
+        },
+
+      getFloorSystemState:
+        function () {
+          return floorSystem?.getState?.() || null;
         },
 
       playVfxTest:
@@ -12159,17 +12485,44 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
 
 console.log("Registering auth listener");
 
+let authStateGeneration = 0;
+
 onAuthStateChanged(auth, async function (user) {
   console.log("Auth state changed:", user ? user.uid : "no user");
+
+  const generation =
+    ++authStateGeneration;
+  const previousUserId =
+    currentUser?.uid || "";
+  const nextUserId =
+    user?.uid || "";
+
+  if (
+    previousUserId &&
+    previousUserId !== nextUserId
+  ) {
+    await showLoggedOut();
+
+    if (generation !== authStateGeneration) {
+      return;
+    }
+  }
 
   currentUser = user;
   animationDocumentSession.presentation?.setContext();
   await animationDocumentSession.persistence?.setContext();
   await animationDocumentSession.presentation?.load({ force: true });
-  if (currentUser !== user) return;
+  if (
+    generation !== authStateGeneration ||
+    currentUser !== user
+  ) {
+    return;
+  }
 
   if (!user) {
-    await showLoggedOut();
+    if (!previousUserId) {
+      await showLoggedOut();
+    }
     return;
   }
 

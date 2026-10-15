@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-floor integration fixture</title>
+  <link rel="stylesheet" href="../../battleMap/floorSystem.css">
+  <style>
+    body { margin: 0; padding: 16px; background: #080b17; color: #eef1ff; font: 14px system-ui; }
+    button, select, input { font: inherit; }
+    #floorSelectorPanel { max-width: 900px; }
+  </style>
+</head>
+<body>
+  <details id="floorSelectorPanel" class="hg-floor-panel" open>
+    <summary><span>Floors</span><strong data-floor-active></strong></summary>
+    <div class="hg-floor-panel-body">
+      <div class="hg-floor-toolbar">
+        <label><span>Location</span><select data-floor-location></select></label>
+        <label class="hg-floor-follow-control"><input data-floor-follow type="checkbox"><span>Follow DM</span></label>
+        <div data-floor-dm-controls class="hg-floor-dm-controls">
+          <button data-floor-action="create-location">New Location</button>
+          <button data-floor-action="rename-location">Rename</button>
+          <button data-floor-action="delete-location">Delete Location</button>
+          <button data-floor-action="add-floor">Add Floor</button>
+          <button data-floor-action="add-connection">Add Connection</button>
+          <button data-floor-action="broadcast">Broadcast Floor</button>
+        </div>
+      </div>
+      <div data-floor-list class="hg-floor-list"></div>
+      <div data-floor-connections></div>
+      <p data-floor-status></p>
+    </div>
+  </details>
+  <script type="module">
+    import { createFloorSystem } from "../../battleMap/floorSystem.js";
+
+    const broadcasts = [];
+    const transfers = [];
+    const scene = { id: "house", roomCode: "ROOM-1", name: "Abandoned House", description: "", schemaVersion: 1 };
+    const floors = [
+      { id: "ground", sceneId: "house", roomCode: "ROOM-1", name: "Ground Floor", baseElevation: 0, order: 0, map: { id: "map-ground", name: "Ground", url: "https://example.test/ground.webp" } },
+      { id: "second", sceneId: "house", roomCode: "ROOM-1", name: "Second Floor", baseElevation: 15, order: 1, map: { id: "map-second", name: "Second", url: "https://example.test/second.webp" } }
+    ];
+    const connections = [{
+      id: "stairs", sceneId: "house", roomCode: "ROOM-1", name: "Main Stairs", type: "stairs",
+      source: { floorId: "ground", x: 20, y: 30 }, destination: { floorId: "second", x: 80, y: 70 },
+      bidirectional: true, allowPlayers: true, movementCost: 10
+    }];
+    const defer = (callback, value) => {
+      queueMicrotask(() => callback(value));
+      return () => {};
+    };
+    const persistence = {
+      listenScenes(roomCode, callback) { return defer(callback, [scene]); },
+      listenFloors(roomCode, sceneId, callback) { return defer(callback, floors); },
+      listenConnections(roomCode, sceneId, callback) { return defer(callback, connections); }
+    };
+    const token = { id: "hero", name: "Hero", ownerUid: "dm-1", sceneId: "house", floorId: "ground", x: 20, y: 30, elevation: 0 };
+    const floorSystem = createFloorSystem({
+      root: document.querySelector("#floorSelectorPanel"),
+      persistence,
+      storage: sessionStorage,
+      getTokens: () => [token],
+      getSelectedToken: () => token,
+      requestConfirmation: async () => true,
+      onBroadcast: async (value) => broadcasts.push(value),
+      onUseConnection: async (value) => transfers.push({ floorId: value.floor.id, connectionId: value.connection.id })
+    });
+    floorSystem.setContext({
+      roomCode: "ROOM-1",
+      userId: "dm-1",
+      isDm: true,
+      room: { activeSceneId: "house", activeFloorId: "ground" }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    window.fixture = { floorSystem, broadcasts, transfers };
+    document.body.dataset.ready = "true";
+  </script>
+</body>
+</html>
