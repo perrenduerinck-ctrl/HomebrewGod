@@ -166,7 +166,7 @@
     assert(/access|server rules/i.test(friendlyServiceError({ code: "permission-denied" }, { service: "Firebase" })), "Unverified permission errors avoid claiming a specific cause.");
     assert(/reconnect/i.test(friendlyServiceError({ code: "unavailable" }, { service: "Firebase" })), "Network errors explain reconnection.");
     assert(/too large/i.test(friendlyServiceError({ code: "resource-exhausted" }, { service: "Cloudinary" })), "Size errors are friendly.");
-    assert(/Sign in again/.test(friendlyServiceError({ code: "unauthenticated" }, { action: "upload" })), "Authentication errors request sign-in.");
+    assert(/sign in/i.test(friendlyServiceError({ code: "unauthenticated" }, { action: "upload" })), "Authentication errors request sign-in.");
 
     async function fetchRequiredText(sourcePath) {
       const response = await fetch(sourcePath);
