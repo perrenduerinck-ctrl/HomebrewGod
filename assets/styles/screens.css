@@ -201,7 +201,10 @@
   border-radius: var(--hg-radius-md);
   background: rgba(9, 12, 19, 0.9);
   box-shadow: var(--hg-shadow-md);
-  backdrop-filter: blur(14px);
+  /* A backdrop filter establishes a containing block for fixed descendants.
+     Keep the blur on the summary so viewport-bounded flyouts stay fixed to
+     the viewport instead of being offset by their toolbar button. */
+  backdrop-filter: none;
 }
 
 .battleToolbarMenu > summary {
@@ -215,6 +218,7 @@
   font-weight: 720;
   list-style: none;
   white-space: nowrap;
+  backdrop-filter: blur(14px);
 }
 
 .battleToolbarMenu > summary::-webkit-details-marker { display: none; }
@@ -256,12 +260,37 @@
   overflow: auto;
 }
 
+#battleTopBar > #spellCastingPanel {
+  position: fixed;
+  inset: 64px 10px auto auto;
+  z-index: 2200;
+  width: min(430px, calc(100vw - 20px));
+  max-height: calc(100dvh - 74px);
+  overflow: auto;
+  flex: none;
+  pointer-events: none;
+}
+
+#spellCastingPanel :is(button, select, input, textarea, label) {
+  pointer-events: auto;
+}
+
 @media (max-width: 900px) {
   #battleTopBar > .battleToolbarMenu > .battleToolbarPanel,
-  #battleTopBar > #battleManagerBar > #battleManagerInner {
+  #battleTopBar > #battleManagerBar > #battleManagerInner,
+  #battleTopBar > #spellCastingPanel {
     inset: 62px 8px auto;
     width: auto !important;
     max-height: calc(100dvh - 70px);
+  }
+}
+
+@media (max-width: 640px) {
+  #battleTopBar > .battleToolbarMenu > .battleToolbarPanel,
+  #battleTopBar > #battleManagerBar > #battleManagerInner,
+  #battleTopBar > #spellCastingPanel {
+    inset: 170px 8px auto;
+    max-height: calc(100dvh - 178px);
   }
 }
 

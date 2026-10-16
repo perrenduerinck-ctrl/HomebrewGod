@@ -4508,16 +4508,18 @@ test("DM Spell Preview Fire Bolt travels in all eight directions after two click
   for (const [dx, dy] of [[140,0],[-140,0],[0,100],[0,-100],
     [100,100],[-100,100],[100,-100],[-100,-100]]) {
     await ui.reset.click();
-    await ui.point(240, 180);
+    await ui.point(240, 320);
     await expect(ui.status).toContainText("Caster set. Click target.");
     await expect(ui.play).toBeDisabled();
-    await ui.point(240 + dx, 180 + dy, true);
+    await ui.point(240 + dx, 320 + dy, true);
     await expect(ui.status).toContainText("/ 120 ft");
-    await ui.point(240 + dx, 180 + dy);
+    await ui.point(240 + dx, 320 + dy);
     await expect(ui.play).toBeEnabled();
     await expect(ui.overlay).toHaveAttribute("data-preview-phase", "locked");
     const locked = (await ui.state()).preview;
-    await ui.point(20, 20);
+    // Exercise an unobstructed map point. The compact floating toolbar now
+    // intentionally owns the top-left corner of the viewport.
+    await ui.point(640, 360);
     expect((await ui.state()).preview.previewTargetPoint).toEqual(locked.previewTargetPoint);
     await page.evaluate(() => { window.__PREVIEW_RENDERED_PATHS__ = []; });
     await ui.play.click();
