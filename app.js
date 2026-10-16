@@ -220,7 +220,7 @@ import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
 import { createMapInteractionController } from "./battleMap/interactionController.js";
 import { createScenePersistence } from "./battleMap/scenePersistence.js?v=multi-floor-20261014";
-import { createFloorSystem } from "./battleMap/floorSystem.js?v=multi-floor-20261014";
+import { createFloorSystem } from "./battleMap/floorSystem.js?v=battle-map-ui-20261015";
 import {
   buildFloorTransitionPatch
 } from "./battleMap/sceneModel.js?v=multi-floor-20261014";
@@ -1584,7 +1584,7 @@ async function ensureCombatActionBar() {
     return combatActionBarSystem;
   }
   if (!combatActionBarModulePromise) {
-    combatActionBarModulePromise = import("./combat/actionBar.js");
+    combatActionBarModulePromise = import("./combat/actionBar.js?v=battle-map-ui-20261015");
   }
   let actionBarModule;
   try {
@@ -8176,8 +8176,7 @@ function ensureBattleManagerPolishStyles() {
 
   style.textContent = `
     #battleTopBar {
-      position: relative;
-      z-index: 2000;
+      z-index: 8000;
     }
 
     #battleManagerBar {

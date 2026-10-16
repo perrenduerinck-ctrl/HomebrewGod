@@ -50,6 +50,28 @@ test("token selection opens, updates and safely clears the Combat Action Bar", a
   });
   await expect(bar).toBeHidden();
 });
+
+test("Combat Action Bar collapses, hides, reopens and remembers the local preference", async ({ page }) => {
+  await openCombatMap(page, { width: 1600, height: 900 });
+  await page.locator('.hg-token[data-token-id="hero"]').click();
+  const bar = page.locator("#combatActionBar");
+
+  await bar.locator("[data-action-bar-collapse]").click();
+  await expect(bar).toHaveClass(/is-compact/);
+  await expect(bar.locator("[data-action-bar-collapse]")).toHaveAttribute("aria-expanded", "false");
+  expect(await page.evaluate(() => localStorage.getItem("homebrewGodCombatActionBarDisplay"))).toBe("compact");
+
+  await bar.locator("[data-action-bar-hide]").click();
+  await expect(bar).toBeHidden();
+  await expect(page.locator(".hg-action-bar-reopen")).toBeVisible();
+  await page.locator(".hg-action-bar-reopen").click();
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveClass(/is-compact/);
+
+  await bar.locator("[data-action-bar-collapse]").click();
+  await expect(bar).not.toHaveClass(/is-compact/);
+  await expect(bar.locator("[data-action-tabs]")).toBeVisible();
+});
 for (const viewport of [
   { width: 390, height: 844 },
   { width: 820, height: 1180 },

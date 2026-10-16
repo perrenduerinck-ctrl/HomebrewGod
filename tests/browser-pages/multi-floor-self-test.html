@@ -8,13 +8,24 @@
   <style>
     body { margin: 0; padding: 16px; background: #080b17; color: #eef1ff; font: 14px system-ui; }
     button, select, input { font: inherit; }
+    .hidden { display: none !important; }
     #floorSelectorPanel { max-width: 900px; }
+    .map-fixture { min-height: 620px; border-radius: 16px; background: radial-gradient(circle, #202a48, #070a12 68%); }
   </style>
 </head>
 <body>
-  <details id="floorSelectorPanel" class="hg-floor-panel" open>
-    <summary><span>Floors</span><strong data-floor-active></strong></summary>
-    <div class="hg-floor-panel-body">
+  <section id="floorSelectorPanel" class="hg-floor-panel">
+    <div class="hg-floor-compact" data-floor-compact>
+      <button data-floor-action="previous-floor" aria-label="Previous floor">↑</button>
+      <label class="hg-floor-jump-label"><select data-floor-jump aria-label="Current floor"></select></label>
+      <button data-floor-action="next-floor" aria-label="Next floor">↓</button>
+      <button data-floor-manage-toggle aria-expanded="false" aria-controls="floorManagementDrawer" aria-label="Manage floors">⚙</button>
+      <strong data-floor-active hidden></strong>
+    </div>
+    <button class="hg-floor-drawer-backdrop" data-floor-manage-close tabindex="-1" aria-label="Close floor management"></button>
+    <aside id="floorManagementDrawer" class="hg-floor-drawer" data-floor-drawer aria-hidden="true">
+      <header class="hg-floor-drawer-header"><h2>Manage Floors</h2><button data-floor-manage-close aria-label="Close floor management">×</button></header>
+      <div class="hg-floor-panel-body">
       <div class="hg-floor-toolbar">
         <label><span>Location</span><select data-floor-location></select></label>
         <label class="hg-floor-follow-control"><input data-floor-follow type="checkbox"><span>Follow DM</span></label>
@@ -30,15 +41,21 @@
       <div data-floor-list class="hg-floor-list"></div>
       <div data-floor-connections></div>
       <p data-floor-status></p>
-    </div>
-  </details>
+      </div>
+    </aside>
+  </section>
+  <main class="map-fixture" aria-label="Map fixture"></main>
   <script type="module">
     import { createFloorSystem } from "../../battleMap/floorSystem.js";
 
+    const fixtureParams = new URLSearchParams(location.search);
+    const fixtureIsDm = fixtureParams.get("role") !== "player";
+    const fixtureIsLegacy = fixtureParams.get("legacy") === "1";
     const broadcasts = [];
     const transfers = [];
     const scene = { id: "house", roomCode: "ROOM-1", name: "Abandoned House", description: "", schemaVersion: 1 };
     const floors = [
+      { id: "basement", sceneId: "house", roomCode: "ROOM-1", name: "Basement", baseElevation: -10, order: 0, map: { id: "map-basement", name: "Basement", url: "https://example.test/basement.webp" } },
       { id: "ground", sceneId: "house", roomCode: "ROOM-1", name: "Ground Floor", baseElevation: 0, order: 0, map: { id: "map-ground", name: "Ground", url: "https://example.test/ground.webp" } },
       { id: "second", sceneId: "house", roomCode: "ROOM-1", name: "Second Floor", baseElevation: 15, order: 1, map: { id: "map-second", name: "Second", url: "https://example.test/second.webp" } }
     ];
@@ -51,10 +68,15 @@
       queueMicrotask(() => callback(value));
       return () => {};
     };
+    const floorSaves = [];
+    const connectionSaves = [];
     const persistence = {
-      listenScenes(roomCode, callback) { return defer(callback, [scene]); },
+      listenScenes(roomCode, callback) { return defer(callback, fixtureIsLegacy ? [] : [scene]); },
       listenFloors(roomCode, sceneId, callback) { return defer(callback, floors); },
-      listenConnections(roomCode, sceneId, callback) { return defer(callback, connections); }
+      listenConnections(roomCode, sceneId, callback) { return defer(callback, connections); },
+      saveFloor(roomCode, sceneId, floorId, value) { floorSaves.push({ floorId, value }); return Promise.resolve(value); },
+      saveConnection(roomCode, sceneId, connectionId, value) { connectionSaves.push({ connectionId, value }); return Promise.resolve(value); },
+      deleteConnection() { return Promise.resolve(); }
     };
     const token = { id: "hero", name: "Hero", ownerUid: "dm-1", sceneId: "house", floorId: "ground", x: 20, y: 30, elevation: 0 };
     const floorSystem = createFloorSystem({
@@ -69,12 +91,14 @@
     });
     floorSystem.setContext({
       roomCode: "ROOM-1",
-      userId: "dm-1",
-      isDm: true,
-      room: { activeSceneId: "house", activeFloorId: "ground" }
+      userId: fixtureIsDm ? "dm-1" : "player-1",
+      isDm: fixtureIsDm,
+      room: fixtureIsLegacy
+        ? { activeSceneId: "", activeFloorId: "" }
+        : { activeSceneId: "house", activeFloorId: "ground" }
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    window.fixture = { floorSystem, broadcasts, transfers };
+    window.fixture = { floorSystem, broadcasts, transfers, floorSaves, connectionSaves };
     document.body.dataset.ready = "true";
   </script>
 </body>

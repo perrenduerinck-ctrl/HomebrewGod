@@ -53,12 +53,15 @@ export function createFloorSystem({
 
   const elements = {
     location: root.querySelector("[data-floor-location]"),
+    jump: root.querySelector("[data-floor-jump]"),
     active: root.querySelector("[data-floor-active]"),
     list: root.querySelector("[data-floor-list]"),
     connections: root.querySelector("[data-floor-connections]"),
     follow: root.querySelector("[data-floor-follow]"),
     dmControls: root.querySelector("[data-floor-dm-controls]"),
-    status: root.querySelector("[data-floor-status]")
+    status: root.querySelector("[data-floor-status]"),
+    manageToggle: root.querySelector("[data-floor-manage-toggle]"),
+    drawer: root.querySelector("[data-floor-drawer]")
   };
   let roomCode = "";
   let userId = "";
@@ -77,6 +80,7 @@ export function createFloorSystem({
   let stopDmFloorNotes = null;
   let generation = 0;
   let busy = false;
+  let drawerOpen = false;
 
   const storageKey = () => `homebrewGodFloorView:${userId}:${roomCode}`;
 
@@ -106,6 +110,22 @@ export function createFloorSystem({
       }));
     } catch {
       // A blocked storage area must not prevent map use.
+    }
+  }
+
+  function setDrawerOpen(open, { focus = true } = {}) {
+    drawerOpen = open === true;
+    if (drawerOpen) {
+      root.parentElement?.querySelectorAll(".battleToolbarMenu[open]").forEach((menu) => {
+        menu.open = false;
+      });
+    }
+    root.classList.toggle("is-managing", drawerOpen);
+    elements.manageToggle?.setAttribute("aria-expanded", String(drawerOpen));
+    elements.drawer?.setAttribute("aria-hidden", String(!drawerOpen));
+    if (focus) {
+      if (drawerOpen) elements.drawer?.querySelector("[data-floor-manage-close]")?.focus();
+      else elements.manageToggle?.focus();
     }
   }
 
@@ -244,6 +264,29 @@ export function createFloorSystem({
     elements.location.disabled = !isDm && followDm;
   }
 
+  function renderJumpOptions() {
+    if (!elements.jump) return;
+    elements.jump.replaceChildren();
+    if (!floors.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = viewSceneId ? "No floors" : "Legacy single map";
+      elements.jump.appendChild(option);
+      elements.jump.disabled = true;
+      return;
+    }
+    floors.forEach((floor) => {
+      const option = document.createElement("option");
+      option.value = floor.id;
+      option.textContent = floorLabel(floor);
+      elements.jump.appendChild(option);
+    });
+    elements.jump.value = floors.some((floor) => floor.id === viewFloorId)
+      ? viewFloorId
+      : floors[0]?.id || "";
+    elements.jump.disabled = !isDm && followDm;
+  }
+
   function appendFloorAction(container, label, action, floorId, title = "") {
     const button = document.createElement("button");
     button.type = "button";
@@ -286,15 +329,23 @@ export function createFloorSystem({
       choose.disabled = !isDm && followDm;
       row.appendChild(choose);
       if (isDm) {
+        const menu = document.createElement("details");
+        menu.className = "hg-floor-row-menu";
+        const summary = document.createElement("summary");
+        summary.textContent = "•••";
+        summary.title = `Options for ${floor.name}`;
+        summary.setAttribute("aria-label", summary.title);
         const actions = document.createElement("span");
         actions.className = "hg-floor-row-actions";
-        appendFloorAction(actions, "Move token", "move-token", floor.id, "Move the selected token here without using a connection");
+        appendFloorAction(actions, "Select floor", "select", floor.id);
         appendFloorAction(actions, "Edit", "edit", floor.id);
-        appendFloorAction(actions, "Copy", "duplicate", floor.id);
-        appendFloorAction(actions, "↑", "up", floor.id, "Move earlier within this elevation");
-        appendFloorAction(actions, "↓", "down", floor.id, "Move later within this elevation");
+        appendFloorAction(actions, "Duplicate", "duplicate", floor.id);
+        appendFloorAction(actions, "Move token here", "move-token", floor.id, "Move the selected token here without using a connection");
+        appendFloorAction(actions, "Move up", "up", floor.id, "Move earlier within this elevation");
+        appendFloorAction(actions, "Move down", "down", floor.id, "Move later within this elevation");
         appendFloorAction(actions, "Delete", "delete", floor.id);
-        row.appendChild(actions);
+        menu.append(summary, actions);
+        row.appendChild(menu);
       }
       elements.list.appendChild(row);
     });
@@ -326,12 +377,17 @@ export function createFloorSystem({
       use.disabled = !destination || (!isDm && !connection.allowPlayers);
       row.append(label, use);
       if (isDm) {
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.textContent = "Edit";
+        edit.dataset.floorAction = "edit-connection";
+        edit.dataset.connectionId = connection.id;
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "Delete";
         remove.dataset.floorAction = "delete-connection";
         remove.dataset.connectionId = connection.id;
-        row.appendChild(remove);
+        row.append(edit, remove);
       }
       elements.connections.appendChild(row);
     });
@@ -347,6 +403,7 @@ export function createFloorSystem({
       elements.follow.disabled = isDm;
     }
     renderLocationOptions();
+    renderJumpOptions();
     renderFloors();
     renderConnections();
     const floor = getActiveFloor();
@@ -355,6 +412,11 @@ export function createFloorSystem({
         ? floorLabel(floor)
         : "Legacy single map";
     }
+    const activeIndex = floors.findIndex((entry) => entry.id === viewFloorId);
+    const previous = root.querySelector('[data-floor-action="previous-floor"]');
+    const next = root.querySelector('[data-floor-action="next-floor"]');
+    if (previous) previous.disabled = activeIndex <= 0 || (!isDm && followDm);
+    if (next) next.disabled = activeIndex < 0 || activeIndex >= floors.length - 1 || (!isDm && followDm);
   }
 
   function chooseMap() {
@@ -523,6 +585,34 @@ export function createFloorSystem({
     setStatus(`${name} connected to ${destination.name}.`, "success");
   }
 
+  async function editConnection(connection) {
+    if (!connection || typeof persistence.saveConnection !== "function") return;
+    const name = cleanText(globalThis.prompt("Connection name", connection.name));
+    if (!name) return;
+    const typeAnswer = cleanText(globalThis.prompt(
+      `Connection type (${FLOOR_CONNECTION_TYPES.join(", ")})`,
+      connection.type || "stairs"
+    )).toLowerCase();
+    const type = FLOOR_CONNECTION_TYPES.includes(typeAnswer) ? typeAnswer : "custom";
+    const movementCostAnswer = globalThis.prompt(
+      "Movement cost in feet",
+      String(connection.movementCost || 0)
+    );
+    if (movementCostAnswer === null) return;
+    const movementCost = Math.max(0, Number(movementCostAnswer) || 0);
+    const allowPlayers = globalThis.confirm(
+      "Allow players to use this connection outside combat?"
+    );
+    await persistence.saveConnection(roomCode, viewSceneId, connection.id, {
+      ...connection,
+      name,
+      type,
+      movementCost,
+      allowPlayers
+    });
+    setStatus(`${name} updated.`, "success");
+  }
+
   async function runAction(action) {
     if (busy) return;
     busy = true;
@@ -541,6 +631,8 @@ export function createFloorSystem({
   root.addEventListener("change", (event) => {
     if (event.target === elements.location) {
       selectScene(elements.location.value, { broadcast: isDm });
+    } else if (event.target === elements.jump) {
+      void runAction(() => selectFloor(elements.jump.value));
     } else if (event.target === elements.follow) {
       followDm = elements.follow.checked;
       if (followDm) {
@@ -554,11 +646,26 @@ export function createFloorSystem({
   });
 
   root.addEventListener("click", (event) => {
+    if (event.target.closest("[data-floor-manage-toggle]")) {
+      setDrawerOpen(!drawerOpen);
+      return;
+    }
+    if (event.target.closest("[data-floor-manage-close]")) {
+      setDrawerOpen(false);
+      return;
+    }
     const button = event.target.closest("[data-floor-action]");
     if (!button || !root.contains(button)) return;
     const action = button.dataset.floorAction;
     const floor = floors.find((entry) => entry.id === button.dataset.floorId);
     const connection = connections.find((entry) => entry.id === button.dataset.connectionId);
+    if (action === "previous-floor" || action === "next-floor") {
+      const currentIndex = floors.findIndex((entry) => entry.id === viewFloorId);
+      const offset = action === "previous-floor" ? -1 : 1;
+      const destination = floors[currentIndex + offset];
+      if (destination) void runAction(() => selectFloor(destination.id));
+      return;
+    }
     if (action === "select") return void runAction(() => selectFloor(floor.id));
     if (action === "create-location" && isDm) return void runAction(createLocation);
     if (action === "rename-location" && isDm) return void runAction(async () => {
@@ -610,7 +717,17 @@ export function createFloorSystem({
       if (!await requestConfirmation(`Delete ${connection.name}?`, { title: "Delete connection", confirmLabel: "Delete" })) return;
       await persistence.deleteConnection(roomCode, viewSceneId, connection.id);
     });
+    if (action === "edit-connection" && isDm) return void runAction(() => editConnection(connection));
   });
+
+  function handleKeydown(event) {
+    if (event.key !== "Escape" || !drawerOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDrawerOpen(false);
+  }
+
+  document.addEventListener("keydown", handleKeydown, true);
 
   function setContext(context = {}) {
     const nextRoomCode = cleanText(context.roomCode);
@@ -681,6 +798,7 @@ export function createFloorSystem({
     userId = "";
     isDm = false;
     roomSnapshot = {};
+    setDrawerOpen(false, { focus: false });
     render();
     notifyView("disconnected");
   }
@@ -690,7 +808,10 @@ export function createFloorSystem({
     setContext,
     applyRoomSnapshot,
     disconnect,
-    destroy: disconnect,
+    destroy() {
+      document.removeEventListener("keydown", handleKeydown, true);
+      disconnect();
+    },
     getState,
     getFloorLabel(token = {}) {
       if (!token?.floorId) return "";

@@ -22,8 +22,8 @@
   <link id="homebrewGodWorkshopStyles" rel="stylesheet" href="./workshop/workshop.css?v=ui-polish-20261004">
   <link id="homebrewGodJournalStyles" rel="stylesheet" href="./journal/journal.css?v=journal-drawing-20261008">
   <link id="homebrewGodDrawingStyles" rel="stylesheet" href="./battleMap/drawingTools.css?v=journal-drawing-20261008">
-  <link id="homebrewGodFloorStyles" rel="stylesheet" href="./battleMap/floorSystem.css?v=multi-floor-20261014">
-  <link id="homebrewGodCombatActionBarStyles" rel="stylesheet" href="./combat/actionBar.css?v=combat-action-bar-20261010">
+  <link id="homebrewGodFloorStyles" rel="stylesheet" href="./battleMap/floorSystem.css?v=battle-map-ui-20261015">
+  <link id="homebrewGodCombatActionBarStyles" rel="stylesheet" href="./combat/actionBar.css?v=battle-map-ui-20261015">
   <link rel="stylesheet" href="./assets/styles/tokens.css?v=ui-polish-20261004">
   <link rel="stylesheet" href="./assets/styles/foundation.css?v=ui-polish-20261004">
   <link rel="stylesheet" href="./assets/styles/components.css?v=ui-polish-20261004">
@@ -1045,12 +1045,49 @@
       </div>
     </details>
 
-    <details id="floorSelectorPanel" class="hg-floor-panel hidden">
-      <summary>
-        <span>Floors</span>
-        <strong data-floor-active>Legacy single map</strong>
-      </summary>
-      <div class="hg-floor-panel-body">
+    <section id="floorSelectorPanel" class="hg-floor-panel hidden" aria-label="Floor navigation">
+      <div class="hg-floor-compact" data-floor-compact>
+        <button
+          class="hg-floor-step"
+          data-floor-action="previous-floor"
+          type="button"
+          aria-label="Previous floor"
+          title="Previous floor"
+        >↑</button>
+        <label class="hg-floor-jump-label">
+          <span class="sr-only">Current floor</span>
+          <select data-floor-jump aria-label="Current floor">
+            <option value="">Legacy single map</option>
+          </select>
+        </label>
+        <button
+          class="hg-floor-step"
+          data-floor-action="next-floor"
+          type="button"
+          aria-label="Next floor"
+          title="Next floor"
+        >↓</button>
+        <button
+          class="hg-floor-manage-toggle"
+          data-floor-manage-toggle
+          type="button"
+          aria-expanded="false"
+          aria-controls="floorManagementDrawer"
+          aria-label="Manage floors"
+          title="Manage floors"
+        >⚙</button>
+        <strong class="sr-only" data-floor-active>Legacy single map</strong>
+      </div>
+      <button class="hg-floor-drawer-backdrop" data-floor-manage-close type="button" tabindex="-1" aria-label="Close floor management"></button>
+      <aside id="floorManagementDrawer" class="hg-floor-drawer" data-floor-drawer aria-hidden="true" aria-label="Manage floors">
+        <header class="hg-floor-drawer-header">
+          <div>
+            <span class="hg-floor-eyebrow">Battle map</span>
+            <h2>Manage Floors</h2>
+          </div>
+          <button data-floor-manage-close type="button" aria-label="Close floor management" title="Close">×</button>
+        </header>
+        <div class="hg-floor-panel-body">
         <div class="hg-floor-toolbar">
           <label>
             <span>Location</span>
@@ -1075,8 +1112,9 @@
           <div data-floor-connections class="hg-floor-connections"></div>
         </div>
         <p data-floor-status class="status" aria-live="polite"></p>
-      </div>
-    </details>
+        </div>
+      </aside>
+    </section>
 
     <section
       id="spellCastingPanel"
@@ -1675,7 +1713,7 @@
   </script>
   <script
     type="module"
-    src="./app.js?v=journal-polish-20261008"
+    src="./app.js?v=battle-map-ui-20261015"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
   <dialog id="animationLibraryDialog" class="hg-animation-library" aria-labelledby="animationLibraryTitle"></dialog>

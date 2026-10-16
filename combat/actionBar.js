@@ -11,6 +11,8 @@ const TABS = Object.freeze([
   ["abilities", "Abilities"],
   ["items", "Items"]
 ]);
+const DISPLAY_MODES = new Set(["expanded", "compact", "hidden"]);
+const DISPLAY_MODE_STORAGE_KEY = "homebrewGodCombatActionBarDisplay";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -30,6 +32,13 @@ function sectionLabel(resource) {
   return "Action";
 }
 
+function resourceAvailable(resource, economy, combatActive) {
+  if (!combatActive || resource === "free") return true;
+  if (resource === "bonus") return Number(economy?.bonusActionsRemaining) > 0;
+  if (resource === "reaction") return economy?.reactionAvailable === true;
+  return Number(economy?.actionsRemaining) > 0;
+}
+
 export function createCombatActionBar({
   root,
   tokenSystem,
@@ -43,7 +52,8 @@ export function createCombatActionBar({
   onToggleFavorite = async () => {},
   onEndTurn = async () => {},
   onMovementMode = async () => {},
-  onStatus = null
+  onStatus = null,
+  storage = globalThis.localStorage
 } = {}) {
   if (!root) throw new Error("The Combat Action Bar needs a Battle Map root.");
 
@@ -52,6 +62,10 @@ export function createCombatActionBar({
   dock.className = "hg-combat-action-bar hidden";
   dock.setAttribute("aria-label", "Combat Action Bar");
   dock.innerHTML = `
+    <div class="hg-action-bar-chrome">
+      <button type="button" data-action-bar-collapse aria-expanded="true" title="Collapse hotbar">⌄</button>
+      <button type="button" data-action-bar-hide title="Hide hotbar" aria-label="Hide hotbar">×</button>
+    </div>
     <div class="hg-action-bar-actor" data-action-actor></div>
     <div class="hg-action-bar-center">
       <div class="hg-action-bar-tabs" role="tablist" aria-label="Action sections" data-action-tabs></div>
@@ -64,6 +78,11 @@ export function createCombatActionBar({
     </div>
     <div class="hg-action-bar-turn" data-action-turn></div>`;
   root.appendChild(dock);
+  const reopen = button("Actions", "hg-action-bar-reopen hidden");
+  reopen.type = "button";
+  reopen.setAttribute("aria-label", "Show Combat Action Bar");
+  reopen.title = "Show Combat Action Bar";
+  root.appendChild(reopen);
 
   const actorRoot = dock.querySelector("[data-action-actor]");
   const tabsRoot = dock.querySelector("[data-action-tabs]");
@@ -72,6 +91,8 @@ export function createCombatActionBar({
   const modesRoot = dock.querySelector("[data-movement-modes]");
   const searchInput = dock.querySelector("[data-action-search]");
   const statusRoot = dock.querySelector("[data-action-status]");
+  const collapseButton = dock.querySelector("[data-action-bar-collapse]");
+  const hideButton = dock.querySelector("[data-action-bar-hide]");
 
   let selectedToken = null;
   let actor = null;
@@ -84,9 +105,27 @@ export function createCombatActionBar({
   let search = "";
   let busy = false;
   let screen = "";
+  let displayMode = "expanded";
   let stopActorWatch = null;
   let stopEconomyWatch = null;
   const unsubscribers = [];
+
+  try {
+    const savedMode = storage?.getItem?.(DISPLAY_MODE_STORAGE_KEY);
+    if (DISPLAY_MODES.has(savedMode)) displayMode = savedMode;
+  } catch {
+    // Browsers that block local storage still get a fully working hotbar.
+  }
+
+  function setDisplayMode(mode) {
+    displayMode = DISPLAY_MODES.has(mode) ? mode : "expanded";
+    try {
+      storage?.setItem?.(DISPLAY_MODE_STORAGE_KEY, displayMode);
+    } catch {
+      // Display preferences are optional and never block combat.
+    }
+    render();
+  }
 
   function setStatus(message, tone = "") {
     statusRoot.textContent = message || "";
@@ -203,6 +242,11 @@ export function createCombatActionBar({
       const actionButton = button(action.name, "hg-action-button");
       actionButton.title = action.summary || action.name;
       actionButton.setAttribute("aria-label", `${action.name}. ${action.summary || sectionLabel(action.resource)}`);
+      actionButton.dataset.resourceAvailable = String(resourceAvailable(
+        action.resource,
+        economy,
+        initiative.combatActive === true
+      ));
       actionButton.disabled = busy || !controlled || !isTurnUsable();
       const economyLabel = document.createElement("small");
       economyLabel.textContent = sectionLabel(action.resource);
@@ -335,9 +379,16 @@ export function createCombatActionBar({
 
   function render() {
     const visible = screen === "battle" && Boolean(selectedToken);
-    dock.classList.toggle("hidden", !visible);
-    document.body.classList.toggle("hg-combat-action-bar-visible", visible);
+    const dockVisible = visible && displayMode !== "hidden";
+    dock.classList.toggle("hidden", !dockVisible);
+    dock.classList.toggle("is-compact", displayMode === "compact");
+    reopen.classList.toggle("hidden", !visible || displayMode !== "hidden");
+    document.body.classList.toggle("hg-combat-action-bar-visible", dockVisible);
     if (!visible) return;
+    collapseButton.textContent = displayMode === "compact" ? "⌃" : "⌄";
+    collapseButton.title = displayMode === "compact" ? "Expand hotbar" : "Collapse hotbar";
+    collapseButton.setAttribute("aria-label", collapseButton.title);
+    collapseButton.setAttribute("aria-expanded", String(displayMode === "expanded"));
     const model = currentModel();
     renderActor();
     renderTabs(model);
@@ -385,6 +436,11 @@ export function createCombatActionBar({
     search = searchInput.value.trim();
     render();
   });
+  collapseButton.addEventListener("click", () => {
+    setDisplayMode(displayMode === "compact" ? "expanded" : "compact");
+  });
+  hideButton.addEventListener("click", () => setDisplayMode("hidden"));
+  reopen.addEventListener("click", () => setDisplayMode("compact"));
   unsubscribers.push(tokenSystem?.subscribeSelection?.(selectToken));
   unsubscribers.push(initiativeSystem?.subscribe?.((state) => {
     initiative = state;
@@ -420,10 +476,15 @@ export function createCombatActionBar({
       render();
     },
     setStatus,
+    setDisplayMode,
+    getDisplayMode() {
+      return displayMode;
+    },
     destroy() {
       stopRecordWatches();
       unsubscribers.filter(Boolean).forEach((unsubscribe) => unsubscribe());
       dock.remove();
+      reopen.remove();
       document.body.classList.remove("hg-combat-action-bar-visible");
     }
   });
