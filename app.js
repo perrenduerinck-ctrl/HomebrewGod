@@ -12577,6 +12577,11 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
           return movementSystem?.getState?.() || null;
         },
 
+      waitForInitialAuthStateForTest:
+        function () {
+          return initialAuthStateReady;
+        },
+
       setBattleGameFeelTestContext:
         function (roomCode = "TEST-ROOM") {
           currentRoomCode = String(roomCode || "TEST-ROOM");
@@ -12857,6 +12862,15 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
 console.log("Registering auth listener");
 
 let authStateGeneration = 0;
+let resolveInitialAuthState;
+const initialAuthStateReady = new Promise((resolve) => {
+  resolveInitialAuthState = resolve;
+});
+
+function markInitialAuthStateReady() {
+  resolveInitialAuthState?.();
+  resolveInitialAuthState = null;
+}
 
 onAuthStateChanged(auth, async function (user) {
   console.log("Auth state changed:", user ? user.uid : "no user");
@@ -12894,6 +12908,7 @@ onAuthStateChanged(auth, async function (user) {
     if (!previousUserId) {
       await showLoggedOut();
     }
+    markInitialAuthStateReady();
     return;
   }
 
@@ -12920,5 +12935,6 @@ onAuthStateChanged(auth, async function (user) {
       startupScreen
     );
   }
+  markInitialAuthStateReady();
 });
 

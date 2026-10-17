@@ -6,6 +6,7 @@ async function openSmokeBattle(page, viewport = { width: 1600, height: 900 }) {
   await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 30000 });
   await page.evaluate(async () => {
     const release = window.__HOMEBREW_GOD_RELEASE_TEST__;
+    await release.waitForInitialAuthStateForTest();
     await release.openScreen("battle");
     release.setDmRole(true);
     release.setMovementTestTokens([
