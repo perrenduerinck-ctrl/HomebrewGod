@@ -3,6 +3,13 @@ import {
   createEmptyActionEconomy,
   synchronizeActionEconomy
 } from "./actionEconomy.js";
+import { getCharacterSpellSlotOptions } from "./characterCombatCommands.js";
+import {
+  buildActionTooltip,
+  getActionAvailability,
+  getActionRemainingUses,
+  resolveActionIcon
+} from "./actionIconRegistry.js";
 
 const TABS = Object.freeze([
   ["main", "Main"],
@@ -104,6 +111,10 @@ export function createCombatActionBar({
   let activeTab = "main";
   let search = "";
   let busy = false;
+  let busyKey = "";
+  let activeActionKey = "";
+  let activeActionState = "";
+  let attemptCounter = 0;
   let screen = "";
   let displayMode = "expanded";
   let stopActorWatch = null;
@@ -131,6 +142,23 @@ export function createCombatActionBar({
     statusRoot.textContent = message || "";
     statusRoot.dataset.tone = tone;
     if (typeof onStatus === "function") onStatus(message, tone);
+  }
+
+  function dispatchActionState(action, state, message = "", attemptId = "") {
+    const detail = {
+      id: attemptId || `${text(selectedToken?.id) || "token"}:${action?.key || action?.id || "action"}:${++attemptCounter}`,
+      roomLocal: true,
+      tokenId: text(selectedToken?.id),
+      actorName: text(selectedToken?.name) || "Token",
+      actionKey: text(action?.key || action?.id),
+      actionName: text(action?.name) || "Action",
+      state,
+      message,
+      round: Number(initiative?.roundNumber) || 0,
+      timestamp: Date.now()
+    };
+    document.dispatchEvent(new CustomEvent("homebrewgod:combat-action-state", { detail }));
+    return detail.id;
   }
 
   function currentModel() {
@@ -239,24 +267,80 @@ export function createCombatActionBar({
     entries.forEach((action) => {
       const wrapper = document.createElement("div");
       wrapper.className = "hg-action-button-wrap";
-      const actionButton = button(action.name, "hg-action-button");
-      actionButton.title = action.summary || action.name;
-      actionButton.setAttribute("aria-label", `${action.name}. ${action.summary || sectionLabel(action.resource)}`);
-      actionButton.dataset.resourceAvailable = String(resourceAvailable(
+      const economyAvailable = resourceAvailable(
         action.resource,
         economy,
         initiative.combatActive === true
-      ));
-      actionButton.disabled = busy || !controlled || !isTurnUsable();
+      );
+      const spellSlotOptions = action.kind === "spell"
+        ? getCharacterSpellSlotOptions(actor || {}, action.raw || {})
+        : [];
+      const availability = getActionAvailability({
+        action,
+        actor,
+        controlled,
+        busy: busyKey === action.key,
+        turnUsable: isTurnUsable(),
+        resourceAvailable: economyAvailable,
+        spellSlotOptions
+      });
+      const actionState = busyKey === action.key
+        ? "processing"
+        : activeActionKey === action.key
+          ? activeActionState || "selected"
+          : availability.state;
+      const tooltip = buildActionTooltip(action, {
+        actor,
+        availability,
+        costLabel: sectionLabel(action.resource),
+        spellSlotOptions
+      });
+      const actionButton = button("", "hg-action-button");
+      actionButton.title = tooltip;
+      actionButton.dataset.tooltip = tooltip;
+      actionButton.setAttribute("aria-label", tooltip.replace(/\n/g, ". "));
+      actionButton.dataset.resourceAvailable = String(economyAvailable);
+      actionButton.dataset.actionState = actionState;
+      actionButton.disabled = !availability.available || busy || ["targeting", "awaiting", "processing"].includes(actionState);
+      const icon = resolveActionIcon(action);
+      const iconElement = icon.type === "image"
+        ? document.createElement("img")
+        : document.createElement("span");
+      iconElement.className = "hg-action-icon";
+      if (icon.type === "image") {
+        iconElement.src = icon.value;
+        iconElement.alt = "";
+        iconElement.referrerPolicy = "no-referrer";
+      } else {
+        iconElement.textContent = icon.value;
+        iconElement.setAttribute("aria-hidden", "true");
+      }
+      const name = document.createElement("span");
+      name.className = "hg-action-name";
+      name.textContent = action.name;
       const economyLabel = document.createElement("small");
+      economyLabel.className = "hg-action-cost";
       economyLabel.textContent = sectionLabel(action.resource);
-      actionButton.appendChild(economyLabel);
+      const remaining = getActionRemainingUses(action, actor);
+      actionButton.append(iconElement, name, economyLabel);
+      if (remaining != null) {
+        const remainingLabel = document.createElement("span");
+        remainingLabel.className = "hg-action-remaining";
+        remainingLabel.textContent = String(remaining);
+        remainingLabel.setAttribute("aria-label", `${remaining} remaining`);
+        actionButton.appendChild(remainingLabel);
+      }
       actionButton.addEventListener("click", async () => {
         if (busy) return;
         busy = true;
+        busyKey = action.key;
+        activeActionKey = action.key;
+        activeActionState = "selected";
+        const attemptId = dispatchActionState(action, "selected", `${action.name} selected.`);
         render();
         setStatus(`${action.name} ready…`);
         try {
+          dispatchActionState(action, "processing", `${action.name} is being prepared.`, attemptId);
           const result = await onExecute(action, {
             token: selectedToken,
             actor,
@@ -264,13 +348,25 @@ export function createCombatActionBar({
             model,
             economy,
             initiative,
-            movement
+            movement,
+            actionAttemptId: attemptId
           });
+          const nextState = text(result?.state) || "committed";
+          activeActionState = nextState;
+          if (!["targeting", "awaiting"].includes(nextState)) activeActionKey = "";
+          dispatchActionState(action, nextState, result?.message || `${action.name} ready.`, attemptId);
           if (result?.message) setStatus(result.message, "success");
         } catch (error) {
+          activeActionKey = "";
+          activeActionState = "";
+          const failureState = /permission|denied|save|network|offline/i.test(`${error?.code || ""} ${error?.message || ""}`)
+            ? "save-failed"
+            : "rejected";
+          dispatchActionState(action, failureState, error?.message || "That action could not be completed.", attemptId);
           setStatus(error?.message || "That action could not be completed.", "error");
         } finally {
           busy = false;
+          busyKey = "";
           render();
         }
       });
@@ -448,9 +544,36 @@ export function createCombatActionBar({
     render();
   }));
   unsubscribers.push(movementSystem?.subscribe?.((state) => {
+    const previewEnded = Boolean(movement.pendingMovement) && !state?.pendingMovement;
     movement = state;
+    if (previewEnded && ["universal:move", "universal:jump"].includes(activeActionKey)) {
+      activeActionKey = "";
+      activeActionState = "";
+    }
     render();
   }));
+  const onExternalActionState = (event) => {
+    const detail = event?.detail || {};
+    if (text(detail.tokenId) !== text(selectedToken?.id)) return;
+    if (detail.actionKey) activeActionKey = text(detail.actionKey);
+    activeActionState = text(detail.state);
+    if (["cancelled", "committed", "rejected", "save-failed"].includes(activeActionState)) {
+      activeActionKey = "";
+    }
+    render();
+  };
+  document.addEventListener("homebrewgod:combat-action-lifecycle", onExternalActionState);
+  unsubscribers.push(() => document.removeEventListener("homebrewgod:combat-action-lifecycle", onExternalActionState));
+  const onCombatOutcome = (event) => {
+    const detail = event?.detail || {};
+    if (detail.type !== "movement" || text(detail.tokenId) !== text(selectedToken?.id)) return;
+    if (!["universal:move", "universal:jump"].includes(activeActionKey)) return;
+    activeActionKey = "";
+    activeActionState = "";
+    render();
+  };
+  document.addEventListener("homebrewgod:combat-outcome", onCombatOutcome);
+  unsubscribers.push(() => document.removeEventListener("homebrewgod:combat-outcome", onCombatOutcome));
 
   return Object.freeze({
     root: dock,

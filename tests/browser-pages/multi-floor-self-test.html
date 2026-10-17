@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Multi-floor integration fixture</title>
   <link rel="stylesheet" href="../../battleMap/floorSystem.css">
+  <link rel="stylesheet" href="../../battleMap/floorConnectionMarkers.css">
   <style>
     body { margin: 0; padding: 16px; background: #080b17; color: #eef1ff; font: 14px system-ui; }
     button, select, input { font: inherit; }
     .hidden { display: none !important; }
     #floorSelectorPanel { max-width: 900px; }
-    .map-fixture { min-height: 620px; border-radius: 16px; background: radial-gradient(circle, #202a48, #070a12 68%); }
+    .map-fixture { position: relative; min-height: 620px; border-radius: 16px; background: radial-gradient(circle, #202a48, #070a12 68%); }
   </style>
 </head>
 <body>
@@ -44,9 +45,10 @@
       </div>
     </aside>
   </section>
-  <main class="map-fixture" aria-label="Map fixture"></main>
+  <main class="map-fixture" aria-label="Map fixture"><div class="hg-token" data-token-id="hero" style="position:absolute;left:20%;top:30%"></div></main>
   <script type="module">
     import { createFloorSystem } from "../../battleMap/floorSystem.js";
+    import { createFloorConnectionMarkers } from "../../battleMap/floorConnectionMarkers.js";
 
     const fixtureParams = new URLSearchParams(location.search);
     const fixtureIsDm = fixtureParams.get("role") !== "player";
@@ -85,6 +87,9 @@
       storage: sessionStorage,
       getTokens: () => [token],
       getSelectedToken: () => token,
+      canControlToken: () => true,
+      getInitiativeState: () => ({ combatActive: false }),
+      getConnectionDistanceFeet: () => 0,
       requestConfirmation: async () => true,
       onBroadcast: async (value) => broadcasts.push(value),
       onUseConnection: async (value) => transfers.push({ floorId: value.floor.id, connectionId: value.connection.id })
@@ -98,7 +103,21 @@
         : { activeSceneId: "house", activeFloorId: "ground" }
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    window.fixture = { floorSystem, broadcasts, transfers, floorSaves, connectionSaves };
+    const selectionSubscribers = new Set();
+    const tokenSystem = {
+      getSelectedToken: () => token,
+      subscribeSelection(callback) { selectionSubscribers.add(callback); callback(token); return () => selectionSubscribers.delete(callback); }
+    };
+    const markerSystem = createFloorConnectionMarkers({
+      floorSystem,
+      tokenSystem,
+      getContainer: () => document.querySelector(".map-fixture"),
+      getContext: () => ({ isDm: fixtureIsDm, canControl: true, combatActive: false, pixelsPerSquare: 64, feetPerSquare: 5 }),
+      onUse: ({ connection }) => floorSystem.useConnection(connection, { token }),
+      onEdit: ({ connection }) => floorSystem.editConnection(connection)
+    });
+    markerSystem.setScreen("battle");
+    window.fixture = { floorSystem, markerSystem, broadcasts, transfers, floorSaves, connectionSaves };
     document.body.dataset.ready = "true";
   </script>
 </body>

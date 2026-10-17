@@ -117,6 +117,8 @@ export function normalizeConnection(value = {}, id = value?.id) {
     destination: normalizeEndpoint(value?.destination),
     bidirectional: value?.bidirectional !== false,
     allowPlayers: value?.allowPlayers !== false,
+    enabled: value?.enabled !== false,
+    hidden: value?.hidden === true,
     movementCost: Math.max(0, Math.min(1000, finiteNumber(value?.movementCost, 0))),
     schemaVersion: CONNECTION_SCHEMA_VERSION,
     createdAtMillis: Math.max(0, finiteNumber(value?.createdAtMillis, Date.now())),

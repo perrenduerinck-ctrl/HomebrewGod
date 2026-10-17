@@ -161,8 +161,9 @@ export function createMovementPanel({
     setText(status, force ? "Forcing move…" : "Confirming move…");
     render();
     try {
+      const pendingMovement = system.getState().pendingMovement;
       const state = await system.confirmMove({ force });
-      onConfirmed(state);
+      onConfirmed(state, { pendingMovement, force: force === true });
       setText(status, force ? "Forced move confirmed." : "Move confirmed.");
     } catch (error) {
       setText(status, error?.message || "Move could not be confirmed.");

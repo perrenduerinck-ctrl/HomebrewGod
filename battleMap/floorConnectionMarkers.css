@@ -1,0 +1,12 @@
+.hg-floor-marker-layer { position: absolute; inset: 0; z-index: 280; overflow: visible; pointer-events: none; }
+.hg-floor-marker-layer.hidden { display: none; }
+.hg-floor-marker { position: absolute; display: grid; place-items: center; width: clamp(30px, 3.2vw, 44px); min-width: 30px; height: clamp(30px, 3.2vw, 44px); min-height: 30px; margin: 0; padding: 0; border: 2px solid rgba(219,208,255,.86); border-radius: 12px; color: #fff; background: radial-gradient(circle at 38% 28%, #9c82ff, #44317e 58%, #171429); box-shadow: 0 5px 16px rgba(0,0,0,.62), 0 0 14px rgba(127,93,231,.45); transform: translate(-50%, -50%); pointer-events: auto; font-size: 1.15rem; line-height: 1; touch-action: manipulation; }
+.hg-floor-marker:not(:disabled):hover,
+.hg-floor-marker:not(:disabled):focus-visible { z-index: 2; border-color: #fff; transform: translate(-50%, -50%) scale(1.08); }
+.hg-floor-marker.is-hidden-marker { opacity: .48; border-style: dashed; }
+.hg-floor-marker.is-disabled { filter: grayscale(.8); opacity: .55; }
+.hg-floor-marker[data-busy="true"] { cursor: wait; animation: hg-floor-marker-busy .75s ease-in-out infinite alternate; }
+.hg-floor-marker-layer.is-interaction-blocked .hg-floor-marker { pointer-events: none; opacity: .35; }
+@keyframes hg-floor-marker-busy { to { filter: brightness(1.45); } }
+@media (prefers-reduced-motion: reduce) { .hg-floor-marker { transition: none; } .hg-floor-marker[data-busy="true"] { animation: none; } }
+

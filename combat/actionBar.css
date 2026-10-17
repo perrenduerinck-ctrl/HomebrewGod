@@ -92,8 +92,12 @@
 
 .hg-action-bar-actions { display: flex; align-items: stretch; gap: 7px; min-width: 0; padding: 2px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
 .hg-action-button-wrap { position: relative; flex: 0 0 auto; }
-.hg-action-button { display: grid; align-content: center; gap: 2px; width: 92px; height: 54px; padding: 5px; border-color: rgba(129, 143, 220, .3); background: linear-gradient(180deg, #222a47, #151a2e); color: #f4f6ff; font-size: .74rem; line-height: 1.1; }
+.hg-action-button { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); grid-template-rows: 1fr auto; align-items: center; gap: 1px 6px; width: 118px; height: 58px; padding: 5px 7px; border-color: rgba(129, 143, 220, .3); background: linear-gradient(180deg, #222a47, #151a2e); color: #f4f6ff; font-size: .72rem; line-height: 1.1; text-align: left; }
+.hg-action-icon { grid-row: 1 / -1; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid rgba(158, 142, 255, .28); border-radius: 9px; color: #f3eeff; background: radial-gradient(circle at 35% 30%, rgba(149, 120, 255, .32), rgba(28, 32, 57, .82)); object-fit: cover; font-size: 1.25rem; line-height: 1; }
+.hg-action-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+.hg-action-cost { grid-column: 2; }
 .hg-action-button small { color: #9fa9ca; font-size: .56rem; font-weight: 600; }
+.hg-action-remaining { position: absolute; top: 2px; left: 29px; display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border: 1px solid rgba(255,255,255,.28); border-radius: 999px; color: #fff; background: #6e55ce; font-size: .57rem; font-weight: 900; }
 .hg-action-favorite { position: absolute; top: 2px; right: 2px; width: 22px; min-width: 22px; min-height: 22px; padding: 0; border: 0; background: transparent; color: #e0c167; font-size: 1rem; }
 .hg-action-bar-empty { margin: auto 0; color: #9fa9ca; font-size: .78rem; }
 .hg-action-bar-status { min-height: 1em; margin: 0; color: #aeb8d9; font-size: .68rem; }
@@ -113,6 +117,22 @@
   background: linear-gradient(180deg, #1a1e2d, #11141f);
   filter: saturate(.45);
 }
+
+.hg-action-button[data-action-state="selected"],
+.hg-action-button[data-action-state="targeting"],
+.hg-action-button[data-action-state="awaiting"] {
+  border-color: #c1b2ff;
+  background: linear-gradient(180deg, #4a3a83, #28264c);
+  box-shadow: 0 0 0 2px rgba(148, 121, 255, .2), 0 0 18px rgba(120, 91, 231, .32);
+}
+
+.hg-action-button[data-action-state="processing"] .hg-action-icon { animation: hg-action-processing .8s ease-in-out infinite alternate; }
+.hg-action-button[data-action-state="expended"],
+.hg-action-button[data-action-state="needs-slot"],
+.hg-action-button[data-action-state="outside-turn"],
+.hg-action-button[data-action-state="unavailable"] { filter: grayscale(.55) saturate(.45); }
+
+@keyframes hg-action-processing { to { filter: brightness(1.45); transform: scale(.94); } }
 
 .hg-action-button:not(:disabled):hover,
 .hg-action-button:not(:disabled):focus-visible {

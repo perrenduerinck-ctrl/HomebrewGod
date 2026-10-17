@@ -220,7 +220,13 @@ import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
 import { createMapInteractionController } from "./battleMap/interactionController.js";
 import { createScenePersistence } from "./battleMap/scenePersistence.js?v=multi-floor-20261014";
-import { createFloorSystem } from "./battleMap/floorSystem.js?v=battle-map-ui-20261015";
+import { createFloorSystem } from "./battleMap/floorSystem.js?v=battle-game-feel-20261016";
+import {
+  createFloorConnectionMarkers,
+  measureConnectionDistanceFeet
+} from "./battleMap/floorConnectionMarkers.js?v=battle-game-feel-20261016";
+import { createTokenContextMenu } from "./tokens/tokenContextMenu.js?v=battle-game-feel-20261016";
+import { createCombatFeedback } from "./combat/combatFeedback.js?v=battle-game-feel-20261016";
 import {
   buildFloorTransitionPatch
 } from "./battleMap/sceneModel.js?v=multi-floor-20261014";
@@ -653,6 +659,7 @@ let activeSpellCastingCasterPoint = null;
 let activeSpellCastingCasterElevationFeet = 0;
 let activeSpellCastingConfirm = null;
 let activeSpellInteractionRelease = null;
+let activeSpellActionLifecycle = null;
 
 const appRealtimeListeners =
   createRealtimeListenerRegistry({
@@ -674,6 +681,9 @@ let initiativePanelSystem = null;
 let movementSystem = null;
 let movementPanelSystem = null;
 let combatActionBarSystem = null;
+let tokenContextMenuSystem = null;
+let floorConnectionMarkerSystem = null;
+let combatFeedbackSystem = null;
 let battleMapLighting = null;
 let characterCreatorSystem = null;
 let monsterCreatorSystem = null;
@@ -870,6 +880,9 @@ function navigateMainScreen(screenName) {
 
   syncRealtimeListenersForScreen(screenName);
   combatActionBarSystem?.setScreen?.(screenName);
+  tokenContextMenuSystem?.setScreen?.(screenName);
+  floorConnectionMarkerSystem?.setScreen?.(screenName);
+  combatFeedbackSystem?.setScreen?.(screenName);
   if (screenName === "battle") void ensureCombatActionBar();
   navigationController?.setContext({
     screen: screenName,
@@ -1584,7 +1597,7 @@ async function ensureCombatActionBar() {
     return combatActionBarSystem;
   }
   if (!combatActionBarModulePromise) {
-    combatActionBarModulePromise = import("./combat/actionBar.js?v=battle-map-ui-20261015");
+    combatActionBarModulePromise = import("./combat/actionBar.js?v=battle-game-feel-20261016");
   }
   let actionBarModule;
   try {
@@ -1776,7 +1789,7 @@ function maybeHandleRequestedTurnAdvance(room) {
   });
 }
 
-function beginJumpTargeting({ token, model } = {}) {
+function beginJumpTargeting({ token, model, actionKey = "", actionAttemptId = "", actionName = "Jump" } = {}) {
   const jump = model?.jump;
   if (!jump) throw new Error("Jump distance needs a linked character's Strength score.");
   if (movementSystem?.getState?.().combatActive !== true) {
@@ -1787,6 +1800,14 @@ function beginJumpTargeting({ token, model } = {}) {
   const container = tokenSystem?.getTokenContainerForCurrentView?.();
   if (!container) throw new Error("The current map is not ready for jump targeting.");
   let release = () => false;
+  const lifecycle = {
+    actionKey,
+    actionAttemptId,
+    sourceTokenId: token.id,
+    actorName: token.name || "Token",
+    actionName
+  };
+  dispatchCombatActionLifecycle(lifecycle, "targeting", `${actionName} targeting started.`);
   const cleanup = () => {
     container.removeEventListener("click", onClick, true);
     document.removeEventListener("keydown", onKeyDown, true);
@@ -1795,6 +1816,7 @@ function beginJumpTargeting({ token, model } = {}) {
     if (event.key !== "Escape") return;
     cleanup();
     release();
+    dispatchCombatActionLifecycle(lifecycle, "cancelled", `${actionName} targeting cancelled.`);
     combatActionBarSystem?.setStatus?.("Jump targeting cancelled.");
   };
   const onClick = (event) => {
@@ -1832,6 +1854,7 @@ function beginJumpTargeting({ token, model } = {}) {
     });
     cleanup();
     release();
+    dispatchCombatActionLifecycle(lifecycle, "awaiting", `${actionName} movement preview is awaiting confirmation.`);
     tokenSystem.render(currentRoomData || {});
     combatActionBarSystem?.setStatus?.(
       `Jump preview: ${distanceFeet} ft. Confirm it in Movement. High jump: ${jump.runningHigh} ft running / ${jump.standingHigh} ft standing.`,
@@ -1841,29 +1864,39 @@ function beginJumpTargeting({ token, model } = {}) {
   release = mapInteractionController.acquire({
     id: "combat-jump",
     label: "Jump targeting",
-    cancel: cleanup
+    cancel: () => {
+      cleanup();
+      dispatchCombatActionLifecycle(lifecycle, "cancelled", `${actionName} targeting cancelled.`);
+    }
   });
   container.addEventListener("click", onClick, true);
   document.addEventListener("keydown", onKeyDown, true);
   return {
+    state: "targeting",
     message: `Jump: STR ${jump.strength}. Click a landing point within ${jump.runningLong} ft (standing ${jump.standingLong} ft); Escape cancels.`
   };
 }
 
 async function executeCombatActionBarEntry(action, context) {
-  const { token, actor, actorKind, model, initiative } = context;
+  const { token, actor, actorKind, model, initiative, actionAttemptId } = context;
   if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
   const inCombat = initiative.combatActive === true;
   const economyCommand = { type: action.id || action.kind, resource: action.resource };
 
   if (action.kind === "universal") {
     if (action.id === "move") {
-      return { message: "Move ready. Drag the token; the existing movement preview will measure and confirm it." };
+      return { state: "awaiting", message: "Move ready. Drag the token; the existing movement preview will measure and confirm it." };
     }
-    if (action.id === "jump") return beginJumpTargeting({ token, model });
+    if (action.id === "jump") return beginJumpTargeting({
+      token,
+      model,
+      actionKey: action.key,
+      actionAttemptId,
+      actionName: action.name
+    });
     if (action.id === "throw") {
       combatActionBarSystem?.openTab?.("items");
-      return { message: "Choose a throwable item. It will not be consumed until a target is confirmed." };
+      return { state: "awaiting", message: "Choose a throwable item. It will not be consumed until a target is confirmed." };
     }
     if (["shove", "help"].includes(action.id)) {
       await beginCombatActionTargeting({
@@ -1873,13 +1906,15 @@ async function executeCombatActionBarEntry(action, context) {
         monster: actorKind === "monster" ? actor : null,
         monsterId: actorKind === "monster" ? token.linkedMonsterId : "",
         sourceTokenId: token.id,
+        actionKey: action.key,
+        actionAttemptId,
         manualOnly: true,
         manualMessage: action.id === "shove"
           ? "Target selected. Resolve the 2014 Athletics contest, then move the target manually only on success."
           : "Help target selected. Apply the appropriate advantage manually.",
         onConfirmAction: () => commitCombatActionBarMutation({ token, economyCommand })
       });
-      return { message: `${action.name}: choose a target token; Escape cancels without spending the Action.` };
+      return { state: "targeting", message: `${action.name}: choose a target token; Escape cancels without spending the Action.` };
     }
     if (action.id === "dash") {
       if (!inCombat) return { message: "Free exploration does not restrict movement or consume Dash." };
@@ -1902,6 +1937,8 @@ async function executeCombatActionBarEntry(action, context) {
       monster: actorKind === "monster" ? actor : null,
       monsterId: actorKind === "monster" ? token.linkedMonsterId : "",
       sourceTokenId: token.id,
+      actionKey: action.key,
+      actionAttemptId,
       onConfirmAction: () => commitCombatActionBarMutation({
         token,
         economyCommand: {
@@ -1911,7 +1948,7 @@ async function executeCombatActionBarEntry(action, context) {
         }
       })
     });
-    return { message: `${action.name}: choose a target. Economy is spent only when the target is confirmed.` };
+    return { state: "targeting", message: `${action.name}: choose a target. Economy is spent only when the target is confirmed.` };
   }
 
   if (action.kind === "spell") {
@@ -1924,13 +1961,15 @@ async function executeCombatActionBarEntry(action, context) {
       character: actor,
       characterId: token.linkedCharacterId,
       slotOptions,
+      actionKey: action.key,
+      actionAttemptId,
       onConfirmCast: (selection) => commitCombatActionBarMutation({
         token,
         economyCommand: { type: "spell", resource: action.resource },
         characterMutator: (remote) => applyConfirmedSpellCast(remote, action.raw, selection)
       })
     });
-    return { message: `${action.name}: use the existing spell template/target workflow. Cancel spends nothing.` };
+    return { state: "targeting", message: `${action.name}: use the existing spell template/target workflow. Cancel spends nothing.` };
   }
 
   if (action.kind === "ability") {
@@ -1951,12 +1990,14 @@ async function executeCombatActionBarEntry(action, context) {
         character: actor,
         characterId: token.linkedCharacterId,
         sourceTokenId: token.id,
+        actionKey: action.key,
+        actionAttemptId,
         onConfirmAction: useAbility
       });
-      return { message: `${action.name}: choose a target; cancel spends nothing.` };
+      return { state: "targeting", message: `${action.name}: choose a target; cancel spends nothing.` };
     }
     if (!await requestAppConfirmation(`Use ${action.name}?`, { title: action.name, confirmLabel: "Use" })) {
-      return { message: `${action.name} cancelled; nothing was spent.` };
+      return { state: "cancelled", message: `${action.name} cancelled; nothing was spent.` };
     }
     await useAbility();
     return { message: `${action.name} confirmed and its tracked resource was updated.` };
@@ -1975,14 +2016,16 @@ async function executeCombatActionBarEntry(action, context) {
         character: actor,
         characterId: token.linkedCharacterId,
         sourceTokenId: token.id,
+        actionKey: action.key,
+        actionAttemptId,
         manualOnly: true,
         manualMessage: `${action.name} target selected. Resolve the throw manually.`,
         onConfirmAction: confirmItem
       });
-      return { message: `${action.name}: choose a target; previewing does not consume it.` };
+      return { state: "targeting", message: `${action.name}: choose a target; previewing does not consume it.` };
     }
     if (!await requestAppConfirmation(`Use one ${action.name}?`, { title: "Use item", confirmLabel: "Use" })) {
-      return { message: `${action.name} cancelled; quantity was not changed.` };
+      return { state: "cancelled", message: `${action.name} cancelled; quantity was not changed.` };
     }
     await confirmItem();
     return { message: `${action.name} used; inventory quantity saved.` };
@@ -2692,6 +2735,8 @@ async function showLoggedOut() {
   currentRoomMembershipState = "unknown";
   currentMapId = null;
   floorSystem?.disconnect?.();
+  combatFeedbackSystem?.setContext?.({ roomCode: "", screen: "auth" });
+  tokenContextMenuSystem?.close?.();
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   campaignTimeSystem.applySnapshot({});
@@ -3385,6 +3430,8 @@ function openRoom(roomCode, screenToShow = "room") {
       isDm: currentIsDM,
       room
     });
+    ensureBattleGameFeelSystems();
+    combatFeedbackSystem?.setContext?.({ roomCode: cleanCode, screen: activeMainScreenName });
 
     if (room.deletingAt && currentIsDM) {
       text(E.roomStatusText, "Room deletion is incomplete. Use Delete Room Permanently to retry.");
@@ -3461,6 +3508,8 @@ async function leaveCurrentRoomView() {
   currentRoomMembershipState = "unknown";
   currentMapId = null;
   floorSystem?.disconnect?.();
+  combatFeedbackSystem?.setContext?.({ roomCode: "", screen: "lobby" });
+  tokenContextMenuSystem?.close?.();
   latestMapsSnapshot = null;
   latestActivePlayersSnapshot = null;
   campaignTimeSystem.applySnapshot({});
@@ -5921,7 +5970,8 @@ function syncActiveSpellCastingTarget(
 
 function cancelActiveSpellCasting({
   clearTemplate = true,
-  releaseInteraction = true
+  releaseInteraction = true,
+  lifecycleMessage = "Spell targeting cancelled."
 } = {}) {
   const sessionState =
     activeSpellCastingSession?.getState();
@@ -5931,12 +5981,14 @@ function cancelActiveSpellCasting({
     sessionState.phase !== "confirmed"
   ) {
     activeSpellCastingSession.cancel();
+    dispatchCombatActionLifecycle(activeSpellActionLifecycle, "cancelled", lifecycleMessage);
   }
 
   activeSpellCastingSession = null;
   activeSpellCastingCasterPoint = null;
   activeSpellCastingCasterElevationFeet = 0;
   activeSpellCastingConfirm = null;
+  activeSpellActionLifecycle = null;
   if (releaseInteraction) {
     activeSpellInteractionRelease?.();
     activeSpellInteractionRelease = null;
@@ -5968,11 +6020,22 @@ async function confirmActiveSpellCast() {
   renderSpellCastingPanel();
 
   if (result.ok) {
+    dispatchCombatActionLifecycle(
+      activeSpellActionLifecycle,
+      "committed",
+      `${result.resolution.spellName} cast confirmed.`
+    );
     activeSpellInteractionRelease?.();
     activeSpellInteractionRelease = null;
     text(
       E.templateStatus,
       `${result.resolution.spellName} cast confirmed. ${formatCastResolution(result.resolution)}`
+    );
+  } else {
+    dispatchCombatActionLifecycle(
+      activeSpellActionLifecycle,
+      "save-failed",
+      result.error?.message || result.message || "The spell cast could not be confirmed."
     );
   }
 }
@@ -6439,9 +6502,27 @@ function findRenderedMonsterToken(monsterId) {
 }
 
 function clearCombatActionTargeting(message = "") {
-  activeCombatTargetingCleanup?.();
+  activeCombatTargetingCleanup?.({ lifecycle: "cancelled", message: message || "Combat action targeting cancelled." });
   activeCombatTargetingCleanup = null;
   if (message) text(E.templateStatus, message);
+}
+
+function dispatchCombatActionLifecycle(context = {}, state, message = "") {
+  if (!context?.actionAttemptId && !context?.actionKey) return;
+  document.dispatchEvent(new CustomEvent("homebrewgod:combat-action-lifecycle", {
+    detail: {
+      id: context.actionAttemptId || `${context.sourceTokenId || "token"}:${context.actionKey}:${Date.now()}`,
+      roomCode: currentRoomCode || "",
+      tokenId: context.sourceTokenId || "",
+      actorName: context.actorName || context.tokenName || "Token",
+      actionKey: context.actionKey || "",
+      actionName: context.actionName || "Action",
+      state,
+      message,
+      round: initiativeSystem?.getState?.().roundNumber || 0,
+      timestamp: Date.now()
+    }
+  }));
 }
 
 function createCombatEffectId() {
@@ -6952,6 +7033,8 @@ async function beginCombatActionTargeting({
   monster = null,
   monsterId = "",
   sourceTokenId = "",
+  actionKey = "",
+  actionAttemptId = "",
   manualOnly = false,
   manualMessage = "",
   onConfirmAction = null
@@ -6983,11 +7066,19 @@ async function beginCombatActionTargeting({
   }
 
   clearCombatActionTargeting();
+  const lifecycle = {
+    actionKey,
+    actionAttemptId,
+    sourceTokenId: sourceElement.dataset.tokenId || sourceTokenId,
+    actorName: character?.identity?.name || character?.name || monster?.name || sourceElement.dataset.tokenName || "Token",
+    actionName: action?.name || "Action"
+  };
+  dispatchCombatActionLifecycle(lifecycle, "targeting", `${lifecycle.actionName} targeting started.`);
   const selectedTargets = [];
   sourceElement.classList.add("hg-token-combat-source");
   let cancelled = false;
   let releaseInteraction = () => false;
-  const cleanup = ({ release = true } = {}) => {
+  const cleanup = ({ release = true, lifecycle: lifecycleState = "", message = "" } = {}) => {
     if (cancelled) return;
     cancelled = true;
     E.battleMapSurface?.removeEventListener("click", onClick, true);
@@ -6996,10 +7087,11 @@ async function beginCombatActionTargeting({
     selectedTargets.forEach((element) => element.classList.remove("hg-token-combat-target"));
     if (activeCombatTargetingCleanup === cleanup) activeCombatTargetingCleanup = null;
     if (release) releaseInteraction();
+    if (lifecycleState) dispatchCombatActionLifecycle(lifecycle, lifecycleState, message);
   };
   const onKeyDown = (event) => {
     if (event.key === "Escape") {
-      cleanup();
+      cleanup({ lifecycle: "cancelled", message: `${lifecycle.actionName} targeting cancelled.` });
       text(E.templateStatus, "Combat action targeting cancelled.");
     }
   };
@@ -7017,6 +7109,7 @@ async function beginCombatActionTargeting({
       return;
     }
     const targets = [...selectedTargets];
+    dispatchCombatActionLifecycle(lifecycle, "awaiting", `${lifecycle.actionName} target selected; awaiting confirmation.`);
     if (typeof onConfirmAction === "function") {
       try {
         await onConfirmAction({
@@ -7025,12 +7118,17 @@ async function beginCombatActionTargeting({
           targetTokenIds: targets.map((element) => element.dataset.tokenId).filter(Boolean)
         });
       } catch (error) {
+        dispatchCombatActionLifecycle(lifecycle, "save-failed", error?.message || `${lifecycle.actionName} could not be saved.`);
         selectedTargets.forEach((element) => element.classList.remove("hg-token-combat-target"));
         selectedTargets.length = 0;
         text(E.templateStatus, error?.message || "The action could not be saved. Choose a target again or press Escape.");
         return;
       }
     }
+    const committedMessage = manualOnly
+      ? manualMessage || `${lifecycle.actionName} was confirmed for manual resolution.`
+      : `${lifecycle.actionName} was confirmed; resolve gameplay effects using the existing rules workflow.`;
+    dispatchCombatActionLifecycle(lifecycle, "committed", committedMessage);
     cleanup();
     if (manualOnly) {
       text(E.templateStatus, manualMessage || `${action?.name || "Action"} target selected. Resolve it manually.`);
@@ -7041,19 +7139,26 @@ async function beginCombatActionTargeting({
       return;
     }
     const sequence = resolveMonsterMultiattackSequence(action, monster);
-    await playBattleMapCombatAction({
-      content: action,
-      sourceElement,
-      targetElements: targets,
-      actor: character || monster,
-      actorId: characterId || monsterId,
-      sequence
-    });
+    try {
+      await playBattleMapCombatAction({
+        content: action,
+        sourceElement,
+        targetElements: targets,
+        actor: character || monster,
+        actorId: characterId || monsterId,
+        sequence
+      });
+    } catch (error) {
+      console.error("Confirmed combat action presentation failed:", error);
+      const warning = `${lifecycle.actionName} was confirmed, but its animation could not play.`;
+      text(E.templateStatus, warning);
+      combatActionBarSystem?.setStatus?.(warning, "error");
+    }
   };
   releaseInteraction = mapInteractionController.acquire({
     id: "combat-action-targeting",
     label: `${action?.name || "Action"} targeting`,
-    cancel: () => cleanup({ release: false })
+    cancel: () => cleanup({ release: false, lifecycle: "cancelled", message: `${lifecycle.actionName} targeting cancelled.` })
   });
   activeCombatTargetingCleanup = cleanup;
   E.battleMapSurface?.addEventListener("click", onClick, true);
@@ -7070,6 +7175,8 @@ async function beginCharacterSpellTargeting({
   character,
   characterId,
   slotOptions = [],
+  actionKey = "",
+  actionAttemptId = "",
   onConfirmCast,
   allowWithoutRoom = false
 } = {}) {
@@ -7161,6 +7268,19 @@ async function beginCharacterSpellTargeting({
       "Create or synchronize this character's linked token on the current map before targeting a spell."
     );
   }
+
+  activeSpellActionLifecycle = {
+    actionKey,
+    actionAttemptId,
+    sourceTokenId: tokenElement.dataset.tokenId || linkedToken?.id || "",
+    actorName: character?.identity?.name || character?.name || tokenElement.dataset.tokenName || "Token",
+    actionName: spell?.name || "Spell"
+  };
+  dispatchCombatActionLifecycle(
+    activeSpellActionLifecycle,
+    "targeting",
+    `${spell?.name || "Spell"} targeting started.`
+  );
 
   activeSpellCastingCasterElevationFeet =
     normalizeElevation(
@@ -8904,6 +9024,7 @@ function showPuzzleBoardView() {
   battleMapTemplates?.refresh();
   battleMapVfx?.refresh();
   mapDrawingSystem.syncContext();
+  floorConnectionMarkerSystem?.render?.();
 }
 
 function showSingleBattleMapView() {
@@ -9903,6 +10024,20 @@ if (!floorSystem && E.floorSelectorPanel) {
     }),
     getTokens: () => tokenSystem?.getRoomTokens?.() || [],
     getSelectedToken: () => tokenSystem?.getSelectedToken?.() || null,
+    canControlToken: (token) => canOperateCombatToken(token),
+    getInitiativeState: () => initiativeSystem?.getState?.() || {},
+    getConnectionDistanceFeet: ({ token, route, floor }) => {
+      const container = tokenSystem?.getTokenContainerForCurrentView?.();
+      const rect = container?.getBoundingClientRect?.();
+      if (!rect?.width || !rect?.height || !route?.from) return Infinity;
+      return measureConnectionDistanceFeet(token, route.from, {
+        viewportWidth: rect.width,
+        viewportHeight: rect.height,
+        pixelsPerSquare: getBattleMapGridPixelSize(),
+        feetPerSquare: getRulerFeetPerSquare(),
+        floorElevation: floor?.baseElevation
+      });
+    },
     onBroadcast: async ({ sceneId, floorId }) => {
       if (!currentRoomCode || !currentIsDM) return;
       await updateDoc(doc(db, "rooms", currentRoomCode), {
@@ -9952,6 +10087,201 @@ if (!floorSystem && E.floorSelectorPanel) {
   });
 }
 
+function setBattleGameFeelStatus(message, tone = "") {
+  combatActionBarSystem?.setStatus?.(message, tone);
+  text(E.templateStatus, message || "");
+}
+
+async function adjustTokenHpFromContext(token) {
+  if (currentIsDM !== true) throw new Error("Only the room DM can adjust token HP from this menu.");
+  const current = Number(token.currentHp) || 0;
+  const maximum = Math.max(0, Number(token.maxHp) || current);
+  const answer = globalThis.prompt(`Set ${token.name || "token"} HP (0-${maximum || "any"})`, String(current));
+  if (answer === null) return false;
+  const requested = Math.max(0, Math.round(Number(answer)));
+  if (!Number.isFinite(requested)) throw new Error("Enter a valid HP value.");
+  const nextHp = maximum > 0 ? Math.min(maximum, requested) : requested;
+  if (token.linkedCharacterId) {
+    const result = await commitCombatActionBarMutation({
+      token,
+      characterMutator: (remote) => ({
+        ...remote,
+        combat: { ...(remote.combat || {}), currentHp: nextHp },
+        currentHp: nextHp
+      })
+    });
+    if (result.character) await tokenSystem?.syncLinkedCharacterTokens?.(result.character);
+  } else {
+    await updateDoc(doc(db, "rooms", currentRoomCode, "tokens", token.id), {
+      currentHp: nextHp,
+      "hp.current": nextHp,
+      updatedAtMillis: Date.now(),
+      updatedAt: serverTimestamp()
+    });
+  }
+  document.dispatchEvent(new CustomEvent("homebrewgod:combat-outcome", {
+    detail: {
+      id: `hp-adjust:${currentRoomCode}:${token.id}:${Date.now()}`,
+      verified: true,
+      roomCode: currentRoomCode,
+      tokenId: token.id,
+      targetName: token.name,
+      actorName: currentUser?.displayName || "DM",
+      type: nextHp === current ? "confirmed" : nextHp > current ? "healing" : "damage",
+      amount: Math.abs(nextHp - current),
+      message: `${token.name || "Token"} HP set to ${nextHp}${maximum ? `/${maximum}` : ""} by the DM.`,
+      round: initiativeSystem?.getState?.().roundNumber || 0,
+      timestamp: Date.now()
+    }
+  }));
+  return true;
+}
+
+async function executeTokenContextCommand(command, { token } = {}) {
+  if (!token?.id) throw new Error("That token is no longer available.");
+  if (command.startsWith("connection:")) {
+    return floorSystem?.useConnection?.(command.slice("connection:".length), { token });
+  }
+  if (command === "open-character") {
+    navigateMainScreen("characterCreator");
+    const creator = await initCharacterCreatorSystem();
+    creator.openLibrary?.();
+    return true;
+  }
+  if (command === "open-monster" || command === "open-linked") {
+    if (!currentIsDM) throw new Error("Only the DM can open the linked monster record.");
+    navigateMainScreen("monsterCreator");
+    const creator = await initMonsterCreatorSystem();
+    const monsterId = String(token.linkedMonsterId || token.linkedMonster?.id || "");
+    const monster = creator.getState?.().monsters?.find((entry) => String(entry.id) === monsterId);
+    if (monster) creator.loadMonsterIntoForm?.(monster);
+    return true;
+  }
+  if (command === "move") {
+    if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
+    setBattleGameFeelStatus("Move ready. Drag the selected token and confirm tracked movement when required.");
+    return true;
+  }
+  if (command === "actions" || command === "spells") {
+    if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
+    tokenSystem?.setSelectedToken?.(token.id, "context-action");
+    const bar = await ensureCombatActionBar();
+    bar?.openTab?.(command === "spells" ? "spells" : token.linkedMonsterId ? "abilities" : "weapons");
+    bar?.setDisplayMode?.("expanded");
+    return true;
+  }
+  if (command === "conditions" || command === "apply-condition") {
+    openNavigationTool("effects");
+    return true;
+  }
+  if (command === "stats") {
+    if (
+      currentIsDM !== true &&
+      !canOperateCombatToken(token) &&
+      token.display?.hpText !== true &&
+      token.display?.ac !== true
+    ) {
+      throw new Error("This token's combat statistics are private.");
+    }
+    const hp = Number(token.maxHp) > 0 ? `HP ${token.currentHp}/${token.maxHp}` : "HP not tracked";
+    const ac = Number(token.armorClass) > 0 ? `AC ${token.armorClass}` : "AC not tracked";
+    setBattleGameFeelStatus(`${token.name || "Token"}: ${hp} · ${ac}.`);
+    return true;
+  }
+  if (command === "measure") {
+    mapInteractionController.cancel("ruler-start");
+    battleMapTemplates?.setEnabled(false);
+    battleMapRuler?.setEnabled(true);
+    setBattleGameFeelStatus(`Ruler ready from ${token.name || "the selected token"}. Drag on the map to measure.`);
+    return true;
+  }
+  if (command === "elevation") {
+    setBattleGameFeelStatus(`${token.name || "Token"} elevation: ${normalizeElevation(token.elevation ?? token.elevationFeet)} ft.`);
+    return true;
+  }
+  if (command === "focus") {
+    E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(token.id))}"]`)?.scrollIntoView?.({ block: "center", inline: "center", behavior: "smooth" });
+    return true;
+  }
+  if (command === "edit-token") {
+    if (!currentIsDM) throw new Error("Only the room DM can edit tokens.");
+    openNavigationTool("tokenBuilder");
+    setBattleGameFeelStatus(`${token.name || "Token"} selected. Use Token Builder or the linked creator to edit it.`);
+    return true;
+  }
+  if (command === "adjust-hp") return adjustTokenHpFromContext(token);
+  if (command === "set-elevation") {
+    if (!currentIsDM) throw new Error("Only the room DM can set elevation from this menu.");
+    const answer = globalThis.prompt("Token elevation in feet", String(token.elevation ?? token.elevationFeet ?? 0));
+    if (answer === null) return false;
+    await tokenSystem.updateTokenElevation(token.id, Number(answer));
+    return true;
+  }
+  if (command === "move-floor") {
+    if (!currentIsDM) throw new Error("Only the room DM can move tokens between floors directly.");
+    E.floorSelectorPanel?.querySelector("[data-floor-manage-toggle]")?.click();
+    return true;
+  }
+  if (command === "remove-token") {
+    if (!currentIsDM) throw new Error("Only the room DM can remove tokens.");
+    if (!await requestAppConfirmation(`Remove ${token.name || "this token"} from the map?`, { title: "Remove token", confirmLabel: "Remove" })) return false;
+    await tokenSystem.deleteToken(token.id);
+    return true;
+  }
+  throw new Error("That token command is unavailable.");
+}
+
+function ensureBattleGameFeelSystems() {
+  if (!tokenSystem || !floorSystem || !E.battleMapSurface || !E.battleMapScreen) return;
+  if (!combatFeedbackSystem) {
+    combatFeedbackSystem = createCombatFeedback({
+      root: E.battleMapScreen,
+      tokenRoot: E.tokenLayer
+    });
+  }
+  if (!floorConnectionMarkerSystem) {
+    floorConnectionMarkerSystem = createFloorConnectionMarkers({
+      floorSystem,
+      tokenSystem,
+      interactionController: mapInteractionController,
+      getContainer: () => tokenSystem?.getTokenContainerForCurrentView?.(),
+      getContext: (token) => ({
+        isDm: currentIsDM === true,
+        canControl: token ? canOperateCombatToken(token) : false,
+        combatActive: initiativeSystem?.getState?.().combatActive === true,
+        pixelsPerSquare: getBattleMapGridPixelSize(),
+        feetPerSquare: getRulerFeetPerSquare()
+      }),
+      onUse: ({ connection, token }) => floorSystem.useConnection(connection, { token }),
+      onEdit: ({ connection }) => floorSystem.editConnection(connection),
+      onStatus: setBattleGameFeelStatus
+    });
+  }
+  if (!tokenContextMenuSystem) {
+    tokenContextMenuSystem = createTokenContextMenu({
+      surface: E.battleMapSurface,
+      tokenSystem,
+      getContext: (token) => {
+        const initiative = initiativeSystem?.getState?.() || {};
+        return {
+          isDm: currentIsDM === true,
+          canControl: canOperateCombatToken(token),
+          canViewStats: currentIsDM === true || canOperateCombatToken(token) || token.display?.hpText === true || token.display?.ac === true,
+          combatActive: initiative.combatActive === true,
+          isCurrentTurn: initiative.combatActive !== true || initiative.currentCombatantId === token.id
+        };
+      },
+      getConnectionOptions: (token) => floorConnectionMarkerSystem?.getConnectionOptions?.(token) || [],
+      onAction: executeTokenContextCommand
+    });
+  }
+  tokenContextMenuSystem.setScreen(activeMainScreenName);
+  floorConnectionMarkerSystem.setScreen(activeMainScreenName);
+  combatFeedbackSystem.setContext({ roomCode: currentRoomCode, screen: activeMainScreenName });
+}
+
+ensureBattleGameFeelSystems();
+
 if (activeMainScreenName === "battle") void ensureCombatActionBar();
 
 if (!initiativePanelSystem && E.battleInitiativePanel) {
@@ -9994,6 +10324,24 @@ if (!movementPanelSystem && E.battleInitiativePanel) {
       },
       onCancel: function () {
         tokenSystem?.cancelPendingMovement?.();
+      },
+      onConfirmed: function (state, { pendingMovement, force } = {}) {
+        if (!pendingMovement?.tokenId) return;
+        const token = tokenSystem?.getRoomTokens?.().find((entry) => entry.id === pendingMovement.tokenId);
+        document.dispatchEvent(new CustomEvent("homebrewgod:combat-outcome", {
+          detail: {
+            id: `movement:${currentRoomCode}:${pendingMovement.tokenId}:${state.movementTurnKey}:${state.movementSpent}`,
+            verified: true,
+            roomCode: currentRoomCode,
+            type: "movement",
+            tokenId: pendingMovement.tokenId,
+            actorName: token?.name || state.activeTokenName || "Token",
+            amount: Number(pendingMovement.distanceFeet) || 0,
+            message: `${token?.name || state.activeTokenName || "Token"} moved ${Number(pendingMovement.distanceFeet) || 0} ft${force ? " with DM override" : ""}.`,
+            round: initiativeSystem?.getState?.().roundNumber || 0,
+            timestamp: Date.now()
+          }
+        }));
       }
     });
   }
@@ -11767,6 +12115,9 @@ window.addEventListener("pagehide", function (event) {
   battleMapVfx?.destroy();
   battleMapCombatVfx?.destroy();
   battleMapAnimations?.destroy();
+  tokenContextMenuSystem?.destroy?.();
+  floorConnectionMarkerSystem?.destroy?.();
+  combatFeedbackSystem?.destroy?.();
   removeActivePlayerSession();
 });
 
@@ -12224,6 +12575,27 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       getMovementTestState:
         function () {
           return movementSystem?.getState?.() || null;
+        },
+
+      setBattleGameFeelTestContext:
+        function (roomCode = "TEST-ROOM") {
+          currentRoomCode = String(roomCode || "TEST-ROOM");
+          ensureBattleGameFeelSystems();
+          combatFeedbackSystem?.setContext?.({ roomCode: currentRoomCode, screen: activeMainScreenName });
+          return {
+            roomCode: currentRoomCode,
+            feedbackReady: Boolean(combatFeedbackSystem),
+            menuReady: Boolean(tokenContextMenuSystem),
+            markersReady: Boolean(floorConnectionMarkerSystem)
+          };
+        },
+
+      dispatchCombatOutcomeForTest:
+        function (detail = {}) {
+          document.dispatchEvent(new CustomEvent("homebrewgod:combat-outcome", {
+            detail: { roomCode: currentRoomCode, ...detail }
+          }));
+          return combatFeedbackSystem?.getEntries?.() || [];
         },
 
       cancelMovementForTest:
