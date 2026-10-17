@@ -12577,11 +12577,6 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
           return movementSystem?.getState?.() || null;
         },
 
-      waitForInitialAuthStateForTest:
-        function () {
-          return initialAuthStateReady;
-        },
-
       setBattleGameFeelTestContext:
         function (roomCode = "TEST-ROOM") {
           currentRoomCode = String(roomCode || "TEST-ROOM");
@@ -12862,15 +12857,6 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
 console.log("Registering auth listener");
 
 let authStateGeneration = 0;
-let resolveInitialAuthState;
-const initialAuthStateReady = new Promise((resolve) => {
-  resolveInitialAuthState = resolve;
-});
-
-function markInitialAuthStateReady() {
-  resolveInitialAuthState?.();
-  resolveInitialAuthState = null;
-}
 
 onAuthStateChanged(auth, async function (user) {
   console.log("Auth state changed:", user ? user.uid : "no user");
@@ -12881,6 +12867,13 @@ onAuthStateChanged(auth, async function (user) {
     currentUser?.uid || "";
   const nextUserId =
     user?.uid || "";
+
+  // Release smoke tests own their synthetic screen and token state. A delayed
+  // Firebase callback must not navigate or clear that state mid-assertion.
+  if (window.__HOMEBREW_GOD_SMOKE__) {
+    currentUser = user;
+    return;
+  }
 
   if (
     previousUserId &&
@@ -12908,7 +12901,6 @@ onAuthStateChanged(auth, async function (user) {
     if (!previousUserId) {
       await showLoggedOut();
     }
-    markInitialAuthStateReady();
     return;
   }
 
@@ -12935,6 +12927,5 @@ onAuthStateChanged(auth, async function (user) {
       startupScreen
     );
   }
-  markInitialAuthStateReady();
 });
 
