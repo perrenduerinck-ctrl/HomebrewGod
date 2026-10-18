@@ -137,9 +137,16 @@ test("game-feel modules are integrated without new Firestore collections or rule
   assert.match(app, /createFloorConnectionMarkers/);
   assert.match(app, /createCombatFeedback/);
   assert.match(app, /floorSystem\.useConnection/);
-  assert.match(app, /URLSearchParams\(location\.search\)\.has\("battleGameFeelTest"\)/);
-  assert.doesNotMatch(app, /__HOMEBREW_GOD_SMOKE__\s*&&\s*new URLSearchParams\(location\.search\)\.has\("battleGameFeelTest"\)/);
+  assert.match(app, /const battleGameFeelTestMode = startupParams\.has\("battleGameFeelTest"\)/);
+  assert.doesNotMatch(app, /__HOMEBREW_GOD_SMOKE__\s*&&\s*battleGameFeelTestMode/);
+  assert.match(app, /!\(battleGameFeelTestMode && screenName === "battle"\)/);
+  assert.match(app, /preserveTokenTestState:\s*battleGameFeelTestMode && screenName === "battle"/);
+  assert.match(app, /if \(battleGameFeelTestMode && !roomCode\)[\s\S]{0,180}kind: "generic"/);
+  assert.match(app, /let releaseBattleGameFeelRoomCode = ""/);
+  assert.doesNotMatch(app, /setBattleGameFeelTestContext:[\s\S]{0,450}currentRoomCode\s*=/);
+  assert.match(app, /setBattleGameFeelTestContext:[\s\S]{0,450}await ensureCombatActionBar\(\)/);
   assert.match(html, /combatFeedback\.css/);
+  assert.match(html, /app\.js\?v=battle-game-feel-20261018/);
   assert.doesNotMatch(rules, /combatFeedback|combatLog|actionHistory/);
 });
 

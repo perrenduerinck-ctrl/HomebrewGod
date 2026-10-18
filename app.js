@@ -738,6 +738,7 @@ function makeActiveSessionId() {
 
 const startupParams = new URLSearchParams(window.location.search);
 const startupRoomCode = String(startupParams.get("room") || "").trim().toUpperCase();
+const battleGameFeelTestMode = startupParams.has("battleGameFeelTest");
 const startupView = startupParams.get("view");
 let alreadyUsedStartupLink = false;
 
@@ -1513,6 +1514,14 @@ function watchCombatActionActor(token, onChange) {
   const characterId = String(token?.linkedCharacterId || "").trim();
   const monsterId = String(token?.linkedMonsterId || token?.linkedMonster?.id || "").trim();
   const userUid = currentUser?.uid || "";
+  if (battleGameFeelTestMode && !roomCode) {
+    onChange({
+      actor: null,
+      kind: "generic",
+      private: false
+    });
+    return () => {};
+  }
   if (characterId) {
     if (!currentIsDM && String(token?.ownerUid || "") !== userUid) {
       onChange({ actor: null, kind: "generic", private: true });
@@ -2412,12 +2421,13 @@ function stopSavedRoomsListener() {
   appRealtimeListeners.stop("my-rooms");
 }
 
-function stopRoomViewListeners() {
+function stopRoomViewListeners({ preserveTokenTestState = false } = {}) {
   appRealtimeListeners.stop("players");
   appRealtimeListeners.stop("maps");
   appRealtimeListeners.stop("puzzle-tiles");
 
   if (
+    !preserveTokenTestState &&
     tokenSystem &&
     typeof tokenSystem.stopTokenListener ===
       "function"
@@ -2456,7 +2466,10 @@ function syncRealtimeListenersForScreen(
     listenToRoomMaps(currentRoomCode);
     listenToPuzzleTiles(currentRoomCode);
   } else {
-    stopRoomViewListeners();
+    stopRoomViewListeners({
+      preserveTokenTestState:
+        battleGameFeelTestMode && screenName === "battle"
+    });
   }
 
   if (
@@ -2471,8 +2484,8 @@ function syncRealtimeListenersForScreen(
     );
   } else if (
     tokenSystem &&
-    typeof tokenSystem.stopTokenListener ===
-      "function"
+    typeof tokenSystem.stopTokenListener === "function" &&
+    !(battleGameFeelTestMode && screenName === "battle")
   ) {
     tokenSystem.stopTokenListener();
   }
@@ -12188,6 +12201,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       0, 0, 0, 0, 73, 69, 78, 68,
       174, 66, 96, 130
     ]);
+  let releaseBattleGameFeelRoomCode = "";
   function attachReleaseTestImageUploadFile(
     uploadKind
   ) {
@@ -12578,22 +12592,33 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
         },
 
       setBattleGameFeelTestContext:
-        function (roomCode = "TEST-ROOM") {
-          currentRoomCode = String(roomCode || "TEST-ROOM");
+        async function (roomCode = "TEST-ROOM") {
+          releaseBattleGameFeelRoomCode = String(roomCode || "TEST-ROOM");
           ensureBattleGameFeelSystems();
-          combatFeedbackSystem?.setContext?.({ roomCode: currentRoomCode, screen: activeMainScreenName });
+          const actionBar = await ensureCombatActionBar();
+          actionBar?.setScreen?.("battle");
+          tokenContextMenuSystem?.setScreen?.("battle");
+          floorConnectionMarkerSystem?.setScreen?.("battle");
+          combatFeedbackSystem?.setContext?.({
+            roomCode: releaseBattleGameFeelRoomCode,
+            screen: activeMainScreenName
+          });
           return {
-            roomCode: currentRoomCode,
+            roomCode: releaseBattleGameFeelRoomCode,
             feedbackReady: Boolean(combatFeedbackSystem),
             menuReady: Boolean(tokenContextMenuSystem),
-            markersReady: Boolean(floorConnectionMarkerSystem)
+            markersReady: Boolean(floorConnectionMarkerSystem),
+            actionBarReady: Boolean(actionBar)
           };
         },
 
       dispatchCombatOutcomeForTest:
         function (detail = {}) {
           document.dispatchEvent(new CustomEvent("homebrewgod:combat-outcome", {
-            detail: { roomCode: currentRoomCode, ...detail }
+            detail: {
+              roomCode: releaseBattleGameFeelRoomCode || currentRoomCode,
+              ...detail
+            }
           }));
           return combatFeedbackSystem?.getEntries?.() || [];
         },
@@ -12870,7 +12895,7 @@ onAuthStateChanged(auth, async function (user) {
 
   // The battle game-feel smoke suite owns synthetic screen and token state. A
   // delayed Firebase callback must not navigate or clear it mid-assertion.
-  if (new URLSearchParams(location.search).has("battleGameFeelTest")) {
+  if (battleGameFeelTestMode) {
     currentUser = user;
     return;
   }

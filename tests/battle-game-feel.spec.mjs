@@ -22,7 +22,8 @@ async function openSmokeBattle(page, viewport = { width: 1600, height: 900 }) {
       },
       { id: "crate", name: "Crate", type: "object", x: 50, y: 62, mapMode: "single", sizeCategory: "medium" }
     ]);
-    release.setBattleGameFeelTestContext("GAME-FEEL-TEST");
+    await release.setBattleGameFeelTestContext("GAME-FEEL-TEST");
+    await release.openScreen("battle");
   });
 }
 
