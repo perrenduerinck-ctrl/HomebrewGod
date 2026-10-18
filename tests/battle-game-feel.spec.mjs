@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 async function openSmokeBattle(page, viewport = { width: 1600, height: 900 }) {
   await page.setViewportSize(viewport);
-  await page.goto("?smokeTest=1&release=battle-game-feel-20261016", { waitUntil: "domcontentloaded" });
+  await page.goto("?smokeTest=1&battleGameFeelTest=1&release=battle-game-feel-20261016", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 30000 });
   await page.evaluate(async () => {
     const release = window.__HOMEBREW_GOD_RELEASE_TEST__;

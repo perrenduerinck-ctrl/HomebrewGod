@@ -12868,9 +12868,12 @@ onAuthStateChanged(auth, async function (user) {
   const nextUserId =
     user?.uid || "";
 
-  // Release smoke tests own their synthetic screen and token state. A delayed
-  // Firebase callback must not navigate or clear that state mid-assertion.
-  if (window.__HOMEBREW_GOD_SMOKE__) {
+  // The battle game-feel smoke suite owns synthetic screen and token state. A
+  // delayed Firebase callback must not navigate or clear it mid-assertion.
+  if (
+    window.__HOMEBREW_GOD_SMOKE__ &&
+    new URLSearchParams(location.search).has("battleGameFeelTest")
+  ) {
     currentUser = user;
     return;
   }
