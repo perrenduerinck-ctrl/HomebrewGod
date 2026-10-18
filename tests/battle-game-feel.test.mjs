@@ -137,6 +137,8 @@ test("game-feel modules are integrated without new Firestore collections or rule
   assert.match(app, /createFloorConnectionMarkers/);
   assert.match(app, /createCombatFeedback/);
   assert.match(app, /floorSystem\.useConnection/);
+  assert.match(app, /URLSearchParams\(location\.search\)\.has\("battleGameFeelTest"\)/);
+  assert.doesNotMatch(app, /__HOMEBREW_GOD_SMOKE__\s*&&\s*new URLSearchParams\(location\.search\)\.has\("battleGameFeelTest"\)/);
   assert.match(html, /combatFeedback\.css/);
   assert.doesNotMatch(rules, /combatFeedback|combatLog|actionHistory/);
 });
