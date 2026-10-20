@@ -1,0 +1,86 @@
+.hg-vision-toolbar {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 432;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100% - 24px));
+  padding: 12px;
+  border: 1px solid rgba(114, 232, 171, .34);
+  border-radius: 13px;
+  color: #eef2ff;
+  background: rgba(6, 9, 22, .96);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .46);
+  backdrop-filter: blur(12px);
+}
+
+.hg-vision-toolbar[hidden] { display: none; }
+.hg-vision-toolbar header,
+.hg-vision-actions,
+.hg-vision-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hg-vision-toolbar header { justify-content: space-between; }
+.hg-vision-toolbar header > div { display: grid; gap: 1px; }
+.hg-vision-toolbar header small {
+  color: #aeb8d4;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.hg-vision-toolbar > p { margin: 0; color: #bcc7df; font-size: 12px; line-height: 1.45; }
+.hg-vision-toolbar label { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 750; }
+.hg-vision-toolbar label input { width: auto; margin: 0; }
+.hg-vision-toolbar button { min-height: 34px; margin: 0; padding: 6px 10px; }
+.hg-vision-toolbar button.is-active,
+#visionToolsToggleButton.is-active {
+  border-color: #72e8ab;
+  color: #fff;
+  background: linear-gradient(135deg, #197f76, #2da891);
+}
+.hg-vision-toolbar .status { min-height: 18px; }
+.hg-vision-toolbar [data-vision-status][data-state="saved"] { color: #72e8ab; }
+.hg-vision-toolbar [data-vision-status][data-state="error"] { color: #ff8d9d; }
+.hg-vision-toolbar [data-vision-status][data-state="active"] { color: #ffd987; }
+.hg-vision-legend { color: #c4cee3; font-size: 11px; }
+.hg-vision-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.hg-vision-legend i { width: 11px; height: 11px; border-radius: 3px; }
+.hg-vision-legend i[data-kind="current"] { background: #f4e6a0; }
+.hg-vision-legend i[data-kind="explored"] { background: #263247; }
+
+.hg-vision-wall-layer {
+  position: absolute;
+  z-index: 292;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.hg-vision-wall-layer line {
+  fill: none;
+  stroke: #ffcf5c;
+  stroke-width: 5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.hg-vision-wall-layer .hg-vision-saved-walls line {
+  stroke-dasharray: 7 5;
+  opacity: .82;
+}
+.hg-vision-wall-layer .hg-vision-preview-wall line { stroke: #72e8ab; }
+.hg-vision-wall-layer.is-editing { cursor: crosshair; }
+
+@media (max-width: 720px) {
+  .hg-vision-toolbar {
+    top: 8px;
+    right: 8px;
+    width: min(calc(100vw - 16px), calc(100% - 16px));
+    max-height: 52vh;
+    overflow: auto;
+  }
+}

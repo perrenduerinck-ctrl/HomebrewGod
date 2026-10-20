@@ -74,7 +74,22 @@ test("token editor validates supported fields without replacing unrelated token 
   });
   assert.equal(patch.elevation, -10);
   assert.equal(patch.display.hpText, false);
+  assert.equal(patch.vision.distance, 30);
+  assert.equal(patch.vision.darkvision, 0);
   assert.equal(Object.hasOwn(patch, "linkedMonsterId"), false);
+  const darkvisionPatch = validateTokenEditorDraft({
+    ...patch,
+    visionDistance: 20,
+    darkvision: 120,
+    brightLight: 10,
+    dimLight: 20
+  });
+  assert.deepEqual(darkvisionPatch.vision, {
+    distance: 20,
+    darkvision: 120,
+    brightLight: 10,
+    dimLight: 20
+  });
   assert.throws(() => validateTokenEditorDraft({ ...patch, imageUrl: "javascript:alert(1)" }), /HTTPS URL/i);
 });
 

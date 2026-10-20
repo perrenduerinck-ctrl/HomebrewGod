@@ -82,6 +82,28 @@ const fogOperation = (id, mapId, revision = 1, overrides = {}) => ({
   ...overrides
 });
 
+const visionWall = (id, authorUid = "dm-1", overrides = {}) => ({
+  id,
+  roomCode: ROOM,
+  mapId: "floor-one",
+  authorUid,
+  start: { x: 500, y: 0 },
+  end: { x: 500, y: 1000 },
+  createdAtMillis: 1,
+  updatedAtMillis: 1,
+  ...overrides
+});
+
+const visionExploration = (ownerUid, overrides = {}) => ({
+  roomCode: ROOM,
+  mapId: "floor-one",
+  ownerUid,
+  resolution: 64,
+  cells: "0".repeat(64 * 64),
+  updatedAtMillis: 1,
+  ...overrides
+});
+
 function databaseFor(uid) {
   return environment.authenticatedContext(uid, { email: `${uid}@example.test` }).firestore();
 }
@@ -742,6 +764,39 @@ test("Fog of War is readable by room members but writable only by the DM", async
     fogOperation("hide-one", "floor-one", 2, { mode: "hide", tool: "circle" })
   ));
   await assertFails(updateDoc(doc(player, ...settingsPath), { enabled: false }));
+});
+
+test("vision walls are DM-authored while explored maps remain owner-private", async () => {
+  const dm = databaseFor("dm-1");
+  const player = databaseFor("player-1");
+  const peer = databaseFor("player-2");
+  const stranger = databaseFor("stranger");
+  const wallPath = ["rooms", ROOM, "visionWalls", "wall-one"];
+  const explorationPath = ["rooms", ROOM, "visionExploration", "vision-player-1"];
+
+  await assertFails(setDoc(doc(player, ...wallPath), visionWall("wall-one", "player-1")));
+  await assertSucceeds(setDoc(doc(dm, ...wallPath), visionWall("wall-one")));
+  await assertSucceeds(getDoc(doc(player, ...wallPath)));
+  await assertFails(getDoc(doc(stranger, ...wallPath)));
+  await assertFails(updateDoc(doc(dm, ...wallPath), { end: { x: 600, y: 1000 } }));
+
+  await assertSucceeds(setDoc(doc(player, ...explorationPath), visionExploration("player-1")));
+  await assertSucceeds(getDoc(doc(player, ...explorationPath)));
+  await assertSucceeds(getDoc(doc(dm, ...explorationPath)));
+  await assertFails(getDoc(doc(peer, ...explorationPath)));
+  await assertFails(getDoc(doc(stranger, ...explorationPath)));
+  await assertSucceeds(updateDoc(doc(player, ...explorationPath), {
+    cells: `1${"0".repeat(64 * 64 - 1)}`,
+    updatedAtMillis: 2
+  }));
+  await assertFails(updateDoc(doc(player, ...explorationPath), {
+    ownerUid: "player-2",
+    updatedAtMillis: 3
+  }));
+  await assertFails(setDoc(
+    doc(peer, "rooms", ROOM, "visionExploration", "spoofed"),
+    visionExploration("player-1")
+  ));
 });
 
 test("players can move only their token while exploration is active", async () => {

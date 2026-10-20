@@ -27,6 +27,10 @@ export function validateTokenEditorDraft(value = {}) {
   const armorClass = number(value.armorClass, "Armor Class", { min: 0, max: 1000 });
   const movementSpeed = number(value.movementSpeed, "Movement speed", { min: 0, max: 1000 });
   const elevation = normalizeElevation(number(value.elevation, "Elevation", { min: -1000, max: 1000 }));
+  const visionDistance = number(value.visionDistance ?? 30, "Normal vision", { min: 0, max: 1000 });
+  const darkvision = number(value.darkvision ?? 0, "Darkvision", { min: 0, max: 1000 });
+  const brightLight = number(value.brightLight ?? 0, "Bright light", { min: 0, max: 1000 });
+  const dimLight = number(value.dimLight ?? 0, "Dim light", { min: 0, max: 1000 });
   return Object.freeze({
     name,
     imageUrl,
@@ -42,6 +46,12 @@ export function validateTokenEditorDraft(value = {}) {
     elevationFeet: elevation,
     movementSpeed,
     baseSpeed: movementSpeed,
+    vision: Object.freeze({
+      distance: visionDistance,
+      darkvision,
+      brightLight,
+      dimLight
+    }),
     display: Object.freeze({
       name: value.display?.name === true,
       hpBar: value.display?.hpBar === true,
@@ -73,6 +83,12 @@ export function createTokenEditor({ mount = document.body } = {}) {
         <label><span>Armor Class</span><input name="armorClass" type="number" min="0" max="1000" required></label>
         <label><span>Movement speed (ft)</span><input name="movementSpeed" type="number" min="0" max="1000" required></label>
         <label><span>Elevation (ft)</span><input name="elevation" type="number" min="-1000" max="1000" required></label>
+        <fieldset><legend>Vision &amp; light ranges (ft)</legend>
+          <label><span>Normal vision</span><input name="visionDistance" type="number" min="0" max="1000" required></label>
+          <label><span>Darkvision</span><input name="darkvision" type="number" min="0" max="1000" required></label>
+          <label><span>Bright light</span><input name="brightLight" type="number" min="0" max="1000" required></label>
+          <label><span>Dim light</span><input name="dimLight" type="number" min="0" max="1000" required></label>
+        </fieldset>
         <fieldset><legend>Visible on map</legend>
           <label><input name="displayName" type="checkbox"> Name</label>
           <label><input name="displayHpBar" type="checkbox"> HP bar</label>
@@ -119,6 +135,8 @@ export function createTokenEditor({ mount = document.body } = {}) {
         name: data.get("name"), imageUrl: data.get("imageUrl"), type: data.get("type"), sizeCategory: data.get("sizeCategory"),
         currentHp: data.get("currentHp"), maxHp: data.get("maxHp"), armorClass: data.get("armorClass"),
         movementSpeed: data.get("movementSpeed"), elevation: data.get("elevation"),
+        visionDistance: data.get("visionDistance"), darkvision: data.get("darkvision"),
+        brightLight: data.get("brightLight"), dimLight: data.get("dimLight"),
         display: {
           name: data.get("displayName") === "on", hpBar: data.get("displayHpBar") === "on",
           hpText: data.get("displayHpText") === "on", ac: data.get("displayAc") === "on",
@@ -143,6 +161,10 @@ export function createTokenEditor({ mount = document.body } = {}) {
       set("armorClass", token.armorClass ?? token.ac ?? 0);
       set("movementSpeed", token.movementSpeed ?? token.baseSpeed ?? 30);
       set("elevation", token.elevation ?? token.elevationFeet ?? 0);
+      set("visionDistance", token.vision?.distance ?? token.visionDistance ?? (token.type === "player" ? 30 : 0));
+      set("darkvision", token.vision?.darkvision ?? token.darkvisionDistance ?? 0);
+      set("brightLight", token.vision?.brightLight ?? token.lightBrightRadius ?? 0);
+      set("dimLight", token.vision?.dimLight ?? token.lightDimRadius ?? 0);
       set("displayName", token.display?.name === true);
       set("displayHpBar", token.display?.hpBar === true);
       set("displayHpText", token.display?.hpText === true);

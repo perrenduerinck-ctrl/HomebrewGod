@@ -15,7 +15,7 @@ test("room deletion inventory covers every room-owned collection", () => {
     "characters", "monsters", "classes", "species", "backgrounds",
     "animations", "combatEffects", "effects", "combatTurns", "sharedJournal",
     "personalJournal", "dmJournal", "sharedDrawings", "dmDrawings",
-    "fogSettings", "fogOperations"
+    "fogSettings", "fogOperations", "visionWalls", "visionExploration"
   ]);
   assert.equal(new Set(names).size, names.length);
   assert.deepEqual(

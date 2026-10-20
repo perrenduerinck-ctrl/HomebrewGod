@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fog of War integration fixture</title>
   <link rel="stylesheet" href="../../battleMap/fogOfWar.css">
+  <link rel="stylesheet" href="../../battleMap/visionSystem.css">
   <style>
     body { margin: 0; color: #eef1ff; background: #080b17; font: 14px system-ui; }
     button, input { font: inherit; }
@@ -25,6 +26,7 @@
   </section>
   <script type="module">
     import { createFogOfWarSystem } from "../../battleMap/fogOfWar.js";
+    import { createVisionSystem } from "../../battleMap/visionSystem.js";
 
     const operations = [];
     const listeners = [];
@@ -123,6 +125,7 @@
       return result;
     };
 
+    let vision = null;
     const fog = createFogOfWarSystem({
       document,
       surface: document.querySelector("#surface"),
@@ -151,9 +154,55 @@
       acquireInteraction: (cancel) => {
         window.fixture.activeInteractionCancel = cancel;
         return () => { window.fixture.activeInteractionCancel = null; };
+      },
+      onSettingsChanged: () => vision?.syncContext()
+    });
+    vision = createVisionSystem({
+      document,
+      surface: document.querySelector("#surface"),
+      quickActions: document.querySelector("#quick"),
+      mapViewer: document.querySelector("#map"),
+      mapImage: document.querySelector("#mapImage"),
+      puzzleBoard: document.querySelector("#map"),
+      db: fakeDb,
+      collection,
+      doc,
+      query,
+      where,
+      onSnapshot,
+      setDoc,
+      getDocs,
+      writeBatch,
+      serverTimestamp,
+      requestConfirmation: async () => confirmationResult,
+      getMapContext: () => ({
+        mapId,
+        target: document.querySelector("#map"),
+        mode: "single",
+        zoom: mapZoom,
+        floorId: mapId,
+        unitsPerFoot: 10
+      }),
+      getFogEnabled: () => fog.getState().enabled,
+      setFogVisionState: (value) => fog.setVisionState(value),
+      acquireInteraction: (cancel) => {
+        window.fixture.activeInteractionCancel?.("superseded");
+        window.fixture.activeInteractionCancel = cancel;
+        return () => { window.fixture.activeInteractionCancel = null; };
       }
     });
     fog.setContext({ roomCode: "ROOM-1", userId: "dm-1", isDm });
+    vision.setContext({ roomCode: "ROOM-1", userId: "dm-1", isDm });
+    vision.updateTokens([{
+      id: "hero",
+      name: "Hero",
+      type: "player",
+      ownerUid: "dm-1",
+      x: 25,
+      y: 50,
+      floorId: "floor-one",
+      vision: { distance: 30, darkvision: 0, brightLight: 0, dimLight: 0 }
+    }]);
     document.querySelector("#token").addEventListener("click", () => { tokenClicks += 1; });
 
     function emitSnapshots() {
@@ -164,6 +213,7 @@
 
     window.fixture = {
       fog,
+      vision,
       operations,
       documents,
       activeInteractionCancel: null,
@@ -171,19 +221,24 @@
       getTokenClicks: () => tokenClicks,
       setConfirmation(value) { confirmationResult = value === true; },
       failNextWrite(message = "offline") { nextWriteError = new Error(message); },
-      setMapId(value) { mapId = value; fog.syncContext(); },
+      setMapId(value) { mapId = value; fog.syncContext(); vision.syncContext(); },
+      setTokens(value) { vision.updateTokens(value); },
       setZoom(value) {
         mapZoom = Number(value) || 1;
         document.querySelector("#mapImage").style.transform = `scale(${mapZoom})`;
         fog.syncContext();
+        vision.syncContext();
       },
       setRole(nextIsDm) {
         isDm = nextIsDm === true;
         fog.setContext({ roomCode: "ROOM-1", userId: isDm ? "dm-1" : "player-1", isDm });
+        vision.setContext({ roomCode: "ROOM-1", userId: isDm ? "dm-1" : "player-1", isDm });
       },
       reconnect() {
         fog.disconnect();
+        vision.disconnect();
         fog.setContext({ roomCode: "ROOM-1", userId: isDm ? "dm-1" : "player-1", isDm });
+        vision.setContext({ roomCode: "ROOM-1", userId: isDm ? "dm-1" : "player-1", isDm });
       }
     };
   </script>

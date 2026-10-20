@@ -23,6 +23,10 @@ import {
   readTokenBaseSpeed
 } from "../combat/movementSystem.js?v=movement-robustness-20260906";
 import { tokenMatchesFloor } from "../battleMap/sceneModel.js?v=multi-floor-20261014";
+import {
+  inferCharacterDarkvision,
+  normalizeTokenVision
+} from "../battleMap/visionModel.js?v=fog-phase2-20261020";
 
 export function isMatchingAutomationSummon(token, effectId) {
   return token?.automation?.kind === "summon" &&
@@ -78,6 +82,7 @@ export function createTokenSystem(options) {
     getMovementMeasurementOptions:
       options.getMovementMeasurementOptions,
     canStartTokenDrag: options.canStartTokenDrag,
+    onTokensChanged: options.onTokensChanged,
 
     getPuzzleTiles: options.getPuzzleTiles,
     getActivePuzzleTile: options.getActivePuzzleTile,
@@ -391,6 +396,7 @@ export function createTokenSystem(options) {
       character?.speed
     );
     const movementSpeeds = getMovementSpeeds(character, movementSpeed);
+    const darkvision = inferCharacterDarkvision(character);
 
     const mediumSize =
       getMediumSize(roomData || {});
@@ -412,6 +418,7 @@ export function createTokenSystem(options) {
       initiativeBonus,
       movementSpeed,
       movementSpeeds,
+      darkvision,
       ownerUid
     };
   }
@@ -467,6 +474,7 @@ export function createTokenSystem(options) {
         movementSpeed: fields.movementSpeed,
         walkingSpeed: fields.movementSpeed,
         movementSpeeds: fields.movementSpeeds,
+        darkvision: fields.darkvision,
         ownerUid: fields.ownerUid
       }
     };
@@ -1496,7 +1504,8 @@ export function createTokenSystem(options) {
       floorId: String(token.floorId || "").trim() || null,
       heightAboveFloor: Number.isFinite(Number(token.heightAboveFloor))
         ? normalizeElevation(token.heightAboveFloor)
-        : null
+        : null,
+      vision: normalizeTokenVision(token)
     };
   }
 
@@ -2159,6 +2168,7 @@ export function createTokenSystem(options) {
         }
       )
     );
+    deps.onTokensChanged?.(getRoomTokens());
   }
 
 

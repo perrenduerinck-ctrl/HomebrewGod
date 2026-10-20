@@ -29,7 +29,9 @@ export const ROOM_OWNED_COLLECTIONS = Object.freeze([
   { name: "sharedDrawings", clientCleanup: true },
   { name: "dmDrawings", clientCleanup: true },
   { name: "fogSettings", clientCleanup: true },
-  { name: "fogOperations", clientCleanup: true }
+  { name: "fogOperations", clientCleanup: true },
+  { name: "visionWalls", clientCleanup: true },
+  { name: "visionExploration", clientCleanup: true }
 ]);
 
 export const ROOM_CLIENT_CLEANUP_COLLECTIONS = Object.freeze(

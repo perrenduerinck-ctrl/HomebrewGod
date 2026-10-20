@@ -10,6 +10,15 @@ import {
   sortFogOperations,
   stableFogMapId
 } from "../battleMap/fogModel.js";
+import {
+  buildVisibilityPolygon,
+  createExplorationGrid,
+  effectiveVisionDistance,
+  explorationGridToPath,
+  inferCharacterDarkvision,
+  markExploredPolygons,
+  stableVisionDocumentId
+} from "../battleMap/visionModel.js";
 
 test("legacy maps have fog disabled until the DM explicitly enables it", () => {
   const legacy = createDefaultFogSettings("legacy-map");
@@ -95,5 +104,78 @@ test("app integration cleans up Fog of War listeners and room-owned records", ()
   assert.match(app, /fogOfWarSystem\?\.syncContext\(\)/);
   assert.match(policy, /"fogSettings"/);
   assert.match(policy, /"fogOperations"/);
+  assert.match(policy, /"visionWalls"/);
+  assert.match(policy, /"visionExploration"/);
   assert.match(index, /battleMap\/fogOfWar\.css/);
+  assert.match(index, /battleMap\/visionSystem\.css/);
+});
+
+test("token vision stops at a solid wall", () => {
+  const polygon = buildVisibilityPolygon({
+    origin: { x: 250, y: 500 },
+    radius: 400,
+    walls: [{
+      id: "wall-one",
+      start: { x: 500, y: 0 },
+      end: { x: 500, y: 1000 }
+    }],
+    rayCount: 96
+  });
+  const east = polygon.reduce((furthest, point) => point.x > furthest.x ? point : furthest, polygon[0]);
+  const west = polygon.reduce((furthest, point) => point.x < furthest.x ? point : furthest, polygon[0]);
+  assert.ok(east.x < 501, `expected eastward sight to stop at wall, received ${east.x}`);
+  assert.ok(west.x <= 0.5, `expected unobstructed westward sight to reach map edge, received ${west.x}`);
+});
+
+test("darkvision is inherited from current character data", () => {
+  const character = {
+    species: {
+      traits: [{ id: "elf-darkvision", name: "Darkvision", summary: "See in darkness out to 60 feet." }]
+    },
+    featMechanics: {
+      senses: [{ sense: "darkvision", range: 120 }]
+    }
+  };
+  assert.equal(inferCharacterDarkvision(character), 120);
+  assert.equal(effectiveVisionDistance({ type: "player", linkedCharacter: character }), 120);
+});
+
+test("exploration remains remembered after current vision moves", () => {
+  const first = buildVisibilityPolygon({ origin: { x: 220, y: 500 }, radius: 150 });
+  const second = buildVisibilityPolygon({ origin: { x: 780, y: 500 }, radius: 150 });
+  const initial = createExplorationGrid({ resolution: 32 });
+  const exploredFirst = markExploredPolygons(initial, [first]);
+  const exploredSecond = markExploredPolygons(exploredFirst, [second]);
+  const firstCount = [...exploredFirst.cells].filter((cell) => cell === "1").length;
+  const secondCount = [...exploredSecond.cells].filter((cell) => cell === "1").length;
+  assert.ok(firstCount > 0);
+  assert.ok(secondCount > firstCount);
+  assert.match(explorationGridToPath(exploredSecond), /^M/);
+  assert.equal(stableVisionDocumentId("player-1", "floor-one"), stableVisionDocumentId("player-1", "floor-one"));
+  assert.notEqual(stableVisionDocumentId("player-1", "floor-one"), stableVisionDocumentId("player-1", "floor-two"));
+});
+
+test("vision rules keep walls DM-authored and exploration owner-private", () => {
+  const rules = readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
+  const wallRules = rules.slice(
+    rules.indexOf("match /visionWalls/{wallId}"),
+    rules.indexOf("match /visionExploration/{explorationId}")
+  );
+  const explorationRules = rules.slice(
+    rules.indexOf("match /visionExploration/{explorationId}"),
+    rules.indexOf("match /maps/{mapId}")
+  );
+  assert.match(wallRules, /allow create:[\s\S]*isRoomDm\(roomCode\)/);
+  assert.match(wallRules, /allow update:\s*if false/);
+  assert.match(explorationRules, /resource\.data\.ownerUid == request\.auth\.uid/);
+  assert.match(explorationRules, /request\.resource\.data\.ownerUid == resource\.data\.ownerUid/);
+  assert.match(rules, /cells\.size\(\) == resolution \* resolution/);
+});
+
+test("secure hidden-enemy migration remains explicitly documented", () => {
+  const privacy = readFileSync(new URL("../docs/FOG-OF-WAR-PRIVACY.md", import.meta.url), "utf8");
+  assert.match(privacy, /tokens\/{tokenId}/);
+  assert.match(privacy, /readable by every room member/i);
+  assert.match(privacy, /DM-only collection/i);
+  assert.match(privacy, /Firestore Emulator coverage/i);
 });

@@ -129,3 +129,62 @@ test("failed fog saves remain retryable", async ({ page }) => {
   await page.locator("[data-fog-retry]").click();
   await expect.poll(() => page.evaluate(() => window.fixture.fog.getState().failedCount)).toBe(0);
 });
+
+test("automatic vision reveals, remembers exploration, and saves sight-blocking walls", async ({ page }) => {
+  await page.locator("#fogOfWarToggleButton").click();
+  await page.locator("[data-fog-enabled]").check();
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().currentPolygonCount)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().exploredCellCount)).toBeGreaterThan(0);
+  const firstExplored = await page.evaluate(() => window.fixture.vision.getState().exploredCellCount);
+  await expect(page.locator(".hg-fog-memory-fill")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.fixture.operations.some(
+    (entry) => entry.type === "set" && entry.path.includes("visionExploration")
+  ))).toBe(true);
+
+  await page.evaluate(() => window.fixture.setTokens([{
+    id: "hero", type: "player", ownerUid: "dm-1", x: 75, y: 50, floorId: "floor-one",
+    vision: { distance: 30, darkvision: 0, brightLight: 0, dimLight: 0 }
+  }]));
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().exploredCellCount)).toBeGreaterThan(firstExplored);
+
+  await page.locator("#visionToolsToggleButton").click();
+  await page.locator("[data-vision-wall-mode]").click();
+  const overlay = page.locator(".hg-vision-wall-layer");
+  const box = await overlay.boundingBox();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + 30);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height - 30);
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().wallCount)).toBe(1);
+  expect(await page.evaluate(() => window.fixture.operations.some(
+    (entry) => entry.type === "set" && entry.path.includes("visionWalls")
+  ))).toBe(true);
+});
+
+test("vision and exploration stay separate by floor and player", async ({ page }) => {
+  await page.locator("#fogOfWarToggleButton").click();
+  await page.locator("[data-fog-enabled]").check();
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().currentPolygonCount)).toBe(1);
+
+  await page.evaluate(() => window.fixture.setMapId("floor-two"));
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().mapId)).toBe("floor-two");
+  expect(await page.evaluate(() => window.fixture.vision.getState().currentPolygonCount)).toBe(0);
+  expect(await page.evaluate(() => window.fixture.vision.getState().exploredCellCount)).toBe(0);
+
+  await page.evaluate(() => {
+    window.fixture.setRole(false);
+    window.fixture.setMapId("floor-one");
+  });
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().currentPolygonCount)).toBe(0);
+  await page.evaluate(() => window.fixture.setTokens([{
+    id: "player-hero", type: "player", ownerUid: "player-1", x: 25, y: 50, floorId: "floor-one",
+    vision: { distance: 20, darkvision: 60, brightLight: 0, dimLight: 0 }
+  }]));
+  await expect.poll(() => page.evaluate(() => window.fixture.vision.getState().currentPolygonCount)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.fixture.operations.some(
+    (entry) => entry.type === "set"
+      && entry.path.includes("visionExploration")
+      && entry.payload.ownerUid === "player-1"
+  ))).toBe(true);
+  await expect(page.locator("#visionToolsToggleButton")).toBeHidden();
+});

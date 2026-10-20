@@ -75,7 +75,14 @@
   pointer-events: none;
 }
 
+.hg-fog-layer .hg-fog-memory-fill {
+  fill: #07101f;
+  opacity: .64;
+  pointer-events: none;
+}
+
 .hg-fog-layer.is-dm-view .hg-fog-fill { opacity: .58; }
+.hg-fog-layer.is-dm-view .hg-fog-memory-fill { opacity: .24; }
 .hg-fog-layer.is-editing { cursor: crosshair; }
 .hg-fog-layer .hg-fog-preview { pointer-events: none; }
 .hg-fog-layer .hg-fog-preview > * {

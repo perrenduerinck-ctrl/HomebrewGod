@@ -736,6 +736,57 @@ service cloud.firestore {
           == get(fogSettingsPath(roomCode, mapId)).data.get('revision', 0);
     }
 
+    function validVisionPoint(point) {
+      return point is map
+        && point.keys().hasOnly(['x', 'y'])
+        && point.x is number
+        && point.x >= 0
+        && point.x <= 1000
+        && point.y is number
+        && point.y >= 0
+        && point.y <= 1000;
+    }
+
+    function validVisionWall(roomCode, wallId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'roomCode', 'mapId', 'authorUid', 'start', 'end',
+          'createdAtMillis', 'updatedAtMillis', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == wallId
+        && request.resource.data.roomCode == roomCode
+        && request.resource.data.mapId is string
+        && request.resource.data.mapId.size() > 0
+        && request.resource.data.mapId.size() <= 180
+        && request.resource.data.authorUid == request.auth.uid
+        && validVisionPoint(request.resource.data.start)
+        && validVisionPoint(request.resource.data.end)
+        && request.resource.data.createdAtMillis is number
+        && request.resource.data.updatedAtMillis is number;
+    }
+
+    function validVisionExploration(roomCode) {
+      let resolution = request.resource.data.get('resolution', 0);
+      let cells = request.resource.data.get('cells', '');
+      return request.resource.data.keys().hasOnly([
+          'roomCode', 'mapId', 'ownerUid', 'resolution', 'cells',
+          'updatedAtMillis', 'updatedAt'
+        ])
+        && request.resource.data.roomCode == roomCode
+        && request.resource.data.mapId is string
+        && request.resource.data.mapId.size() > 0
+        && request.resource.data.mapId.size() <= 180
+        && request.resource.data.ownerUid is string
+        && request.resource.data.ownerUid.size() > 0
+        && request.resource.data.ownerUid.size() <= 180
+        && resolution is int
+        && resolution >= 16
+        && resolution <= 128
+        && cells is string
+        && cells.size() == resolution * resolution
+        && cells.matches('^[01]+$')
+        && request.resource.data.updatedAtMillis is number;
+    }
+
     function validScene(roomCode, sceneId) {
       return request.resource.data.get('id', '') == sceneId
         && request.resource.data.get('roomCode', '') == roomCode
@@ -1647,6 +1698,57 @@ service cloud.firestore {
 
         allow delete:
           if isRoomDm(roomCode);
+      }
+
+      match /visionWalls/{wallId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && validVisionWall(roomCode, wallId);
+
+        allow update:
+          if false;
+
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /visionExploration/{explorationId} {
+        allow read:
+          if isRoomDm(roomCode)
+          || (
+            isRoomMember(roomCode)
+            && resource.data.ownerUid == request.auth.uid
+          );
+
+        allow create:
+          if roomAcceptsWrites(roomCode)
+          && validVisionExploration(roomCode)
+          && (
+            isRoomDm(roomCode)
+            || request.resource.data.ownerUid == request.auth.uid
+          );
+
+        allow update:
+          if roomAcceptsWrites(roomCode)
+          && validVisionExploration(roomCode)
+          && request.resource.data.roomCode == resource.data.roomCode
+          && request.resource.data.mapId == resource.data.mapId
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && (
+            isRoomDm(roomCode)
+            || resource.data.ownerUid == request.auth.uid
+          );
+
+        allow delete:
+          if isRoomDm(roomCode)
+          || (
+            isRoomMember(roomCode)
+            && resource.data.ownerUid == request.auth.uid
+          );
       }
 
       match /maps/{mapId} {

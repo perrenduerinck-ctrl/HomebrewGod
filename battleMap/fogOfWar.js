@@ -51,7 +51,8 @@ export function createFogOfWarSystem(options = {}) {
     serverTimestamp,
     requestConfirmation = async (message) => globalThis.confirm?.(message) === true,
     getMapContext = () => ({}),
-    acquireInteraction = null
+    acquireInteraction = null,
+    onSettingsChanged = null
   } = options;
   if (!document || !db || !collection || !doc || !onSnapshot || !setDoc) {
     throw new Error("Fog of War requires the map and Firestore tools.");
@@ -61,6 +62,7 @@ export function createFogOfWarSystem(options = {}) {
     onStopError: (error) => console.warn("Fog listener cleanup failed:", error)
   });
   const maskId = makeId("hgFogMask");
+  const memoryMaskId = makeId("hgFogMemoryMask");
   let resizeObserver = null;
   let previewFrame = 0;
   let releaseInteraction = null;
@@ -82,6 +84,11 @@ export function createFogOfWarSystem(options = {}) {
     settings: createDefaultFogSettings(),
     operations: new Map(),
     pendingOperations: new Map(),
+    vision: {
+      enabled: false,
+      currentPolygons: [],
+      exploredPath: ""
+    },
     drawing: null,
     pointerId: null,
     busy: false
@@ -144,7 +151,15 @@ export function createFogOfWarSystem(options = {}) {
     width: 1000,
     height: 1000
   });
-  defs.append(mask);
+  const memoryMask = makeSvgElement(document, "mask", {
+    id: memoryMaskId,
+    maskUnits: "userSpaceOnUse",
+    x: 0,
+    y: 0,
+    width: 1000,
+    height: 1000
+  });
+  defs.append(mask, memoryMask);
   const fogFill = makeSvgElement(document, "rect", {
     class: "hg-fog-fill",
     x: 0,
@@ -153,8 +168,16 @@ export function createFogOfWarSystem(options = {}) {
     height: 1000,
     mask: `url(#${maskId})`
   });
+  const memoryFill = makeSvgElement(document, "rect", {
+    class: "hg-fog-memory-fill",
+    x: 0,
+    y: 0,
+    width: 1000,
+    height: 1000,
+    mask: `url(#${memoryMaskId})`
+  });
   const previewGroup = makeSvgElement(document, "g", { class: "hg-fog-preview" });
-  overlay.append(defs, fogFill, previewGroup);
+  overlay.append(defs, fogFill, memoryFill, previewGroup);
   surface?.append(overlay);
 
   const elements = {
@@ -282,6 +305,45 @@ export function createFogOfWarSystem(options = {}) {
       fill: state.settings.baseState === "hidden" ? "white" : "black"
     }));
     currentOperations().forEach((operation) => mask.append(createOperationShape(operation)));
+    const visionEnabled = state.vision.enabled && state.settings.enabled;
+    if (visionEnabled && state.vision.exploredPath) {
+      mask.append(makeSvgElement(document, "path", {
+        class: "hg-fog-explored-mask",
+        d: state.vision.exploredPath,
+        fill: "black"
+      }));
+    }
+    if (visionEnabled) {
+      state.vision.currentPolygons.forEach((polygon) => {
+        if (!Array.isArray(polygon) || polygon.length < 3) return;
+        mask.append(makeSvgElement(document, "polygon", {
+          class: "hg-fog-current-vision-mask",
+          points: pointsAttribute(polygon),
+          fill: "black"
+        }));
+      });
+    }
+    memoryMask.replaceChildren(makeSvgElement(document, "rect", {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      fill: "black"
+    }));
+    if (visionEnabled && state.vision.exploredPath) {
+      memoryMask.append(makeSvgElement(document, "path", {
+        d: state.vision.exploredPath,
+        fill: "white"
+      }));
+      state.vision.currentPolygons.forEach((polygon) => {
+        if (!Array.isArray(polygon) || polygon.length < 3) return;
+        memoryMask.append(makeSvgElement(document, "polygon", {
+          points: pointsAttribute(polygon),
+          fill: "black"
+        }));
+      });
+    }
+    memoryFill.style.display = visionEnabled && state.vision.exploredPath ? "" : "none";
     previewGroup.replaceChildren();
     if (state.drawing && state.isDm) {
       mask.append(createOperationShape(state.drawing));
@@ -417,6 +479,7 @@ export function createFogOfWarSystem(options = {}) {
       : createDefaultFogSettings(state.mapId);
     state.drawing = null;
     updateControls();
+    onSettingsChanged?.(getState());
   }
 
   function applyOperationsSnapshot(snapshot, isCurrent) {
@@ -484,6 +547,7 @@ export function createFogOfWarSystem(options = {}) {
       state.pendingOperations.clear();
       state.drawing = null;
       state.pointerId = null;
+      state.vision = { enabled: false, currentPolygons: [], exploredPath: "" };
     }
     state.mapId = mapId;
     state.target = target;
@@ -520,6 +584,25 @@ export function createFogOfWarSystem(options = {}) {
       state.pendingOperations.clear();
     }
     return syncContext();
+  }
+
+  function setVisionState(next = {}) {
+    state.vision = {
+      enabled: next.enabled === true,
+      currentPolygons: (Array.isArray(next.currentPolygons) ? next.currentPolygons : [])
+        .filter((polygon) => Array.isArray(polygon) && polygon.length >= 3)
+        .map((polygon) => polygon.map((point) => ({
+          x: Math.max(0, Math.min(1000, Number(point?.x) || 0)),
+          y: Math.max(0, Math.min(1000, Number(point?.y) || 0))
+        }))),
+      exploredPath: String(next.exploredPath || "")
+    };
+    scheduleRender();
+    return {
+      enabled: state.vision.enabled,
+      polygonCount: state.vision.currentPolygons.length,
+      hasExploration: Boolean(state.vision.exploredPath)
+    };
   }
 
   async function commitSettings(mutator) {
@@ -562,6 +645,7 @@ export function createFogOfWarSystem(options = {}) {
         state.settings = nextSettings;
         state.drawing = null;
         updateControls();
+        onSettingsChanged?.(getState());
       }
       return nextSettings;
     } catch (error) {
@@ -815,6 +899,9 @@ export function createFogOfWarSystem(options = {}) {
       failedCount: [...state.pendingOperations.values()].filter((entry) => (
         entry.scopeKey === currentScopeKey() && entry.status === "failed"
       )).length,
+      visionEnabled: state.vision.enabled,
+      currentVisionPolygonCount: state.vision.currentPolygons.length,
+      hasExploredVision: Boolean(state.vision.exploredPath),
       listeners: listeners.getSnapshot()
     };
   }
@@ -842,6 +929,7 @@ export function createFogOfWarSystem(options = {}) {
     setEnabled,
     resetFog,
     retryFailed,
+    setVisionState,
     getState,
     destroy
   });
