@@ -54,6 +54,34 @@ const drawingStroke = (id, authorUid, overrides = {}) => ({
   ...overrides
 });
 
+const fogSettings = (mapId, revision = 1, overrides = {}) => ({
+  mapId,
+  roomCode: ROOM,
+  enabled: true,
+  baseState: "hidden",
+  revision,
+  updatedByUid: "dm-1",
+  updatedAtMillis: revision,
+  ...overrides
+});
+
+const fogOperation = (id, mapId, revision = 1, overrides = {}) => ({
+  id,
+  roomCode: ROOM,
+  mapId,
+  revision,
+  authorUid: "dm-1",
+  mode: "reveal",
+  tool: "rectangle",
+  size: 60,
+  points: [],
+  start: { x: 10, y: 10 },
+  end: { x: 40, y: 30 },
+  order: 1000,
+  createdAtMillis: 1,
+  ...overrides
+});
+
 function databaseFor(uid) {
   return environment.authenticatedContext(uid, { email: `${uid}@example.test` }).firestore();
 }
@@ -678,6 +706,42 @@ test("drawing ownership permits explicit DM restoration without impersonation", 
     restoredByUid: "dm-1"
   })));
   await assertFails(setDoc(doc(dm, "rooms", ROOM, "sharedDrawings", "impersonated-stroke"), drawingStroke("impersonated-stroke", "player-1")));
+});
+
+test("Fog of War is readable by room members but writable only by the DM", async () => {
+  const dm = databaseFor("dm-1");
+  const player = databaseFor("player-1");
+  const stranger = databaseFor("stranger");
+  const settingsPath = ["rooms", ROOM, "fogSettings", "floor-one"];
+  const operationPath = ["rooms", ROOM, "fogOperations", "reveal-one"];
+
+  await assertFails(setDoc(doc(player, ...settingsPath), {
+    ...fogSettings("floor-one"),
+    updatedByUid: "player-1"
+  }));
+  await assertSucceeds(setDoc(doc(dm, ...settingsPath), fogSettings("floor-one")));
+  await assertSucceeds(getDoc(doc(player, ...settingsPath)));
+  await assertFails(getDoc(doc(stranger, ...settingsPath)));
+
+  await assertFails(setDoc(doc(player, ...operationPath), {
+    ...fogOperation("reveal-one", "floor-one"),
+    authorUid: "player-1"
+  }));
+  await assertSucceeds(setDoc(doc(dm, ...operationPath), fogOperation("reveal-one", "floor-one")));
+  await assertSucceeds(getDoc(doc(player, ...operationPath)));
+
+  await assertSucceeds(setDoc(doc(dm, ...settingsPath), fogSettings("floor-one", 2, {
+    baseState: "revealed"
+  })));
+  await assertFails(setDoc(
+    doc(dm, "rooms", ROOM, "fogOperations", "stale-reveal"),
+    fogOperation("stale-reveal", "floor-one", 1)
+  ));
+  await assertSucceeds(setDoc(
+    doc(dm, "rooms", ROOM, "fogOperations", "hide-one"),
+    fogOperation("hide-one", "floor-one", 2, { mode: "hide", tool: "circle" })
+  ));
+  await assertFails(updateDoc(doc(player, ...settingsPath), { enabled: false }));
 });
 
 test("players can move only their token while exploration is active", async () => {

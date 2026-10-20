@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fog of War integration fixture</title>
+  <link rel="stylesheet" href="../../battleMap/fogOfWar.css">
+  <style>
+    body { margin: 0; color: #eef1ff; background: #080b17; font: 14px system-ui; }
+    button, input { font: inherit; }
+    #quick { display: flex; gap: 8px; min-height: 42px; padding: 8px; }
+    #surface { position: relative; width: 900px; min-height: 520px; }
+    #map { position: relative; width: 800px; height: 400px; margin: 30px 40px; background: #26304b; }
+    #mapImage { display: block; position: relative; width: 640px; height: 320px; margin: 40px 80px; transform-origin: center center; pointer-events: none; }
+    #token { position: absolute; z-index: 300; left: 370px; top: 170px; width: 60px; height: 60px; }
+  </style>
+</head>
+<body>
+  <div id="quick"></div>
+  <section id="surface">
+    <div id="map">
+      <img id="mapImage" alt="Fog test map">
+      <button id="token" type="button">Token</button>
+    </div>
+  </section>
+  <script type="module">
+    import { createFogOfWarSystem } from "../../battleMap/fogOfWar.js";
+
+    const operations = [];
+    const listeners = [];
+    const documents = new Map();
+    let nextWriteError = null;
+    let mapId = "floor-one";
+    let mapZoom = 1;
+    let isDm = true;
+    let tokenClicks = 0;
+    let confirmationResult = true;
+    const pathOf = (...parts) => parts.map((part) => part?.path || String(part)).join("/");
+    const collection = (...parts) => ({ kind: "collection", path: pathOf(...parts) });
+    const doc = (...parts) => ({ kind: "document", path: pathOf(...parts), id: String(parts.at(-1)) });
+    const where = (...parts) => ({ where: parts });
+    const query = (source, ...filters) => ({ kind: "query", path: source.path, filters });
+    const serverTimestamp = () => "SERVER_TIMESTAMP";
+    const fakeDb = { path: "db" };
+
+    function queryDocs(source) {
+      const prefix = `${source.path}/`;
+      const direct = [...documents.entries()].filter(([path]) => (
+        path.startsWith(prefix) && !path.slice(prefix.length).includes("/")
+      ));
+      return direct.filter(([, value]) => source.filters?.every((filter) => {
+        const [field, operator, expected] = filter.where;
+        return operator === "==" ? value[field] === expected : true;
+      }) ?? true).map(([path, value]) => ({
+        id: path.slice(prefix.length),
+        ref: { kind: "document", path, id: path.slice(prefix.length) },
+        data: () => ({ ...value })
+      }));
+    }
+
+    function snapshotFor(source) {
+      if (source.kind === "document") {
+        const value = documents.get(source.path);
+        return {
+          exists: () => value !== undefined,
+          data: () => value ? { ...value } : undefined,
+          metadata: { hasPendingWrites: false }
+        };
+      }
+      return { docs: queryDocs(source), metadata: { hasPendingWrites: false } };
+    }
+
+    const onSnapshot = (source, options, next, error) => {
+      const record = { source, active: true, next, error };
+      listeners.push(record);
+      queueMicrotask(() => { if (record.active) next(snapshotFor(source)); });
+      return () => { record.active = false; };
+    };
+    const beforeWrite = async () => {
+      if (!nextWriteError) return;
+      const error = nextWriteError;
+      nextWriteError = null;
+      throw error;
+    };
+    const setDoc = async (reference, payload, options) => {
+      await beforeWrite();
+      operations.push({ type: "set", path: reference.path, payload, options });
+      documents.set(reference.path, options?.merge
+        ? { ...(documents.get(reference.path) || {}), ...payload }
+        : { ...payload });
+    };
+    const getDocs = async (source) => ({ docs: queryDocs(source) });
+    const writeBatch = () => {
+      const entries = [];
+      return {
+        set(reference, payload) { entries.push({ type: "set", path: reference.path, payload }); },
+        delete(reference) { entries.push({ type: "delete", path: reference.path }); },
+        async commit() {
+          await beforeWrite();
+          operations.push({ type: "batch", entries });
+          entries.forEach((entry) => {
+            if (entry.type === "delete") documents.delete(entry.path);
+            else documents.set(entry.path, { ...entry.payload });
+          });
+        }
+      };
+    };
+    const runTransaction = async (_db, callback) => {
+      const entries = [];
+      const transaction = {
+        async get(reference) {
+          const value = documents.get(reference.path);
+          return { exists: () => value !== undefined, data: () => value ? { ...value } : undefined };
+        },
+        set(reference, payload) { entries.push({ type: "set", path: reference.path, payload }); }
+      };
+      const result = await callback(transaction);
+      await beforeWrite();
+      entries.forEach((entry) => {
+        operations.push(entry);
+        documents.set(entry.path, { ...entry.payload });
+      });
+      return result;
+    };
+
+    const fog = createFogOfWarSystem({
+      document,
+      surface: document.querySelector("#surface"),
+      quickActions: document.querySelector("#quick"),
+      mapViewer: document.querySelector("#map"),
+      mapImage: document.querySelector("#mapImage"),
+      puzzleBoard: document.querySelector("#map"),
+      db: fakeDb,
+      collection,
+      doc,
+      query,
+      where,
+      onSnapshot,
+      setDoc,
+      getDocs,
+      writeBatch,
+      runTransaction,
+      serverTimestamp,
+      requestConfirmation: async () => confirmationResult,
+      getMapContext: () => ({
+        mapId,
+        target: document.querySelector("#map"),
+        mode: "single",
+        zoom: mapZoom
+      }),
+      acquireInteraction: (cancel) => {
+        window.fixture.activeInteractionCancel = cancel;
+        return () => { window.fixture.activeInteractionCancel = null; };
+      }
+    });
+    fog.setContext({ roomCode: "ROOM-1", userId: "dm-1", isDm });
+    document.querySelector("#token").addEventListener("click", () => { tokenClicks += 1; });
+
+    function emitSnapshots() {
+      listeners.filter((listener) => listener.active).forEach((listener) => {
+        listener.next(snapshotFor(listener.source));
+      });
+    }
+
+    window.fixture = {
+      fog,
+      operations,
+      documents,
+      activeInteractionCancel: null,
+      emitSnapshots,
+      getTokenClicks: () => tokenClicks,
+      setConfirmation(value) { confirmationResult = value === true; },
+      failNextWrite(message = "offline") { nextWriteError = new Error(message); },
+      setMapId(value) { mapId = value; fog.syncContext(); },
+      setZoom(value) {
+        mapZoom = Number(value) || 1;
+        document.querySelector("#mapImage").style.transform = `scale(${mapZoom})`;
+        fog.syncContext();
+      },
+      setRole(nextIsDm) {
+        isDm = nextIsDm === true;
+        fog.setContext({ roomCode: "ROOM-1", userId: isDm ? "dm-1" : "player-1", isDm });
+      },
+      reconnect() {
+        fog.disconnect();
+        fog.setContext({ roomCode: "ROOM-1", userId: isDm ? "dm-1" : "player-1", isDm });
+      }
+    };
+  </script>
+</body>
+</html>

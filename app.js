@@ -218,6 +218,7 @@ import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
 import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261008";
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
+import { createFogOfWarSystem } from "./battleMap/fogOfWar.js?v=fog-phase1-20261020";
 import { createMapInteractionController } from "./battleMap/interactionController.js";
 import { createScenePersistence } from "./battleMap/scenePersistence.js?v=multi-floor-20261014";
 import { createFloorSystem } from "./battleMap/floorSystem.js?v=battle-game-feel-20261016";
@@ -552,11 +553,44 @@ const mapDrawingSystem = createMapDrawingSystem({
   requestConfirmation: requestAppConfirmation,
   getMapContext: getCurrentDrawingMapContext
 });
+let fogOfWarSystem = null;
 const mapInteractionController = createMapInteractionController({
   onOwnerChange: (owner) => {
-    if (owner) mapDrawingSystem.setActive?.(false);
+    if (owner) {
+      mapDrawingSystem.setActive?.(false);
+      if (owner.id !== "fog-of-war") fogOfWarSystem?.setActive?.(false);
+    }
   }
 });
+fogOfWarSystem = createFogOfWarSystem({
+  document,
+  surface: E.battleMapSurface,
+  quickActions: E.battleQuickActions,
+  mapViewer: E.battleMapViewer,
+  mapImage: E.battleMapImage,
+  puzzleBoard: E.puzzleMapBoard,
+  db,
+  collection,
+  doc,
+  query,
+  where,
+  onSnapshot,
+  setDoc,
+  getDocs,
+  writeBatch,
+  runTransaction,
+  serverTimestamp,
+  requestConfirmation: requestAppConfirmation,
+  getMapContext: getCurrentDrawingMapContext,
+  acquireInteraction: (cancel) => mapInteractionController.acquire({
+    id: "fog-of-war",
+    label: "Fog of War editing",
+    cancel
+  })
+});
+document.getElementById("drawingToggleButton")?.addEventListener("click", () => {
+  mapInteractionController.cancel("drawing-start");
+}, true);
 let battleMapRuler = null;
 let battleMapTemplates = null;
 let battleMapVfx = null;
@@ -2392,6 +2426,7 @@ function makeRoomCode() {
 function clearRoomListeners() {
   journalSystem.disconnect();
   mapDrawingSystem.disconnect();
+  fogOfWarSystem?.disconnect();
   appRealtimeListeners.stop("room");
   combatEffectPersistence?.stop();
   gameplayEffectPersistence?.stop();
@@ -2529,9 +2564,13 @@ function syncRealtimeListenersForScreen(
   }
 
   if (screenName === "battle") {
-    queueMicrotask(() => mapDrawingSystem.syncContext());
+    queueMicrotask(() => {
+      mapDrawingSystem.syncContext();
+      fogOfWarSystem?.syncContext();
+    });
   } else {
     mapDrawingSystem.disconnect();
+    fogOfWarSystem?.disconnect();
   }
 }
 
@@ -3434,6 +3473,11 @@ function openRoom(roomCode, screenToShow = "room") {
       userName: realtimeUserName,
       isDm: currentIsDM,
       playersEnabled: room.drawingSettings?.playersEnabled === true
+    });
+    fogOfWarSystem?.setContext({
+      roomCode: cleanCode,
+      userId: currentUser.uid,
+      isDm: currentIsDM
     });
     campaignTimeSystem.applyRoomSnapshot(
       room
@@ -4850,6 +4894,7 @@ function showSharedMap(currentMap) {
     E.noBattleMapText.style.display = "block";
     battleMapLighting?.setMap(null);
     mapDrawingSystem.syncContext();
+    fogOfWarSystem?.syncContext();
 
     return;
   }
@@ -4872,6 +4917,7 @@ function showSharedMap(currentMap) {
   ) {
     battleMapLighting?.setMap(map);
     mapDrawingSystem.syncContext();
+    fogOfWarSystem?.syncContext();
     return;
   }
 
@@ -4917,6 +4963,7 @@ function showSharedMap(currentMap) {
     E.battleMapImage.style.display = "block";
     applyBattleZoom();
     mapDrawingSystem.syncContext();
+    fogOfWarSystem?.syncContext();
   };
 
   E.battleMapImage.onerror = function () {
@@ -4928,6 +4975,7 @@ function showSharedMap(currentMap) {
   E.battleMapImage.src = imageUrl;
   battleMapLighting?.setMap(map);
   mapDrawingSystem.syncContext();
+  fogOfWarSystem?.syncContext();
 }
 
 addOptionalEventListener(E.uploadRoomMapButton, "click", async function () {
@@ -9053,6 +9101,7 @@ function showPuzzleBoardView() {
   battleMapTemplates?.refresh();
   battleMapVfx?.refresh();
   mapDrawingSystem.syncContext();
+  fogOfWarSystem?.syncContext();
   floorConnectionMarkerSystem?.render?.();
 }
 
@@ -9069,6 +9118,7 @@ function showSingleBattleMapView() {
   battleMapTemplates?.refresh();
   battleMapVfx?.refresh();
   mapDrawingSystem.syncContext();
+  fogOfWarSystem?.syncContext();
 }
 
 function keepTokenLayerReadyForExternalFile() {
@@ -9181,6 +9231,7 @@ function renderPuzzleBoard(room) {
   keepTokenLayerReadyForExternalFile();
   notifyExternalTokenSystem(safeRoom);
   mapDrawingSystem.syncContext();
+  fogOfWarSystem?.syncContext();
 }
 
 function createPuzzleTileElement(tile, activeTile) {
@@ -10141,6 +10192,7 @@ if (!floorSystem && E.floorSelectorPanel) {
       tokenSystem?.render?.(currentRoomData || {});
       initiativePanelSystem?.render?.(initiativeSystem?.getState?.());
       mapDrawingSystem.syncContext();
+      fogOfWarSystem?.syncContext();
       battleMapRuler?.refresh();
       battleMapTemplates?.refresh();
       battleMapVfx?.refresh();
@@ -10731,6 +10783,7 @@ function applyBattleZoom() {
   battleMapTemplates?.refresh();
   battleMapVfx?.refresh();
   mapDrawingSystem.syncContext();
+  fogOfWarSystem?.syncContext();
 }
 
 function openToolTab(viewName) {

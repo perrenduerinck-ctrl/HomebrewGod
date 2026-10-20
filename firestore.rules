@@ -48,6 +48,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/rooms/$(roomCode)/scenes/$(sceneId)/connections/$(connectionId);
     }
 
+    function fogSettingsPath(roomCode, mapId) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/fogSettings/$(mapId);
+    }
+
     function combatTurnPath(roomCode, tokenId) {
       return /databases/$(database)/documents/rooms/$(roomCode)/combatTurns/$(tokenId);
     }
@@ -684,6 +688,52 @@ service cloud.firestore {
         && request.resource.data.end is map
         && request.resource.data.createdAtMillis is number
         && request.resource.data.updatedAtMillis is number;
+    }
+
+    function validFogSettings(roomCode, mapId) {
+      return request.resource.data.keys().hasOnly([
+          'mapId', 'roomCode', 'enabled', 'baseState', 'revision',
+          'updatedByUid', 'updatedAtMillis', 'updatedAt'
+        ])
+        && request.resource.data.mapId == mapId
+        && request.resource.data.roomCode == roomCode
+        && request.resource.data.enabled is bool
+        && request.resource.data.baseState in ['hidden', 'revealed']
+        && request.resource.data.revision is int
+        && request.resource.data.revision >= 1
+        && request.resource.data.revision <= 1000000
+        && request.resource.data.updatedByUid == request.auth.uid
+        && request.resource.data.updatedAtMillis is number;
+    }
+
+    function validFogOperation(roomCode, operationId) {
+      let mapId = request.resource.data.get('mapId', '');
+      return request.resource.data.keys().hasOnly([
+          'id', 'roomCode', 'mapId', 'revision', 'authorUid', 'mode',
+          'tool', 'size', 'points', 'start', 'end', 'order',
+          'createdAtMillis', 'createdAt'
+        ])
+        && request.resource.data.id == operationId
+        && request.resource.data.roomCode == roomCode
+        && mapId is string
+        && mapId.size() > 0
+        && mapId.size() <= 180
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.mode in ['reveal', 'hide']
+        && request.resource.data.tool in ['brush', 'rectangle', 'circle']
+        && request.resource.data.size is number
+        && request.resource.data.size >= 4
+        && request.resource.data.size <= 400
+        && request.resource.data.points is list
+        && request.resource.data.points.size() <= 512
+        && request.resource.data.start is map
+        && request.resource.data.end is map
+        && request.resource.data.order is number
+        && request.resource.data.createdAtMillis is number
+        && exists(fogSettingsPath(roomCode, mapId))
+        && get(fogSettingsPath(roomCode, mapId)).data.get('enabled', false) == true
+        && request.resource.data.revision
+          == get(fogSettingsPath(roomCode, mapId)).data.get('revision', 0);
     }
 
     function validScene(roomCode, sceneId) {
@@ -1547,6 +1597,50 @@ service cloud.firestore {
           && isRoomDm(roomCode)
           && request.resource.data.authorUid == request.auth.uid
           && validDrawingStroke(roomCode, strokeId, 'dm');
+
+        allow update:
+          if false;
+
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /fogSettings/{mapId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && request.resource.data.revision == 1
+          && validFogSettings(roomCode, mapId);
+
+        allow update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && request.resource.data.roomCode == resource.data.roomCode
+          && request.resource.data.mapId == resource.data.mapId
+          && (
+            (
+              request.resource.data.revision == resource.data.revision
+              && request.resource.data.baseState == resource.data.baseState
+            )
+            || request.resource.data.revision == resource.data.revision + 1
+          )
+          && validFogSettings(roomCode, mapId);
+
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /fogOperations/{operationId} {
+        allow read:
+          if isRoomMember(roomCode);
+
+        allow create:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && validFogOperation(roomCode, operationId);
 
         allow update:
           if false;

@@ -1,0 +1,95 @@
+.hg-fog-toolbar {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 430;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100% - 24px));
+  padding: 12px;
+  border: 1px solid rgba(136, 153, 204, .34);
+  border-radius: 13px;
+  color: #eef2ff;
+  background: rgba(6, 9, 22, .96);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .46);
+  backdrop-filter: blur(12px);
+}
+
+.hg-fog-toolbar[hidden] { display: none; }
+
+.hg-fog-toolbar header,
+.hg-fog-tools,
+.hg-fog-segmented,
+.hg-fog-actions,
+.hg-fog-size {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.hg-fog-toolbar header { justify-content: space-between; }
+.hg-fog-toolbar header > div { display: grid; gap: 1px; }
+.hg-fog-toolbar header small { color: #aeb8d4; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.hg-fog-toolbar button,
+.hg-fog-toolbar input { margin: 0; }
+.hg-fog-toolbar button { min-height: 34px; padding: 6px 10px; }
+.hg-fog-toolbar button.is-active,
+#fogOfWarToggleButton.is-active {
+  border-color: #69dfc2;
+  color: #fff;
+  background: linear-gradient(135deg, #197f76, #2da891);
+}
+#fogOfWarToggleButton.has-fog:not(.is-active) { border-color: rgba(105, 223, 194, .64); }
+.hg-fog-enabled,
+.hg-fog-preview-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #dce4f8;
+  font-size: 12px;
+  font-weight: 750;
+}
+.hg-fog-enabled input,
+.hg-fog-preview-toggle input { width: auto; }
+.hg-fog-size { color: #b9c4df; font-size: 12px; }
+.hg-fog-size input { flex: 1 1 140px; }
+.hg-fog-size output { min-width: 32px; color: #fff; text-align: right; }
+.hg-fog-toolbar .status { min-height: 18px; margin: 0; font-size: 12px; }
+.hg-fog-toolbar [data-fog-status][data-state="saved"] { color: #72e8ab; }
+.hg-fog-toolbar [data-fog-status][data-state="error"] { color: #ff8d9d; }
+.hg-fog-toolbar [data-fog-status][data-state="active"] { color: #ffd987; }
+
+.hg-fog-layer {
+  position: absolute;
+  z-index: 290;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hg-fog-layer .hg-fog-fill {
+  fill: #02040b;
+  opacity: .985;
+  pointer-events: none;
+}
+
+.hg-fog-layer.is-dm-view .hg-fog-fill { opacity: .58; }
+.hg-fog-layer.is-editing { cursor: crosshair; }
+.hg-fog-layer .hg-fog-preview { pointer-events: none; }
+.hg-fog-layer .hg-fog-preview > * {
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 8 5;
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .hg-fog-toolbar {
+    top: 8px;
+    right: 8px;
+    width: min(calc(100vw - 16px), calc(100% - 16px));
+    max-height: 52vh;
+    overflow: auto;
+  }
+}
