@@ -80,6 +80,49 @@ test("touch token options remain reachable on mobile without horizontal overflow
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
+test("token stats respect independent HP and AC visibility", async ({ page }) => {
+  await openSmokeBattle(page);
+  await page.evaluate(() => {
+    const release = window.__HOMEBREW_GOD_RELEASE_TEST__;
+    release.setDmRole(false);
+    release.setMovementTestTokens([
+      { id: "hp-only", name: "HP Only", type: "object", x: 35, y: 40, currentHp: 6, maxHp: 10, armorClass: 18, display: { hpText: true, ac: false }, mapMode: "single", sizeCategory: "medium" },
+      { id: "ac-only", name: "AC Only", type: "object", x: 65, y: 40, currentHp: 9, maxHp: 12, armorClass: 15, display: { hpText: false, ac: true }, mapMode: "single", sizeCategory: "medium" }
+    ]);
+  });
+  await page.locator('.hg-token[data-token-id="hp-only"]').click({ button: "right" });
+  await page.locator('[data-token-menu-action="stats"]').click();
+  await expect(page.locator("#templateStatus")).toContainText("HP 6/10");
+  await expect(page.locator("#templateStatus")).not.toContainText("AC 18");
+  await page.locator('.hg-token[data-token-id="ac-only"]').click({ button: "right" });
+  await page.locator('[data-token-menu-action="stats"]').click();
+  await expect(page.locator("#templateStatus")).toContainText("AC 15");
+  await expect(page.locator("#templateStatus")).not.toContainText("HP 9/12");
+});
+
+test("token editing and condition commands stay bound to the chosen token", async ({ page }) => {
+  await openSmokeBattle(page);
+  const goblin = page.locator('.hg-token[data-token-id="goblin"]');
+  const menu = page.locator(".hg-token-context-menu");
+  await goblin.click({ button: "right" });
+  await expect(menu).toBeVisible();
+  await menu.locator('[data-token-menu-action="edit-token"]').click();
+  const editor = page.locator(".hg-token-editor");
+  await expect(editor).toBeVisible();
+  await expect(editor.locator('[name="name"]')).toHaveValue("Goblin");
+  await editor.locator('[name="name"]').fill("Wrong Goblin");
+  await editor.locator("[data-token-editor-cancel]").last().click();
+  await expect(editor).toBeHidden();
+  await expect(menu).toBeHidden();
+  await expect(goblin).toHaveAttribute("data-token-name", "Goblin");
+
+  await goblin.click({ button: "right" });
+  await expect(menu).toBeVisible();
+  await menu.locator('[data-token-menu-action="conditions"]').click();
+  await expect(page.locator('[data-effect-field="targetTokenId"]')).toHaveValue("goblin");
+  await expect(page.locator("[data-effect-status]")).toContainText("selected token");
+});
+
 test("floor connection markers render saved coordinates and use the existing transition", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("tests/browser-pages/multi-floor-self-test.html?role=player");
@@ -114,5 +157,19 @@ test("combat feedback ignores unverified values, deduplicates confirmed outcomes
   await feedback.locator("summary").click();
   await expect(feedback.locator("[data-combat-log-list]")).toContainText("12 damage");
   await expect(page.locator('.hg-token[data-token-id="goblin"] .hg-floating-combat-text')).toHaveText("−12");
+});
+
+test("manual HP adjustments are not presented as damage or healing", async ({ page }) => {
+  await openSmokeBattle(page);
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.dispatchCombatOutcomeForTest({
+    id: "manual-adjustment-1", verified: true, type: "manual-adjustment",
+    tokenId: "goblin", actorName: "DM", targetName: "Goblin", previousHp: 7, nextHp: 3, amount: 4, round: 2
+  }));
+  const feedback = page.locator(".hg-combat-feedback");
+  await feedback.locator("summary").click();
+  await expect(feedback.locator("[data-combat-log-list]")).toContainText("Round 2");
+  await expect(feedback.locator("[data-combat-log-list]")).toContainText("adjusted Goblin HP from 7 to 3");
+  await expect(feedback.locator("[data-combat-log-list]")).not.toContainText("damage");
+  await expect(page.locator('.hg-token[data-token-id="goblin"] .hg-floating-combat-text')).toHaveCount(0);
 });
 

@@ -5,7 +5,7 @@ export function normalizeVerifiedCombatOutcome(value = {}) {
   const id = text(value.id || value.eventId);
   const verified = value.verified === true || value.authoritative === true;
   if (!id || !verified) return null;
-  const type = ["damage", "healing", "temporary-hp", "critical", "miss", "movement", "condition", "turn"].includes(value.type)
+  const type = ["damage", "healing", "temporary-hp", "manual-adjustment", "critical", "miss", "movement", "condition", "turn", "attack", "spell"].includes(value.type)
     ? value.type
     : "confirmed";
   const amount = number(value.amount);
@@ -23,6 +23,8 @@ export function normalizeVerifiedCombatOutcome(value = {}) {
     id,
     type,
     amount,
+    previousHp: number(value.previousHp),
+    nextHp: number(value.nextHp),
     roll,
     tokenId: text(value.tokenId || value.targetTokenId),
     actorName: text(value.actorName) || "Combatant",
@@ -44,6 +46,9 @@ export function formatCombatOutcome(value = {}) {
   if (outcome.type === "damage" && amount != null) return `${outcome.actorName} confirmed ${amount} damage to ${target}.`;
   if (outcome.type === "healing" && amount != null) return `${target} regained ${amount} HP.`;
   if (outcome.type === "temporary-hp" && amount != null) return `${target} gained ${amount} temporary HP.`;
+  if (outcome.type === "manual-adjustment" && outcome.previousHp != null && outcome.nextHp != null) {
+    return `${outcome.actorName} adjusted ${target} HP from ${outcome.previousHp} to ${outcome.nextHp}.`;
+  }
   if (outcome.type === "critical") return `${outcome.actorName} scored a critical hit.`;
   if (outcome.type === "miss") return `${outcome.actorName} missed.`;
   if (outcome.type === "movement" && amount != null) return `${outcome.actorName} moved ${amount} ft.`;
@@ -81,6 +86,7 @@ export function createCombatFeedback({
     <div class="hg-combat-toasts" data-combat-toasts aria-live="polite" aria-atomic="false"></div>
     <details class="hg-combat-log" data-combat-log>
       <summary>Combat Log <span data-combat-log-count>0</span></summary>
+      <p class="hg-combat-log-scope">Live session log on this device. It is not persistent multiplayer history.</p>
       <div class="hg-combat-log-list" data-combat-log-list role="log" aria-live="polite"></div>
     </details>`;
   root.appendChild(panel);
@@ -118,35 +124,65 @@ export function createCombatFeedback({
     timers.add(timer);
   }
 
-  function addLogEntry({ id, message, state = "confirmed", round = 0, timestamp = Date.now(), roll = null } = {}) {
+  function createLogRow(entry) {
+    const row = document.createElement("article");
+    row.className = "hg-combat-log-entry";
+    row.dataset.state = entry.state;
+    row.dataset.type = entry.type;
+    const meta = document.createElement("small");
+    const time = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    meta.textContent = `${time} · ${entry.state === "confirmed" ? "Confirmed" : "Local"}`;
+    const body = document.createElement("p");
+    body.textContent = entry.message;
+    row.append(meta, body);
+    if (entry.roll && [entry.roll.rolled, entry.roll.modifier, entry.roll.total].some((value) => value != null)) {
+      const dice = document.createElement("details");
+      dice.className = "hg-combat-dice-result";
+      const summary = document.createElement("summary");
+      summary.textContent = "Roll details";
+      const result = document.createElement("div");
+      result.textContent = [
+        entry.roll.label || entry.roll.die || "Roll",
+        entry.roll.die ? `expression: ${entry.roll.die}` : "",
+        entry.roll.rolled != null ? `rolled: ${entry.roll.rolled}` : "",
+        entry.roll.modifier != null ? `modifier: ${entry.roll.modifier >= 0 ? "+" : ""}${entry.roll.modifier}` : "",
+        entry.roll.total != null ? `total: ${entry.roll.total}` : ""
+      ].filter(Boolean).join(" · ");
+      dice.append(summary, result);
+      row.appendChild(dice);
+    }
+    return row;
+  }
+
+  function renderLog() {
+    log.replaceChildren();
+    const newest = [...entries].reverse();
+    const groups = new Map();
+    newest.forEach((entry) => {
+      const key = entry.round > 0 ? `round:${entry.round}` : "recent";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(entry);
+    });
+    groups.forEach((groupEntries, key) => {
+      const section = document.createElement("section");
+      section.className = "hg-combat-log-group";
+      const heading = document.createElement("h4");
+      heading.textContent = key === "recent" ? "Recent activity" : `Round ${key.slice("round:".length)}`;
+      section.append(heading, ...groupEntries.map(createLogRow));
+      log.appendChild(section);
+    });
+    count.textContent = String(entries.length);
+  }
+
+  function addLogEntry({ id, message, state = "confirmed", type = "confirmed", round = 0, timestamp = Date.now(), roll = null } = {}) {
     const dedupeKey = `${id}:${state}`;
     if (!id || !message || seen.has(dedupeKey)) return false;
     seen.add(dedupeKey);
-    entries.push({ id, message, state, round, timestamp, roll });
-    if (entries.length > maxEntries) entries.splice(0, entries.length - maxEntries);
-    const row = document.createElement("article");
-    row.className = "hg-combat-log-entry";
-    row.dataset.state = state;
-    const meta = document.createElement("small");
-    const time = new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    meta.textContent = `${round ? `Round ${round} · ` : ""}${time} · ${state === "confirmed" ? "Confirmed" : "Local"}`;
-    const body = document.createElement("p");
-    body.textContent = message;
-    row.append(meta, body);
-    if (roll && [roll.rolled, roll.modifier, roll.total].some((value) => value != null)) {
-      const dice = document.createElement("div");
-      dice.className = "hg-combat-dice-result";
-      dice.textContent = [
-        roll.label || roll.die || "Roll",
-        roll.rolled != null ? `d20: ${roll.rolled}` : "",
-        roll.modifier != null ? `modifier: ${roll.modifier >= 0 ? "+" : ""}${roll.modifier}` : "",
-        roll.total != null ? `total: ${roll.total}` : ""
-      ].filter(Boolean).join(" · ");
-      row.appendChild(dice);
+    entries.push({ id, message, state, type, round, timestamp, roll, dedupeKey });
+    if (entries.length > maxEntries) {
+      entries.splice(0, entries.length - maxEntries).forEach((entry) => seen.delete(entry.dedupeKey));
     }
-    log.prepend(row);
-    while (log.childElementCount > maxEntries) log.lastElementChild?.remove();
-    count.textContent = String(entries.length);
+    renderLog();
     return true;
   }
 
@@ -159,7 +195,9 @@ export function createCombatFeedback({
       healing: outcome.amount != null ? `+${outcome.amount}` : "",
       "temporary-hp": outcome.amount != null ? `+${outcome.amount} Temp HP` : "",
       critical: "CRITICAL!",
-      miss: "MISS"
+      miss: "MISS",
+      condition: outcome.targetName ? "CONDITION" : "",
+      turn: "TURN"
     };
     const label = labels[outcome.type];
     if (!label) return;
@@ -186,7 +224,9 @@ export function createCombatFeedback({
     if (!outcome || (outcome.roomCode && roomCode && outcome.roomCode !== roomCode)) return false;
     const message = formatCombatOutcome(outcome);
     if (!addLogEntry({ ...outcome, message, state: "confirmed" })) return false;
-    addToast(message, outcome.type === "damage" ? "danger" : "success");
+    const tone = outcome.type === "damage" ? "danger"
+      : outcome.type === "manual-adjustment" ? "info" : "success";
+    addToast(message, tone);
     floatingText(outcome);
     return true;
   }
@@ -199,7 +239,7 @@ export function createCombatFeedback({
     const tone = ["rejected", "save-failed"].includes(state) ? "error"
       : state === "committed" ? "success" : "info";
     addToast(message, tone);
-    if (["targeting", "awaiting", "committed", "cancelled", "rejected", "save-failed"].includes(state)) {
+    if (["selected", "processing", "targeting", "awaiting", "committed", "cancelled", "rejected", "save-failed"].includes(state)) {
       return addLogEntry({
         id: detail.id,
         message,

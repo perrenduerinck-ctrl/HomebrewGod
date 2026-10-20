@@ -347,6 +347,99 @@
 .hg-floor-panel [data-tone="error"] { color: #fca5a5; }
 .hg-floor-panel [data-tone="success"] { color: #86efac; }
 
+.hg-floor-connection-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.hg-floor-connection-editor.hidden { display: none; }
+
+.hg-floor-connection-editor-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(1, 3, 9, .7);
+}
+
+.hg-floor-connection-editor-card {
+  position: relative;
+  display: grid;
+  width: min(620px, calc(100vw - 28px));
+  max-height: min(88dvh, 760px);
+  overflow: auto;
+  border: 1px solid rgba(151, 132, 255, .52);
+  border-radius: 16px;
+  color: #eef1ff;
+  background: linear-gradient(180deg, rgba(19, 24, 43, .995), rgba(8, 11, 21, .995));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .7);
+}
+
+.hg-floor-connection-editor-card > header,
+.hg-floor-connection-editor-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.hg-floor-connection-editor-card > header { border-bottom: 1px solid rgba(130, 143, 215, .2); }
+.hg-floor-connection-editor-card > footer { justify-content: flex-end; border-top: 1px solid rgba(130, 143, 215, .2); }
+.hg-floor-connection-editor-card h2 { margin: 2px 0 0; font-size: 1.08rem; }
+.hg-floor-connection-editor-card > header > button { width: 38px; min-height: 38px; margin: 0; padding: 0; font-size: 1.25rem; }
+
+.hg-floor-connection-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+
+.hg-floor-connection-editor-fields label { display: grid; gap: 4px; min-width: 0; color: #b8c1de; font-size: .72rem; font-weight: 750; }
+.hg-floor-connection-editor-fields input,
+.hg-floor-connection-editor-fields select { width: 100%; min-width: 0; margin: 0; }
+.hg-floor-connection-editor-fields .is-wide { grid-column: 1 / -1; }
+
+.hg-floor-connection-endpoint {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(119, 135, 203, .3);
+  border-radius: 10px;
+}
+
+.hg-floor-connection-endpoint legend { padding: 0 5px; color: #e7e2ff; font-size: .75rem; font-weight: 850; }
+.hg-floor-connection-endpoint button { grid-column: 1 / -1; min-height: 34px; margin: 0; }
+.hg-floor-connection-flags { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.hg-floor-connection-flags label { display: inline-flex; align-items: center; gap: 5px; }
+.hg-floor-connection-flags input { width: auto; }
+.hg-floor-connection-editor-status { min-height: 1.2em; margin: 0; padding: 0 14px 12px; color: #f7c978; font-size: .72rem; }
+
+.hg-floor-connection-editor.is-placing { place-items: start center; pointer-events: none; }
+.hg-floor-connection-editor.is-placing .hg-floor-connection-editor-backdrop { opacity: 0; pointer-events: none; }
+.hg-floor-connection-editor.is-placing .hg-floor-connection-editor-card {
+  width: min(520px, calc(100vw - 20px));
+  max-height: 92px;
+  pointer-events: auto;
+}
+.hg-floor-connection-editor.is-placing .hg-floor-connection-editor-fields,
+.hg-floor-connection-editor.is-placing .hg-floor-connection-editor-card > header,
+.hg-floor-connection-editor.is-placing .hg-floor-connection-editor-card > footer { display: none; }
+.hg-floor-connection-editor.is-placing .hg-floor-connection-editor-status { padding: 12px 14px; text-align: center; }
+body.hg-placing-floor-connection { cursor: crosshair; }
+
 @media (max-width: 900px) {
   #floorSelectorPanel .hg-floor-compact {
     grid-template-columns: 32px minmax(120px, 200px) 32px 32px;
@@ -388,6 +481,14 @@
   .hg-floor-connection > span {
     grid-column: 1 / -1;
   }
+
+  .hg-floor-connection-editor { padding: 7px; }
+  .hg-floor-connection-editor-card { width: calc(100vw - 14px); max-height: calc(100dvh - 14px); }
+  .hg-floor-connection-editor-fields { grid-template-columns: 1fr; }
+  .hg-floor-connection-editor-fields .is-wide { grid-column: auto; }
+  .hg-floor-connection-endpoint { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hg-floor-connection-endpoint .is-wide { grid-column: 1 / -1; }
+  .hg-floor-connection-flags { grid-column: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

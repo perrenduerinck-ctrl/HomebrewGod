@@ -8,11 +8,21 @@
 .hg-combat-log > summary { min-height: 34px; padding: 8px 10px; color: #dfe4ff; cursor: pointer; font-size: .72rem; font-weight: 800; }
 .hg-combat-log > summary span { display: inline-grid; place-items: center; min-width: 19px; min-height: 19px; margin-left: 5px; border-radius: 999px; color: #d9d1ff; background: rgba(112,86,214,.28); font-size: .62rem; }
 .hg-combat-log-list { display: grid; gap: 5px; max-height: min(34vh, 280px); padding: 0 7px 7px; overflow: auto; }
+.hg-combat-log-scope { margin: 0; padding: 0 9px 7px; color: #858fac; font-size: .58rem; line-height: 1.3; }
+.hg-combat-log-group { display: grid; gap: 5px; }
+.hg-combat-log-group > h4 { position: sticky; top: 0; z-index: 1; margin: 0; padding: 4px 5px; color: #b8c1e1; background: rgba(10,13,25,.96); font-size: .61rem; letter-spacing: .05em; text-transform: uppercase; }
 .hg-combat-log-entry { padding: 7px 8px; border-left: 2px solid #7d6ae0; border-radius: 6px; background: rgba(35,40,64,.62); }
+.hg-combat-log-entry[data-type="damage"] { border-left-color: #ef7186; }
+.hg-combat-log-entry[data-type="healing"], .hg-combat-log-entry[data-type="temporary-hp"] { border-left-color: #5ed29a; }
+.hg-combat-log-entry[data-type="movement"] { border-left-color: #65b9ef; }
+.hg-combat-log-entry[data-type="condition"] { border-left-color: #d69af4; }
+.hg-combat-log-entry[data-type="manual-adjustment"] { border-left-color: #e8b76e; }
 .hg-combat-log-entry[data-state="cancelled"], .hg-combat-log-entry[data-state="rejected"], .hg-combat-log-entry[data-state="save-failed"] { border-left-color: #d76a7d; }
 .hg-combat-log-entry small { color: #929bb9; font-size: .58rem; }
 .hg-combat-log-entry p { margin: 2px 0 0; color: #e9ecfa; font-size: .7rem; line-height: 1.25; }
 .hg-combat-dice-result { margin-top: 5px; color: #d8ceff; font-size: .65rem; }
+.hg-combat-dice-result > summary { cursor: pointer; font-weight: 800; }
+.hg-combat-dice-result > div { padding-top: 4px; color: #bfc5de; }
 .hg-floating-combat-text { position: absolute; z-index: 30; left: 50%; top: -8px; min-width: max-content; color: #ff9bac; font-size: clamp(.85rem, 1.4vw, 1.2rem); font-weight: 950; text-shadow: 0 2px 2px #000, 0 0 9px currentColor; pointer-events: none; transform: translate(-50%, 0); animation: hg-combat-float 1.6s ease-out forwards; }
 .hg-floating-combat-text[data-type="healing"], .hg-floating-combat-text[data-type="temporary-hp"] { color: #80efb6; }
 .hg-floating-combat-text[data-type="critical"] { color: #ffd772; }

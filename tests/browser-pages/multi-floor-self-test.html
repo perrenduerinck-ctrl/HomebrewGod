@@ -72,12 +72,25 @@
     };
     const floorSaves = [];
     const connectionSaves = [];
+    const connectionCreates = [];
+    let connectionSaveError = null;
+    let deferConfirmation = false;
+    let resolveConfirmation = null;
     const persistence = {
       listenScenes(roomCode, callback) { return defer(callback, fixtureIsLegacy ? [] : [scene]); },
       listenFloors(roomCode, sceneId, callback) { return defer(callback, floors); },
       listenConnections(roomCode, sceneId, callback) { return defer(callback, connections); },
       saveFloor(roomCode, sceneId, floorId, value) { floorSaves.push({ floorId, value }); return Promise.resolve(value); },
-      saveConnection(roomCode, sceneId, connectionId, value) { connectionSaves.push({ connectionId, value }); return Promise.resolve(value); },
+      saveConnection(roomCode, sceneId, connectionId, value) {
+        if (connectionSaveError) {
+          const error = connectionSaveError;
+          connectionSaveError = null;
+          return Promise.reject(error);
+        }
+        connectionSaves.push({ connectionId, value });
+        return Promise.resolve(value);
+      },
+      createConnection(roomCode, sceneId, value) { connectionCreates.push({ value }); return Promise.resolve({ ...value, id: `created-${connectionCreates.length}` }); },
       deleteConnection() { return Promise.resolve(); }
     };
     const token = { id: "hero", name: "Hero", ownerUid: "dm-1", sceneId: "house", floorId: "ground", x: 20, y: 30, elevation: 0 };
@@ -90,7 +103,11 @@
       canControlToken: () => true,
       getInitiativeState: () => ({ combatActive: false }),
       getConnectionDistanceFeet: () => 0,
-      requestConfirmation: async () => true,
+      getPlacementSurface: () => document.querySelector(".map-fixture"),
+      requestConfirmation: async () => {
+        if (!deferConfirmation) return true;
+        return new Promise((resolve) => { resolveConfirmation = resolve; });
+      },
       onBroadcast: async (value) => broadcasts.push(value),
       onUseConnection: async (value) => transfers.push({ floorId: value.floor.id, connectionId: value.connection.id })
     });
@@ -117,7 +134,21 @@
       onEdit: ({ connection }) => floorSystem.editConnection(connection)
     });
     markerSystem.setScreen("battle");
-    window.fixture = { floorSystem, markerSystem, broadcasts, transfers, floorSaves, connectionSaves };
+    window.fixture = {
+      floorSystem, markerSystem, broadcasts, transfers, floorSaves, connectionSaves, connectionCreates, connections,
+      failNextConnectionSave(message = "Permission denied while saving the connection.") {
+        connectionSaveError = new Error(message);
+      },
+      deferNextConfirmation() {
+        deferConfirmation = true;
+      },
+      resolveDeferredConfirmation(value = true) {
+        deferConfirmation = false;
+        const resolve = resolveConfirmation;
+        resolveConfirmation = null;
+        resolve?.(value);
+      }
+    };
     document.body.dataset.ready = "true";
   </script>
 </body>

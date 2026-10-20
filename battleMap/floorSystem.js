@@ -1,5 +1,4 @@
 import {
-  FLOOR_CONNECTION_TYPES,
   createLegacyFloor,
   createStableMapScopeId,
   getConnectionsForFloor,
@@ -12,6 +11,7 @@ import {
   DEFAULT_CONNECTION_INTERACTION_FEET,
   validateFloorConnectionUse
 } from "./floorConnectionMarkers.js";
+import { createFloorConnectionEditor } from "./floorConnectionEditor.js";
 
 const cleanText = (value) => String(value ?? "").trim();
 
@@ -48,6 +48,8 @@ export function createFloorSystem({
   canControlToken = () => false,
   getInitiativeState = () => ({}),
   getConnectionDistanceFeet = () => Infinity,
+  getPlacementSurface = () => null,
+  onPlacementModeChange = () => {},
   onViewChanged = () => {},
   onBroadcast = async () => {},
   onUseConnection = async () => {},
@@ -88,7 +90,71 @@ export function createFloorSystem({
   let generation = 0;
   let busy = false;
   let drawerOpen = false;
+  let cancelActivePlacement = null;
   const subscribers = new Set();
+
+  async function placeConnectionEndpoint({ floorId } = {}) {
+    const placementRoomCode = roomCode;
+    const placementSceneId = viewSceneId;
+    const placementGeneration = generation;
+    if (!isDm) throw new Error("Only the room DM can place floor connections.");
+    if (!floors.some((floor) => floor.id === floorId)) throw new Error("Choose a valid floor before placing the marker.");
+    if (floorId !== viewFloorId) {
+      await selectFloor(floorId, { reason: "connection-placement", broadcast: false });
+    }
+    const surface = getPlacementSurface();
+    if (!surface) throw new Error("The current map is not ready for marker placement.");
+    setDrawerOpen(false, { focus: false });
+    onPlacementModeChange(true);
+    return new Promise((resolve) => {
+      let settled = false;
+      const cleanup = (point = null) => {
+        if (settled) return;
+        settled = true;
+        surface.removeEventListener("pointerdown", onPointerDown, true);
+        document.removeEventListener("keydown", onKeyDown, true);
+        cancelActivePlacement = null;
+        onPlacementModeChange(false);
+        resolve(point);
+      };
+      const onPointerDown = (event) => {
+        if (
+          roomCode !== placementRoomCode ||
+          viewSceneId !== placementSceneId ||
+          generation !== placementGeneration ||
+          viewFloorId !== floorId
+        ) {
+          cleanup(null);
+          return;
+        }
+        const rect = surface.getBoundingClientRect();
+        if (!rect.width || !rect.height) {
+          cleanup(null);
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        cleanup({
+          x: Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100)),
+          y: Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100))
+        });
+      };
+      const onKeyDown = (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        cleanup(null);
+      };
+      cancelActivePlacement = () => cleanup(null);
+      surface.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    });
+  }
+
+  const connectionEditor = createFloorConnectionEditor({
+    mount: document.body,
+    placeEndpoint: placeConnectionEndpoint
+  });
 
   const storageKey = () => `homebrewGodFloorView:${userId}:${roomCode}`;
 
@@ -574,72 +640,63 @@ export function createFloorSystem({
     if (!source || floors.length < 2) {
       throw new Error("Add at least two floors before creating a connection.");
     }
-    const destinations = floors.filter((floor) => floor.id !== source.id);
-    const answer = globalThis.prompt(
-      `Destination floor:\n${destinations.map((floor, index) => `${index + 1}: ${floorLabel(floor)}`).join("\n")}`,
-      "1"
-    );
-    if (answer === null) return;
-    const destination = destinations[Number(answer) - 1];
-    if (!destination) throw new Error("Choose a valid destination floor number.");
-    const typeAnswer = cleanText(globalThis.prompt(
-      `Connection type (${FLOOR_CONNECTION_TYPES.join(", ")})`,
-      "stairs"
-    )).toLowerCase();
-    const type = FLOOR_CONNECTION_TYPES.includes(typeAnswer) ? typeAnswer : "custom";
-    const name = cleanText(globalThis.prompt("Connection name", type === "custom" ? "Passage" : type)) || type;
-    const movementCost = Math.max(0, Number(globalThis.prompt("Movement cost in feet", "0")) || 0);
-    const allowPlayers = globalThis.confirm("Allow players to use this connection outside combat?");
-    const sourceX = Math.max(0, Math.min(100, Number(globalThis.prompt("Marker X on this floor (0-100%)", "50")) || 50));
-    const sourceY = Math.max(0, Math.min(100, Number(globalThis.prompt("Marker Y on this floor (0-100%)", "50")) || 50));
-    const destinationX = Math.max(0, Math.min(100, Number(globalThis.prompt("Arrival X on destination floor (0-100%)", "50")) || 50));
-    const destinationY = Math.max(0, Math.min(100, Number(globalThis.prompt("Arrival Y on destination floor (0-100%)", "50")) || 50));
-    await persistence.createConnection(roomCode, viewSceneId, {
-      name,
-      type,
-      source: { floorId: source.id, x: sourceX, y: sourceY },
-      destination: { floorId: destination.id, x: destinationX, y: destinationY },
-      bidirectional: true,
-      allowPlayers,
-      enabled: true,
-      hidden: false,
-      movementCost
+    const editRoomCode = roomCode;
+    const editSceneId = viewSceneId;
+    const editGeneration = generation;
+    const destination = floors.find((floor) => floor.id !== source.id);
+    const draft = await connectionEditor.open({
+      mode: "create",
+      floors,
+      sourceFloorId: source.id,
+      destinationFloorId: destination?.id || "",
+      connection: {
+        name: "Stairs",
+        type: "stairs",
+        source: { floorId: source.id, x: 50, y: 50 },
+        destination: { floorId: destination?.id || "", x: 50, y: 50 },
+        bidirectional: true,
+        allowPlayers: true,
+        enabled: true,
+        hidden: false,
+        movementCost: 0
+      }
     });
-    setStatus(`${name} connected to ${destination.name}.`, "success");
+    if (!draft) {
+      setStatus("Connection creation canceled. No changes were saved.");
+      return false;
+    }
+    if (roomCode !== editRoomCode || viewSceneId !== editSceneId || generation !== editGeneration || !isDm) {
+      throw new Error("The room or account changed while the connection was being edited. Nothing was saved.");
+    }
+    await persistence.createConnection(roomCode, viewSceneId, draft);
+    const savedDestination = floors.find((floor) => floor.id === draft.destination.floorId);
+    setStatus(`${draft.name} connected to ${savedDestination?.name || "the destination floor"}.`, "success");
+    return true;
   }
 
   async function editConnection(connection) {
     if (!connection || typeof persistence.saveConnection !== "function") return;
-    const name = cleanText(globalThis.prompt("Connection name", connection.name));
-    if (!name) return;
-    const typeAnswer = cleanText(globalThis.prompt(
-      `Connection type (${FLOOR_CONNECTION_TYPES.join(", ")})`,
-      connection.type || "stairs"
-    )).toLowerCase();
-    const type = FLOOR_CONNECTION_TYPES.includes(typeAnswer) ? typeAnswer : "custom";
-    const movementCostAnswer = globalThis.prompt(
-      "Movement cost in feet",
-      String(connection.movementCost || 0)
-    );
-    if (movementCostAnswer === null) return;
-    const movementCost = Math.max(0, Number(movementCostAnswer) || 0);
-    const allowPlayers = globalThis.confirm(
-      "Allow players to use this connection outside combat?"
-    );
-    const sourceX = Math.max(0, Math.min(100, Number(globalThis.prompt("Source marker X (0-100%)", String(connection.source?.x ?? 50))) || 0));
-    const sourceY = Math.max(0, Math.min(100, Number(globalThis.prompt("Source marker Y (0-100%)", String(connection.source?.y ?? 50))) || 0));
-    const destinationX = Math.max(0, Math.min(100, Number(globalThis.prompt("Destination marker X (0-100%)", String(connection.destination?.x ?? 50))) || 0));
-    const destinationY = Math.max(0, Math.min(100, Number(globalThis.prompt("Destination marker Y (0-100%)", String(connection.destination?.y ?? 50))) || 0));
+    const editRoomCode = roomCode;
+    const editSceneId = viewSceneId;
+    const editGeneration = generation;
+    const draft = await connectionEditor.open({ mode: "edit", floors, connection });
+    if (!draft) {
+      setStatus("Connection edit canceled. Existing values were kept.");
+      return false;
+    }
+    if (roomCode !== editRoomCode || viewSceneId !== editSceneId || generation !== editGeneration || !isDm) {
+      throw new Error("The room or account changed while the connection was being edited. Nothing was saved.");
+    }
+    const latest = connections.find((entry) => entry.id === connection.id);
+    if (!latest) throw new Error("That floor connection was deleted while it was being edited.");
     await persistence.saveConnection(roomCode, viewSceneId, connection.id, {
-      ...connection,
-      name,
-      type,
-      movementCost,
-      allowPlayers,
-      source: { ...connection.source, x: sourceX, y: sourceY },
-      destination: { ...connection.destination, x: destinationX, y: destinationY }
+      ...latest,
+      ...draft,
+      source: { ...latest.source, ...draft.source },
+      destination: { ...latest.destination, ...draft.destination }
     });
-    setStatus(`${name} updated.`, "success");
+    setStatus(`${draft.name} updated.`, "success");
+    return true;
   }
 
   async function runAction(action) {
@@ -658,11 +715,15 @@ export function createFloorSystem({
   }
 
   async function useConnection(connectionOrId, { token = getSelectedToken(), confirm = true } = {}) {
-    const connection = typeof connectionOrId === "string"
-      ? connections.find((entry) => entry.id === connectionOrId)
-      : connectionOrId;
+    const operationRoomCode = roomCode;
+    const operationUserId = userId;
+    const operationGeneration = generation;
+    const connectionId = cleanText(typeof connectionOrId === "string" ? connectionOrId : connectionOrId?.id);
+    const connection = connections.find((entry) => entry.id === connectionId);
     if (!connection) throw new Error("That floor connection is unavailable.");
-    if (!token) throw new Error("Select a token on the battle map first.");
+    const tokenId = cleanText(token?.id);
+    token = getTokens().find((entry) => cleanText(entry.id) === tokenId);
+    if (!token) throw new Error("The selected token no longer exists.");
     const route = resolveConnectionDestination(connection, token.floorId || viewFloorId);
     const destination = floors.find((entry) => entry.id === route?.to.floorId);
     if (!destination) throw new Error("The destination floor is unavailable.");
@@ -689,7 +750,22 @@ export function createFloorSystem({
       `Move ${token.name || "the selected token"} through ${connection.name} to ${destination.name}?`,
       { title: `Travel to ${destination.name}?`, confirmLabel: "Travel" }
     )) return false;
+    if (
+      roomCode !== operationRoomCode ||
+      userId !== operationUserId ||
+      generation !== operationGeneration
+    ) {
+      throw new Error("The room or account changed. Reopen the connection and try again.");
+    }
+    if (confirm) return useConnection(connection.id, { token: { id: token.id }, confirm: false });
     await onUseConnection({ token, scene: getActiveScene(), floor: destination, connection });
+    if (
+      roomCode !== operationRoomCode ||
+      userId !== operationUserId ||
+      generation !== operationGeneration
+    ) {
+      return true;
+    }
     await selectFloor(destination.id, { broadcast: false, reason: "connection-used" });
     setStatus(`${token.name || "Token"} traveled to ${destination.name}.`, "success");
     return true;
@@ -794,6 +870,10 @@ export function createFloorSystem({
   function setContext(context = {}) {
     const nextRoomCode = cleanText(context.roomCode);
     const roomChanged = nextRoomCode !== roomCode || cleanText(context.userId) !== userId;
+    if (isDm && context.isDm !== true) {
+      cancelActivePlacement?.();
+      connectionEditor.cancel();
+    }
     roomSnapshot = context.room || roomSnapshot || {};
     isDm = context.isDm === true;
     if (!roomChanged) {
@@ -848,6 +928,8 @@ export function createFloorSystem({
   }
 
   function disconnect() {
+    cancelActivePlacement?.();
+    connectionEditor.cancel();
     generation += 1;
     stopScenes?.();
     stopScenes = null;
@@ -873,6 +955,7 @@ export function createFloorSystem({
     destroy() {
       document.removeEventListener("keydown", handleKeydown, true);
       disconnect();
+      connectionEditor.destroy();
     },
     getState,
     subscribe(subscriber) {

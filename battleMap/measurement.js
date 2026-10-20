@@ -578,6 +578,19 @@ export function createMapRuler({
     return setEnabled(!enabled);
   }
 
+  function setOrigin(point = {}) {
+    setEnabled(true);
+    syncBounds();
+    const width = Math.max(1, overlay.clientWidth);
+    const height = Math.max(1, overlay.clientHeight);
+    const xRatio = clamp(finiteNumber(point.xRatio) ?? (finiteNumber(point.x) ?? 0) / width, 0, 1);
+    const yRatio = clamp(finiteNumber(point.yRatio) ?? (finiteNumber(point.y) ?? 0) / height, 0, 1);
+    start = { x: xRatio * width, y: yRatio * height, xRatio, yRatio };
+    end = { ...start };
+    render();
+    return getState();
+  }
+
   function destroy() {
     if (!connected) return;
 
@@ -616,6 +629,7 @@ export function createMapRuler({
     destroy,
     getState,
     refresh,
+    setOrigin,
     setEnabled,
     toggle
   });

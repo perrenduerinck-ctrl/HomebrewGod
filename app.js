@@ -223,12 +223,23 @@ import { createScenePersistence } from "./battleMap/scenePersistence.js?v=multi-
 import { createFloorSystem } from "./battleMap/floorSystem.js?v=battle-game-feel-20261016";
 import {
   createFloorConnectionMarkers,
-  measureConnectionDistanceFeet
+  measureConnectionDistanceFeet,
+  validateFloorConnectionUse
 } from "./battleMap/floorConnectionMarkers.js?v=battle-game-feel-20261016";
-import { createTokenContextMenu } from "./tokens/tokenContextMenu.js?v=battle-game-feel-20261016";
+import {
+  createTokenContextMenu,
+  formatVisibleTokenStats,
+  getTokenStatVisibility
+} from "./tokens/tokenContextMenu.js?v=battle-reliability-20261018";
+import { createTokenEditor } from "./tokens/tokenEditor.js?v=battle-reliability-20261018";
+import {
+  getLinkedTokenRecordId,
+  requireLinkedTokenRecord
+} from "./tokens/linkedRecord.js?v=battle-reliability-20261019";
 import { createCombatFeedback } from "./combat/combatFeedback.js?v=battle-game-feel-20261016";
 import {
-  buildFloorTransitionPatch
+  buildFloorTransitionPatch,
+  resolveConnectionDestination
 } from "./battleMap/sceneModel.js?v=multi-floor-20261014";
 import { subscribeToActionBarDocument } from "./combat/actionBarPersistence.js";
 import {
@@ -682,6 +693,7 @@ let movementSystem = null;
 let movementPanelSystem = null;
 let combatActionBarSystem = null;
 let tokenContextMenuSystem = null;
+let tokenEditorSystem = null;
 let floorConnectionMarkerSystem = null;
 let combatFeedbackSystem = null;
 let battleMapLighting = null;
@@ -739,6 +751,7 @@ function makeActiveSessionId() {
 const startupParams = new URLSearchParams(window.location.search);
 const startupRoomCode = String(startupParams.get("room") || "").trim().toUpperCase();
 const battleGameFeelTestMode = startupParams.has("battleGameFeelTest");
+let battleGameFeelTestRoomCode = "";
 const startupView = startupParams.get("view");
 let alreadyUsedStartupLink = false;
 
@@ -1662,6 +1675,7 @@ async function commitCombatActionBarMutation({
   let committedEconomy = null;
   let committedMovement = null;
   let committedCharacter = null;
+  let committedToken = null;
 
   await runTransaction(db, async (transaction) => {
     const roomSnapshot = await transaction.get(roomRef);
@@ -1670,6 +1684,7 @@ async function commitCombatActionBarMutation({
     const tokenSnapshot = await transaction.get(tokenRef);
     if (!tokenSnapshot.exists()) throw new Error("The selected token no longer exists.");
     const latestToken = { ...tokenSnapshot.data(), id: tokenSnapshot.id };
+    committedToken = latestToken;
     const isDm = latestRoom.dmUid === userUid;
     if (!canControlToken(latestToken, { isDm, userUid })) {
       throw new Error("You do not control that token.");
@@ -1745,7 +1760,8 @@ async function commitCombatActionBarMutation({
   return {
     economy: committedEconomy,
     movement: committedMovement,
-    character: committedCharacter
+    character: committedCharacter,
+    token: committedToken
   };
 }
 
@@ -9977,34 +9993,75 @@ async function transferTokenToFloor({
   if (!currentRoomCode || !currentUser?.uid || !token?.id || !scene?.id || !floor?.id) {
     throw new Error("The room, token, location, or destination floor is unavailable.");
   }
-  if (!currentIsDM) {
-    if (token.ownerUid !== currentUser.uid) {
-      throw new Error("You can move only a token you control.");
+  const operationRoomCode = currentRoomCode;
+  const operationUserUid = currentUser.uid;
+  const roomRef = doc(db, "rooms", operationRoomCode);
+  const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
+  let patch = null;
+  await runTransaction(db, async (transaction) => {
+    if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
+      throw new Error("The active room or account changed. The token was not moved.");
     }
-    if (!connection?.allowPlayers) {
-      throw new Error("The DM has not enabled this floor connection for players.");
+    const [roomSnapshot, tokenSnapshot] = await Promise.all([
+      transaction.get(roomRef),
+      transaction.get(tokenRef)
+    ]);
+    if (!roomSnapshot.exists()) throw new Error("The room no longer exists.");
+    if (!tokenSnapshot.exists()) throw new Error("That token no longer exists.");
+    const latestRoom = roomSnapshot.data() || {};
+    const latestToken = { ...tokenSnapshot.data(), id: tokenSnapshot.id };
+    const isDm = latestRoom.dmUid === operationUserUid;
+    const canControl = canControlToken(latestToken, { isDm, userUid: operationUserUid });
+    const initiative = normalizeInitiativeState(latestRoom);
+    if (!canControl) throw new Error("You no longer control that token.");
+    if (!isDm && dmOverride) throw new Error("Only the room DM can directly transfer a token between floors.");
+    if (connection) {
+      const state = floorSystem?.getState?.() || {};
+      const sourceFloor = state.floors?.find((entry) => entry.id === latestToken.floorId);
+      const route = resolveConnectionDestination(connection, latestToken.floorId);
+      const container = tokenSystem?.getTokenContainerForCurrentView?.();
+      const rect = container?.getBoundingClientRect?.();
+      const distanceFeet = rect?.width && rect?.height && route?.from
+        ? measureConnectionDistanceFeet(latestToken, route.from, {
+            viewportWidth: rect.width,
+            viewportHeight: rect.height,
+            pixelsPerSquare: getBattleMapGridPixelSize(),
+            feetPerSquare: getRulerFeetPerSquare(),
+            floorElevation: sourceFloor?.baseElevation
+          })
+        : Infinity;
+      const validation = validateFloorConnectionUse({
+        connection,
+        token: latestToken,
+        sceneId: scene.id,
+        floorId: latestToken.floorId,
+        isDm,
+        canControl,
+        combatActive: initiative.combatActive === true,
+        distanceFeet
+      });
+      if (!validation.ok) throw new Error(validation.reason);
+      if (validation.route?.to?.floorId !== floor.id) {
+        throw new Error("That connection no longer leads to the selected destination floor.");
+      }
+    } else if (!isDm || !dmOverride) {
+      throw new Error("A valid floor connection is required.");
     }
-    if (initiativeSystem?.getState?.().combatActive === true) {
-      throw new Error("Player floor transitions during initiative require DM adjudication.");
-    }
-  }
-  const patch = buildFloorTransitionPatch({
-    token: {
-      ...token,
-      heightAboveFloor: Number.isFinite(Number(token.heightAboveFloor))
-        ? token.heightAboveFloor
-        : 0
-    },
-    sceneId: scene.id,
-    floor,
-    connection,
-    fromFloorId: token.floorId,
-    dmOverride: currentIsDM && dmOverride,
-    now: Date.now()
-  });
-  await updateDoc(doc(db, "rooms", currentRoomCode, "tokens", token.id), {
-    ...patch,
-    updatedAt: serverTimestamp()
+    patch = buildFloorTransitionPatch({
+      token: {
+        ...latestToken,
+        heightAboveFloor: Number.isFinite(Number(latestToken.heightAboveFloor))
+          ? latestToken.heightAboveFloor
+          : 0
+      },
+      sceneId: scene.id,
+      floor,
+      connection,
+      fromFloorId: latestToken.floorId,
+      dmOverride: isDm && dmOverride,
+      now: Date.now()
+    });
+    transaction.update(tokenRef, { ...patch, updatedAt: serverTimestamp() });
   });
   return patch;
 }
@@ -10050,6 +10107,15 @@ if (!floorSystem && E.floorSelectorPanel) {
         feetPerSquare: getRulerFeetPerSquare(),
         floorElevation: floor?.baseElevation
       });
+    },
+    getPlacementSurface: () => tokenSystem?.getTokenContainerForCurrentView?.() || null,
+    onPlacementModeChange: (active) => {
+      document.body.classList.toggle("hg-placing-floor-connection", active === true);
+      if (active) {
+        mapInteractionController.cancel("floor-connection-placement");
+        battleMapRuler?.setEnabled(false);
+        battleMapTemplates?.setEnabled(false);
+      }
     },
     onBroadcast: async ({ sceneId, floorId }) => {
       if (!currentRoomCode || !currentIsDM) return;
@@ -10107,42 +10173,77 @@ function setBattleGameFeelStatus(message, tone = "") {
 
 async function adjustTokenHpFromContext(token) {
   if (currentIsDM !== true) throw new Error("Only the room DM can adjust token HP from this menu.");
+  const operationRoomCode = currentRoomCode;
+  const operationUserUid = currentUser?.uid || "";
+  const operationActorName = currentUser?.displayName || "DM";
   const current = Number(token.currentHp) || 0;
   const maximum = Math.max(0, Number(token.maxHp) || current);
   const answer = globalThis.prompt(`Set ${token.name || "token"} HP (0-${maximum || "any"})`, String(current));
   if (answer === null) return false;
-  const requested = Math.max(0, Math.round(Number(answer)));
-  if (!Number.isFinite(requested)) throw new Error("Enter a valid HP value.");
-  const nextHp = maximum > 0 ? Math.min(maximum, requested) : requested;
+  const parsed = Number(answer);
+  if (!Number.isFinite(parsed)) throw new Error("Enter a valid HP value.");
+  const requested = Math.max(0, Math.round(parsed));
+  if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
+    throw new Error("The active room or account changed. HP was not updated.");
+  }
+  let previousHp = current;
+  let nextHp = maximum > 0 ? Math.min(maximum, requested) : requested;
+  let targetName = token.name || "Token";
   if (token.linkedCharacterId) {
     const result = await commitCombatActionBarMutation({
       token,
-      characterMutator: (remote) => ({
-        ...remote,
-        combat: { ...(remote.combat || {}), currentHp: nextHp },
-        currentHp: nextHp
-      })
+      characterMutator: (remote) => {
+        previousHp = Math.max(0, Number(remote.combat?.currentHp ?? remote.currentHp) || 0);
+        const remoteMaximum = Math.max(0, Number(remote.combat?.maxHp ?? remote.maxHp) || 0);
+        nextHp = remoteMaximum > 0 ? Math.min(remoteMaximum, requested) : requested;
+        return {
+          ...remote,
+          combat: { ...(remote.combat || {}), currentHp: nextHp },
+          currentHp: nextHp
+        };
+      }
     });
+    targetName = result.token?.name || targetName;
     if (result.character) await tokenSystem?.syncLinkedCharacterTokens?.(result.character);
   } else {
-    await updateDoc(doc(db, "rooms", currentRoomCode, "tokens", token.id), {
-      currentHp: nextHp,
-      "hp.current": nextHp,
-      updatedAtMillis: Date.now(),
-      updatedAt: serverTimestamp()
+    const roomRef = doc(db, "rooms", operationRoomCode);
+    const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
+    await runTransaction(db, async (transaction) => {
+      const [roomSnapshot, tokenSnapshot] = await Promise.all([
+        transaction.get(roomRef),
+        transaction.get(tokenRef)
+      ]);
+      if (!roomSnapshot.exists()) throw new Error("The room no longer exists.");
+      if (!tokenSnapshot.exists()) throw new Error("That token no longer exists.");
+      if (roomSnapshot.data()?.dmUid !== operationUserUid) {
+        throw new Error("Only the current room DM can adjust token HP.");
+      }
+      const latest = tokenSnapshot.data() || {};
+      previousHp = Math.max(0, Number(latest.currentHp ?? latest.hp?.current) || 0);
+      const remoteMaximum = Math.max(0, Number(latest.maxHp ?? latest.hp?.maximum) || 0);
+      nextHp = remoteMaximum > 0 ? Math.min(remoteMaximum, requested) : requested;
+      targetName = latest.name || targetName;
+      transaction.update(tokenRef, {
+        currentHp: nextHp,
+        "hp.current": nextHp,
+        updatedAtMillis: Date.now(),
+        updatedAt: serverTimestamp()
+      });
     });
   }
   document.dispatchEvent(new CustomEvent("homebrewgod:combat-outcome", {
     detail: {
-      id: `hp-adjust:${currentRoomCode}:${token.id}:${Date.now()}`,
+      id: `hp-adjust:${operationRoomCode}:${token.id}:${Date.now()}`,
       verified: true,
-      roomCode: currentRoomCode,
+      roomCode: operationRoomCode,
       tokenId: token.id,
-      targetName: token.name,
-      actorName: currentUser?.displayName || "DM",
-      type: nextHp === current ? "confirmed" : nextHp > current ? "healing" : "damage",
-      amount: Math.abs(nextHp - current),
-      message: `${token.name || "Token"} HP set to ${nextHp}${maximum ? `/${maximum}` : ""} by the DM.`,
+      targetName,
+      actorName: operationActorName,
+      type: "manual-adjustment",
+      amount: Math.abs(nextHp - previousHp),
+      previousHp,
+      nextHp,
+      message: `${operationActorName} adjusted ${targetName} HP from ${previousHp} to ${nextHp}.`,
       round: initiativeSystem?.getState?.().roundNumber || 0,
       timestamp: Date.now()
     }
@@ -10150,28 +10251,80 @@ async function adjustTokenHpFromContext(token) {
   return true;
 }
 
-async function executeTokenContextCommand(command, { token } = {}) {
-  if (!token?.id) throw new Error("That token is no longer available.");
+function getTokenOperationUserUid() {
+  return currentUser?.uid || (battleGameFeelTestMode ? "battle-game-feel-test-user" : "");
+}
+
+function getTokenOperationRoomCode() {
+  return currentRoomCode || (battleGameFeelTestMode ? battleGameFeelTestRoomCode : "");
+}
+
+function resolveTokenContextOperation(token, context = {}) {
+  const activeRoomCode = getTokenOperationRoomCode();
+  const capturedRoomCode = String(context.roomCode || activeRoomCode);
+  const activeUserUid = getTokenOperationUserUid();
+  const capturedUserUid = String(context.userUid || activeUserUid);
+  if (!token?.id || !capturedRoomCode || !capturedUserUid) {
+    throw new Error("That token action no longer has a valid room or account context.");
+  }
+  if (capturedRoomCode !== activeRoomCode || capturedUserUid !== activeUserUid) {
+    throw new Error("The active room or account changed. Reopen the token menu and try again.");
+  }
+  const latest = tokenSystem?.getRoomTokens?.().find((entry) => String(entry.id) === String(token.id));
+  if (!latest) throw new Error("That token no longer exists.");
+  return latest;
+}
+
+function ensureTokenEditor() {
+  if (!tokenEditorSystem) tokenEditorSystem = createTokenEditor({ mount: document.body });
+  return tokenEditorSystem;
+}
+
+async function executeTokenContextCommand(command, { token, context = {} } = {}) {
+  token = resolveTokenContextOperation(token, context);
+  const operationRoomCode = getTokenOperationRoomCode();
+  const operationUserUid = getTokenOperationUserUid();
   if (command.startsWith("connection:")) {
     return floorSystem?.useConnection?.(command.slice("connection:".length), { token });
   }
   if (command === "open-character") {
-    navigateMainScreen("characterCreator");
+    const characterId = getLinkedTokenRecordId(token, "character");
     const creator = await initCharacterCreatorSystem();
-    creator.openLibrary?.();
+    const snapshot = await getDoc(doc(db, "rooms", operationRoomCode, "characters", characterId));
+    if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
+      throw new Error("The active room or account changed. The character was not opened.");
+    }
+    const character = requireLinkedTokenRecord(
+      snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null,
+      { kind: "character", id: characterId }
+    );
+    const opened = creator.openCharacterSheetById?.(characterId, character);
+    if (opened !== true) return false;
+    navigateMainScreen("characterCreator");
+    setBattleGameFeelStatus(`Opened ${character.name || token.name || "the linked character"}. Use Battle Map in the sidebar to return.`);
     return true;
   }
   if (command === "open-monster" || command === "open-linked") {
     if (!currentIsDM) throw new Error("Only the DM can open the linked monster record.");
-    navigateMainScreen("monsterCreator");
+    const monsterId = getLinkedTokenRecordId(token, "monster");
+    const snapshot = await getDoc(doc(db, "rooms", operationRoomCode, "monsters", monsterId));
+    if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
+      throw new Error("The active room or account changed. The monster was not opened.");
+    }
+    const monster = requireLinkedTokenRecord(
+      snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } : null,
+      { kind: "monster", id: monsterId }
+    );
     const creator = await initMonsterCreatorSystem();
-    const monsterId = String(token.linkedMonsterId || token.linkedMonster?.id || "");
-    const monster = creator.getState?.().monsters?.find((entry) => String(entry.id) === monsterId);
-    if (monster) creator.loadMonsterIntoForm?.(monster);
+    if (creator.confirmNavigation?.() === false) return false;
+    navigateMainScreen("monsterCreator");
+    creator.loadMonsterIntoForm?.(monster);
+    setBattleGameFeelStatus(`Opened ${monster.name || token.name || "the linked monster"}. Use Battle Map in the sidebar to return.`);
     return true;
   }
   if (command === "move") {
     if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
+    tokenSystem?.setSelectedToken?.(token.id, "move-command");
     setBattleGameFeelStatus("Move ready. Drag the selected token and confirm tracked movement when required.");
     return true;
   }
@@ -10184,28 +10337,36 @@ async function executeTokenContextCommand(command, { token } = {}) {
     return true;
   }
   if (command === "conditions" || command === "apply-condition") {
+    if (command === "apply-condition" && currentIsDM !== true) {
+      throw new Error("Only the room DM can apply or remove conditions.");
+    }
     openNavigationTool("effects");
+    gameplayEffectPanelSystem?.focusToken?.(token.id, { edit: command === "apply-condition" });
     return true;
   }
   if (command === "stats") {
-    if (
-      currentIsDM !== true &&
-      !canOperateCombatToken(token) &&
-      token.display?.hpText !== true &&
-      token.display?.ac !== true
-    ) {
+    const summary = formatVisibleTokenStats({
+      token,
+      isDm: currentIsDM === true,
+      canControl: canOperateCombatToken(token)
+    });
+    if (!summary.parts.length) {
       throw new Error("This token's combat statistics are private.");
     }
-    const hp = Number(token.maxHp) > 0 ? `HP ${token.currentHp}/${token.maxHp}` : "HP not tracked";
-    const ac = Number(token.armorClass) > 0 ? `AC ${token.armorClass}` : "AC not tracked";
-    setBattleGameFeelStatus(`${token.name || "Token"}: ${hp} · ${ac}.`);
+    setBattleGameFeelStatus(`${token.name || "Token"}: ${summary.text}.`);
     return true;
   }
   if (command === "measure") {
     mapInteractionController.cancel("ruler-start");
     battleMapTemplates?.setEnabled(false);
     battleMapRuler?.setEnabled(true);
-    setBattleGameFeelStatus(`Ruler ready from ${token.name || "the selected token"}. Drag on the map to measure.`);
+    const anchored = battleMapRuler?.setOrigin?.({
+      xRatio: Math.max(0, Math.min(1, Number(token.x) / 100)),
+      yRatio: Math.max(0, Math.min(1, Number(token.y) / 100))
+    });
+    setBattleGameFeelStatus(anchored
+      ? `Ruler anchored to ${token.name || "the selected token"}. Drag from the token to measure.`
+      : "Ruler enabled. Drag on the map to measure.");
     return true;
   }
   if (command === "elevation") {
@@ -10213,13 +10374,43 @@ async function executeTokenContextCommand(command, { token } = {}) {
     return true;
   }
   if (command === "focus") {
-    E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(token.id))}"]`)?.scrollIntoView?.({ block: "center", inline: "center", behavior: "smooth" });
+    const tokenElement = E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(token.id))}"]`);
+    const surface = E.battleMapSurface;
+    if (!tokenElement || !surface) throw new Error("That token is not visible on the current floor.");
+    const tokenRect = tokenElement.getBoundingClientRect();
+    const surfaceRect = surface.getBoundingClientRect();
+    surface.scrollTo?.({
+      left: surface.scrollLeft + tokenRect.left + tokenRect.width / 2 - surfaceRect.left - surfaceRect.width / 2,
+      top: surface.scrollTop + tokenRect.top + tokenRect.height / 2 - surfaceRect.top - surfaceRect.height / 2,
+      behavior: "smooth"
+    });
+    tokenElement.focus?.({ preventScroll: true });
+    setBattleGameFeelStatus(`${token.name || "Token"} centered in the map view.`);
     return true;
   }
   if (command === "edit-token") {
     if (!currentIsDM) throw new Error("Only the room DM can edit tokens.");
-    openNavigationTool("tokenBuilder");
-    setBattleGameFeelStatus(`${token.name || "Token"} selected. Use Token Builder or the linked creator to edit it.`);
+    const draft = await ensureTokenEditor().open(token);
+    if (!draft) return false;
+    if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
+      throw new Error("The active room or account changed. The token was not updated.");
+    }
+    const roomRef = doc(db, "rooms", operationRoomCode);
+    const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
+    await runTransaction(db, async (transaction) => {
+      const [roomSnapshot, tokenSnapshot] = await Promise.all([
+        transaction.get(roomRef), transaction.get(tokenRef)
+      ]);
+      if (!roomSnapshot.exists()) throw new Error("The room no longer exists.");
+      if (!tokenSnapshot.exists()) throw new Error("That token no longer exists.");
+      if (roomSnapshot.data()?.dmUid !== operationUserUid) throw new Error("Only the current room DM can edit tokens.");
+      transaction.update(tokenRef, {
+        ...draft,
+        updatedAtMillis: Date.now(),
+        updatedAt: serverTimestamp()
+      });
+    });
+    setBattleGameFeelStatus(`${draft.name} was updated.`);
     return true;
   }
   if (command === "adjust-hp") return adjustTokenHpFromContext(token);
@@ -10227,18 +10418,43 @@ async function executeTokenContextCommand(command, { token } = {}) {
     if (!currentIsDM) throw new Error("Only the room DM can set elevation from this menu.");
     const answer = globalThis.prompt("Token elevation in feet", String(token.elevation ?? token.elevationFeet ?? 0));
     if (answer === null) return false;
-    await tokenSystem.updateTokenElevation(token.id, Number(answer));
+    const parsed = Number(answer);
+    if (!Number.isFinite(parsed) || parsed < -1000 || parsed > 1000) {
+      throw new Error("Token elevation must be a number between -1000 and 1000 feet.");
+    }
+    const roomRef = doc(db, "rooms", operationRoomCode);
+    const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
+    await runTransaction(db, async (transaction) => {
+      const [roomSnapshot, tokenSnapshot] = await Promise.all([transaction.get(roomRef), transaction.get(tokenRef)]);
+      if (!roomSnapshot.exists()) throw new Error("The room no longer exists.");
+      if (!tokenSnapshot.exists()) throw new Error("That token no longer exists.");
+      if (roomSnapshot.data()?.dmUid !== operationUserUid) throw new Error("Only the current room DM can set token elevation.");
+      transaction.update(tokenRef, {
+        elevation: Math.round(parsed), elevationFeet: Math.round(parsed),
+        updatedAtMillis: Date.now(), updatedAt: serverTimestamp()
+      });
+    });
+    setBattleGameFeelStatus(`${token.name || "Token"} elevation set to ${Math.round(parsed)} ft.`);
     return true;
   }
   if (command === "move-floor") {
     if (!currentIsDM) throw new Error("Only the room DM can move tokens between floors directly.");
+    tokenSystem?.setSelectedToken?.(token.id, "move-floor-command");
     E.floorSelectorPanel?.querySelector("[data-floor-manage-toggle]")?.click();
+    setBattleGameFeelStatus(`Choose a destination floor for ${token.name || "the selected token"}.`);
     return true;
   }
   if (command === "remove-token") {
     if (!currentIsDM) throw new Error("Only the room DM can remove tokens.");
     if (!await requestAppConfirmation(`Remove ${token.name || "this token"} from the map?`, { title: "Remove token", confirmLabel: "Remove" })) return false;
-    await tokenSystem.deleteToken(token.id);
+    if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
+      throw new Error("The active room or account changed. The token was not removed.");
+    }
+    if (!tokenSystem?.getRoomTokens?.().some((entry) => String(entry.id) === String(token.id))) {
+      throw new Error("That token no longer exists.");
+    }
+    const removed = await tokenSystem.deleteToken(token.id, { confirm: false });
+    if (removed !== true) throw new Error("The token could not be removed.");
     return true;
   }
   throw new Error("That token command is unavailable.");
@@ -10279,7 +10495,12 @@ function ensureBattleGameFeelSystems() {
         return {
           isDm: currentIsDM === true,
           canControl: canOperateCombatToken(token),
-          canViewStats: currentIsDM === true || canOperateCombatToken(token) || token.display?.hpText === true || token.display?.ac === true,
+          canViewStats: (() => {
+            const visibility = getTokenStatVisibility({ token, isDm: currentIsDM === true, canControl: canOperateCombatToken(token) });
+            return visibility.hp || visibility.ac;
+          })(),
+          roomCode: getTokenOperationRoomCode(),
+          userUid: getTokenOperationUserUid(),
           combatActive: initiative.combatActive === true,
           isCurrentTurn: initiative.combatActive !== true || initiative.currentCombatantId === token.id
         };
@@ -10395,7 +10616,7 @@ initiativeSystem.subscribe(function () {
 // =====================================================
 
 function openNavigationTool(toolName, trigger) {
-  if (!currentRoomCode) return false;
+  if (!getTokenOperationRoomCode()) return false;
   if (toolName === "journal") {
     return navigationToolDrawer?.open({
       label: "Campaign Journal",
@@ -12129,6 +12350,7 @@ window.addEventListener("pagehide", function (event) {
   battleMapCombatVfx?.destroy();
   battleMapAnimations?.destroy();
   tokenContextMenuSystem?.destroy?.();
+  tokenEditorSystem?.destroy?.();
   floorConnectionMarkerSystem?.destroy?.();
   combatFeedbackSystem?.destroy?.();
   removeActivePlayerSession();
@@ -12594,6 +12816,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
       setBattleGameFeelTestContext:
         async function (roomCode = "TEST-ROOM") {
           releaseBattleGameFeelRoomCode = String(roomCode || "TEST-ROOM");
+          battleGameFeelTestRoomCode = releaseBattleGameFeelRoomCode;
           ensureBattleGameFeelSystems();
           const actionBar = await ensureCombatActionBar();
           actionBar?.setScreen?.("battle");

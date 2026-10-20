@@ -3120,18 +3120,18 @@ export function createTokenSystem(options) {
     }
   }
 
-  async function deleteToken(tokenId) {
+  async function deleteToken(tokenId, { confirm = true } = {}) {
     try {
       const roomCode = deps.getCurrentRoomCode ? deps.getCurrentRoomCode() : null;
       const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
 
       if (!roomCode || !isDM) {
         alert("Only the DM can delete tokens.");
-        return;
+        return false;
       }
 
-      if (!await requestAppConfirmation("Delete this token? This does not delete the image from Cloudinary.", { title: "Delete token", confirmLabel: "Delete" })) {
-        return;
+      if (confirm && !await requestAppConfirmation("Delete this token? This does not delete the image from Cloudinary.", { title: "Delete token", confirmLabel: "Delete" })) {
+        return false;
       }
 
       if (
@@ -3148,9 +3148,11 @@ export function createTokenSystem(options) {
       if (selectedTokenId === tokenId) clearSelection("token-deleted");
 
       setStatus("Token deleted.");
+      return true;
     } catch (error) {
       console.error(error);
       alert(error.message);
+      return false;
     }
   }
 

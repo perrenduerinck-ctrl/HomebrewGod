@@ -21224,7 +21224,8 @@ export function createCharacterCreator(options = {}) {
   }
 
   function openCharacterSheetFromLibrary(
-    characterId
+    characterId,
+    providedCharacter = null
   ) {
     if (
       blockCharacterBusyAction(
@@ -21237,6 +21238,11 @@ export function createCharacterCreator(options = {}) {
     const character =
       findCachedCharacter(
         characterId
+      ) || (
+        providedCharacter &&
+        String(providedCharacter.id || providedCharacter.firestoreDocumentId || "") === String(characterId || "")
+          ? providedCharacter
+          : null
       );
 
     if (!character) {
@@ -39176,6 +39182,8 @@ export function createCharacterCreator(options = {}) {
     destroy: cleanupSection20CharacterCreator,
 
     openLibrary: navigateToLibrary,
+    openCharacterForEditing: openCharacterFromLibrary,
+    openCharacterSheetById: openCharacterSheetFromLibrary,
     navigateToStep,
     startNew: startSection20NewCharacter,
     replaceDraft: replaceSection20Draft,

@@ -1,7 +1,33 @@
 const text = (value) => String(value ?? "").trim();
+const ACTION_ICONS = Object.freeze({
+  "open-character": "♙", "open-monster": "♜", "open-linked": "↗", move: "➠", actions: "⚔", spells: "✦",
+  conditions: "◈", stats: "♥", measure: "⌁", elevation: "↕", focus: "◎", "edit-token": "✎",
+  "adjust-hp": "✚", "apply-condition": "◆", "set-elevation": "↕", "move-floor": "⇅", "remove-token": "×"
+});
 
 function item(id, label, options = {}) {
   return Object.freeze({ id, label, enabled: options.enabled !== false, ...options });
+}
+
+export function getTokenStatVisibility({ token = {}, isDm = false, canControl = false } = {}) {
+  const authorized = isDm === true || canControl === true;
+  return Object.freeze({
+    hp: authorized || token.display?.hpText === true,
+    ac: authorized || token.display?.ac === true,
+    authorized
+  });
+}
+
+export function formatVisibleTokenStats({ token = {}, isDm = false, canControl = false } = {}) {
+  const visibility = getTokenStatVisibility({ token, isDm, canControl });
+  const parts = [];
+  if (visibility.hp) {
+    parts.push(Number(token.maxHp) > 0 ? `HP ${Number(token.currentHp) || 0}/${Number(token.maxHp)}` : "HP not tracked");
+  }
+  if (visibility.ac) {
+    parts.push(Number(token.armorClass) > 0 ? `AC ${Number(token.armorClass)}` : "AC not tracked");
+  }
+  return Object.freeze({ visibility, parts, text: parts.join(" · ") });
 }
 
 export function buildTokenContextActions({
@@ -10,7 +36,7 @@ export function buildTokenContextActions({
   canControl = false,
   combatActive = false,
   isCurrentTurn = true,
-  canViewStats = isDm || canControl || token.display?.hpText === true || token.display?.ac === true,
+  canViewStats = getTokenStatVisibility({ token, isDm, canControl }).hp || getTokenStatVisibility({ token, isDm, canControl }).ac,
   nearbyConnections = []
 } = {}) {
   const linkedCharacter = text(token.linkedCharacterId);
@@ -19,39 +45,43 @@ export function buildTokenContextActions({
   const turnBlocked = combatActive && !isCurrentTurn && !isDm;
   const actions = [];
 
-  if (linkedCharacter && (canControl || isDm)) actions.push(item("open-character", "View Character Sheet"));
-  if (linkedMonster && isDm) actions.push(item("open-monster", "Open Linked Monster"));
+  if (linkedCharacter && (canControl || isDm)) actions.push(item("open-character", "View Character Sheet", { group: "record" }));
+  if (linkedMonster && isDm) actions.push(item("open-monster", "Open Linked Monster", { group: "record" }));
   if (linked && isDm && !actions.some((entry) => entry.id.startsWith("open-"))) {
-    actions.push(item("open-linked", "Open Linked Record"));
+    actions.push(item("open-linked", "Open Linked Record", { group: "record" }));
   }
   if (canControl || isDm) {
     actions.push(item("move", "Move Token", {
+      group: "combat",
       enabled: !turnBlocked,
       reason: turnBlocked ? "It is not this token's turn." : ""
     }));
     actions.push(item("actions", "Attack / Choose Action", {
+      group: "combat",
       enabled: !turnBlocked,
       reason: turnBlocked ? "It is not this token's turn." : ""
     }));
     if (linkedCharacter) {
       actions.push(item("spells", "Cast Spell", {
+        group: "combat",
         enabled: !turnBlocked,
         reason: turnBlocked ? "It is not this token's turn." : ""
       }));
     }
   }
 
-  actions.push(item("conditions", "View Conditions"));
-  if (canViewStats) actions.push(item("stats", "View Current HP and AC"));
-  actions.push(item("measure", "Measure Distance"));
-  actions.push(item("elevation", `Elevation: ${Number(token.elevation ?? token.elevationFeet) || 0} ft`));
-  actions.push(item("focus", "Focus Camera on Token"));
+  actions.push(item("conditions", "View Conditions", { group: "inspect" }));
+  if (canViewStats) actions.push(item("stats", "View Visible Combat Stats", { group: "inspect" }));
+  actions.push(item("measure", "Measure from Token", { group: "map" }));
+  actions.push(item("elevation", `Elevation: ${Number(token.elevation ?? token.elevationFeet) || 0} ft`, { group: "map" }));
+  actions.push(item("focus", "Focus Camera on Token", { group: "map" }));
 
   nearbyConnections.forEach((connection) => {
     actions.push(item(`connection:${connection.id}`, `Travel via ${connection.name || "connection"}`, {
       enabled: connection.available !== false,
       reason: connection.reason || "",
-      connectionId: connection.id
+      connectionId: connection.id,
+      group: "floor"
     }));
   });
 
@@ -131,15 +161,15 @@ export function createTokenContextMenu({
       ...context,
       nearbyConnections: getConnectionOptions(token) || []
     });
-    let dmDividerAdded = false;
+    let previousGroup = "";
     actions.forEach((action) => {
-      if (action.group === "dm" && !dmDividerAdded) {
+      if (previousGroup && action.group !== previousGroup) {
         const divider = document.createElement("div");
         divider.className = "hg-token-menu-divider";
         divider.setAttribute("role", "separator");
         menu.appendChild(divider);
-        dmDividerAdded = true;
       }
+      previousGroup = action.group || previousGroup;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "hg-token-menu-item";
@@ -147,15 +177,18 @@ export function createTokenContextMenu({
       button.setAttribute("role", "menuitem");
       button.disabled = action.enabled === false;
       button.classList.toggle("is-danger", action.danger === true);
-      button.textContent = action.label;
+      const icon = action.id.startsWith("connection:") ? "⇅" : ACTION_ICONS[action.id] || "•";
+      button.innerHTML = `<span class="hg-token-menu-icon" aria-hidden="true"></span><span class="hg-token-menu-label"></span>`;
+      button.querySelector(".hg-token-menu-icon").textContent = icon;
+      button.querySelector(".hg-token-menu-label").textContent = action.label;
       if (action.reason) button.title = action.reason;
       button.addEventListener("click", async () => {
         if (button.disabled) return;
         button.disabled = true;
         menu.setAttribute("aria-busy", "true");
         try {
-          await onAction(action.id, { token, action, context });
-          close();
+          const completed = await onAction(action.id, { token, action, context });
+          if (completed !== false) close();
         } catch (error) {
           button.disabled = false;
           button.title = error?.message || "This token action could not be completed.";

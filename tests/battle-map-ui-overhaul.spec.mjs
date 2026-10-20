@@ -88,11 +88,12 @@ test("floor drawer keeps management actions available without moving the map", a
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("battle-map-floor-drawer.png") });
 
-  page.on("dialog", async (dialog) => {
-    if (dialog.type() === "confirm") await dialog.accept();
-    else await dialog.accept(dialog.defaultValue());
-  });
   await page.locator('[data-floor-action="edit-connection"]').click();
+  const editor = page.locator(".hg-floor-connection-editor");
+  await expect(editor).toBeVisible();
+  await expect(editor.locator('[name="name"]')).toHaveValue("Main Stairs");
+  await editor.locator('[name="name"]').fill("Main Stairwell");
+  await editor.locator('[data-connection-save]').click();
   await expect.poll(() => page.evaluate(() => window.fixture.connectionSaves.length)).toBe(1);
 
   const activeRow = page.locator(".hg-floor-row.is-active");

@@ -41,6 +41,7 @@ export function createEffectPanel({
   const document = root.ownerDocument || globalThis.document;
   ensureStyles(document);
   let customModifiers = [];
+  let focusedTokenId = "";
   root.innerHTML = `
     <section class="hg-gameplay-effects">
       <div class="hg-effect-intro"><div><span>GAMEPLAY STATE</span><h3>Conditions, Buffs & Debuffs</h3><p>Rules remain authoritative. Visual effects are optional and cannot block changes.</p></div></div>
@@ -167,9 +168,11 @@ export function createEffectPanel({
 
   function renderActive() {
     const list = root.querySelector("[data-gameplay-effect-list]");
-    const records = runtime.getSnapshot();
+    const records = runtime.getSnapshot().filter((record) => (
+      !focusedTokenId || String(record.targetTokenId) === focusedTokenId
+    ));
     if (!records.length) {
-      list.innerHTML = '<p class="small">No active gameplay effects.</p>';
+      list.innerHTML = `<p class="small">${focusedTokenId ? "No active conditions or effects on this token." : "No active gameplay effects."}</p>`;
       return;
     }
     const tokens = new Map((getTokens() || []).map((token) => [String(token.id || token.tokenId), token]));
@@ -286,6 +289,22 @@ export function createEffectPanel({
     refresh,
     renderActive,
     setStatus,
+    focusToken(tokenId, { edit = false } = {}) {
+      focusedTokenId = String(tokenId || "").trim();
+      refreshTokens();
+      if (focusedTokenId && [...targetSelect.options].some((option) => option.value === focusedTokenId)) {
+        targetSelect.value = focusedTokenId;
+      }
+      renderActive();
+      setStatus(edit && getIsDm() === true
+        ? "Showing this token's active effects. Choose an effect above to add another."
+        : "Showing conditions and effects for the selected token.");
+      return focusedTokenId;
+    },
+    clearTokenFocus() {
+      focusedTokenId = "";
+      renderActive();
+    },
     setVisualEffects(records = []) {
       const list = root.querySelector("[data-visual-effect-list]");
       if (!list) return;
