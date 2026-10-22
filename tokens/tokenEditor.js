@@ -1,4 +1,5 @@
 import { normalizeElevation } from "../battleMap/elevation.js";
+import { normalizeTokenVisibility } from "./tokenPrivacy.js?v=secure-token-privacy-20261021";
 
 const TYPES = Object.freeze(["player", "enemy", "npc", "object"]);
 const SIZES = Object.freeze(["tiny", "small", "medium", "large", "huge", "gargantuan"]);
@@ -46,6 +47,7 @@ export function validateTokenEditorDraft(value = {}) {
     elevationFeet: elevation,
     movementSpeed,
     baseSpeed: movementSpeed,
+    visibility: normalizeTokenVisibility(value.visibility),
     vision: Object.freeze({
       distance: visionDistance,
       darkvision,
@@ -97,6 +99,10 @@ export function createTokenEditor({ mount = document.body } = {}) {
           <label><input name="displayConditions" type="checkbox"> Conditions</label>
           <label><input name="displayInitiative" type="checkbox"> Initiative</label>
         </fieldset>
+        <fieldset><legend>Player visibility</legend>
+          <label><input name="dmOnly" type="checkbox"> DM-only hidden token</label>
+          <small>DM-only tokens are stored separately and cannot be read by players. Reveal the token before adding it to initiative.</small>
+        </fieldset>
       </div>
       <p data-token-editor-status role="alert"></p>
       <footer><button type="button" data-token-editor-cancel>Cancel</button><button type="submit">Save Token</button></footer>
@@ -137,6 +143,7 @@ export function createTokenEditor({ mount = document.body } = {}) {
         movementSpeed: data.get("movementSpeed"), elevation: data.get("elevation"),
         visionDistance: data.get("visionDistance"), darkvision: data.get("darkvision"),
         brightLight: data.get("brightLight"), dimLight: data.get("dimLight"),
+        visibility: data.get("dmOnly") === "on" ? "dm" : "shared",
         display: {
           name: data.get("displayName") === "on", hpBar: data.get("displayHpBar") === "on",
           hpText: data.get("displayHpText") === "on", ac: data.get("displayAc") === "on",
@@ -171,7 +178,8 @@ export function createTokenEditor({ mount = document.body } = {}) {
       set("displayAc", token.display?.ac === true);
       set("displayConditions", token.display?.conditions !== false);
       set("displayInitiative", token.display?.initiative === true);
-      status.textContent = "Only this token document will be updated.";
+      set("dmOnly", normalizeTokenVisibility(token.visibility) === "dm");
+      status.textContent = "DM-only tokens are kept out of every player's Firestore reads.";
       root.classList.remove("hidden");
       queueMicrotask(() => form.elements.namedItem("name")?.focus());
       return new Promise((resolve) => { resolveSession = resolve; });

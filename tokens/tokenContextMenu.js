@@ -151,6 +151,7 @@ export function createTokenContextMenu({
     name.textContent = text(token.name) || "Token";
     const detail = document.createElement("span");
     const parts = [text(token.type) || "token"];
+    if (token.visibility === "dm") parts.push("DM-only");
     if (context.combatActive) parts.push(context.isCurrentTurn ? "current turn" : "waiting turn");
     detail.textContent = parts.join(" · ");
     heading.append(name, detail);

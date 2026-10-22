@@ -10,6 +10,7 @@ export const ROOM_OWNED_COLLECTIONS = Object.freeze([
     nestedCollections: ["floors", "connections", "dmFloorNotes"]
   },
   { name: "tokens", clientCleanup: true },
+  { name: "dmTokens", clientCleanup: true },
   { name: "characters", clientCleanup: true },
   { name: "monsters", clientCleanup: true },
   { name: "classes", clientCleanup: true },

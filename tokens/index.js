@@ -1,7 +1,8 @@
 // =====================================================
 // TOKENS SECTION 1 — TOKEN SYSTEM EXPORT / DEPENDENCIES
 // Firestore subcollection version.
-// Tokens live at rooms/{roomCode}/tokens/{tokenId}
+// Shared tokens live at rooms/{roomCode}/tokens/{tokenId}.
+// DM-only tokens live at rooms/{roomCode}/dmTokens/{tokenId}.
 // =====================================================
 
 import { requestAppConfirmation } from "../ui/visualPolish.js";
@@ -27,6 +28,13 @@ import {
   inferCharacterDarkvision,
   normalizeTokenVision
 } from "../battleMap/visionModel.js?v=fog-phase2-20261020";
+import {
+  normalizeTokenPrivacy,
+  normalizeTokenVisibility,
+  tokenCollectionForRecord,
+  tokenCollectionForVisibility,
+  tokenIsDmOnly
+} from "./tokenPrivacy.js?v=secure-token-privacy-20261021";
 
 export function isMatchingAutomationSummon(token, effectId) {
   return token?.automation?.kind === "summon" &&
@@ -117,7 +125,10 @@ export function createTokenSystem(options) {
   let scalePreviewHideTimer = null;
 
   let tokenRoomCode = null;
+  let tokenListenerIsDm = false;
   let tokenCache = [];
+  let publicTokenCache = [];
+  let privateTokenCache = [];
   let tokenTestMode = false;
   let selectedTokenId = null;
   const selectionSubscribers = new Set();
@@ -141,6 +152,7 @@ export function createTokenSystem(options) {
     tokenSizeSelect: null,
     tokenElevationInput: null,
     tokenMovementSpeedInput: null,
+    tokenDmOnlyInput: null,
     tokenImageUploadInput: null,
     addTokenButton: null,
     tokenBuilderStatus: null,
@@ -163,6 +175,7 @@ export function createTokenSystem(options) {
     T.tokenSizeSelect = $("tokenSizeSelect");
     T.tokenElevationInput = $("tokenElevationInput");
     T.tokenMovementSpeedInput = $("tokenMovementSpeedInput");
+    T.tokenDmOnlyInput = $("tokenDmOnlyInput");
     T.tokenImageUploadInput = $("tokenImageUploadInput");
     T.addTokenButton = $("addTokenButton");
     T.tokenBuilderStatus = $("tokenBuilderStatus");
@@ -718,6 +731,25 @@ export function createTokenSystem(options) {
         font-weight: 700;
       }
 
+      .tokenDmOnlyInputLabel {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 4px;
+        padding: 8px 10px;
+        border: 1px solid rgba(255, 199, 94, 0.38);
+        border-radius: 10px;
+        color: #ffe0a1;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      #tokenDmOnlyInput {
+        width: auto !important;
+        margin: 0 !important;
+        accent-color: #d69b32;
+      }
+
       #tokenElevationInput {
         width: 82px !important;
         max-width: 100% !important;
@@ -996,6 +1028,25 @@ export function createTokenSystem(options) {
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.15s ease;
+      }
+
+      .hg-token.is-dm-only {
+        outline: 2px dashed rgba(255, 196, 92, 0.9);
+        outline-offset: 3px;
+      }
+
+      .hg-token-privacy-badge {
+        position: absolute;
+        right: -7px;
+        top: -7px;
+        z-index: 15;
+        padding: 2px 4px;
+        border: 1px solid rgba(255, 219, 145, 0.8);
+        border-radius: 999px;
+        background: rgba(58, 34, 4, 0.96);
+        color: #ffe2a3;
+        font: 800 9px/1 sans-serif;
+        pointer-events: none;
       }
 
       .hg-token:hover .hg-token-size-badge {
@@ -1407,7 +1458,7 @@ export function createTokenSystem(options) {
 // =====================================================
 
   function normalizeToken(rawToken) {
-    const token = rawToken || {};
+    const token = normalizeTokenPrivacy(rawToken || {});
     const cleanSizeCategory = normalizeSizeCategory(token.sizeCategory || token.creatureSize || "medium");
     const maximumHp = Math.max(
       0,
@@ -1505,8 +1556,49 @@ export function createTokenSystem(options) {
       heightAboveFloor: Number.isFinite(Number(token.heightAboveFloor))
         ? normalizeElevation(token.heightAboveFloor)
         : null,
+      visibility: normalizeTokenVisibility(token.visibility),
       vision: normalizeTokenVision(token)
     };
+  }
+
+  function tokenDocumentReference(roomCode, tokenOrId) {
+    const token = typeof tokenOrId === "object"
+      ? tokenOrId
+      : tokenCache.find((entry) => String(entry.id) === String(tokenOrId));
+    return deps.doc(
+      deps.db,
+      "rooms",
+      roomCode,
+      tokenCollectionForRecord(token || {}),
+      String(token?.id || tokenOrId)
+    );
+  }
+
+  function rebuildTokenCache() {
+    const byId = new Map();
+    publicTokenCache.forEach((token) => byId.set(String(token.id), token));
+    privateTokenCache.forEach((token) => byId.set(String(token.id), token));
+    tokenCache = [...byId.values()];
+  }
+
+  function renderTokenSnapshot(roomCode) {
+    if (
+      tokenRoomCode !== roomCode ||
+      (deps.getCurrentRoomCode && deps.getCurrentRoomCode() !== roomCode)
+    ) {
+      return;
+    }
+    rebuildTokenCache();
+    if (selectedTokenId && !tokenCache.some((token) => token.id === selectedTokenId)) {
+      clearSelection("token-removed");
+    } else if (selectedTokenId) {
+      notifySelection("token-updated");
+    }
+    render(
+      deps.getCurrentRoomData
+        ? deps.getCurrentRoomData()
+        : lastRenderedRoom || {}
+    );
   }
 
   function getRoomTokens() {
@@ -1613,20 +1705,18 @@ export function createTokenSystem(options) {
       return null;
     }
 
-    const snapshot = await deps.getDocs(
-      deps.collection(
-        deps.db,
-        "rooms",
-        roomCode,
-        "tokens"
-      )
-    );
-    tokenCache = snapshot.docs.map(
-      (tokenDoc) => normalizeToken({
+    const collectionNames = deps.getCurrentIsDM?.() === true
+      ? ["tokens", "dmTokens"]
+      : ["tokens"];
+    const snapshots = await Promise.all(collectionNames.map((collectionName) => (
+      deps.getDocs(deps.collection(deps.db, "rooms", roomCode, collectionName))
+    )));
+    tokenCache = snapshots.flatMap((snapshot, index) => snapshot.docs.map(
+      (tokenDoc) => normalizeToken(normalizeTokenPrivacy({
         ...tokenDoc.data(),
         id: tokenDoc.id
-      })
-    );
+      }, collectionNames[index]))
+    ));
 
     return getCharacterLinkedToken(
       characterOrId,
@@ -1636,8 +1726,12 @@ export function createTokenSystem(options) {
 
   function stopTokenListener() {
     realtimeListeners.stop("tokens");
+    realtimeListeners.stop("dmTokens");
     tokenRoomCode = null;
+    tokenListenerIsDm = false;
     tokenCache = [];
+    publicTokenCache = [];
+    privateTokenCache = [];
   }
 
   function startTokenListenerForRoom(roomCode) {
@@ -1648,12 +1742,14 @@ export function createTokenSystem(options) {
     }
 
     tokenTestMode = false;
+    const shouldReadPrivateTokens = deps.getCurrentIsDM?.() === true;
 
     if (
       realtimeListeners.has(
         "tokens",
         roomCode
-      )
+      ) &&
+      tokenListenerIsDm === shouldReadPrivateTokens
     ) {
       return;
     }
@@ -1664,15 +1760,14 @@ export function createTokenSystem(options) {
     stopTokenListener();
 
     tokenRoomCode = roomCode;
-
-    const tokenCollectionRef = deps.collection(deps.db, "rooms", roomCode, "tokens");
+    tokenListenerIsDm = shouldReadPrivateTokens;
 
     realtimeListeners.connect(
       "tokens",
       roomCode,
       ({ fail, isCurrent }) => {
         return deps.onSnapshot(
-          tokenCollectionRef,
+          deps.collection(deps.db, "rooms", roomCode, "tokens"),
           function (snapshot) {
             if (
               !isCurrent() ||
@@ -1685,24 +1780,13 @@ export function createTokenSystem(options) {
               return;
             }
 
-            tokenCache = snapshot.docs.map(function (tokenDoc) {
-              return normalizeToken({
+            publicTokenCache = snapshot.docs.map(function (tokenDoc) {
+              return normalizeToken(normalizeTokenPrivacy({
                 ...tokenDoc.data(),
                 id: tokenDoc.id
-              });
+              }, "tokens"));
             });
-
-            if (selectedTokenId && !tokenCache.some((token) => token.id === selectedTokenId)) {
-              clearSelection("token-removed");
-            } else if (selectedTokenId) {
-              notifySelection("token-updated");
-            }
-
-            render(
-              deps.getCurrentRoomData
-                ? deps.getCurrentRoomData()
-                : lastRenderedRoom || {}
-            );
+            renderTokenSnapshot(roomCode);
           },
           function (error) {
             if (!isCurrent()) {
@@ -1719,6 +1803,31 @@ export function createTokenSystem(options) {
         );
       }
     );
+
+    if (shouldReadPrivateTokens) {
+      realtimeListeners.connect(
+        "dmTokens",
+        roomCode,
+        ({ fail, isCurrent }) => deps.onSnapshot(
+          deps.collection(deps.db, "rooms", roomCode, "dmTokens"),
+          function (snapshot) {
+            if (!isCurrent() || tokenRoomCode !== roomCode) return;
+            privateTokenCache = snapshot.docs.map((tokenDoc) => normalizeToken(
+              normalizeTokenPrivacy({
+                ...tokenDoc.data(),
+                id: tokenDoc.id
+              }, "dmTokens")
+            ));
+            renderTokenSnapshot(roomCode);
+          },
+          function (error) {
+            if (!isCurrent()) return;
+            fail(error);
+            console.error("Could not load DM-only room tokens:", error);
+          }
+        )
+      );
+    }
   }
 
   function getCurrentTokenTarget(room) {
@@ -1931,6 +2040,7 @@ export function createTokenSystem(options) {
       tokenEl.dataset.tokenId = token.id;
       tokenEl.dataset.tokenName = token.name || "Token";
       tokenEl.dataset.tokenType = token.type;
+      tokenEl.dataset.tokenVisibility = token.visibility;
       tokenEl.dataset.tokenSizeCategory = token.sizeCategory;
       tokenEl.dataset.tokenElevation =
         String(token.elevation);
@@ -1940,12 +2050,13 @@ export function createTokenSystem(options) {
         token.linkedCharacterId || "";
       tokenEl.title = `${token.name || "Token"} · ${
         formatElevation(token.elevation)
-      }`;
+      }${tokenIsDmOnly(token) ? " · DM-only" : ""}`;
       tokenEl.tabIndex = 0;
       tokenEl.setAttribute("role", "button");
       tokenEl.setAttribute("aria-label", `Select ${token.name || "token"}`);
       tokenEl.setAttribute("aria-pressed", String(selectedTokenId === token.id));
       tokenEl.classList.toggle("is-selected", selectedTokenId === token.id);
+      tokenEl.classList.toggle("is-dm-only", tokenIsDmOnly(token));
       tokenEl.classList.toggle(
         "is-elevated",
         token.elevation > 0
@@ -1989,6 +2100,14 @@ export function createTokenSystem(options) {
       sizeBadge.className = "hg-token-size-badge";
       sizeBadge.textContent = sizeCategoryLabel(token.sizeCategory);
       tokenEl.appendChild(sizeBadge);
+
+      if (tokenIsDmOnly(token)) {
+        const privacyBadge = document.createElement("div");
+        privacyBadge.className = "hg-token-privacy-badge";
+        privacyBadge.textContent = "DM";
+        privacyBadge.title = "Secure DM-only token";
+        tokenEl.appendChild(privacyBadge);
+      }
 
       if (token.elevation !== 0) {
         const elevationBadge =
@@ -2286,6 +2405,7 @@ export function createTokenSystem(options) {
       const movementSpeed = normalizeBaseMovementSpeed(
         T.tokenMovementSpeedInput?.value
       );
+      const visibility = T.tokenDmOnlyInput?.checked === true ? "dm" : "shared";
 
       if (T.tokenElevationInput) {
         T.tokenElevationInput.value =
@@ -2310,6 +2430,7 @@ export function createTokenSystem(options) {
       const newToken = {
         name,
         type,
+        visibility,
         imageUrl: cloudinaryResult.secure_url,
         publicId: cloudinaryResult.public_id,
         x: 50,
@@ -2344,7 +2465,12 @@ export function createTokenSystem(options) {
       };
 
       await deps.addDoc(
-        deps.collection(deps.db, "rooms", roomCode, "tokens"),
+        deps.collection(
+          deps.db,
+          "rooms",
+          roomCode,
+          tokenCollectionForVisibility(visibility)
+        ),
         newToken
       );
 
@@ -2362,6 +2488,10 @@ export function createTokenSystem(options) {
 
       if (T.tokenMovementSpeedInput) {
         T.tokenMovementSpeedInput.value = "30";
+      }
+
+      if (T.tokenDmOnlyInput) {
+        T.tokenDmOnlyInput.checked = false;
       }
 
       setStatus(sizeCategoryLabel(sizeCategory) + " token added.");
@@ -2445,6 +2575,7 @@ export function createTokenSystem(options) {
         roomData || {}
       ),
       type: "player",
+      visibility: "shared",
       x: 50,
       y: 50,
       elevation: 0,
@@ -2551,6 +2682,7 @@ export function createTokenSystem(options) {
     const newToken = {
       ...patch,
       type: "enemy",
+      visibility: "shared",
       x: 50,
       y: 50,
       elevation: 0,
@@ -2673,6 +2805,7 @@ export function createTokenSystem(options) {
       ...sourcePatch,
       name: sourcePatch.name || String(spec.name || "Summon").trim().slice(0, 120) || "Summon",
       type: safeTokenType(sourcePatch.sourceType === "monster" ? "enemy" : sourcePatch.sourceType === "character" ? "player" : spec.tokenType || "npc"),
+      visibility: "shared",
       imageUrl: sourcePatch.imageUrl || (/^https:\/\//i.test(String(spec.imageUrl || "")) ? String(spec.imageUrl) : ""),
       publicId: sourcePatch.publicId || null,
       x: clampPercent(spec.x),
@@ -2726,7 +2859,12 @@ export function createTokenSystem(options) {
       throw new Error("The active room or account changed while the token was being staged.");
     }
     const created = await deps.addDoc(
-      deps.collection(deps.db, "rooms", expectedRoomCode, "tokens"),
+      deps.collection(
+        deps.db,
+        "rooms",
+        expectedRoomCode,
+        tokenCollectionForVisibility(newToken.visibility)
+      ),
       newToken
     );
     return normalizeToken({ ...newToken, id: created?.id || null });
@@ -2740,7 +2878,7 @@ export function createTokenSystem(options) {
     const cleanTokenId = String(tokenId || "").trim();
     const effectId = String(spec.effectId || "").trim();
     if (!cleanTokenId || !effectId) throw new Error("Temporary transformations require an effect ID.");
-    const reference = deps.doc(deps.db, "rooms", roomCode, "tokens", cleanTokenId);
+    const reference = tokenDocumentReference(roomCode, cleanTokenId);
     if (typeof deps.runTransaction !== "function") {
       throw new Error("Safe transformation transactions are unavailable.");
     }
@@ -2792,7 +2930,7 @@ export function createTokenSystem(options) {
   async function deleteAutomationSummon(tokenId, effectId) {
     const roomCode = deps.getCurrentRoomCode?.();
     if (!roomCode || deps.getCurrentIsDM?.() !== true) return false;
-    const reference = deps.doc(deps.db, "rooms", roomCode, "tokens", String(tokenId));
+    const reference = tokenDocumentReference(roomCode, tokenId);
     return deps.runTransaction(deps.db, async (transaction) => {
       const snapshot = await transaction.get(reference);
       if (!snapshot.exists()) return false;
@@ -2805,7 +2943,7 @@ export function createTokenSystem(options) {
   async function restoreAutomationTransform(tokenId, effectId) {
     const roomCode = deps.getCurrentRoomCode?.();
     if (!roomCode || deps.getCurrentIsDM?.() !== true) return false;
-    const reference = deps.doc(deps.db, "rooms", roomCode, "tokens", String(tokenId));
+    const reference = tokenDocumentReference(roomCode, tokenId);
     return deps.runTransaction(deps.db, async (transaction) => {
       const snapshot = await transaction.get(reference);
       if (!snapshot.exists()) return false;
@@ -2853,29 +2991,25 @@ export function createTokenSystem(options) {
       );
     }
 
-    const linkedTokensSnapshot =
-      await deps.getDocs(
+    const characterTokenCollections = deps.getCurrentIsDM?.() === true
+      ? ["tokens", "dmTokens"]
+      : ["tokens"];
+    const linkedTokenSnapshots = await Promise.all(
+      characterTokenCollections.map((collectionName) => deps.getDocs(
         deps.query(
-          deps.collection(
-            deps.db,
-            "rooms",
-            roomCode,
-            "tokens"
-          ),
-          deps.where(
-            "linkedCharacterId",
-            "==",
-            characterId
-          )
+          deps.collection(deps.db, "rooms", roomCode, collectionName),
+          deps.where("linkedCharacterId", "==", characterId)
         )
-      );
-
-    const linkedTokenDocuments =
-      Array.isArray(
-        linkedTokensSnapshot?.docs
+      ))
+    );
+    const linkedTokenDocuments = linkedTokenSnapshots.flatMap(
+      (snapshot, index) => (Array.isArray(snapshot?.docs) ? snapshot.docs : []).map(
+        (tokenDocument) => ({
+          tokenDocument,
+          collectionName: characterTokenCollections[index]
+        })
       )
-        ? linkedTokensSnapshot.docs
-        : [];
+    );
 
     if (!linkedTokenDocuments.length) {
       return {
@@ -2894,7 +3028,7 @@ export function createTokenSystem(options) {
       ? deps.getCurrentIsDM() === true
       : false;
     const writableTokenDocuments = linkedTokenDocuments.filter(
-      (tokenDocument) => {
+      ({ tokenDocument }) => {
         if (isDm) return true;
         const tokenData = typeof tokenDocument?.data === "function"
           ? tokenDocument.data()
@@ -2916,14 +3050,14 @@ export function createTokenSystem(options) {
     };
 
     await Promise.all(
-      writableTokenDocuments.map((tokenDocument) => {
+      writableTokenDocuments.map(({ tokenDocument, collectionName }) => {
         return deps.updateDoc(
           tokenDocument.ref ||
           deps.doc(
             deps.db,
             "rooms",
             roomCode,
-            "tokens",
+            collectionName,
             tokenDocument.id
           ),
           updatePatch
@@ -2932,7 +3066,7 @@ export function createTokenSystem(options) {
     );
 
     const writableTokenIds = new Set(
-      writableTokenDocuments.map((tokenDocument) => String(tokenDocument.id || ""))
+      writableTokenDocuments.map(({ tokenDocument }) => String(tokenDocument.id || ""))
     );
 
     tokenCache = tokenCache.map((token) => {
@@ -2992,26 +3126,25 @@ export function createTokenSystem(options) {
       );
     }
 
-    const linkedTokensSnapshot = await deps.getDocs(
-      deps.query(
-        deps.collection(
-          deps.db,
-          "rooms",
-          roomCode,
-          "tokens"
-        ),
-        deps.where(
-          "linkedMonsterId",
-          "==",
-          monsterId
+    const monsterTokenCollections = deps.getCurrentIsDM?.() === true
+      ? ["tokens", "dmTokens"]
+      : ["tokens"];
+    const linkedMonsterSnapshots = await Promise.all(
+      monsterTokenCollections.map((collectionName) => deps.getDocs(
+        deps.query(
+          deps.collection(deps.db, "rooms", roomCode, collectionName),
+          deps.where("linkedMonsterId", "==", monsterId)
         )
+      ))
+    );
+    const linkedTokenDocuments = linkedMonsterSnapshots.flatMap(
+      (snapshot, index) => (Array.isArray(snapshot?.docs) ? snapshot.docs : []).map(
+        (tokenDocument) => ({
+          tokenDocument,
+          collectionName: monsterTokenCollections[index]
+        })
       )
     );
-    const linkedTokenDocuments = Array.isArray(
-      linkedTokensSnapshot?.docs
-    )
-      ? linkedTokensSnapshot.docs
-      : [];
 
     if (!linkedTokenDocuments.length) {
       return {
@@ -3030,14 +3163,14 @@ export function createTokenSystem(options) {
     };
 
     await Promise.all(
-      linkedTokenDocuments.map((tokenDocument) => (
+      linkedTokenDocuments.map(({ tokenDocument, collectionName }) => (
         deps.updateDoc(
           tokenDocument.ref ||
           deps.doc(
             deps.db,
             "rooms",
             roomCode,
-            "tokens",
+            collectionName,
             tokenDocument.id
           ),
           updatePatch
@@ -3067,6 +3200,82 @@ export function createTokenSystem(options) {
     };
   }
 
+  async function updateToken(tokenId, patch = {}) {
+    const roomCode = deps.getCurrentRoomCode?.();
+    const actorUid = String(deps.getCurrentUserUid?.() || "").trim();
+    const current = tokenCache.find((entry) => String(entry.id) === String(tokenId));
+    if (!roomCode || !current || deps.getCurrentIsDM?.() !== true) {
+      throw new Error("Only the room DM can edit that token.");
+    }
+    const cleanPatch = Object.fromEntries(
+      Object.entries(patch || {}).filter(([key, value]) => key !== "id" && value !== undefined)
+    );
+    const currentVisibility = normalizeTokenVisibility(current.visibility);
+    const nextVisibility = Object.hasOwn(cleanPatch, "visibility")
+      ? normalizeTokenVisibility(cleanPatch.visibility)
+      : currentVisibility;
+    cleanPatch.visibility = nextVisibility;
+    cleanPatch.updatedAtMillis = Date.now();
+    cleanPatch.updatedAt = deps.serverTimestamp();
+
+    if (currentVisibility === nextVisibility) {
+      await deps.updateDoc(tokenDocumentReference(roomCode, current), cleanPatch);
+      return normalizeToken({ ...current, ...cleanPatch });
+    }
+
+    if (typeof deps.runTransaction !== "function") {
+      throw new Error("Safe token visibility changes are unavailable.");
+    }
+    const roomReference = deps.doc(deps.db, "rooms", roomCode);
+    const sourceReference = tokenDocumentReference(roomCode, current);
+    const destinationReference = deps.doc(
+      deps.db,
+      "rooms",
+      roomCode,
+      tokenCollectionForVisibility(nextVisibility),
+      String(tokenId)
+    );
+    const migrated = await deps.runTransaction(deps.db, async (transaction) => {
+      const [roomSnapshot, sourceSnapshot, destinationSnapshot] = await Promise.all([
+        transaction.get(roomReference),
+        transaction.get(sourceReference),
+        transaction.get(destinationReference)
+      ]);
+      if (!roomSnapshot.exists()) throw new Error("The room no longer exists.");
+      if (roomSnapshot.data()?.dmUid !== actorUid) {
+        throw new Error("Only the current room DM can change token privacy.");
+      }
+      if (!sourceSnapshot.exists()) throw new Error("That token no longer exists.");
+      if (destinationSnapshot.exists()) {
+        throw new Error("A token with that ID already exists in the destination visibility layer.");
+      }
+      const initiativeOrder = roomSnapshot.data()?.initiativeState?.initiativeOrder || [];
+      if (
+        nextVisibility === "dm" &&
+        initiativeOrder.some((combatant) => String(combatant?.tokenId) === String(tokenId))
+      ) {
+        throw new Error("Remove this token from initiative before hiding it from players.");
+      }
+      const nextRecord = {
+        ...(sourceSnapshot.data() || {}),
+        ...cleanPatch,
+        visibility: nextVisibility
+      };
+      transaction.set(destinationReference, nextRecord);
+      transaction.delete(sourceReference);
+      return normalizeToken({ ...nextRecord, id: String(tokenId) });
+    });
+    publicTokenCache = publicTokenCache.filter((token) => String(token.id) !== String(tokenId));
+    privateTokenCache = privateTokenCache.filter((token) => String(token.id) !== String(tokenId));
+    if (nextVisibility === "dm") privateTokenCache.push(migrated);
+    else publicTokenCache.push(migrated);
+    renderTokenSnapshot(roomCode);
+    setStatus(nextVisibility === "dm"
+      ? "Token moved to the secure DM-only layer."
+      : "Token revealed to players.");
+    return migrated;
+  }
+
   async function updateTokenElevation(
     tokenId,
     nextElevation
@@ -3089,13 +3298,7 @@ export function createTokenSystem(options) {
       }
 
       await deps.updateDoc(
-        deps.doc(
-          deps.db,
-          "rooms",
-          roomCode,
-          "tokens",
-          tokenId
-        ),
+        tokenDocumentReference(roomCode, tokenId),
         {
           elevation,
           elevationFeet: elevation,
@@ -3152,7 +3355,7 @@ export function createTokenSystem(options) {
       }
 
       await deps.deleteDoc(
-        deps.doc(deps.db, "rooms", roomCode, "tokens", tokenId)
+        tokenDocumentReference(roomCode, tokenId)
       );
 
       if (selectedTokenId === tokenId) clearSelection("token-deleted");
@@ -3195,7 +3398,7 @@ export function createTokenSystem(options) {
     }
 
     await deps.updateDoc(
-      deps.doc(deps.db, "rooms", roomCode, "tokens", tokenId),
+      tokenDocumentReference(roomCode, token || tokenId),
       {
         x: clampPercent(x),
         y: clampPercent(y),
@@ -3496,6 +3699,7 @@ export function createTokenSystem(options) {
     subscribeSelection,
     syncLinkedCharacterTokens,
     syncLinkedMonsterTokens,
+    updateToken,
     updateTokenElevation,
     deleteToken,
     saveTokenScale,

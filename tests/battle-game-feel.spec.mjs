@@ -110,6 +110,8 @@ test("token editing and condition commands stay bound to the chosen token", asyn
   const editor = page.locator(".hg-token-editor");
   await expect(editor).toBeVisible();
   await expect(editor.locator('[name="name"]')).toHaveValue("Goblin");
+  await expect(editor.locator('[name="dmOnly"]')).not.toBeChecked();
+  await expect(editor).toContainText("cannot be read by players");
   await editor.locator('[name="name"]').fill("Wrong Goblin");
   await editor.locator("[data-token-editor-cancel]").last().click();
   await expect(editor).toBeHidden();

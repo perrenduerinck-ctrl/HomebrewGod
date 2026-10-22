@@ -59,8 +59,11 @@ test("every Firestore snapshot subscription uses the shared lifecycle registry",
     app: 5,
     realtimePersistence: 1,
     monsterCreator: 1,
-    tokens: 1
+    tokens: 2
   });
+
+  assert.match(sourceFiles.tokens, /realtimeListeners\.connect\(\s*"tokens"/);
+  assert.match(sourceFiles.tokens, /realtimeListeners\.connect\(\s*"dmTokens"/);
 
   [
     sourceFiles.app,

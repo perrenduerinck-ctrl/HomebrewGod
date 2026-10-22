@@ -36,7 +36,8 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=foundation-milestone-20260915";
+import { createTokenSystem } from "./tokens/index.js?v=secure-token-privacy-20261021";
+import { tokenCollectionForRecord } from "./tokens/tokenPrivacy.js?v=secure-token-privacy-20261021";
 import {
   createMapRuler,
   formatMapDistance,
@@ -232,8 +233,8 @@ import {
   createTokenContextMenu,
   formatVisibleTokenStats,
   getTokenStatVisibility
-} from "./tokens/tokenContextMenu.js?v=battle-reliability-20261018";
-import { createTokenEditor } from "./tokens/tokenEditor.js?v=battle-reliability-20261018";
+} from "./tokens/tokenContextMenu.js?v=secure-token-privacy-20261021";
+import { createTokenEditor } from "./tokens/tokenEditor.js?v=secure-token-privacy-20261021";
 import {
   getLinkedTokenRecordId,
   requireLinkedTokenRecord
@@ -1731,7 +1732,13 @@ async function commitCombatActionBarMutation({
   const userUid = currentUser.uid;
   const tokenId = String(token.id);
   const roomRef = doc(db, "rooms", roomCode);
-  const tokenRef = doc(db, "rooms", roomCode, "tokens", tokenId);
+  const tokenRef = doc(
+    db,
+    "rooms",
+    roomCode,
+    tokenCollectionForRecord(token),
+    tokenId
+  );
   const economyRef = doc(db, "rooms", roomCode, "combatTurns", tokenId);
   const characterId = String(token.linkedCharacterId || "").trim();
   const characterRef = characterMutator && characterId
@@ -10115,7 +10122,13 @@ async function transferTokenToFloor({
   const operationRoomCode = currentRoomCode;
   const operationUserUid = currentUser.uid;
   const roomRef = doc(db, "rooms", operationRoomCode);
-  const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
+  const tokenRef = doc(
+    db,
+    "rooms",
+    operationRoomCode,
+    tokenCollectionForRecord(token),
+    token.id
+  );
   let patch = null;
   await runTransaction(db, async (transaction) => {
     if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
@@ -10275,7 +10288,13 @@ if (!floorSystem && E.floorSelectorPanel) {
       if (!currentIsDM) return;
       await Promise.all(tokens.map((token) => {
         const elevation = normalizeElevation(token.elevation ?? token.elevationFeet);
-        return updateDoc(doc(db, "rooms", currentRoomCode, "tokens", token.id), {
+        return updateDoc(doc(
+          db,
+          "rooms",
+          currentRoomCode,
+          tokenCollectionForRecord(token),
+          token.id
+        ), {
           sceneId: scene.id,
           floorId: floor.id,
           heightAboveFloor: elevation - floor.baseElevation,
@@ -10328,7 +10347,13 @@ async function adjustTokenHpFromContext(token) {
     if (result.character) await tokenSystem?.syncLinkedCharacterTokens?.(result.character);
   } else {
     const roomRef = doc(db, "rooms", operationRoomCode);
-    const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
+    const tokenRef = doc(
+      db,
+      "rooms",
+      operationRoomCode,
+      tokenCollectionForRecord(token),
+      token.id
+    );
     await runTransaction(db, async (transaction) => {
       const [roomSnapshot, tokenSnapshot] = await Promise.all([
         transaction.get(roomRef),
@@ -10516,21 +10541,7 @@ async function executeTokenContextCommand(command, { token, context = {} } = {})
     if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
       throw new Error("The active room or account changed. The token was not updated.");
     }
-    const roomRef = doc(db, "rooms", operationRoomCode);
-    const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
-    await runTransaction(db, async (transaction) => {
-      const [roomSnapshot, tokenSnapshot] = await Promise.all([
-        transaction.get(roomRef), transaction.get(tokenRef)
-      ]);
-      if (!roomSnapshot.exists()) throw new Error("The room no longer exists.");
-      if (!tokenSnapshot.exists()) throw new Error("That token no longer exists.");
-      if (roomSnapshot.data()?.dmUid !== operationUserUid) throw new Error("Only the current room DM can edit tokens.");
-      transaction.update(tokenRef, {
-        ...draft,
-        updatedAtMillis: Date.now(),
-        updatedAt: serverTimestamp()
-      });
-    });
+    await tokenSystem.updateToken(token.id, draft);
     setBattleGameFeelStatus(`${draft.name} was updated.`);
     return true;
   }
@@ -10543,18 +10554,8 @@ async function executeTokenContextCommand(command, { token, context = {} } = {})
     if (!Number.isFinite(parsed) || parsed < -1000 || parsed > 1000) {
       throw new Error("Token elevation must be a number between -1000 and 1000 feet.");
     }
-    const roomRef = doc(db, "rooms", operationRoomCode);
-    const tokenRef = doc(db, "rooms", operationRoomCode, "tokens", token.id);
-    await runTransaction(db, async (transaction) => {
-      const [roomSnapshot, tokenSnapshot] = await Promise.all([transaction.get(roomRef), transaction.get(tokenRef)]);
-      if (!roomSnapshot.exists()) throw new Error("The room no longer exists.");
-      if (!tokenSnapshot.exists()) throw new Error("That token no longer exists.");
-      if (roomSnapshot.data()?.dmUid !== operationUserUid) throw new Error("Only the current room DM can set token elevation.");
-      transaction.update(tokenRef, {
-        elevation: Math.round(parsed), elevationFeet: Math.round(parsed),
-        updatedAtMillis: Date.now(), updatedAt: serverTimestamp()
-      });
-    });
+    const updatedElevation = await tokenSystem.updateTokenElevation(token.id, parsed);
+    if (updatedElevation === null) throw new Error("The token elevation could not be updated.");
     setBattleGameFeelStatus(`${token.name || "Token"} elevation set to ${Math.round(parsed)} ft.`);
     return true;
   }
@@ -11511,13 +11512,14 @@ async function replaceCurrentBattleWithEncounter(prepared) {
   });
   const retainedMap = buildMapFromRoomFields(context.roomData);
   preflightEncounterReplacement(prepared, { retainedMap });
-  const [tokenSnapshot, gameplayEffectSnapshot, combatEffectSnapshot] = await Promise.all([
+  const [tokenSnapshot, dmTokenSnapshot, gameplayEffectSnapshot, combatEffectSnapshot] = await Promise.all([
     getDocs(collection(db, "rooms", context.roomCode, "tokens")),
+    getDocs(collection(db, "rooms", context.roomCode, "dmTokens")),
     getDocs(collection(db, "rooms", context.roomCode, "effects")),
     getDocs(collection(db, "rooms", context.roomCode, "combatEffects"))
   ]);
   assertEncounterOperationCurrent(context, currentEncounterOperationIdentity());
-  const replacementWriteCount = 1 + tokenSnapshot.docs.length
+  const replacementWriteCount = 1 + tokenSnapshot.docs.length + dmTokenSnapshot.docs.length
     + gameplayEffectSnapshot.docs.length + combatEffectSnapshot.docs.length
     + prepared.combatants.length;
   if (replacementWriteCount > 500) {
@@ -11603,6 +11605,7 @@ async function replaceCurrentBattleWithEncounter(prepared) {
       const resetFields = buildEncounterBattleResetFields(context.roomData, initiativeOrder);
       const batch = writeBatch(db);
       for (const tokenDoc of tokenSnapshot.docs) batch.delete(tokenDoc.ref);
+      for (const tokenDoc of dmTokenSnapshot.docs) batch.delete(tokenDoc.ref);
       for (const effectDoc of gameplayEffectSnapshot.docs) batch.delete(effectDoc.ref);
       for (const effectDoc of combatEffectSnapshot.docs) batch.delete(effectDoc.ref);
       for (const { token } of createdTokens) {

@@ -799,6 +799,47 @@ test("vision walls are DM-authored while explored maps remain owner-private", as
   ));
 });
 
+test("DM-only tokens are physically unreadable and unwritable for players", async () => {
+  const dm = databaseFor("dm-1");
+  const player = databaseFor("player-1");
+  const stranger = databaseFor("stranger");
+  const privateTokenPath = ["rooms", ROOM, "dmTokens", "hidden-goblin"];
+  const privateToken = {
+    id: "hidden-goblin",
+    name: "Hidden Goblin",
+    type: "enemy",
+    visibility: "dm",
+    x: 25,
+    y: 35,
+    updatedAtMillis: 1
+  };
+
+  await assertSucceeds(setDoc(doc(dm, ...privateTokenPath), privateToken));
+  await assertSucceeds(getDoc(doc(dm, ...privateTokenPath)));
+  await assertFails(getDoc(doc(player, ...privateTokenPath)));
+  await assertFails(getDoc(doc(stranger, ...privateTokenPath)));
+  await assertFails(setDoc(doc(player, "rooms", ROOM, "dmTokens", "spoofed"), {
+    ...privateToken,
+    id: "spoofed"
+  }));
+  await assertFails(updateDoc(doc(player, ...privateTokenPath), { x: 50 }));
+  await assertFails(setDoc(doc(dm, "rooms", ROOM, "dmTokens", "not-private"), {
+    ...privateToken,
+    id: "not-private",
+    visibility: "shared"
+  }));
+  await assertFails(setDoc(doc(dm, "rooms", ROOM, "tokens", "misfiled-private"), {
+    ...privateToken,
+    id: "misfiled-private"
+  }));
+  await assertSucceeds(setDoc(doc(dm, "rooms", ROOM, "tokens", "revealed-goblin"), {
+    ...privateToken,
+    id: "revealed-goblin",
+    visibility: "shared"
+  }));
+  await assertSucceeds(getDoc(doc(player, "rooms", ROOM, "tokens", "revealed-goblin")));
+});
+
 test("players can move only their token while exploration is active", async () => {
   const owner = databaseFor("player-1");
   const stranger = databaseFor("player-2");

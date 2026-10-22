@@ -8,6 +8,11 @@ import { formatCombatOutcome, normalizeVerifiedCombatOutcome } from "../combat/c
 import { formatVisibleTokenStats, getTokenStatVisibility } from "../tokens/tokenContextMenu.js";
 import { validateTokenEditorDraft } from "../tokens/tokenEditor.js";
 import { getLinkedTokenRecordId, requireLinkedTokenRecord } from "../tokens/linkedRecord.js";
+import {
+  normalizeTokenPrivacy,
+  tokenCollectionForRecord,
+  tokenIsDmOnly
+} from "../tokens/tokenPrivacy.js";
 
 const floors = [{ id: "ground", name: "Ground" }, { id: "upper", name: "Upper" }];
 const connection = {
@@ -74,6 +79,7 @@ test("token editor validates supported fields without replacing unrelated token 
   });
   assert.equal(patch.elevation, -10);
   assert.equal(patch.display.hpText, false);
+  assert.equal(patch.visibility, "shared");
   assert.equal(patch.vision.distance, 30);
   assert.equal(patch.vision.darkvision, 0);
   assert.equal(Object.hasOwn(patch, "linkedMonsterId"), false);
@@ -90,6 +96,7 @@ test("token editor validates supported fields without replacing unrelated token 
     brightLight: 10,
     dimLight: 20
   });
+  assert.equal(validateTokenEditorDraft({ ...patch, visibility: "dm" }).visibility, "dm");
   assert.throws(() => validateTokenEditorDraft({ ...patch, imageUrl: "javascript:alert(1)" }), /HTTPS URL/i);
 });
 
@@ -117,7 +124,12 @@ test("connection distance remains invariant when viewport and grid scale togethe
   assert.equal(zoomed, base);
 });
 
-test("server-side token privacy limitation is documented by the existing room-member read rule", async () => {
+test("DM-only tokens route to a separate server-protected collection", async () => {
   const rules = await readFile(new URL("../firestore.rules", import.meta.url), "utf8");
   assert.match(rules, /match \/tokens\/\{tokenId\}[\s\S]{0,100}allow read:\s*if isRoomMember\(roomCode\)/);
+  assert.match(rules, /match \/dmTokens\/\{tokenId\}[\s\S]{0,100}allow read:\s*if isRoomDm\(roomCode\)/);
+  assert.equal(tokenCollectionForRecord({ visibility: "shared" }), "tokens");
+  assert.equal(tokenCollectionForRecord({ visibility: "dm" }), "dmTokens");
+  assert.equal(tokenIsDmOnly(normalizeTokenPrivacy({}, "dmTokens")), true);
+  assert.equal(normalizeTokenPrivacy({}, "tokens").visibility, "shared");
 });

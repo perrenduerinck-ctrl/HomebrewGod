@@ -36,6 +36,14 @@ service cloud.firestore {
       return /databases/$(database)/documents/rooms/$(roomCode)/tokens/$(tokenId);
     }
 
+    function tokenIsShared(data) {
+      return data.get('visibility', 'shared') == 'shared';
+    }
+
+    function tokenIsDmOnly(data) {
+      return data.get('visibility', '') == 'dm';
+    }
+
     function scenePath(roomCode, sceneId) {
       return /databases/$(database)/documents/rooms/$(roomCode)/scenes/$(sceneId);
     }
@@ -1829,11 +1837,13 @@ service cloud.firestore {
           if isRoomMember(roomCode);
         allow create:
           if roomAcceptsWrites(roomCode)
-          && isRoomDm(roomCode);
+          && isRoomDm(roomCode)
+          && tokenIsShared(request.resource.data);
         allow delete:
           if isRoomDm(roomCode);
         allow update:
           if roomAcceptsWrites(roomCode)
+          && tokenIsShared(request.resource.data)
           && (
             isRoomDm(roomCode)
             || (
@@ -1852,6 +1862,17 @@ service cloud.firestore {
               )
             )
           );
+      }
+
+      match /dmTokens/{tokenId} {
+        allow read:
+          if isRoomDm(roomCode);
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && tokenIsDmOnly(request.resource.data);
+        allow delete:
+          if isRoomDm(roomCode);
       }
 
       match /combatTurns/{tokenId} {

@@ -65,7 +65,11 @@ export function createInitiativePanel({
       state.initiativeOrder.map((combatant) => combatant.tokenId)
     );
     const tokens = getTokens()
-      .filter((token) => token?.id && !existing.has(token.id))
+      .filter((token) => (
+        token?.id &&
+        token.visibility !== "dm" &&
+        !existing.has(token.id)
+      ))
       .sort((left, right) => String(left.name || "")
         .localeCompare(String(right.name || "")));
 

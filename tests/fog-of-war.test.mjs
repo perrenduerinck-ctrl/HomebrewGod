@@ -173,10 +173,11 @@ test("vision rules keep walls DM-authored and exploration owner-private", () => 
   assert.match(rules, /cells\.size\(\) == resolution \* resolution/);
 });
 
-test("secure hidden-enemy migration remains explicitly documented", () => {
+test("secure hidden-enemy storage is explicitly documented", () => {
   const privacy = readFileSync(new URL("../docs/FOG-OF-WAR-PRIVACY.md", import.meta.url), "utf8");
   assert.match(privacy, /tokens\/{tokenId}/);
-  assert.match(privacy, /readable by every room member/i);
-  assert.match(privacy, /DM-only collection/i);
+  assert.match(privacy, /dmTokens\/{tokenId}/);
+  assert.match(privacy, /readable only by the room DM/i);
+  assert.match(privacy, /one Firestore transaction/i);
   assert.match(privacy, /Firestore Emulator coverage/i);
 });
