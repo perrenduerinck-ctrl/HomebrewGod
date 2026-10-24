@@ -11,7 +11,8 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc
+  updateDoc,
+  writeBatch
 } from "firebase/firestore";
 
 const PROJECT_ID = "demo-homebrew-god";
@@ -173,6 +174,77 @@ function connectionRecord() {
     schemaVersion: 1,
     createdAtMillis: 1,
     updatedAtMillis: 1
+  };
+}
+
+function mapObjectRecord(id = "door-1", visibility = "shared", overrides = {}) {
+  return {
+    id,
+    roomCode: ROOM,
+    kind: "object",
+    type: "door",
+    name: "Rules Door",
+    description: "",
+    imageUrl: "",
+    imagePublicId: "",
+    icon: "D",
+    sceneId: "",
+    floorId: "",
+    mapId: "map-one",
+    transform: { x: 12, y: 20, width: 8, height: 12, rotation: 0 },
+    stateId: "closed",
+    locked: false,
+    allowPlayers: true,
+    visibility,
+    interactionDistanceFeet: 10,
+    interactionRadius: { x: 5, y: 5 },
+    blocksMovement: true,
+    blocksVision: true,
+    hitPoints: { current: 20, maximum: 20 },
+    animationId: "",
+    revision: 1,
+    createdByUid: "dm-1",
+    updatedByUid: "dm-1",
+    lastInteractedByUid: "",
+    lastInteractorTokenId: "",
+    createdAtMillis: 1,
+    updatedAtMillis: 1,
+    schemaVersion: 1,
+    ...overrides
+  };
+}
+
+function puzzleRecord(id = "puzzle-1", revision = 1, overrides = {}) {
+  return {
+    id,
+    roomCode: ROOM,
+    name: "Rules Puzzle",
+    description: "A private lever and door connection.",
+    enabled: true,
+    hiddenState: true,
+    allowCrossFloor: false,
+    triggerMode: "all",
+    triggers: [{ id: "trigger-1", objectId: "lever-1", stateId: "active" }],
+    actions: [{ id: "action-1", objectId: "door-1", stateId: "open", lockMode: "unlock" }],
+    resetActions: [
+      { id: "reset-1", objectId: "lever-1", stateId: "inactive", lockMode: "unlock" },
+      { id: "reset-2", objectId: "door-1", stateId: "closed", lockMode: "lock" }
+    ],
+    runtime: {
+      status: "idle",
+      sequenceIndex: 0,
+      executionId: "",
+      lastObjectId: "",
+      solvedAtMillis: 0,
+      message: ""
+    },
+    revision,
+    createdByUid: "dm-1",
+    updatedByUid: "dm-1",
+    createdAtMillis: 1,
+    updatedAtMillis: revision,
+    schemaVersion: 1,
+    ...overrides
   };
 }
 
@@ -840,6 +912,114 @@ test("DM-only tokens are physically unreadable and unwritable for players", asyn
   await assertSucceeds(getDoc(doc(player, "rooms", ROOM, "tokens", "revealed-goblin")));
 });
 
+test("map objects synchronize safely while DM-only objects stay physically private", async () => {
+  const dm = databaseFor("dm-1");
+  const owner = databaseFor("player-1");
+  const peer = databaseFor("player-2");
+  const sharedRef = doc(dm, "rooms", ROOM, "objects", "door-1");
+  const privateRef = doc(dm, "rooms", ROOM, "dmObjects", "trap-1");
+
+  await assertSucceeds(setDoc(sharedRef, mapObjectRecord()));
+  await assertSucceeds(getDoc(doc(owner, "rooms", ROOM, "objects", "door-1")));
+  await assertFails(setDoc(doc(owner, "rooms", ROOM, "objects", "spoofed"), mapObjectRecord("spoofed", "shared", {
+    createdByUid: "player-1",
+    updatedByUid: "player-1"
+  })));
+
+  await assertSucceeds(setDoc(privateRef, mapObjectRecord("trap-1", "dm", {
+    type: "trap",
+    name: "Hidden Trap",
+    stateId: "armed"
+  })));
+  await assertSucceeds(getDoc(privateRef));
+  await assertFails(getDoc(doc(owner, "rooms", ROOM, "dmObjects", "trap-1")));
+  await assertFails(getDoc(doc(peer, "rooms", ROOM, "dmObjects", "trap-1")));
+
+  await assertSucceeds(updateDoc(doc(owner, "rooms", ROOM, "objects", "door-1"), {
+    stateId: "open",
+    blocksMovement: false,
+    blocksVision: false,
+    revision: 2,
+    lastInteractedByUid: "player-1",
+    lastInteractorTokenId: "hero",
+    lastPuzzleExecutionId: "",
+    updatedByUid: "player-1",
+    updatedAtMillis: 2
+  }));
+  await assertSucceeds(setDoc(doc(dm, "rooms", ROOM, "objects", "far-door"), mapObjectRecord("far-door", "shared", {
+    transform: { x: 80, y: 80, width: 8, height: 12, rotation: 0 }
+  })));
+  await assertFails(updateDoc(doc(owner, "rooms", ROOM, "objects", "far-door"), {
+    stateId: "open",
+    blocksMovement: false,
+    blocksVision: false,
+    revision: 2,
+    lastInteractedByUid: "player-1",
+    lastInteractorTokenId: "hero",
+    updatedByUid: "player-1",
+    updatedAtMillis: 2
+  }));
+  await assertFails(updateDoc(doc(peer, "rooms", ROOM, "objects", "door-1"), {
+    stateId: "closed",
+    blocksMovement: true,
+    blocksVision: true,
+    revision: 3,
+    lastInteractedByUid: "player-2",
+    lastInteractorTokenId: "hero",
+    updatedByUid: "player-2",
+    updatedAtMillis: 3
+  }));
+  await assertFails(updateDoc(doc(owner, "rooms", ROOM, "objects", "door-1"), {
+    name: "Player Rewrite",
+    revision: 3,
+    updatedByUid: "player-1",
+    updatedAtMillis: 3
+  }));
+  await assertSucceeds(updateDoc(sharedRef, { locked: true, revision: 3, updatedByUid: "dm-1", updatedAtMillis: 3 }));
+  await assertFails(updateDoc(doc(owner, "rooms", ROOM, "objects", "door-1"), {
+    stateId: "closed",
+    blocksMovement: true,
+    blocksVision: true,
+    revision: 4,
+    lastInteractedByUid: "player-1",
+    lastInteractorTokenId: "hero",
+    updatedByUid: "player-1",
+    updatedAtMillis: 4
+  }));
+});
+
+test("puzzle configuration and hidden progress remain DM-only and revisioned", async () => {
+  const dm = databaseFor("dm-1");
+  const owner = databaseFor("player-1");
+  const peer = databaseFor("player-2");
+  const stranger = databaseFor("stranger");
+  const reference = doc(dm, "rooms", ROOM, "dmPuzzles", "puzzle-1");
+
+  await assertSucceeds(setDoc(reference, puzzleRecord()));
+  await assertSucceeds(getDoc(reference));
+  await assertFails(getDoc(doc(owner, "rooms", ROOM, "dmPuzzles", "puzzle-1")));
+  await assertFails(getDoc(doc(peer, "rooms", ROOM, "dmPuzzles", "puzzle-1")));
+  await assertFails(getDoc(doc(stranger, "rooms", ROOM, "dmPuzzles", "puzzle-1")));
+  await assertFails(setDoc(doc(owner, "rooms", ROOM, "dmPuzzles", "spoofed"), puzzleRecord("spoofed", 1, {
+    createdByUid: "player-1",
+    updatedByUid: "player-1"
+  })));
+  await assertFails(updateDoc(doc(owner, "rooms", ROOM, "dmPuzzles", "puzzle-1"), {
+    runtime: { ...puzzleRecord().runtime, status: "solved", solvedAtMillis: 2 },
+    revision: 2,
+    updatedByUid: "player-1",
+    updatedAtMillis: 2
+  }));
+  await assertSucceeds(updateDoc(reference, {
+    runtime: { ...puzzleRecord().runtime, status: "progress", sequenceIndex: 1, message: "Sequence 1/2." },
+    revision: 2,
+    updatedByUid: "dm-1",
+    updatedAtMillis: 2
+  }));
+  await assertFails(updateDoc(reference, { revision: 4, updatedAtMillis: 4 }));
+  await assertFails(setDoc(doc(dm, "rooms", ROOM, "dmPuzzles", "invalid"), puzzleRecord("invalid", 1, { triggers: [] })));
+});
+
 test("players can move only their token while exploration is active", async () => {
   const owner = databaseFor("player-1");
   const stranger = databaseFor("player-2");
@@ -1016,6 +1196,117 @@ test("combat turn economy is owner-scoped, revisioned, and bound to the active t
     actionsRemaining: 1,
     revision: 2,
     updatedAtMillis: 3
+  }));
+});
+
+test("off-turn reactions spend once and the DM atomically refreshes the next turn", async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, "rooms", ROOM, "tokens", "ally"), {
+      id: "ally",
+      ownerUid: "player-1",
+      sourceType: "character",
+      x: 20,
+      y: 20,
+      updatedAtMillis: 1
+    });
+    await updateDoc(doc(admin, "rooms", ROOM), {
+      initiativeState: {
+        combatActive: true,
+        roundNumber: 1,
+        turnCounter: 0,
+        currentCombatantId: "hero",
+        initiativeOrder: [
+          { tokenId: "hero" },
+          { tokenId: "ally" }
+        ]
+      }
+    });
+  });
+
+  const owner = databaseFor("player-1");
+  const stranger = databaseFor("player-2");
+  const dm = databaseFor("dm-1");
+  const reaction = {
+    schemaVersion: 1,
+    tokenId: "ally",
+    combatActive: true,
+    turnKey: "reaction:1:0:ally",
+    roundNumber: 1,
+    turnCounter: 0,
+    actionsRemaining: 0,
+    bonusActionsRemaining: 0,
+    reactionAvailable: false,
+    attackActionStarted: false,
+    attacksRemaining: 0,
+    actionSurgeUsed: false,
+    dashUsed: false,
+    disengaged: false,
+    dodging: false,
+    hidden: false,
+    helping: false,
+    lastCommand: "shield",
+    lastResource: "reaction",
+    lastCommandByUid: "player-1",
+    revision: 1,
+    updatedAtMillis: 2,
+    updatedAt: 2
+  };
+  const turnRef = doc(owner, "rooms", ROOM, "combatTurns", "ally");
+  await assertSucceeds(setDoc(turnRef, reaction));
+  await assertFails(setDoc(doc(stranger, "rooms", ROOM, "combatTurns", "ally"), {
+    ...reaction,
+    lastCommandByUid: "player-2"
+  }));
+  await assertFails(setDoc(turnRef, {
+    ...reaction,
+    revision: 2,
+    updatedAtMillis: 3
+  }));
+
+  const dmTurnRef = doc(dm, "rooms", ROOM, "combatTurns", "ally");
+  const batch = writeBatch(dm);
+  batch.update(doc(dm, "rooms", ROOM), {
+    initiativeState: {
+      combatActive: true,
+      roundNumber: 1,
+      turnCounter: 1,
+      currentCombatantId: "ally",
+      initiativeOrder: [
+        { tokenId: "hero" },
+        { tokenId: "ally" }
+      ]
+    },
+    updatedAt: 4
+  });
+  batch.set(dmTurnRef, {
+    ...reaction,
+    turnKey: "1:1:ally",
+    turnCounter: 1,
+    actionsRemaining: 1,
+    bonusActionsRemaining: 1,
+    reactionAvailable: true,
+    lastCommand: "turn-start",
+    lastResource: "free",
+    lastCommandByUid: "dm-1",
+    revision: 2,
+    updatedAtMillis: 4,
+    updatedAt: 4
+  });
+  await assertSucceeds(batch.commit());
+
+  await assertFails(setDoc(turnRef, {
+    ...reaction,
+    turnKey: "forged-reset",
+    turnCounter: 1,
+    actionsRemaining: 1,
+    bonusActionsRemaining: 1,
+    reactionAvailable: true,
+    lastCommand: "turn-start",
+    lastResource: "free",
+    revision: 3,
+    updatedAtMillis: 5,
+    updatedAt: 5
   }));
 });
 

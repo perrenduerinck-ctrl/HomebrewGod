@@ -5,6 +5,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 
 import {
+  connectAuthEmulator,
   getAuth,
   onAuthStateChanged,
   signInAnonymously,
@@ -15,6 +16,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 import {
+  connectFirestoreEmulator,
   getFirestore,
   doc,
   setDoc,
@@ -36,7 +38,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-import { createTokenSystem } from "./tokens/index.js?v=secure-token-privacy-20261021";
+import { createTokenSystem } from "./tokens/index.js?v=stage7-performance-20261023";
 import { tokenCollectionForRecord } from "./tokens/tokenPrivacy.js?v=secure-token-privacy-20261021";
 import {
   createMapRuler,
@@ -104,7 +106,7 @@ import {
 } from "./vfx/combatEffectLifecycle.js?v=foundation-milestone-20260915";
 import { createCombatEffectPersistence } from "./vfx/combatEffectPersistence.js?v=foundation-milestone-20260915";
 import { createEffectRegistry } from "./effects/effectRegistry.js";
-import { createEffectRuntime } from "./effects/effectRuntime.js";
+import { createEffectRuntime } from "./effects/effectRuntime.js?v=stage7-performance-20261023";
 import { createEffectPersistence } from "./effects/effectPersistence.js";
 import { createEffectPanel } from "./effects/effectPanel.js";
 import {
@@ -219,9 +221,14 @@ import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
 import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261008";
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
-import { createFogOfWarSystem } from "./battleMap/fogOfWar.js?v=fog-phase1-20261020";
+import { createFogOfWarSystem } from "./battleMap/fogOfWar.js?v=stage7-performance-20261023";
 import { createVisionSystem } from "./battleMap/visionSystem.js?v=fog-phase2-20261020";
 import { createMapInteractionController } from "./battleMap/interactionController.js";
+import { createMapObjectStore } from "./battleMap/objectPersistence.js?v=interactive-objects-20261022";
+import { createMapObjectSystem } from "./battleMap/objectSystem.js?v=stage7-performance-20261023";
+import { createPuzzleStore } from "./battleMap/puzzlePersistence.js?v=puzzle-environment-20261022";
+import { createPuzzleEngine } from "./battleMap/puzzleEngine.js?v=puzzle-environment-20261022";
+import { createPuzzleSystem } from "./battleMap/puzzleSystem.js?v=puzzle-environment-20261022";
 import { createScenePersistence } from "./battleMap/scenePersistence.js?v=multi-floor-20261014";
 import { createFloorSystem } from "./battleMap/floorSystem.js?v=battle-game-feel-20261016";
 import {
@@ -247,7 +254,10 @@ import {
 import { subscribeToActionBarDocument } from "./combat/actionBarPersistence.js";
 import {
   applyActionEconomyCommand,
+  createFreshActionEconomy,
+  normalizeActionEconomy,
   synchronizeActionEconomy,
+  synchronizeReactionEconomy,
   toCombatTurnDocument
 } from "./combat/actionEconomy.js";
 import {
@@ -286,6 +296,23 @@ const CLOUDINARY_DELETE_TOKEN_MAX_AGE_MS = 9 * 60 * 1000;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+const firebaseEmulatorTestMode =
+  ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) &&
+  new URLSearchParams(window.location.search).get("firebaseEmulator") === "1";
+
+if (firebaseEmulatorTestMode) {
+  connectAuthEmulator(
+    auth,
+    "http://127.0.0.1:9099",
+    { disableWarnings: true }
+  );
+  connectFirestoreEmulator(
+    db,
+    "127.0.0.1",
+    8080
+  );
+}
 
 console.log("Firebase initialized");
 
@@ -557,6 +584,9 @@ const mapDrawingSystem = createMapDrawingSystem({
 });
 let fogOfWarSystem = null;
 let visionSystem = null;
+let mapObjectSystem = null;
+let mapObjectStore = null;
+let puzzleSystem = null;
 const mapInteractionController = createMapInteractionController({
   onOwnerChange: (owner) => {
     if (owner) {
@@ -614,6 +644,7 @@ visionSystem = createVisionSystem({
   getMapContext: getCurrentDrawingMapContext,
   getFogEnabled: () => fogOfWarSystem?.getState?.().enabled === true,
   setFogVisionState: (vision) => fogOfWarSystem?.setVisionState?.(vision),
+  getAdditionalWalls: () => mapObjectSystem?.getVisionWalls?.() || [],
   acquireInteraction: (cancel) => mapInteractionController.acquire({
     id: "vision-walls",
     label: "Vision wall editing",
@@ -871,6 +902,7 @@ function initializeBattleMapToolbar() {
         renderActiveSpellPreviewPlacement();
         battleMapVfx?.refresh();
         battleMapLighting?.refresh();
+        mapObjectSystem?.refresh();
       });
     });
     observer.observe(E.battleMapSurface);
@@ -956,6 +988,26 @@ function navigateMainScreen(screenName) {
     battleMapTemplates?.refresh();
     battleMapVfx?.refresh();
     battleMapLighting?.refresh();
+  }
+
+  if (
+    currentRoomCode &&
+    currentRoomData &&
+    (screenName === "room" || screenName === "battle")
+  ) {
+    showSharedMap(
+      buildMapForCurrentFloorOrRoom(
+        currentRoomData
+      )
+    );
+    if (
+      screenName === "room" &&
+      latestMapsSnapshot
+    ) {
+      renderRoomMaps(
+        latestMapsSnapshot
+      );
+    }
   }
 
   syncRealtimeListenersForScreen(screenName);
@@ -1413,6 +1465,62 @@ async function commitInitiativeCommand(
           }
       );
 
+      const previousInitiative =
+        normalizeInitiativeState(latestRoom);
+      const nextInitiative =
+        committedTransition.state;
+      const activeTokenId = String(
+        nextInitiative.currentCombatantId || ""
+      ).trim();
+      const turnStarted =
+        nextInitiative.combatActive === true &&
+        Boolean(activeTokenId) &&
+        (
+          previousInitiative.combatActive !== true ||
+          previousInitiative.currentCombatantId !== activeTokenId ||
+          previousInitiative.turnCounter !== nextInitiative.turnCounter ||
+          previousInitiative.roundNumber !== nextInitiative.roundNumber
+        );
+      let turnStartWrite = null;
+
+      if (turnStarted) {
+        const turnRef = doc(
+          db,
+          "rooms",
+          roomCode,
+          "combatTurns",
+          activeTokenId
+        );
+        const turnSnapshot =
+          await transaction.get(turnRef);
+        const previousTurn = normalizeActionEconomy(
+          turnSnapshot.exists()
+            ? turnSnapshot.data()
+            : {}
+        );
+        const freshTurn = {
+          ...createFreshActionEconomy(
+            nextInitiative,
+            activeTokenId
+          ),
+          revision: previousTurn.revision,
+          updatedAtMillis:
+            previousTurn.updatedAtMillis
+        };
+        turnStartWrite = {
+          ref: turnRef,
+          state: applyActionEconomyCommand(
+            freshTurn,
+            {
+              type: "turn-start",
+              resource: "free",
+              actorUid: userUid,
+              updatedAtMillis: Date.now()
+            }
+          )
+        };
+      }
+
       if (
         !committedTransition.initiativeChanged &&
         !committedTransition.timeChanged &&
@@ -1428,6 +1536,14 @@ async function commitInitiativeCommand(
           : {}),
         updatedAt: serverTimestamp()
       });
+      if (turnStartWrite) {
+        transaction.set(turnStartWrite.ref, {
+          ...toCombatTurnDocument(
+            turnStartWrite.state
+          ),
+          updatedAt: serverTimestamp()
+        });
+      }
     }
   );
 
@@ -1653,7 +1769,7 @@ function watchCombatTurnEconomy(token, onChange) {
   const roomCode = currentRoomCode;
   const tokenId = String(token?.id || "").trim();
   if (!roomCode || !tokenId) {
-    onChange(synchronizeActionEconomy({}, initiativeSystem?.getState?.(), tokenId));
+    onChange(synchronizeReactionEconomy({}, initiativeSystem?.getState?.(), tokenId));
     return () => {};
   }
   const listenerName = "combat-action-economy";
@@ -1663,7 +1779,7 @@ function watchCombatTurnEconomy(token, onChange) {
     reference: doc(db, "rooms", roomCode, "combatTurns", tokenId),
     onNext: (snapshot) => {
       if (!isCurrent() || currentRoomCode !== roomCode) return;
-      onChange(synchronizeActionEconomy(
+      onChange(synchronizeReactionEconomy(
         snapshot.exists() ? snapshot.data() : {},
         initiativeSystem?.getState?.() || {},
         tokenId
@@ -1671,7 +1787,7 @@ function watchCombatTurnEconomy(token, onChange) {
     },
     onError: (error) => {
       if (fail(error).handled) {
-        onChange(synchronizeActionEconomy({}, initiativeSystem?.getState?.(), tokenId));
+        onChange(synchronizeReactionEconomy({}, initiativeSystem?.getState?.(), tokenId));
       }
     }
   }));
@@ -1763,7 +1879,15 @@ async function commitCombatActionBarMutation({
     }
     const initiative = normalizeInitiativeState(latestRoom);
     const activeCombatTurn = initiative.combatActive === true;
-    if (activeCombatTurn && initiative.currentCombatantId !== tokenId) {
+    const offTurnReaction =
+      activeCombatTurn &&
+      initiative.currentCombatantId !== tokenId &&
+      economyCommand?.resource === "reaction";
+    if (
+      activeCombatTurn &&
+      initiative.currentCombatantId !== tokenId &&
+      !offTurnReaction
+    ) {
       throw new Error("It is not that token's turn.");
     }
 
@@ -1773,11 +1897,17 @@ async function commitCombatActionBarMutation({
     if (characterRef) characterSnapshot = await transaction.get(characterRef);
 
     if (activeCombatTurn && economyCommand) {
-      const latestEconomy = synchronizeActionEconomy(
-        economySnapshot?.exists() ? economySnapshot.data() : {},
-        initiative,
-        tokenId
-      );
+      const latestEconomy = offTurnReaction
+        ? synchronizeReactionEconomy(
+            economySnapshot?.exists() ? economySnapshot.data() : {},
+            initiative,
+            tokenId
+          )
+        : synchronizeActionEconomy(
+            economySnapshot?.exists() ? economySnapshot.data() : {},
+            initiative,
+            tokenId
+          );
       committedEconomy = applyActionEconomyCommand(latestEconomy, {
         ...economyCommand,
         actorUid: userUid,
@@ -2466,6 +2596,8 @@ function clearRoomListeners() {
   mapDrawingSystem.disconnect();
   fogOfWarSystem?.disconnect();
   visionSystem?.disconnect();
+  mapObjectSystem?.disconnect();
+  puzzleSystem?.disconnect();
   appRealtimeListeners.stop("room");
   combatEffectPersistence?.stop();
   gameplayEffectPersistence?.stop();
@@ -2564,7 +2696,6 @@ function syncRealtimeListenersForScreen(
 
   if (
     screenName === "battle" &&
-    currentRoomCode &&
     tokenSystem &&
     typeof tokenSystem.startTokenListenerForRoom ===
       "function"
@@ -2607,11 +2738,15 @@ function syncRealtimeListenersForScreen(
       mapDrawingSystem.syncContext();
       fogOfWarSystem?.syncContext();
       visionSystem?.syncContext();
+      mapObjectSystem?.setScreen("battle");
+      puzzleSystem?.setScreen("battle");
     });
   } else {
     mapDrawingSystem.disconnect();
     fogOfWarSystem?.disconnect();
     visionSystem?.disconnect();
+    mapObjectSystem?.setScreen(screenName);
+    puzzleSystem?.setScreen(screenName);
   }
 }
 
@@ -2711,6 +2846,8 @@ function setDmControlsVisible(isVisible) {
   }
 
   updateSpellPreviewVfxControls();
+  mapObjectSystem?.syncContext();
+  puzzleSystem?.syncContext();
   renderCampaignTime(
     campaignTimeSystem.getState()
   );
@@ -3467,6 +3604,8 @@ function openRoom(roomCode, screenToShow = "room") {
   });
   latestCombatEffectRecords = [];
   clearGameplayEffectsForRoomExit();
+  currentRoomData = null;
+  currentIsDM = false;
   currentRoomCode = cleanCode;
   lastHandledTurnAdvanceRequestId = "";
   latestMapsSnapshot = null;
@@ -4309,8 +4448,8 @@ function getAssetIdentity(asset) {
   }
 
   return {
-    publicId: String(asset.publicId || asset.public_id || "").trim(),
-    url: String(asset.url || asset.secure_url || "").trim()
+    publicId: String(asset.publicId || asset.public_id || asset.imagePublicId || "").trim(),
+    url: String(asset.url || asset.secure_url || asset.imageUrl || "").trim()
   };
 }
 
@@ -4943,7 +5082,12 @@ function showSharedMap(currentMap) {
       E.roomMapPreviewImage.style.display = "none";
     }
 
-    text(E.noRoomMapPreviewText, "No shared map loaded yet.");
+    text(
+      E.noRoomMapPreviewText,
+      currentIsDM
+        ? "No shared map yet. Open Maps / Images to upload or choose one."
+        : "The DM has not shared a map yet."
+    );
 
     if (E.noRoomMapPreviewText) {
       E.noRoomMapPreviewText.style.display = "block";
@@ -4954,12 +5098,18 @@ function showSharedMap(currentMap) {
     E.battleMapImage.removeAttribute("src");
     E.battleMapImage.style.display = "none";
 
-    text(E.noBattleMapText, "No battle map loaded yet.");
+    text(
+      E.noBattleMapText,
+      currentIsDM
+        ? "No battle map loaded. Choose a map from Maps / Images to begin."
+        : "The DM has not loaded a battle map yet."
+    );
     E.noBattleMapText.style.display = "block";
     battleMapLighting?.setMap(null);
     mapDrawingSystem.syncContext();
     fogOfWarSystem?.syncContext();
     visionSystem?.syncContext();
+    mapObjectSystem?.syncContext();
 
     return;
   }
@@ -4984,6 +5134,7 @@ function showSharedMap(currentMap) {
     mapDrawingSystem.syncContext();
     fogOfWarSystem?.syncContext();
     visionSystem?.syncContext();
+    mapObjectSystem?.syncContext();
     return;
   }
 
@@ -5031,6 +5182,7 @@ function showSharedMap(currentMap) {
     mapDrawingSystem.syncContext();
     fogOfWarSystem?.syncContext();
     visionSystem?.syncContext();
+    mapObjectSystem?.syncContext();
   };
 
   E.battleMapImage.onerror = function () {
@@ -5044,6 +5196,7 @@ function showSharedMap(currentMap) {
   mapDrawingSystem.syncContext();
   fogOfWarSystem?.syncContext();
   visionSystem?.syncContext();
+  mapObjectSystem?.syncContext();
 }
 
 addOptionalEventListener(E.uploadRoomMapButton, "click", async function () {
@@ -7352,7 +7505,11 @@ async function beginCharacterSpellTargeting({
     clearSpell: true
   });
 
-  navigateMainScreen("battle");
+  if (activeMainScreenName !== "battle") {
+    navigateMainScreen("battle");
+  } else {
+    closeBattleMapMenus();
+  }
   let linkedToken = null;
 
   try {
@@ -9171,6 +9328,7 @@ function showPuzzleBoardView() {
   mapDrawingSystem.syncContext();
   fogOfWarSystem?.syncContext();
   visionSystem?.syncContext();
+  mapObjectSystem?.syncContext();
   floorConnectionMarkerSystem?.render?.();
 }
 
@@ -9189,6 +9347,7 @@ function showSingleBattleMapView() {
   mapDrawingSystem.syncContext();
   fogOfWarSystem?.syncContext();
   visionSystem?.syncContext();
+  mapObjectSystem?.syncContext();
 }
 
 function keepTokenLayerReadyForExternalFile() {
@@ -9303,6 +9462,7 @@ function renderPuzzleBoard(room) {
   mapDrawingSystem.syncContext();
   fogOfWarSystem?.syncContext();
   visionSystem?.syncContext();
+  mapObjectSystem?.syncContext();
 }
 
 function createPuzzleTileElement(tile, activeTile) {
@@ -10054,6 +10214,7 @@ if (!tokenSystem) {
     },
 
     previewTokenMovement: function (preview) {
+      mapObjectSystem?.assertMovementAllowed?.(preview);
       return movementSystem.previewMove(preview);
     },
 
@@ -10275,6 +10436,7 @@ if (!floorSystem && E.floorSelectorPanel) {
       mapDrawingSystem.syncContext();
       fogOfWarSystem?.syncContext();
       visionSystem?.syncContext();
+      mapObjectSystem?.syncContext();
       battleMapRuler?.refresh();
       battleMapTemplates?.refresh();
       battleMapVfx?.refresh();
@@ -10304,6 +10466,101 @@ if (!floorSystem && E.floorSelectorPanel) {
       }));
     }
   });
+}
+
+if (!mapObjectSystem && E.battleMapSurface) {
+  mapObjectStore = createMapObjectStore({
+    db,
+    collection,
+    doc,
+    onSnapshot,
+    setDoc,
+    deleteDoc,
+    runTransaction,
+    writeBatch,
+    serverTimestamp
+  });
+  mapObjectSystem = createMapObjectSystem({
+    document,
+    surface: E.battleMapSurface,
+    quickActions: E.battleQuickActions,
+    store: mapObjectStore,
+    getRoomContext: () => ({
+      roomCode: currentRoomCode || "",
+      userUid: currentUser?.uid || "",
+      isDm: currentIsDM === true
+    }),
+    getMapContext: getCurrentDrawingMapContext,
+    getSelectedToken: () => tokenSystem?.getSelectedToken?.() || null,
+    canControlToken: (token) => canOperateCombatToken(token),
+    getMeasurementOptions: () => ({
+      pixelsPerSquare: getBattleMapGridPixelSize(),
+      feetPerSquare: getRulerFeetPerSquare()
+    }),
+    acquireInteraction: (cancel) => mapInteractionController.acquire({
+      id: "map-objects",
+      label: "Map object editing",
+      cancel
+    }),
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setBattleGameFeelStatus,
+    onObjectsChanged: (objects) => {
+      visionSystem?.refresh?.();
+      puzzleSystem?.syncObjects(objects);
+    },
+    onInteraction: ({ object, token, element }) => {
+      if (!object?.animationId || !element) return;
+      const source = token?.id
+        ? E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(token.id))}"]`) || element
+        : element;
+      void battleMapAnimations?.player?.playAnimation?.(object.animationId, {
+        source,
+        target: element,
+        sourceTokenId: token?.id || "",
+        targetTokenId: object.id,
+        placement: { mode: "TARGET", followTarget: false },
+        playback: "once"
+      }).catch((error) => console.warn("Map object animation was skipped:", error));
+    }
+  });
+  const puzzleStore = createPuzzleStore({
+    db,
+    collection,
+    doc,
+    onSnapshot,
+    setDoc,
+    deleteDoc,
+    runTransaction,
+    serverTimestamp
+  });
+  const puzzleEngine = createPuzzleEngine({
+    puzzleStore,
+    objectStore: mapObjectStore,
+    getRoomContext: () => ({
+      roomCode: currentRoomCode || "",
+      userUid: currentUser?.uid || "",
+      isDm: currentIsDM === true
+    }),
+    onStatus: setBattleGameFeelStatus
+  });
+  puzzleSystem = createPuzzleSystem({
+    document,
+    surface: E.battleMapSurface,
+    quickActions: E.battleQuickActions,
+    store: puzzleStore,
+    engine: puzzleEngine,
+    getRoomContext: () => ({
+      roomCode: currentRoomCode || "",
+      userUid: currentUser?.uid || "",
+      isDm: currentIsDM === true
+    }),
+    getObjects: () => mapObjectSystem?.getObjects?.() || [],
+    requestConfirmation: requestAppConfirmation,
+    onStatus: setBattleGameFeelStatus
+  });
+  puzzleSystem.syncObjects(mapObjectSystem.getObjects());
+  mapObjectSystem.setScreen(activeMainScreenName);
+  puzzleSystem.setScreen(activeMainScreenName);
 }
 
 function setBattleGameFeelStatus(message, tone = "") {
@@ -10855,6 +11112,7 @@ function applyBattleZoom() {
   mapDrawingSystem.syncContext();
   fogOfWarSystem?.syncContext();
   visionSystem?.syncContext();
+  mapObjectSystem?.syncContext();
 }
 
 function openToolTab(viewName) {
@@ -12782,7 +13040,27 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
               null,
             monsterCreator:
               monsterCreatorSystem?.getListenerSnapshot?.() ||
+              null,
+            mapObjects:
+              mapObjectSystem?.getListenerSnapshot?.() ||
+              null,
+            puzzles:
+              puzzleSystem?.getListenerSnapshot?.() ||
               null
+          };
+        },
+
+      getBattleMapPerformanceState:
+        function () {
+          return {
+            tokens: tokenSystem?.getRenderMetrics?.() || null,
+            mapObjects: mapObjectSystem?.getRenderMetrics?.() || null,
+            fog: fogOfWarSystem?.getState?.().renderMetrics || null,
+            dom: {
+              tokens: document.querySelectorAll("#tokenLayer .hg-token").length,
+              objects: document.querySelectorAll(".hg-map-object-layer .hg-map-object").length,
+              activeEffects: document.querySelectorAll("#tokenLayer .hg-token-effect-badge").length
+            }
           };
         },
 
@@ -12931,6 +13209,14 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
           const result = tokenSystem?.setRoomTokensForTest?.(tokens) || [];
           movementSystem?.sync();
           tokenSystem?.render?.(currentRoomData);
+          return result;
+        },
+
+      setGameplayEffectsForTest:
+        function (records) {
+          latestGameplayEffectRecords = Array.isArray(records) ? records : [];
+          const result = gameplayEffectRuntime.hydrate(latestGameplayEffectRecords);
+          tokenSystem?.render?.(currentRoomData || {});
           return result;
         },
 

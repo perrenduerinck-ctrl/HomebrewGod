@@ -133,6 +133,47 @@ export function synchronizeActionEconomy(source, initiative = {}, tokenId = "") 
   });
 }
 
+export function synchronizeReactionEconomy(source, initiative = {}, tokenId = "") {
+  const id = text(tokenId);
+  const current = normalizeActionEconomy(source);
+  const order = (Array.isArray(initiative?.initiativeOrder)
+    ? initiative.initiativeOrder
+    : [])
+    .map((entry) => text(entry?.tokenId || entry?.id))
+    .filter(Boolean);
+  if (
+    initiative.combatActive !== true ||
+    !id ||
+    !order.includes(id)
+  ) {
+    return Object.freeze({
+      ...createEmptyActionEconomy(id),
+      revision: current.revision,
+      updatedAtMillis: current.updatedAtMillis
+    });
+  }
+  if (id === text(initiative.currentCombatantId)) {
+    return synchronizeActionEconomy(current, initiative, id);
+  }
+  if (current.combatActive && current.tokenId === id) {
+    return current;
+  }
+  return Object.freeze({
+    ...createEmptyActionEconomy(id),
+    combatActive: true,
+    turnKey: `reaction:${integer(initiative.roundNumber, 1, 1)}:${integer(
+      initiative.turnCounter,
+      0,
+      0
+    )}:${id}`,
+    roundNumber: integer(initiative.roundNumber, 1, 1),
+    turnCounter: integer(initiative.turnCounter, 0, 0),
+    reactionAvailable: true,
+    revision: current.revision,
+    updatedAtMillis: current.updatedAtMillis
+  });
+}
+
 function spend(state, resource) {
   if (resource === "free" || !resource) return state;
   if (resource === "action") {

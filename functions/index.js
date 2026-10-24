@@ -479,6 +479,16 @@ async function isAssetReferenced({
       null
     ],
     [
+      "objects",
+      "imagePublicId",
+      null
+    ],
+    [
+      "dmObjects",
+      "imagePublicId",
+      null
+    ],
+    [
       "characters",
       "identity.image.publicId",
       ignoredCharacterId || null

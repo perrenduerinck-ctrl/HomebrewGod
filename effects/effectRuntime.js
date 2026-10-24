@@ -19,7 +19,28 @@ export function createEffectRuntime({
 } = {}) {
   if (!registry?.get) throw new Error("Effect runtime requires an effect registry.");
   const records = new Map();
+  const recordsByTarget = new Map();
   const pendingExpirations = new Map();
+
+  function indexRecord(record) {
+    const targetTokenId = text(record?.targetTokenId);
+    if (!targetTokenId || !record?.id) return;
+    if (!recordsByTarget.has(targetTokenId)) recordsByTarget.set(targetTokenId, new Set());
+    recordsByTarget.get(targetTokenId).add(record.id);
+  }
+
+  function unindexRecord(record) {
+    const targetTokenId = text(record?.targetTokenId);
+    const ids = recordsByTarget.get(targetTokenId);
+    if (!ids) return;
+    ids.delete(record?.id);
+    if (ids.size === 0) recordsByTarget.delete(targetTokenId);
+  }
+
+  function rebuildTargetIndex() {
+    recordsByTarget.clear();
+    records.forEach(indexRecord);
+  }
 
   function snapshot() {
     return [...records.values()]
@@ -77,7 +98,9 @@ export function createEffectRuntime({
     });
     if (!record) throw new Error("Choose a named effect, room, and target token.");
     pendingExpirations.delete(record.id);
+    unindexRecord(records.get(record.id));
     records.set(record.id, record);
+    indexRecord(record);
     emit("applied", record);
     visual(record, "start");
     if (record.animation.sustainAnimationId) visual(record, "sustain");
@@ -89,6 +112,7 @@ export function createEffectRuntime({
     if (!record) return false;
     pendingExpirations.delete(record.id);
     records.delete(record.id);
+    unindexRecord(record);
     if (visualPhase) visual(record, "end");
     if (emitChange) emit(reason, record);
     return true;
@@ -118,6 +142,7 @@ export function createEffectRuntime({
         else removed.push(record);
       }
     }
+    rebuildTargetIndex();
     for (const record of added) {
       if (record.animation.sustainAnimationId) visual(record, "sustain");
     }
@@ -156,7 +181,17 @@ export function createEffectRuntime({
     reconcile,
     getSnapshot: snapshot,
     getById: (id) => clone(records.get(text(id)) || null),
-    getForToken: (tokenId) => snapshot().filter((record) => record.targetTokenId === text(tokenId)),
+    getForToken(tokenId) {
+      const ids = recordsByTarget.get(text(tokenId));
+      if (!ids) return [];
+      const result = [];
+      ids.forEach((id) => {
+        if (pendingExpirations.has(id)) return;
+        const record = records.get(id);
+        if (record) result.push(clone(record));
+      });
+      return result;
+    },
     clear(reason = "cleared", { visualPhase = false, emitChange = false } = {}) {
       for (const id of [...records.keys()]) {
         removeEffect(id, reason, { visualPhase, emitChange: false });

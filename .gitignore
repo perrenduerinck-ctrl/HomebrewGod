@@ -3,5 +3,6 @@ dist/
 dist-staging/
 playwright-report/
 test-results/
+.tools/
 .DS_Store
 Thumbs.db

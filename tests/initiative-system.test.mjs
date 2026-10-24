@@ -690,6 +690,14 @@ test("room integration reuses one listener and disables manual round completion"
   );
   assert.match(
     appSource,
-    /buildInitiativeRoomTransition\([\s\S]{0,500}transaction\.update\(roomRef, \{[\s\S]{0,120}committedTransition\.roomFields/
+    /committedTransition\s*=\s*buildInitiativeRoomTransition\(/
+  );
+  assert.match(
+    appSource,
+    /transaction\.update\(roomRef, \{[\s\S]{0,160}committedTransition\.roomFields/
+  );
+  assert.match(
+    appSource,
+    /transaction\.set\(turnStartWrite\.ref, \{[\s\S]{0,160}toCombatTurnDocument/
   );
 });

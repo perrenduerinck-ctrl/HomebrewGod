@@ -188,3 +188,28 @@ test("vision and exploration stay separate by floor and player", async ({ page }
   ))).toBe(true);
   await expect(page.locator("#visionToolsToggleButton")).toBeHidden();
 });
+
+test("control-only fog changes reuse the existing SVG mask", async ({ page }) => {
+  await page.locator("#fogOfWarToggleButton").click();
+  await page.locator("[data-fog-enabled]").check();
+  const result = await page.evaluate(() => {
+    const mask = document.querySelector(".hg-fog-layer mask");
+    const firstChild = mask.firstElementChild;
+    const before = window.fixture.fog.getState().renderMetrics;
+    document.querySelector('[data-fog-mode="hide"]').click();
+    document.querySelector('[data-fog-tool="rectangle"]').click();
+    document.querySelector('[data-fog-tool="circle"]').click();
+    const after = window.fixture.fog.getState().renderMetrics;
+    return {
+      sameMaskNode: mask.firstElementChild === firstChild,
+      reuseDelta: after.maskReuses - before.maskReuses,
+      rebuildDelta: after.maskRebuilds - before.maskRebuilds
+    };
+  });
+  expect(result.sameMaskNode).toBe(true);
+  expect(result.reuseDelta).toBeGreaterThanOrEqual(3);
+  expect(result.rebuildDelta).toBe(0);
+
+  await page.locator("[data-fog-close]").click();
+  await expect(page.locator(".hg-fog-layer")).toHaveCSS("pointer-events", "none");
+});

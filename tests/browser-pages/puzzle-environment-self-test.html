@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Puzzle environment fixture</title>
+  <link rel="stylesheet" href="../../battleMap/objectSystem.css">
+  <link rel="stylesheet" href="../../battleMap/puzzleSystem.css">
+  <style>
+    body { margin: 0; color: #eef1ff; background: #080b17; font: 14px system-ui; }
+    button, input, select, textarea { font: inherit; }
+    #quick { display: flex; gap: 8px; min-height: 42px; padding: 8px; }
+    #surface { position: relative; width: 900px; min-height: 520px; }
+    #map { position: relative; width: 800px; height: 400px; margin: 30px 40px; background: #26304b; }
+  </style>
+</head>
+<body>
+  <div id="quick"></div>
+  <section id="surface"><div id="map"></div></section>
+  <script type="module">
+    import { createMapObjectSystem } from "../../battleMap/objectSystem.js";
+    import { buildMapObjectInteractionPatch, normalizeMapObject, validateMapObjectInteraction } from "../../battleMap/objectModel.js";
+    import { createPuzzleEngine } from "../../battleMap/puzzleEngine.js";
+    import { normalizePuzzle } from "../../battleMap/puzzleModel.js";
+    import { createPuzzleSystem } from "../../battleMap/puzzleSystem.js";
+
+    let isDm = true;
+    let objectEmit = () => {};
+    let puzzleEmit = () => {};
+    let puzzleSystem = null;
+    const selectedToken = { id: "hero", ownerUid: "player-1", x: 31, y: 50, sceneId: "keep", floorId: "ground" };
+    let objects = [
+      normalizeMapObject({ id: "lever-1", roomCode: "ROOM-1", type: "lever", name: "Moon Lever", sceneId: "keep", floorId: "ground", mapId: "scene:keep:floor:ground", transform: { x: 30, y: 50, width: 8, height: 12, rotation: 0 }, stateId: "inactive", allowPlayers: true, visibility: "shared", revision: 1 }, "lever-1"),
+      normalizeMapObject({ id: "button-1", roomCode: "ROOM-1", type: "button", name: "Sun Button", sceneId: "keep", floorId: "ground", mapId: "scene:keep:floor:ground", transform: { x: 42, y: 50, width: 8, height: 8, rotation: 0 }, stateId: "inactive", allowPlayers: true, visibility: "shared", revision: 1 }, "button-1"),
+      normalizeMapObject({ id: "door-1", roomCode: "ROOM-1", type: "door", name: "Vault Door", sceneId: "keep", floorId: "ground", mapId: "scene:keep:floor:ground", transform: { x: 70, y: 50, width: 10, height: 18, rotation: 0 }, stateId: "closed", locked: true, allowPlayers: true, visibility: "shared", animationId: "door-glow", revision: 1 }, "door-1"),
+      normalizeMapObject({ id: "trap-1", roomCode: "ROOM-1", type: "trap", name: "Rune Trap", sceneId: "keep", floorId: "ground", mapId: "scene:keep:floor:ground", transform: { x: 56, y: 50, width: 8, height: 8, rotation: 0 }, stateId: "armed", allowPlayers: true, visibility: "shared", revision: 1 }, "trap-1")
+    ];
+    let puzzles = [];
+    const writes = [];
+    const effects = [];
+    const publishObjects = () => objectEmit(objects.map((entry) => normalizeMapObject(entry, entry.id)));
+    const publishPuzzles = () => puzzleEmit(puzzles.map((entry) => normalizePuzzle(entry, entry.id)));
+
+    const objectStore = {
+      connect(_room, options) { objectEmit = options.onData; queueMicrotask(publishObjects); return this.stop; },
+      stop() {},
+      async create() { throw new Error("Not used by this fixture."); },
+      async save(_room, source, patch, userUid) {
+        const saved = normalizeMapObject({ ...source, ...patch, transform: { ...source.transform, ...(patch.transform || {}) }, hitPoints: { ...source.hitPoints, ...(patch.hitPoints || {}) }, revision: source.revision + 1, updatedByUid: userUid }, source.id);
+        objects = objects.map((entry) => entry.id === source.id ? saved : entry);
+        writes.push({ type: "object-save", object: saved });
+        publishObjects();
+        return saved;
+      },
+      async interact(_room, source, options) {
+        const validation = validateMapObjectInteraction({ object: source, token: options.token, isDm: options.isDm, context: options.context });
+        if (!validation.ok) throw new Error(validation.reason);
+        const patch = buildMapObjectInteractionPatch(source, { nextStateId: validation.nextStateId, userUid: options.userUid, tokenId: options.token?.id || "" });
+        const saved = normalizeMapObject({ ...source, ...patch }, source.id);
+        objects = objects.map((entry) => entry.id === source.id ? saved : entry);
+        writes.push({ type: "object-interact", object: saved });
+        publishObjects();
+        return saved;
+      },
+      async duplicate() { throw new Error("Not used by this fixture."); },
+      async remove() {}
+    };
+
+    const puzzleStore = {
+      connect(_room, options) { puzzleEmit = options.onData; queueMicrotask(publishPuzzles); return this.stop; },
+      stop() {},
+      async create(roomCode, value, userUid) {
+        const saved = normalizePuzzle({ ...value, id: `puzzle-${puzzles.length + 1}`, roomCode, createdByUid: userUid, updatedByUid: userUid, revision: 1 }, `puzzle-${puzzles.length + 1}`);
+        puzzles.push(saved); writes.push({ type: "puzzle-create", puzzle: saved }); publishPuzzles(); return saved;
+      },
+      async save(_room, source, patch, userUid) {
+        const saved = normalizePuzzle({ ...source, ...patch, runtime: { ...source.runtime, ...(patch.runtime || {}) }, revision: source.revision + 1, updatedByUid: userUid }, source.id);
+        puzzles = puzzles.map((entry) => entry.id === source.id ? saved : entry);
+        writes.push({ type: "puzzle-save", puzzle: saved }); publishPuzzles(); return saved;
+      },
+      async remove(_room, source) { puzzles = puzzles.filter((entry) => entry.id !== source.id); writes.push({ type: "puzzle-delete", puzzle: source }); publishPuzzles(); }
+    };
+
+    const context = () => ({ roomCode: "ROOM-1", userUid: isDm ? "dm-1" : "player-1", isDm });
+    const engine = createPuzzleEngine({ puzzleStore, objectStore, getRoomContext: context });
+    const objectSystem = createMapObjectSystem({
+      document,
+      surface: document.querySelector("#surface"),
+      quickActions: document.querySelector("#quick"),
+      store: objectStore,
+      getRoomContext: context,
+      getMapContext: () => ({ mapId: "scene:keep:floor:ground", sceneId: "keep", floorId: "ground", target: document.querySelector("#map") }),
+      getSelectedToken: () => selectedToken,
+      canControlToken: () => true,
+      getMeasurementOptions: () => ({ pixelsPerSquare: 80, feetPerSquare: 5 }),
+      acquireInteraction: () => () => {},
+      requestConfirmation: async () => true,
+      onObjectsChanged: (records) => puzzleSystem?.syncObjects(records),
+      onInteraction: ({ object }) => {
+        if (object.animationId) effects.push({ objectId: object.id, animationId: object.animationId });
+      }
+    });
+    puzzleSystem = createPuzzleSystem({
+      document,
+      surface: document.querySelector("#surface"),
+      quickActions: document.querySelector("#quick"),
+      store: puzzleStore,
+      engine,
+      getRoomContext: context,
+      getObjects: () => objectSystem.getObjects(),
+      requestConfirmation: async () => true
+    });
+    puzzleSystem.syncObjects(objects);
+    objectSystem.setScreen("battle");
+    puzzleSystem.setScreen("battle");
+
+    window.fixture = {
+      objectSystem, puzzleSystem, engine, writes, effects,
+      getObjects: () => objects,
+      getPuzzles: () => puzzles,
+      async settle() { for (let index = 0; index < 6; index += 1) await engine.getState().pending; },
+      setRole(value) { isDm = value === "dm"; objectSystem.syncContext(); puzzleSystem.syncContext(); }
+    };
+    document.body.dataset.ready = "true";
+  </script>
+</body>
+</html>

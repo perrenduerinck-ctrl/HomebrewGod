@@ -17,6 +17,7 @@ const notify=ref=>{for(const sub of subscriptions){
 const snapshot=(ref)=>({id:ref.split('/').at(-1),metadata:{hasPendingWrites:false,fromCache:false},exists:()=>Boolean(records()[ref]),data:()=>records()[ref]});
 const list=(ref)=>{const docs=Object.keys(records()).filter(p=>p.startsWith(ref+'/')&&!p.slice(ref.length+1).includes('/')).map(snapshot);return {docs,empty:!docs.length,size:docs.length,metadata:{hasPendingWrites:false,fromCache:false},forEach:fn=>docs.forEach(fn),docChanges:()=>docs.map(doc=>({type:'added',doc}))};};
 export const initializeApp=()=>({}), getFirestore=()=>({}), getAuth=()=>({});
+export const connectAuthEmulator=()=>{},connectFirestoreEmulator=()=>{};
 export const doc=path,collection=path,query=(p)=>p,where=()=>null,orderBy=()=>null,limit=()=>null,startAfter=()=>null;
 export const serverTimestamp=()=>new Date().toISOString(),deleteField=()=>null;
 export const getDoc=async ref=>snapshot(ref);

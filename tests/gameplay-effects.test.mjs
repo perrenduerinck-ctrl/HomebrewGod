@@ -246,3 +246,34 @@ test("application, token badges, movement, build and Firestore contracts are wir
   );
   assert.match(rules, /allow delete:\s*if isRoomDm\(roomCode\)/);
 });
+
+test("large effect sets stay indexed by target through hydration and retargeting", () => {
+  const runtime = createEffectRuntime({ registry: createEffectRegistry() });
+  const records = Array.from({ length: 500 }, (_, index) => ({
+    id: `indexed-effect-${index}`,
+    roomCode,
+    definitionId: "poisoned",
+    name: "Poisoned",
+    type: "condition",
+    icon: "◆",
+    sourceId: "caster",
+    targetTokenId: `target-${index % 100}`,
+    createdByUid: "dm-1",
+    duration: { mode: "permanent" },
+    animation: {},
+    createdAtMillis: index + 1,
+    updatedAtMillis: index + 1
+  }));
+  runtime.hydrate(records);
+  assert.equal(runtime.getForToken("target-42").length, 5);
+  assert.equal(runtime.getForToken("missing-target").length, 0);
+
+  const retargeted = records.map((record, index) => (
+    index === 42 ? { ...record, targetTokenId: "target-new", updatedAtMillis: 999 } : record
+  ));
+  runtime.hydrate(retargeted);
+  assert.equal(runtime.getForToken("target-42").length, 4);
+  assert.equal(runtime.getForToken("target-new").length, 1);
+  runtime.hydrate([]);
+  assert.equal(runtime.getForToken("target-new").length, 0);
+});

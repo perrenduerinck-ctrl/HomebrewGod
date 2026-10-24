@@ -66,7 +66,8 @@ export function createVisionSystem(options = {}) {
     getMapContext = () => ({}),
     getFogEnabled = () => false,
     setFogVisionState = () => {},
-    acquireInteraction = null
+    acquireInteraction = null,
+    getAdditionalWalls = () => []
   } = options;
   if (!document || !db || !collection || !doc || !onSnapshot || !setDoc) {
     throw new Error("Vision requires the map and Firestore tools.");
@@ -304,7 +305,7 @@ export function createVisionSystem(options = {}) {
   function computeVision() {
     renderFrame = 0;
     const unitsPerFoot = Math.max(0.01, Number(state.unitsPerFoot) || 10);
-    const walls = [...state.walls.values()];
+    const walls = [...state.walls.values(), ...(getAdditionalWalls() || [])];
     state.currentPolygons = relevantTokens().flatMap((token) => {
       const distance = effectiveVisionDistance(token);
       if (distance <= 0) return [];
@@ -649,6 +650,7 @@ export function createVisionSystem(options = {}) {
     setContext,
     syncContext,
     updateTokens,
+    refresh: scheduleVision,
     persistExplorationNow,
     clearWalls,
     getState,

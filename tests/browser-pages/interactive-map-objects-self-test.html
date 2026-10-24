@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive map objects fixture</title>
+  <link rel="stylesheet" href="../../battleMap/objectSystem.css">
+  <style>
+    body { margin: 0; color: #eef1ff; background: #080b17; font: 14px system-ui; }
+    button, input, select, textarea { font: inherit; }
+    #quick { display: flex; gap: 8px; min-height: 42px; padding: 8px; }
+    #surface { position: relative; width: 900px; min-height: 520px; }
+    #map { position: relative; width: 800px; height: 400px; margin: 30px 40px; background: #26304b; }
+  </style>
+</head>
+<body>
+  <div id="quick"></div>
+  <section id="surface"><div id="map"></div></section>
+  <script type="module">
+    import { createMapObjectSystem } from "../../battleMap/objectSystem.js";
+    import { buildMapObjectInteractionPatch, normalizeMapObject, validateMapObjectInteraction } from "../../battleMap/objectModel.js";
+
+    let isDm = true;
+    let floorId = "ground";
+    let selectedToken = { id: "hero", ownerUid: "player-1", x: 52, y: 50, sceneId: "keep", floorId: "ground" };
+    let objects = [normalizeMapObject({
+      id: "door-1", roomCode: "ROOM-1", type: "door", name: "Vault Door",
+      sceneId: "keep", floorId: "ground", mapId: "scene:keep:floor:ground",
+      transform: { x: 50, y: 50, width: 10, height: 18, rotation: 0 },
+      stateId: "closed", locked: true, allowPlayers: true, visibility: "shared",
+      interactionDistanceFeet: 10, revision: 1, createdByUid: "dm-1", updatedByUid: "dm-1"
+    }, "door-1")];
+    let emit = () => {};
+    let sequence = 1;
+    const writes = [];
+    const publish = () => emit(objects.map((object) => normalizeMapObject(object, object.id)));
+    const store = {
+      connect(_room, options) { emit = options.onData; queueMicrotask(publish); return this.stop; },
+      stop() {},
+      async create(roomCode, value, userUid) {
+        const id = `object-${sequence++}`;
+        const object = normalizeMapObject({ ...value, id, roomCode, createdByUid: userUid, updatedByUid: userUid }, id);
+        objects.push(object); writes.push({ type: "create", object }); publish(); return object;
+      },
+      async save(_room, object, patch, userUid) {
+        const saved = normalizeMapObject({
+          ...object, ...patch,
+          transform: { ...object.transform, ...(patch.transform || {}) },
+          hitPoints: { ...object.hitPoints, ...(patch.hitPoints || {}) },
+          revision: object.revision + 1, updatedByUid: userUid
+        }, object.id);
+        objects = objects.map((entry) => entry.id === object.id ? saved : entry);
+        writes.push({ type: "save", object: saved }); publish(); return saved;
+      },
+      async duplicate(roomCode, object, _overrides, userUid) {
+        return this.create(roomCode, { ...object, name: `${object.name} Copy`, transform: { ...object.transform, x: object.transform.x + 2 } }, userUid);
+      },
+      async interact(_room, object, options) {
+        const validation = validateMapObjectInteraction({ object, token: options.token, isDm: options.isDm, context: options.context });
+        if (!validation.ok) throw new Error(validation.reason);
+        const next = buildMapObjectInteractionPatch(object, { nextStateId: validation.nextStateId, userUid: options.userUid, tokenId: options.token?.id || "" });
+        const saved = normalizeMapObject({ ...object, ...next }, object.id);
+        objects = objects.map((entry) => entry.id === object.id ? saved : entry);
+        writes.push({ type: "interact", object: saved }); publish(); return saved;
+      },
+      async remove(_room, object) { objects = objects.filter((entry) => entry.id !== object.id); writes.push({ type: "delete", object }); publish(); }
+    };
+
+    const system = createMapObjectSystem({
+      document,
+      surface: document.querySelector("#surface"),
+      quickActions: document.querySelector("#quick"),
+      store,
+      getRoomContext: () => ({ roomCode: "ROOM-1", userUid: isDm ? "dm-1" : "player-1", isDm }),
+      getMapContext: () => ({ mapId: `scene:keep:floor:${floorId}`, sceneId: "keep", floorId, target: document.querySelector("#map") }),
+      getSelectedToken: () => selectedToken,
+      canControlToken: (token) => isDm || token?.ownerUid === "player-1",
+      getMeasurementOptions: () => ({ pixelsPerSquare: 80, feetPerSquare: 5 }),
+      acquireInteraction: () => () => {},
+      requestConfirmation: async () => true
+    });
+    system.setScreen("battle");
+
+    window.fixture = {
+      system, writes,
+      getObjects: () => objects,
+      setRole(value) { isDm = value === "dm"; system.syncContext(); },
+      setFloor(value) { floorId = value; system.syncContext(); },
+      setToken(value) { selectedToken = value; },
+      setObjects(value) {
+        objects = (Array.isArray(value) ? value : []).map((object, index) => (
+          normalizeMapObject(object, object.id || `fixture-object-${index}`)
+        ));
+        publish();
+      },
+      reconnect() { system.setScreen("room"); system.setScreen("battle"); }
+    };
+    document.body.dataset.ready = "true";
+  </script>
+</body>
+</html>

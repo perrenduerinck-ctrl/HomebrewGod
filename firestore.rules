@@ -22,6 +22,10 @@ service cloud.firestore {
       return get(roomPath(roomCode)).data;
     }
 
+    function roomDataAfter(roomCode) {
+      return getAfter(roomPath(roomCode)).data;
+    }
+
     function isRoomDm(roomCode) {
       return signedIn()
         && roomExists(roomCode)
@@ -392,7 +396,15 @@ service cloud.firestore {
 
     function validCombatTurnShape(roomCode, tokenId) {
       let turn = request.resource.data;
-      let initiative = roomData(roomCode).get('initiativeState', {});
+      let initiative = roomDataAfter(roomCode).get('initiativeState', {});
+      let currentTurn = initiative.get('currentCombatantId', '') == tokenId
+        && turn.get('roundNumber', -1) == initiative.get('roundNumber', -2)
+        && turn.get('turnCounter', -1) == initiative.get('turnCounter', -2);
+      let offTurnReaction = initiative.get('currentCombatantId', '') != tokenId
+        && turn.get('lastResource', '') == 'reaction'
+        && turn.get('reactionAvailable', true) == false
+        && turn.get('roundNumber', -1) <= initiative.get('roundNumber', -2)
+        && turn.get('turnCounter', -1) <= initiative.get('turnCounter', -2);
       return turn.keys().hasOnly([
           'schemaVersion', 'tokenId', 'combatActive', 'turnKey',
           'roundNumber', 'turnCounter', 'actionsRemaining',
@@ -406,9 +418,7 @@ service cloud.firestore {
         && turn.get('tokenId', '') == tokenId
         && turn.get('combatActive', false) == true
         && initiative.get('combatActive', false) == true
-        && initiative.get('currentCombatantId', '') == tokenId
-        && turn.get('roundNumber', -1) == initiative.get('roundNumber', -2)
-        && turn.get('turnCounter', -1) == initiative.get('turnCounter', -2)
+        && (currentTurn || offTurnReaction)
         && turn.get('turnKey', '') is string
         && turn.get('turnKey', '').size() > 0
         && turn.get('turnKey', '').size() <= 128
@@ -460,6 +470,24 @@ service cloud.firestore {
         );
     }
 
+    function validFreshOffTurnReactionOutcome(roomCode, tokenId) {
+      let turn = request.resource.data;
+      let initiative = roomDataAfter(roomCode).get('initiativeState', {});
+      return initiative.get('currentCombatantId', '') != tokenId
+        && turn.get('lastResource', '') == 'reaction'
+        && turn.get('actionsRemaining', -1) == 0
+        && turn.get('bonusActionsRemaining', -1) == 0
+        && turn.get('reactionAvailable', true) == false
+        && turn.get('attackActionStarted', true) == false
+        && turn.get('attacksRemaining', -1) == 0
+        && turn.get('actionSurgeUsed', true) == false
+        && turn.get('dashUsed', true) == false
+        && turn.get('disengaged', true) == false
+        && turn.get('dodging', true) == false
+        && turn.get('hidden', true) == false
+        && turn.get('helping', true) == false;
+    }
+
     function validSameTurnCombatStep() {
       let turn = request.resource.data;
       let previous = resource.data;
@@ -509,6 +537,22 @@ service cloud.firestore {
         && (previous.get('dashUsed', false) == false || turn.get('dashUsed', false) == true);
     }
 
+    function validOffTurnReactionStep(roomCode, tokenId) {
+      let turn = request.resource.data;
+      let previous = resource.data;
+      let initiative = roomDataAfter(roomCode).get('initiativeState', {});
+      let changed = turn.diff(previous).affectedKeys();
+      return initiative.get('currentCombatantId', '') != tokenId
+        && changed.hasOnly([
+          'reactionAvailable', 'lastCommand', 'lastResource',
+          'lastCommandByUid', 'revision', 'updatedAtMillis', 'updatedAt'
+        ])
+        && turn.get('lastResource', '') == 'reaction'
+        && previous.get('reactionAvailable', false) == true
+        && turn.get('reactionAvailable', true) == false
+        && turn.get('revision', -1) == previous.get('revision', 0) + 1;
+    }
+
     function validCombatTurnActor(roomCode, tokenId) {
       return roomAcceptsWrites(roomCode)
         && isRoomMember(roomCode)
@@ -522,19 +566,48 @@ service cloud.firestore {
     function validCombatTurnCreate(roomCode, tokenId) {
       return validCombatTurnActor(roomCode, tokenId)
         && request.resource.data.get('revision', -1) == 1
-        && validFreshCombatTurnOutcome();
+        && (
+          validFreshCombatTurnOutcome()
+          || validFreshOffTurnReactionOutcome(roomCode, tokenId)
+        );
     }
 
     function validCombatTurnUpdate(roomCode, tokenId) {
+      let previousInitiative = roomData(roomCode).get('initiativeState', {});
+      let nextInitiative = roomDataAfter(roomCode).get('initiativeState', {});
       let sameTurn = request.resource.data.get('turnKey', '')
         == resource.data.get('turnKey', '');
+      let sameAuthoritativeTurn = resource.data.get('roundNumber', -1)
+          == nextInitiative.get('roundNumber', -2)
+        && resource.data.get('turnCounter', -1)
+          == nextInitiative.get('turnCounter', -2)
+        && resource.data.get('tokenId', '')
+          == nextInitiative.get('currentCombatantId', '');
+      let authoritativeTurnChanged = previousInitiative.get('combatActive', false) != true
+        || previousInitiative.get('currentCombatantId', '')
+          != nextInitiative.get('currentCombatantId', '')
+        || previousInitiative.get('roundNumber', -1)
+          != nextInitiative.get('roundNumber', -2)
+        || previousInitiative.get('turnCounter', -1)
+          != nextInitiative.get('turnCounter', -2);
+      let offTurn = nextInitiative.get('currentCombatantId', '') != tokenId;
       return validCombatTurnActor(roomCode, tokenId)
         && (
-          sameTurn
-            ? validSameTurnCombatStep()
-            : request.resource.data.get('revision', -1)
-                == resource.data.get('revision', 0) + 1
-              && validFreshCombatTurnOutcome()
+          offTurn
+            ? validOffTurnReactionStep(roomCode, tokenId)
+            : authoritativeTurnChanged
+                && isRoomDm(roomCode)
+                && request.resource.data.get('lastCommand', '') == 'turn-start'
+                && request.resource.data.get('revision', -1)
+                  == resource.data.get('revision', 0) + 1
+                && validFreshCombatTurnOutcome()
+              || sameAuthoritativeTurn
+                && sameTurn
+                && validSameTurnCombatStep()
+              || !sameAuthoritativeTurn
+                && request.resource.data.get('revision', -1)
+                  == resource.data.get('revision', 0) + 1
+                && validFreshCombatTurnOutcome()
         );
     }
 
@@ -864,6 +937,249 @@ service cloud.firestore {
         && request.resource.data.get('allowPlayers', null) is bool
         && request.resource.data.get('movementCost', -1) >= 0
         && request.resource.data.get('movementCost', 1001) <= 1000;
+    }
+
+    function validMapObjectState(type, stateId) {
+      return (
+          type == 'door' && stateId in ['closed', 'open']
+        ) || (
+          type == 'chest' && stateId in ['closed', 'open', 'looted']
+        ) || (
+          type in ['lever', 'button', 'pressure-plate', 'custom']
+          && stateId in ['inactive', 'active']
+        ) || (
+          type == 'trap' && stateId in ['armed', 'activated', 'disabled']
+        ) || (
+          type == 'destructible' && stateId in ['intact', 'damaged', 'destroyed']
+        ) || (
+          type == 'furniture' && stateId in ['intact', 'moved', 'destroyed']
+        );
+    }
+
+    function validMapObject(roomCode, objectId, visibility) {
+      let transform = request.resource.data.get('transform', {});
+      let hitPoints = request.resource.data.get('hitPoints', {});
+      let interactionRadius = request.resource.data.get('interactionRadius', {});
+      let type = request.resource.data.get('type', '');
+      return request.resource.data.keys().hasOnly([
+          'id', 'roomCode', 'kind', 'type', 'name', 'description',
+          'imageUrl', 'imagePublicId', 'icon', 'sceneId', 'floorId',
+          'mapId', 'transform', 'stateId', 'locked', 'allowPlayers',
+          'visibility', 'interactionDistanceFeet', 'interactionRadius', 'blocksMovement',
+          'blocksVision', 'hitPoints', 'animationId', 'revision',
+          'createdByUid', 'updatedByUid', 'lastInteractedByUid',
+          'lastInteractorTokenId', 'lastPuzzleExecutionId',
+          'createdAtMillis', 'updatedAtMillis',
+          'schemaVersion', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.get('id', '') == objectId
+        && request.resource.data.get('roomCode', '') == roomCode
+        && request.resource.data.get('kind', '') == 'object'
+        && request.resource.data.get('schemaVersion', 0) == 1
+        && request.resource.data.get('visibility', '') == visibility
+        && type in [
+          'door', 'chest', 'lever', 'button', 'pressure-plate',
+          'trap', 'destructible', 'furniture', 'custom'
+        ]
+        && validMapObjectState(type, request.resource.data.get('stateId', ''))
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() > 0
+        && request.resource.data.get('name', '').size() <= 120
+        && request.resource.data.get('description', '') is string
+        && request.resource.data.get('description', '').size() <= 2000
+        && request.resource.data.get('imageUrl', '') is string
+        && request.resource.data.get('imageUrl', '').size() <= 2000
+        && (
+          request.resource.data.get('imageUrl', '') == ''
+          || request.resource.data.get('imageUrl', '').matches('https://.*')
+        )
+        && request.resource.data.get('imagePublicId', '') is string
+        && request.resource.data.get('imagePublicId', '').size() <= 500
+        && request.resource.data.get('icon', '') is string
+        && request.resource.data.get('icon', '').size() <= 16
+        && request.resource.data.get('sceneId', '') is string
+        && request.resource.data.get('floorId', '') is string
+        && request.resource.data.get('mapId', '') is string
+        && request.resource.data.get('mapId', '').size() > 0
+        && request.resource.data.get('mapId', '').size() <= 300
+        && (
+          (
+            request.resource.data.get('sceneId', '') == ''
+            && request.resource.data.get('floorId', '') == ''
+          )
+          || (
+            request.resource.data.get('sceneId', '') != ''
+            && request.resource.data.get('floorId', '') != ''
+            && exists(floorPath(
+              roomCode,
+              request.resource.data.get('sceneId', ''),
+              request.resource.data.get('floorId', '')
+            ))
+          )
+        )
+        && transform is map
+        && transform.keys().hasOnly(['x', 'y', 'width', 'height', 'rotation'])
+        && transform.get('x', -1) >= 0
+        && transform.get('x', 101) <= 100
+        && transform.get('y', -1) >= 0
+        && transform.get('y', 101) <= 100
+        && transform.get('width', 0) >= 1
+        && transform.get('width', 101) <= 100
+        && transform.get('height', 0) >= 1
+        && transform.get('height', 101) <= 100
+        && transform.get('rotation', -361) >= -360
+        && transform.get('rotation', 361) <= 360
+        && request.resource.data.get('locked', null) is bool
+        && request.resource.data.get('allowPlayers', null) is bool
+        && request.resource.data.get('blocksMovement', null) is bool
+        && request.resource.data.get('blocksVision', null) is bool
+        && request.resource.data.get('interactionDistanceFeet', 4) >= 5
+        && request.resource.data.get('interactionDistanceFeet', 121) <= 120
+        && interactionRadius is map
+        && interactionRadius.keys().hasOnly(['x', 'y'])
+        && interactionRadius.get('x', 0) >= 0.1
+        && interactionRadius.get('x', 101) <= 100
+        && interactionRadius.get('y', 0) >= 0.1
+        && interactionRadius.get('y', 101) <= 100
+        && hitPoints is map
+        && hitPoints.keys().hasOnly(['current', 'maximum'])
+        && hitPoints.get('current', -1) >= 0
+        && hitPoints.get('maximum', -1) >= 0
+        && hitPoints.get('current', 100001) <= 100000
+        && hitPoints.get('maximum', 100001) <= 100000
+        && request.resource.data.get('animationId', '') is string
+        && request.resource.data.get('animationId', '').size() <= 180
+        && request.resource.data.get('revision', 0) is int
+        && request.resource.data.get('revision', 0) >= 1
+        && request.resource.data.get('createdByUid', '') is string
+        && request.resource.data.get('updatedByUid', '') is string
+        && request.resource.data.get('lastInteractedByUid', '') is string
+        && request.resource.data.get('lastInteractorTokenId', '') is string
+        && request.resource.data.get('lastPuzzleExecutionId', '') is string
+        && request.resource.data.get('lastPuzzleExecutionId', '').size() <= 180
+        && request.resource.data.get('createdAtMillis', -1) is number
+        && request.resource.data.get('updatedAtMillis', -1) is number;
+    }
+
+    function validPlayerObjectTransition(type, before, after) {
+      return (
+          type == 'door'
+          && ((before == 'closed' && after == 'open') || (before == 'open' && after == 'closed'))
+        ) || (
+          type == 'chest'
+          && ((before == 'closed' && after == 'open') || (before == 'open' && after == 'looted') || (before == 'looted' && after == 'closed'))
+        ) || (
+          type in ['lever', 'button', 'pressure-plate', 'custom']
+          && ((before == 'inactive' && after == 'active') || (before == 'active' && after == 'inactive'))
+        ) || (
+          type == 'trap'
+          && ((before == 'armed' && after == 'activated') || (before == 'activated' && after == 'disabled') || (before == 'disabled' && after == 'armed'))
+        );
+    }
+
+    function validPlayerMapObjectInteraction(roomCode) {
+      let tokenId = request.resource.data.get('lastInteractorTokenId', '');
+      let token = get(tokenPath(roomCode, tokenId)).data;
+      let transform = resource.data.get('transform', {});
+      let interactionRadius = resource.data.get('interactionRadius', {});
+      let type = resource.data.get('type', '');
+      return roomAcceptsWrites(roomCode)
+        && isRoomMember(roomCode)
+        && resource.data.get('visibility', '') == 'shared'
+        && resource.data.get('allowPlayers', false) == true
+        && resource.data.get('locked', true) == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'stateId', 'blocksMovement', 'blocksVision', 'revision',
+          'lastInteractedByUid', 'lastInteractorTokenId', 'updatedByUid',
+          'lastPuzzleExecutionId', 'updatedAtMillis', 'updatedAt'
+        ])
+        && request.resource.data.get('revision', 0) == resource.data.get('revision', 0) + 1
+        && request.resource.data.get('lastInteractedByUid', '') == request.auth.uid
+        && request.resource.data.get('updatedByUid', '') == request.auth.uid
+        && request.resource.data.get('lastPuzzleExecutionId', '') == ''
+        && tokenId != ''
+        && exists(tokenPath(roomCode, tokenId))
+        && token.get('ownerUid', '') == request.auth.uid
+        && token.get('sceneId', '') == resource.data.get('sceneId', '')
+        && token.get('floorId', '') == resource.data.get('floorId', '')
+        && token.get('x', -101) >= transform.get('x', 0) - interactionRadius.get('x', 0)
+        && token.get('x', 101) <= transform.get('x', 0) + interactionRadius.get('x', 0)
+        && token.get('y', -101) >= transform.get('y', 0) - interactionRadius.get('y', 0)
+        && token.get('y', 101) <= transform.get('y', 0) + interactionRadius.get('y', 0)
+        && validPlayerObjectTransition(
+          type,
+          resource.data.get('stateId', ''),
+          request.resource.data.get('stateId', '')
+        )
+        && (
+          type != 'door'
+          || (
+            request.resource.data.get('stateId', '') == 'closed'
+            && request.resource.data.get('blocksMovement', false) == true
+            && request.resource.data.get('blocksVision', false) == true
+          )
+          || (
+            request.resource.data.get('stateId', '') == 'open'
+            && request.resource.data.get('blocksMovement', true) == false
+            && request.resource.data.get('blocksVision', true) == false
+          )
+        );
+    }
+
+    function validDmPuzzle(roomCode, puzzleId) {
+      let runtime = request.resource.data.get('runtime', {});
+      let triggers = request.resource.data.get('triggers', []);
+      let actions = request.resource.data.get('actions', []);
+      let resetActions = request.resource.data.get('resetActions', []);
+      return request.resource.data.keys().hasOnly([
+          'id', 'roomCode', 'name', 'description', 'enabled', 'hiddenState',
+          'allowCrossFloor', 'triggerMode', 'triggers', 'actions', 'resetActions',
+          'runtime', 'revision', 'createdByUid', 'updatedByUid',
+          'createdAtMillis', 'updatedAtMillis', 'schemaVersion', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.get('id', '') == puzzleId
+        && request.resource.data.get('roomCode', '') == roomCode
+        && request.resource.data.get('schemaVersion', 0) == 1
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() > 0
+        && request.resource.data.get('name', '').size() <= 120
+        && request.resource.data.get('description', '') is string
+        && request.resource.data.get('description', '').size() <= 2000
+        && request.resource.data.get('enabled', null) is bool
+        && request.resource.data.get('hiddenState', null) is bool
+        && request.resource.data.get('allowCrossFloor', null) is bool
+        && request.resource.data.get('triggerMode', '') in ['all', 'any', 'sequence']
+        && triggers is list
+        && triggers.size() > 0
+        && triggers.size() <= 20
+        && actions is list
+        && actions.size() > 0
+        && actions.size() <= 20
+        && resetActions is list
+        && resetActions.size() <= 40
+        && runtime is map
+        && runtime.keys().hasOnly([
+          'status', 'sequenceIndex', 'executionId', 'lastObjectId',
+          'solvedAtMillis', 'message'
+        ])
+        && runtime.get('status', '') in ['idle', 'progress', 'solved', 'error']
+        && runtime.get('sequenceIndex', -1) is int
+        && runtime.get('sequenceIndex', -1) >= 0
+        && runtime.get('sequenceIndex', 21) <= 20
+        && runtime.get('executionId', '') is string
+        && runtime.get('executionId', '').size() <= 180
+        && runtime.get('lastObjectId', '') is string
+        && runtime.get('lastObjectId', '').size() <= 180
+        && runtime.get('solvedAtMillis', -1) is number
+        && runtime.get('solvedAtMillis', -1) >= 0
+        && runtime.get('message', '') is string
+        && runtime.get('message', '').size() <= 500
+        && request.resource.data.get('revision', 0) is int
+        && request.resource.data.get('revision', 0) >= 1
+        && request.resource.data.get('createdByUid', '') is string
+        && request.resource.data.get('updatedByUid', '') is string
+        && request.resource.data.get('createdAtMillis', -1) is number
+        && request.resource.data.get('updatedAtMillis', -1) is number;
     }
 
     function playerDrawingEnabled(roomCode) {
@@ -1871,6 +2187,54 @@ service cloud.firestore {
           if roomAcceptsWrites(roomCode)
           && isRoomDm(roomCode)
           && tokenIsDmOnly(request.resource.data);
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /objects/{objectId} {
+        allow read:
+          if isRoomMember(roomCode);
+        allow create:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && validMapObject(roomCode, objectId, 'shared');
+        allow update:
+          if (
+            roomAcceptsWrites(roomCode)
+            && isRoomDm(roomCode)
+            && validMapObject(roomCode, objectId, 'shared')
+          )
+          || validPlayerMapObjectInteraction(roomCode);
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /dmObjects/{objectId} {
+        allow read:
+          if isRoomDm(roomCode);
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && validMapObject(roomCode, objectId, 'dm');
+        allow delete:
+          if isRoomDm(roomCode);
+      }
+
+      match /dmPuzzles/{puzzleId} {
+        allow read:
+          if isRoomDm(roomCode);
+        allow create:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && validDmPuzzle(roomCode, puzzleId)
+          && request.resource.data.get('revision', 0) == 1
+          && request.resource.data.get('createdByUid', '') == request.auth.uid;
+        allow update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && validDmPuzzle(roomCode, puzzleId)
+          && request.resource.data.get('revision', 0) == resource.data.get('revision', 0) + 1
+          && request.resource.data.get('createdByUid', '') == resource.data.get('createdByUid', '');
         allow delete:
           if isRoomDm(roomCode);
       }

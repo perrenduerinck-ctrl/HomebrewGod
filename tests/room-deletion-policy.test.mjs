@@ -11,7 +11,7 @@ import {
 test("room deletion inventory covers every room-owned collection", () => {
   const names = ROOM_OWNED_COLLECTIONS.map((entry) => entry.name);
   assert.deepEqual(names, [
-    "players", "activePlayers", "maps", "puzzleTiles", "scenes", "tokens", "dmTokens",
+    "players", "activePlayers", "maps", "puzzleTiles", "scenes", "tokens", "dmTokens", "objects", "dmObjects", "dmPuzzles",
     "characters", "monsters", "classes", "species", "backgrounds",
     "animations", "combatEffects", "effects", "combatTurns", "sharedJournal",
     "personalJournal", "dmJournal", "sharedDrawings", "dmDrawings",

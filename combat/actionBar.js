@@ -46,6 +46,12 @@ function resourceAvailable(resource, economy, combatActive) {
   return Number(economy?.actionsRemaining) > 0;
 }
 
+export function isCombatActionTurnUsable(action = {}, initiative = {}, tokenId = "") {
+  return initiative.combatActive !== true ||
+    text(initiative.currentCombatantId) === text(tokenId) ||
+    action?.resource === "reaction";
+}
+
 export function createCombatActionBar({
   root,
   tokenSystem,
@@ -165,9 +171,11 @@ export function createCombatActionBar({
     return buildCombatActionBarModel({ token: selectedToken || {}, actor, actorKind });
   }
 
-  function isTurnUsable() {
-    return initiative.combatActive !== true || (
-      text(initiative.currentCombatantId) === text(selectedToken?.id)
+  function isTurnUsable(action = null) {
+    return isCombatActionTurnUsable(
+      action || {},
+      initiative,
+      selectedToken?.id
     );
   }
 
@@ -280,7 +288,7 @@ export function createCombatActionBar({
         actor,
         controlled,
         busy: busyKey === action.key,
-        turnUsable: isTurnUsable(),
+        turnUsable: isTurnUsable(action),
         resourceAvailable: economyAvailable,
         spellSlotOptions
       });

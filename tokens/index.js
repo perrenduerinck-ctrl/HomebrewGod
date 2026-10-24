@@ -132,6 +132,16 @@ export function createTokenSystem(options) {
   let tokenTestMode = false;
   let selectedTokenId = null;
   const selectionSubscribers = new Set();
+  const renderedTokenElements = new Map();
+  const tokenRenderMetrics = {
+    passes: 0,
+    created: 0,
+    replaced: 0,
+    reused: 0,
+    removed: 0
+  };
+  let scheduledTokenRender = null;
+  let scheduledTokenRenderRoomCode = "";
 
 
 // =====================================================
@@ -1594,11 +1604,23 @@ export function createTokenSystem(options) {
     } else if (selectedTokenId) {
       notifySelection("token-updated");
     }
-    render(
-      deps.getCurrentRoomData
-        ? deps.getCurrentRoomData()
-        : lastRenderedRoom || {}
-    );
+    scheduledTokenRenderRoomCode = roomCode;
+    if (scheduledTokenRender) return;
+    const requestFrame = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0));
+    scheduledTokenRender = requestFrame(() => {
+      const requestedRoomCode = scheduledTokenRenderRoomCode;
+      scheduledTokenRender = null;
+      scheduledTokenRenderRoomCode = "";
+      if (
+        tokenRoomCode !== requestedRoomCode ||
+        (deps.getCurrentRoomCode && deps.getCurrentRoomCode() !== requestedRoomCode)
+      ) return;
+      render(
+        deps.getCurrentRoomData
+          ? deps.getCurrentRoomData()
+          : lastRenderedRoom || {}
+      );
+    });
   }
 
   function getRoomTokens() {
@@ -1732,6 +1754,8 @@ export function createTokenSystem(options) {
     tokenCache = [];
     publicTokenCache = [];
     privateTokenCache = [];
+    renderedTokenElements.forEach((element) => element.remove());
+    renderedTokenElements.clear();
   }
 
   function startTokenListenerForRoom(roomCode) {
@@ -2008,19 +2032,6 @@ export function createTokenSystem(options) {
       return;
     }
 
-    const existingScaleCircle = layer.querySelector(".hg-map-scale-preview");
-    const existingScaleLabel = layer.querySelector(".hg-map-scale-label");
-
-    layer.innerHTML = "";
-
-    if (existingScaleCircle) {
-      layer.appendChild(existingScaleCircle);
-    }
-
-    if (existingScaleLabel) {
-      layer.appendChild(existingScaleLabel);
-    }
-
     const isDM = deps.getCurrentIsDM ? deps.getCurrentIsDM() : false;
     const pendingMovement = deps.getPendingMovement
       ? deps.getPendingMovement()
@@ -2029,12 +2040,70 @@ export function createTokenSystem(options) {
     const visibleTokens = getRoomTokens().filter(function (token) {
       return token.activationState !== "pending" && tokenMatchesCurrentView(token, safeRoom);
     });
+    const visibleTokenIds = new Set(visibleTokens.map((token) => String(token.id)));
+
+    tokenRenderMetrics.passes += 1;
+    renderedTokenElements.forEach((element, tokenId) => {
+      if (visibleTokenIds.has(tokenId) && element.parentElement === layer) return;
+      element.remove();
+      renderedTokenElements.delete(tokenId);
+      tokenRenderMetrics.removed += 1;
+    });
 
     if (selectedTokenId && !visibleTokens.some((token) => token.id === selectedTokenId)) {
       clearSelection("floor-hidden");
     }
 
     visibleTokens.forEach(function (token) {
+      const renderedToken =
+        pendingMovement?.tokenId === token.id &&
+        pendingMovement?.endPosition
+          ? {
+              ...token,
+              x: pendingMovement.endPosition.x,
+              y: pendingMovement.endPosition.y
+            }
+          : token;
+      const gameplayEffects = deps.getGameplayEffectsForToken
+        ? deps.getGameplayEffectsForToken(token.id) || []
+        : [];
+      const effectiveStats = deps.getEffectiveTokenStats
+        ? deps.getEffectiveTokenStats(token) || {}
+        : {};
+      const movementMode = deps.getTokenMovementMode
+        ? deps.getTokenMovementMode(token)
+        : (isDM ? "free" : "blocked");
+      const renderKey = JSON.stringify({
+        token,
+        renderedPosition: {
+          x: renderedToken.x,
+          y: renderedToken.y
+        },
+        mediumSize: getMediumSize(safeRoom),
+        gameplayEffects: gameplayEffects.map((entry) => ({
+          id: entry.id || "",
+          name: entry.name || "",
+          icon: entry.icon || ""
+        })),
+        effectiveArmorClass: effectiveStats.armorClass ?? null,
+        movementMode,
+        isDM
+      });
+      const existingTokenElement = renderedTokenElements.get(String(token.id));
+
+      if (existingTokenElement?.__homebrewGodRenderKey === renderKey) {
+        existingTokenElement.classList.toggle("is-selected", selectedTokenId === token.id);
+        existingTokenElement.setAttribute("aria-pressed", String(selectedTokenId === token.id));
+        tokenRenderMetrics.reused += 1;
+        return;
+      }
+
+      if (existingTokenElement) {
+        existingTokenElement.remove();
+        renderedTokenElements.delete(String(token.id));
+        tokenRenderMetrics.replaced += 1;
+      }
+
       const tokenEl = document.createElement("div");
       tokenEl.className = "hg-token hg-token-" + token.type;
       tokenEl.dataset.tokenId = token.id;
@@ -2048,6 +2117,7 @@ export function createTokenSystem(options) {
       tokenEl.dataset.floorId = token.floorId || "";
       tokenEl.dataset.linkedCharacterId =
         token.linkedCharacterId || "";
+      tokenEl.__homebrewGodRenderKey = renderKey;
       tokenEl.title = `${token.name || "Token"} · ${
         formatElevation(token.elevation)
       }${tokenIsDmOnly(token) ? " · DM-only" : ""}`;
@@ -2073,15 +2143,6 @@ export function createTokenSystem(options) {
         )}px`
       );
 
-      const renderedToken =
-        pendingMovement?.tokenId === token.id &&
-        pendingMovement?.endPosition
-          ? {
-              ...token,
-              x: pendingMovement.endPosition.x,
-              y: pendingMovement.endPosition.y
-            }
-          : token;
       positionTokenElement(tokenEl, renderedToken, safeRoom);
 
       if (token.imageUrl) {
@@ -2121,9 +2182,6 @@ export function createTokenSystem(options) {
         tokenEl.appendChild(elevationBadge);
       }
 
-      const gameplayEffects = deps.getGameplayEffectsForToken
-        ? deps.getGameplayEffectsForToken(token.id) || []
-        : [];
       if (gameplayEffects.length > 0) {
         const effects = document.createElement("div");
         effects.className = "hg-token-effects";
@@ -2154,9 +2212,6 @@ export function createTokenSystem(options) {
       tokenEl.appendChild(label);
 
       const tokenStats = [];
-      const effectiveStats = deps.getEffectiveTokenStats
-        ? deps.getEffectiveTokenStats(token) || {}
-        : {};
       const effectiveArmorClass = Number.isFinite(Number(effectiveStats.armorClass))
         ? Number(effectiveStats.armorClass)
         : token.armorClass;
@@ -2195,9 +2250,6 @@ export function createTokenSystem(options) {
         tokenEl.appendChild(stats);
       }
 
-      const movementMode = deps.getTokenMovementMode
-        ? deps.getTokenMovementMode(token)
-        : (isDM ? "free" : "blocked");
       tokenEl.dataset.movementMode = movementMode;
       tokenEl.classList.toggle(
         "hg-token-movable",
@@ -2274,6 +2326,8 @@ export function createTokenSystem(options) {
         tokenEl.appendChild(elevationControls);
       }
 
+      renderedTokenElements.set(String(token.id), tokenEl);
+      tokenRenderMetrics.created += 1;
       layer.appendChild(tokenEl);
     });
 
@@ -3712,7 +3766,11 @@ export function createTokenSystem(options) {
     stopTokenListener,
     getListenerSnapshot: function () {
       return realtimeListeners.getSnapshot();
-    }
+    },
+    getRenderMetrics: () => ({
+      ...tokenRenderMetrics,
+      mounted: renderedTokenElements.size
+    })
   };
 
   if (options.autoInit !== false) {

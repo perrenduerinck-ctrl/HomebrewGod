@@ -67,6 +67,14 @@ export function createFogOfWarSystem(options = {}) {
   let previewFrame = 0;
   let releaseInteraction = null;
   let localOrderSequence = 0;
+  let lastMaskSignature = "";
+  let lastPreviewSignature = "";
+  const renderMetrics = {
+    passes: 0,
+    maskRebuilds: 0,
+    maskReuses: 0,
+    previewRebuilds: 0
+  };
   const state = {
     roomCode: "",
     userId: "",
@@ -114,13 +122,13 @@ export function createFogOfWarSystem(options = {}) {
     </header>
     <label class="hg-fog-enabled"><input type="checkbox" data-fog-enabled> Enable fog on this map</label>
     <div class="hg-fog-segmented" role="toolbar" aria-label="Fog paint mode">
-      <button type="button" data-fog-mode="reveal">Reveal</button>
-      <button type="button" data-fog-mode="hide">Hide</button>
+      <button type="button" data-fog-mode="reveal" title="Make painted areas visible to players">Reveal</button>
+      <button type="button" data-fog-mode="hide" title="Cover painted areas with fog">Hide</button>
     </div>
     <div class="hg-fog-tools" role="toolbar" aria-label="Fog shape">
-      <button type="button" data-fog-tool="brush">Brush</button>
-      <button type="button" data-fog-tool="rectangle">Rectangle</button>
-      <button type="button" data-fog-tool="circle">Circle</button>
+      <button type="button" data-fog-tool="brush" title="Paint fog freehand">Brush</button>
+      <button type="button" data-fog-tool="rectangle" title="Paint a rectangular area">Rectangle</button>
+      <button type="button" data-fog-tool="circle" title="Paint an elliptical area">Circle</button>
     </div>
     <label class="hg-fog-size">Brush size
       <input type="range" min="10" max="300" step="5" value="60" data-fog-size>
@@ -297,57 +305,85 @@ export function createFogOfWarSystem(options = {}) {
   }
 
   function render() {
-    mask.replaceChildren(makeSvgElement(document, "rect", {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      fill: state.settings.baseState === "hidden" ? "white" : "black"
-    }));
-    currentOperations().forEach((operation) => mask.append(createOperationShape(operation)));
     const visionEnabled = state.vision.enabled && state.settings.enabled;
-    if (visionEnabled && state.vision.exploredPath) {
-      mask.append(makeSvgElement(document, "path", {
-        class: "hg-fog-explored-mask",
-        d: state.vision.exploredPath,
+    const operations = currentOperations();
+    const maskSignature = JSON.stringify({
+      mapId: state.mapId,
+      baseState: state.settings.baseState,
+      revision: state.settings.revision,
+      operations,
+      visionEnabled,
+      exploredPath: state.vision.exploredPath,
+      currentPolygons: state.vision.currentPolygons,
+      drawing: state.drawing
+    });
+    renderMetrics.passes += 1;
+    if (maskSignature !== lastMaskSignature) {
+      lastMaskSignature = maskSignature;
+      renderMetrics.maskRebuilds += 1;
+      mask.replaceChildren(makeSvgElement(document, "rect", {
+        x: 0,
+        y: 0,
+        width: 1000,
+        height: 1000,
+        fill: state.settings.baseState === "hidden" ? "white" : "black"
+      }));
+      operations.forEach((operation) => mask.append(createOperationShape(operation)));
+      if (visionEnabled && state.vision.exploredPath) {
+        mask.append(makeSvgElement(document, "path", {
+          class: "hg-fog-explored-mask",
+          d: state.vision.exploredPath,
+          fill: "black"
+        }));
+      }
+      if (visionEnabled) {
+        state.vision.currentPolygons.forEach((polygon) => {
+          if (!Array.isArray(polygon) || polygon.length < 3) return;
+          mask.append(makeSvgElement(document, "polygon", {
+            class: "hg-fog-current-vision-mask",
+            points: pointsAttribute(polygon),
+            fill: "black"
+          }));
+        });
+      }
+      memoryMask.replaceChildren(makeSvgElement(document, "rect", {
+        x: 0,
+        y: 0,
+        width: 1000,
+        height: 1000,
         fill: "black"
       }));
-    }
-    if (visionEnabled) {
-      state.vision.currentPolygons.forEach((polygon) => {
-        if (!Array.isArray(polygon) || polygon.length < 3) return;
-        mask.append(makeSvgElement(document, "polygon", {
-          class: "hg-fog-current-vision-mask",
-          points: pointsAttribute(polygon),
-          fill: "black"
+      if (visionEnabled && state.vision.exploredPath) {
+        memoryMask.append(makeSvgElement(document, "path", {
+          d: state.vision.exploredPath,
+          fill: "white"
         }));
-      });
-    }
-    memoryMask.replaceChildren(makeSvgElement(document, "rect", {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      fill: "black"
-    }));
-    if (visionEnabled && state.vision.exploredPath) {
-      memoryMask.append(makeSvgElement(document, "path", {
-        d: state.vision.exploredPath,
-        fill: "white"
-      }));
-      state.vision.currentPolygons.forEach((polygon) => {
-        if (!Array.isArray(polygon) || polygon.length < 3) return;
-        memoryMask.append(makeSvgElement(document, "polygon", {
-          points: pointsAttribute(polygon),
-          fill: "black"
-        }));
-      });
+        state.vision.currentPolygons.forEach((polygon) => {
+          if (!Array.isArray(polygon) || polygon.length < 3) return;
+          memoryMask.append(makeSvgElement(document, "polygon", {
+            points: pointsAttribute(polygon),
+            fill: "black"
+          }));
+        });
+      }
+      if (state.drawing && state.isDm) {
+        mask.append(createOperationShape(state.drawing));
+      }
+    } else {
+      renderMetrics.maskReuses += 1;
     }
     memoryFill.style.display = visionEnabled && state.vision.exploredPath ? "" : "none";
-    previewGroup.replaceChildren();
-    if (state.drawing && state.isDm) {
-      mask.append(createOperationShape(state.drawing));
-      previewGroup.append(createOperationShape(state.drawing, { preview: true }));
+    const previewSignature = JSON.stringify({
+      drawing: state.drawing,
+      isDm: state.isDm
+    });
+    if (previewSignature !== lastPreviewSignature) {
+      lastPreviewSignature = previewSignature;
+      renderMetrics.previewRebuilds += 1;
+      previewGroup.replaceChildren();
+      if (state.drawing && state.isDm) {
+        previewGroup.append(createOperationShape(state.drawing, { preview: true }));
+      }
     }
 
     const visible = Boolean(state.mapId && state.settings.enabled);
@@ -902,6 +938,7 @@ export function createFogOfWarSystem(options = {}) {
       visionEnabled: state.vision.enabled,
       currentVisionPolygonCount: state.vision.currentPolygons.length,
       hasExploredVision: Boolean(state.vision.exploredPath),
+      renderMetrics: { ...renderMetrics },
       listeners: listeners.getSnapshot()
     };
   }

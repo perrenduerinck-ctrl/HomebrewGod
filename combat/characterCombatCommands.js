@@ -20,25 +20,66 @@ function pathValue(root, path = []) {
   return path.reduce((value, key) => value?.[key], root);
 }
 
+function normalSpellSlotLedger(magic = {}) {
+  const canonicalSlots = object(magic.slots);
+  const canonicalUsage = object(object(magic.slotUsage).normal);
+  const legacySlots = object(magic.spellSlots);
+  const levels = new Set([
+    ...Object.keys(canonicalSlots),
+    ...Object.keys(legacySlots)
+  ]);
+
+  return [...levels]
+    .map((slotLevel) => {
+      const canonical = canonicalSlots[slotLevel];
+      const canonicalRecord = object(canonical);
+      const legacy = legacySlots[slotLevel];
+      const legacyRecord = object(legacy);
+      const maximum = count(
+        canonicalRecord.maximum ??
+          canonicalRecord.max ??
+          canonical ??
+          legacyRecord.maximum ??
+          legacyRecord.max ??
+          legacy,
+        0
+      );
+      const used = count(
+        canonicalUsage[slotLevel] ??
+          canonicalRecord.used ??
+          legacyRecord.used,
+        0
+      );
+
+      return {
+        level: count(slotLevel, 0),
+        maximum,
+        used: Math.min(maximum, used),
+        legacyRecord:
+          legacy && typeof legacy === "object" && !Array.isArray(legacy)
+            ? legacyRecord
+            : null
+      };
+    })
+    .filter((entry) => entry.level > 0 && entry.maximum > 0)
+    .sort((left, right) => left.level - right.level);
+}
+
 export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
   const level = count(spell.level, 0);
   if (level === 0) {
     return [{ kind: "cantrip", level: 0, sourceId: "", label: "Cantrip — no spell slot", remaining: Infinity }];
   }
   const magic = object(character.magic);
-  const slots = object(magic.slots);
-  const normalUsage = object(object(magic.slotUsage).normal);
   const options = [];
-  Object.entries(slots).forEach(([slotLevel, maximum]) => {
-    const parsedLevel = count(slotLevel, 0);
-    const max = count(maximum, 0);
-    if (parsedLevel < level || max < 1) return;
-    const remaining = Math.max(0, max - count(normalUsage[slotLevel], 0));
+  normalSpellSlotLedger(magic).forEach(({ level: slotLevel, maximum, used }) => {
+    if (slotLevel < level) return;
+    const remaining = Math.max(0, maximum - used);
     options.push({
       kind: "normal",
-      level: parsedLevel,
+      level: slotLevel,
       sourceId: "",
-      label: `Level ${parsedLevel} slot (${remaining} remaining)`,
+      label: `Level ${slotLevel} slot (${remaining} remaining)`,
       remaining
     });
   });
@@ -70,9 +111,17 @@ export function applyConfirmedSpellCast(character = {}, spell = {}, selection = 
   const next = clone(character);
   const level = count(spell.level, 0);
   if (level > 0) {
+    const selectionKind = text(selection.kind) || "normal";
+    const selectedLevel = count(selection.level, level);
+    if (!["normal", "pact"].includes(selectionKind)) {
+      throw new Error("Choose a valid spell slot before confirming the cast.");
+    }
+    if (selectedLevel < level) {
+      throw new Error("That spell slot is too low for this spell.");
+    }
     next.magic = object(next.magic);
     next.magic.slotUsage = object(next.magic.slotUsage);
-    if (selection.kind === "pact") {
+    if (selectionKind === "pact") {
       next.magic.slotUsage.pactSources = object(next.magic.slotUsage.pactSources);
       const sourceId = text(selection.sourceId);
       if (!sourceId) throw new Error("A pact slot source is required.");
@@ -85,18 +134,34 @@ export function applyConfirmedSpellCast(character = {}, spell = {}, selection = 
         : Object.entries(object(next.magic.pactMagicSources)).map(([id, source], index) => ({ id, source, index }));
       if (!sources.length && next.magic.pactMagic) sources.push({ id: "legacy:pact-magic", source: next.magic.pactMagic, index: 0 });
       const selectedSource = sources.find((entry) => entry.id === sourceId);
+      const sourceLevel = count(selectedSource?.source?.slotLevel ?? selectedSource?.source?.level, 0);
       const maximum = count(selectedSource?.source?.slots ?? selectedSource?.source?.maximumSlots, 0);
       const used = count(next.magic.slotUsage.pactSources[sourceId], selectedSource?.index === 0 ? next.magic.slotUsage.pact : 0);
-      if (!selectedSource || maximum < 1 || used >= maximum) throw new Error("That pact slot is no longer available.");
+      if (!selectedSource || sourceLevel !== selectedLevel || sourceLevel < level || maximum < 1 || used >= maximum) {
+        throw new Error("That pact slot is no longer available.");
+      }
       next.magic.slotUsage.pactSources[sourceId] = used + 1;
       if (selectedSource.index === 0) next.magic.slotUsage.pact = used + 1;
     } else {
       next.magic.slotUsage.normal = object(next.magic.slotUsage.normal);
-      const slotLevel = String(count(selection.level, level));
-      const maximum = count(object(next.magic.slots)[slotLevel], 0);
-      const used = count(next.magic.slotUsage.normal[slotLevel], 0);
+      const slotLevel = String(selectedLevel);
+      const ledger = normalSpellSlotLedger(next.magic)
+        .find((entry) => String(entry.level) === slotLevel);
+      const maximum = count(ledger?.maximum, 0);
+      const used = count(
+        next.magic.slotUsage.normal[slotLevel],
+        ledger?.used || 0
+      );
       if (maximum < 1 || used >= maximum) throw new Error("That spell slot is no longer available.");
       next.magic.slotUsage.normal[slotLevel] = used + 1;
+      if (ledger?.legacyRecord) {
+        next.magic.spellSlots = object(next.magic.spellSlots);
+        next.magic.spellSlots[slotLevel] = {
+          ...ledger.legacyRecord,
+          maximum,
+          used: used + 1
+        };
+      }
     }
   }
   if (spell.concentration === true || spell.targeting?.duration?.concentration === true) {

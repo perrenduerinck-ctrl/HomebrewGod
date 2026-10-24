@@ -1,0 +1,110 @@
+.hg-object-toolbar {
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 440;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  gap: 10px;
+  width: min(460px, calc(100% - 24px));
+  max-height: min(76vh, 720px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(104, 210, 255, .5);
+  border-radius: 14px;
+  color: #eef7ff;
+  background: rgba(6, 12, 24, .97);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .48);
+  backdrop-filter: blur(12px);
+}
+
+.hg-object-toolbar[hidden] { display: none; }
+.hg-object-toolbar header,
+.hg-object-add-row,
+.hg-object-actions,
+.hg-object-toggles { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hg-object-toolbar header { justify-content: space-between; }
+.hg-object-toolbar header > div { display: grid; gap: 1px; }
+.hg-object-toolbar header small { color: #96abc5; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.hg-object-toolbar button,
+.hg-object-toolbar input,
+.hg-object-toolbar select,
+.hg-object-toolbar textarea { margin: 0; }
+.hg-object-add-row label { display: flex; align-items: center; gap: 7px; margin: 0; }
+.hg-object-add-row select { width: auto; min-width: 150px; }
+.hg-object-help { margin: 0; color: #aebbd0; font-size: 12px; }
+.hg-object-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hg-object-fields label { display: grid; gap: 4px; margin: 0; color: #cad6e7; font-size: 12px; font-weight: 750; }
+.hg-object-fields input,
+.hg-object-fields select,
+.hg-object-fields textarea { width: 100%; box-sizing: border-box; }
+.hg-object-wide { grid-column: 1 / -1; }
+.hg-object-toggles label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; }
+.hg-object-toggles input { width: auto; }
+.hg-object-toolbar .status { min-height: 18px; margin: 0; font-size: 12px; }
+.hg-object-toolbar [data-object-status][data-state="saved"] { color: #72e8ab; }
+.hg-object-toolbar [data-object-status][data-state="error"] { color: #ff8d9d; }
+.hg-object-toolbar [data-object-status][data-state="active"] { color: #ffd987; }
+#mapObjectsToggleButton.is-active { border-color: #68d2ff; color: #fff; background: linear-gradient(135deg, #12658c, #238db8); }
+
+.hg-map-object-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 260;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hg-map-object {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid rgba(213, 226, 248, .82);
+  border-radius: 10px;
+  color: #fff;
+  background: radial-gradient(circle at 35% 25%, rgba(69, 95, 130, .96), rgba(15, 24, 39, .96));
+  box-shadow: 0 5px 14px rgba(0, 0, 0, .62);
+  pointer-events: auto;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.hg-map-object > span { font-size: clamp(16px, 3vw, 34px); line-height: 1; }
+.hg-map-object > img { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; pointer-events: none; }
+.hg-map-object > small {
+  position: absolute;
+  left: 50%;
+  bottom: -19px;
+  max-width: 140px;
+  padding: 2px 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  color: #f3f7ff;
+  background: rgba(4, 8, 18, .9);
+  font-size: 9px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.hg-map-object.is-open { opacity: .7; border-style: dashed; }
+.hg-map-object.is-disabled { filter: grayscale(.65); opacity: .62; }
+.hg-map-object.is-dm-only { outline: 2px dashed rgba(255, 202, 91, .88); outline-offset: 3px; }
+.hg-map-object.is-selected { border-color: #7fe7ff; box-shadow: 0 0 0 3px rgba(40, 181, 235, .35), 0 5px 14px rgba(0, 0, 0, .62); }
+.hg-map-object-layer.is-editing .hg-map-object { cursor: grab; }
+.hg-map-object.is-dragging { cursor: grabbing !important; filter: brightness(1.2); }
+
+body.hg-editing-map-objects #tokenLayer { pointer-events: none !important; }
+body.hg-editing-map-objects .hg-floor-marker-layer { pointer-events: none !important; opacity: .4; }
+
+@media (max-width: 720px) {
+  .hg-object-toolbar { top: 8px; left: 8px; width: min(calc(100vw - 16px), calc(100% - 16px)); max-height: 58vh; }
+  .hg-object-fields { grid-template-columns: 1fr; }
+  .hg-object-wide { grid-column: auto; }
+}

@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 import {
   applyActionEconomyCommand,
   createFreshActionEconomy,
-  synchronizeActionEconomy
+  synchronizeActionEconomy,
+  synchronizeReactionEconomy
 } from "../combat/actionEconomy.js";
 import {
   applyMovementDash,
@@ -16,6 +17,9 @@ import {
   getCharacterMovementModes,
   getLegacyJumpProfile
 } from "../combat/actionBarModel.js";
+import {
+  isCombatActionTurnUsable
+} from "../combat/actionBar.js";
 import {
   applyConfirmedSpellCast,
   consumeCharacterInventoryItem,
@@ -73,6 +77,67 @@ test("Extra Attack uses one Action and Action Surge cannot repeat", () => {
     () => applyActionEconomyCommand(state, { type: "action-surge", resource: "free" }),
     /already used/i
   );
+});
+
+test("an off-turn reaction spends once and refreshes at the token's next turn", () => {
+  const enemyTurn = {
+    combatActive: true,
+    roundNumber: 2,
+    turnCounter: 8,
+    currentCombatantId: "goblin",
+    initiativeOrder: [
+      { tokenId: "hero" },
+      { tokenId: "goblin" }
+    ]
+  };
+  const available = synchronizeReactionEconomy({}, enemyTurn, "hero");
+  assert.equal(available.actionsRemaining, 0);
+  assert.equal(available.bonusActionsRemaining, 0);
+  assert.equal(available.reactionAvailable, true);
+  assert.equal(
+    isCombatActionTurnUsable(
+      { resource: "reaction" },
+      enemyTurn,
+      "hero"
+    ),
+    true
+  );
+  assert.equal(
+    isCombatActionTurnUsable(
+      { resource: "action" },
+      enemyTurn,
+      "hero"
+    ),
+    false
+  );
+
+  const spent = applyActionEconomyCommand(available, {
+    type: "shield",
+    resource: "reaction",
+    actorUid: "owner"
+  });
+  assert.equal(spent.reactionAvailable, false);
+  assert.throws(
+    () => applyActionEconomyCommand(spent, {
+      type: "opportunity-attack",
+      resource: "reaction"
+    }),
+    /already been used/i
+  );
+  assert.equal(
+    synchronizeReactionEconomy(spent, enemyTurn, "hero").reactionAvailable,
+    false
+  );
+
+  const heroTurn = synchronizeReactionEconomy(spent, {
+    ...enemyTurn,
+    roundNumber: 3,
+    turnCounter: 9,
+    currentCombatantId: "hero"
+  }, "hero");
+  assert.equal(heroTurn.actionsRemaining, 1);
+  assert.equal(heroTurn.bonusActionsRemaining, 1);
+  assert.equal(heroTurn.reactionAvailable, true);
 });
 
 test("Dash increases only the turn budget and cannot stack", () => {
@@ -182,6 +247,72 @@ test("spell slots, cancellation-safe mutations, item use and favorites retain so
     kind: "spell",
     id: "shield"
   });
+});
+
+test("legacy saved spell-slot records remain castable without rewriting their character", () => {
+  const legacyCharacter = {
+    schemaVersion: 12,
+    magic: {
+      spellSlots: {
+        1: { maximum: 4, used: 2 },
+        2: { maximum: 2, used: 0 }
+      }
+    },
+    futureData: { preserved: true }
+  };
+
+  const options = getCharacterSpellSlotOptions(
+    legacyCharacter,
+    { id: "magic-missile", name: "Magic Missile", level: 1 }
+  );
+  assert.deepEqual(
+    options.map(({ level, remaining }) => [level, remaining]),
+    [[1, 2], [2, 2]]
+  );
+
+  const cast = applyConfirmedSpellCast(
+    legacyCharacter,
+    { id: "magic-missile", name: "Magic Missile", level: 1 },
+    options[0]
+  );
+  assert.equal(cast.magic.slotUsage.normal[1], 3);
+  assert.equal(cast.magic.spellSlots[1].used, 3);
+  assert.equal(cast.magic.spellSlots[1].maximum, 4);
+  assert.equal(cast.futureData.preserved, true);
+  assert.equal(legacyCharacter.magic.spellSlots[1].used, 2);
+
+  assert.throws(
+    () => applyConfirmedSpellCast(
+      legacyCharacter,
+      { id: "fireball", name: "Fireball", level: 3 },
+      { kind: "normal", level: 1 }
+    ),
+    /too low/i
+  );
+  assert.throws(
+    () => applyConfirmedSpellCast(
+      legacyCharacter,
+      { id: "shield", name: "Shield", level: 1 },
+      { kind: "unknown", level: 1 }
+    ),
+    /valid spell slot/i
+  );
+
+  const exhausted = {
+    magic: { spellSlots: { 1: { maximum: 1, used: 1 } } }
+  };
+  assert.equal(
+    getCharacterSpellSlotOptions(exhausted, { level: 1 })[0].remaining,
+    0
+  );
+  assert.throws(
+    () => applyConfirmedSpellCast(
+      exhausted,
+      { id: "shield", name: "Shield", level: 1 },
+      { kind: "normal", level: 1 }
+    ),
+    /no longer available/i
+  );
 });
 
 test("navigation, controller reuse and Firestore ownership contracts are wired", async () => {
