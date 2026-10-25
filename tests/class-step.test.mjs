@@ -49,6 +49,7 @@ test("class completion defers multiclass ability prerequisites but preserves pro
         { name: "Wizard", level: 3 },
         { name: "Fighter", level: 2 }
       ],
+      classProgression: { totalLevel: 5 },
       prerequisites: [{ met: true }],
       pendingChoices: []
     }),
@@ -66,7 +67,11 @@ test("class completion defers multiclass ability prerequisites but preserves pro
   assert.equal(
     step.isStepComplete({
       multiclass: true,
-      classes: [{ name: "Wizard", level: 2 }],
+      classes: [
+        { name: "Wizard", level: 1 },
+        { name: "Fighter", level: 1 }
+      ],
+      classProgression: { totalLevel: 2 },
       prerequisites: [{ met: false }],
       pendingChoices: []
     }),
@@ -75,7 +80,11 @@ test("class completion defers multiclass ability prerequisites but preserves pro
   assert.equal(
     step.isStepComplete({
       multiclass: true,
-      classes: [{ name: "Wizard", level: 2 }],
+      classes: [
+        { name: "Wizard", level: 1 },
+        { name: "Fighter", level: 1 }
+      ],
+      classProgression: { totalLevel: 2 },
       prerequisites: [{ met: true }],
       pendingChoices: ["Choose a class feature"]
     }),

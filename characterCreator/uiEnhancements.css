@@ -251,6 +251,63 @@
   padding: 8px 12px !important;
 }
 
+.hg-class-build-workflow {
+  display: grid;
+  gap: 14px;
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid rgba(116, 138, 255, 0.3);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(18, 27, 54, 0.92), rgba(10, 15, 31, 0.96));
+}
+
+.hg-class-build-workflow h3,
+.hg-class-build-workflow p {
+  margin: 0;
+}
+
+.hg-class-build-mode,
+.hg-class-build-starting-options,
+.hg-class-build-allocation-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.hg-class-build-mode button[aria-pressed="true"] {
+  border-color: #9c8cff;
+  background: linear-gradient(135deg, #735de8, #a172f7);
+  color: #fff;
+}
+
+.hg-class-build-card button[aria-pressed="true"] {
+  border-color: rgba(104, 226, 177, 0.65);
+}
+
+.hg-class-build-allocations {
+  display: grid;
+  gap: 8px;
+}
+
+.hg-class-build-allocation-row {
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid rgba(116, 138, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(8, 13, 29, 0.6);
+}
+
+.hg-class-build-allocation-row output {
+  min-width: 2ch;
+  text-align: center;
+  font-weight: 800;
+}
+
+.hg-class-build-summary {
+  line-height: 1.65;
+}
+
 @media (max-width: 900px) {
   .hg-core-progress {
     grid-template-columns: repeat(5, minmax(120px, 1fr));

@@ -92,6 +92,13 @@ import {
   planMulticlassLevelSplit
 } from "./multiclassing.js?v=multiclass-flow-20260825";
 import {
+  summarizeClassBuildChanges,
+  validateClassBuildPlan
+} from "./classBuildPlanner.js?v=class-workflow-20261024";
+import {
+  reconcileClassOwnedSpellSources
+} from "./classSpellReconciliation.js?v=class-workflow-20261024";
+import {
   normalizeCharacterEnvelope
 } from "./normalization.js";
 import { renderInnateSpellCards } from "./innateSpellPresentation.js";
@@ -102,7 +109,7 @@ import {
   createCatalogPage,
   CREATOR_CATALOG_BATCH_SIZE
 } from "./catalogPagination.js";
-import { createClassStep } from "./steps/classStep.js?v=dm-preview-class-state-20260829";
+import { createClassStep } from "./steps/classStep.js?v=class-workflow-20261024";
 import { createMulticlassStep } from "./steps/multiclassStep.js?v=dm-preview-class-state-20260829";
 import { createFeatsStep } from "./steps/featsStep.js?v=dm-preview-class-state-20260829";
 import { createSpeciesStep } from "./steps/speciesStep.js?v=dm-preview-class-state-20260829";
@@ -14330,6 +14337,156 @@ export function createCharacterCreator(options = {}) {
     };
   }
 
+  function applyGuidedClassBuildPlan(rawPlan) {
+    const changes = summarizeClassBuildChanges(
+      creatorState.draft,
+      rawPlan
+    );
+    const validation = validateClassBuildPlan(rawPlan);
+
+    if (!validation.valid) {
+      return {
+        ok: false,
+        message: validation.errors.join(" ")
+      };
+    }
+
+    const plan = validation.plan;
+    const templates = new Map(
+      getAllClassTemplates().map((template) => [
+        cleanString(template?.id),
+        template
+      ])
+    );
+    const previousEntries = getCharacterClassEntries(
+      creatorState.draft
+    );
+    const previousOrder = [
+      ...(creatorState.draft.classProgression?.levelOrder || [])
+    ];
+    const previousByClassId = new Map(
+      previousEntries.map((entry) => [
+        cleanString(entry?.classId || entry?.className),
+        entry
+      ])
+    );
+    const nextEntries = [];
+
+    for (const classId of plan.selectedClassIds) {
+      const template = templates.get(classId);
+      if (!template) {
+        return {
+          ok: false,
+          message: `The selected class ${classId} is no longer available. Reopen the Class step and choose again.`
+        };
+      }
+
+      const entry = previousByClassId.get(classId) ||
+        createClassProgressionEntry(
+          template,
+          plan.levels[classId]
+        );
+      entry.level = plan.levels[classId];
+      entry.classId = template.id;
+      entry.className = template.name;
+      entry.hitDie = normalizeClassEntryHitDie(
+        entry.hitDie,
+        template.hitDie || 8
+      );
+      nextEntries.push(entry);
+    }
+
+    const startingIndex = nextEntries.findIndex((entry) => {
+      return cleanString(entry?.classId) === plan.startingClassId;
+    });
+    if (startingIndex > 0) {
+      nextEntries.unshift(
+        nextEntries.splice(startingIndex, 1)[0]
+      );
+    }
+
+    creatorState.draft.classProgression = {
+      ...(creatorState.draft.classProgression || {}),
+      classes: nextEntries,
+      totalLevel: plan.totalLevel
+    };
+    ensureClassProgressionEntryData(creatorState.draft);
+
+    const nextByClassId = new Map(
+      nextEntries.map((entry) => [
+        cleanString(entry?.classId),
+        entry
+      ])
+    );
+    const remaining = new Map(
+      nextEntries.map((entry) => [
+        cleanString(entry?.classId),
+        getClassEntryLevel(entry, 1)
+      ])
+    );
+    const levelOrder = [];
+    const startingEntry = nextByClassId.get(plan.startingClassId);
+
+    if (startingEntry) {
+      levelOrder.push(startingEntry.entryId);
+      remaining.set(
+        plan.startingClassId,
+        Math.max(0, remaining.get(plan.startingClassId) - 1)
+      );
+    }
+
+    let skippedOriginalStartingLevel = false;
+    previousOrder.forEach((rawOrderEntry) => {
+      const previousKey = getClassLevelOrderEntryKey(rawOrderEntry);
+      const previousEntry = previousEntries.find((entry, index) => {
+        return getClassProgressionEntryKey(entry, index) === previousKey;
+      });
+      const classId = cleanString(
+        previousEntry?.classId || previousEntry?.className
+      );
+      const nextEntry = nextByClassId.get(classId);
+
+      if (!nextEntry) {
+        return;
+      }
+      if (classId === plan.startingClassId && !skippedOriginalStartingLevel) {
+        skippedOriginalStartingLevel = true;
+        return;
+      }
+      if ((remaining.get(classId) || 0) < 1) {
+        return;
+      }
+
+      levelOrder.push(nextEntry.entryId);
+      remaining.set(classId, remaining.get(classId) - 1);
+    });
+
+    nextEntries.forEach((entry) => {
+      const classId = cleanString(entry.classId);
+      while ((remaining.get(classId) || 0) > 0) {
+        levelOrder.push(entry.entryId);
+        remaining.set(classId, remaining.get(classId) - 1);
+      }
+    });
+
+    creatorState.draft.classProgression.levelOrder = levelOrder;
+    const reconciliation = reconcileClassOwnedSpellSources(
+      creatorState.draft,
+      nextEntries
+    );
+    refreshClassProgressionDerivedValues();
+    markDraftChanged();
+
+    return {
+      ok: true,
+      summary: nextEntries.map((entry) => {
+        return `${entry.className} ${getClassEntryLevel(entry, 1)}`;
+      }).join(" / "),
+      ...changes,
+      ...reconciliation
+    };
+  }
+
   function getClassEntrySubclassTemplate(
     classEntry
   ) {
@@ -15622,6 +15779,11 @@ export function createCharacterCreator(options = {}) {
   function pruneRemovedClassSpellSources(
     character = creatorState.draft
   ) {
+    const reconciliation =
+      reconcileClassOwnedSpellSources(
+        character,
+        getCharacterClassEntries(character)
+      );
     const store =
       getSection16ClassSourceStore(
         character
@@ -15651,12 +15813,20 @@ export function createCharacterCreator(options = {}) {
 
     if (
       character === creatorState.draft &&
-      removedSourceKeys.length
+      (
+        removedSourceKeys.length ||
+        reconciliation.changed
+      )
     ) {
       syncSection16LegacySpellAliases();
     }
 
-    return removedSourceKeys;
+    return [
+      ...new Set([
+        ...removedSourceKeys,
+        ...reconciliation.removedSourceIds
+      ])
+    ];
   }
 
   function refreshClassProgressionDerivedValues(
@@ -17825,6 +17995,10 @@ export function createCharacterCreator(options = {}) {
     creatorState.dirty = true;
     markCharacterBuilderAsDraft(
       creatorState.draft
+    );
+    reconcileClassOwnedSpellSources(
+      creatorState.draft,
+      getCharacterClassEntries(creatorState.draft)
     );
     synchronizeCanonicalSpellSources(creatorState.draft, { fromCompatibility: true });
     scheduleDraftPersistence();
@@ -29514,6 +29688,7 @@ export function createCharacterCreator(options = {}) {
     sharedServices: sharedStepServices,
 
     applySection12CustomClass,
+    applyGuidedClassBuildPlan,
     applySection12CustomSubclass,
     applySelectedClassFeatureMechanics,
     chooseSection12Class,
@@ -29528,6 +29703,8 @@ export function createCharacterCreator(options = {}) {
     getClassEntryLevel,
     getClassProgressionPendingChoiceWarnings,
     getMulticlassPrerequisiteResults,
+    getMulticlassPrerequisiteResultForClass,
+    getGenericProficiencyBonus,
     getPrimaryClassEntry,
     getRoomCode,
     getSafeClassName,
@@ -35337,6 +35514,57 @@ export function createCharacterCreator(options = {}) {
     });
     return selectedIds;
   }
+
+  function getSection16SpellAvailabilityReason(
+    spell,
+    selectedSource = null
+  ) {
+    const spellLevel = Math.max(0, safeNumber(spell?.level, 0));
+    const activeSpellcasters = getSpellcastingClassOptions(
+      creatorState.draft
+    );
+
+    if (!activeSpellcasters.length) {
+      return "No valid spellcasting source.";
+    }
+
+    if (!selectedSource) {
+      const spellClasses = cleanArray(spell?.classes);
+      const activeClassIds = getCharacterClassEntries(creatorState.draft)
+        .map((entry) => cleanString(entry?.classId));
+      if (
+        spellClasses.length &&
+        !spellClasses.some((classId) => activeClassIds.includes(classId))
+      ) {
+        return "This spell is not on the selected class spell list.";
+      }
+      return "No valid spellcasting source for this spell.";
+    }
+
+    const className = safeDisplayString(
+      selectedSource.className,
+      "This class"
+    );
+    const classId = makeSafeId(selectedSource.classId, "");
+    const classLevel = Math.max(0, safeNumber(selectedSource.level, 0));
+    const maxSpellLevel = Math.max(
+      0,
+      safeNumber(selectedSource.maxSpellLevel, 0)
+    );
+
+    if (spellLevel === 0 && safeNumber(selectedSource.cantripsKnown, 0) < 1) {
+      return `${className} has not unlocked cantrips at this class level.`;
+    }
+    if (spellLevel > maxSpellLevel) {
+      if (classId === "paladin" && classLevel < 2) {
+        return "Requires Paladin level 2 to prepare this spell.";
+      }
+      return `Requires a higher ${className} level.`;
+    }
+
+    return "This spell is not on the selected class spell list.";
+  }
+
   function renderSection16DefaultSpellViewer(
     pickerState = section16SpellPickerState,
     selectedSpellSourceIds =
@@ -35549,11 +35777,11 @@ export function createCharacterCreator(options = {}) {
                   ? "Remove from Spellbook"
                   : "Add to Spellbook"
                 : known
-                  ? "Forget"
-                  : "Learn";
+                  ? "Remove Known Spell"
+                  : "Learn Spell";
 
             const statusLabel = alwaysPrepared
-              ? "Always prepared"
+              ? "Always Prepared — automatic"
               : mysticArcanumSelected
                 ? `Mystic Arcanum (level ${safeNumber(
                     spell.level,
@@ -35578,6 +35806,13 @@ export function createCharacterCreator(options = {}) {
                   );
                 })
               );
+
+            const availabilityReason = sourceCurrentlyEligible
+              ? ""
+              : getSection16SpellAvailabilityReason(
+                  spell,
+                  selectedSource
+                );
 
             const components =
               formatSection16SpellComponents(
@@ -35809,10 +36044,7 @@ export function createCharacterCreator(options = {}) {
                           !prepared
                             ? `
                               <br>
-                              Available when that class can cast level ${safeNumber(
-                                spell.level,
-                                0
-                              )} spells.
+                              ${escapeHtml(availabilityReason)}
                             `
                             : ""
                         }
@@ -35863,8 +36095,8 @@ export function createCharacterCreator(options = {}) {
                               >
                                 ${
                                   prepared
-                                    ? "Unprepare"
-                                    : "Prepare"
+                                    ? "Unprepare Spell"
+                                    : "Prepare Spell"
                                 }
                               </button>
                             `
@@ -35908,7 +36140,7 @@ export function createCharacterCreator(options = {}) {
                     `
                     : `
                       <div class="hg-character-placeholder">
-                        This spell is not currently available to one of this character's classes.
+                        ${escapeHtml(getSection16SpellAvailabilityReason(spell, null))}
                       </div>
                     `
                 }
@@ -37219,8 +37451,14 @@ export function createCharacterCreator(options = {}) {
 
     const classCards =
       summary.classes.map((entry) => {
-        const source =
-          getSection16SourceState(entry);
+        const hasSpellcasting =
+          cleanString(entry.progressionType, "none") !== "none" ||
+          safeNumber(entry.pactMagic?.slots, 0) > 0 ||
+          safeNumber(entry.cantripsKnown, 0) > 0 ||
+          safeNumber(entry.spellsKnown, 0) > 0;
+        const source = hasSpellcasting
+          ? getSection16SourceState(entry)
+          : null;
         const focuses =
           focusBySourceId.get(
             getSection16SourceKey(entry)
@@ -37259,6 +37497,22 @@ export function createCharacterCreator(options = {}) {
             </h3>
 
             <p>
+              <b>Class Level:</b>
+              ${Math.max(1, safeNumber(entry.level, 1))}
+
+              <br>
+
+              <b>Spell Access:</b>
+              ${hasSpellcasting
+                ? safeNumber(entry.maxSpellLevel, 0) > 0
+                  ? `Up to level ${safeNumber(entry.maxSpellLevel, 0)} spells`
+                  : safeNumber(entry.cantripsKnown, 0) > 0
+                    ? "Cantrips only"
+                    : "Class feature not unlocked at this level"
+                : "No Spellcasting feature"}
+
+              <br>
+
               <b>Progression:</b>
               ${escapeHtml(
                 entry.progressionType ||

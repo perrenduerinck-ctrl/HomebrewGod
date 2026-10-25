@@ -494,6 +494,78 @@ test(
 );
 
 test(
+  "guided multiclass choices drive Paladin spells and remove stale class spell ownership",
+  async ({ page }) => {
+    await page.goto(
+      "?smokeTest=1&view=characterCreator&release=class-workflow-20261024",
+      { waitUntil: "domcontentloaded" }
+    );
+    await expect(page.locator("#homebrewGodSmokeResult"))
+      .toContainText("SMOKE TEST PASS", { timeout: 30000 });
+    await page.evaluate(() => {
+      return window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen(
+        "characterCreator"
+      );
+    });
+    await page.locator('[data-cc-action="new-character"]')
+      .first()
+      .click();
+    await page.locator('[data-cc-action="go-step"][data-step-id="class"]')
+      .first()
+      .click();
+
+    await page.locator("#ccClassBuildTotalLevel").fill("3");
+    await page.getByText("2. Build Type", { exact: true }).click();
+    await page.getByRole("button", { name: "Multiclass", exact: true })
+      .click();
+    await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="fighter"]')
+      .click();
+    await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="paladin"]')
+      .click();
+    await page.locator('input[data-class-build-starting="true"][value="paladin"]')
+      .check();
+    await page.locator('[data-cc-action="adjust-class-build-level"][data-class-id="paladin"][data-level-delta="1"]')
+      .click();
+    await expect(page.locator(".hg-class-build-summary"))
+      .toContainText("Fighter 1 / Paladin 2");
+    await page.locator('[data-cc-action="confirm-class-build"]')
+      .click();
+    await expect(page.locator(".hg-class-build-summary"))
+      .toContainText("Paladin 2 / Fighter 1");
+
+    await page.locator('[data-cc-action="go-step"][data-step-id="spells"]')
+      .first()
+      .click();
+    await page.locator("#ccDefaultSpellSearch").fill("Heroism");
+    const heroism = page.locator('article[data-spell-id="heroism"]');
+    await expect(heroism).toBeVisible();
+    await expect(heroism.getByRole("button", { name: "Prepare Spell" }))
+      .toBeVisible();
+    await heroism.getByRole("button", { name: "Prepare Spell" }).click();
+    await expect(heroism).toContainText("Status: Prepared");
+
+    await page.locator('[data-cc-action="go-step"][data-step-id="class"]')
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Single Class", exact: true })
+      .click();
+    await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="fighter"]')
+      .click();
+    await expect(page.locator(".hg-class-build-summary"))
+      .toContainText("Remove Paladin and deactivate its class-owned spells");
+    await page.locator('[data-cc-action="confirm-class-build"]')
+      .click();
+    await page.locator('[data-cc-action="go-step"][data-step-id="spells"]')
+      .first()
+      .click();
+    await page.locator("#ccDefaultSpellSearch").fill("Heroism");
+    const removedHeroism = page.locator('article[data-spell-id="heroism"]');
+    await expect(removedHeroism).toContainText("No valid spellcasting source.");
+    await expect(removedHeroism).not.toHaveClass(/selected/);
+  }
+);
+
+test(
   "core progress and sticky actions remain usable on a smaller laptop",
   async ({ page }) => {
     await page.setViewportSize({

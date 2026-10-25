@@ -1,4 +1,20 @@
+import {
+  createClassBuildPlan,
+  normalizeClassBuildPlan,
+  setClassBuildLevel,
+  setClassBuildMode,
+  setClassBuildSelection,
+  summarizeClassBuildChanges,
+  validateClassBuildPlan
+} from "../classBuildPlanner.js?v=class-workflow-20261024";
+
 const CLASS_STEP_ACTIONS = Object.freeze([
+  "set-class-build-mode",
+  "toggle-class-build-class",
+  "set-class-build-starting",
+  "adjust-class-build-level",
+  "confirm-class-build",
+  "cancel-class-build",
   "choose-class",
   "delete-room-class",
   "use-custom-class",
@@ -33,6 +49,7 @@ export function createClassStep(dependencies = {}) {
   } = dependencies.sharedServices || dependencies;
   const {
     applySection12CustomClass,
+    applyGuidedClassBuildPlan,
     applySection12CustomSubclass,
     applySelectedClassFeatureMechanics,
     chooseSection12Class,
@@ -47,6 +64,8 @@ export function createClassStep(dependencies = {}) {
     getClassEntryLevel,
     getClassProgressionPendingChoiceWarnings,
     getMulticlassPrerequisiteResults,
+    getMulticlassPrerequisiteResultForClass,
+    getGenericProficiencyBonus,
     getPrimaryClassEntry,
     getRoomCode,
     getSafeClassName,
@@ -78,6 +97,179 @@ export function createClassStep(dependencies = {}) {
   } = dependencies;
 
   const creatorState = getCreatorState();
+  let pendingClassBuild = null;
+  let pendingClassBuildBaseSignature = "";
+
+  function getClassBuildDraftSignature() {
+    const progression = creatorState.draft?.classProgression || {};
+    return JSON.stringify({
+      characterId:
+        creatorState.currentCharacterId ||
+        creatorState.draft?.id ||
+        "new-character",
+      totalLevel: progression.totalLevel || 1,
+      classes: getCharacterClassEntries(creatorState.draft).map((entry) => ({
+        entryId: entry?.entryId || "",
+        classId: entry?.classId || entry?.className || "",
+        level: entry?.level || 0
+      })),
+      levelOrder: Array.isArray(progression.levelOrder)
+        ? progression.levelOrder
+        : []
+    });
+  }
+
+  function getPendingClassBuild() {
+    const currentSignature = getClassBuildDraftSignature();
+    if (
+      !pendingClassBuild ||
+      pendingClassBuildBaseSignature !== currentSignature
+    ) {
+      pendingClassBuildBaseSignature = currentSignature;
+      pendingClassBuild = createClassBuildPlan(
+        creatorState.draft
+      );
+    }
+
+    return pendingClassBuild;
+  }
+
+  function classBuildName(classId) {
+    return getAllClassTemplates().find((entry) => {
+      return cleanString(entry?.id) === cleanString(classId);
+    })?.name || classId || "Class";
+  }
+
+  function renderGuidedClassBuildWorkflow() {
+    const plan = getPendingClassBuild();
+    const validation = validateClassBuildPlan(plan);
+    const changes = summarizeClassBuildChanges(
+      creatorState.draft,
+      plan
+    );
+    const selectedSet = new Set(plan.selectedClassIds);
+    const classCards = getAllClassTemplates()
+      .map((classData) => {
+        const selected = selectedSet.has(classData.id);
+        const prerequisite = getMulticlassPrerequisiteResultForClass?.(
+          classData.id,
+          creatorState.draft
+        );
+        const actionLabel = plan.mode === "single"
+          ? selected ? "Selected" : "Choose Class"
+          : selected ? "Remove Class" : "Add Class";
+
+        return `
+          <article class="hg-character-choice-card hg-class-build-card ${selected ? "selected" : ""}">
+            <h3>${escapeHtml(classData.name || "Unnamed Class")}</h3>
+            <p>${escapeHtml(classData.summary || "No description provided.")}</p>
+            <p class="small">
+              <b>Hit Die:</b> ${escapeHtml(classData.hitDie || "d8")}
+              <br>
+              <b>Multiclass prerequisite:</b>
+              ${escapeHtml(prerequisite?.label || "No listed prerequisite")}
+              ${prerequisite?.met === false ? " · Set the required ability scores before finishing." : ""}
+            </p>
+            <button
+              type="button"
+              data-cc-action="toggle-class-build-class"
+              data-class-id="${escapeHtml(classData.id)}"
+              aria-pressed="${selected ? "true" : "false"}"
+            >${escapeHtml(actionLabel)}</button>
+          </article>
+        `;
+      })
+      .join("");
+    const allocationRows = plan.selectedClassIds
+      .map((classId) => {
+        const level = Number(plan.levels[classId] || 1);
+        return `
+          <div class="hg-class-build-allocation-row">
+            <b>${escapeHtml(classBuildName(classId))}</b>
+            <div class="hg-character-inline-actions">
+              <button type="button" data-cc-action="adjust-class-build-level" data-class-id="${escapeHtml(classId)}" data-level-delta="-1" aria-label="Remove one ${escapeHtml(classBuildName(classId))} level">−</button>
+              <output>${level}</output>
+              <button type="button" data-cc-action="adjust-class-build-level" data-class-id="${escapeHtml(classId)}" data-level-delta="1" aria-label="Add one ${escapeHtml(classBuildName(classId))} level">+</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+    const summary = plan.selectedClassIds.length
+      ? plan.selectedClassIds.map((classId) => {
+          return `${classBuildName(classId)} ${plan.levels[classId] || 1}`;
+        }).join(" / ")
+      : "No class selected";
+    const changeLines = [
+      ...changes.addedClassIds.map((id) => `Add ${classBuildName(id)}`),
+      ...changes.removedClassIds.map((id) => `Remove ${classBuildName(id)} and deactivate its class-owned spells`),
+      ...changes.changedLevels.map((entry) => `${classBuildName(entry.classId)} ${entry.before} → ${entry.after}`)
+    ];
+
+    return `
+      <section class="hg-class-build-workflow" data-class-build-workflow="true">
+        <header>
+          <p class="small">Guided class setup · changes are not applied until confirmed</p>
+          <h3>1. What level is your character?</h3>
+        </header>
+
+        ${wizardField("Total Character Level", "ccClassBuildTotalLevel", plan.totalLevel, {
+          type: "number",
+          valueType: "integer",
+          extra: 'min="1" max="20" step="1" data-class-build-total="true"'
+        })}
+
+        <h3>2. Build Type</h3>
+        <div class="hg-class-build-mode" role="group" aria-label="Class build type">
+          <button type="button" data-cc-action="set-class-build-mode" data-build-mode="single" aria-pressed="${plan.mode === "single"}">Single Class</button>
+          <button type="button" data-cc-action="set-class-build-mode" data-build-mode="multiclass" aria-pressed="${plan.mode === "multiclass"}" ${plan.totalLevel < 2 ? "disabled" : ""}>Multiclass</button>
+        </div>
+        <p class="small">
+          <b>Single Class:</b> All your levels belong to one class.
+          <br><b>Multiclass:</b> Split your levels between two or more classes.
+        </p>
+        ${plan.totalLevel < 2 ? '<p class="small">Multiclassing requires at least character level 2.</p>' : ""}
+
+        <h3>3. Choose ${plan.mode === "single" ? "a Class" : "Classes"}</h3>
+        <div class="hg-character-choice-grid hg-class-build-cards">${classCards}</div>
+
+        ${plan.mode === "multiclass" && plan.selectedClassIds.length ? `
+          <h3>4. Choose Starting Class</h3>
+          <p class="small">Your starting class controls its first-level saving throws and proficiencies.</p>
+          <div class="hg-class-build-starting-options">
+            ${plan.selectedClassIds.map((classId) => `
+              <label class="hg-ui-check">
+                <input type="radio" name="ccClassBuildStarting" value="${escapeHtml(classId)}" data-class-build-starting="true" ${plan.startingClassId === classId ? "checked" : ""}>
+                ${escapeHtml(classBuildName(classId))}
+              </label>
+            `).join("")}
+          </div>
+        ` : ""}
+
+        ${plan.mode === "multiclass" && plan.selectedClassIds.length ? `
+          <h3>5. Allocate Class Levels</h3>
+          <div class="hg-class-build-allocations">${allocationRows}</div>
+          <p class="small"><b>Allocated:</b> ${validation.allocated} / ${plan.totalLevel}</p>
+        ` : ""}
+
+        <div class="hg-character-current-choice hg-class-build-summary">
+          <b>Your Character</b>
+          <br><b>Total Level:</b> ${plan.totalLevel}
+          <br><b>Starting Class:</b> ${escapeHtml(classBuildName(plan.startingClassId) || "Not selected")}
+          <br><b>Class Breakdown:</b> ${escapeHtml(summary)}
+          <br><b>Proficiency bonus:</b> +${getGenericProficiencyBonus(plan.totalLevel)}
+          <br><b>Changes on confirm:</b> ${escapeHtml(changeLines.join("; ") || "No class changes")}
+        </div>
+
+        ${validation.errors.length ? `<div class="hg-character-warning">${validation.errors.map(escapeHtml).join("<br>")}</div>` : ""}
+
+        <div class="hg-character-inline-actions">
+          <button type="button" data-cc-action="cancel-class-build">Back / Cancel Changes</button>
+          <button type="button" class="primary" data-cc-action="confirm-class-build" ${validation.valid ? "" : "disabled"}>Confirm Classes</button>
+        </div>
+      </section>
+    `;
+  }
 
   function renderLevelFirstPanel() {
     const character = creatorState.draft;
@@ -176,27 +368,6 @@ export function createClassStep(dependencies = {}) {
         creatorState.draft
       )
     );
-
-    if (
-      hasStartingClass &&
-      progressionEntries.length > 1 &&
-      isMulticlassDraft()
-    ) {
-      return `
-        ${renderLevelFirstPanel()}
-
-        ${beginnerNote(
-          "Choosing a Class",
-          "Class is your biggest rules choice. It decides your hit die, armor and weapon training, saving throws, class features, and sometimes spellcasting. Your level belongs here because each level unlocks new class features."
-        )}
-
-        ${renderMulticlassProgressionEditor()}
-
-        ${renderMulticlassLevelBreakdown()}
-
-        ${renderSection12SelectedClassDetails()}
-      `;
-    }
 
     const primaryClass =
       getSection12PrimaryClass();
@@ -387,56 +558,23 @@ export function createClassStep(dependencies = {}) {
       getSection12SkillPickerChoices();
 
     return `
-      ${renderLevelFirstPanel()}
+      ${renderGuidedClassBuildWorkflow()}
 
       ${beginnerNote(
         "Choosing a Class",
         "Class is your biggest rules choice. It decides your hit die, armor and weapon training, saving throws, class features, and sometimes spellcasting. Your level belongs here because each level unlocks new class features."
       )}
 
-      <hr>
-
-      <h3 data-starting-class-selector="true">2. Choose Starting Class</h3>
-
-      <div class="hg-character-current-choice">
-        <b>Current class:</b>
-
-        ${escapeHtml(
-          getSafeClassName() ||
-          "None selected"
-        )}
-
-        ${
-          selectedClass
-            ? `
-              <span class="small">
-                · ${escapeHtml(
-                  selectedClass
-                    .hitDie ||
-                  "d8"
-                )} hit die
-              </span>
-            `
-            : ""
-        }
-      </div>
-
-      <div class="hg-character-choice-grid">
-        ${classCards}
-      </div>
-
       ${selectedClass
         ? `
           <hr>
 
-          <h3>3. Class Progression and Multiclass</h3>
-
-          ${renderMulticlassProgressionEditor()}
-
           <details class="hg-character-advanced-level-settings">
-            <summary>Advanced HP, AC, movement, and hit-dice settings</summary>
+            <summary>Advanced level-by-level progression, HP, AC, movement, and hit dice</summary>
 
             <div class="hg-character-advanced-level-content">
+              ${renderMulticlassProgressionEditor()}
+              ${hasStartingClass && progressionEntries.length > 1 ? renderMulticlassLevelBreakdown() : ""}
               ${renderLevelStep({
                 hideLevelInput: true
               })}
@@ -1242,9 +1380,87 @@ export function createClassStep(dependencies = {}) {
     }
   }
 
+  function updatePendingClassBuild(nextPlan) {
+    pendingClassBuild = normalizeClassBuildPlan(nextPlan);
+    renderCreatorView();
+  }
+
+  function handleGuidedClassBuildAction(action, context) {
+    const button = findSection12ActionElement(context);
+    const plan = getPendingClassBuild();
+
+    if (action === "set-class-build-mode") {
+      updatePendingClassBuild(
+        setClassBuildMode(plan, button?.dataset?.buildMode)
+      );
+      return true;
+    }
+
+    if (action === "toggle-class-build-class") {
+      const classId = cleanString(button?.dataset?.classId);
+      const selected = plan.selectedClassIds.includes(classId);
+      updatePendingClassBuild(
+        setClassBuildSelection(plan, classId, !selected)
+      );
+      return true;
+    }
+
+    if (action === "adjust-class-build-level") {
+      const classId = cleanString(button?.dataset?.classId);
+      const delta = Math.round(safeNumber(button?.dataset?.levelDelta, 0));
+      updatePendingClassBuild(
+        setClassBuildLevel(
+          plan,
+          classId,
+          safeNumber(plan.levels[classId], 1) + delta
+        )
+      );
+      return true;
+    }
+
+    if (action === "cancel-class-build") {
+      pendingClassBuild = createClassBuildPlan(creatorState.draft);
+      pendingClassBuildBaseSignature = getClassBuildDraftSignature();
+      setStatus("Unconfirmed class changes discarded.");
+      renderCreatorView();
+      return true;
+    }
+
+    if (action === "confirm-class-build") {
+      const validation = validateClassBuildPlan(plan);
+      if (!validation.valid) {
+        setStatus(validation.errors.join(" "), true);
+        renderCreatorView();
+        return true;
+      }
+
+      const result = applyGuidedClassBuildPlan?.(validation.plan);
+      if (!result?.ok) {
+        setStatus(result?.message || "The class plan could not be applied.", true);
+        renderCreatorView();
+        return true;
+      }
+
+      pendingClassBuild = createClassBuildPlan(creatorState.draft);
+      pendingClassBuildBaseSignature = getClassBuildDraftSignature();
+      const removedSpells = result.deactivatedSpellIds?.length || 0;
+      setStatus(
+        `Classes confirmed: ${result.summary}.${removedSpells ? ` ${removedSpells} removed-class spell selection${removedSpells === 1 ? "" : "s"} deactivated.` : ""}`
+      );
+      renderCreatorView();
+      return true;
+    }
+
+    return false;
+  }
+
 
   async function handleStepClick(context) {
     const action = cleanString(context?.action);
+
+    if (CLASS_STEP_ACTIONS.slice(0, 6).includes(action)) {
+      return handleGuidedClassBuildAction(action, context);
+    }
 
     switch (action) {
       case "choose-class":
@@ -1304,10 +1520,44 @@ export function createClassStep(dependencies = {}) {
   }
 
   function handleStepInput(context) {
-    return false;
+    const input = context?.target?.closest?.(
+      "input[data-class-build-total='true']"
+    );
+    if (!input) {
+      return false;
+    }
+
+    const plan = getPendingClassBuild();
+    pendingClassBuild = normalizeClassBuildPlan({
+      ...plan,
+      totalLevel: input.value
+    });
+    return true;
   }
 
   function handleStepChange(context) {
+    const totalInput = context?.target?.closest?.(
+      "input[data-class-build-total='true']"
+    );
+    if (totalInput) {
+      updatePendingClassBuild({
+        ...getPendingClassBuild(),
+        totalLevel: totalInput.value
+      });
+      return true;
+    }
+
+    const startingInput = context?.target?.closest?.(
+      "input[data-class-build-starting='true']"
+    );
+    if (startingInput) {
+      updatePendingClassBuild({
+        ...getPendingClassBuild(),
+        startingClassId: startingInput.value
+      });
+      return true;
+    }
+
     return (
       handleSection12ClassFeatureSelectChange(context) ||
       handleSection12ArtificerInfusionTargetChange(context)
@@ -1326,13 +1576,17 @@ export function createClassStep(dependencies = {}) {
       return true;
     }
 
-    const totalLevel = getCharacterClassEntries(character)
+    const entries = getCharacterClassEntries(character);
+    const totalLevel = entries
       .reduce((sum, classEntry) => {
         return sum + getClassEntryLevel(classEntry, 0);
       }, 0);
 
     return (
-      totalLevel >= 1 &&
+      entries.length >= 2 &&
+      entries.every((entry) => getClassEntryLevel(entry, 0) >= 1) &&
+      totalLevel === Number(character?.classProgression?.totalLevel || 0) &&
+      totalLevel >= 2 &&
       totalLevel <= 20 &&
       getClassProgressionPendingChoiceWarnings(character).length === 0
     );
