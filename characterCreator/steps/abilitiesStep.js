@@ -1310,6 +1310,9 @@ export function createAbilitiesStep(dependencies = {}) {
     const hideLevelInput =
       options.hideLevelInput === true;
 
+    const hideProgressionEditor =
+      options.hideProgressionEditor === true;
+
     const isMulticlass =
       isMulticlassDraft(draft);
 
@@ -1386,7 +1389,7 @@ export function createAbilitiesStep(dependencies = {}) {
 
     return `
       ${
-        isMulticlass
+        isMulticlass && !hideProgressionEditor
           ? `
             ${renderMulticlassProgressionEditor(
               draft

@@ -67,6 +67,7 @@
 .hg-room-summary { grid-column: span 12; }
 .hg-room-time { grid-column: span 7; }
 .hg-room-players { grid-column: span 5; }
+.hg-room-member-access { grid-column: span 12; }
 .hg-room-map-tools { grid-column: span 5; }
 .hg-room-map-library { grid-column: span 7; }
 .hg-room-map-preview { grid-column: span 12; }
@@ -114,6 +115,45 @@
   font-family: var(--hg-font-mono);
   font-size: 1rem;
   letter-spacing: 0.1em;
+}
+
+.hg-room-access-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--hg-space-4);
+  margin-top: var(--hg-space-4);
+}
+
+.hg-room-access-grid > section {
+  min-width: 0;
+  padding: var(--hg-space-3);
+  border: 1px solid var(--hg-border);
+  border-radius: var(--hg-radius-md);
+  background: var(--hg-bg-elevated);
+}
+
+.hg-room-access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hg-space-3);
+  margin-top: var(--hg-space-2);
+}
+
+.hg-room-access-row .row-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+  .hg-room-access-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hg-room-access-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 /* Battle map: the map remains dominant while controls collapse into compact menus. */

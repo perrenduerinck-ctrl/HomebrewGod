@@ -1,5 +1,6 @@
 export const ROOM_OWNED_COLLECTIONS = Object.freeze([
   { name: "players", clientCleanup: true },
+  { name: "bannedUsers", clientCleanup: true },
   { name: "activePlayers", clientCleanup: true },
   { name: "maps", clientCleanup: true, collectsAssets: true },
   { name: "puzzleTiles", clientCleanup: true, collectsAssets: true },

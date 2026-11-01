@@ -790,14 +790,22 @@ test(
       workflow,
       /\bpush:/
     );
-    assert.match(
-      workflow,
-      /needs:\s*test/
-    );
-    assert.match(
-      workflow,
-      /npm run test:ci/
-    );
+    [
+      "validate",
+      "browser",
+      "movement-browser",
+      "stage8-browser"
+    ].forEach((jobName) => {
+      assert.match(
+        workflow,
+        new RegExp(`- ${jobName}`)
+      );
+    });
+    assert.match(workflow, /npm test/);
+    assert.match(workflow, /npm run test:rules/);
+    assert.match(workflow, /npm run test:browser --shard=/);
+    assert.match(workflow, /npm run test:movement:browser/);
+    assert.match(workflow, /npm run test:stage8:browser/);
     assert.match(
       workflow,
       /npm run test:deployed/

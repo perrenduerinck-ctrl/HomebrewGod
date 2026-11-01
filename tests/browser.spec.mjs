@@ -4668,86 +4668,50 @@ test(
         stepId: "abilities"
       }));
 
-    const strength = page.locator(
-      "#ccAbility-str"
+    const intelligence = page.locator(
+      "#ccAbility-int"
     );
-    await expect(strength).toBeVisible();
-    await strength.fill("13");
-    await strength.blur();
+    await expect(intelligence).toBeVisible();
+    await intelligence.fill("13");
+    await intelligence.blur();
     await page.evaluate(() => window
       .__HOMEBREW_GOD_RELEASE_TEST__
       .setCharacterCreatorTestStep("class"));
 
+    await page.locator(
+      "#ccClassBuildTotalLevel"
+    ).fill("2");
+    await page.getByText(
+      "2. Build Type",
+      { exact: true }
+    ).click();
     await expect(page.locator(
-      '[data-starting-class-selector="true"]'
-    )).toBeVisible();
+      "#ccClassBuildTotalLevel"
+    )).toHaveValue("2");
     const beforeClass = await page.evaluate(() => window
       .__HOMEBREW_GOD_RELEASE_TEST__
       .getCharacterCreatorTestState());
     expect(beforeClass.classProgression.classes).toEqual([]);
 
-    await page.locator(
-      "#ccCharacterLevel"
-    ).fill("2");
-    await page.locator(
-      "#ccCharacterLevel"
-    ).blur();
-    await expect(page.locator(
-      "#ccCharacterLevel"
-    )).toHaveValue("2");
-
-    await page.locator(
-      '[data-cc-action="choose-class"][data-class-id="artificer"]'
-    ).click();
-    await expect(page.locator(
-      "[data-level-first-panel]"
-    )).toContainText("Artificer 2");
-
     await page.getByRole("button", {
-      name: "Add a Multiclass"
-    }).click();
-    let dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", {
-      name: "Split 1 Level Into Selected Class"
-    }).click();
-    await expect(dialog.locator(
-      "#ccMulticlassAddStatus"
-    )).toContainText("Choose a class to add first");
-    await dialog.locator(
-      "#ccMulticlassAddClass"
-    ).selectOption("wizard");
-    await dialog.getByRole("button", {
-      name: "Split 1 Level Into Selected Class"
-    }).click();
-
-    await expect(page.locator(
-      "[data-level-first-panel]"
-    )).toContainText("Artificer 1 / Wizard 1");
-    await expect(page.getByRole("heading", {
-      name: /Artificer.*Starting Class/,
-      exact: false
-    }).locator("..")).toContainText("Class Level: 1");
-    await expect(page.getByRole("heading", {
-      name: "Wizard",
+      name: "Multiclass",
       exact: true
-    }).first().locator("..")).toContainText("Class Level: 1");
+    }).click();
+    await page.locator(
+      '[data-cc-action="toggle-class-build-class"][data-class-id="artificer"]'
+    ).click();
+    await page.locator(
+      '[data-cc-action="toggle-class-build-class"][data-class-id="wizard"]'
+    ).click();
+    await page.locator(
+      'input[data-class-build-starting="true"][value="artificer"]'
+    ).check();
     await expect(page.locator(
-      "#ccMulticlassAddStatus"
-    )).not.toContainText("Choose a class to add first");
-    await expect(page.locator(
-      "#ccMulticlassAddStatus"
-    )).not.toContainText(
-      "That class is already in this character's progression"
-    );
-    await expect(page.locator(
-      "#ccMulticlassAddClass"
-    )).toHaveValue("");
-    await expect(page.locator(
-      "#ccMulticlassAddClass option"
-    ).first()).toHaveText("Add another character level first");
-    await expect(page.locator(
-      '[data-cc-action="add-multiclass-class"]'
-    )).toBeDisabled();
+      ".hg-class-build-summary"
+    )).toContainText("Artificer 1 / Wizard 1");
+    await page.locator(
+      '[data-cc-action="confirm-class-build"]'
+    ).click();
 
     const classState = await page.evaluate(() => window
       .__HOMEBREW_GOD_RELEASE_TEST__
@@ -4759,6 +4723,23 @@ test(
       { classId: "artificer", level: 1 },
       { classId: "wizard", level: 1 }
     ]);
+    expect(classState.classProgression.classes[0].classId)
+      .toBe("artificer");
+
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .setCharacterCreatorTestStep("abilities"));
+    await page.locator("#ccAbility-int").fill("14");
+    await page.locator("#ccAbility-int").blur();
+    await page.evaluate(() => window
+      .__HOMEBREW_GOD_RELEASE_TEST__
+      .setCharacterCreatorTestStep("class"));
+    await expect(page.locator(
+      'input[data-class-build-starting="true"][value="artificer"]'
+    )).toBeChecked();
+    await expect(page.locator(
+      ".hg-class-build-summary"
+    )).toContainText("Artificer 1 / Wizard 1");
 
     await page.evaluate(() => window
       .__HOMEBREW_GOD_RELEASE_TEST__
@@ -4773,8 +4754,35 @@ test(
       .__HOMEBREW_GOD_RELEASE_TEST__
       .setCharacterCreatorTestStep("class"));
     await expect(page.locator(
-      "[data-level-first-panel]"
+      ".hg-class-build-summary"
     )).toContainText("Artificer 1 / Wizard 1");
+
+    const advancedProgressionTools = page.locator(
+      '[data-cc-action="show-advanced-progression-tools"]'
+    );
+    await expect(advancedProgressionTools).toBeVisible();
+    await advancedProgressionTools.click();
+    await expect(page.locator(
+      ".hg-character-advanced-level-settings"
+    )).toHaveAttribute("open", "");
+    const firstClassLevelInput = page.locator(
+      "#ccMulticlassLevel-0"
+    );
+    await expect(firstClassLevelInput).toHaveCount(1);
+    await expect(firstClassLevelInput).toBeVisible();
+
+    const advancedClassTools = page.locator(
+      '[data-cc-action="show-advanced-class-tools"]'
+    );
+    await expect(advancedClassTools).toBeVisible();
+    await advancedClassTools.click();
+    await expect(page.getByRole("heading", {
+      name: "Custom Class",
+      exact: true
+    })).toBeVisible();
+    await expect(page.locator(
+      '[data-cc-action="use-custom-class"]'
+    )).toBeVisible();
   }
 );
 

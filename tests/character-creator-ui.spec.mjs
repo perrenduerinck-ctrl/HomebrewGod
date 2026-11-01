@@ -510,9 +510,28 @@ test(
     await page.locator('[data-cc-action="new-character"]')
       .first()
       .click();
-    await page.locator('[data-cc-action="go-step"][data-step-id="class"]')
-      .first()
-      .click();
+    await page.evaluate(() => {
+      window.__characterClassNavigationButton =
+        document.querySelector(
+          '.hg-core-progress [data-cc-action="go-step"][data-step-id="class"]'
+        );
+    });
+    await page.waitForTimeout(100);
+    await expect.poll(() => {
+      return page.evaluate(() => {
+        const current = document.querySelector(
+          '.hg-core-progress [data-cc-action="go-step"][data-step-id="class"]'
+        );
+        return Boolean(
+          current &&
+          current === window.__characterClassNavigationButton &&
+          current.isConnected
+        );
+      });
+    }).toBe(true);
+    await page.locator(
+      '.hg-core-progress [data-cc-action="go-step"][data-step-id="class"]'
+    ).click();
 
     await page.locator("#ccClassBuildTotalLevel").fill("3");
     await page.getByText("2. Build Type", { exact: true }).click();

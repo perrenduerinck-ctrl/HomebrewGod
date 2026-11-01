@@ -13,10 +13,96 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Syntax, data, fixtures, and browser tests
+  validate:
+    name: Syntax, data, fixtures, unit, and security tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install test dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run static, data, fixture, and unit gates
+        run: pnpm test
+      - name: Run Firestore security rules tests
+        run: pnpm run test:rules
+
+  browser:
+    name: Browser tests (shard ${{ matrix.index }} of 2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - index: 1
+            shard: 1/2
+          - index: 2
+            shard: 2/2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install test dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run browser release shard
+        run: pnpm run test:browser --shard=${{ matrix.shard }}
+      - name: Upload browser report on failure or cancellation
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-browser-${{ matrix.index }}
+          path: playwright-report/
+          if-no-files-found: ignore
+
+  movement-browser:
+    name: Movement browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install test dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run movement browser tests
+        run: pnpm run test:movement:browser
+      - name: Upload movement report on failure or cancellation
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-movement
+          path: playwright-report/
+          if-no-files-found: ignore
+
+  stage8-browser:
+    name: Authenticated DM and player emulator tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -34,20 +120,24 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
-      - name: Run the complete release suite
-        run: pnpm run test:ci
-      - name: Upload browser report on failure
-        if: failure()
+      - name: Run authenticated emulator playtest
+        run: pnpm run test:stage8:browser
+      - name: Upload authenticated playtest report on failure or cancellation
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-stage8
           path: playwright-report/
           if-no-files-found: ignore
 
   deploy:
     name: Deploy tested GitHub Pages artifact
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
+    needs:
+      - validate
+      - browser
+      - movement-browser
+      - stage8-browser
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

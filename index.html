@@ -272,6 +272,27 @@
       <div id="playersList">No players in the room right now.</div>
     </section>
 
+    <section id="roomMemberAccessPanel" class="box hidden hg-room-member-access">
+      <h2>Room Access</h2>
+      <p class="small">
+        Remove a saved player membership and block that account from rejoining
+        with the room code. Allow rejoin when you are ready to invite them back.
+      </p>
+      <button type="button" data-room-access-refresh>Refresh Access List</button>
+      <p class="status" data-room-access-status aria-live="polite"></p>
+
+      <div class="hg-room-access-grid">
+        <section>
+          <h3>Campaign Members</h3>
+          <div data-room-members-list></div>
+        </section>
+        <section>
+          <h3>Blocked From Rejoining</h3>
+          <div data-room-bans-list></div>
+        </section>
+      </div>
+    </section>
+
     <section id="dmMapControls" class="box hidden hg-room-map-tools">
       <h2>DM Map Library</h2>
 

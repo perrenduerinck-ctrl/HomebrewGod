@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Room member access self-test</title>
+  <link rel="stylesheet" href="../../assets/styles/app.css">
+  <link rel="stylesheet" href="../../assets/styles/screens.css">
+</head>
+<body>
+  <main style="width:min(900px, 100%); margin:0 auto; padding:16px;">
+    <section id="roomMemberAccessPanel" class="box hidden hg-room-member-access">
+      <h2>Room Access</h2>
+      <button type="button" data-room-access-refresh>Refresh Access List</button>
+      <p class="status" data-room-access-status aria-live="polite"></p>
+      <div class="hg-room-access-grid">
+        <section>
+          <h3>Campaign Members</h3>
+          <div data-room-members-list></div>
+        </section>
+        <section>
+          <h3>Blocked From Rejoining</h3>
+          <div data-room-bans-list></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { createRoomMemberAccessManager } from "../../rooms/memberAccessManager.js";
+
+    const store = {
+      players: new Map([
+        ["dm-1", { uid: "dm-1", displayName: "Rules DM", role: "dm" }],
+        ["player-1", { uid: "player-1", displayName: "Test Player", role: "player" }]
+      ]),
+      bannedUsers: new Map(),
+      activePlayers: new Map([
+        ["session-a", { uid: "player-1", displayName: "Test Player", role: "player" }],
+        ["session-b", { uid: "player-1", displayName: "Test Player", role: "player" }]
+      ])
+    };
+    const confirmations = [];
+    const notifications = [];
+    const reference = (segments, constraint = null) => ({
+      segments,
+      constraint,
+      id: segments.at(-1)
+    });
+    const collection = (_db, ...segments) => reference(segments);
+    const doc = (_db, ...segments) => reference(segments);
+    const where = (field, operator, value) => ({ field, operator, value });
+    const query = (base, constraint) => reference(base.segments, constraint);
+    const getDocs = async (ref) => {
+      const name = ref.segments.at(-1);
+      const source = store[name] || new Map();
+      const docs = [...source.entries()]
+        .filter(([, value]) => !ref.constraint || value[ref.constraint.field] === ref.constraint.value)
+        .map(([id, value]) => ({
+          id,
+          data: () => structuredClone(value),
+          ref: reference([...ref.segments, id])
+        }));
+      return { docs };
+    };
+    const writeBatch = () => {
+      const operations = [];
+      return {
+        set: (ref, value) => operations.push({ type: "set", ref, value }),
+        delete: (ref) => operations.push({ type: "delete", ref }),
+        commit: async () => {
+          operations.forEach((operation) => {
+            const name = operation.ref.segments.at(-2);
+            const id = operation.ref.segments.at(-1);
+            if (operation.type === "set") store[name].set(id, structuredClone(operation.value));
+            else store[name].delete(id);
+          });
+        }
+      };
+    };
+
+    const manager = createRoomMemberAccessManager({
+      root: document.getElementById("roomMemberAccessPanel"),
+      document,
+      db: {},
+      collection,
+      doc,
+      getDocs,
+      query,
+      where,
+      writeBatch,
+      serverTimestamp: () => new Date(),
+      requestConfirmation: async (message, options) => {
+        confirmations.push({ message, options });
+        return true;
+      },
+      notify: (message) => notifications.push(message)
+    });
+
+    manager.setContext({
+      roomCode: "RULES-ROOM",
+      roomName: "Rules Room",
+      isDm: true,
+      userId: "dm-1",
+      userName: "Rules DM"
+    });
+
+    while (manager.getState().loading) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    window.__ROOM_MEMBER_ACCESS_TEST__ = {
+      manager,
+      store,
+      confirmations,
+      notifications,
+      setPlayerContext() {
+        manager.setContext({
+          roomCode: "RULES-ROOM",
+          roomName: "Rules Room",
+          isDm: false,
+          userId: "player-1",
+          userName: "Test Player"
+        });
+      }
+    };
+    document.body.dataset.testStatus = "ready";
+  </script>
+</body>
+</html>

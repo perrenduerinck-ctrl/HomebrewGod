@@ -19270,6 +19270,8 @@ export function createCharacterCreator(options = {}) {
   ) {
     const step =
       getStepById(stepId);
+    const previousStepId =
+      creatorState.currentStepId;
 
     creatorState.viewMode =
       "builder";
@@ -19288,7 +19290,12 @@ export function createCharacterCreator(options = {}) {
     }
 
     connectSection19PermanentListeners();
-    renderCreatorView();
+    renderCurrentStep({
+      refreshStepIds: [
+        previousStepId,
+        step.id
+      ]
+    });
   }
 
   function navigateByStepOffset(
@@ -20325,6 +20332,7 @@ export function createCharacterCreator(options = {}) {
 
       <div class="hg-character-progress-track">
         <div
+            id="characterWizardProgressFill"
           class="hg-character-progress-fill"
           style="width:${progress}%"
         ></div>
@@ -20342,16 +20350,19 @@ export function createCharacterCreator(options = {}) {
           <div class="hg-character-step-panel">
             <div class="hg-character-builder-header">
               <div>
-                <div class="small">
+                <div
+                  id="characterWizardStepMeta"
+                  class="small"
+                >
                   Step ${stepIndex + 1}
                   of ${BUILDER_STEPS.length}
                 </div>
 
-                <h2>
+                <h2 id="characterWizardStepTitle">
                   ${escapeHtml(step.label)}
                 </h2>
 
-                <p>
+                <p id="characterWizardStepDescription">
                   ${escapeHtml(step.description)}
                 </p>
               </div>
@@ -20498,7 +20509,37 @@ export function createCharacterCreator(options = {}) {
     }
   }
 
-  function renderCurrentStep() {
+  function refreshCurrentStepChrome() {
+    const step = getStepById(
+      creatorState.currentStepId
+    );
+    const stepIndex = getStepIndex(step.id);
+    const progress = Math.round(
+      ((stepIndex + 1) / BUILDER_STEPS.length) * 100
+    );
+    const progressFill = $("characterWizardProgressFill");
+    const stepMeta = $("characterWizardStepMeta");
+    const stepTitle = $("characterWizardStepTitle");
+    const stepDescription = $(
+      "characterWizardStepDescription"
+    );
+
+    if (progressFill) {
+      progressFill.style.width = `${progress}%`;
+    }
+    if (stepMeta) {
+      stepMeta.textContent =
+        `Step ${stepIndex + 1} of ${BUILDER_STEPS.length}`;
+    }
+    if (stepTitle) {
+      stepTitle.textContent = step.label;
+    }
+    if (stepDescription) {
+      stepDescription.textContent = step.description;
+    }
+  }
+
+  function renderCurrentStep(options = {}) {
     if (
       creatorState.viewMode !== "builder" ||
       !wizardRuntime.shellBuilt
@@ -20526,10 +20567,12 @@ export function createCharacterCreator(options = {}) {
 
     renderActionBar();
     refreshBuilderFooter();
+    refreshCurrentStepChrome();
     refreshBuilderChrome({
-      refreshStepIds: [
+      refreshStepIds: uniqueCleanArray([
+        ...(options.refreshStepIds || []),
         creatorState.currentStepId
-      ]
+      ])
     });
     applyCharacterCreatorFieldLimits(
       W.stepBody

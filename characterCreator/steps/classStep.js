@@ -15,6 +15,8 @@ const CLASS_STEP_ACTIONS = Object.freeze([
   "adjust-class-build-level",
   "confirm-class-build",
   "cancel-class-build",
+  "show-advanced-progression-tools",
+  "show-advanced-class-tools",
   "choose-class",
   "delete-room-class",
   "use-custom-class",
@@ -99,6 +101,8 @@ export function createClassStep(dependencies = {}) {
   const creatorState = getCreatorState();
   let pendingClassBuild = null;
   let pendingClassBuildBaseSignature = "";
+  let showAdvancedProgressionTools = false;
+  let showAdvancedClassTools = false;
 
   function getClassBuildDraftSignature() {
     const progression = creatorState.draft?.classProgression || {};
@@ -376,7 +380,7 @@ export function createClassStep(dependencies = {}) {
       getSelectedClassTemplate();
 
     const selectedClassLevel = clampLevel(
-      creatorState.draft.classProgression.totalLevel
+      primaryClass?.level || 1
     );
 
     const subclassUnlockLevel = Math.max(
@@ -408,127 +412,6 @@ export function createClassStep(dependencies = {}) {
           : ""
       ) ||
       "Subclass";
-
-    const selectedClassId =
-      primaryClass?.classId || "";
-
-    const classCards =
-      getAllClassTemplates()
-        .map((classData) => {
-          const selected =
-            selectedClassId ===
-            classData.id;
-
-          const primaryAbilities =
-            formatSection12List(
-              classData
-                .primaryAbilities
-            ) ||
-            "Not specified";
-
-          const savingThrows =
-            formatSection12List(
-              classData
-                .savingThrows
-            ) ||
-            "Not specified";
-          const isRoomTemplate = Boolean(
-            classData.docId &&
-            creatorState.roomClassCache.some(
-              (cachedClass) => {
-                return cleanString(cachedClass?.docId) ===
-                  cleanString(classData.docId);
-              }
-            )
-          );
-          const canDeleteSelectedTemplate =
-            selected &&
-            isRoomTemplate &&
-            deps.getCurrentIsDM?.() === true;
-
-          return wizardChoiceCard(
-            classData.name ||
-            "Unnamed Class",
-
-            `
-              <p>
-                ${escapeHtml(
-                  classData.summary ||
-                  "No description provided."
-                )}
-              </p>
-
-              <p>
-                <b>Hit Die:</b>
-
-                ${escapeHtml(
-                  classData.hitDie ||
-                  "d8"
-                )}
-              </p>
-
-              <p>
-                <b>Primary Abilities:</b>
-
-                ${escapeHtml(
-                  primaryAbilities
-                )}
-              </p>
-
-              <p>
-                <b>Saving Throws:</b>
-
-                ${escapeHtml(
-                  savingThrows
-                )}
-              </p>
-
-              <p>
-                <b>Subclass Level:</b>
-
-                ${Math.max(
-                  1,
-                  safeNumber(
-                    classData
-                      .subclassLevel,
-                    3
-                  )
-                )}
-              </p>
-
-              <p>
-                ${renderRulesetMetadata(classData, "class")}
-              </p>
-
-              ${
-                canDeleteSelectedTemplate
-                  ? `
-                    <button type="button" class="danger"
-                      data-cc-action="delete-room-class"
-                      data-class-doc-id="${escapeHtml(classData.docId)}"
-                      data-class-name="${escapeHtml(classData.name || "Unnamed Class")}">
-                      Delete ${escapeHtml(classData.name || "Unnamed Class")}
-                    </button>
-                  `
-                  : ""
-              }
-            `,
-
-            selected
-              ? "Selected"
-              : "Choose Class",
-
-            "choose-class",
-
-            {
-              "class-id":
-                classData.id
-            },
-
-            selected
-          );
-        })
-        .join("");
 
     const customSource =
       primaryClass?.source ===
@@ -566,21 +449,42 @@ export function createClassStep(dependencies = {}) {
       )}
 
       ${selectedClass
-        ? `
+        ? showAdvancedProgressionTools
+          ? `
           <hr>
 
-          <details class="hg-character-advanced-level-settings">
+          <details class="hg-character-advanced-level-settings" open>
             <summary>Advanced level-by-level progression, HP, AC, movement, and hit dice</summary>
 
             <div class="hg-character-advanced-level-content">
               ${renderMulticlassProgressionEditor()}
               ${hasStartingClass && progressionEntries.length > 1 ? renderMulticlassLevelBreakdown() : ""}
               ${renderLevelStep({
-                hideLevelInput: true
+                hideLevelInput: true,
+                hideProgressionEditor: true
               })}
             </div>
           </details>
-        `
+          `
+          : `
+            <hr>
+
+            <div class="hg-character-placeholder hg-character-advanced-progression-tools-prompt">
+              <h3>Advanced Level Progression</h3>
+
+              <p>
+                Load level-by-level class order, HP, AC, movement, and hit-die
+                controls only when you need to edit those advanced details.
+              </p>
+
+              <button
+                type="button"
+                data-cc-action="show-advanced-progression-tools"
+              >
+                Show Advanced Level Progression
+              </button>
+            </div>
+          `
         : `
           <div class="hg-character-placeholder">
             Choose a class to set its level and advancement.
@@ -626,6 +530,8 @@ export function createClassStep(dependencies = {}) {
         `
         : ""}
 
+      ${showAdvancedClassTools
+        ? `
       ${renderSection12SelectedClassDetails()}
 
       <hr>
@@ -869,6 +775,26 @@ export function createClassStep(dependencies = {}) {
           Use Custom Class
         </button>
       </div>
+        `
+        : `
+          <hr>
+
+          <div class="hg-character-placeholder hg-character-advanced-class-tools-prompt">
+            <h3>Class Details &amp; Custom Class Tools</h3>
+
+            <p>
+              Load the full class feature reference or create a custom class
+              when you need those advanced controls.
+            </p>
+
+            <button
+              type="button"
+              data-cc-action="show-advanced-class-tools"
+            >
+              Show Class Details &amp; Custom Tools
+            </button>
+          </div>
+        `}
     `;
   }
 
@@ -1463,6 +1389,14 @@ export function createClassStep(dependencies = {}) {
     }
 
     switch (action) {
+      case "show-advanced-progression-tools":
+        showAdvancedProgressionTools = true;
+        renderCreatorView();
+        return true;
+      case "show-advanced-class-tools":
+        showAdvancedClassTools = true;
+        renderCreatorView();
+        return true;
       case "choose-class":
         handleSection12ChooseClass(context);
         return true;

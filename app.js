@@ -221,6 +221,7 @@ import { createSummonPersistence } from "./summons/summonPersistence.js";
 import { summonPresetAutomation } from "./summons/summonPresetModel.js";
 import { createJournalSystem } from "./journal/journal.js?v=journal-polish-20261008";
 import { createMapDrawingSystem } from "./battleMap/drawingTools.js?v=journal-drawing-20261008";
+import { createRoomMemberAccessManager } from "./rooms/memberAccessManager.js?v=membership-access-20261031";
 import { createFogOfWarSystem } from "./battleMap/fogOfWar.js?v=stage7-performance-20261023";
 import { createVisionSystem } from "./battleMap/visionSystem.js?v=fog-phase2-20261020";
 import { createMapInteractionController } from "./battleMap/interactionController.js";
@@ -377,6 +378,7 @@ const E = {
   deleteRoomButton: $("deleteRoomButton"),
   yourRoleText: $("yourRoleText"),
   playersList: $("playersList"),
+  roomMemberAccessPanel: $("roomMemberAccessPanel"),
 
   // Room map controls
   dmMapControls: $("dmMapControls"),
@@ -560,6 +562,20 @@ const journalSystem = createJournalSystem({
   writeBatch,
   serverTimestamp,
   requestConfirmation: requestAppConfirmation
+});
+const roomMemberAccessManager = createRoomMemberAccessManager({
+  root: E.roomMemberAccessPanel,
+  document,
+  db,
+  collection,
+  doc,
+  getDocs,
+  query,
+  where,
+  writeBatch,
+  serverTimestamp,
+  requestConfirmation: requestAppConfirmation,
+  notify: (message) => alert(message)
 });
 const mapDrawingSystem = createMapDrawingSystem({
   document,
@@ -2593,6 +2609,7 @@ function makeRoomCode() {
 
 function clearRoomListeners() {
   journalSystem.disconnect();
+  roomMemberAccessManager.disconnect();
   mapDrawingSystem.disconnect();
   fogOfWarSystem?.disconnect();
   visionSystem?.disconnect();
@@ -3665,6 +3682,13 @@ function openRoom(roomCode, screenToShow = "room") {
       userName: realtimeUserName,
       isDm: currentIsDM
     });
+    roomMemberAccessManager.setContext({
+      roomCode: cleanCode,
+      roomName: room.roomName || "Unnamed Room",
+      isDm: currentIsDM,
+      userId: currentUser.uid,
+      userName: realtimeUserName
+    });
     mapDrawingSystem.setContext({
       roomCode: cleanCode,
       userId: currentUser.uid,
@@ -3740,12 +3764,19 @@ function openRoom(roomCode, screenToShow = "room") {
     }
 
     await openStartupViewIfNeeded();
-  }, function (error) {
+  }, async function (error) {
     if (!isCurrent()) {
       return;
     }
 
     fail(error);
+    if (error?.code === "permission-denied") {
+      currentRoomMembershipState = "missing";
+      alert("You no longer have access to this campaign.");
+      await leaveCurrentRoomView();
+      return;
+    }
+
     currentRoomMembershipState = "unknown";
     alert(friendlyServiceError(error, {
       service: "Firebase",

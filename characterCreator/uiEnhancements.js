@@ -873,49 +873,61 @@ function enhanceCoreProgress(root) {
     );
   }
 
-  const html =
-    CORE_STEPS.map(
-      ([stepId, label]) => {
-        const source =
-          rail.querySelector(
-            `[data-step-id="${stepId}"]`
-          );
-        const complete =
-          source?.classList
-            .contains("complete");
-        const active =
-          source?.classList
-            .contains("active");
+  let buttons = [
+    ...progress.querySelectorAll(
+      ":scope > button[data-cc-action=\"go-step\"]"
+    )
+  ];
+  const hasExpectedButtons =
+    buttons.length === CORE_STEPS.length &&
+    CORE_STEPS.every(([stepId], index) => {
+      return buttons[index]?.dataset.stepId === stepId;
+    });
 
-        return `
-          <button
-            type="button"
-            class="${
-              complete
-                ? "complete"
-                : ""
-            } ${
-              active
-                ? "active"
-                : ""
-            }"
-            data-cc-action="go-step"
-            data-step-id="${stepId}"
-            aria-current="${
-              active
-                ? "step"
-                : "false"
-            }"
-          >
-            ${label}
-          </button>
-        `;
-      }
-    ).join("");
+  if (!hasExpectedButtons) {
+    const fragment = document.createDocumentFragment();
 
-  if (progress.innerHTML !== html) {
-    progress.innerHTML = html;
+    CORE_STEPS.forEach(([stepId, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.ccAction = "go-step";
+      button.dataset.stepId = stepId;
+      button.textContent = label;
+      fragment.append(button);
+    });
+
+    progress.replaceChildren(fragment);
+    buttons = [
+      ...progress.querySelectorAll(
+        ":scope > button[data-cc-action=\"go-step\"]"
+      )
+    ];
   }
+
+  CORE_STEPS.forEach(([stepId, label], index) => {
+    const source = rail.querySelector(
+      `[data-step-id="${stepId}"]`
+    );
+    const button = buttons[index];
+    const complete =
+      source?.classList.contains("complete") === true;
+    const active =
+      source?.classList.contains("active") === true;
+
+    if (!button) {
+      return;
+    }
+
+    if (button.textContent !== label) {
+      button.textContent = label;
+    }
+    button.classList.toggle("complete", complete);
+    button.classList.toggle("active", active);
+    button.setAttribute(
+      "aria-current",
+      active ? "step" : "false"
+    );
+  });
 }
 
 function enhanceStickyActions(root) {

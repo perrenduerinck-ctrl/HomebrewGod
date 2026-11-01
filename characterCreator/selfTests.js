@@ -13730,6 +13730,13 @@ export function runCharacterCreatorSelfTests(context) {
     const multiclassClassHtml =
       renderClassStep();
 
+    const multiclassProgressionHtml =
+      `${renderMulticlassProgressionEditor(
+        creatorState.draft
+      )}${renderMulticlassLevelBreakdown(
+        creatorState.draft
+      )}`;
+
     const multiclassLevelHtml =
       renderLevelStep();
 
@@ -13743,74 +13750,74 @@ export function runCharacterCreatorSelfTests(context) {
       "Multiclass class and level screens expose progression controls",
       {
         classProgression:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Class Progression"
           ),
         addClass:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Split 1 Level Into Selected Class"
           ),
         addClassLabel:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Choose class to add"
           ),
         addClassHelper:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "The total character level will not increase. For example, Fighter 2 becomes Fighter 1 / Wizard 1."
           ),
-        levelFirst:
+        guidedClassBuild:
           multiclassClassHtml.includes(
-            'data-level-first-panel="true"'
+            'id="ccClassBuildTotalLevel"'
           ) &&
           multiclassClassHtml.includes(
-            "Choose Total Character Level"
+            "What level is your character?"
           ) &&
           multiclassClassHtml.includes(
-            'data-multiclass-total="true"'
+            'data-cc-action="set-class-build-mode"'
           ),
         localAddStatus:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             'id="ccMulticlassAddStatus"'
           ) &&
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "aria-live=\"polite\""
           ),
         levelUpWorkflow:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Level Up Workflow"
           ) &&
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "add-character-level"
           ) &&
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "remove-last-character-level"
           ),
         fighterLevelInput:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "ccMulticlassLevel-0"
           ),
         wizardSubclassInput:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "ccMulticlassSubclass-1"
           ),
         fighterSummary:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Fighter"
           ) &&
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Level 3"
           ) &&
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Defense"
           ),
         wizardSummary:
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Wizard"
           ) &&
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Level 2"
           ) &&
-          multiclassClassHtml.includes(
+          multiclassProgressionHtml.includes(
             "Imported"
           ),
         levelOrder:
@@ -13880,7 +13887,7 @@ export function runCharacterCreatorSelfTests(context) {
         addClass: true,
         addClassLabel: true,
         addClassHelper: true,
-        levelFirst: true,
+        guidedClassBuild: true,
         localAddStatus: true,
         levelUpWorkflow: true,
         fighterLevelInput: true,
@@ -14452,7 +14459,9 @@ export function runCharacterCreatorSelfTests(context) {
       );
 
     const fighterLevelThreeClassHtml =
-      renderClassStep();
+      renderMulticlassProgressionEditor(
+        creatorState.draft
+      );
 
     const championSelectedFromUnlock =
       setMulticlassSubclass(0, "champion");
@@ -14497,7 +14506,9 @@ export function runCharacterCreatorSelfTests(context) {
       );
 
     const fighterAlertClassHtml =
-      renderClassStep();
+      renderMulticlassProgressionEditor(
+        creatorState.draft
+      );
 
     record(
       "Level-up workflow keeps subclass and feat unlocks compact",

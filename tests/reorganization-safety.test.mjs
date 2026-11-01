@@ -171,12 +171,19 @@ test("GitHub requires tests before a main-branch Pages deployment", () => {
   );
 
   assert.match(workflow, /pull_request:/);
-  assert.match(workflow, /needs: test/);
+  assert.match(workflow, /needs:[\s\S]*- validate/);
+  assert.match(workflow, /needs:[\s\S]*- browser/);
+  assert.match(workflow, /needs:[\s\S]*- movement-browser/);
+  assert.match(workflow, /needs:[\s\S]*- stage8-browser/);
   assert.match(
     workflow,
     /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/
   );
-  assert.match(workflow, /npm run test:ci/);
+  assert.match(workflow, /npm test/);
+  assert.match(workflow, /npm run test:rules/);
+  assert.match(workflow, /npm run test:browser --shard=/);
+  assert.match(workflow, /npm run test:movement:browser/);
+  assert.match(workflow, /npm run test:stage8:browser/);
   assert.match(workflow, /npm run build:pages/);
   assert.match(workflow, /npm run test:deployed/);
 });

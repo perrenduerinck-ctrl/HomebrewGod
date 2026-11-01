@@ -36,6 +36,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/rooms/$(roomCode)/players/$(uid);
     }
 
+    function membershipBanPath(roomCode, uid) {
+      return /databases/$(database)/documents/rooms/$(roomCode)/bannedUsers/$(uid);
+    }
+
     function tokenPath(roomCode, tokenId) {
       return /databases/$(database)/documents/rooms/$(roomCode)/tokens/$(tokenId);
     }
@@ -615,7 +619,10 @@ service cloud.firestore {
       return signedIn()
         && (
           isRoomDm(roomCode)
-          || exists(membershipPath(roomCode, request.auth.uid))
+          || (
+            exists(membershipPath(roomCode, request.auth.uid))
+            && !exists(membershipBanPath(roomCode, request.auth.uid))
+          )
         );
     }
 
@@ -1644,6 +1651,7 @@ service cloud.firestore {
           && request.auth.uid == playerUid
           && roomExists(roomCode)
           && roomAcceptsWrites(roomCode)
+          && !exists(membershipBanPath(roomCode, playerUid))
           && request.resource.data.uid == request.auth.uid
           && (
             request.resource.data.role == 'player'
@@ -1671,6 +1679,36 @@ service cloud.firestore {
             isSelf(playerUid)
             && resource.data.uid == request.auth.uid
           );
+      }
+
+      match /bannedUsers/{bannedUid} {
+        allow read:
+          if isRoomDm(roomCode);
+
+        allow create, update:
+          if roomAcceptsWrites(roomCode)
+          && isRoomDm(roomCode)
+          && bannedUid != request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'uid', 'displayName', 'bannedByUid', 'bannedByName',
+            'reason', 'createdAt', 'createdAtMillis'
+          ])
+          && request.resource.data.uid == bannedUid
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 120
+          && request.resource.data.bannedByUid == request.auth.uid
+          && request.resource.data.bannedByName is string
+          && request.resource.data.bannedByName.size() > 0
+          && request.resource.data.bannedByName.size() <= 120
+          && request.resource.data.reason is string
+          && request.resource.data.reason.size() <= 500
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.createdAtMillis is number
+          && request.resource.data.createdAtMillis > 0;
+
+        allow delete:
+          if isRoomDm(roomCode);
       }
 
       match /activePlayers/{sessionId} {

@@ -401,6 +401,72 @@ after(async () => {
   await environment?.cleanup();
 });
 
+test("DM membership bans revoke access and prevent room-code rejoining until removed", async () => {
+  const dm = databaseFor("dm-1");
+  const removedPlayer = databaseFor("removed-player");
+  const membership = {
+    uid: "removed-player",
+    displayName: "Removed Player",
+    role: "player"
+  };
+  const membershipRef = doc(
+    removedPlayer,
+    "rooms",
+    ROOM,
+    "players",
+    "removed-player"
+  );
+  const dmMembershipRef = doc(
+    dm,
+    "rooms",
+    ROOM,
+    "players",
+    "removed-player"
+  );
+  const banRef = doc(
+    dm,
+    "rooms",
+    ROOM,
+    "bannedUsers",
+    "removed-player"
+  );
+
+  await assertSucceeds(setDoc(membershipRef, membership));
+  await assertSucceeds(getDoc(doc(removedPlayer, "rooms", ROOM)));
+  await assertSucceeds(setDoc(banRef, {
+    uid: "removed-player",
+    displayName: "Removed Player",
+    bannedByUid: "dm-1",
+    bannedByName: "Rules DM",
+    reason: "Removed by the room DM",
+    createdAt: new Date(),
+    createdAtMillis: 1
+  }));
+
+  await assertFails(getDoc(doc(removedPlayer, "rooms", ROOM)));
+  await assertFails(getDoc(doc(
+    removedPlayer,
+    "rooms",
+    ROOM,
+    "bannedUsers",
+    "removed-player"
+  )));
+  await assertSucceeds(getDoc(banRef));
+  await assertSucceeds(deleteDoc(dmMembershipRef));
+  await assertFails(setDoc(membershipRef, membership));
+  await assertFails(deleteDoc(doc(
+    removedPlayer,
+    "rooms",
+    ROOM,
+    "bannedUsers",
+    "removed-player"
+  )));
+
+  await assertSucceeds(deleteDoc(banRef));
+  await assertSucceeds(setDoc(membershipRef, membership));
+  await assertSucceeds(getDoc(doc(removedPlayer, "rooms", ROOM)));
+});
+
 test("personal and DM journal contents are physically private", async () => {
   const dm = databaseFor("dm-1");
   const owner = databaseFor("player-1");

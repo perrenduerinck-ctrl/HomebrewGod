@@ -17,7 +17,7 @@ Production Firestore rules: **NOT VERIFIED**. No production Firebase deployment 
 | Feature | Firestore path | Read boundary | Write boundary | Revision/concurrency behavior |
 | --- | --- | --- | --- | --- |
 | Rooms | `rooms/{roomCode}` | Room members | DM; narrowly validated player movement/action requests | Room transactions for initiative and movement |
-| Membership | `rooms/{roomCode}/players/{uid}` | Room members | Self player record or DM | Room-code join is the current admission model |
+| Membership | `rooms/{roomCode}/{players,bannedUsers}/{uid}` | Player memberships are room-readable; bans are DM-only | Self player record or DM; bans are DM-only | Room-code join remains available unless the DM has blocked that account |
 | Characters | `rooms/{roomCode}/characters/{id}` | Room members | Owner or room DM | Sequential revision; transaction on existing saves |
 | Tokens | `rooms/{roomCode}/tokens/{id}` | Room members | DM; owner for validated movement/sync/connection transitions | Movement and floor transitions have field allowlists |
 | Maps and puzzle tiles | `rooms/{roomCode}/{maps,puzzleTiles}/{id}` | Room members | DM | Stable document IDs; Cloudinary assets remain references |
@@ -41,7 +41,7 @@ Production Firestore rules: **NOT VERIFIED**. No production Firebase deployment 
 
 ## Known authorization limitation
 
-The product currently treats possession of a valid room code as permission to create one's own player membership. Removing a membership blocks reads immediately, and saved-room reopening no longer recreates it. However, a former member who still knows the room code can deliberately use Join again. A durable ban/revocation system would require a separate DM-managed deny list or invite model; this pass does not invent one.
+Room codes remain the ordinary admission model, but a DM can now place a removed account on a private deny list. Firestore checks that list both when a membership is created and whenever room membership is evaluated, so a blocked account cannot deliberately rejoin with an old code. Removing the deny-list entry allows a later deliberate rejoin without silently restoring membership. See `docs/ROOM_MEMBERSHIP_ACCESS.md`.
 
 ## Verification
 
