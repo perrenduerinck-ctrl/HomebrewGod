@@ -26,6 +26,11 @@ import {
   getCharacterSpellSlotOptions,
   setCombatActionBarFavorite
 } from "../combat/characterCombatCommands.js";
+import {
+  getSpellActionKind,
+  getSpellCastEligibility,
+  resolveCharacterSpellcastingStats
+} from "../spells/spellCastingRules.js";
 
 const initiative = {
   combatActive: true,
@@ -212,6 +217,127 @@ test("character model adapts existing weapons, spells, items and stable favorite
   assert.ok(model.favorites.some((entry) => entry.name === "Longsword"));
 });
 
+test("spell casting uses one shared eligibility and action-resource rule", () => {
+  const character = {
+    magic: {
+      knownSpellIds: ["misty-step"],
+      classSources: {
+        wizard: {
+          className: "Wizard",
+          spellbookSpellIds: ["shield"]
+        }
+      }
+    }
+  };
+  const model = buildCombatActionBarModel({ actor: character, actorKind: "character" });
+  const mistyStep = model.spells.find((spell) => spell.id === "misty-step");
+  assert.equal(mistyStep.resource, "bonus");
+  assert.equal(model.spells.some((spell) => spell.id === "shield"), false);
+  assert.equal(
+    getSpellCastEligibility({ level: 1, statuses: ["Spellbook"] }).eligible,
+    false
+  );
+  assert.equal(
+    getSpellCastEligibility({ level: 1, ritual: true, statuses: ["Spellbook"] }).eligible,
+    true
+  );
+  const reactionCharacter = {
+    magic: { knownSpellIds: ["shield"] }
+  };
+  const reaction = buildCombatActionBarModel({
+    actor: reactionCharacter,
+    actorKind: "character"
+  }).spells.find((spell) => spell.id === "shield");
+  assert.equal(reaction.resource, "reaction");
+  assert.match(reaction.summary, /Trigger:/i);
+});
+
+test("2014 Bonus Action spell restriction is tracked across the turn", () => {
+  let state = createFreshActionEconomy(initiative, "hero");
+  state = applyActionEconomyCommand(state, {
+    type: "spell",
+    resource: "bonus",
+    spellLevel: 2
+  });
+  assert.equal(state.bonusActionsRemaining, 0);
+  assert.equal(state.bonusActionSpellCast, true);
+  state = applyActionEconomyCommand(state, {
+    type: "spell",
+    resource: "action",
+    spellLevel: 0
+  });
+  assert.equal(state.actionsRemaining, 0);
+  assert.throws(() => applyActionEconomyCommand(state, {
+    type: "spell",
+    resource: "reaction",
+    spellLevel: 1
+  }), /Bonus Action spell/i);
+
+  let reverse = createFreshActionEconomy(initiative, "hero");
+  reverse = applyActionEconomyCommand(reverse, {
+    type: "spell",
+    resource: "action",
+    spellLevel: 1
+  });
+  assert.throws(() => applyActionEconomyCommand(reverse, {
+    type: "spell",
+    resource: "bonus",
+    spellLevel: 1
+  }), /cannot be cast/i);
+});
+
+test("ritual and long-cast workflows do not masquerade as ordinary combat actions", () => {
+  const identify = {
+    id: "identify",
+    name: "Identify",
+    level: 1,
+    ritual: true,
+    statuses: ["Spellbook"]
+  };
+  const wizard = {
+    magic: {
+      slots: { 1: 2 },
+      slotUsage: { normal: { 1: 0 } },
+      classSources: {
+        wizard: {
+          classId: "wizard",
+          spellbookSpellIds: ["identify"]
+        }
+      }
+    }
+  };
+  assert.equal(
+    getCharacterSpellSlotOptions(wizard, identify).some((option) => option.kind === "ritual"),
+    true
+  );
+  assert.deepEqual(
+    getCharacterSpellSlotOptions(wizard, identify).map((option) => option.kind),
+    ["ritual"]
+  );
+  assert.throws(
+    () => applyConfirmedSpellCast(wizard, identify, { kind: "normal", level: 1 }),
+    /only be cast as a ritual/i
+  );
+  const sorcerer = {
+    magic: {
+      classSources: {
+        sorcerer: {
+          classId: "sorcerer",
+          knownSpellIds: ["identify"]
+        }
+      }
+    }
+  };
+  assert.equal(
+    getCharacterSpellSlotOptions(
+      sorcerer,
+      { ...identify, statuses: ["Known"] }
+    ).some((option) => option.kind === "ritual"),
+    false
+  );
+  assert.equal(getSpellActionKind({ castingTime: "10 minutes" }), "long-cast");
+});
+
 test("spell slots, cancellation-safe mutations, item use and favorites retain source data", () => {
   const character = {
     magic: { slots: { 1: 2 }, slotUsage: { normal: { 1: 1 } } },
@@ -313,6 +439,109 @@ test("legacy saved spell-slot records remain castable without rewriting their ch
     ),
     /no longer available/i
   );
+});
+
+test("Rage, special spell uses, legacy Pact use, and concentration replacement are enforced", () => {
+  assert.throws(() => applyConfirmedSpellCast(
+    { combat: { classFeatureStates: { rageActive: true } } },
+    { id: "fire-bolt", name: "Fire Bolt", level: 0 },
+    { kind: "cantrip", level: 0 }
+  ), /Rage/i);
+
+  const granted = {
+    magic: {
+      spellSourceModelVersion: 3,
+      spellSources: [{
+        sourceId: "species:tiefling",
+        sourceType: "species",
+        sourceName: "Infernal Legacy",
+        selectedSpellIds: ["darkness"],
+        canUseSpellSlots: false,
+        spellRecords: [{
+          spellId: "darkness",
+          maximumUses: 1,
+          currentUses: 1,
+          canUseSpellSlots: false,
+          recharge: "longRest"
+        }]
+      }],
+      slots: { 2: 2 },
+      slotUsage: { normal: { 2: 0 } }
+    }
+  };
+  const specialOptions = getCharacterSpellSlotOptions(granted, {
+    id: "darkness",
+    name: "Darkness",
+    level: 2
+  });
+  assert.deepEqual(specialOptions.map((option) => option.kind), ["special"]);
+  const specialCast = applyConfirmedSpellCast(
+    granted,
+    { id: "darkness", name: "Darkness", level: 2 },
+    specialOptions[0]
+  );
+  assert.equal(
+    specialCast.magic.spellSources[0].spellRecords[0].currentUses,
+    0
+  );
+  assert.equal(specialCast.magic.slotUsage.normal[2], 0);
+
+  const legacyPact = {
+    magic: {
+      pactMagic: { slots: 2, slotLevel: 3 },
+      slotUsage: { pact: 1 }
+    }
+  };
+  assert.equal(
+    getCharacterSpellSlotOptions(legacyPact, { id: "hex", level: 1 })[0].remaining,
+    1
+  );
+
+  const replacement = applyConfirmedSpellCast(
+    {
+      magic: { slots: { 2: 1 }, slotUsage: { normal: { 2: 0 } } },
+      combat: { concentration: { spellId: "bless", spellName: "Bless" } }
+    },
+    { id: "web", name: "Web", level: 2, concentration: true },
+    { kind: "normal", level: 2, sourceId: "" }
+  );
+  assert.equal(replacement.combat.concentration.replacedSpellName, "Bless");
+});
+
+test("spellcasting stats use the source that granted a multiclass spell", () => {
+  const character = {
+    classProgression: [{ level: 5 }, { level: 3 }],
+    abilities: { scores: { int: 18, wis: 12 } },
+    combat: { proficiencyBonus: 3 },
+    magic: {
+      spellSaveDc: 99,
+      spellAttackBonus: 99,
+      spellSources: [{
+        sourceId: "wizard-main",
+        sourceName: "Wizard",
+        spellcastingAbility: "int",
+        selectedSpellIds: ["fireball"]
+      }]
+    }
+  };
+  const stats = resolveCharacterSpellcastingStats(character, { id: "fireball" });
+  assert.equal(stats.ability, "int");
+  assert.equal(stats.spellSaveDc, 15);
+  assert.equal(stats.spellAttackBonus, 7);
+  assert.equal(stats.characterLevel, 8);
+});
+
+test("monster spell references appear in the normal combat hotbar", () => {
+  const model = buildCombatActionBarModel({
+    actorKind: "monster",
+    actor: {
+      spellcasting: {
+        enabled: true,
+        spells: [{ id: "monster-fireball", name: "Fireball", usage: "daily", uses: 1 }]
+      }
+    }
+  });
+  assert.equal(model.abilities.some((entry) => entry.kind === "monster-spell"), true);
 });
 
 test("navigation, controller reuse and Firestore ownership contracts are wired", async () => {

@@ -171,6 +171,10 @@ import {
   normalizeInventoryItemBase
 } from "./inventoryEquipment.js";
 import {
+  applyConfirmedSpellCast,
+  getCharacterSpellSlotOptions
+} from "../combat/characterCombatCommands.js";
+import {
   addLibraryItemToCharacter,
   createCharacterItemTransferPersistence
 } from "./itemLibraryIntegration.js";
@@ -12726,6 +12730,10 @@ export function createCharacterCreator(options = {}) {
         0,
         safeNumber(rageResource.currentUses, 0) - 1
       );
+    }
+
+    if (!currentlyActive) {
+      creatorState.draft.combat.concentration = null;
     }
 
     creatorState.draft.combat
@@ -38226,57 +38234,10 @@ export function createCharacterCreator(options = {}) {
   function getSection17SpellCastOptions(
     spell
   ) {
-    const baseLevel = Math.max(
-      0,
-      Math.min(
-        9,
-        Math.round(
-          safeNumber(spell?.level, 0)
-        )
-      )
-    );
-
-    if (baseLevel === 0) {
-      return [{
-        kind: "cantrip",
-        level: 0,
-        sourceId: "",
-        label: "Cantrip — no spell slot",
-        remaining: Number.POSITIVE_INFINITY
-      }];
-    }
-
-    const usage =
-      getSection12SpellSlotUsageState();
-
-    return [
-      ...Object.values(usage.normal)
-        .filter((slot) => (
-          slot.level >= baseLevel &&
-          slot.remaining > 0
-        ))
-        .map((slot) => ({
-          kind: "normal",
-          level: slot.level,
-          sourceId: "",
-          label:
-            `Level ${slot.level} slot (${slot.remaining} remaining)`,
-          remaining: slot.remaining
-        })),
-      ...usage.pactSources
-        .filter((slot) => (
-          slot.level >= baseLevel &&
-          slot.remaining > 0
-        ))
-        .map((slot) => ({
-          kind: "pact",
-          level: slot.level,
-          sourceId: slot.sourceId,
-          label:
-            `${slot.className} Pact slot — level ${slot.level} (${slot.remaining} remaining)`,
-          remaining: slot.remaining
-        }))
-    ];
+    return getCharacterSpellSlotOptions(
+      creatorState.draft,
+      spell
+    ).filter((option) => option.remaining > 0);
   }
 
   async function confirmSection17SpellCast(
@@ -38285,11 +38246,8 @@ export function createCharacterCreator(options = {}) {
   ) {
     const previousDirty =
       creatorState.dirty;
-    const previousSlotUsage =
-      cloneData(
-        creatorState.draft?.magic
-          ?.slotUsage || {}
-      );
+    const previousMagic =
+      cloneData(creatorState.draft?.magic || {});
     const previousConcentration =
       cloneData(
         creatorState.draft?.combat
@@ -38297,11 +38255,7 @@ export function createCharacterCreator(options = {}) {
       );
 
     const restoreUnconfirmedCast = () => {
-      if (!creatorState.draft.magic) {
-        creatorState.draft.magic = {};
-      }
-      creatorState.draft.magic.slotUsage =
-        previousSlotUsage;
+      creatorState.draft.magic = previousMagic;
       const combat = ensureGameplayState(
         creatorState.draft
       );
@@ -38320,90 +38274,23 @@ export function createCharacterCreator(options = {}) {
       const result =
         await persistSection17SheetMutation(
           () => {
-        const baseLevel = Math.max(
-          0,
-          Math.round(
-            safeNumber(spell?.level, 0)
-          )
+        const nextCharacter = applyConfirmedSpellCast(
+          creatorState.draft,
+          spell,
+          selection
         );
-        let spentSlot = false;
-
-        if (baseLevel > 0) {
-          const available =
-            getSection17SpellCastOptions(
-              spell
-            ).find((option) => (
-              option.kind ===
-                cleanString(
-                  selection.kind,
-                  "normal"
-                ) &&
-              option.level ===
-                Math.round(
-                  safeNumber(
-                    selection.level,
-                    baseLevel
-                  )
-                ) &&
-              option.sourceId ===
-                cleanString(
-                  selection.sourceId
-                )
-            ));
-
-          if (!available) {
-            throw new Error(
-              "That spell slot is no longer available. No resource was spent."
-            );
-          }
-
-          spentSlot =
-            adjustSection12SpellSlotUsage(
-              available.kind,
-              available.level,
-              1,
-              available.sourceId
-            );
-
-          if (!spentSlot) {
-            throw new Error(
-              "The spell slot could not be spent. The cast was not confirmed."
-            );
-          }
-        }
-
-        const concentration = (
+        creatorState.draft.magic = nextCharacter.magic;
+        creatorState.draft.combat = nextCharacter.combat;
+        const kind = cleanString(selection.kind, "normal");
+        const concentration = Boolean(
           spell?.concentration === true ||
-          spell?.targeting?.duration
-            ?.concentration === true
+          spell?.targeting?.duration?.concentration === true
         );
-        let concentrationChanged = false;
-
-        if (concentration) {
-          const combat =
-            ensureGameplayState(
-              creatorState.draft
-            );
-          combat.concentration = {
-            spellId:
-              cleanString(spell?.id),
-            spellName:
-              cleanString(
-                spell?.name,
-                "Spell"
-              ),
-            startedAtMillis:
-              Date.now()
-          };
-          concentrationChanged = true;
-        }
 
         return {
-          changed:
-            spentSlot ||
-            concentrationChanged,
+          changed: true,
           message:
-            `${cleanString(spell?.name, "Spell")} cast confirmed${spentSlot ? " and spell slot spent" : ""}${concentration ? "; concentration started" : ""}.`
+            `${cleanString(spell?.name, "Spell")} cast confirmed${kind === "normal" || kind === "pact" ? " and spell slot spent" : kind === "special" ? " and special use spent" : kind === "ritual" ? " as a ritual" : ""}${concentration ? "; concentration started" : ""}.`
         };
           },
           "Spell cast confirmed and saved."

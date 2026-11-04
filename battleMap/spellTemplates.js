@@ -49,8 +49,9 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
   ).toLowerCase();
   // A character-free DM preview uses a one-square touch reach. Real casting
   // keeps its existing targeting rules; this opt-in is presentation only.
-  const touchPreview = allowTouchPreview && targeting?.range?.type === "touch";
-  const rangeFeet = touchPreview ? 5 : Number.isFinite(
+  const touchRange = targeting?.range?.type === "touch";
+  const touchPreview = allowTouchPreview && touchRange;
+  const rangeFeet = touchRange ? 5 : Number.isFinite(
     targeting?.range?.feet
   )
     ? targeting.range.feet
@@ -92,11 +93,41 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
       heightFeet: 0,
       rangeType: targeting.range?.type || "distance",
       rangeFeet,
-      rangeText: touchPreview ? "Touch (5-ft preview reach)" : cleanText(
+      rangeText: touchRange ? "Touch (5-ft reach)" : cleanText(
         targeting.range?.text,
         `${rangeFeet} feet`
       ),
       singleTarget: true,
+      previewOnly: true
+    });
+  }
+
+  if (
+    targeting &&
+    !area &&
+    (
+      targetType === "self" ||
+      targetType === "special" ||
+      targeting.range?.type === "special"
+    )
+  ) {
+    return Object.freeze({
+      supported: true,
+      spellId: cleanText(spell.id),
+      spellName: name,
+      sourceShape: "self",
+      templateShape: "circle",
+      targetType: "self",
+      sourceTargetType: targetType,
+      placementMode: "self",
+      sizeFeet: SINGLE_TARGET_RADIUS_FEET,
+      widthFeet: SINGLE_TARGET_RADIUS_FEET * 2,
+      heightFeet: 0,
+      rangeType: targeting.range?.type || "special",
+      rangeFeet: null,
+      rangeText: cleanText(targeting.range?.text, "Self / special"),
+      singleTarget: true,
+      requiresMapTarget: false,
       previewOnly: true
     });
   }

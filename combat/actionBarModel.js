@@ -4,6 +4,11 @@ import {
   collectCharacterSpells
 } from "../characterSheet/index.js";
 import { getEconomyResourceForSection } from "./actionEconomy.js";
+import {
+  getSpellActionResource,
+  getSpellReactionTrigger,
+  isSpellCastEligible
+} from "../spells/spellCastingRules.js";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -74,14 +79,6 @@ export function getLegacyJumpProfile(character = {}) {
   });
 }
 
-function availableSpell(spell) {
-  if (number(spell.level, 0) === 0) return true;
-  const statuses = new Set((spell.statuses || []).map((value) => text(value).toLowerCase()));
-  return spell.prepared === true || spell.known === true || [
-    "always prepared", "innate", "feat-granted", "species-granted", "subclass-granted", "custom spell"
-  ].some((status) => statuses.has(status));
-}
-
 function fastItem(item, raw) {
   const searchable = `${item.name} ${item.category} ${item.description} ${raw?.tags || ""}`.toLowerCase();
   return item.quantity > 0 && (
@@ -96,12 +93,27 @@ function monsterEntries(monster = {}) {
     ["monster-bonus", monster.bonusActions, "bonus"],
     ["monster-reaction", monster.reactions, "reaction"]
   ];
-  return groups.flatMap(([kind, values, resource]) => (
+  const actions = groups.flatMap(([kind, values, resource]) => (
     (Array.isArray(values) ? values : []).map((value, index) => entry(kind, value, {
       id: text(value?.id) || `${kind}-${index}`,
       resource
     }))
   ));
+  const spellcasting = monster?.spellcasting;
+  const spells = spellcasting?.enabled === true && Array.isArray(spellcasting.spells)
+    ? spellcasting.spells.map((spell, index) => entry("monster-spell", spell, {
+        id: text(spell?.id || spell?.sourceId) || `monster-spell-${index}`,
+        resource: getSpellActionResource(spell) === "free"
+          ? "action"
+          : getSpellActionResource(spell),
+        summary: [
+          spell?.usage === "atWill" ? "At will" : "",
+          spell?.usage === "daily" ? `${number(spell?.uses, 1)}/day` : "",
+          spell?.usage === "slot" ? `Level ${number(spell?.level, 0)} spell` : ""
+        ].filter(Boolean).join(" · ")
+      }))
+    : [];
+  return [...actions, ...spells];
 }
 
 export function buildCombatActionBarModel({ token = {}, actor = null, actorKind = "generic" } = {}) {
@@ -117,9 +129,16 @@ export function buildCombatActionBarModel({ token = {}, actor = null, actorKind 
   const abilities = actions.filter((action) => action.contentKind !== "weapon")
     .map((action) => entry("ability", action));
   const spells = isCharacter
-    ? collectCharacterSpells(actor).filter(availableSpell).map((spell) => entry("spell", spell, {
-        resource: spell.actionKind === "bonusAction" ? "bonus" : spell.actionKind === "reaction" ? "reaction" : "action"
-      }))
+    ? collectCharacterSpells(actor).filter(isSpellCastEligible).map((spell) => {
+        const reactionTrigger = getSpellReactionTrigger(spell);
+        return entry("spell", spell, {
+          resource: getSpellActionResource(spell),
+          reactionTrigger,
+          summary: reactionTrigger
+            ? `Trigger: ${reactionTrigger}${spell.summary ? ` · ${spell.summary}` : ""}`
+            : spell.summary
+        });
+      })
     : [];
   const items = inventory.filter((item) => fastItem(item, rawItems[item.index]))
     .map((item) => entry("item", item, { rawItem: rawItems[item.index], resource: "action" }));

@@ -313,6 +313,76 @@ test("unknown save DC and attack bonus stay unknown instead of becoming zero", (
   assert.equal(resolution.attack.bonus, null);
 });
 
+test("cantrip damage scales at character level and ritual casts retain their resource kind", async () => {
+  const scaled = createCastResolution({
+    spell: getDefaultSpellById("fire-bolt"),
+    characterLevel: 11,
+    slotLevel: 0
+  });
+  assert.equal(scaled.damage[0], "3d10 fire");
+
+  const session = createSpellCastingSession({ onConfirm: () => true });
+  session.begin({
+    spell: {
+      id: "identify",
+      name: "Identify",
+      level: 1,
+      ritual: true,
+      range: "Touch"
+    },
+    slotOptions: [{
+      kind: "ritual",
+      level: 1,
+      sourceId: "",
+      label: "Ritual cast",
+      remaining: 1
+    }]
+  });
+  session.updateTarget({ locked: true, validRange: true });
+  const result = await session.confirm({ kind: "ritual", level: 1, sourceId: "" });
+  assert.equal(result.ok, true);
+  assert.equal(result.resolution.ritual, true);
+  assert.equal(result.resolution.resourceKind, "ritual");
+});
+
+test("slot selection previews upcast damage and healing before confirmation", () => {
+  const session = createSpellCastingSession();
+  session.begin({
+    spell: getDefaultSpellById("cure-wounds"),
+    characterLevel: 9,
+    slotOptions: [
+      { kind: "normal", level: 1, sourceId: "", remaining: 1 },
+      { kind: "normal", level: 3, sourceId: "", remaining: 1 }
+    ]
+  });
+  const preview = session.preview({ kind: "normal", level: 3, sourceId: "" });
+  assert.deepEqual(preview.healing, ["3d8 + MOD"]);
+  assert.equal(session.getState().phase, "previewing");
+});
+
+test("leveled at-will spell resources remain available in the casting session", async () => {
+  const session = createSpellCastingSession({ onConfirm: () => true });
+  session.begin({
+    spell: { id: "detect-magic", name: "Detect Magic", level: 1 },
+    slotOptions: [{
+      kind: "special",
+      level: 1,
+      sourceId: "feature:eldritch-sight",
+      label: "Eldritch Sight — at will",
+      remaining: Number.POSITIVE_INFINITY
+    }]
+  });
+  session.updateTarget({ locked: true, validRange: true });
+  assert.equal(session.getState().canConfirm, true);
+  const result = await session.confirm({
+    kind: "special",
+    level: 1,
+    sourceId: "feature:eldritch-sight"
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.resolution.resourceKind, "special");
+});
+
 test("active concentration is normalized and can be ended explicitly", () => {
   const character = {
     combat: {
@@ -349,4 +419,28 @@ test("active concentration is normalized and can be ended explicitly", () => {
     result.message,
     /Web ended/i
   );
+});
+
+test("damage creates the correct concentration save and a failed save ends it", () => {
+  const character = {
+    combat: {
+      maxHp: 50,
+      currentHp: 50,
+      concentration: {
+        spellId: "spirit-guardians",
+        spellName: "Spirit Guardians",
+        startedAtMillis: 1
+      }
+    }
+  };
+  const damage = applyGameplayAction(character, { type: "damage", amount: 26 });
+  assert.equal(damage.concentrationCheck.dc, 13);
+  assert.equal(character.combat.pendingConcentrationCheck.dc, 13);
+  const failed = applyGameplayAction(character, {
+    type: "resolve-concentration-check",
+    total: 12
+  });
+  assert.equal(failed.succeeded, false);
+  assert.equal(character.combat.concentration, null);
+  assert.match(failed.message, /ended/i);
 });

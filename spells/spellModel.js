@@ -1,5 +1,8 @@
 import { normalizeSpellAnimations } from "../vfx/animationReferences.js";
-import { createSpellTargetingData } from "../data/spellTargeting.js";
+import {
+  createSpellTargetingData,
+  validateSpellTargetingData
+} from "../data/spellTargeting.js";
 
 export const SPELL_SCHOOLS = Object.freeze([
   "Abjuration", "Conjuration", "Divination", "Enchantment", "Evocation",
@@ -22,6 +25,21 @@ const clone = (value) => value == null ? value : JSON.parse(JSON.stringify(value
 function cleanList(value, maximum = 20) {
   const source = Array.isArray(value) ? value : String(value ?? "").split(",");
   return [...new Set(source.map((entry) => clean(entry, 80)).filter(Boolean))].slice(0, maximum);
+}
+
+function normalizeComponentLetters(source = {}) {
+  const explicit = Array.isArray(source.componentLetters)
+    ? source.componentLetters
+    : clean(source.componentLetters, 80)
+      ? String(source.componentLetters).split(/[\s,/]+/)
+      : clean(source.components, 500)
+        ? String(source.components).split(/[\s,/]+/)
+        : [];
+  return [...new Set(
+    explicit
+      .map((entry) => clean(entry, 20).toUpperCase())
+      .filter(Boolean)
+  )].slice(0, 5);
 }
 
 function normalizedSchool(value) {
@@ -48,7 +66,7 @@ export function normalizeHomebrewSpell(raw = {}, {
   const rawLevel = Number(source.level ?? source.spellLevel ?? 0);
   const level = Math.max(0, Math.min(9, Math.round(Number.isFinite(rawLevel) ? rawLevel : 0)));
   const classes = cleanList(source.classes || source.classNames || (source.classId ? [source.classId] : []), 20);
-  const componentLetters = cleanList(source.componentLetters, 5).map((entry) => entry.toUpperCase());
+  const componentLetters = normalizeComponentLetters(source);
   const components = clean(source.components || componentLetters.join(", "), 500);
   const description = clean(source.description || source.summary, 12000);
   const damageType = normalizedDamageType(source.damageType || source.damage?.type || source.damage?.damage_type?.name);
@@ -97,6 +115,7 @@ export function normalizeHomebrewSpell(raw = {}, {
     saveSuccess,
     concentration: source.concentration === true,
     ritual: source.ritual === true,
+    manualOverride: source.manualOverride === true,
     tags: Object.freeze([...new Set(cleanList(source.tags, 20).map((entry) => entry.toLowerCase()))]),
     animations: Object.freeze(clone(animations)),
     targeting: Object.freeze(targeting),
@@ -115,9 +134,55 @@ export function normalizeHomebrewSpell(raw = {}, {
 
 export function validateHomebrewSpell(raw = {}) {
   const errors = [];
+  const normalized = normalizeHomebrewSpell(raw);
   if (!clean(raw.name, 120)) errors.push("Give the spell a name.");
   const level = Number(raw.level ?? raw.spellLevel ?? 0);
   if (!Number.isFinite(level) || level < 0 || level > 9) errors.push("Spell level must be between 0 and 9.");
+  const castingTime = normalized.castingTime;
+  if (!/(action|reaction|minute|hour)/i.test(castingTime)) {
+    errors.push("Casting time must identify an action, reaction, minute, or hour duration.");
+  }
+
+  const letters = [...normalized.componentLetters];
+  const invalidComponents = letters.filter((entry) => !["V", "S", "M"].includes(entry));
+  if (invalidComponents.length) errors.push(`Invalid spell component: ${invalidComponents.join(", ")}.`);
+  if (clean(raw.material, 1000) && !letters.includes("M")) {
+    errors.push("Material details require the M component.");
+  }
+
+  const classes = [...normalized.classes];
+  const validClasses = new Set(SPELL_CLASSES.map((entry) => entry.toLowerCase()));
+  const invalidClasses = classes.filter((entry) => !validClasses.has(entry.toLowerCase()));
+  if (invalidClasses.length) errors.push(`Unknown spell class: ${invalidClasses.join(", ")}.`);
+
+  const targeting = normalized.targeting;
+  const targetingValidation = validateSpellTargetingData(targeting, "Spell targeting");
+  errors.push(...targetingValidation.errors);
+
+  const formulas = [];
+  const addFormula = (label, value, maximumLevel) => {
+    if (value == null || value === "") return;
+    if (typeof value === "object" && !Array.isArray(value)) {
+      Object.entries(value).forEach(([threshold, formula]) => {
+        const parsedThreshold = Number(threshold);
+        if (!Number.isInteger(parsedThreshold) || parsedThreshold < 1 || parsedThreshold > maximumLevel) {
+          errors.push(`${label} level ${threshold} is outside 1-${maximumLevel}.`);
+        }
+        formulas.push([`${label} level ${threshold}`, formula]);
+      });
+      return;
+    }
+    formulas.push([label, value]);
+  };
+  addFormula("Damage", raw.damageDice || raw.damage?.dice, 9);
+  addFormula("Character scaling", raw.damage?.atCharacterLevel || raw.scaling?.atCharacterLevel, 20);
+  addFormula("Slot scaling", raw.damage?.atSlotLevel || raw.scaling?.atSlotLevel, 9);
+  formulas.forEach(([label, formula]) => {
+    const value = clean(formula, 240);
+    if (value && !/\b\d+d\d+\b/i.test(value) && !/^\d+(?:\.\d+)?$/.test(value)) {
+      errors.push(`${label} must contain a valid dice expression such as 2d6 or a numeric amount.`);
+    }
+  });
   try { normalizeSpellAnimations(raw.animations || {}, { strict: true }); }
   catch (error) { errors.push(error.message); }
   return Object.freeze(errors);

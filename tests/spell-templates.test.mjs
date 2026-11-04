@@ -16,7 +16,7 @@ test("saved and copied homebrew spells derive targeting from range without mutat
   assert.equal(instruction.sourceTargetType, "creature");
   assert.equal(instruction.rangeFeet, 120);
   assert.equal(spell.targeting, undefined);
-  assert.equal(createSpellTemplateInstruction({ ...spell, range: "Special" }).supported, false);
+  assert.equal(createSpellTemplateInstruction({ ...spell, range: "Special" }).supported, true);
   assert.equal(createSpellTemplateInstruction({ ...spell, areaOfEffect: { type: "sphere", size: 20 } }).templateShape, "sphere");
 });
 
@@ -128,7 +128,7 @@ test("Lightning Bolt drives a sized line", () => {
   assert.equal(instruction.placementMode, "direction");
 });
 
-test("non-area and not-yet-supported wall spells fail safely", () => {
+test("touch and self spells cast without an area while unsupported walls still fail safely", () => {
   const cureWounds = createSpellTemplateInstruction(
     getDefaultSpellById("cure-wounds")
   );
@@ -136,8 +136,13 @@ test("non-area and not-yet-supported wall spells fail safely", () => {
     getDefaultSpellById("wall-of-fire")
   );
 
-  assert.equal(cureWounds.supported, false);
-  assert.match(cureWounds.reason, /no area template/i);
+  assert.equal(cureWounds.supported, true);
+  assert.equal(cureWounds.singleTarget, true);
+  assert.equal(cureWounds.rangeFeet, 5);
+  const shield = createSpellTemplateInstruction(getDefaultSpellById("shield"));
+  assert.equal(shield.supported, true);
+  assert.equal(shield.targetType, "self");
+  assert.equal(shield.requiresMapTarget, false);
   assert.equal(wallOfFire.supported, false);
   assert.match(wallOfFire.reason, /not supported/i);
 });

@@ -51,8 +51,51 @@ test("homebrew spells normalize mechanics and animation references without mutat
   assert.deepEqual(spell.tags, ["fire", "projectile"]);
   assert.equal(spell.animations.cast.animationId, "magic-cast");
   assert.equal(spell.animations.impact, "fire-impact");
+  assert.deepEqual(spell.componentLetters, ["V", "S"]);
   assert.deepEqual(source, before);
-  assert.deepEqual(validateHomebrewSpell({ name: "", level: 12 }), ["Give the spell a name.", "Spell level must be between 0 and 9."]);
+  const invalid = validateHomebrewSpell({ name: "", level: 12 });
+  assert.ok(invalid.includes("Give the spell a name."));
+  assert.ok(invalid.includes("Spell level must be between 0 and 9."));
+});
+
+test("homebrew validation rejects malformed targeting, components, classes, and scaling", () => {
+  const errors = validateHomebrewSpell({
+    name: "Broken Bolt",
+    level: 1,
+    castingTime: "whenever",
+    range: "60 feet",
+    duration: "Instantaneous",
+    componentLetters: ["V", "X"],
+    classes: ["Wizard", "Space Marine"],
+    damage: {
+      dice: "lots",
+      atCharacterLevel: { 25: "more" }
+    },
+    targeting: {
+      schemaVersion: 999,
+      range: { type: "distance", feet: -1, text: "bad" },
+      target: { type: "creature" },
+      area: null,
+      duration: { type: "instantaneous", text: "Instantaneous", concentration: false },
+      save: null,
+      attack: null
+    }
+  });
+  assert.ok(errors.some((error) => /casting time/i.test(error)));
+  assert.ok(errors.some((error) => /Invalid spell component/i.test(error)));
+  assert.ok(errors.some((error) => /Unknown spell class/i.test(error)));
+  assert.ok(errors.some((error) => /schema version/i.test(error)));
+  assert.ok(errors.some((error) => /valid dice expression/i.test(error)));
+  assert.ok(errors.some((error) => /outside 1-20/i.test(error)));
+
+  const materialErrors = validateHomebrewSpell({
+    name: "Incomplete Components",
+    level: 1,
+    castingTime: "1 action",
+    components: "V, S",
+    material: "a silver bell"
+  });
+  assert.ok(materialErrors.some((error) => /require the M component/i.test(error)));
 });
 
 test("character spell copies get independent IDs and retain mechanics and animation stages", () => {

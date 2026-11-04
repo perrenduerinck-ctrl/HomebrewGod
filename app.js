@@ -71,6 +71,12 @@ import {
   createSpellCastingSession
 } from "./battleMap/castingSession.js?v=map-single-target-20260829";
 import {
+  getCharacterLevel,
+  getSpellActionKind,
+  getSpellCastEligibility,
+  resolveCharacterSpellcastingStats
+} from "./spells/spellCastingRules.js";
+import {
   buildSpellAnimationPreviewContext,
   createSpellPreviewSession,
   formatSpellPreviewStatus
@@ -2195,7 +2201,16 @@ async function executeCombatActionBarEntry(action, context) {
   }
 
   if (action.kind === "spell") {
-    const slotOptions = getCharacterSpellSlotOptions(actor, action.raw);
+    const castEligibility = getSpellCastEligibility(action.raw);
+    if (!castEligibility.eligible) throw new Error(castEligibility.reason);
+    const castingKind = getSpellActionKind(action.raw);
+    if (inCombat && castingKind === "long-cast") {
+      throw new Error(
+        `${action.name} has a long casting time and cannot be resolved as a single combat action.`
+      );
+    }
+    const slotOptions = getCharacterSpellSlotOptions(actor, action.raw)
+      .filter((option) => !inCombat || option.kind !== "ritual");
     if (Number(action.raw?.level) > 0 && !slotOptions.some((option) => option.remaining > 0)) {
       throw new Error("No eligible spell slot remains.");
     }
@@ -2208,7 +2223,12 @@ async function executeCombatActionBarEntry(action, context) {
       actionAttemptId,
       onConfirmCast: (selection) => commitCombatActionBarMutation({
         token,
-        economyCommand: { type: "spell", resource: action.resource },
+        economyCommand: {
+          type: "spell",
+          resource: action.resource,
+          spellLevel: Number(action.raw?.level) || 0,
+          castingKind: action.raw?.actionKind || ""
+        },
         characterMutator: (remote) => applyConfirmedSpellCast(remote, action.raw, selection)
       })
     });
@@ -5986,7 +6006,7 @@ function decodeSpellSlotOption(value) {
   };
 }
 
-function formatCastResolution(resolution) {
+function formatCastResolution(resolution, { preview = false } = {}) {
   if (!resolution) return "";
 
   const parts = [];
@@ -6027,13 +6047,27 @@ function formatCastResolution(resolution) {
     );
   }
 
-  if (resolution.concentration) {
-    parts.push("Concentration started");
+  if (resolution.healing?.length) {
+    parts.push(
+      `Healing: ${resolution.healing.join(" + ")}`
+    );
   }
+
+  if (resolution.concentration) {
+    parts.push(
+      resolution.concentrationReplaced
+        ? `Concentration on ${resolution.concentrationReplaced} ended; new concentration started`
+        : "Concentration started"
+    );
+  }
+
+  if (resolution.ritual) parts.push("Ritual cast; no spell slot spent");
 
   return parts.length
     ? parts.join(" · ")
-    : "Cast confirmed. Resolve any remaining spell text at the table.";
+    : preview
+      ? "Ready to cast; no automatic roll or damage is configured."
+      : "Cast confirmed. Resolve any remaining spell text at the table.";
 }
 
 function renderSpellCastingPanel() {
@@ -6195,9 +6229,15 @@ function renderSpellCastingPanel() {
   text(
     E.spellCastingResolution,
     sessionState.confirmationError ||
-      formatCastResolution(
-        sessionState.resolution
-      )
+      (sessionState.resolution
+        ? formatCastResolution(sessionState.resolution)
+        : (() => {
+            const preview = activeSpellCastingSession?.preview?.(
+              decodeSpellSlotOption(E.spellCastingSlotSelect?.value)
+            );
+            const summary = formatCastResolution(preview, { preview: true });
+            return summary ? `Preview: ${summary}` : "";
+          })())
   );
 }
 
@@ -7517,6 +7557,35 @@ async function beginCharacterSpellTargeting({
 
   const instruction =
     createSpellTemplateInstruction(spell);
+  const castEligibility = getSpellCastEligibility(spell);
+  const combatActive = initiativeSystem?.getState?.().combatActive === true;
+
+  if (!castEligibility.eligible && allowWithoutRoom !== true) {
+    throw new Error(castEligibility.reason);
+  }
+  if (
+    combatActive &&
+    getSpellActionKind(spell) === "long-cast" &&
+    allowWithoutRoom !== true
+  ) {
+    throw new Error(
+      `${spell?.name || "This spell"} has a long casting time and cannot be resolved as a single combat action.`
+    );
+  }
+  const availableSlotOptions = (Array.isArray(slotOptions) ? slotOptions : [])
+    .filter((option) => !combatActive || option.kind !== "ritual");
+  if (
+    Number(spell?.level) > 0 &&
+    !availableSlotOptions.some((option) => Number(option?.remaining) > 0) &&
+    allowWithoutRoom !== true
+  ) {
+    throw new Error(
+      combatActive && (Array.isArray(slotOptions) ? slotOptions : [])
+        .some((option) => option.kind === "ritual")
+        ? "Ritual casting is unavailable during active initiative."
+        : "No eligible spell resource remains."
+    );
+  }
 
   if (!instruction.supported) {
     throw new Error(instruction.reason);
@@ -7642,6 +7711,8 @@ async function beginCharacterSpellTargeting({
       },
       onConfirmed: handleConfirmedSpellVfx
     });
+  const spellcastingStats =
+    resolveCharacterSpellcastingStats(character, spell);
   activeSpellCastingSession.begin({
     spell,
     instruction,
@@ -7660,12 +7731,10 @@ async function beginCharacterSpellTargeting({
           tokenElement.dataset.tokenElevation
         )
       },
-    slotOptions,
-    spellSaveDc:
-      character?.magic?.spellSaveDc,
-    spellAttackBonus:
-      character?.magic
-        ?.spellAttackBonus
+    slotOptions: availableSlotOptions,
+    characterLevel: getCharacterLevel(character),
+    spellSaveDc: spellcastingStats.spellSaveDc,
+    spellAttackBonus: spellcastingStats.spellAttackBonus
   });
 
   activeSpellTemplateInstruction =
@@ -8171,6 +8240,12 @@ function initializeBattleMapTemplates() {
     ?.addEventListener(
       "click",
       confirmActiveSpellCast
+    );
+
+  E.spellCastingSlotSelect
+    ?.addEventListener(
+      "change",
+      renderSpellCastingPanel
     );
 
   E.cancelSpellCastButton

@@ -2,7 +2,7 @@
 // synchronized turn ledger; movement, spells, inventory and VFX remain in
 // their existing systems.
 
-const ACTION_ECONOMY_SCHEMA_VERSION = 1;
+const ACTION_ECONOMY_SCHEMA_VERSION = 2;
 
 function text(value) {
   return String(value ?? "").trim();
@@ -38,6 +38,9 @@ export function createEmptyActionEconomy(tokenId = "") {
     attackActionStarted: false,
     attacksRemaining: 0,
     actionSurgeUsed: false,
+    spellCastCount: 0,
+    bonusActionSpellCast: false,
+    bonusSpellRestrictionBlocked: false,
     dashUsed: false,
     disengaged: false,
     dodging: false,
@@ -93,6 +96,9 @@ export function normalizeActionEconomy(source = {}) {
     attackActionStarted: value.attackActionStarted === true,
     attacksRemaining: integer(value.attacksRemaining, 0, 0, 20),
     actionSurgeUsed: value.actionSurgeUsed === true,
+    spellCastCount: integer(value.spellCastCount, 0, 0, 20),
+    bonusActionSpellCast: value.bonusActionSpellCast === true,
+    bonusSpellRestrictionBlocked: value.bonusSpellRestrictionBlocked === true,
     dashUsed: value.dashUsed === true,
     disengaged: value.disengaged === true,
     dodging: value.dodging === true,
@@ -199,6 +205,22 @@ export function applyActionEconomyCommand(currentState, command = {}) {
   const type = text(command.type);
   if (!type) throw new Error("A combat command is required.");
 
+  if (type === "spell") {
+    const resource = text(command.resource) || "action";
+    const spellLevel = integer(command.spellLevel, 0, 0, 9);
+    const isActionCantrip = resource === "action" && spellLevel === 0;
+    if (state.bonusActionSpellCast && !isActionCantrip) {
+      throw new Error(
+        "After a Bonus Action spell, only a cantrip with a casting time of 1 Action can be cast this turn."
+      );
+    }
+    if (resource === "bonus" && state.bonusSpellRestrictionBlocked) {
+      throw new Error(
+        "A Bonus Action spell cannot be cast after another non-Action-cantrip spell this turn."
+      );
+    }
+  }
+
   if (type === "weapon-attack") {
     const attackCount = integer(command.numberOfAttacks, 1, 1, 20);
     if (state.attackActionStarted && state.attacksRemaining > 0) {
@@ -220,6 +242,19 @@ export function applyActionEconomyCommand(currentState, command = {}) {
     };
   } else {
     state = spend(state, text(command.resource) || "action");
+  }
+
+  if (type === "spell") {
+    const resource = text(command.resource) || "action";
+    const spellLevel = integer(command.spellLevel, 0, 0, 9);
+    const isActionCantrip = resource === "action" && spellLevel === 0;
+    state = {
+      ...state,
+      spellCastCount: Math.min(20, state.spellCastCount + 1),
+      bonusActionSpellCast: state.bonusActionSpellCast || resource === "bonus",
+      bonusSpellRestrictionBlocked:
+        state.bonusSpellRestrictionBlocked || !isActionCantrip
+    };
   }
 
   if (type === "dash") {

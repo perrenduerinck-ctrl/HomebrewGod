@@ -132,6 +132,23 @@ export function ensureGameplayState(character) {
               .startedAtMillis,
             0,
             0
+          ),
+          replacedSpellName: cleanText(
+            combat.concentration.replacedSpellName
+          )
+        }
+      : null;
+  combat.pendingConcentrationCheck =
+    combat.concentration &&
+    isRecord(combat.pendingConcentrationCheck) &&
+    integer(combat.pendingConcentrationCheck.dc, 0, 0) > 0
+      ? {
+          dc: integer(combat.pendingConcentrationCheck.dc, 10, 1),
+          damage: integer(combat.pendingConcentrationCheck.damage, 0, 0),
+          createdAtMillis: integer(
+            combat.pendingConcentrationCheck.createdAtMillis,
+            0,
+            0
           )
         }
       : null;
@@ -293,10 +310,53 @@ export function applyGameplayAction(character, action = {}) {
       0,
       combat.currentHp - remaining
     );
+    const concentrationDc = combat.concentration
+      ? Math.max(10, Math.floor(amount / 2))
+      : null;
+    if (concentrationDc !== null) {
+      combat.pendingConcentrationCheck = {
+        dc: concentrationDc,
+        damage: amount,
+        createdAtMillis: Date.now()
+      };
+    }
 
     return {
       changed: true,
-      message: `${amount} damage applied.`
+      concentrationCheck: concentrationDc === null
+        ? null
+        : { dc: concentrationDc, damage: amount },
+      message: `${amount} damage applied.${
+        concentrationDc === null
+          ? ""
+          : ` Make a DC ${concentrationDc} Constitution save to maintain concentration.`
+      }`
+    };
+  }
+
+  if (action.type === "resolve-concentration-check") {
+    const pending = combat.pendingConcentrationCheck;
+    if (!combat.concentration || !pending) {
+      return {
+        changed: false,
+        message: "There is no pending concentration check."
+      };
+    }
+    const total = Number.isFinite(Number(action.total))
+      ? Math.round(Number(action.total))
+      : null;
+    const succeeded = action.succeeded === true ||
+      (action.succeeded !== false && total !== null && total >= pending.dc);
+    const spellName = cleanText(combat.concentration.spellName, "spell");
+    combat.pendingConcentrationCheck = null;
+    if (!succeeded) combat.concentration = null;
+    return {
+      changed: true,
+      succeeded,
+      dc: pending.dc,
+      message: succeeded
+        ? `Concentration on ${spellName} was maintained.`
+        : `Concentration on ${spellName} ended after the failed DC ${pending.dc} save.`
     };
   }
 
@@ -426,6 +486,7 @@ export function applyGameplayAction(character, action = {}) {
     }
 
     combat.concentration = null;
+    combat.pendingConcentrationCheck = null;
     return {
       changed: true,
       message:
@@ -486,6 +547,7 @@ export function applyGameplayAction(character, action = {}) {
       failures: 0
     };
     combat.concentration = null;
+    combat.pendingConcentrationCheck = null;
 
     return {
       changed,

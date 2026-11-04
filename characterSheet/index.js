@@ -34,6 +34,9 @@ import {
   getCanonicalSpellSources,
   SPELL_SOURCE_MODEL_VERSION
 } from "../characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
+import {
+  getSpellCastEligibility
+} from "../spells/spellCastingRules.js";
 
 const ABILITIES = Object.freeze([
   { id: "str", name: "Strength", short: "STR" },
@@ -4809,7 +4812,8 @@ const SPELL_STATUS_ORDER = Object.freeze([
   "Magical Secrets",
   "Subclass-granted",
   "Mystic Arcanum",
-  "Custom spell"
+  "Custom spell",
+  "DM override"
 ]);
 
 const SPELL_FILTER_OPTIONS = Object.freeze([
@@ -5503,6 +5507,9 @@ export function collectCharacterSpells(character) {
             );
           }
         );
+      if (spell.manualOverride === true && !statuses.includes("DM override")) {
+        statuses.push("DM override");
+      }
       const sources = [
         ...spell.sources
       ];
@@ -6263,6 +6270,8 @@ function renderSpellCard(
     getCompleteSpellDescription(spell);
   const templateInstruction =
     createSpellTemplateInstruction(spell);
+  const castEligibility =
+    getSpellCastEligibility(spell);
 
   return `
     <article
@@ -6339,7 +6348,7 @@ function renderSpellCard(
         <p class="hg-sheet-spell-summary">${escapeHtml(spell.summary)}</p>
       ` : ""}
 
-      ${interactive && templateInstruction.supported ? `
+      ${interactive && templateInstruction.supported && castEligibility.eligible ? `
         <div class="hg-sheet-spell-actions hg-sheet-no-print">
           <button
             type="button"
@@ -6347,6 +6356,11 @@ function renderSpellCard(
             data-target-spell-id="${escapeHtml(spell.id)}"
           >Target on Map</button>
           <small>Preview first; no slot is spent until Confirm Cast.</small>
+        </div>
+      ` : interactive && !castEligibility.eligible ? `
+        <div class="hg-sheet-spell-actions hg-sheet-no-print">
+          <button type="button" disabled>Unavailable to cast</button>
+          <small>${escapeHtml(castEligibility.reason)}</small>
         </div>
       ` : ""}
 
@@ -6628,6 +6642,10 @@ function renderSpellPanel(
     )
       ? character.combat.concentration
       : null;
+  const pendingConcentrationCheck =
+    isRecord(character?.combat?.pendingConcentrationCheck)
+      ? character.combat.pendingConcentrationCheck
+      : null;
   const boundedClassSources =
     getBoundedClassSourceEntries(
       character,
@@ -6704,12 +6722,21 @@ function renderSpellPanel(
                 "Spell"
               )
             )}</span>
+            ${pendingConcentrationCheck ? `
+              <small>DC ${clampInteger(pendingConcentrationCheck.dc, 10, 1)} Constitution save pending after ${clampInteger(pendingConcentrationCheck.damage, 0, 0)} damage.</small>
+            ` : ""}
           </div>
           ${printMode ? "" : `
-            <button
-              type="button"
-              data-character-sheet-action="end-concentration"
-            >End Concentration</button>
+            <div class="hg-sheet-inline-actions">
+              ${pendingConcentrationCheck ? `
+                <button type="button" data-character-sheet-action="resolve-concentration-check" data-concentration-succeeded="true">Save Passed</button>
+                <button type="button" data-character-sheet-action="resolve-concentration-check" data-concentration-succeeded="false">Save Failed</button>
+              ` : ""}
+              <button
+                type="button"
+                data-character-sheet-action="end-concentration"
+              >End Concentration</button>
+            </div>
           `}
         </div>
       ` : ""}
@@ -10196,6 +10223,12 @@ export function createCharacterSheetView(options = {}) {
         return;
       }
 
+      const castEligibility = getSpellCastEligibility(spell);
+      if (!castEligibility.eligible) {
+        deps.setStatus(castEligibility.reason);
+        return;
+      }
+
       try {
         const result = deps.onTargetSpell({
           spell: cloneSnapshot(spell),
@@ -10303,6 +10336,17 @@ export function createCharacterSheetView(options = {}) {
           type: "end-concentration"
         }),
         "Concentration ended."
+      );
+      return;
+    }
+
+    if (action === "resolve-concentration-check") {
+      runTrackedAction(
+        () => deps.onGameplayAction({
+          type: "resolve-concentration-check",
+          succeeded: button.dataset.concentrationSucceeded === "true"
+        }),
+        "Concentration check resolved."
       );
       return;
     }

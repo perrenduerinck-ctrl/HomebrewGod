@@ -27,16 +27,19 @@ function cloneAffectedTokens(tokens) {
 function normalizeSlotOption(option = {}) {
   const kind = cleanText(option.kind, "normal") || "normal";
   const level = finiteInteger(option.level, 0, 0);
-  const remaining = Number.isFinite(Number(option.remaining))
-    ? finiteInteger(option.remaining, 0, 0)
-    : kind === "cantrip"
-      ? Number.POSITIVE_INFINITY
-      : 0;
+  const remaining = Number(option.remaining) === Number.POSITIVE_INFINITY
+    ? Number.POSITIVE_INFINITY
+    : Number.isFinite(Number(option.remaining))
+      ? finiteInteger(option.remaining, 0, 0)
+      : kind === "cantrip"
+        ? Number.POSITIVE_INFINITY
+        : 0;
 
   return Object.freeze({
     kind,
     level,
     sourceId: cleanText(option.sourceId),
+    castingTime: cleanText(option.castingTime),
     label: cleanText(
       option.label,
       kind === "cantrip"
@@ -47,13 +50,30 @@ function normalizeSlotOption(option = {}) {
   });
 }
 
-function getDamageExpression(damageEntry, slotLevel) {
+function tableValueAtLevel(table, level) {
+  if (!table || typeof table !== "object") return "";
+  const direct = cleanText(table[String(level)]);
+  if (direct) return direct;
+  const eligible = Object.entries(table)
+    .map(([threshold, value]) => [Number(threshold), cleanText(value)])
+    .filter(([threshold, value]) => Number.isFinite(threshold) && threshold <= level && value)
+    .sort((left, right) => right[0] - left[0]);
+  return eligible[0]?.[1] || "";
+}
+
+function getDamageExpression(damageEntry, slotLevel, characterLevel) {
   const slotTable = damageEntry?.atSlotLevel;
-  const direct = slotTable?.[String(slotLevel)];
+  const direct = tableValueAtLevel(slotTable, slotLevel);
 
   if (cleanText(direct)) {
     return cleanText(direct);
   }
+
+  const characterScaling = tableValueAtLevel(
+    damageEntry?.atCharacterLevel,
+    characterLevel
+  );
+  if (characterScaling) return characterScaling;
 
   const base = cleanText(
     damageEntry?.dice,
@@ -65,9 +85,12 @@ function getDamageExpression(damageEntry, slotLevel) {
 export function createCastResolution({
   spell = {},
   slotLevel = 0,
+  characterLevel = 1,
   affectedTokens = [],
   spellSaveDc = null,
-  spellAttackBonus = null
+  spellAttackBonus = null,
+  resourceKind = "",
+  concentrationReplaced = ""
 } = {}) {
   const save = spell.targeting?.save || spell.save || (
     cleanText(spell.saveAbility)
@@ -97,7 +120,9 @@ export function createCastResolution({
       : [];
   const damage = damageEntries
     .map((entry) => {
-      const expression = getDamageExpression(entry, slotLevel);
+      const expression = getDamageExpression(entry, slotLevel, characterLevel) ||
+        tableValueAtLevel(spell.scaling?.atCharacterLevel, characterLevel) ||
+        tableValueAtLevel(spell.scaling?.atSlotLevel, slotLevel);
       const damageType = cleanText(
         entry?.damageType,
         entry?.type
@@ -107,6 +132,18 @@ export function createCastResolution({
         ? `${expression}${damageType ? ` ${damageType}` : ""}`
         : "";
     })
+    .filter(Boolean);
+  const healingEntries = Array.isArray(spell.healing)
+    ? spell.healing
+    : spell.healing && typeof spell.healing === "object"
+      ? [spell.healing]
+      : [];
+  const healing = healingEntries
+    .map((entry) => (
+      tableValueAtLevel(entry?.atSlotLevel, slotLevel) ||
+      tableValueAtLevel(spell.scaling?.healingAtSlotLevel, slotLevel) ||
+      cleanText(entry?.dice, entry?.amount)
+    ))
     .filter(Boolean);
   const concentration = (
     spell.concentration === true ||
@@ -133,6 +170,10 @@ export function createCastResolution({
     spellId: cleanText(spell.id),
     spellName: cleanText(spell.name, "Spell"),
     slotLevel: finiteInteger(slotLevel, 0, 0),
+    characterLevel: finiteInteger(characterLevel, 1, 1),
+    resourceKind: cleanText(resourceKind),
+    ritual: cleanText(resourceKind) === "ritual",
+    concentrationReplaced: cleanText(concentrationReplaced),
     affectedTokens: Object.freeze(
       cloneAffectedTokens(affectedTokens)
     ),
@@ -150,6 +191,7 @@ export function createCastResolution({
         })
       : null,
     damage: Object.freeze(damage),
+    healing: Object.freeze(healing),
     concentration
   });
 }
@@ -170,6 +212,7 @@ export function createSpellCastingSession({
   let confirmationError = "";
   let spellSaveDc = null;
   let spellAttackBonus = null;
+  let characterLevel = 1;
 
   function getState() {
     return Object.freeze({
@@ -226,6 +269,7 @@ export function createSpellCastingSession({
       ));
     spellSaveDc = config.spellSaveDc;
     spellAttackBonus = config.spellAttackBonus;
+    characterLevel = finiteInteger(config.characterLevel, 1, 1);
     target = null;
     resolution = null;
     confirmationError = "";
@@ -283,6 +327,40 @@ export function createSpellCastingSession({
     return getState();
   }
 
+  function findSlot(selection = {}) {
+    const baseLevel = finiteInteger(spell?.level, 0, 0);
+    if (baseLevel === 0) {
+      return normalizeSlotOption({
+        kind: "cantrip",
+        level: 0,
+        label: "Cantrip — no spell slot"
+      });
+    }
+    const requestedKind = cleanText(selection.kind, "normal");
+    const requestedLevel = finiteInteger(selection.level, baseLevel, 0);
+    const requestedSourceId = cleanText(selection.sourceId);
+    return slotOptions.find((option) => (
+      option.kind === requestedKind &&
+      option.level === requestedLevel &&
+      option.sourceId === requestedSourceId &&
+      option.remaining > 0
+    )) || null;
+  }
+
+  function preview(selection = {}) {
+    const slot = findSlot(selection);
+    if (!slot) return null;
+    return createCastResolution({
+      spell,
+      slotLevel: slot.level,
+      characterLevel,
+      affectedTokens: target?.affectedTokens || [],
+      spellSaveDc,
+      spellAttackBonus,
+      resourceKind: slot.kind
+    });
+  }
+
   async function confirm(selection = {}) {
     if (phase !== "target-selected" || target?.validRange === false) {
       return Object.freeze({
@@ -292,29 +370,7 @@ export function createSpellCastingSession({
       });
     }
 
-    const baseLevel = finiteInteger(spell?.level, 0, 0);
-    const requestedKind = cleanText(
-      selection.kind,
-      baseLevel === 0 ? "cantrip" : "normal"
-    );
-    const requestedLevel = finiteInteger(
-      selection.level,
-      baseLevel,
-      0
-    );
-    const requestedSourceId = cleanText(selection.sourceId);
-    const slot = baseLevel === 0
-      ? normalizeSlotOption({
-          kind: "cantrip",
-          level: 0,
-          label: "Cantrip — no spell slot"
-        })
-      : slotOptions.find((option) => (
-          option.kind === requestedKind &&
-          option.level === requestedLevel &&
-          option.sourceId === requestedSourceId &&
-          option.remaining > 0
-        ));
+    const slot = findSlot(selection);
 
     if (!slot) {
       confirmationError =
@@ -352,9 +408,15 @@ export function createSpellCastingSession({
       resolution = createCastResolution({
         spell,
         slotLevel: slot.level,
+        characterLevel,
         affectedTokens: target.affectedTokens,
         spellSaveDc,
-        spellAttackBonus
+        spellAttackBonus,
+        resourceKind: slot.kind,
+        concentrationReplaced:
+          result?.character?.combat?.concentration?.replacedSpellName ||
+          result?.combat?.concentration?.replacedSpellName ||
+          result?.concentrationReplaced
       });
       phase = "confirmed";
       const confirmedState = getState();
@@ -418,6 +480,7 @@ export function createSpellCastingSession({
     confirmationError = "";
     spellSaveDc = null;
     spellAttackBonus = null;
+    characterLevel = 1;
     return getState();
   }
 
@@ -426,6 +489,7 @@ export function createSpellCastingSession({
     cancel,
     confirm,
     getState,
+    preview,
     reset,
     updateTarget
   });
