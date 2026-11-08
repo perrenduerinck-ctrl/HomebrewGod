@@ -28,6 +28,13 @@ function cleanList(value, maximum = 20) {
 }
 
 function normalizeComponentLetters(source = {}) {
+  if (source.components && typeof source.components === "object" && !Array.isArray(source.components)) {
+    return [
+      source.components.verbal === true ? "V" : "",
+      source.components.somatic === true ? "S" : "",
+      source.components.material === true ? "M" : ""
+    ].filter(Boolean);
+  }
   const explicit = Array.isArray(source.componentLetters)
     ? source.componentLetters
     : clean(source.componentLetters, 80)
@@ -40,6 +47,32 @@ function normalizeComponentLetters(source = {}) {
       .map((entry) => clean(entry, 20).toUpperCase())
       .filter(Boolean)
   )].slice(0, 5);
+}
+
+function cloneRecord(value, fallback = null) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? clone(value)
+    : fallback;
+}
+
+function cloneRecordArray(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry))
+      .slice(0, 64)
+      .map(clone);
+  }
+  return value && typeof value === "object"
+    ? [clone(value)]
+    : [];
+}
+
+function firstDamageRecord(source = {}) {
+  return Array.isArray(source.damage)
+    ? source.damage.find((entry) => entry && typeof entry === "object") || {}
+    : source.damage && typeof source.damage === "object"
+      ? source.damage
+      : {};
 }
 
 function normalizedSchool(value) {
@@ -67,9 +100,17 @@ export function normalizeHomebrewSpell(raw = {}, {
   const level = Math.max(0, Math.min(9, Math.round(Number.isFinite(rawLevel) ? rawLevel : 0)));
   const classes = cleanList(source.classes || source.classNames || (source.classId ? [source.classId] : []), 20);
   const componentLetters = normalizeComponentLetters(source);
-  const components = clean(source.components || componentLetters.join(", "), 500);
+  const structuredComponents = cloneRecord(source.components, {});
+  const components = clean(
+    typeof source.components === "string" ? source.components : componentLetters.join(", "),
+    500
+  );
   const description = clean(source.description || source.summary, 12000);
-  const damageType = normalizedDamageType(source.damageType || source.damage?.type || source.damage?.damage_type?.name);
+  const firstDamage = firstDamageRecord(source);
+  const damageType = normalizedDamageType(
+    source.damageType || firstDamage.damageType || firstDamage.type ||
+    firstDamage.damage_type?.index || firstDamage.damage_type?.name
+  );
   const createdAtMillis = Number(source.createdAtMillis) || now;
   const animations = normalizeSpellAnimations(source.animations || {});
   const range = clean(source.range, 160) || "Self";
@@ -104,12 +145,20 @@ export function normalizeHomebrewSpell(raw = {}, {
     duration,
     components,
     componentLetters: Object.freeze(componentLetters),
-    material: clean(source.material, 1000),
+    material: clean(source.material || structuredComponents.materialText, 1000),
+    materialCostGp: Math.max(0, Number(
+      source.materialCostGp ?? structuredComponents.materialCostGp ?? 0
+    ) || 0),
+    materialConsumed:
+      source.materialConsumed === true || structuredComponents.materialConsumed === true,
+    materialCostly:
+      source.materialCostly === true || structuredComponents.materialCostly === true ||
+      Number(source.materialCostGp ?? structuredComponents.materialCostGp ?? 0) > 0,
     description,
     summary: description,
     higherLevel: clean(source.higherLevel || source.atHigherLevels, 6000),
     damageType,
-    damageDice: clean(source.damageDice || source.damage?.dice, 120),
+    damageDice: clean(source.damageDice || firstDamage.dice || firstDamage.amount, 120),
     attackType,
     saveAbility,
     saveSuccess,
@@ -120,7 +169,10 @@ export function normalizeHomebrewSpell(raw = {}, {
     animations: Object.freeze(clone(animations)),
     targeting: Object.freeze(targeting),
     areaOfEffect: source.areaOfEffect && typeof source.areaOfEffect === "object" ? Object.freeze(clone(source.areaOfEffect)) : null,
-    damage: source.damage && typeof source.damage === "object" ? Object.freeze(clone(source.damage)) : null,
+    damage: Object.freeze(cloneRecordArray(source.damage)),
+    healing: Object.freeze(cloneRecordArray(source.healing)),
+    scaling: Object.freeze(cloneRecord(source.scaling, {})),
+    effects: Object.freeze(cloneRecordArray(source.effects)),
     source: clean(source.source, 80) || "custom",
     createdAtMillis,
     updatedAtMillis: Number(source.updatedAtMillis) || now,
@@ -128,7 +180,8 @@ export function normalizeHomebrewSpell(raw = {}, {
     sourceWorkshopVersion: Number(source.sourceWorkshopVersion) || null,
     sourceAuthorUid: clean(source.sourceAuthorUid, 200),
     copiedFromLibraryId: clean(source.copiedFromLibraryId, 240),
-    copiedFromLibrarySpellId: clean(source.copiedFromLibrarySpellId, 160)
+    copiedFromLibrarySpellId: clean(source.copiedFromLibrarySpellId, 160),
+    sourceLibrarySpellId: clean(source.sourceLibrarySpellId, 160)
   });
 }
 
@@ -137,7 +190,10 @@ export function validateHomebrewSpell(raw = {}) {
   const normalized = normalizeHomebrewSpell(raw);
   if (!clean(raw.name, 120)) errors.push("Give the spell a name.");
   const level = Number(raw.level ?? raw.spellLevel ?? 0);
-  if (!Number.isFinite(level) || level < 0 || level > 9) errors.push("Spell level must be between 0 and 9.");
+  if (!Number.isInteger(level) || level < 0 || level > 9) errors.push("Spell level must be a whole number from 0 through 9.");
+  if (clean(raw.id, 160) && !/^[a-z0-9][a-z0-9._-]{0,159}$/i.test(clean(raw.id, 160))) {
+    errors.push("Spell ID may contain only letters, numbers, periods, underscores, and hyphens.");
+  }
   const castingTime = normalized.castingTime;
   if (!/(action|reaction|minute|hour)/i.test(castingTime)) {
     errors.push("Casting time must identify an action, reaction, minute, or hour duration.");
@@ -149,6 +205,13 @@ export function validateHomebrewSpell(raw = {}) {
   if (clean(raw.material, 1000) && !letters.includes("M")) {
     errors.push("Material details require the M component.");
   }
+  const materialCostGp = Number(raw.materialCostGp ?? 0);
+  if (!Number.isFinite(materialCostGp) || materialCostGp < 0) {
+    errors.push("Material cost must be a non-negative number of gold pieces.");
+  }
+  if ((raw.materialConsumed === true || materialCostGp > 0) && !letters.includes("M")) {
+    errors.push("Costly or consumed materials require the M component.");
+  }
 
   const classes = [...normalized.classes];
   const validClasses = new Set(SPELL_CLASSES.map((entry) => entry.toLowerCase()));
@@ -158,6 +221,24 @@ export function validateHomebrewSpell(raw = {}) {
   const targeting = normalized.targeting;
   const targetingValidation = validateSpellTargetingData(targeting, "Spell targeting");
   errors.push(...targetingValidation.errors);
+
+  const validDamageTypes = new Set(SPELL_DAMAGE_TYPES.filter(Boolean).map((entry) => entry.toLowerCase()));
+  const damageRecords = Array.isArray(raw.damage)
+    ? raw.damage
+    : raw.damage && typeof raw.damage === "object"
+      ? [raw.damage]
+      : [];
+  const requestedDamageTypes = [
+    raw.damageType,
+    ...damageRecords.map((entry) => entry?.damageType || entry?.type || entry?.damage_type?.index || entry?.damage_type?.name)
+  ].map((entry) => clean(entry, 40).toLowerCase()).filter(Boolean);
+  requestedDamageTypes.forEach((damageType) => {
+    if (!validDamageTypes.has(damageType)) errors.push(`Unsupported damage type: ${damageType}.`);
+  });
+  const requestedSaveAbility = clean(raw.saveAbility, 20).toLowerCase();
+  if (requestedSaveAbility && !["str", "dex", "con", "int", "wis", "cha"].includes(requestedSaveAbility)) {
+    errors.push("Saving throw ability must be STR, DEX, CON, INT, WIS, or CHA.");
+  }
 
   const formulas = [];
   const addFormula = (label, value, maximumLevel) => {
@@ -174,13 +255,23 @@ export function validateHomebrewSpell(raw = {}) {
     }
     formulas.push([label, value]);
   };
-  addFormula("Damage", raw.damageDice || raw.damage?.dice, 9);
-  addFormula("Character scaling", raw.damage?.atCharacterLevel || raw.scaling?.atCharacterLevel, 20);
-  addFormula("Slot scaling", raw.damage?.atSlotLevel || raw.scaling?.atSlotLevel, 9);
+  addFormula("Damage", raw.damageDice, 9);
+  damageRecords.forEach((entry, index) => {
+    addFormula(`Damage ${index + 1}`, entry?.dice || entry?.amount, 9);
+    addFormula(`Damage ${index + 1} character scaling`, entry?.atCharacterLevel, 20);
+    addFormula(`Damage ${index + 1} slot scaling`, entry?.atSlotLevel, 9);
+  });
+  addFormula("Character scaling", raw.scaling?.atCharacterLevel, 20);
+  addFormula("Slot scaling", raw.scaling?.atSlotLevel, 9);
+  addFormula("Healing scaling", raw.scaling?.healingAtSlotLevel, 9);
+  cloneRecordArray(raw.healing).forEach((entry, index) => {
+    addFormula(`Healing ${index + 1}`, entry?.dice || entry?.amount, 9);
+    addFormula(`Healing ${index + 1} slot scaling`, entry?.atSlotLevel, 9);
+  });
   formulas.forEach(([label, formula]) => {
     const value = clean(formula, 240);
-    if (value && !/\b\d+d\d+\b/i.test(value) && !/^\d+(?:\.\d+)?$/.test(value)) {
-      errors.push(`${label} must contain a valid dice expression such as 2d6 or a numeric amount.`);
+    if (value && !/^(?:\d+d\d+|\d+(?:\.\d+)?)(?:\s*[+-]\s*(?:\d+d\d+|\d+(?:\.\d+)?|MOD))*$/i.test(value)) {
+      errors.push(`${label} must be a complete dice expression such as 2d6 + MOD or a numeric amount.`);
     }
   });
   try { normalizeSpellAnimations(raw.animations || {}, { strict: true }); }

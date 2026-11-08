@@ -27,8 +27,18 @@ export function normalizeMonsterSpellReference(value, index = 0) {
     name: name || sourceId || "Unnamed Spell",
     usage,
     uses: Math.max(1, Math.round(Number(value.uses) || 1)),
+    usesUsed: Math.max(0, Math.min(
+      Math.max(1, Math.round(Number(value.uses) || 1)),
+      Math.round(Number(value.usesUsed) || 0)
+    )),
     level: Math.max(0, Math.min(9, Math.round(Number(value.level) || 0))),
-    slots: Math.max(1, Math.round(Number(value.slots) || 1))
+    slots: Math.max(1, Math.round(Number(value.slots) || 1)),
+    slotsUsed: Math.max(0, Math.min(
+      Math.max(1, Math.round(Number(value.slots) || 1)),
+      Math.round(Number(value.slotsUsed) || 0)
+    )),
+    castingTime: text(value.castingTime),
+    range: text(value.range)
   };
 }
 
@@ -45,7 +55,15 @@ export function normalizeMonsterSpellcasting(value) {
     saveDc: numberOrBlank(source.saveDc),
     attackBonus: numberOrBlank(source.attackBonus),
     casterLevel: numberOrBlank(source.casterLevel),
-    spells
+    spells,
+    concentration: source.concentration && typeof source.concentration === "object"
+      ? {
+          spellId: text(source.concentration.spellId),
+          spellName: text(source.concentration.spellName, "Spell"),
+          startedAtMillis: Math.max(0, Math.round(Number(source.concentration.startedAtMillis) || 0)),
+          replacedSpellName: text(source.concentration.replacedSpellName)
+        }
+      : null
   };
 }
 
@@ -255,7 +273,10 @@ export function createMonsterSpellcastingEditor({
         libraryRecords = (Array.isArray(records) ? records : [])
           .map((record) => ({
             sourceRecordId: text(record.sourceRecordId || record.id),
-            name: text(record.name, "Unnamed Spell")
+            name: text(record.name, "Unnamed Spell"),
+            level: Math.max(0, Math.min(9, Math.round(Number(record.metadata?.level) || 0))),
+            castingTime: text(record.metadata?.castingTime),
+            range: text(record.metadata?.range)
           }))
           .filter((record) => record.sourceRecordId);
         libraryStatus = libraryRecords.length
@@ -276,6 +297,9 @@ export function createMonsterSpellcastingEditor({
         source: "library",
         sourceId: selected.sourceRecordId,
         name: selected.name,
+        level: selected.level,
+        castingTime: selected.castingTime,
+        range: selected.range,
         usage: "atWill"
       }, state.spells.length));
     } else if (action.dataset.spellAction === "add") {

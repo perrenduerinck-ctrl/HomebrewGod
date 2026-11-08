@@ -71,6 +71,37 @@ function normalSpellSlotLedger(magic = {}) {
     .sort((left, right) => left.level - right.level);
 }
 
+export function getPactSpellSlotLedger(character = {}) {
+  const magic = object(character.magic);
+  const pactUsage = object(object(magic.slotUsage).pactSources);
+  const sources = Array.isArray(magic.pactMagicSources)
+    ? magic.pactMagicSources.map((source, index) => ({
+        sourceId: text(source?.classEntryId) || `pact-source-${index + 1}`,
+        source,
+        index
+      }))
+    : Object.entries(object(magic.pactMagicSources))
+        .map(([sourceId, source], index) => ({ sourceId, source, index }));
+  if (!sources.length && magic.pactMagic) {
+    sources.push({ sourceId: "legacy:pact-magic", source: magic.pactMagic, index: 0 });
+  }
+  return sources.map(({ sourceId, source, index }) => {
+    const slotLevel = count(source?.slotLevel ?? source?.level, 0);
+    const maximum = count(source?.slots ?? source?.maximumSlots ?? source?.maximumUses, 0);
+    const legacyUsed = index === 0 ? count(object(magic.slotUsage).pact, 0) : 0;
+    const used = Math.min(maximum, count(pactUsage[sourceId], legacyUsed));
+    return {
+      sourceId,
+      sourceName: text(source?.className || source?.sourceName) || "Pact Magic",
+      slotLevel,
+      maximum,
+      used,
+      remaining: Math.max(0, maximum - used),
+      index
+    };
+  }).filter((entry) => entry.slotLevel > 0 && entry.maximum > 0);
+}
+
 function spellReferenceId(value) {
   return text(
     typeof value === "string"
@@ -114,39 +145,92 @@ function getSpecialSpellSources(character, spell) {
     .filter((entry) => entry.atWill || entry.maximum > 0);
 }
 
-function canCharacterRitualCast(character, spell) {
+function sourceSpellState(source, spellId) {
+  return object(source?.spellStates)[spellId] || object(sourceSpellRecord(source, spellId)?.spellState);
+}
+
+function sourceCanRitualCast(character, spell, source) {
   if (spell.ritual !== true) return false;
   const magic = object(character.magic);
   if (magic.ritualCasting === true || spell.manualOverride === true) return true;
-  const ritualClasses = new Set(["artificer", "bard", "cleric", "druid", "wizard"]);
   const spellId = spellReferenceId(spell);
-  const canonicalMatch = getCanonicalSpellSources(character).some((source) => (
-    sourceContainsSpell(source, spellId) &&
-    (
-      source.ritualCasting === true ||
-      ritualClasses.has(text(source.classId).toLowerCase())
-    )
-  ));
-  if (canonicalMatch) return true;
-  const legacyMatch = Object.values(object(magic.classSources)).some((source) => {
-    const references = [
-      ...(Array.isArray(source?.cantripIds) ? source.cantripIds : []),
-      ...(Array.isArray(source?.knownSpellIds) ? source.knownSpellIds : []),
-      ...(Array.isArray(source?.preparedSpellIds) ? source.preparedSpellIds : []),
-      ...(Array.isArray(source?.spellbookSpellIds) ? source.spellbookSpellIds : [])
-    ];
-    return references.map(spellReferenceId).includes(spellId) &&
-      (source?.ritualCasting === true || ritualClasses.has(text(source?.classId).toLowerCase()));
-  });
-  if (legacyMatch) return true;
-  return (Array.isArray(spell.statuses) ? spell.statuses : [])
-    .some((status) => text(status).toLowerCase() === "spellbook");
+  if (!sourceContainsSpell(source, spellId)) return false;
+  if (source?.ritualCasting === true) return true;
+  const classId = text(source?.classId).toLowerCase();
+  const state = sourceSpellState(source, spellId);
+  const record = sourceSpellRecord(source, spellId) || {};
+  const prepared = state.prepared === true || state.alwaysPrepared === true ||
+    record.prepared === true || record.alwaysPrepared === true || source.alwaysPrepared === true;
+  const known = state.known === true || record.known === true || source.grantsKnown === true;
+  const spellbook = state.spellbook === true || record.spellbook === true ||
+    (Array.isArray(source?.spellbookSpellIds) && source.spellbookSpellIds.map(spellReferenceId).includes(spellId));
+
+  if (classId === "wizard") return spellbook || prepared;
+  if (classId === "bard") return known || prepared;
+  if (["artificer", "cleric", "druid"].includes(classId)) return prepared;
+  return false;
+}
+
+export function getCharacterSpellcastingSourceOptions(character = {}, spell = {}) {
+  const spellId = spellReferenceId(spell);
+  if (!spellId) return [];
+  const seen = new Set();
+  return getCanonicalSpellSources(character)
+    .filter((source) => sourceContainsSpell(source, spellId))
+    .map((source) => {
+      const sourceId = text(source?.sourceId || source?.classEntryId);
+      if (!sourceId || seen.has(sourceId)) return null;
+      seen.add(sourceId);
+      const sourceRecord = sourceSpellRecord(source, spellId) || {};
+      return {
+        sourceId,
+        sourceName: text(source?.sourceName || source?.className || source?.name) || "Spellcasting",
+        sourceType: text(source?.sourceType),
+        spellcastingAbility: text(sourceRecord.spellcastingAbility || source?.spellcastingAbility).toLowerCase(),
+        ritual: sourceCanRitualCast(character, spell, source)
+      };
+    })
+    .filter(Boolean);
+}
+
+function canCharacterRitualCast(character, spell, sourceId = "") {
+  const sources = getCanonicalSpellSources(character)
+    .filter((source) => sourceContainsSpell(source, spellReferenceId(spell)));
+  const requestedSourceId = text(sourceId);
+  const eligibleSources = requestedSourceId
+    ? sources.filter((source) => text(source?.sourceId || source?.classEntryId) === requestedSourceId)
+    : sources;
+  return eligibleSources.some((source) => sourceCanRitualCast(character, spell, source)) ||
+    (spell.ritual === true && (object(character.magic).ritualCasting === true || spell.manualOverride === true));
+}
+
+function attachCastingSources(character, spell, options) {
+  const castingSources = getCharacterSpellcastingSourceOptions(character, spell);
+  if (!castingSources.length) {
+    return options.map((option) => ({
+      ...option,
+      castingSourceId: "",
+      castingSourceName: ""
+    }));
+  }
+  const showSource = castingSources.length > 1;
+  return options.flatMap((option) => castingSources
+    .filter((source) => option.kind !== "ritual" || source.ritual)
+    .map((source) => ({
+      ...option,
+      castingSourceId: source.sourceId,
+      castingSourceName: source.sourceName,
+      spellcastingAbility: source.spellcastingAbility,
+      label: showSource ? `${option.label} · Cast via ${source.sourceName}` : option.label
+    })));
 }
 
 export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
   const level = count(spell.level, 0);
   if (level === 0) {
-    return [{ kind: "cantrip", level: 0, sourceId: "", label: "Cantrip — no spell slot", remaining: Infinity }];
+    return attachCastingSources(character, spell, [
+      { kind: "cantrip", level: 0, sourceId: "", label: "Cantrip — no spell slot", remaining: Infinity }
+    ]);
   }
   const magic = object(character.magic);
   const options = [];
@@ -190,26 +274,9 @@ export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
       remaining
     });
   });
-  const pactUsage = object(object(magic.slotUsage).pactSources);
-  const pactSources = castEligibility.ritualOnly
-    ? []
-    : Array.isArray(magic.pactMagicSources)
-    ? magic.pactMagicSources.map((source, index) => [
-        text(source?.classEntryId) || `pact-source-${index + 1}`,
-        source
-      ])
-    : Object.entries(object(magic.pactMagicSources));
-  if (!castEligibility.ritualOnly && !pactSources.length && magic.pactMagic) {
-    pactSources.push(["legacy:pact-magic", magic.pactMagic]);
-  }
-  pactSources.forEach(([sourceId, source]) => {
-    const slotLevel = count(source?.slotLevel ?? source?.level, 0);
-    const maximum = count(source?.slots ?? source?.maximumSlots ?? source?.maximumUses, 0);
-    if (slotLevel < level || maximum < 1) return;
-    const legacyPactUsed = sourceId === "legacy:pact-magic"
-      ? count(object(magic.slotUsage).pact, 0)
-      : 0;
-    const remaining = Math.max(0, maximum - count(pactUsage[sourceId], legacyPactUsed));
+  const pactSources = castEligibility.ritualOnly ? [] : getPactSpellSlotLedger(character);
+  pactSources.forEach(({ sourceId, slotLevel, remaining }) => {
+    if (slotLevel < level) return;
     options.push({
       kind: "pact",
       level: slotLevel,
@@ -218,12 +285,22 @@ export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
       remaining
     });
   });
-  return options.sort((left, right) => left.level - right.level || left.kind.localeCompare(right.kind));
+  return attachCastingSources(character, spell, options)
+    .sort((left, right) => left.level - right.level || left.kind.localeCompare(right.kind) ||
+      left.castingSourceName.localeCompare(right.castingSourceName));
 }
 
 export function applyConfirmedSpellCast(character = {}, spell = {}, selection = {}) {
   const next = clone(character);
   const level = count(spell.level, 0);
+  const castingSourceId = text(selection.castingSourceId);
+  const castingSources = getCharacterSpellcastingSourceOptions(next, spell);
+  if (castingSourceId && !castingSources.some((source) => source.sourceId === castingSourceId)) {
+    throw new Error("That spellcasting source is no longer available for this spell.");
+  }
+  if (castingSources.length > 1 && !castingSourceId) {
+    throw new Error("Choose which spellcasting source is casting this spell.");
+  }
   if (next.combat?.classFeatureStates?.rageActive === true) {
     throw new Error("Spellcasting is blocked while Rage is active.");
   }
@@ -255,30 +332,21 @@ export function applyConfirmedSpellCast(character = {}, spell = {}, selection = 
         throw new Error("That special spell use could not be spent.");
       }
     } else if (selectionKind === "ritual") {
-      if (!canCharacterRitualCast(next, spell)) {
+      if (!canCharacterRitualCast(next, spell, castingSourceId)) {
         throw new Error("This character cannot cast that spell as a ritual.");
       }
     } else if (selectionKind === "pact") {
       next.magic.slotUsage.pactSources = object(next.magic.slotUsage.pactSources);
       const sourceId = text(selection.sourceId);
       if (!sourceId) throw new Error("A pact slot source is required.");
-      const sources = Array.isArray(next.magic.pactMagicSources)
-        ? next.magic.pactMagicSources.map((source, index) => ({
-            id: text(source?.classEntryId) || `pact-source-${index + 1}`,
-            source,
-            index
-          }))
-        : Object.entries(object(next.magic.pactMagicSources)).map(([id, source], index) => ({ id, source, index }));
-      if (!sources.length && next.magic.pactMagic) sources.push({ id: "legacy:pact-magic", source: next.magic.pactMagic, index: 0 });
-      const selectedSource = sources.find((entry) => entry.id === sourceId);
-      const sourceLevel = count(selectedSource?.source?.slotLevel ?? selectedSource?.source?.level, 0);
-      const maximum = count(selectedSource?.source?.slots ?? selectedSource?.source?.maximumSlots, 0);
-      const used = count(next.magic.slotUsage.pactSources[sourceId], selectedSource?.index === 0 ? next.magic.slotUsage.pact : 0);
-      if (!selectedSource || sourceLevel !== selectedLevel || sourceLevel < level || maximum < 1 || used >= maximum) {
+      const selectedSource = getPactSpellSlotLedger(next)
+        .find((entry) => entry.sourceId === sourceId);
+      if (!selectedSource || selectedSource.slotLevel !== selectedLevel ||
+        selectedSource.slotLevel < level || selectedSource.remaining < 1) {
         throw new Error("That pact slot is no longer available.");
       }
-      next.magic.slotUsage.pactSources[sourceId] = used + 1;
-      if (selectedSource.index === 0) next.magic.slotUsage.pact = used + 1;
+      next.magic.slotUsage.pactSources[sourceId] = selectedSource.used + 1;
+      if (selectedSource.index === 0) next.magic.slotUsage.pact = selectedSource.used + 1;
     } else {
       next.magic.slotUsage.normal = object(next.magic.slotUsage.normal);
       const slotLevel = String(selectedLevel);

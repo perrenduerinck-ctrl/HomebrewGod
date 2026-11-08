@@ -212,6 +212,10 @@ import { createAccountLibraryIndex } from "./library/accountLibraryIndex.js";
 import { copyLibraryRecordToRoom } from "./library/copyToRoom.js";
 import { createMagicItemPersistence } from "./items/magicItemPersistence.js";
 import { createSpellPersistence } from "./spells/spellPersistence.js";
+import {
+  applyConfirmedMonsterSpellCast,
+  getMonsterSpellAvailability
+} from "./combat/monsterSpellcasting.js";
 import { createNpcPersistence } from "./npcs/npcPersistence.js";
 import { createNpcRelationshipPersistence } from "./npcs/relationshipPersistence.js";
 import { createEncounterPersistence } from "./encounters/encounterPersistence.js";
@@ -1726,6 +1730,43 @@ function canOperateCombatToken(token) {
   });
 }
 
+async function resolveMonsterSpellDefinition(reference = {}, presentation = {}) {
+  const sourceId = String(reference.sourceId || reference.spellId || presentation.id || "").trim();
+  if (!sourceId) throw new Error("This monster spell is missing its stable spell reference.");
+
+  if (reference.source === "custom") {
+    return {
+      ...presentation,
+      ...reference,
+      id: sourceId,
+      name: reference.name || presentation.name || "Monster spell",
+      level: Number(reference.level ?? presentation.level) || 0,
+      castingTime: reference.castingTime || presentation.castingTime || "1 action",
+      range: reference.range || presentation.range || "Self"
+    };
+  }
+
+  if (reference.source === "library") {
+    try {
+      return await getSpellPersistenceSystem().load(sourceId);
+    } catch {
+      // Older monster records also used "library" for built-in catalog IDs.
+    }
+  }
+
+  const { getDefaultSpellById } = await import("./data/defaultSpells.js?v=stage8-20260826");
+  const catalogSpell = getDefaultSpellById(sourceId);
+  if (catalogSpell) return catalogSpell;
+
+  try {
+    return await getSpellPersistenceSystem().load(sourceId);
+  } catch {
+    throw new Error(
+      `${reference.name || "This monster spell"} no longer resolves to a catalog or personal Library spell. Repair its reference in Monster Creator.`
+    );
+  }
+}
+
 function watchCombatActionActor(token, onChange) {
   const roomCode = currentRoomCode;
   const characterId = String(token?.linkedCharacterId || "").trim();
@@ -1861,6 +1902,7 @@ async function commitCombatActionBarMutation({
   token,
   economyCommand = null,
   characterMutator = null,
+  monsterMutator = null,
   movementMutator = null
 } = {}) {
   if (!currentRoomCode || !currentUser || !token?.id) {
@@ -1882,9 +1924,14 @@ async function commitCombatActionBarMutation({
   const characterRef = characterMutator && characterId
     ? doc(db, "rooms", roomCode, "characters", characterId)
     : null;
+  const monsterId = String(token.linkedMonsterId || token.linkedMonster?.id || "").trim();
+  const monsterRef = monsterMutator && monsterId
+    ? doc(db, "rooms", roomCode, "monsters", monsterId)
+    : null;
   let committedEconomy = null;
   let committedMovement = null;
   let committedCharacter = null;
+  let committedMonster = null;
   let committedToken = null;
 
   await runTransaction(db, async (transaction) => {
@@ -1917,6 +1964,8 @@ async function commitCombatActionBarMutation({
     if (activeCombatTurn && economyCommand) economySnapshot = await transaction.get(economyRef);
     let characterSnapshot = null;
     if (characterRef) characterSnapshot = await transaction.get(characterRef);
+    let monsterSnapshot = null;
+    if (monsterRef) monsterSnapshot = await transaction.get(monsterRef);
 
     if (activeCombatTurn && economyCommand) {
       const latestEconomy = offTurnReaction
@@ -1972,6 +2021,23 @@ async function commitCombatActionBarMutation({
       };
       transaction.update(characterRef, committedCharacter);
     }
+
+    if (monsterMutator) {
+      if (!isDm) throw new Error("Only the room DM can change monster spell resources.");
+      if (!monsterSnapshot?.exists()) throw new Error("The linked monster no longer exists.");
+      const remote = monsterSnapshot.data() || {};
+      const next = monsterMutator(remote);
+      const now = Date.now();
+      committedMonster = {
+        ...next,
+        ownerUid: remote.ownerUid,
+        roomCode: remote.roomCode || roomCode,
+        revision: Math.max(0, Math.floor(Number(remote.revision) || 0)) + 1,
+        updatedAtMillis: now,
+        updatedAt: serverTimestamp()
+      };
+      transaction.update(monsterRef, committedMonster);
+    }
   });
 
   if (currentRoomCode === roomCode && committedMovement) {
@@ -1985,6 +2051,7 @@ async function commitCombatActionBarMutation({
     economy: committedEconomy,
     movement: committedMovement,
     character: committedCharacter,
+    monster: committedMonster,
     token: committedToken
   };
 }
@@ -2176,6 +2243,64 @@ async function executeCombatActionBarEntry(action, context) {
     }
     if (inCombat) await commitCombatActionBarMutation({ token, economyCommand });
     return { message: `${action.name} tracked${inCombat ? " for this turn" : " as a manual exploration action"}.` };
+  }
+
+  if (action.kind === "monster-spell") {
+    const reference = action.raw?.resourceReference || action.raw || {};
+    const availability = getMonsterSpellAvailability(actor, reference);
+    if (!availability.available) throw new Error(availability.reason);
+    const spell = await resolveMonsterSpellDefinition(reference, action.raw);
+    const castingKind = getSpellActionKind(spell);
+    if (inCombat && castingKind === "long-cast") {
+      throw new Error(
+        `${spell.name || action.name} has a long casting time and cannot be resolved as a single combat action.`
+      );
+    }
+    const castResource = getSpellActionKind(spell) === "bonus-action"
+      ? "bonus"
+      : getSpellActionKind(spell) === "reaction"
+        ? "reaction"
+        : "action";
+    const sourceId = String(reference.id || reference.sourceId || "monster-spell");
+    await beginCharacterSpellTargeting({
+      spell,
+      character: actor,
+      characterId: "",
+      casterToken: token,
+      casterTokenId: token.id,
+      casterName: actor?.name || token.name || "Monster",
+      casterLevel: actor?.spellcasting?.casterLevel || 1,
+      spellcastingStats: {
+        spellSaveDc: actor?.spellcasting?.saveDc,
+        spellAttackBonus: actor?.spellcasting?.attackBonus
+      },
+      skipCastEligibility: true,
+      slotOptions: [{
+        kind: "special",
+        level: Number(spell.level) || 0,
+        sourceId,
+        label: availability.kind === "atWill"
+          ? `${spell.name} — at will`
+          : `${spell.name} — ${availability.remaining} remaining`,
+        remaining: availability.remaining
+      }],
+      actionKey: action.key,
+      actionAttemptId,
+      onConfirmCast: () => commitCombatActionBarMutation({
+        token,
+        economyCommand: {
+          type: "spell",
+          resource: castResource,
+          spellLevel: Number(spell.level) || 0,
+          castingKind
+        },
+        monsterMutator: (remote) => applyConfirmedMonsterSpellCast(remote, reference, spell)
+      })
+    });
+    return {
+      state: "targeting",
+      message: `${spell.name}: choose a valid spell target. The monster resource is spent only after confirmation.`
+    };
   }
 
   if (action.kind === "weapon" || action.kind.startsWith("monster-")) {
@@ -5990,18 +6115,24 @@ function encodeSpellSlotOption(option) {
     String(Number(option.level) || 0),
     encodeURIComponent(
       String(option.sourceId || "")
+    ),
+    encodeURIComponent(
+      String(option.castingSourceId || "")
     )
   ].join("|");
 }
 
 function decodeSpellSlotOption(value) {
-  const [kind, level, sourceId] =
+  const [kind, level, sourceId, castingSourceId] =
     String(value || "").split("|");
   return {
     kind: kind || "normal",
     level: Number(level) || 0,
     sourceId: decodeURIComponent(
       sourceId || ""
+    ),
+    castingSourceId: decodeURIComponent(
+      castingSourceId || ""
     )
   };
 }
@@ -6332,6 +6463,7 @@ function syncActiveSpellCastingTarget(
     endElevationFeet:
       targetElevationFeet,
     affectedTokens,
+    selectedPoint: geometry?.pointer || null,
     geometry
   });
   renderSpellCastingPanel();
@@ -6433,7 +6565,11 @@ function handleConfirmedSpellVfx({
         ? casterToken?.id
         : selectedTarget?.id || null,
       // Directional geometry is anchored at the caster, not the aiming target.
-      targetPoint: selectedTarget?.center || null,
+      targetPoint:
+        selectedTarget?.center ||
+        target?.selectedPoint ||
+        target?.geometry?.pointer ||
+        null,
       deliveryType: instruction?.singleTarget ? inferSpellVfxDeliveryType({ spell }) : "",
       targetElevation:
         target?.endElevationFeet,
@@ -7543,6 +7679,12 @@ async function beginCharacterSpellTargeting({
   spell,
   character,
   characterId,
+  casterToken = null,
+  casterTokenId = "",
+  casterName = "",
+  casterLevel = null,
+  spellcastingStats: providedSpellcastingStats = null,
+  skipCastEligibility = false,
   slotOptions = [],
   actionKey = "",
   actionAttemptId = "",
@@ -7560,7 +7702,7 @@ async function beginCharacterSpellTargeting({
   const castEligibility = getSpellCastEligibility(spell);
   const combatActive = initiativeSystem?.getState?.().combatActive === true;
 
-  if (!castEligibility.eligible && allowWithoutRoom !== true) {
+  if (!castEligibility.eligible && skipCastEligibility !== true && allowWithoutRoom !== true) {
     throw new Error(castEligibility.reason);
   }
   if (
@@ -7572,8 +7714,21 @@ async function beginCharacterSpellTargeting({
       `${spell?.name || "This spell"} has a long casting time and cannot be resolved as a single combat action.`
     );
   }
-  const availableSlotOptions = (Array.isArray(slotOptions) ? slotOptions : [])
+  const baseAvailableSlotOptions = (Array.isArray(slotOptions) ? slotOptions : [])
     .filter((option) => !combatActive || option.kind !== "ritual");
+  const defaultSpellcastingStats = providedSpellcastingStats ||
+    resolveCharacterSpellcastingStats(character, spell);
+  const availableSlotOptions = baseAvailableSlotOptions.map((option) => {
+    const sourceStats = providedSpellcastingStats ||
+      resolveCharacterSpellcastingStats(character, spell, {
+        sourceId: option?.castingSourceId || ""
+      });
+    return {
+      ...option,
+      spellSaveDc: sourceStats.spellSaveDc,
+      spellAttackBonus: sourceStats.spellAttackBonus
+    };
+  });
   if (
     Number(spell?.level) > 0 &&
     !availableSlotOptions.some((option) => Number(option?.remaining) > 0) &&
@@ -7613,8 +7768,10 @@ async function beginCharacterSpellTargeting({
   let linkedToken = null;
 
   try {
-    linkedToken =
-      allowWithoutRoom === true
+    linkedToken = casterToken || (
+      casterTokenId
+        ? (tokenSystem?.getRoomTokens?.() || []).find((token) => token.id === casterTokenId) || null
+        : allowWithoutRoom === true
         ? tokenSystem
             ?.getCharacterLinkedToken?.(
               characterId
@@ -7622,7 +7779,8 @@ async function beginCharacterSpellTargeting({
         : await tokenSystem
             ?.loadCharacterLinkedToken?.(
               characterId
-            );
+            )
+    );
 
     if (allowWithoutRoom !== true) {
       tokenSystem?.render?.(
@@ -7632,7 +7790,7 @@ async function beginCharacterSpellTargeting({
   } catch (error) {
     activeSpellInteractionRelease?.();
     activeSpellInteractionRelease = null;
-    if (allowWithoutRoom !== true) {
+    if (allowWithoutRoom !== true && !casterTokenId) {
       navigateMainScreen(
         "characterCreator"
       );
@@ -7643,31 +7801,31 @@ async function beginCharacterSpellTargeting({
 
   const tokenElement =
     (
-      linkedToken?.id
+      (casterTokenId || linkedToken?.id)
         ? Array.from(
             E.tokenLayer?.querySelectorAll(
               ".hg-token[data-token-id]"
             ) || []
           ).find((element) => (
             element.dataset.tokenId ===
-              linkedToken.id
+              (casterTokenId || linkedToken.id)
           ))
         : null
     ) ||
-    findRenderedCharacterToken(
-      characterId
-    );
+    (characterId ? findRenderedCharacterToken(characterId) : null);
 
   if (!tokenElement) {
     activeSpellInteractionRelease?.();
     activeSpellInteractionRelease = null;
-    if (allowWithoutRoom !== true) {
+    if (allowWithoutRoom !== true && !casterTokenId) {
       navigateMainScreen(
         "characterCreator"
       );
     }
     throw new Error(
-      "Create or synchronize this character's linked token on the current map before targeting a spell."
+      casterTokenId
+        ? "The monster's linked token is no longer on this map."
+        : "Create or synchronize this character's linked token on the current map before targeting a spell."
     );
   }
 
@@ -7675,7 +7833,7 @@ async function beginCharacterSpellTargeting({
     actionKey,
     actionAttemptId,
     sourceTokenId: tokenElement.dataset.tokenId || linkedToken?.id || "",
-    actorName: character?.identity?.name || character?.name || tokenElement.dataset.tokenName || "Token",
+    actorName: casterName || character?.identity?.name || character?.name || tokenElement.dataset.tokenName || "Token",
     actionName: spell?.name || "Spell"
   };
   dispatchCombatActionLifecycle(
@@ -7706,20 +7864,19 @@ async function beginCharacterSpellTargeting({
         return activeSpellCastingConfirm({
           kind: slot.kind,
           level: slot.level,
-          sourceId: slot.sourceId
+          sourceId: slot.sourceId,
+          castingSourceId: slot.castingSourceId
         });
       },
       onConfirmed: handleConfirmedSpellVfx
     });
-  const spellcastingStats =
-    resolveCharacterSpellcastingStats(character, spell);
   activeSpellCastingSession.begin({
     spell,
     instruction,
     character,
     characterId,
     characterName:
-      character?.identity?.name ||
+      casterName || character?.identity?.name ||
       character?.name,
     casterToken:
       linkedToken || {
@@ -7732,9 +7889,11 @@ async function beginCharacterSpellTargeting({
         )
       },
     slotOptions: availableSlotOptions,
-    characterLevel: getCharacterLevel(character),
-    spellSaveDc: spellcastingStats.spellSaveDc,
-    spellAttackBonus: spellcastingStats.spellAttackBonus
+    characterLevel: Number.isFinite(Number(casterLevel))
+      ? Math.max(1, Math.round(Number(casterLevel)))
+      : getCharacterLevel(character),
+    spellSaveDc: defaultSpellcastingStats.spellSaveDc,
+    spellAttackBonus: defaultSpellcastingStats.spellAttackBonus
   });
 
   activeSpellTemplateInstruction =

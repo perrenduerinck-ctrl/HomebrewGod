@@ -10,7 +10,10 @@ const mutableSpell = (spell) => ({
   animations: structuredClone(spell.animations),
   targeting: structuredClone(spell.targeting),
   areaOfEffect: structuredClone(spell.areaOfEffect),
-  damage: structuredClone(spell.damage)
+  damage: structuredClone(spell.damage),
+  healing: structuredClone(spell.healing),
+  scaling: structuredClone(spell.scaling),
+  effects: structuredClone(spell.effects)
 });
 
 export function createSpellPersistence({

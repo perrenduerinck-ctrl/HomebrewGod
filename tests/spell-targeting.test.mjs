@@ -124,6 +124,19 @@ test("range, duration, save, and attack metadata are normalized", () => {
   );
 });
 
+test("distance ranges accept feet, foot, and ft spell notation", () => {
+  for (const range of ["60 feet", "60 foot", "60 ft", "60 ft."]) {
+    const targeting = createSpellTargetingData({
+      id: "range-test",
+      name: "Range Test",
+      range,
+      duration: "Instantaneous"
+    });
+    assert.equal(targeting.range.type, "distance", range);
+    assert.equal(targeting.range.feet, 60, range);
+  }
+});
+
 test("self-radius cantrips distinguish auras from creature attacks", () => {
   assert.deepEqual(
     getDefaultSpellById("sword-burst")

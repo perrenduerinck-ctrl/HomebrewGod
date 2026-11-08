@@ -16,11 +16,20 @@ function finiteInteger(value, fallback = 0, minimum = 0) {
 
 function cloneAffectedTokens(tokens) {
   return (Array.isArray(tokens) ? tokens : [])
-    .map((token) => ({
-      id: cleanText(token?.id),
-      name: cleanText(token?.name, "Token"),
-      type: cleanText(token?.type, "token")
-    }))
+    .map((token) => {
+      const centerX = Number(token?.center?.x ?? token?.centerX);
+      const centerY = Number(token?.center?.y ?? token?.centerY);
+      const elevation = Number(token?.elevation ?? token?.elevationFeet);
+      return {
+        id: cleanText(token?.id),
+        name: cleanText(token?.name, "Token"),
+        type: cleanText(token?.type, "token"),
+        ...(Number.isFinite(centerX) && Number.isFinite(centerY)
+          ? { center: Object.freeze({ x: centerX, y: centerY }) }
+          : {}),
+        ...(Number.isFinite(elevation) ? { elevation } : {})
+      };
+    })
     .filter((token) => token.id || token.name);
 }
 
@@ -39,6 +48,15 @@ function normalizeSlotOption(option = {}) {
     kind,
     level,
     sourceId: cleanText(option.sourceId),
+    castingSourceId: cleanText(option.castingSourceId),
+    castingSourceName: cleanText(option.castingSourceName),
+    spellcastingAbility: cleanText(option.spellcastingAbility).toLowerCase(),
+    spellSaveDc: Number.isFinite(Number(option.spellSaveDc))
+      ? finiteInteger(option.spellSaveDc, 0, 0)
+      : null,
+    spellAttackBonus: Number.isFinite(Number(option.spellAttackBonus))
+      ? Math.round(Number(option.spellAttackBonus))
+      : null,
     castingTime: cleanText(option.castingTime),
     label: cleanText(
       option.label,
@@ -90,6 +108,8 @@ export function createCastResolution({
   spellSaveDc = null,
   spellAttackBonus = null,
   resourceKind = "",
+  castingSourceId = "",
+  castingSourceName = "",
   concentrationReplaced = ""
 } = {}) {
   const save = spell.targeting?.save || spell.save || (
@@ -172,6 +192,8 @@ export function createCastResolution({
     slotLevel: finiteInteger(slotLevel, 0, 0),
     characterLevel: finiteInteger(characterLevel, 1, 1),
     resourceKind: cleanText(resourceKind),
+    castingSourceId: cleanText(castingSourceId),
+    castingSourceName: cleanText(castingSourceName),
     ritual: cleanText(resourceKind) === "ritual",
     concentrationReplaced: cleanText(concentrationReplaced),
     affectedTokens: Object.freeze(
@@ -286,6 +308,7 @@ export function createSpellCastingSession({
     startElevationFeet = 0,
     endElevationFeet = 0,
     affectedTokens = [],
+    selectedPoint = null,
     geometry = null
   } = {}) {
     if (
@@ -318,6 +341,10 @@ export function createSpellCastingSession({
       affectedTokens: Object.freeze(
         cloneAffectedTokens(affectedTokens)
       ),
+      selectedPoint: Number.isFinite(Number(selectedPoint?.x)) &&
+        Number.isFinite(Number(selectedPoint?.y))
+        ? Object.freeze({ x: Number(selectedPoint.x), y: Number(selectedPoint.y) })
+        : null,
       geometry
     });
     phase = locked === true && validRange !== false
@@ -330,19 +357,25 @@ export function createSpellCastingSession({
   function findSlot(selection = {}) {
     const baseLevel = finiteInteger(spell?.level, 0, 0);
     if (baseLevel === 0) {
-      return normalizeSlotOption({
-        kind: "cantrip",
-        level: 0,
-        label: "Cantrip — no spell slot"
-      });
+      const requestedCastingSourceId = cleanText(selection.castingSourceId);
+      return slotOptions.find((option) => (
+        option.kind === "cantrip" &&
+        (!requestedCastingSourceId || option.castingSourceId === requestedCastingSourceId)
+      )) || normalizeSlotOption({
+          kind: "cantrip",
+          level: 0,
+          label: "Cantrip — no spell slot"
+        });
     }
     const requestedKind = cleanText(selection.kind, "normal");
     const requestedLevel = finiteInteger(selection.level, baseLevel, 0);
     const requestedSourceId = cleanText(selection.sourceId);
+    const requestedCastingSourceId = cleanText(selection.castingSourceId);
     return slotOptions.find((option) => (
       option.kind === requestedKind &&
       option.level === requestedLevel &&
       option.sourceId === requestedSourceId &&
+      (!requestedCastingSourceId || option.castingSourceId === requestedCastingSourceId) &&
       option.remaining > 0
     )) || null;
   }
@@ -355,9 +388,11 @@ export function createSpellCastingSession({
       slotLevel: slot.level,
       characterLevel,
       affectedTokens: target?.affectedTokens || [],
-      spellSaveDc,
-      spellAttackBonus,
-      resourceKind: slot.kind
+      spellSaveDc: slot.spellSaveDc ?? spellSaveDc,
+      spellAttackBonus: slot.spellAttackBonus ?? spellAttackBonus,
+      resourceKind: slot.kind,
+      castingSourceId: slot.castingSourceId,
+      castingSourceName: slot.castingSourceName
     });
   }
 
@@ -410,9 +445,11 @@ export function createSpellCastingSession({
         slotLevel: slot.level,
         characterLevel,
         affectedTokens: target.affectedTokens,
-        spellSaveDc,
-        spellAttackBonus,
+        spellSaveDc: slot.spellSaveDc ?? spellSaveDc,
+        spellAttackBonus: slot.spellAttackBonus ?? spellAttackBonus,
         resourceKind: slot.kind,
+        castingSourceId: slot.castingSourceId,
+        castingSourceName: slot.castingSourceName,
         concentrationReplaced:
           result?.character?.combat?.concentration?.replacedSpellName ||
           result?.combat?.concentration?.replacedSpellName ||

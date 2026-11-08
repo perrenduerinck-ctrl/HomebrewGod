@@ -12,6 +12,7 @@ import { setCreatorControlsBusy } from "../shared/creatorFormState.js";
 import { createCreatorDraftLifecycle } from "../shared/creatorDraftLifecycle.js";
 import { creatorSaveRefreshMessage } from "../shared/creatorRefreshState.js";
 import { createPaginatedCreatorLibrary } from "../shared/paginatedCreatorLibrary.js";
+import { createSpellTargetingData } from "../data/spellTargeting.js";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -30,6 +31,92 @@ function ensureStyles(document) {
 
 function normalizedSearch(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+const cloneData = (value) => value == null
+  ? value
+  : typeof structuredClone === "function"
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+
+function changed(editable, baseline, key) {
+  return JSON.stringify(editable?.[key]) !== JSON.stringify(baseline?.[key]);
+}
+
+function mergeStructuredDamage(baseDamage, editable, baseline) {
+  const diceChanged = changed(editable, baseline, "damageDice");
+  const typeChanged = changed(editable, baseline, "damageType");
+  if (!diceChanged && !typeChanged) return cloneData(baseDamage);
+
+  const records = Array.isArray(baseDamage)
+    ? cloneData(baseDamage)
+    : baseDamage && typeof baseDamage === "object"
+      ? [cloneData(baseDamage)]
+      : [];
+  if (!records.length && (editable.damageDice || editable.damageType)) records.push({});
+  if (!records.length) return [];
+
+  if (diceChanged) {
+    if (editable.damageDice) records[0].dice = editable.damageDice;
+    else {
+      delete records[0].dice;
+      delete records[0].amount;
+    }
+  }
+  if (typeChanged) {
+    if (editable.damageType) records[0].damageType = editable.damageType;
+    else {
+      delete records[0].damageType;
+      delete records[0].type;
+    }
+  }
+  return records;
+}
+
+export function mergeSpellCreatorDraft(base = {}, editable = {}, baseline = {}) {
+  const preserved = base && typeof base === "object" ? cloneData(base) : {};
+  const merged = { ...preserved, ...cloneData(editable) };
+  const generatedTargeting = createSpellTargetingData(merged);
+  const originalTargeting = preserved.targeting && typeof preserved.targeting === "object"
+    ? cloneData(preserved.targeting)
+    : null;
+
+  if (originalTargeting) {
+    merged.targeting = originalTargeting;
+    if (changed(editable, baseline, "range")) {
+      merged.targeting.range = generatedTargeting.range;
+      merged.targeting.target = generatedTargeting.target;
+    }
+    if (
+      changed(editable, baseline, "duration") ||
+      changed(editable, baseline, "concentration")
+    ) {
+      merged.targeting.duration = generatedTargeting.duration;
+    }
+    if (changed(editable, baseline, "attackType")) {
+      merged.targeting.attack = generatedTargeting.attack;
+    }
+    if (
+      changed(editable, baseline, "saveAbility") ||
+      changed(editable, baseline, "saveSuccess")
+    ) {
+      merged.targeting.save = generatedTargeting.save;
+    }
+  }
+
+  merged.damage = mergeStructuredDamage(preserved.damage, editable, baseline);
+  return merged;
+}
+
+export function createIndependentSpellCopy(raw = {}) {
+  return {
+    ...cloneData(raw),
+    id: "",
+    revision: 0,
+    createdAtMillis: 0,
+    updatedAtMillis: 0,
+    name: `${raw.name || "Spell"} Copy`
+  };
 }
 
 export function createSpellCreator({
@@ -147,6 +234,8 @@ export function createSpellCreator({
   let createdAtMillis = 0;
   let loadedRevision = 0;
   let animations = {};
+  let preservedSpellData = {};
+  let loadedEditableBaseline = {};
   let records = [];
   let busy = false;
   let refreshError = null;
@@ -162,7 +251,7 @@ export function createSpellCreator({
     setCreatorControlsBusy(screen, value);
   };
 
-  function rawDraft() {
+  function readEditableDraft() {
     return {
       id: selectedId,
       revision: loadedRevision,
@@ -187,6 +276,14 @@ export function createSpellCreator({
       higherLevel: field("higherLevel").value,
       animations: structuredClone(animations)
     };
+  }
+
+  function rawDraft() {
+    return mergeSpellCreatorDraft(
+      preservedSpellData,
+      readEditableDraft(),
+      loadedEditableBaseline
+    );
   }
 
   function renderPreview() {
@@ -231,6 +328,8 @@ export function createSpellCreator({
     field("description").value = spell.description;
     field("higherLevel").value = spell.higherLevel;
     animations = structuredClone(spell.animations);
+    preservedSpellData = cloneData(spell);
+    loadedEditableBaseline = readEditableDraft();
     renderPreview();
   }
 
@@ -318,8 +417,8 @@ export function createSpellCreator({
   }
 
   function duplicate() {
-    const draft = rawDraft();
-    applySpell({ ...draft, id: "", revision: 0, createdAtMillis: 0, name: `${draft.name || "Spell"} Copy` });
+    applySpell(createIndependentSpellCopy(rawDraft()));
+    draftLifecycle.markChanged();
     setStatus("Independent copy ready. Save it to add it to My Library.");
   }
 
@@ -406,7 +505,7 @@ export function createSpellCreator({
     async editAnimations(previewOnly = false) { return editAnimations(previewOnly); },
     async openSpell(spell, { duplicate: makeCopy = false } = {}) {
       if (!await draftLifecycle.confirmReplacement("open another spell")) return false;
-      applySpell(makeCopy ? { ...spell, id: "", revision: 0, createdAtMillis: 0, name: `${spell?.name || "Spell"} Copy` } : spell);
+      applySpell(makeCopy ? createIndependentSpellCopy(spell) : spell);
       if (makeCopy) draftLifecycle.markChanged();
       else draftLifecycle.markClean();
       setStatus(makeCopy ? "Independent copy opened. Save it to My Library." : "Spell opened.");

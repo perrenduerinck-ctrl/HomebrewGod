@@ -23,7 +23,9 @@ import {
 import {
   applyConfirmedSpellCast,
   consumeCharacterInventoryItem,
+  getCharacterSpellcastingSourceOptions,
   getCharacterSpellSlotOptions,
+  getPactSpellSlotLedger,
   setCombatActionBarFavorite
 } from "../combat/characterCombatCommands.js";
 import {
@@ -31,6 +33,12 @@ import {
   getSpellCastEligibility,
   resolveCharacterSpellcastingStats
 } from "../spells/spellCastingRules.js";
+import {
+  applyConfirmedMonsterSpellCast,
+  getMonsterSpellAvailability,
+  restoreMonsterSpellResources
+} from "../combat/monsterSpellcasting.js";
+import { SPELL_SOURCE_MODEL_VERSION } from "../characterCreator/spellSources.js";
 
 const initiative = {
   combatActive: true,
@@ -375,6 +383,29 @@ test("spell slots, cancellation-safe mutations, item use and favorites retain so
   });
 });
 
+test("Pact slot display and confirmation share one legacy-compatible ledger", () => {
+  const character = {
+    magic: {
+      pactMagicSources: [{
+        classEntryId: "warlock-main",
+        className: "Warlock",
+        slotLevel: 2,
+        maximumUses: 2
+      }],
+      slotUsage: { pactSources: { "warlock-main": 1 }, pact: 1 }
+    }
+  };
+  const ledger = getPactSpellSlotLedger(character);
+  assert.deepEqual(ledger.map(({ sourceId, slotLevel, maximum, used, remaining }) => ({
+    sourceId, slotLevel, maximum, used, remaining
+  })), [{ sourceId: "warlock-main", slotLevel: 2, maximum: 2, used: 1, remaining: 1 }]);
+  const option = getCharacterSpellSlotOptions(character, { id: "hex", level: 1 })[0];
+  assert.equal(option.remaining, 1);
+  const cast = applyConfirmedSpellCast(character, { id: "hex", level: 1 }, option);
+  assert.equal(cast.magic.slotUsage.pactSources["warlock-main"], 2);
+  assert.throws(() => applyConfirmedSpellCast(cast, { id: "hex", level: 1 }, option), /no longer available/i);
+});
+
 test("legacy saved spell-slot records remain castable without rewriting their character", () => {
   const legacyCharacter = {
     schemaVersion: 12,
@@ -531,17 +562,135 @@ test("spellcasting stats use the source that granted a multiclass spell", () => 
   assert.equal(stats.characterLevel, 8);
 });
 
+test("shared multiclass spells expose and enforce an explicit casting source", () => {
+  const character = {
+    classProgression: [{ level: 5 }, { level: 5 }],
+    abilities: { scores: { int: 18, wis: 14 } },
+    combat: { proficiencyBonus: 4 },
+    magic: {
+      slots: { 3: 2 },
+      slotUsage: { normal: { 3: 0 } },
+      spellSourceModelVersion: SPELL_SOURCE_MODEL_VERSION,
+      spellSources: [{
+        sourceId: "wizard-main",
+        sourceName: "Wizard",
+        sourceType: "class",
+        classId: "wizard",
+        spellcastingAbility: "int",
+        selectedSpellIds: ["fireball"],
+        spellStates: { fireball: { spellbook: true } }
+      }, {
+        sourceId: "cleric-main",
+        sourceName: "Light Cleric",
+        sourceType: "class",
+        classId: "cleric",
+        spellcastingAbility: "wis",
+        selectedSpellIds: ["fireball"],
+        spellStates: { fireball: { prepared: true } }
+      }]
+    }
+  };
+  const spell = { id: "fireball", name: "Fireball", level: 3 };
+  const sources = getCharacterSpellcastingSourceOptions(character, spell);
+  assert.deepEqual(sources.map((source) => source.sourceId), ["wizard-main", "cleric-main"]);
+  const options = getCharacterSpellSlotOptions(character, spell);
+  assert.deepEqual(options.map((option) => option.castingSourceId), ["cleric-main", "wizard-main"]);
+  assert.match(options[0].label, /Cast via/i);
+  assert.throws(
+    () => applyConfirmedSpellCast(character, spell, { kind: "normal", level: 3, sourceId: "" }),
+    /Choose which spellcasting source/i
+  );
+  const cast = applyConfirmedSpellCast(character, spell, options[0]);
+  assert.equal(cast.magic.slotUsage.normal[3], 1);
+  assert.throws(
+    () => applyConfirmedSpellCast(character, spell, { ...options[0], castingSourceId: "removed-source" }),
+    /no longer available/i
+  );
+});
+
+test("prepared ritual casters cannot ritual-cast an unprepared class spell", () => {
+  const cleric = {
+    magic: {
+      spellSourceModelVersion: SPELL_SOURCE_MODEL_VERSION,
+      spellSources: [{
+        sourceId: "cleric-main",
+        sourceName: "Cleric",
+        sourceType: "class",
+        classId: "cleric",
+        spellcastingAbility: "wis",
+        selectedSpellIds: ["detect-magic"],
+        spellStates: { "detect-magic": { known: true, prepared: false } }
+      }]
+    }
+  };
+  const spell = { id: "detect-magic", name: "Detect Magic", level: 1, ritual: true };
+  assert.equal(getCharacterSpellSlotOptions(cleric, spell).some((option) => option.kind === "ritual"), false);
+  cleric.magic.spellSources[0].spellStates["detect-magic"].prepared = true;
+  assert.equal(getCharacterSpellSlotOptions(cleric, spell).some((option) => option.kind === "ritual"), true);
+});
+
 test("monster spell references appear in the normal combat hotbar", () => {
   const model = buildCombatActionBarModel({
     actorKind: "monster",
     actor: {
       spellcasting: {
         enabled: true,
-        spells: [{ id: "monster-fireball", name: "Fireball", usage: "daily", uses: 1 }]
+        spells: [
+          { id: "monster-fireball", sourceId: "fireball", name: "Fireball", usage: "daily", uses: 1 },
+          { id: "monster-misty-step", sourceId: "misty-step", name: "Misty Step", usage: "daily", uses: 1 }
+        ]
       }
     }
   });
-  assert.equal(model.abilities.some((entry) => entry.kind === "monster-spell"), true);
+  assert.equal(model.spells.some((entry) => entry.kind === "monster-spell"), true);
+  assert.equal(model.abilities.some((entry) => entry.kind === "monster-spell"), false);
+  const mistyStep = model.spells.find((entry) => entry.id === "monster-misty-step");
+  assert.equal(mistyStep.resource, "bonus");
+  assert.match(mistyStep.raw.range, /self/i);
+});
+
+test("monster daily, slot, at-will, concentration, and rest resources are authoritative", () => {
+  const monster = {
+    name: "Mage",
+    spellcasting: {
+      enabled: true,
+      saveDc: 15,
+      attackBonus: 7,
+      spells: [
+        { id: "at-will", sourceId: "fire-bolt", name: "Fire Bolt", usage: "atWill", level: 0 },
+        { id: "daily", sourceId: "misty-step", name: "Misty Step", usage: "daily", uses: 1, level: 2 },
+        { id: "slot", sourceId: "fireball", name: "Fireball", usage: "slot", slots: 2, level: 3 }
+      ]
+    }
+  };
+
+  assert.equal(getMonsterSpellAvailability(monster, { id: "at-will" }).remaining, Infinity);
+  const dailyCast = applyConfirmedMonsterSpellCast(
+    monster,
+    { id: "daily" },
+    { id: "misty-step", name: "Misty Step", level: 2 }
+  );
+  assert.equal(getMonsterSpellAvailability(dailyCast, { id: "daily" }).remaining, 0);
+  assert.throws(
+    () => applyConfirmedMonsterSpellCast(dailyCast, { id: "daily" }, { id: "misty-step" }),
+    /No uses/i
+  );
+
+  const slotCast = applyConfirmedMonsterSpellCast(
+    monster,
+    { id: "slot" },
+    { id: "fireball", name: "Fireball", level: 3, concentration: true }
+  );
+  assert.equal(getMonsterSpellAvailability(slotCast, { id: "slot" }).remaining, 1);
+  assert.equal(slotCast.spellcasting.concentration.spellName, "Fireball");
+  assert.equal(
+    getMonsterSpellAvailability(restoreMonsterSpellResources(slotCast, "short"), { id: "slot" }).remaining,
+    1
+  );
+  assert.equal(
+    getMonsterSpellAvailability(restoreMonsterSpellResources(slotCast, "long"), { id: "slot" }).remaining,
+    2
+  );
 });
 
 test("navigation, controller reuse and Firestore ownership contracts are wired", async () => {

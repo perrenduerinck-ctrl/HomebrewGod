@@ -383,6 +383,88 @@ test("leveled at-will spell resources remain available in the casting session", 
   assert.equal(result.resolution.resourceKind, "special");
 });
 
+test("casting source selection carries its own save DC through preview and confirmation", async () => {
+  let confirmedSlot = null;
+  const session = createSpellCastingSession({
+    onConfirm: ({ slot }) => {
+      confirmedSlot = slot;
+      return true;
+    }
+  });
+  session.begin({
+    spell: {
+      id: "shared-spell",
+      name: "Shared Spell",
+      level: 1,
+      saveAbility: "dex"
+    },
+    slotOptions: [{
+      kind: "normal",
+      level: 1,
+      sourceId: "",
+      castingSourceId: "wizard-main",
+      castingSourceName: "Wizard",
+      spellSaveDc: 16,
+      remaining: 1
+    }, {
+      kind: "normal",
+      level: 1,
+      sourceId: "",
+      castingSourceId: "cleric-main",
+      castingSourceName: "Cleric",
+      spellSaveDc: 13,
+      remaining: 1
+    }]
+  });
+  session.updateTarget({ locked: true, validRange: true });
+  const selection = {
+    kind: "normal",
+    level: 1,
+    sourceId: "",
+    castingSourceId: "cleric-main"
+  };
+  const preview = session.preview(selection);
+  assert.equal(preview.save.dc, 13);
+  assert.equal(preview.castingSourceId, "cleric-main");
+  assert.equal(preview.castingSourceName, "Cleric");
+  const result = await session.confirm(selection);
+  assert.equal(result.ok, true);
+  assert.equal(confirmedSlot.castingSourceId, "cleric-main");
+  assert.equal(result.resolution.save.dc, 13);
+});
+
+test("casting targets preserve token identity, center, elevation, and the selected map point", () => {
+  const session = createSpellCastingSession();
+  session.begin({
+    spell: getDefaultSpellById("fireball"),
+    slotOptions: [{ kind: "normal", level: 3, sourceId: "", remaining: 1 }]
+  });
+  const state = session.updateTarget({
+    locked: true,
+    validRange: true,
+    selectedPoint: { x: 320.5, y: 180.25 },
+    startElevationFeet: 5,
+    endElevationFeet: 20,
+    affectedTokens: [{
+      id: "flying-target",
+      name: "Flying Target",
+      type: "monster",
+      center: { x: 330, y: 190 },
+      elevation: 25
+    }]
+  });
+  assert.deepEqual(state.target.selectedPoint, { x: 320.5, y: 180.25 });
+  assert.equal(state.target.startElevationFeet, 5);
+  assert.equal(state.target.endElevationFeet, 20);
+  assert.deepEqual(state.target.affectedTokens[0], {
+    id: "flying-target",
+    name: "Flying Target",
+    type: "monster",
+    center: { x: 330, y: 190 },
+    elevation: 25
+  });
+});
+
 test("active concentration is normalized and can be ended explicitly", () => {
   const character = {
     combat: {
@@ -443,4 +525,35 @@ test("damage creates the correct concentration save and a failed save ends it", 
   assert.equal(failed.succeeded, false);
   assert.equal(character.combat.concentration, null);
   assert.match(failed.message, /ended/i);
+});
+
+test("falling unconscious or gaining an incapacitating condition ends concentration", () => {
+  const fallen = {
+    combat: {
+      maxHp: 8,
+      currentHp: 8,
+      concentration: { spellId: "bless", spellName: "Bless" }
+    }
+  };
+  const damage = applyGameplayAction(fallen, { type: "damage", amount: 8 });
+  assert.equal(fallen.combat.currentHp, 0);
+  assert.equal(fallen.combat.concentration, null);
+  assert.equal(damage.concentrationCheck, null);
+  assert.match(damage.message, /fell unconscious/i);
+
+  const stunned = {
+    combat: {
+      maxHp: 20,
+      currentHp: 20,
+      concentration: { spellId: "haste", spellName: "Haste" },
+      conditions: []
+    }
+  };
+  const condition = applyGameplayAction(stunned, {
+    type: "toggle-condition",
+    condition: "Stunned"
+  });
+  assert.equal(stunned.combat.concentration, null);
+  assert.equal(condition.concentrationEnded, true);
+  assert.match(condition.message, /Concentration on Haste ended/i);
 });

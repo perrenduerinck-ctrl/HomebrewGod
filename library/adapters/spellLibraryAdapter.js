@@ -31,7 +31,9 @@ export function createSpellLibraryAdapter({
         classNames: spell.classes,
         damageType: spell.damageType,
         concentration: spell.concentration,
-        ritual: spell.ritual
+        ritual: spell.ritual,
+        castingTime: spell.castingTime,
+        range: spell.range
       }
     });
   };

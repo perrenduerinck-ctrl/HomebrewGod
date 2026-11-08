@@ -20,6 +20,7 @@ const KIND_ICONS = Object.freeze({
   "monster-action": "⚔",
   "monster-bonus": "◆",
   "monster-reaction": "◈",
+  "monster-spell": "✧",
   universal: "◆"
 });
 
@@ -122,7 +123,7 @@ export function resolveActionIcon(action = {}) {
     return Object.freeze({ type: "glyph", value: DAMAGE_ICONS[damageKey], label: damageKey });
   }
 
-  if (action.kind === "spell") {
+  if (action.kind === "spell" || action.kind === "monster-spell") {
     const school = includesKey(normalize(raw.school?.name || raw.school), SCHOOL_ICONS);
     return Object.freeze({
       type: "glyph",
@@ -190,6 +191,9 @@ export function getActionAvailability({
   if (!controlled) return Object.freeze({ state: "unavailable", available: false, reason: "You do not control this token." });
   if (!turnUsable) return Object.freeze({ state: "outside-turn", available: false, reason: "It is not this token's turn." });
   if (!resourceAvailable) return Object.freeze({ state: "expended", available: false, reason: `The ${action.resource || "action"} resource is already spent.` });
+  if (action.available === false) {
+    return Object.freeze({ state: "expended", available: false, reason: action.availabilityReason || "No uses remain." });
+  }
   if (remaining === 0) return Object.freeze({ state: "expended", available: false, reason: "No uses remain." });
   if (action.kind === "spell" && Number(action.raw?.level || 0) > 0) {
     const slots = Array.isArray(spellSlotOptions) ? spellSlotOptions : [];
@@ -208,12 +212,18 @@ export function buildActionTooltip(action = {}, context = {}) {
   const raw = action.raw || action.rawItem || {};
   const availability = context.availability || getActionAvailability({ action, ...context });
   const remaining = getActionRemainingUses(action, context.actor);
+  const castingSources = [...new Set(
+    (Array.isArray(context.spellSlotOptions) ? context.spellSlotOptions : [])
+      .map((option) => cleanText(option?.castingSourceName))
+      .filter(Boolean)
+  )];
   const details = [
     cleanText(action.name) || "Action",
     cleanText(action.summary || raw.description || raw.summary),
     `Cost: ${context.costLabel || action.resource || "Action"}`,
     firstValue(raw.range, raw.target?.range, raw.reach) ? `Range: ${firstValue(raw.range, raw.target?.range, raw.reach)}` : "",
     firstValue(raw.damage, raw.damageDice, raw.healing, raw.healingDice) ? `Effect: ${firstValue(raw.damage, raw.damageDice, raw.healing, raw.healingDice)}` : "",
+    castingSources.length ? `Casting source${castingSources.length === 1 ? "" : "s"}: ${castingSources.join(", ")}` : "",
     remaining != null ? `Remaining: ${remaining}` : "",
     availability.reason ? `Unavailable: ${availability.reason}` : ""
   ].filter(Boolean);

@@ -6,6 +6,10 @@ import {
   normalizeHomebrewSpell,
   validateHomebrewSpell
 } from "../spells/spellModel.js";
+import {
+  createIndependentSpellCopy,
+  mergeSpellCreatorDraft
+} from "../spells/spellCreator.js";
 import { createSpellPersistence } from "../spells/spellPersistence.js";
 import { createSpellLibraryAdapter } from "../library/adapters/spellLibraryAdapter.js";
 
@@ -55,7 +59,7 @@ test("homebrew spells normalize mechanics and animation references without mutat
   assert.deepEqual(source, before);
   const invalid = validateHomebrewSpell({ name: "", level: 12 });
   assert.ok(invalid.includes("Give the spell a name."));
-  assert.ok(invalid.includes("Spell level must be between 0 and 9."));
+  assert.ok(invalid.includes("Spell level must be a whole number from 0 through 9."));
 });
 
 test("homebrew validation rejects malformed targeting, components, classes, and scaling", () => {
@@ -85,7 +89,7 @@ test("homebrew validation rejects malformed targeting, components, classes, and 
   assert.ok(errors.some((error) => /Invalid spell component/i.test(error)));
   assert.ok(errors.some((error) => /Unknown spell class/i.test(error)));
   assert.ok(errors.some((error) => /schema version/i.test(error)));
-  assert.ok(errors.some((error) => /valid dice expression/i.test(error)));
+  assert.ok(errors.some((error) => /complete dice expression/i.test(error)));
   assert.ok(errors.some((error) => /outside 1-20/i.test(error)));
 
   const materialErrors = validateHomebrewSpell({
@@ -96,6 +100,127 @@ test("homebrew validation rejects malformed targeting, components, classes, and 
     material: "a silver bell"
   });
   assert.ok(materialErrors.some((error) => /require the M component/i.test(error)));
+  assert.ok(validateHomebrewSpell({
+    name: "Fractional Spell",
+    level: 1.5,
+    castingTime: "1 action"
+  }).some((error) => /whole number/i.test(error)));
+  assert.ok(validateHomebrewSpell({
+    name: "Partial Dice",
+    level: 1,
+    castingTime: "1 action",
+    damageDice: "2d6 extra text"
+  }).some((error) => /complete dice expression/i.test(error)));
+});
+
+test("Spell Creator edits preserve advanced mechanics and independent copies retain provenance", async () => {
+  const store = memoryFirestore();
+  let now = 400;
+  const persistence = createSpellPersistence({
+    ...store,
+    getUserId: () => "user-1",
+    now: () => ++now
+  });
+  const advanced = {
+    id: "gravity-well",
+    name: "Gravity Well",
+    level: 4,
+    school: "Transmutation",
+    classes: ["Wizard"],
+    castingTime: "1 action",
+    range: "90 feet",
+    duration: "Concentration, up to 1 minute",
+    concentration: true,
+    components: "V, S, M",
+    material: "a lodestone worth 50 gp",
+    materialCostGp: 50,
+    materialConsumed: false,
+    damageType: "Force",
+    damageDice: "4d8",
+    damage: [{
+      dice: "4d8",
+      damageType: "Force",
+      atSlotLevel: { 4: "4d8", 5: "5d8" }
+    }],
+    healing: [{ atSlotLevel: { 4: "1d8 + MOD" } }],
+    scaling: {
+      atCharacterLevel: {},
+      atSlotLevel: { 4: "4d8", 5: "5d8" },
+      healingAtSlotLevel: { 4: "1d8 + MOD" }
+    },
+    effects: [{ type: "condition", condition: "restrained" }],
+    areaOfEffect: { type: "sphere", size: 15 },
+    targeting: {
+      schemaVersion: 1,
+      range: { type: "distance", feet: 90, text: "90 feet" },
+      target: { type: "point" },
+      area: { shape: "sphere", radius: 15 },
+      duration: {
+        type: "timed",
+        amount: 1,
+        unit: "minute",
+        upTo: true,
+        concentration: true,
+        text: "Concentration, up to 1 minute"
+      },
+      save: { ability: "str", success: "half" },
+      attack: null
+    },
+    animations: { impact: { animationId: "gravity-impact" } },
+    sourceWorkshopAssetId: "workshop-gravity",
+    sourceWorkshopVersion: 3,
+    sourceAuthorUid: "author-1"
+  };
+
+  const firstSave = await persistence.save(advanced);
+  const loaded = await persistence.load(firstSave.id);
+  const editable = {
+    id: loaded.id,
+    revision: loaded.revision,
+    createdAtMillis: loaded.createdAtMillis,
+    name: "Gravity Well Revised",
+    level: String(loaded.level),
+    school: loaded.school,
+    classes: loaded.classes,
+    tags: loaded.tags,
+    castingTime: loaded.castingTime,
+    range: loaded.range,
+    duration: loaded.duration,
+    components: loaded.components,
+    material: loaded.material,
+    concentration: loaded.concentration,
+    ritual: loaded.ritual,
+    damageType: loaded.damageType,
+    damageDice: loaded.damageDice,
+    attackType: loaded.attackType,
+    saveAbility: loaded.saveAbility,
+    description: loaded.description,
+    higherLevel: loaded.higherLevel,
+    animations: loaded.animations
+  };
+  const baseline = { ...editable, name: loaded.name };
+  const merged = mergeSpellCreatorDraft(loaded, editable, baseline);
+  const secondSave = await persistence.save(merged);
+  const reloaded = await persistence.load(secondSave.id);
+
+  assert.equal(reloaded.name, "Gravity Well Revised");
+  assert.deepEqual(reloaded.targeting, loaded.targeting);
+  assert.deepEqual(reloaded.damage, loaded.damage);
+  assert.deepEqual(reloaded.healing, loaded.healing);
+  assert.deepEqual(reloaded.scaling, loaded.scaling);
+  assert.deepEqual(reloaded.effects, loaded.effects);
+  assert.equal(reloaded.materialCostGp, 50);
+  assert.equal(reloaded.sourceWorkshopAssetId, "workshop-gravity");
+  assert.deepEqual(reloaded.animations, loaded.animations);
+
+  const copy = createIndependentSpellCopy(reloaded);
+  assert.equal(copy.id, "");
+  assert.equal(copy.revision, 0);
+  assert.equal(copy.sourceWorkshopAssetId, "workshop-gravity");
+  assert.equal(copy.sourceWorkshopVersion, 3);
+  assert.equal(copy.sourceAuthorUid, "author-1");
+  assert.deepEqual(copy.damage, reloaded.damage);
+  assert.deepEqual(copy.targeting, reloaded.targeting);
 });
 
 test("character spell copies get independent IDs and retain mechanics and animation stages", () => {

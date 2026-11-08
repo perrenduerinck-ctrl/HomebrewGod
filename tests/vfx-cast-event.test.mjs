@@ -196,6 +196,19 @@ test("event inputs are bounded and invalid numbers cannot escape", () => {
   assert.deepEqual(event.damageTypes, ["force"]);
 });
 
+test("flat custom spell damage types reach confirmed VFX events", () => {
+  const event = createSpellVfxEvent({
+    spell: {
+      id: "custom-ember",
+      name: "Custom Ember",
+      level: 1,
+      damageType: "Fire",
+      damageDice: "2d6"
+    }
+  });
+  assert.deepEqual(event.damageTypes, ["fire"]);
+});
+
 test("confirmed-cast dispatch is generic and failure-safe", () => {
   const events = [];
   class TestCustomEvent {

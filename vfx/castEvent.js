@@ -165,6 +165,7 @@ function getDamageTypes(spell, requestedTypes) {
   const candidates = Array.isArray(requestedTypes)
     ? requestedTypes
     : [
+        spell?.damageType,
         ...(Array.isArray(spell?.damage) ? spell.damage : [])
           .map((entry) => (
             entry?.damageType ??

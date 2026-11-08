@@ -9,6 +9,8 @@ import {
   getSpellReactionTrigger,
   isSpellCastEligible
 } from "../spells/spellCastingRules.js";
+import { getMonsterSpellAvailability } from "./monsterSpellcasting.js";
+import { getDefaultSpellById } from "../data/defaultSpells.js";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -101,17 +103,45 @@ function monsterEntries(monster = {}) {
   ));
   const spellcasting = monster?.spellcasting;
   const spells = spellcasting?.enabled === true && Array.isArray(spellcasting.spells)
-    ? spellcasting.spells.map((spell, index) => entry("monster-spell", spell, {
-        id: text(spell?.id || spell?.sourceId) || `monster-spell-${index}`,
-        resource: getSpellActionResource(spell) === "free"
-          ? "action"
-          : getSpellActionResource(spell),
-        summary: [
-          spell?.usage === "atWill" ? "At will" : "",
-          spell?.usage === "daily" ? `${number(spell?.uses, 1)}/day` : "",
-          spell?.usage === "slot" ? `Level ${number(spell?.level, 0)} spell` : ""
-        ].filter(Boolean).join(" · ")
-      }))
+    ? spellcasting.spells.map((spell, index) => {
+        const availability = getMonsterSpellAvailability(monster, spell);
+        const catalogSpell = getDefaultSpellById(spell.sourceId);
+        const spellPresentation = catalogSpell
+          ? {
+              ...catalogSpell,
+              ...spell,
+              name: spell.name || catalogSpell.name,
+              level: catalogSpell.level,
+              castingTime: spell.castingTime || catalogSpell.castingTime,
+              range: spell.range || catalogSpell.range
+            }
+          : spell;
+        const raw = {
+          ...spellPresentation,
+          resourceReference: spell,
+          ...(Number.isFinite(availability.remaining)
+            ? { remainingUses: availability.remaining }
+            : {})
+        };
+        return entry("monster-spell", raw, {
+          id: text(spell?.id || spell?.sourceId) || `monster-spell-${index}`,
+          resource: getSpellActionResource(spellPresentation) === "free"
+            ? "action"
+            : getSpellActionResource(spellPresentation),
+          available: availability.available,
+          availabilityReason: availability.reason,
+          summary: [
+            spell?.usage === "atWill" ? "At will" : "",
+            spell?.usage === "daily" || spell?.usage === "innate"
+              ? `${availability.remaining}/${number(spell?.uses, 1)} uses`
+              : "",
+            spell?.usage === "slot"
+              ? `Level ${number(spell?.level, 0)} · ${availability.remaining}/${number(spell?.slots, 1)} slots`
+              : "",
+            spell?.castingTime || ""
+          ].filter(Boolean).join(" · ")
+        });
+      })
     : [];
   return [...actions, ...spells];
 }
@@ -128,7 +158,7 @@ export function buildCombatActionBarModel({ token = {}, actor = null, actorKind 
     }));
   const abilities = actions.filter((action) => action.contentKind !== "weapon")
     .map((action) => entry("ability", action));
-  const spells = isCharacter
+  const characterSpells = isCharacter
     ? collectCharacterSpells(actor).filter(isSpellCastEligible).map((spell) => {
         const reactionTrigger = getSpellReactionTrigger(spell);
         return entry("spell", spell, {
@@ -143,8 +173,12 @@ export function buildCombatActionBarModel({ token = {}, actor = null, actorKind 
   const items = inventory.filter((item) => fastItem(item, rawItems[item.index]))
     .map((item) => entry("item", item, { rawItem: rawItems[item.index], resource: "action" }));
   const monsterActions = actorKind === "monster" ? monsterEntries(actor) : [];
+  const monsterSpells = monsterActions.filter((action) => action.kind === "monster-spell");
+  const monsterAbilities = monsterActions.filter((action) => action.kind !== "monster-spell");
+  const spells = actorKind === "monster" ? monsterSpells : characterSpells;
+  const presentedAbilities = actorKind === "monster" ? monsterAbilities : abilities;
   const favorites = new Set((actor?.uiPreferences?.combatActionBarFavorites || []).map((favorite) => text(favorite?.key)));
-  const all = [...UNIVERSAL_COMBAT_ACTIONS, ...weapons, ...spells, ...abilities, ...items, ...monsterActions];
+  const all = [...UNIVERSAL_COMBAT_ACTIONS, ...weapons, ...spells, ...presentedAbilities, ...items];
   const favoriteEntries = all.filter((action) => favorites.has(action.key));
   return Object.freeze({
     token,
@@ -153,7 +187,7 @@ export function buildCombatActionBarModel({ token = {}, actor = null, actorKind 
     universal: UNIVERSAL_COMBAT_ACTIONS,
     weapons,
     spells,
-    abilities: actorKind === "monster" ? monsterActions : abilities,
+    abilities: presentedAbilities,
     items,
     favorites: favoriteEntries,
     favoriteKeys: favorites,

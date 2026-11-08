@@ -197,7 +197,7 @@ function normalizeRange(rangeText) {
   const text = String(rangeText || "").trim();
   const normalized = text.toLowerCase();
   const distance = normalized.match(
-    /^(\d+(?:\.\d+)?)\s*(feet|foot|miles?|mile)$/
+    /^(\d+(?:\.\d+)?)\s*(feet|foot|ft\.?|miles?|mile)$/
   );
 
   if (distance) {

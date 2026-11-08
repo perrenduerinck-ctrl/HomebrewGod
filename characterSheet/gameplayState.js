@@ -61,6 +61,19 @@ function uniqueConditions(values) {
     });
 }
 
+const CONCENTRATION_ENDING_CONDITIONS = new Set([
+  "incapacitated",
+  "paralyzed",
+  "petrified",
+  "stunned",
+  "unconscious",
+  "dead"
+]);
+
+function conditionEndsConcentration(condition) {
+  return CONCENTRATION_ENDING_CONDITIONS.has(cleanText(condition).toLowerCase());
+}
+
 export function ensureGameplayState(character) {
   if (!isRecord(character)) {
     return null;
@@ -310,6 +323,12 @@ export function applyGameplayAction(character, action = {}) {
       0,
       combat.currentHp - remaining
     );
+    const concentrationSpell = cleanText(combat.concentration?.spellName || "spell");
+    const concentrationEnded = combat.currentHp === 0 && Boolean(combat.concentration);
+    if (concentrationEnded) {
+      combat.concentration = null;
+      combat.pendingConcentrationCheck = null;
+    }
     const concentrationDc = combat.concentration
       ? Math.max(10, Math.floor(amount / 2))
       : null;
@@ -327,7 +346,9 @@ export function applyGameplayAction(character, action = {}) {
         ? null
         : { dc: concentrationDc, damage: amount },
       message: `${amount} damage applied.${
-        concentrationDc === null
+        concentrationEnded
+          ? ` Concentration on ${concentrationSpell} ended when the character fell unconscious.`
+          : concentrationDc === null
           ? ""
           : ` Make a DC ${concentrationDc} Constitution save to maintain concentration.`
       }`
@@ -520,10 +541,19 @@ export function applyGameplayAction(character, action = {}) {
     }
 
     combat.conditions.push(condition);
+    const concentrationSpell = cleanText(combat.concentration?.spellName || "spell");
+    const concentrationEnded = conditionEndsConcentration(condition) && Boolean(combat.concentration);
+    if (concentrationEnded) {
+      combat.concentration = null;
+      combat.pendingConcentrationCheck = null;
+    }
 
     return {
       changed: true,
-      message: `${condition} added.`
+      concentrationEnded,
+      message: concentrationEnded
+        ? `${condition} added. Concentration on ${concentrationSpell} ended.`
+        : `${condition} added.`
     };
   }
 

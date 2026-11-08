@@ -207,10 +207,11 @@ export function createCombatActionBar({
     const effects = getEffects(selectedToken.id) || [];
     const badges = document.createElement("div");
     badges.className = "hg-action-bar-badges";
-    if (actor?.combat?.concentration) {
+    const concentrationState = actor?.combat?.concentration || actor?.spellcasting?.concentration;
+    if (concentrationState) {
       const concentration = document.createElement("span");
       concentration.textContent = "Concentration";
-      concentration.title = text(actor.combat.concentration.spellName) || "Concentrating";
+      concentration.title = text(concentrationState.spellName) || "Concentrating";
       badges.appendChild(concentration);
     }
     effects.slice(0, 3).forEach((effect) => {
