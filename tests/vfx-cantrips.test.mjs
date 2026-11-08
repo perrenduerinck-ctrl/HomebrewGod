@@ -116,9 +116,12 @@ test("Effects Off never starts a sequence; Reduced remains bounded and cleans up
   assert.ok(reduced.requests.every((r) => r.duration <= 720));
 });
 
-test("Shocking Grasp supports a bounded five-foot DM preview without changing real casting", () => {
+test("Shocking Grasp supports bounded five-foot casting and DM preview", () => {
   const spell = getDefaultSpellById("shocking-grasp");
-  assert.equal(createSpellTemplateInstruction(spell).supported, false);
+  const castInstruction = createSpellTemplateInstruction(spell);
+  assert.equal(castInstruction.supported, true);
+  assert.equal(castInstruction.rangeFeet, 5);
+  assert.match(castInstruction.rangeText, /Touch/);
   const instruction = createSpellTemplateInstruction(spell, { allowTouchPreview: true });
   assert.equal(instruction.rangeFeet, 5);
   assert.match(instruction.rangeText, /Touch/);
