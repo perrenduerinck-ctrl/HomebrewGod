@@ -5,7 +5,6 @@
 // DM-only tokens live at rooms/{roomCode}/dmTokens/{tokenId}.
 // =====================================================
 
-import { applyGameplayAction } from "../characterSheet/gameplayState.js";
 import { applyMonsterConcentrationEvent } from "../combat/monsterSpellcasting.js";
 
 import { requestAppConfirmation } from "../ui/visualPolish.js";
@@ -3287,6 +3286,7 @@ export function createTokenSystem(options) {
         if (!snapshot.exists()) throw new Error("The linked character no longer exists. Repair its link before changing HP.");
         const remote = snapshot.data();
         const character = structuredClone(remote);
+        const { applyGameplayAction } = await import("../characterSheet/gameplayState.js");
         const result = applyGameplayAction(character, { type: "set-current-hp", amount: requestedHp });
         const hp = character.combat.currentHp;
         cleanPatch.currentHp = hp;

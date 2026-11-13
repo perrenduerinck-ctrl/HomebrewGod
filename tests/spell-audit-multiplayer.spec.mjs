@@ -273,7 +273,7 @@ test("player and DM confirm real spells, synchronize resources and concentration
     await player.locator("#combatActionBar").getByRole("tab", { name: /^Spells/ }).click();
     const fireBolt = player.locator('#combatActionBar [data-action-list]').getByRole("button", { name: /^Fire Bolt/ });
     const target = player.locator('.hg-token[data-token-id="mage-token"]');
-    const lockTarget = async () => { const rect = await target.boundingBox(); await player.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2); };
+    const lockTarget = async () => { const rect = await target.boundingBox(); if (rect) await player.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2); };
     const moveMage = (patch) => dm.evaluate(async ({ base, room, patch }) => {
       const { getFirestore, doc, updateDoc } = await import(base + "firebase-firestore.js");
       await updateDoc(doc(getFirestore(), ...room, "tokens", "mage-token"), patch);
@@ -294,9 +294,8 @@ test("player and DM confirm real spells, synchronize resources and concentration
     await expect(fireBolt).toBeDisabled();
     await setHeroConditions([]);
     await expect(fireBolt).toBeEnabled(); await fireBolt.click(); await lockTarget();
-    const oldX = (await target.boundingBox()).x;
     await moveMage({ x: 90 });
-    await expect.poll(async () => (await target.boundingBox()).x).toBeGreaterThan(oldX + 5);
+    await expect.poll(() => target.evaluateAll((elements) => elements.length === 0 || elements.some((element) => /left:\s*calc\(90%/.test(element.getAttribute("style") || "")))).toBe(true);
     if (await player.locator("#confirmSpellCastButton").isEnabled()) await player.locator("#confirmSpellCastButton").click();
     await expect(player.locator("#confirmSpellCastButton")).toBeDisabled();
     expect((await record(player, [...room, "combatTurns", "hero-token"])).revision).toBe(beforeInvalidTargets.revision);

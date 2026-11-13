@@ -152,6 +152,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run test:spell-audit:multiplayer
+      - name: Upload spell playtest report on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spell-multiplayer-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
 
   deploy:
     name: Deploy tested GitHub Pages artifact

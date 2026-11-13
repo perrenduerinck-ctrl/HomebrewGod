@@ -1,7 +1,5 @@
-import { prepareConditionMutation } from "./effects/conditionPersistence.js";
 import { assertSpellDefinitionRevision } from "./combat/monsterSpellDefinition.js";
 import { getSpellcasterBlockReason } from "./spells/spellCastingRules.js";
-import { applyGameplayAction } from "./characterSheet/gameplayState.js";
 import { applyLongCastingCommand, getLongCastingStatus, getTimedCastingSeconds, supportsTrackedLongCasting } from "./combat/longCasting.js";
 // =====================================================
 // APP SECTION 1 — FIREBASE IMPORTS
@@ -744,7 +742,10 @@ gameplayEffectPersistence = createEffectPersistence({
   getUserId: () => currentUser?.uid || "",
   getIsDm: () => currentIsDM === true,
   runTransaction,
-  prepareTargetMutation: (transaction, record, remove) => prepareConditionMutation(transaction, { db, doc, roomCode: record.roomCode, userUid: currentUser?.uid, record, remove, serverTimestamp, tokenCollection: tokenCollectionForRecord(tokenSystem?.getRoomTokens?.().find((token) => token.id === record.targetTokenId) || {}) }),
+  prepareTargetMutation: async (transaction, record, remove) => {
+    const { prepareConditionMutation } = await import("./effects/conditionPersistence.js");
+    return prepareConditionMutation(transaction, { db, doc, roomCode: record.roomCode, userUid: currentUser?.uid, record, remove, serverTimestamp, tokenCollection: tokenCollectionForRecord(tokenSystem?.getRoomTokens?.().find((token) => token.id === record.targetTokenId) || {}) });
+  },
   onTargetCommitted: (target, roomCode) => { if (currentRoomCode === roomCode && target) reconcileCombatPresentationEffects(target); },
   onWarning: (message) => console.warn(message)
 });
@@ -10977,6 +10978,7 @@ function setBattleGameFeelStatus(message, tone = "") {
 }
 
 async function adjustTokenHpFromContext(token) {
+  const { applyGameplayAction } = await import("./characterSheet/gameplayState.js");
   if (currentIsDM !== true) throw new Error("Only the room DM can adjust token HP from this menu.");
   const operationRoomCode = currentRoomCode;
   const operationUserUid = currentUser?.uid || "";
