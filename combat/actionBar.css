@@ -243,3 +243,9 @@
 @media (prefers-reduced-motion: reduce) {
   .hg-combat-action-bar *, .hg-token.is-selected { transition: none !important; }
 }
+
+.hg-combat-action-bar [data-long-casting-panel] { grid-column: 1 / -1; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; min-width: 0; }
+.hg-combat-action-bar [data-long-casting-panel]:empty { display: none; }
+.hg-combat-action-bar [data-long-casting-panel] p { margin: 0; flex: 1 1 18rem; overflow-wrap: anywhere; }
+.hg-combat-action-bar [data-long-casting-panel] button { min-height: 36px; flex: 0 1 10rem; }
+.hg-action-button-wrap select[data-long-casting-resource] { max-width: 100%; min-width: 0; font-size: .8rem; }

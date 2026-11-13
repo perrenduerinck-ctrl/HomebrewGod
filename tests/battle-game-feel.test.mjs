@@ -31,7 +31,7 @@ test("hotbar icons are recognizable, deterministic and reject executable custom 
 });
 
 test("hotbar availability and tooltips explain turns, spent resources and spell slots", () => {
-  const action = { kind: "spell", name: "Shield", resource: "reaction", raw: { level: 1, range: "Self" } };
+  const action = { kind: "spell", name: "Shield", resource: "reaction", raw: { level: 1, range: "Self", castingTime: "1 reaction" } };
   assert.equal(getActionAvailability({ action, controlled: false }).reason, "You do not control this token.");
   assert.equal(getActionAvailability({ action, turnUsable: false }).state, "outside-turn");
   assert.equal(getActionAvailability({ action, resourceAvailable: false }).state, "expended");

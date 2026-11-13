@@ -1,7 +1,9 @@
+import { getLongCastingStatus, getLongCastingRounds, getTimedCastingSeconds, supportsTrackedLongCasting } from "./longCasting.js";
+import { getMonsterSpellAvailability } from "./monsterSpellcasting.js";
 import { buildCombatActionBarModel } from "./actionBarModel.js";
 import {
   createEmptyActionEconomy,
-  synchronizeActionEconomy
+  synchronizeReactionEconomy
 } from "./actionEconomy.js";
 import { getCharacterSpellSlotOptions } from "./characterCombatCommands.js";
 import {
@@ -60,9 +62,11 @@ export function createCombatActionBar({
   watchActor,
   watchEconomy,
   getEffects = () => [],
+  getCastingContext = () => ({}),
   canControl = () => false,
   onExecute = async () => {},
   onToggleFavorite = async () => {},
+  onLongCastingCommand = async () => {},
   onEndTurn = async () => {},
   onMovementMode = async () => {},
   onStatus = null,
@@ -89,7 +93,8 @@ export function createCombatActionBar({
       <div class="hg-action-bar-actions" role="tabpanel" data-action-list></div>
       <p class="hg-action-bar-status" data-action-status aria-live="polite"></p>
     </div>
-    <div class="hg-action-bar-turn" data-action-turn></div>`;
+    <div class="hg-action-bar-turn" data-action-turn></div>
+    <div data-long-casting-panel></div>`;
   root.appendChild(dock);
   const reopen = button("Actions", "hg-action-bar-reopen hidden");
   reopen.type = "button";
@@ -210,7 +215,8 @@ export function createCombatActionBar({
     const concentrationState = actor?.combat?.concentration || actor?.spellcasting?.concentration;
     if (concentrationState) {
       const concentration = document.createElement("span");
-      concentration.textContent = "Concentration";
+      const pending = actor?.combat?.pendingConcentrationCheck || actor?.spellcasting?.pendingConcentrationCheck;
+      concentration.textContent = pending ? `Concentration · DC ${pending.dc} save pending` : "Concentration";
       concentration.title = text(concentrationState.spellName) || "Concentrating";
       badges.appendChild(concentration);
     }
@@ -281,17 +287,23 @@ export function createCombatActionBar({
         economy,
         initiative.combatActive === true
       );
-      const spellSlotOptions = action.kind === "spell"
+      let spellSlotOptions = action.kind === "spell"
         ? getCharacterSpellSlotOptions(actor || {}, action.raw || {})
         : [];
+      if (action.kind === "monster-spell") {
+        const remaining = getMonsterSpellAvailability(actor, action.raw?.resourceReference || action.raw);
+        spellSlotOptions = remaining.kind === "slot" ? remaining.options : [{ kind: "special", level: Number(action.raw?.level) || 0, sourceId: action.raw?.resourceReference?.id || action.raw?.id || "", remaining: remaining.remaining, label: "Monster spell use" }];
+      }
       const availability = getActionAvailability({
         action,
         actor,
+        token: selectedToken,
         controlled,
         busy: busyKey === action.key,
         turnUsable: isTurnUsable(action),
         resourceAvailable: economyAvailable,
-        spellSlotOptions
+        spellSlotOptions,
+        inCombat: initiative.combatActive === true
       });
       const actionState = busyKey === action.key
         ? "processing"
@@ -339,6 +351,23 @@ export function createCombatActionBar({
         remainingLabel.setAttribute("aria-label", `${remaining} remaining`);
         actionButton.appendChild(remainingLabel);
       }
+      let longCastingSelection = null;
+      if (["spell", "monster-spell"].includes(action.kind) && (supportsTrackedLongCasting(action.raw || {}) || (!initiative.combatActive && spellSlotOptions.some((option) => option.kind === "ritual" && getTimedCastingSeconds(action.raw, option) !== null)))) {
+        const select = document.createElement("select");
+        select.dataset.longCastingResource = action.id;
+        select.setAttribute("aria-label", `Resource for casting ${action.name}`);
+        for (const option of spellSlotOptions.filter((option) => (!initiative.combatActive || option.kind !== "ritual") && option.remaining > 0)) {
+          const element = document.createElement("option");
+          element.textContent = option.label;
+          element.value = String(select.options.length);
+          select.append(element);
+        }
+        const eligible = spellSlotOptions.filter((option) => (!initiative.combatActive || option.kind !== "ritual") && option.remaining > 0);
+        longCastingSelection = eligible[0];
+        select.addEventListener("change", () => { longCastingSelection = eligible[Number(select.value)]; });
+        wrapper.append(select);
+        economyLabel.textContent = initiative.combatActive ? `Begin ${getLongCastingRounds(action.raw)} rounds` : "Timed casting / ritual";
+      }
       actionButton.addEventListener("click", async () => {
         if (busy) return;
         busy = true;
@@ -358,7 +387,8 @@ export function createCombatActionBar({
             economy,
             initiative,
             movement,
-            actionAttemptId: attemptId
+            actionAttemptId: attemptId,
+            longCastingSelection
           });
           const nextState = text(result?.state) || "committed";
           activeActionState = nextState;
@@ -482,6 +512,33 @@ export function createCombatActionBar({
     }
   }
 
+  function renderLongCasting() {
+    const root = dock.querySelector("[data-long-casting-panel]");
+    root.replaceChildren();
+    const attempt = getLongCastingStatus(actor || {}, actorKind, { ...getCastingContext(), initiative, token: selectedToken });
+    if (!attempt || ["completed", "cancelled"].includes(attempt.status)) return;
+    const label = document.createElement("p");
+    label.textContent = `${attempt.spell.name}: ${attempt.mode === "elapsed" ? `${Math.min(attempt.elapsedSeconds, attempt.requiredSeconds)}/${attempt.requiredSeconds} campaign seconds` : `${attempt.completedRounds}/${attempt.requiredRounds} rounds`} · ${attempt.status}${attempt.reason ? ` — ${attempt.reason}` : ""}`;
+    root.append(label);
+    const canUse = canControl(selectedToken) && !busy;
+    for (const [command, title] of [["continue", attempt.mode === "elapsed" ? "Finish Timed Casting" : attempt.status === "ready" && Number(initiative.roundNumber) === attempt.lastRound ? "Finish Casting" : "Continue Casting (Action)"], ["cancel", "Stop Casting"]]) {
+      const control = button(title, "hg-action-button");
+      control.dataset.longCastingCommand = command;
+      const ready = attempt.status === "ready" && (attempt.mode === "elapsed" || Number(initiative.roundNumber) === attempt.lastRound);
+      control.disabled = !canUse || (command === "continue" && ((attempt.mode === "elapsed" ? !ready : !isTurnUsable()) || (attempt.status !== "casting" && attempt.status !== "ready") || attempt.pendingSave || (!ready && (!attempt.canAdvance || !resourceAvailable("action", economy, true)))));
+      control.addEventListener("click", async () => {
+        if (busy) return;
+        busy = true; render();
+        try {
+          const result = await onLongCastingCommand(command, { token: selectedToken, actor, actorKind, attempt, initiative });
+          if (result?.message) setStatus(result.message, "success");
+        } catch (error) { setStatus(error.message, "error"); }
+        finally { busy = false; render(); }
+      });
+      root.append(control);
+    }
+  }
+
   function render() {
     const visible = screen === "battle" && Boolean(selectedToken);
     const dockVisible = visible && displayMode !== "hidden";
@@ -500,6 +557,7 @@ export function createCombatActionBar({
     renderModes(model);
     renderActions(model);
     renderTurn();
+    renderLongCasting();
   }
 
   function stopRecordWatches() {
@@ -510,6 +568,13 @@ export function createCombatActionBar({
   }
 
   function selectToken(token) {
+    if (token && selectedToken && text(token.id) === text(selectedToken.id) &&
+      text(token.linkedCharacterId) === text(selectedToken.linkedCharacterId) &&
+      text(token.linkedMonsterId || token.linkedMonster?.id) === text(selectedToken.linkedMonsterId || selectedToken.linkedMonster?.id)) {
+      selectedToken = token;
+      render();
+      return;
+    }
     stopRecordWatches();
     selectedToken = token || null;
     actor = null;
@@ -549,7 +614,7 @@ export function createCombatActionBar({
   unsubscribers.push(tokenSystem?.subscribeSelection?.(selectToken));
   unsubscribers.push(initiativeSystem?.subscribe?.((state) => {
     initiative = state;
-    economy = synchronizeActionEconomy(economy, state, selectedToken?.id || "");
+    economy = synchronizeReactionEconomy(economy, state, selectedToken?.id || "");
     render();
   }));
   unsubscribers.push(movementSystem?.subscribe?.((state) => {

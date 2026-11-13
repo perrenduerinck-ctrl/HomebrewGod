@@ -9,6 +9,7 @@ const SHAPE_MAP = Object.freeze({
   cylinder: "cylinder",
   cone: "cone",
   line: "line",
+  wall: "line",
   cube: "cube"
 });
 const SINGLE_TARGET_TYPES = Object.freeze([
@@ -73,6 +74,10 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
       singleTarget: !cube, previewOnly: true });
   }
 
+  if (!allowTouchPreview && (targetType === "special" || targeting?.range?.type === "special")) {
+    return Object.freeze({ supported: false, reason: "This spell has special targeting or range. Resolve its targets manually with the DM." });
+  }
+
   if (
     targeting &&
     !area &&
@@ -98,6 +103,7 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
         `${rangeFeet} feet`
       ),
       singleTarget: true,
+      manualResolution: targetType === "object" ? "Choose a visible map object. Verify spell-specific object restrictions and resolve its effects with the DM." : "",
       previewOnly: true
     });
   }
@@ -139,10 +145,14 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
     });
   }
 
+  if (area.shape === "wall" && (!Number.isFinite(rangeFeet) || ![area.length, area.width, area.height].every((value) => Number.isFinite(value) && value > 0))) {
+    return Object.freeze({ supported: false, reason: "A straight wall needs a numeric range, length, width and height. Resolve other wall forms manually with the DM." });
+  }
+
   if (!templateShape) {
     return Object.freeze({
       supported: false,
-      reason: `${cleanText(area.shape, "This area shape")} is not supported by the basic template engine yet.`
+      reason: `${cleanText(area.shape, "This area shape")} is not supported by the basic template engine yet. Resolve its shape and targets manually with the DM.`
     });
   }
 
@@ -199,6 +209,7 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
         ? "Self"
         : "Special"
     ),
+    manualResolution: area.shape === "wall" ? "Straight wall only. Resolve bends, rings, side-dependent damage and continuing effects with the DM." : "",
     previewOnly: true
   });
 }
@@ -212,6 +223,7 @@ export function formatSpellTemplateInstruction(instruction) {
     return `${instruction.spellName} · Range ${instruction.rangeText} · single target`;
   }
 
+  if (instruction.sourceShape === "wall") return `${instruction.spellName} · Range ${instruction.rangeText} · straight wall ${instruction.sizeFeet} × ${instruction.widthFeet} × ${instruction.heightFeet} ft · ${instruction.manualResolution}`;
   const area = instruction.templateShape === "sphere"
     ? `${instruction.sizeFeet}-ft radius`
     : instruction.templateShape === "cylinder"
@@ -222,4 +234,10 @@ export function formatSpellTemplateInstruction(instruction) {
         ? `${instruction.sizeFeet}-ft cube`
         : `${instruction.sizeFeet} ft`;
   return `${instruction.spellName} · Range ${instruction.rangeText} · ${area}`;
+}
+
+export function prepareSpellTemplateGeometry(geometry, instruction) {
+  if (!geometry || instruction?.sourceShape !== "wall") return geometry;
+  const base = Number(geometry.elevationFeet) || 0;
+  return { ...geometry, verticalBounds: { minFeet: base, maxFeet: base + instruction.heightFeet, heightFeet: instruction.heightFeet } };
 }

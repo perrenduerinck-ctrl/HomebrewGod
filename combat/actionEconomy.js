@@ -208,7 +208,7 @@ export function applyActionEconomyCommand(currentState, command = {}) {
   if (type === "spell") {
     const resource = text(command.resource) || "action";
     const spellLevel = integer(command.spellLevel, 0, 0, 9);
-    const isActionCantrip = resource === "action" && spellLevel === 0;
+    const isActionCantrip = resource === "action" && spellLevel === 0 && command.castingKind !== "long-cast-progress";
     if (state.bonusActionSpellCast && !isActionCantrip) {
       throw new Error(
         "After a Bonus Action spell, only a cantrip with a casting time of 1 Action can be cast this turn."
@@ -247,7 +247,7 @@ export function applyActionEconomyCommand(currentState, command = {}) {
   if (type === "spell") {
     const resource = text(command.resource) || "action";
     const spellLevel = integer(command.spellLevel, 0, 0, 9);
-    const isActionCantrip = resource === "action" && spellLevel === 0;
+    const isActionCantrip = resource === "action" && spellLevel === 0 && command.castingKind !== "long-cast-progress";
     state = {
       ...state,
       spellCastCount: Math.min(20, state.spellCastCount + 1),
@@ -276,9 +276,25 @@ export function applyActionEconomyCommand(currentState, command = {}) {
   });
 }
 
+// Keep the turn ledger compatible with the deployed v1 rules. The spell-only
+// flags live alongside the actor and are hydrated in the same cast transaction.
 export function toCombatTurnDocument(value) {
+  const { spellCastCount, bonusActionSpellCast, bonusSpellRestrictionBlocked, ...state } = normalizeActionEconomy(value);
+  return { ...state, schemaVersion: 1 };
+}
+
+export function toActorSpellTurnState(value, turnKey = value?.turnKey) {
   const state = normalizeActionEconomy(value);
-  return { ...state };
+  return { turnKey, spellCastCount: state.spellCastCount,
+    bonusActionSpellCast: state.bonusActionSpellCast, bonusSpellRestrictionBlocked: state.bonusSpellRestrictionBlocked };
+}
+
+export function hydrateActorSpellTurnState(value, actorState, turnKey = value?.turnKey) {
+  const state = normalizeActionEconomy(value);
+  const sameTurn = actorState?.turnKey === turnKey;
+  return normalizeActionEconomy({ ...state, spellCastCount: sameTurn ? actorState.spellCastCount : 0,
+    bonusActionSpellCast: sameTurn && actorState.bonusActionSpellCast,
+    bonusSpellRestrictionBlocked: sameTurn && actorState.bonusSpellRestrictionBlocked });
 }
 
 export function getEconomyResourceForSection(section = "") {

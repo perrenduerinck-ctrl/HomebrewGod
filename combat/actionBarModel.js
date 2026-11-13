@@ -136,7 +136,7 @@ function monsterEntries(monster = {}) {
               ? `${availability.remaining}/${number(spell?.uses, 1)} uses`
               : "",
             spell?.usage === "slot"
-              ? `Level ${number(spell?.level, 0)} · ${availability.remaining}/${number(spell?.slots, 1)} slots`
+              ? `Shared slots: ${(availability.options || []).map((option) => `L${option.level}: ${option.remaining}`).join("; ")}`
               : "",
             spell?.castingTime || ""
           ].filter(Boolean).join(" · ")

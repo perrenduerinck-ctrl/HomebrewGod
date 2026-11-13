@@ -229,6 +229,7 @@ export function createSpellCastingSession({
   let characterName = "";
   let casterToken = null;
   let slotOptions = [];
+  let sourceFeedback = [];
   let target = null;
   let resolution = null;
   let confirmationError = "";
@@ -245,6 +246,7 @@ export function createSpellCastingSession({
       characterName,
       casterToken,
       slotOptions: Object.freeze([...slotOptions]),
+      sourceFeedback: Object.freeze(sourceFeedback.map((entry) => Object.freeze({ ...entry }))),
       target,
       resolution,
       confirmationError,
@@ -271,6 +273,7 @@ export function createSpellCastingSession({
       );
     }
 
+    sourceFeedback = (config.sourceFeedback || []).map((entry) => ({ sourceId: cleanText(entry.sourceId), sourceName: cleanText(entry.sourceName), reason: cleanText(entry.reason) }));
     spell = nextSpell;
     instruction = nextInstruction;
     characterId = cleanText(config.characterId);
@@ -302,6 +305,8 @@ export function createSpellCastingSession({
   function updateTarget({
     locked = false,
     validRange = true,
+    validTarget = true,
+    invalidReason = "",
     distanceFeet = null,
     horizontalFeet = null,
     verticalFeet = null,
@@ -323,6 +328,8 @@ export function createSpellCastingSession({
     target = Object.freeze({
       locked: locked === true,
       validRange: validRange !== false,
+      validTarget: validTarget !== false,
+      invalidReason: cleanText(invalidReason),
       distanceFeet: Number.isFinite(Number(distanceFeet))
         ? Number(distanceFeet)
         : null,
@@ -347,7 +354,7 @@ export function createSpellCastingSession({
         : null,
       geometry
     });
-    phase = locked === true && validRange !== false
+    phase = locked === true && validRange !== false && validTarget !== false
       ? "target-selected"
       : "previewing";
     confirmationError = "";

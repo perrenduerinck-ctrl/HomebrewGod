@@ -5,6 +5,9 @@
 // DM-only tokens live at rooms/{roomCode}/dmTokens/{tokenId}.
 // =====================================================
 
+import { applyGameplayAction } from "../characterSheet/gameplayState.js";
+import { applyMonsterConcentrationEvent } from "../combat/monsterSpellcasting.js";
+
 import { requestAppConfirmation } from "../ui/visualPolish.js";
 
 import {
@@ -3272,13 +3275,57 @@ export function createTokenSystem(options) {
     cleanPatch.updatedAtMillis = Date.now();
     cleanPatch.updatedAt = deps.serverTimestamp();
 
-    if (currentVisibility === nextVisibility) {
+    const requestedHp = cleanPatch.currentHp ?? cleanPatch.hp?.current;
+    let linkedHpChange = null;
+    async function prepareLinkedHpChange(transaction, latest) {
+      linkedHpChange = null;
+      const characterId = String(latest.linkedCharacterId || "").trim();
+      const editsCharacterHp = Object.hasOwn(cleanPatch, "currentHp") || Object.hasOwn(cleanPatch.hp || {}, "current");
+      if (characterId && editsCharacterHp) {
+        const reference = deps.doc(deps.db, "rooms", roomCode, "characters", characterId);
+        const snapshot = await transaction.get(reference);
+        if (!snapshot.exists()) throw new Error("The linked character no longer exists. Repair its link before changing HP.");
+        const remote = snapshot.data();
+        const character = structuredClone(remote);
+        const result = applyGameplayAction(character, { type: "set-current-hp", amount: requestedHp });
+        const hp = character.combat.currentHp;
+        cleanPatch.currentHp = hp;
+        cleanPatch.maxHp = character.combat.maxHp;
+        cleanPatch.hp = { current: hp, maximum: character.combat.maxHp };
+        cleanPatch.linkedCharacterRevision = Math.max(0, Number(remote.revision) || 0) + (result.changed ? 1 : 0);
+        cleanPatch.hpAuthority = "character";
+        if (!result.changed) return;
+        character.currentHp = hp;
+        character.revision = Math.max(0, Number(remote.revision) || 0) + 1;
+        linkedHpChange = { reference, characterId, character };
+        return { combat: character.combat, currentHp: hp, revision: character.revision, updatedAtMillis: Date.now(), updatedAt: deps.serverTimestamp() };
+      }
+      const previousHp = Number(latest.currentHp ?? latest.hp?.current);
+      const nextHp = Number(cleanPatch.currentHp ?? cleanPatch.hp?.current ?? previousHp);
+      const monsterId = String(latest.linkedMonsterId || latest.linkedMonster?.id || "").trim();
+      if (!monsterId || !Number.isFinite(previousHp) || !Number.isFinite(nextHp) || nextHp >= previousHp) return;
+      const reference = deps.doc(deps.db, "rooms", roomCode, "monsters", monsterId);
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists()) throw new Error("The linked monster no longer exists. Repair its link before changing HP.");
+      const remote = snapshot.data();
+      if (!remote.spellcasting?.concentration) return;
+      const monster = applyMonsterConcentrationEvent(remote, { type: "damage", amount: previousHp - nextHp, currentHp: nextHp });
+      linkedHpChange = { reference, monsterId, monster };
+      return { spellcasting: monster.spellcasting, revision: Math.max(0, Number(remote.revision) || 0) + 1, updatedAtMillis: Date.now(), updatedAt: deps.serverTimestamp() };
+    }
+    async function notifyLinkedHpChange() {
+      if (!linkedHpChange) return;
+      try { await deps.onLinkedActorHpChanged?.({ roomCode, monsterId: linkedHpChange.monsterId, monster: linkedHpChange.monster, characterId: linkedHpChange.characterId, character: linkedHpChange.character }); }
+      catch (error) { console.error("Could not refresh linked actor HP presentation.", error); }
+    }
+    const editsHp = Object.hasOwn(cleanPatch, "currentHp") || Object.hasOwn(cleanPatch.hp || {}, "current");
+    if (currentVisibility === nextVisibility && !editsHp) {
       await deps.updateDoc(tokenDocumentReference(roomCode, current), cleanPatch);
       return normalizeToken({ ...current, ...cleanPatch });
     }
 
     if (typeof deps.runTransaction !== "function") {
-      throw new Error("Safe token visibility changes are unavailable.");
+      throw new Error("Safe token HP and visibility changes are unavailable.");
     }
     const roomReference = deps.doc(deps.db, "rooms", roomCode);
     const sourceReference = tokenDocumentReference(roomCode, current);
@@ -3289,6 +3336,19 @@ export function createTokenSystem(options) {
       tokenCollectionForVisibility(nextVisibility),
       String(tokenId)
     );
+    if (currentVisibility === nextVisibility) {
+      const updated = await deps.runTransaction(deps.db, async (transaction) => {
+        const [roomSnapshot, sourceSnapshot] = await Promise.all([transaction.get(roomReference), transaction.get(sourceReference)]);
+        if (!roomSnapshot.exists() || roomSnapshot.data()?.dmUid !== actorUid) throw new Error("Only the current room DM can edit tokens.");
+        if (!sourceSnapshot.exists()) throw new Error("That token no longer exists.");
+        const actorPatch = await prepareLinkedHpChange(transaction, sourceSnapshot.data());
+        transaction.update(sourceReference, cleanPatch);
+        if (actorPatch) transaction.update(linkedHpChange.reference, actorPatch);
+        return normalizeToken({ ...sourceSnapshot.data(), ...cleanPatch, id: String(tokenId) });
+      });
+      await notifyLinkedHpChange();
+      return updated;
+    }
     const migrated = await deps.runTransaction(deps.db, async (transaction) => {
       const [roomSnapshot, sourceSnapshot, destinationSnapshot] = await Promise.all([
         transaction.get(roomReference),
@@ -3310,15 +3370,18 @@ export function createTokenSystem(options) {
       ) {
         throw new Error("Remove this token from initiative before hiding it from players.");
       }
+      const actorPatch = await prepareLinkedHpChange(transaction, sourceSnapshot.data());
       const nextRecord = {
         ...(sourceSnapshot.data() || {}),
         ...cleanPatch,
         visibility: nextVisibility
       };
       transaction.set(destinationReference, nextRecord);
+      if (actorPatch) transaction.update(linkedHpChange.reference, actorPatch);
       transaction.delete(sourceReference);
       return normalizeToken({ ...nextRecord, id: String(tokenId) });
     });
+    await notifyLinkedHpChange();
     publicTokenCache = publicTokenCache.filter((token) => String(token.id) !== String(tokenId));
     privateTokenCache = privateTokenCache.filter((token) => String(token.id) !== String(tokenId));
     if (nextVisibility === "dm") privateTokenCache.push(migrated);

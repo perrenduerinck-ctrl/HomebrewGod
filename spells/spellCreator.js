@@ -1,3 +1,4 @@
+import { createSpellComponentEditor } from "./spellComponentEditor.js";
 import {
   SPELL_CLASSES,
   SPELL_DAMAGE_TYPES,
@@ -76,6 +77,8 @@ function mergeStructuredDamage(baseDamage, editable, baseline) {
 export function mergeSpellCreatorDraft(base = {}, editable = {}, baseline = {}) {
   const preserved = base && typeof base === "object" ? cloneData(base) : {};
   const merged = { ...preserved, ...cloneData(editable) };
+  if (changed(editable, baseline, "components")) delete merged.componentLetters;
+  if (changed(editable, baseline, "materialCostGp")) merged.materialCostly = Number(editable.materialCostGp) > 0;
   const generatedTargeting = createSpellTargetingData(merged);
   const originalTargeting = preserved.targeting && typeof preserved.targeting === "object"
     ? cloneData(preserved.targeting)
@@ -105,6 +108,49 @@ export function mergeSpellCreatorDraft(base = {}, editable = {}, baseline = {}) 
   }
 
   merged.damage = mergeStructuredDamage(preserved.damage, editable, baseline);
+  if (changed(editable, baseline, "healingDice")) {
+    merged.healing = cloneData(preserved.healing || []);
+    if (editable.healingDice) merged.healing[0] = { ...(merged.healing[0] || {}), dice: editable.healingDice };
+    else merged.healing.shift();
+  }
+  if (changed(editable, baseline, "slotScaling")) {
+    if (merged.damage.length) merged.damage[0] = { ...merged.damage[0], atSlotLevel: cloneData(editable.slotScaling) };
+    else merged.scaling = { ...(preserved.scaling || {}), atSlotLevel: cloneData(editable.slotScaling) };
+  }
+  if (changed(editable, baseline, "targetType")) {
+    merged.targeting = { ...(merged.targeting || generatedTargeting), target: { type: editable.targetType } };
+  }
+  if (changed(editable, baseline, "areaShape") || changed(editable, baseline, "areaSize")) {
+    const shape = editable.areaShape;
+    const dimension = ["sphere", "cylinder"].includes(shape) ? "radius" : shape === "cube" ? "side" : "length";
+    merged.targeting = { ...(merged.targeting || generatedTargeting), area: shape ? { ...(preserved.targeting?.area?.shape === shape ? preserved.targeting.area : {}), shape, [dimension]: Number(editable.areaSize) } : null };
+    merged.areaOfEffect = shape ? { type: shape, size: Number(editable.areaSize) } : null;
+  }
+  for (const [field, target] of [["characterScaling", "atCharacterLevel"], ["healingScaling", "atSlotLevel"]]) {
+    if (!changed(editable, baseline, field)) continue;
+    const records = field === "healingScaling" ? merged.healing : merged.damage;
+    if (records?.length) records[0] = { ...records[0], [target]: cloneData(editable[field]) };
+    else merged.scaling = { ...(merged.scaling || {}), [field === "healingScaling" ? "healingAtSlotLevel" : "atCharacterLevel"]: cloneData(editable[field]) };
+  }
+  for (const [field, target] of [["extraDamage", "damage"], ["extraHealing", "healing"]]) {
+    if (!changed(editable, baseline, field)) continue;
+    const primary = merged[target]?.[0];
+    merged[target] = [...(primary ? [primary] : []), ...cloneData(editable[field] || [])];
+  }
+  if (merged.targeting?.area) {
+    for (const dimension of ["width", "height"]) {
+      if (changed(editable, baseline, `area${dimension}`)) merged.targeting.area[dimension] = Number(editable[`area${dimension}`]);
+    }
+  }
+  if (changed(editable, baseline, "condition")) {
+    merged.effects = cloneData(preserved.effects || []);
+    const index = merged.effects.findIndex((effect) => effect.type === "condition");
+    if (editable.condition) {
+      const effect = { ...(index >= 0 ? merged.effects[index] : {}), type: "condition", condition: editable.condition };
+      if (index >= 0) merged.effects[index] = effect; else merged.effects.push(effect);
+    } else if (index >= 0) merged.effects.splice(index, 1);
+  }
+  for (const key of ["healingDice", "slotScaling", "targetType", "areaShape", "areaSize", "condition", "characterScaling", "healingScaling", "extraDamage", "extraHealing", "areawidth", "areaheight"]) delete merged[key];
   return merged;
 }
 
@@ -192,6 +238,31 @@ export function createSpellCreator({
               <label>Saving Throw<select data-spell-field="saveAbility"><option value="">None</option>${["str", "dex", "con", "int", "wis", "cha"].map((ability) => `<option value="${ability}">${ability.toUpperCase()}</option>`).join("")}</select></label>
             </div>
           </section>
+          <details class="spell-creator-panel">
+            <summary>Advanced mechanics</summary>
+            <p class="spell-creator-help">These fields describe mechanics; the DM resolves rolls and continuing effects. Unedited advanced data is preserved.</p>
+            <label>Healing dice<input data-spell-field="healingDice" placeholder="1d8 + MOD"></label>
+            <div class="spell-creator-row">
+              <label>Material cost (gp)<input data-spell-field="materialCostGp" type="number" min="0" step="0.01"></label>
+              <label><input data-spell-field="materialConsumed" type="checkbox"> Material is consumed</label>
+            </div>
+            <label>Target type<select data-spell-field="targetType">${optionMarkup(["creature", "object", "self", "point", "direction", "special"])}</select></label>
+            <div class="spell-creator-row">
+              <label>Area shape<select data-spell-field="areaShape">${optionMarkup(["", "sphere", "cylinder", "cone", "line", "cube", "wall"])}</select></label>
+              <label>Radius, length, or side (ft)<input data-spell-field="areaSize" type="number" min="0"></label>
+            </div>
+            <div class="spell-creator-row">
+              <label>Area width (ft)<input data-spell-field="areawidth" type="number" min="0"></label>
+              <label>Area height (ft)<input data-spell-field="areaheight" type="number" min="0"></label>
+            </div>
+            <label>Condition<select data-spell-field="condition">${optionMarkup(["", "blinded", "charmed", "deafened", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified", "poisoned", "prone", "restrained", "stunned", "unconscious"])}</select></label>
+            <p>Damage formula by slot level (complete formula; blank keeps the base formula)</p>
+            <div class="spell-creator-row">${Array.from({ length: 9 }, (_, index) => `<label>Slot level ${index + 1}<input data-spell-scale="${index + 1}" placeholder="4d6 + MOD"></label>`).join("")}</div>
+            <details><summary>Damage by character level</summary><div class="spell-creator-row">${[5,11,17].map((level) => `<label>Character level ${level}<input data-spell-character-scale="${level}"></label>`).join("")}</div></details>
+            <details><summary>Healing by slot level</summary><div class="spell-creator-row">${Array.from({length:9}, (_, index) => `<label>Healing slot level ${index+1}<input data-spell-healing-scale="${index+1}"></label>`).join("")}</div></details>
+            <div data-spell-extra-damage></div>
+            <div data-spell-extra-healing></div>
+          </details>
           <section class="spell-creator-panel">
             <h3>Rules Text</h3>
             <label>Description<textarea rows="8" maxlength="12000" data-spell-field="description"></textarea></label>
@@ -215,6 +286,11 @@ export function createSpellCreator({
               <label>School<select data-spell-filter="school"><option value="">All schools</option>${optionMarkup(SPELL_SCHOOLS)}</select></label>
               <label>Class<select data-spell-filter="className"><option value="">All classes</option>${optionMarkup(SPELL_CLASSES)}</select></label>
               <label>Damage<select data-spell-filter="damageType"><option value="">All damage</option>${optionMarkup(SPELL_DAMAGE_TYPES.filter(Boolean))}</select></label>
+            </div>
+            <div class="spell-creator-filters">
+              <label>Concentration<select data-spell-filter="concentration"><option value="">All spells</option><option value="true">Concentration</option><option value="false">No concentration</option></select></label>
+              <label>Ritual<select data-spell-filter="ritual"><option value="">All spells</option><option value="true">Ritual</option><option value="false">Not a ritual</option></select></label>
+              <label>Sort<select data-spell-filter="sort"><option value="recent">Recently updated</option><option value="name">Name</option><option value="level">Level, then name</option></select></label>
             </div>
             <div class="spell-creator-library" data-spell-library></div>
           </section>
@@ -251,6 +327,17 @@ export function createSpellCreator({
     setCreatorControlsBusy(screen, value);
   };
 
+  const damageComponents = createSpellComponentEditor({ root: screen.querySelector("[data-spell-extra-damage]"), kind: "damage", onChange: renderPreview });
+  const healingComponents = createSpellComponentEditor({ root: screen.querySelector("[data-spell-extra-healing]"), kind: "healing", onChange: renderPreview });
+  const scalingDraft = (attribute, base) => {
+    const result = cloneData(base || {});
+    for (const input of screen.querySelectorAll(`[${attribute}]`)) {
+      const level = input.getAttribute(attribute);
+      if (input.value.trim()) result[level] = input.value.trim(); else delete result[level];
+    }
+    return result;
+  };
+
   function readEditableDraft() {
     return {
       id: selectedId,
@@ -274,6 +361,20 @@ export function createSpellCreator({
       saveAbility: field("saveAbility").value,
       description: field("description").value,
       higherLevel: field("higherLevel").value,
+      healingDice: field("healingDice").value,
+      materialCostGp: Number(field("materialCostGp").value),
+      materialConsumed: field("materialConsumed").checked,
+      targetType: field("targetType").value,
+      areaShape: field("areaShape").value,
+      areaSize: field("areaSize").value,
+      condition: field("condition").value,
+      areawidth: field("areawidth").value,
+      areaheight: field("areaheight").value,
+      characterScaling: scalingDraft("data-spell-character-scale", preservedSpellData.damage?.[0]?.atCharacterLevel || preservedSpellData.scaling?.atCharacterLevel),
+      healingScaling: scalingDraft("data-spell-healing-scale", preservedSpellData.healing?.[0]?.atSlotLevel || preservedSpellData.scaling?.healingAtSlotLevel),
+      extraDamage: damageComponents.read(),
+      extraHealing: healingComponents.read(),
+      slotScaling: Object.fromEntries([...screen.querySelectorAll("[data-spell-scale]")].filter((input) => input.value.trim()).map((input) => [input.dataset.spellScale, input.value.trim()])),
       animations: structuredClone(animations)
     };
   }
@@ -327,6 +428,20 @@ export function createSpellCreator({
     field("saveAbility").value = ["str", "dex", "con", "int", "wis", "cha"].includes(spell.saveAbility) ? spell.saveAbility : "";
     field("description").value = spell.description;
     field("higherLevel").value = spell.higherLevel;
+    field("healingDice").value = spell.healing?.[0]?.dice || spell.healing?.[0]?.amount || "";
+    field("materialCostGp").value = String(spell.materialCostGp);
+    field("materialConsumed").checked = spell.materialConsumed;
+    field("targetType").value = spell.targeting?.target?.type || "creature";
+    field("areaShape").value = spell.targeting?.area?.shape || "";
+    field("areaSize").value = String(spell.targeting?.area?.radius ?? spell.targeting?.area?.length ?? spell.targeting?.area?.side ?? 0);
+    field("areawidth").value = String(spell.targeting?.area?.width ?? 0);
+    field("areaheight").value = String(spell.targeting?.area?.height ?? 0);
+    for (const input of screen.querySelectorAll("[data-spell-character-scale]")) input.value = (spell.damage?.[0]?.atCharacterLevel || spell.scaling?.atCharacterLevel)?.[input.dataset.spellCharacterScale] || "";
+    for (const input of screen.querySelectorAll("[data-spell-healing-scale]")) input.value = (spell.healing?.[0]?.atSlotLevel || spell.scaling?.healingAtSlotLevel)?.[input.dataset.spellHealingScale] || "";
+    damageComponents.write(spell.damage.slice(1));
+    healingComponents.write(spell.healing.slice(1));
+    field("condition").value = spell.effects?.find((effect) => effect.type === "condition")?.condition || "";
+    for (const input of screen.querySelectorAll("[data-spell-scale]")) input.value = (spell.damage?.[0]?.atSlotLevel || spell.scaling?.atSlotLevel)?.[input.dataset.spellScale] || "";
     animations = structuredClone(spell.animations);
     preservedSpellData = cloneData(spell);
     loadedEditableBaseline = readEditableDraft();
@@ -343,9 +458,18 @@ export function createSpellCreator({
       if (level !== "" && String(spell.level) !== level) return false;
       if (school && normalizedSearch(spell.school) !== school) return false;
       if (className && !spell.classes.some((entry) => normalizedSearch(entry) === className)) return false;
-      if (damageType && normalizedSearch(spell.damageType) !== damageType) return false;
+      if (damageType && ![spell.damageType, ...(spell.damage || []).map((entry) => entry.damageType || entry.type)].some((value) => normalizedSearch(value) === damageType)) return false;
+      const concentration = filter("concentration").value;
+      const ritual = filter("ritual").value;
+      if (concentration && String(Boolean(spell.concentration || spell.targeting?.duration?.concentration)) !== concentration) return false;
+      if (ritual && String(spell.ritual === true) !== ritual) return false;
       if (search && ![spell.name, spell.description, spell.tags.join(" ")].some((entry) => normalizedSearch(entry).includes(search))) return false;
       return true;
+    }).sort((left, right) => {
+      const sort = filter("sort").value;
+      if (sort === "level") return left.level - right.level || left.name.localeCompare(right.name);
+      if (sort === "name") return left.name.localeCompare(right.name);
+      return Number(right.updatedAtMillis || 0) - Number(left.updatedAtMillis || 0) || left.name.localeCompare(right.name);
     });
   }
 

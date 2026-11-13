@@ -1,3 +1,4 @@
+import { synchronizeConcentrationChecks, enqueueConcentrationCheck, clearConcentrationChecks, resolveConcentrationCheck } from "../combat/concentrationChecks.js";
 // Play-session state is intentionally isolated from permanent character choices.
 // These helpers mutate only the supplied character snapshot/draft.
 
@@ -166,6 +167,7 @@ export function ensureGameplayState(character) {
         }
       : null;
 
+  synchronizeConcentrationChecks(combat);
   return combat;
 }
 
@@ -327,17 +329,13 @@ export function applyGameplayAction(character, action = {}) {
     const concentrationEnded = combat.currentHp === 0 && Boolean(combat.concentration);
     if (concentrationEnded) {
       combat.concentration = null;
-      combat.pendingConcentrationCheck = null;
+      clearConcentrationChecks(combat);
     }
     const concentrationDc = combat.concentration
       ? Math.max(10, Math.floor(amount / 2))
       : null;
     if (concentrationDc !== null) {
-      combat.pendingConcentrationCheck = {
-        dc: concentrationDc,
-        damage: amount,
-        createdAtMillis: Date.now()
-      };
+      enqueueConcentrationCheck(combat, { dc: concentrationDc, damage: amount, createdAtMillis: Date.now() });
     }
 
     return {
@@ -369,8 +367,7 @@ export function applyGameplayAction(character, action = {}) {
     const succeeded = action.succeeded === true ||
       (action.succeeded !== false && total !== null && total >= pending.dc);
     const spellName = cleanText(combat.concentration.spellName, "spell");
-    combat.pendingConcentrationCheck = null;
-    if (!succeeded) combat.concentration = null;
+    resolveConcentrationCheck(combat, succeeded);
     return {
       changed: true,
       succeeded,
@@ -410,7 +407,10 @@ export function applyGameplayAction(character, action = {}) {
       integer(action.amount, combat.currentHp, 0)
     );
     const changed = next !== combat.currentHp;
+    const damage = Math.max(0, combat.currentHp - next);
     combat.currentHp = next;
+    if (next === 0 && combat.concentration) { combat.concentration = null; clearConcentrationChecks(combat); }
+    else if (damage > 0 && combat.concentration) enqueueConcentrationCheck(combat, { dc: Math.max(10, Math.floor(damage / 2)), damage, createdAtMillis: Date.now() });
 
     return {
       changed,
@@ -507,7 +507,7 @@ export function applyGameplayAction(character, action = {}) {
     }
 
     combat.concentration = null;
-    combat.pendingConcentrationCheck = null;
+    clearConcentrationChecks(combat);
     return {
       changed: true,
       message:
@@ -545,7 +545,7 @@ export function applyGameplayAction(character, action = {}) {
     const concentrationEnded = conditionEndsConcentration(condition) && Boolean(combat.concentration);
     if (concentrationEnded) {
       combat.concentration = null;
-      combat.pendingConcentrationCheck = null;
+      clearConcentrationChecks(combat);
     }
 
     return {
@@ -577,7 +577,7 @@ export function applyGameplayAction(character, action = {}) {
       failures: 0
     };
     combat.concentration = null;
-    combat.pendingConcentrationCheck = null;
+    clearConcentrationChecks(combat);
 
     return {
       changed,

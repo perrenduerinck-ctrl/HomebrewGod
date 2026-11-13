@@ -1,3 +1,6 @@
+import { supportsTrackedLongCasting } from "./longCasting.js";
+import { getCharacterSpellcastingSourceOptions } from "./characterCombatCommands.js";
+import { getSpellcasterBlockReason, getSpellActionKind } from "../spells/spellCastingRules.js";
 const cleanText = (value) => String(value ?? "").trim();
 
 const UNIVERSAL_ICONS = Object.freeze({
@@ -180,25 +183,35 @@ export function getActionRemainingUses(action = {}, actor = {}) {
 export function getActionAvailability({
   action = {},
   actor = {},
+  token = {},
   controlled = true,
   busy = false,
   turnUsable = true,
   resourceAvailable = true,
+  inCombat = true,
   spellSlotOptions = []
 } = {}) {
   const remaining = getActionRemainingUses(action, actor);
   if (busy) return Object.freeze({ state: "processing", available: false, reason: "Another action is being processed." });
   if (!controlled) return Object.freeze({ state: "unavailable", available: false, reason: "You do not control this token." });
+  if (["spell", "monster-spell"].includes(action.kind)) {
+    const blocked = getSpellcasterBlockReason(actor, { token, actorKind: action.kind === "monster-spell" ? "monster" : "character" });
+    if (blocked) return Object.freeze({ state: "unavailable", available: false, reason: blocked });
+  }
   if (!turnUsable) return Object.freeze({ state: "outside-turn", available: false, reason: "It is not this token's turn." });
   if (!resourceAvailable) return Object.freeze({ state: "expended", available: false, reason: `The ${action.resource || "action"} resource is already spent.` });
   if (action.available === false) {
     return Object.freeze({ state: "expended", available: false, reason: action.availabilityReason || "No uses remain." });
   }
   if (remaining === 0) return Object.freeze({ state: "expended", available: false, reason: "No uses remain." });
-  if (action.kind === "spell" && Number(action.raw?.level || 0) > 0) {
+  if (action.kind === "spell" && actor.combat?.classFeatureStates?.rageActive === true) return Object.freeze({ state: "unavailable", available: false, reason: "Spellcasting is blocked while Rage is active." });
+  if (["spell", "monster-spell"].includes(action.kind) && getSpellActionKind(action.raw || {}) === "long-cast" && !supportsTrackedLongCasting(action.raw || {})) {
+    return Object.freeze({ state: "unavailable", available: false, reason: "This spell requires more than one action. This casting time or targeting requires manual resolution." });
+  }
+  if (action.kind === "spell") {
     const slots = Array.isArray(spellSlotOptions) ? spellSlotOptions : [];
-    if (!slots.some((slot) => Number(slot.remaining) > 0)) {
-      return Object.freeze({ state: "needs-slot", available: false, reason: "No eligible spell slot remains." });
+    if (!slots.some((slot) => (!inCombat || slot.kind !== "ritual") && Number(slot.remaining) > 0)) {
+      return Object.freeze({ state: "needs-slot", available: false, reason: Number(action.raw?.level || 0) === 0 ? "This cantrip is no longer known or granted by an eligible source." : inCombat && slots.some((slot) => slot.kind === "ritual" && slot.remaining > 0) ? "Only ritual casting is available. Rituals are unavailable during active initiative." : "No eligible spell slot remains." });
     }
   }
   return Object.freeze({ state: "available", available: true, reason: "" });
@@ -224,6 +237,8 @@ export function buildActionTooltip(action = {}, context = {}) {
     firstValue(raw.range, raw.target?.range, raw.reach) ? `Range: ${firstValue(raw.range, raw.target?.range, raw.reach)}` : "",
     firstValue(raw.damage, raw.damageDice, raw.healing, raw.healingDice) ? `Effect: ${firstValue(raw.damage, raw.damageDice, raw.healing, raw.healingDice)}` : "",
     castingSources.length ? `Casting source${castingSources.length === 1 ? "" : "s"}: ${castingSources.join(", ")}` : "",
+    ...[...new Set((context.spellSlotOptions || []).map((option) => option.castingSourceName ? `${option.castingSourceName}: ${String(option.spellcastingAbility || "").toUpperCase()} · DC ${option.spellSaveDc ?? "unknown"} · attack ${option.spellAttackBonus ?? "unknown"}` : "").filter(Boolean))],
+    ...(action.kind === "spell" ? getCharacterSpellcastingSourceOptions(context.actor || {}, raw, { includeUnavailable: true }).filter((source) => !source.normal).map((source) => `${source.sourceName}: ${source.reason}`) : []),
     remaining != null ? `Remaining: ${remaining}` : "",
     availability.reason ? `Unavailable: ${availability.reason}` : ""
   ].filter(Boolean);
