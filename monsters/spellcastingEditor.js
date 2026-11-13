@@ -1,3 +1,4 @@
+import { readConcentrationChecks } from "../combat/concentrationChecks.js";
 const text = (value, fallback = "") => String(value ?? "").trim() || fallback;
 const ABILITIES = Object.freeze(["int", "wis", "cha", "str", "dex", "con"]);
 const USAGES = Object.freeze([
@@ -42,6 +43,21 @@ export function normalizeMonsterSpellReference(value, index = 0) {
   };
 }
 
+// Legacy rows described the same level pool independently. Use the largest
+// maximum and sum recorded spends so migration cannot mint additional slots.
+export function normalizeMonsterSlotPools(value, spells = []) {
+  const pools = {};
+  for (let level = 1; level <= 9; level += 1) {
+    const saved = value?.[level];
+    const rows = spells.filter((spell) => spell.usage === "slot" && spell.level === level);
+    if (!saved && !rows.length) continue;
+    const maximum = Math.max(0, Math.round(Number(saved?.maximum) || (saved ? 0 : Math.max(...rows.map((spell) => spell.slots)))));
+    const used = Math.max(0, Math.round(Number(saved?.used) || (saved ? 0 : rows.reduce((total, spell) => total + spell.slotsUsed, 0))));
+    pools[level] = { maximum, used: Math.min(maximum, used) };
+  }
+  return pools;
+}
+
 export function normalizeMonsterSpellcasting(value) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const spells = (Array.isArray(source.spells) ? source.spells : [])
@@ -55,7 +71,12 @@ export function normalizeMonsterSpellcasting(value) {
     saveDc: numberOrBlank(source.saveDc),
     attackBonus: numberOrBlank(source.attackBonus),
     casterLevel: numberOrBlank(source.casterLevel),
+    spellTurnState: source.spellTurnState && typeof source.spellTurnState === "object" ? JSON.parse(JSON.stringify(source.spellTurnState)) : null,
+    longCasting: source.longCasting && typeof source.longCasting === "object" ? JSON.parse(JSON.stringify(source.longCasting)) : null,
+    slotPools: normalizeMonsterSlotPools(source.slotPools, spells),
     spells,
+    pendingConcentrationChecks: readConcentrationChecks(source),
+    pendingConcentrationCheck: readConcentrationChecks(source)[0] || null,
     concentration: source.concentration && typeof source.concentration === "object"
       ? {
           spellId: text(source.concentration.spellId),
@@ -143,6 +164,17 @@ export function createMonsterSpellcastingEditor({
     }
     fields.forEach(([label, control]) => basics.append(labeled(document, label, control)));
 
+    const poolControls = document.createElement("div");
+    for (let level = 1; level <= 9; level += 1) {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.value = state.slotPools[level]?.maximum || 0;
+      input.dataset.spellPoolLevel = String(level);
+      const pool = state.slotPools[level] || { maximum: 0, used: 0 };
+      poolControls.append(labeled(document, `Level ${level} shared slots (${Math.max(0, pool.maximum - pool.used)} remaining / ${pool.maximum} total)`, input));
+    }
+    basics.append(poolControls);
     const heading = document.createElement("div");
     heading.className = "monster-spell-list-heading";
     const title = document.createElement("strong");
@@ -207,7 +239,8 @@ export function createMonsterSpellcastingEditor({
       slots.type = "number";
       slots.min = "1";
       slots.value = spell.slots;
-      slots.title = "Slots";
+      slots.title = "Legacy slot count; edit shared pools above";
+      slots.hidden = true;
       slots.dataset.spellField = "slots";
       const remove = document.createElement("button");
       remove.type = "button";
@@ -243,6 +276,14 @@ export function createMonsterSpellcastingEditor({
   }
 
   listen("input", (event) => {
+    const poolInput = event.target.closest("[data-spell-pool-level]");
+    if (poolInput) {
+      const level = poolInput.dataset.spellPoolLevel;
+      const maximum = Math.max(0, Math.round(Number(poolInput.value) || 0));
+      state.slotPools[level] = { maximum, used: Math.min(maximum, state.slotPools[level]?.used || 0) };
+      notify();
+      return;
+    }
     const basic = event.target.closest("[data-spellcasting-field]");
     if (basic) {
       const key = basic.dataset.spellcastingField;

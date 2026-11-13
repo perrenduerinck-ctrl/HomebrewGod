@@ -240,7 +240,7 @@ test("every level-three spell has intentional, valid, asset-safe VFX and a Play 
       ["sphere", 30, 60], ["sphere", 10, 20]]
   );
   const windWall = DEFAULT_SPELLS.find(s => s.id === "wind-wall");
-  assert.equal(createSpellTemplateInstruction(windWall).supported, false);
+  assert.equal(createSpellTemplateInstruction(windWall).supported, true);
   assert.equal(createSpellTemplateInstruction(windWall, { allowTouchPreview: true,
     vfxPreview: getSpellVfxProfile("wind-wall").preview }).supported, true);
 });
@@ -292,7 +292,7 @@ test("every level-four spell has intentional, valid, asset-safe VFX and a Play P
       ["sphere", 5, 10], ["cube", 150, 150], ["cube", 100, 100]]
   );
   const wallOfFire = DEFAULT_SPELLS.find(s => s.id === "wall-of-fire");
-  assert.equal(createSpellTemplateInstruction(wallOfFire).supported, false);
+  assert.equal(createSpellTemplateInstruction(wallOfFire).supported, true);
   assert.equal(createSpellTemplateInstruction(wallOfFire, { allowTouchPreview: true,
     vfxPreview: getSpellVfxProfile("wall-of-fire").preview }).supported, true);
 });
@@ -468,7 +468,7 @@ test("every level-seven through level-nine spell has intentional, valid, asset-s
   );
   const prismaticWall = DEFAULT_SPELLS.find(s => s.id === "prismatic-wall");
   const realWall = createSpellTemplateInstruction(prismaticWall);
-  assert.equal(realWall.supported, false);
+  assert.equal(realWall.supported, true);
   const previewWall = createSpellTemplateInstruction(prismaticWall, {
     allowTouchPreview: true, vfxPreview: getSpellVfxProfile("prismatic-wall").preview
   });

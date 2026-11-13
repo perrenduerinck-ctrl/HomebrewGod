@@ -363,7 +363,7 @@ test("slot selection previews upcast damage and healing before confirmation", ()
 test("leveled at-will spell resources remain available in the casting session", async () => {
   const session = createSpellCastingSession({ onConfirm: () => true });
   session.begin({
-    spell: { id: "detect-magic", name: "Detect Magic", level: 1 },
+    spell: { id: "detect-magic", name: "Detect Magic", level: 1, range: "Self" },
     slotOptions: [{
       kind: "special",
       level: 1,
@@ -395,6 +395,7 @@ test("casting source selection carries its own save DC through preview and confi
     spell: {
       id: "shared-spell",
       name: "Shared Spell",
+      range: "60 feet",
       level: 1,
       saveAbility: "dex"
     },

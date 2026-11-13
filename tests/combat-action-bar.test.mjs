@@ -324,7 +324,7 @@ test("ritual and long-cast workflows do not masquerade as ordinary combat action
   );
   assert.throws(
     () => applyConfirmedSpellCast(wizard, identify, { kind: "normal", level: 1 }),
-    /only be cast as a ritual/i
+    /no longer available/i
   );
   const sorcerer = {
     magic: {
@@ -348,7 +348,7 @@ test("ritual and long-cast workflows do not masquerade as ordinary combat action
 
 test("spell slots, cancellation-safe mutations, item use and favorites retain source data", () => {
   const character = {
-    magic: { slots: { 1: 2 }, slotUsage: { normal: { 1: 1 } } },
+    magic: { knownSpellIds: ["shield"], slots: { 1: 2 }, slotUsage: { normal: { 1: 1 } } },
     equipment: { items: [{ id: "potion", name: "Potion", quantity: 2 }] },
     customUntouched: { safe: true }
   };
@@ -359,6 +359,7 @@ test("spell slots, cancellation-safe mutations, item use and favorites retain so
   assert.equal(character.magic.slotUsage.normal[1], 1);
   const pactCharacter = {
     magic: {
+      knownSpellIds: ["hex"],
       pactMagicSources: [{ classEntryId: "warlock", className: "Warlock", slots: 1, slotLevel: 2 }],
       slotUsage: { pactSources: { warlock: 0 }, pact: 0 }
     }
@@ -386,6 +387,7 @@ test("spell slots, cancellation-safe mutations, item use and favorites retain so
 test("Pact slot display and confirmation share one legacy-compatible ledger", () => {
   const character = {
     magic: {
+      knownSpellIds: ["hex"],
       pactMagicSources: [{
         classEntryId: "warlock-main",
         className: "Warlock",
@@ -410,6 +412,7 @@ test("legacy saved spell-slot records remain castable without rewriting their ch
   const legacyCharacter = {
     schemaVersion: 12,
     magic: {
+      knownSpellIds: ["magic-missile"],
       spellSlots: {
         1: { maximum: 4, used: 2 },
         2: { maximum: 2, used: 0 }
@@ -456,10 +459,10 @@ test("legacy saved spell-slot records remain castable without rewriting their ch
   );
 
   const exhausted = {
-    magic: { spellSlots: { 1: { maximum: 1, used: 1 } } }
+    magic: { knownSpellIds: ["shield"], spellSlots: { 1: { maximum: 1, used: 1 } } }
   };
   assert.equal(
-    getCharacterSpellSlotOptions(exhausted, { level: 1 })[0].remaining,
+    getCharacterSpellSlotOptions(exhausted, { id: "shield", level: 1 })[0].remaining,
     0
   );
   assert.throws(
@@ -519,6 +522,7 @@ test("Rage, special spell uses, legacy Pact use, and concentration replacement a
 
   const legacyPact = {
     magic: {
+      knownSpellIds: ["hex"],
       pactMagic: { slots: 2, slotLevel: 3 },
       slotUsage: { pact: 1 }
     }
@@ -530,7 +534,7 @@ test("Rage, special spell uses, legacy Pact use, and concentration replacement a
 
   const replacement = applyConfirmedSpellCast(
     {
-      magic: { slots: { 2: 1 }, slotUsage: { normal: { 2: 0 } } },
+      magic: { knownSpellIds: ["web"], slots: { 2: 1 }, slotUsage: { normal: { 2: 0 } } },
       combat: { concentration: { spellId: "bless", spellName: "Bless" } }
     },
     { id: "web", name: "Web", level: 2, concentration: true },
@@ -592,14 +596,10 @@ test("shared multiclass spells expose and enforce an explicit casting source", (
   };
   const spell = { id: "fireball", name: "Fireball", level: 3 };
   const sources = getCharacterSpellcastingSourceOptions(character, spell);
-  assert.deepEqual(sources.map((source) => source.sourceId), ["wizard-main", "cleric-main"]);
+  assert.deepEqual(sources.map((source) => source.sourceId), ["cleric-main"]);
   const options = getCharacterSpellSlotOptions(character, spell);
-  assert.deepEqual(options.map((option) => option.castingSourceId), ["cleric-main", "wizard-main"]);
-  assert.match(options[0].label, /Cast via/i);
-  assert.throws(
-    () => applyConfirmedSpellCast(character, spell, { kind: "normal", level: 3, sourceId: "" }),
-    /Choose which spellcasting source/i
-  );
+  assert.deepEqual(options.map((option) => option.castingSourceId), ["cleric-main"]);
+  assert.equal(applyConfirmedSpellCast(character, spell, { kind: "normal", level: 3 }).magic.slotUsage.normal[3], 1);
   const cast = applyConfirmedSpellCast(character, spell, options[0]);
   assert.equal(cast.magic.slotUsage.normal[3], 1);
   assert.throws(

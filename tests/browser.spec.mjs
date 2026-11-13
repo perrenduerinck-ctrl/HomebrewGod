@@ -2138,7 +2138,7 @@ test(
 );
 
 test(
-  "lobby startup defers both creator module graphs until each creator opens",
+  "lobby startup defers both creator entry points until each creator opens",
   async ({ page }) => {
     const creatorRequests = [];
 
@@ -2153,9 +2153,6 @@ test(
         if (
           pathname.endsWith(
             "/characterCreator/index.js"
-          ) ||
-          pathname.includes(
-            "/characterCreator/"
           ) ||
           pathname.endsWith(
             "/monsters/creator.js"

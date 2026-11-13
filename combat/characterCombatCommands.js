@@ -1,8 +1,9 @@
+import { clearConcentrationChecks, interruptElapsedCasting } from "./concentrationChecks.js";
 import {
   adjustCanonicalSpellResource,
   getCanonicalSpellSources
 } from "../characterCreator/spellSources.js?v=canonical-spell-sources-20260802";
-import { getSpellCastEligibility } from "../spells/spellCastingRules.js";
+import { getSpellcasterBlockReason, resolveCharacterSpellcastingStats } from "../spells/spellCastingRules.js";
 
 function clone(value) {
   return typeof structuredClone === "function"
@@ -152,17 +153,16 @@ function sourceSpellState(source, spellId) {
 function sourceCanRitualCast(character, spell, source) {
   if (spell.ritual !== true) return false;
   const magic = object(character.magic);
-  if (magic.ritualCasting === true || spell.manualOverride === true) return true;
+  if (magic.ritualCasting === true) return true;
   const spellId = spellReferenceId(spell);
   if (!sourceContainsSpell(source, spellId)) return false;
   if (source?.ritualCasting === true) return true;
   const classId = text(source?.classId).toLowerCase();
   const state = sourceSpellState(source, spellId);
   const record = sourceSpellRecord(source, spellId) || {};
-  const prepared = state.prepared === true || state.alwaysPrepared === true ||
-    record.prepared === true || record.alwaysPrepared === true || source.alwaysPrepared === true;
-  const known = state.known === true || record.known === true || source.grantsKnown === true;
-  const spellbook = state.spellbook === true || record.spellbook === true ||
+  const prepared = (state.prepared ?? record.prepared) === true || (state.alwaysPrepared ?? record.alwaysPrepared) === true || source.alwaysPrepared === true;
+  const known = (state.known ?? record.known) === true || (!Object.keys(state).length && source.grantsKnown === true);
+  const spellbook = (state.spellbook ?? record.spellbook) === true ||
     (Array.isArray(source?.spellbookSpellIds) && source.spellbookSpellIds.map(spellReferenceId).includes(spellId));
 
   if (classId === "wizard") return spellbook || prepared;
@@ -171,7 +171,22 @@ function sourceCanRitualCast(character, spell, source) {
   return false;
 }
 
-export function getCharacterSpellcastingSourceOptions(character = {}, spell = {}) {
+function sourceCanCast(spell, source) {
+  const id = spellReferenceId(spell);
+  const state = sourceSpellState(source, id);
+  const record = sourceSpellRecord(source, id) || {};
+  if (record.manualOverride === true) return true;
+  if (source.ritualOnly === true) return false;
+  const prepared = (state.prepared ?? record.prepared) === true || (state.alwaysPrepared ?? record.alwaysPrepared) === true || source.alwaysPrepared === true;
+  if (prepared) return true;
+  if (count(spell.level) > 0 && ["wizard", "cleric", "druid", "paladin", "artificer"].includes(text(source.classId).toLowerCase())) return false;
+  return (state.known ?? record.known) === true || (count(spell.level) === 0 && state.cantrip === true) || state.innate === true ||
+    (!Object.keys(state).length && (source.grantsKnown === true || source.grantsPrepared === true)) ||
+    (count(spell.level) === 0 && !Object.keys(state).length && sourceContainsSpell(source, id)) ||
+    (["feat", "species", "innate"].includes(source.sourceType) && sourceContainsSpell(source, id));
+}
+
+export function getCharacterSpellcastingSourceOptions(character = {}, spell = {}, { includeUnavailable = false } = {}) {
   const spellId = spellReferenceId(spell);
   if (!spellId) return [];
   const seen = new Set();
@@ -182,12 +197,21 @@ export function getCharacterSpellcastingSourceOptions(character = {}, spell = {}
       if (!sourceId || seen.has(sourceId)) return null;
       seen.add(sourceId);
       const sourceRecord = sourceSpellRecord(source, spellId) || {};
+      const normal = sourceCanCast(spell, source);
+      const ritual = sourceCanRitualCast(character, spell, source);
+      if (!includeUnavailable && !normal && !ritual) return null;
+      const stats = resolveCharacterSpellcastingStats(character, spell, { sourceId });
       return {
+        spellSaveDc: stats.spellSaveDc,
+        spellAttackBonus: stats.spellAttackBonus,
         sourceId,
         sourceName: text(source?.sourceName || source?.className || source?.name) || "Spellcasting",
         sourceType: text(source?.sourceType),
         spellcastingAbility: text(sourceRecord.spellcastingAbility || source?.spellcastingAbility).toLowerCase(),
-        ritual: sourceCanRitualCast(character, spell, source)
+        normal,
+        reason: normal ? "" : ritual ? "Prepare this spell for normal casting; ritual casting is available outside combat." : "This source does not currently know or have this spell prepared. Prepare or select it in the character sheet.",
+        canUseSpellSlots: sourceRecord.canUseSpellSlots !== false && (source.sourceType === "class" || source.canUseSpellSlots === true),
+        ritual
       };
     })
     .filter(Boolean);
@@ -201,27 +225,24 @@ function canCharacterRitualCast(character, spell, sourceId = "") {
     ? sources.filter((source) => text(source?.sourceId || source?.classEntryId) === requestedSourceId)
     : sources;
   return eligibleSources.some((source) => sourceCanRitualCast(character, spell, source)) ||
-    (spell.ritual === true && (object(character.magic).ritualCasting === true || spell.manualOverride === true));
+    (spell.ritual === true && sources.length > 0 && object(character.magic).ritualCasting === true);
 }
 
 function attachCastingSources(character, spell, options) {
   const castingSources = getCharacterSpellcastingSourceOptions(character, spell);
-  if (!castingSources.length) {
-    return options.map((option) => ({
-      ...option,
-      castingSourceId: "",
-      castingSourceName: ""
-    }));
-  }
-  const showSource = castingSources.length > 1;
+  if (!castingSources.length) return [];
   return options.flatMap((option) => castingSources
-    .filter((source) => option.kind !== "ritual" || source.ritual)
+    .filter((source) => option.kind === "ritual" ? source.ritual : source.normal)
+    .filter((source) => option.kind !== "special" || option.sourceId === source.sourceId)
+    .filter((source) => !["normal", "pact"].includes(option.kind) || source.canUseSpellSlots)
     .map((source) => ({
       ...option,
       castingSourceId: source.sourceId,
       castingSourceName: source.sourceName,
       spellcastingAbility: source.spellcastingAbility,
-      label: showSource ? `${option.label} · Cast via ${source.sourceName}` : option.label
+      spellSaveDc: source.spellSaveDc,
+      spellAttackBonus: source.spellAttackBonus,
+      label: `${option.label} · Cast via ${source.sourceName}`
     })));
 }
 
@@ -234,11 +255,8 @@ export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
   }
   const magic = object(character.magic);
   const options = [];
-  const castEligibility = getSpellCastEligibility(spell);
+
   const specialSources = getSpecialSpellSources(character, spell);
-  const canUseSpellSlots = specialSources.length === 0 || specialSources.some(({ source, record }) => (
-    (record.canUseSpellSlots ?? source.canUseSpellSlots) !== false
-  ));
   specialSources.forEach(({ source, record, atWill, remaining }) => {
     const sourceId = text(source.sourceId);
     const sourceName = text(source.sourceName || source.name) || "Granted spell";
@@ -263,7 +281,7 @@ export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
       castingTime: "+10 minutes"
     });
   }
-  if (canUseSpellSlots && !castEligibility.ritualOnly) normalSpellSlotLedger(magic).forEach(({ level: slotLevel, maximum, used }) => {
+  normalSpellSlotLedger(magic).forEach(({ level: slotLevel, maximum, used }) => {
     if (slotLevel < level) return;
     const remaining = Math.max(0, maximum - used);
     options.push({
@@ -274,7 +292,7 @@ export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
       remaining
     });
   });
-  const pactSources = castEligibility.ritualOnly ? [] : getPactSpellSlotLedger(character);
+  const pactSources = getPactSpellSlotLedger(character);
   pactSources.forEach(({ sourceId, slotLevel, remaining }) => {
     if (slotLevel < level) return;
     options.push({
@@ -290,8 +308,11 @@ export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
       left.castingSourceName.localeCompare(right.castingSourceName));
 }
 
-export function applyConfirmedSpellCast(character = {}, spell = {}, selection = {}) {
+export function applyConfirmedSpellCast(character = {}, spell = {}, selection = {}, { completingTrackedCast = false } = {}) {
   const next = clone(character);
+  const blocked = getSpellcasterBlockReason(next);
+  if (blocked) throw new Error(blocked);
+  if (!completingTrackedCast) interruptElapsedCasting(next.combat);
   const level = count(spell.level, 0);
   const castingSourceId = text(selection.castingSourceId);
   const castingSources = getCharacterSpellcastingSourceOptions(next, spell);
@@ -313,8 +334,13 @@ export function applyConfirmedSpellCast(character = {}, spell = {}, selection = 
     if (selectedLevel < level) {
       throw new Error("That spell slot is too low for this spell.");
     }
-    if (getSpellCastEligibility(spell).ritualOnly && selectionKind !== "ritual") {
-      throw new Error("This unprepared spellbook spell can only be cast as a ritual.");
+    const currentOptions = getCharacterSpellSlotOptions(next, spell);
+    const kind = text(selection.kind) || (level === 0 ? "cantrip" : "normal");
+    if (!currentOptions.some((option) => option.kind === kind &&
+      option.level === count(selection.level, level) &&
+      text(option.sourceId) === text(selection.sourceId) &&
+      (!castingSourceId || option.castingSourceId === castingSourceId))) {
+      throw new Error("That spell or source/resource combination is no longer available. Check known and prepared spells.");
     }
     next.magic = object(next.magic);
     next.magic.slotUsage = object(next.magic.slotUsage);
@@ -369,9 +395,13 @@ export function applyConfirmedSpellCast(character = {}, spell = {}, selection = 
       }
     }
   }
+  if (level === 0 && !getCharacterSpellSlotOptions(next, spell).some((option) => option.kind === "cantrip" && (!castingSourceId || option.castingSourceId === castingSourceId))) {
+    throw new Error("That cantrip is no longer available on this character.");
+  }
   if (spell.concentration === true || spell.targeting?.duration?.concentration === true) {
     next.combat = object(next.combat);
     const replacedSpellName = text(next.combat.concentration?.spellName);
+    clearConcentrationChecks(next.combat);
     next.combat.concentration = {
       spellId: text(spell.id),
       spellName: text(spell.name) || "Spell",

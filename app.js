@@ -1,3 +1,6 @@
+import { assertSpellDefinitionRevision } from "./combat/monsterSpellDefinition.js";
+import { getSpellcasterBlockReason } from "./spells/spellCastingRules.js";
+import { applyLongCastingCommand, getLongCastingStatus, getTimedCastingSeconds, supportsTrackedLongCasting } from "./combat/longCasting.js";
 // =====================================================
 // APP SECTION 1 — FIREBASE IMPORTS
 // =====================================================
@@ -65,6 +68,7 @@ import {
 } from "./battleMap/tokenCollision.js?v=stage8-20260826";
 import {
   createSpellTemplateInstruction,
+  prepareSpellTemplateGeometry,
   formatSpellTemplateInstruction
 } from "./battleMap/spellTemplates.js?v=status-sprites-20260831";
 import {
@@ -73,6 +77,7 @@ import {
 import {
   getCharacterLevel,
   getSpellActionKind,
+  getSpellReactionTrigger,
   getSpellCastEligibility,
   resolveCharacterSpellcastingStats
 } from "./spells/spellCastingRules.js";
@@ -214,6 +219,8 @@ import { createMagicItemPersistence } from "./items/magicItemPersistence.js";
 import { createSpellPersistence } from "./spells/spellPersistence.js";
 import {
   applyConfirmedMonsterSpellCast,
+  restoreMonsterSpellResources,
+  applyMonsterConcentrationEvent,
   getMonsterSpellAvailability
 } from "./combat/monsterSpellcasting.js";
 import { createNpcPersistence } from "./npcs/npcPersistence.js";
@@ -269,6 +276,8 @@ import {
   normalizeActionEconomy,
   synchronizeActionEconomy,
   synchronizeReactionEconomy,
+  toActorSpellTurnState,
+  hydrateActorSpellTurnState,
   toCombatTurnDocument
 } from "./combat/actionEconomy.js";
 import {
@@ -276,6 +285,7 @@ import {
   applyConfirmedSpellCast,
   consumeCharacterInventoryItem,
   getCharacterSpellSlotOptions,
+  getCharacterSpellcastingSourceOptions,
   setCombatActionBarFavorite
 } from "./combat/characterCombatCommands.js";
 
@@ -731,6 +741,12 @@ gameplayEffectPersistence = createEffectPersistence({
   getRoomId: () => currentRoomCode || "",
   getUserId: () => currentUser?.uid || "",
   getIsDm: () => currentIsDM === true,
+  runTransaction,
+  prepareTargetMutation: async (transaction, record, remove) => {
+    const { prepareConditionMutation } = await import("./effects/conditionPersistence.js");
+    return prepareConditionMutation(transaction, { db, doc, roomCode: record.roomCode, userUid: currentUser?.uid, record, remove, serverTimestamp, tokenCollection: tokenCollectionForRecord(tokenSystem?.getRoomTokens?.().find((token) => token.id === record.targetTokenId) || {}) });
+  },
+  onTargetCommitted: (target, roomCode) => { if (currentRoomCode === roomCode && target) reconcileCombatPresentationEffects(target); },
   onWarning: (message) => console.warn(message)
 });
 async function uploadAnimationSprite(file) {
@@ -1731,40 +1747,16 @@ function canOperateCombatToken(token) {
 }
 
 async function resolveMonsterSpellDefinition(reference = {}, presentation = {}) {
-  const sourceId = String(reference.sourceId || reference.spellId || presentation.id || "").trim();
-  if (!sourceId) throw new Error("This monster spell is missing its stable spell reference.");
-
-  if (reference.source === "custom") {
-    return {
-      ...presentation,
-      ...reference,
-      id: sourceId,
-      name: reference.name || presentation.name || "Monster spell",
-      level: Number(reference.level ?? presentation.level) || 0,
-      castingTime: reference.castingTime || presentation.castingTime || "1 action",
-      range: reference.range || presentation.range || "Self"
-    };
-  }
-
-  if (reference.source === "library") {
-    try {
-      return await getSpellPersistenceSystem().load(sourceId);
-    } catch {
-      // Older monster records also used "library" for built-in catalog IDs.
-    }
-  }
-
+  const { resolveMonsterSpellDefinition: resolveDefinition } = await import("./combat/monsterSpellDefinition.js");
   const { getDefaultSpellById } = await import("./data/defaultSpells.js?v=stage8-20260826");
-  const catalogSpell = getDefaultSpellById(sourceId);
-  if (catalogSpell) return catalogSpell;
-
-  try {
-    return await getSpellPersistenceSystem().load(sourceId);
-  } catch {
-    throw new Error(
-      `${reference.name || "This monster spell"} no longer resolves to a catalog or personal Library spell. Repair its reference in Monster Creator.`
-    );
-  }
+  return resolveDefinition(reference, presentation, {
+    loadSpell: async (id) => {
+      const ownerUid = currentUser?.uid;
+      const definition = await getSpellPersistenceSystem().load(id);
+      return { ...definition, castingDefinition: { ownerUid, id, revision: definition.revision || 0 } };
+    },
+    getCatalogSpell: getDefaultSpellById
+  });
 }
 
 function watchCombatActionActor(token, onChange) {
@@ -1812,6 +1804,7 @@ function watchCombatActionActor(token, onChange) {
       reference: doc(db, "rooms", roomCode, "monsters", monsterId),
       onNext: (snapshot) => {
         if (!isCurrent() || currentRoomCode !== roomCode) return;
+        if (snapshot.exists()) reconcileCombatPresentationEffects({ monster: snapshot.data(), monsterId });
         onChange(snapshot.exists()
           ? { actor: { ...snapshot.data(), firestoreDocumentId: snapshot.id }, kind: "monster", private: false }
           : { actor: null, kind: "generic", private: false });
@@ -1883,8 +1876,10 @@ async function ensureCombatActionBar() {
     watchActor: watchCombatActionActor,
     watchEconomy: watchCombatTurnEconomy,
     getEffects: getGameplayEffectsForToken,
+    getCastingContext: () => ({ room: currentRoomData, roomCode: currentRoomCode }),
     canControl: canOperateCombatToken,
     onExecute: executeCombatActionBarEntry,
+    onLongCastingCommand: executeLongCastingControl,
     onToggleFavorite: async (action, pinned, { token }) => {
       await commitCombatActionBarMutation({
         token,
@@ -1903,7 +1898,9 @@ async function commitCombatActionBarMutation({
   economyCommand = null,
   characterMutator = null,
   monsterMutator = null,
-  movementMutator = null
+  movementMutator = null,
+  allowOffTurn = false,
+  spellDefinitionGuard = null
 } = {}) {
   if (!currentRoomCode || !currentUser || !token?.id) {
     throw new Error("Open a room and select a token first.");
@@ -1921,11 +1918,12 @@ async function commitCombatActionBarMutation({
   );
   const economyRef = doc(db, "rooms", roomCode, "combatTurns", tokenId);
   const characterId = String(token.linkedCharacterId || "").trim();
-  const characterRef = characterMutator && characterId
+  const trackSpellTurn = economyCommand?.type === "spell";
+  const characterRef = (characterMutator || trackSpellTurn) && characterId
     ? doc(db, "rooms", roomCode, "characters", characterId)
     : null;
   const monsterId = String(token.linkedMonsterId || token.linkedMonster?.id || "").trim();
-  const monsterRef = monsterMutator && monsterId
+  const monsterRef = (monsterMutator || trackSpellTurn) && monsterId
     ? doc(db, "rooms", roomCode, "monsters", monsterId)
     : null;
   let committedEconomy = null;
@@ -1942,6 +1940,9 @@ async function commitCombatActionBarMutation({
     if (!tokenSnapshot.exists()) throw new Error("The selected token no longer exists.");
     const latestToken = { ...tokenSnapshot.data(), id: tokenSnapshot.id };
     committedToken = latestToken;
+    if (characterRef && String(latestToken.linkedCharacterId || "") !== characterId) throw new Error("The token is linked to a different character now. Select it again.");
+    if (monsterRef && String(latestToken.linkedMonsterId || latestToken.linkedMonster?.id || "") !== monsterId) throw new Error("The token is linked to a different monster now. Select it again.");
+    if (["spell", "long-cast-complete"].includes(economyCommand?.type) && (String(latestToken.sceneId || "") !== String(token.sceneId || "") || String(latestToken.floorId || "") !== String(token.floorId || ""))) throw new Error("The caster changed map or floor. Choose its targets again.");
     const isDm = latestRoom.dmUid === userUid;
     if (!canControlToken(latestToken, { isDm, userUid })) {
       throw new Error("You do not control that token.");
@@ -1955,7 +1956,7 @@ async function commitCombatActionBarMutation({
     if (
       activeCombatTurn &&
       initiative.currentCombatantId !== tokenId &&
-      !offTurnReaction
+      !offTurnReaction && !allowOffTurn
     ) {
       throw new Error("It is not that token's turn.");
     }
@@ -1967,8 +1968,19 @@ async function commitCombatActionBarMutation({
     let monsterSnapshot = null;
     if (monsterRef) monsterSnapshot = await transaction.get(monsterRef);
 
+    if (spellDefinitionGuard) {
+      if (spellDefinitionGuard.ownerUid !== userUid) throw new Error("Select this spell again with the current account.");
+      const definitionSnapshot = await transaction.get(doc(db, "users", userUid, "spells", spellDefinitionGuard.id));
+      assertSpellDefinitionRevision(spellDefinitionGuard, definitionSnapshot.exists() ? definitionSnapshot.data() : null);
+    }
+
+    if (["spell", "long-cast-complete"].includes(economyCommand?.type)) {
+      const blocked = getSpellcasterBlockReason(characterSnapshot?.data() || monsterSnapshot?.data() || {}, { token: latestToken, actorKind: characterRef ? "character" : "monster" });
+      if (blocked) throw new Error(blocked);
+    }
+
     if (activeCombatTurn && economyCommand) {
-      const latestEconomy = offTurnReaction
+      let latestEconomy = offTurnReaction
         ? synchronizeReactionEconomy(
             economySnapshot?.exists() ? economySnapshot.data() : {},
             initiative,
@@ -1979,6 +1991,8 @@ async function commitCombatActionBarMutation({
             initiative,
             tokenId
           );
+      const actorSpellTurn = characterSnapshot?.data()?.combat?.spellTurnState || monsterSnapshot?.data()?.spellcasting?.spellTurnState;
+      latestEconomy = hydrateActorSpellTurnState(latestEconomy, actorSpellTurn, `${initiative.roundNumber}:${initiative.turnCounter}:${initiative.currentCombatantId}`);
       committedEconomy = applyActionEconomyCommand(latestEconomy, {
         ...economyCommand,
         actorUid: userUid,
@@ -2003,13 +2017,17 @@ async function commitCombatActionBarMutation({
       });
     }
 
-    if (characterMutator) {
+    if (characterMutator || (trackSpellTurn && characterRef)) {
       if (!characterSnapshot?.exists()) throw new Error("The linked character no longer exists.");
       const remote = characterSnapshot.data() || {};
       if (!isDm && String(remote.ownerUid || "") !== userUid) {
         throw new Error("You cannot change another player's character.");
       }
-      const next = characterMutator(remote);
+      const next = characterMutator ? characterMutator(remote, { initiative, token: latestToken, room: latestRoom, roomCode }) : structuredClone(remote);
+      if (committedEconomy && trackSpellTurn) {
+        next.combat ||= {};
+        next.combat.spellTurnState = toActorSpellTurnState(committedEconomy, `${initiative.roundNumber}:${initiative.turnCounter}:${initiative.currentCombatantId}`);
+      }
       const now = Date.now();
       committedCharacter = {
         ...next,
@@ -2022,11 +2040,15 @@ async function commitCombatActionBarMutation({
       transaction.update(characterRef, committedCharacter);
     }
 
-    if (monsterMutator) {
+    if (monsterMutator || (trackSpellTurn && monsterRef)) {
       if (!isDm) throw new Error("Only the room DM can change monster spell resources.");
       if (!monsterSnapshot?.exists()) throw new Error("The linked monster no longer exists.");
       const remote = monsterSnapshot.data() || {};
-      const next = monsterMutator(remote);
+      const next = monsterMutator ? monsterMutator(remote, { initiative, token: latestToken, room: latestRoom, roomCode }) : structuredClone(remote);
+      if (committedEconomy && trackSpellTurn) {
+        next.spellcasting ||= {};
+        next.spellcasting.spellTurnState = toActorSpellTurnState(committedEconomy, `${initiative.roundNumber}:${initiative.turnCounter}:${initiative.currentCombatantId}`);
+      }
       const now = Date.now();
       committedMonster = {
         ...next,
@@ -2193,6 +2215,63 @@ function beginJumpTargeting({ token, model, actionKey = "", actionAttemptId = ""
   };
 }
 
+function longCastingMutator(actorKind, command) {
+  const mutate = (remote, context) => applyLongCastingCommand(remote, { ...command, actorKind }, context);
+  return actorKind === "monster" ? { monsterMutator: mutate } : { characterMutator: mutate };
+}
+
+async function startTrackedLongCasting({ actorKind, token, spell, selection, reference = {} }) {
+  const operationRoom = currentRoomCode;
+  const operationUser = currentUser?.uid;
+  const elapsed = initiativeSystem?.getState?.().combatActive !== true;
+  if (!selection || (elapsed ? getTimedCastingSeconds(spell, selection) === null : !supportsTrackedLongCasting(spell))) throw new Error("This spell requires manual casting-time resolution.");
+  if (!await requestAppConfirmation(
+    `Begin casting ${spell.name}? ${elapsed ? "The DM advances the campaign clock; maintain concentration until the full casting time has elapsed." : "Spend your Action each turn and maintain concentration."} The selected spell resource is spent only when casting completes. Confirm with the DM that you can supply the spell's components.`,
+    { title: "Begin longer casting", confirmLabel: "Begin Casting" }
+  )) return { state: "cancelled", message: "Casting cancelled; nothing was spent." };
+  if (currentRoomCode !== operationRoom || currentUser?.uid !== operationUser) throw new Error("The room or account changed. Start casting again.");
+  const attemptId = crypto.randomUUID();
+  await commitCombatActionBarMutation({ token,
+    spellDefinitionGuard: spell.castingDefinition || null,
+    economyCommand: elapsed ? null : { type: "spell", resource: "action", spellLevel: Number(spell.level) || 0, castingKind: "long-cast-progress" },
+    ...longCastingMutator(actorKind, { type: "start", attemptId, spell, selection, reference, mode: elapsed ? "elapsed" : "rounds" })
+  });
+  return { state: "committed", message: `Casting ${spell.name} started. ${elapsed ? "Advance the campaign clock, then finish casting" : "Continue with an Action on each turn"}; no spell resource has been spent.` };
+}
+
+async function executeLongCastingControl(command, { token, actor, actorKind, attempt, initiative }) {
+  if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
+  if (command === "cancel") {
+    const result = await commitCombatActionBarMutation({ token, allowOffTurn: true,
+      ...longCastingMutator(actorKind, { type: "cancel", attemptId: attempt.id }) });
+    reconcileCombatPresentationEffects(actorKind === "monster" ? { monster: result.monster, monsterId: token.linkedMonsterId } : { character: result.character, characterId: token.linkedCharacterId });
+    return { message: "Casting stopped. No spell resource was spent." };
+  }
+  let current = getLongCastingStatus(actor, actorKind, { room: currentRoomData, roomCode: currentRoomCode, token, initiative });
+  if (current.mode !== "elapsed" && current.lastRound < Number(initiative.roundNumber)) {
+    const result = await commitCombatActionBarMutation({ token,
+      spellDefinitionGuard: current.spell.castingDefinition || null,
+      economyCommand: { type: "spell", resource: "action", spellLevel: Number(current.spell.level) || 0, castingKind: "long-cast-progress" },
+      ...longCastingMutator(actorKind, { type: "advance", attemptId: current.id }) });
+    actor = actorKind === "monster" ? result.monster : result.character;
+    current = getLongCastingStatus(actor, actorKind, { initiative });
+  }
+  if (current.status !== "ready") return { message: `Casting ${current.spell.name}: ${current.completedRounds}/${current.requiredRounds} rounds.` };
+  const spell = current.spell;
+  await beginCharacterSpellTargeting({ spell, character: actor,
+    characterId: actorKind === "character" ? token.linkedCharacterId : "", casterToken: token, casterTokenId: token.id,
+    casterName: actor.identity?.name || actor.name || token.name,
+    skipCastEligibility: actorKind === "monster", allowTrackedLongCasting: true,
+    spellcastingStats: actorKind === "monster" ? { spellSaveDc: actor.spellcasting?.saveDc, spellAttackBonus: actor.spellcasting?.attackBonus } : null,
+    slotOptions: [{ ...current.selection, remaining: 1, label: "Complete casting with the resource chosen at the start" }],
+    onConfirmCast: () => commitCombatActionBarMutation({ token,
+      spellDefinitionGuard: current.spell.castingDefinition || null,
+      economyCommand: { type: "long-cast-complete", resource: "free" },
+      ...longCastingMutator(actorKind, { type: "complete", attemptId: current.id }) })
+  });
+  return { message: `${spell.name} is ready. Confirm its targets to finish casting and spend the spell resource.` };
+}
+
 async function executeCombatActionBarEntry(action, context) {
   const { token, actor, actorKind, model, initiative, actionAttemptId } = context;
   if (!canOperateCombatToken(token)) throw new Error("You do not control that token.");
@@ -2251,7 +2330,10 @@ async function executeCombatActionBarEntry(action, context) {
     if (!availability.available) throw new Error(availability.reason);
     const spell = await resolveMonsterSpellDefinition(reference, action.raw);
     const castingKind = getSpellActionKind(spell);
-    if (inCombat && castingKind === "long-cast") {
+    if ((inCombat && castingKind === "long-cast") || (!inCombat && (castingKind === "long-cast" || context.longCastingSelection?.kind === "ritual"))) {
+      return startTrackedLongCasting({ actorKind, token, spell, selection: context.longCastingSelection, reference });
+    }
+    if (castingKind === "long-cast") {
       throw new Error(
         `${spell.name || action.name} has a long casting time and cannot be resolved as a single combat action.`
       );
@@ -2275,7 +2357,7 @@ async function executeCombatActionBarEntry(action, context) {
         spellAttackBonus: actor?.spellcasting?.attackBonus
       },
       skipCastEligibility: true,
-      slotOptions: [{
+      slotOptions: availability.kind === "slot" ? availability.options.map((option) => ({ ...option, sourceId })) : [{
         kind: "special",
         level: Number(spell.level) || 0,
         sourceId,
@@ -2286,7 +2368,7 @@ async function executeCombatActionBarEntry(action, context) {
       }],
       actionKey: action.key,
       actionAttemptId,
-      onConfirmCast: () => commitCombatActionBarMutation({
+      onConfirmCast: (selection) => commitCombatActionBarMutation({
         token,
         economyCommand: {
           type: "spell",
@@ -2294,7 +2376,8 @@ async function executeCombatActionBarEntry(action, context) {
           spellLevel: Number(spell.level) || 0,
           castingKind
         },
-        monsterMutator: (remote) => applyConfirmedMonsterSpellCast(remote, reference, spell)
+        spellDefinitionGuard: spell.castingDefinition || null,
+        monsterMutator: (remote) => applyConfirmedMonsterSpellCast(remote, reference, spell, selection)
       })
     });
     return {
@@ -2329,13 +2412,16 @@ async function executeCombatActionBarEntry(action, context) {
     const castEligibility = getSpellCastEligibility(action.raw);
     if (!castEligibility.eligible) throw new Error(castEligibility.reason);
     const castingKind = getSpellActionKind(action.raw);
-    if (inCombat && castingKind === "long-cast") {
+    if ((inCombat && castingKind === "long-cast") || (!inCombat && (castingKind === "long-cast" || context.longCastingSelection?.kind === "ritual"))) {
+      return startTrackedLongCasting({ actorKind, token, spell: action.raw, selection: context.longCastingSelection });
+    }
+    if (castingKind === "long-cast") {
       throw new Error(
         `${action.name} has a long casting time and cannot be resolved as a single combat action.`
       );
     }
     const slotOptions = getCharacterSpellSlotOptions(actor, action.raw)
-      .filter((option) => !inCombat || option.kind !== "ritual");
+      .filter((option) => option.kind !== "ritual");
     if (Number(action.raw?.level) > 0 && !slotOptions.some((option) => option.remaining > 0)) {
       throw new Error("No eligible spell slot remains.");
     }
@@ -2448,6 +2534,22 @@ function readTimeInput(
   );
 }
 
+async function restoreRoomMonsterSpellResources(restType) {
+  if (!currentIsDM || !currentRoomCode || restType !== "long") return;
+  const roomCode = currentRoomCode;
+  const monsters = await getDocs(collection(db, "rooms", roomCode, "monsters"));
+  for (const monster of monsters.docs) {
+    await runTransaction(db, async (transaction) => {
+      const room = await transaction.get(doc(db, "rooms", roomCode));
+      const latest = await transaction.get(monster.ref);
+      if (room.data()?.dmUid !== currentUser?.uid) throw new Error("Only the room DM can restore monster resources.");
+      if (!latest.exists() || !latest.data().spellcasting) return;
+      const restored = restoreMonsterSpellResources(latest.data(), restType);
+      transaction.update(monster.ref, { spellcasting: restored.spellcasting, revision: Math.max(0, Number(latest.data().revision) || 0) + 1, updatedAtMillis: Date.now(), updatedAt: serverTimestamp() });
+    });
+  }
+}
+
 async function runCampaignTimeMutation(
   action,
   successMessage
@@ -2501,12 +2603,10 @@ function initializeCampaignTimeControls() {
           button.dataset.timeRest ===
             "long";
         runCampaignTimeMutation(
-          () => campaignTimeSystem
-            .advanceSeconds(
-              isLongRest
-                ? LONG_REST_SECONDS
-                : SHORT_REST_SECONDS
-            ),
+          async () => {
+            await campaignTimeSystem.advanceSeconds(isLongRest ? LONG_REST_SECONDS : SHORT_REST_SECONDS);
+            await restoreRoomMonsterSpellResources(isLongRest ? "long" : "short");
+          },
           isLongRest
             ? "Long rest completed: +8 hours."
             : "Short rest completed: +1 hour."
@@ -2709,6 +2809,7 @@ function connectCampaignTimeCombatEvents() {
 campaignTimeSystem.subscribe(
   function (state) {
     renderCampaignTime(state);
+    combatActionBarSystem?.refresh?.();
     battleMapLighting?.applyWorldTime(
       state.worldTime
     );
@@ -5954,7 +6055,8 @@ function collectBattleMapTokenFootprints() {
     battleMapTemplates?.getOverlayElement();
   const overlayRect =
     overlay?.getBoundingClientRect();
-  const tokenElements = Array.from(
+  const objectOnly = activeSpellTemplateInstruction?.sourceTargetType === "object";
+  const tokenElements = objectOnly ? Array.from(E.battleMapSurface?.querySelectorAll(".hg-map-object[data-object-id]") || []) : Array.from(
     E.tokenLayer?.querySelectorAll(
       ".hg-token[data-token-id]"
     ) || []
@@ -5970,19 +6072,20 @@ function collectBattleMapTokenFootprints() {
 
   return tokenElements.map((element) => {
     const rect = element.getBoundingClientRect();
+    const object = objectOnly ? mapObjectSystem?.getObjects?.().find((record) => record.id === element.dataset.objectId) : null;
     return {
       element,
       footprint: {
-        id: element.dataset.tokenId,
+        id: objectOnly ? `object:${element.dataset.objectId}` : element.dataset.tokenId,
         name:
-          element.dataset.tokenName ||
+          object?.name || element.dataset.tokenName ||
           element.title ||
           "Token",
         type:
-          element.dataset.tokenType ||
+          (objectOnly ? "object" : element.dataset.tokenType) ||
           "token",
         elevation: normalizeElevation(
-          element.dataset.tokenElevation
+          objectOnly ? floorSystem?.getState?.().floor?.baseElevation || 0 : element.dataset.tokenElevation
         ),
         left: rect.left - overlayRect.left,
         top: rect.top - overlayRect.top,
@@ -5994,6 +6097,7 @@ function collectBattleMapTokenFootprints() {
 }
 
 function updateAffectedTokenHighlights(geometry) {
+  geometry = prepareSpellTemplateGeometry(geometry, activeSpellTemplateInstruction);
   const tokenEntries =
     collectBattleMapTokenFootprints();
   const affectedTokens = geometry
@@ -6008,10 +6112,9 @@ function updateAffectedTokenHighlights(geometry) {
     affectedTokens.map((token) => token.id)
   );
 
-  tokenEntries.forEach(({ element, footprint }) => {
-    const affected = affectedIds.has(
-      footprint.id
-    );
+  Array.from(E.battleMapSurface?.querySelectorAll(".hg-token[data-token-id], .hg-map-object[data-object-id]") || []).forEach((element) => {
+    const id = element.dataset.tokenId || `object:${element.dataset.objectId}`;
+    const affected = affectedIds.has(id);
     element.classList.toggle(
       "hg-token-template-affected",
       affected
@@ -6192,6 +6295,9 @@ function formatCastResolution(resolution, { preview = false } = {}) {
     );
   }
 
+  if (resolution.castingSourceName) parts.push(`Source: ${resolution.castingSourceName}`);
+  if (resolution.slotLevel > 0) parts.push(`Cast level ${resolution.slotLevel}`);
+  parts.push("Manual: resolve rolls, saves, damage/healing, defenses, and continuing spell text with the DM.");
   if (resolution.ritual) parts.push("Ritual cast; no spell slot spent");
 
   return parts.length
@@ -6240,7 +6346,7 @@ function renderSpellCastingPanel() {
         .map((option) => (
           `${encodeSpellSlotOption(option)}:${option.remaining}:${option.label}`
         ))
-        .join(";");
+        .join(";") + JSON.stringify(sessionState.sourceFeedback || []);
 
     if (
       E.spellCastingSlotSelect
@@ -6266,6 +6372,12 @@ function renderSpellCastingPanel() {
           }
         )
       );
+      for (const source of sessionState.sourceFeedback || []) {
+        const option = document.createElement("option");
+        option.disabled = true;
+        option.textContent = `${source.sourceName}: ${source.reason}`;
+        E.spellCastingSlotSelect.append(option);
+      }
       E.spellCastingSlotSelect
         .dataset.slotSignature =
           slotSignature;
@@ -6304,12 +6416,14 @@ function renderSpellCastingPanel() {
       E.spellCastingInstructions,
       "Saving the confirmed cast…"
     );
+  } else if (sessionState.target?.validTarget === false) {
+    text(E.spellCastingInstructions, sessionState.target.invalidReason);
   } else if (
     sessionState.phase === "target-selected"
   ) {
     text(
       E.spellCastingInstructions,
-      `Target locked${
+      `${sessionState.instruction.manualResolution || ""} Target locked${
         Number.isFinite(
           sessionState.target?.distanceFeet
         )
@@ -6392,16 +6506,19 @@ function syncActiveSpellCastingTarget(
     return;
   }
 
-  const geometry =
-    templateState.enabled
-      ? templateState.geometry
-      : null;
+  const geometry = templateState.enabled ? prepareSpellTemplateGeometry(templateState.geometry, sessionState.instruction) : null;
+  const casterElement = E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(sessionState.casterToken?.id || ""))}"]`);
+  const currentCasterPoint = getCastingCasterPoint(casterElement);
+  if (currentCasterPoint) activeSpellCastingCasterPoint = currentCasterPoint;
+  if (casterElement) activeSpellCastingCasterElevationFeet = normalizeElevation(casterElement.dataset.tokenElevation);
   let distanceFeet = null;
   let horizontalFeet = null;
   let verticalFeet = null;
-  let validRange = true;
-  const targetElevationFeet =
-    sessionState.instruction.targetType ===
+  let validRange = Boolean(currentCasterPoint);
+  const validTarget = sessionState.instruction.singleTarget && ["creature", "object"].includes(sessionState.instruction.sourceTargetType) ? affectedTokens.length === 1 : true;
+  const targetElevationFeet = sessionState.instruction.singleTarget && affectedTokens.length === 1
+    ? normalizeElevation(affectedTokens[0].elevation ?? affectedTokens[0].elevationFeet)
+    : sessionState.instruction.targetType ===
       "point"
       ? getRulerElevations()
           .endElevationFeet
@@ -6415,10 +6532,8 @@ function syncActiveSpellCastingTarget(
     )
   ) {
     const pixels = Math.hypot(
-      geometry.anchor.x -
-        activeSpellCastingCasterPoint.x,
-      geometry.anchor.y -
-        activeSpellCastingCasterPoint.y
+      (sessionState.instruction.singleTarget && affectedTokens.length === 1 ? affectedTokens[0].center?.x ?? geometry.anchor.x : geometry.anchor.x) - activeSpellCastingCasterPoint.x,
+      (sessionState.instruction.singleTarget && affectedTokens.length === 1 ? affectedTokens[0].center?.y ?? geometry.anchor.y : geometry.anchor.y) - activeSpellCastingCasterPoint.y
     );
     horizontalFeet =
       pixels /
@@ -6436,10 +6551,11 @@ function syncActiveSpellCastingTarget(
       spatialDistance.distanceFeet;
     verticalFeet =
       spatialDistance.verticalFeet;
-    validRange =
-      distanceFeet <=
-      sessionState.instruction.rangeFeet +
-        0.001;
+    validRange = Boolean(currentCasterPoint) && distanceFeet <= sessionState.instruction.rangeFeet + 0.001;
+    if (sessionState.instruction.sourceShape === "wall") {
+      const endHorizontal = Math.hypot(geometry.directionPoint.x - activeSpellCastingCasterPoint.x, geometry.directionPoint.y - activeSpellCastingCasterPoint.y) / getBattleMapGridPixelSize() * getRulerFeetPerSquare();
+      validRange = validRange && Math.hypot(endHorizontal, targetElevationFeet - activeSpellCastingCasterElevationFeet) <= sessionState.instruction.rangeFeet + 0.001;
+    }
   }
 
   battleMapTemplates
@@ -6455,6 +6571,8 @@ function syncActiveSpellCastingTarget(
         "confirmed" &&
       validRange,
     validRange,
+    validTarget,
+    invalidReason: validTarget ? "" : `Choose exactly one ${sessionState.instruction.sourceTargetType === "object" ? "object" : "creature"} target. The selected target may have moved; lock its current position again.`,
     distanceFeet,
     horizontalFeet,
     verticalFeet,
@@ -6509,9 +6627,25 @@ function cancelActiveSpellCasting({
 async function confirmActiveSpellCast() {
   if (!activeSpellCastingSession) return;
 
+  const spell = activeSpellCastingSession.getState().spell;
+  if (getSpellActionKind(spell) === "reaction") {
+    const confirmed = await requestAppConfirmation(
+      `Trigger: ${getSpellReactionTrigger(spell)}. Confirm with the DM that this trigger occurred before spending your reaction.`,
+      { title: "Confirm reaction trigger", confirmLabel: "DM confirmed trigger" }
+    );
+    if (!confirmed) return;
+  }
   const selection = decodeSpellSlotOption(
     E.spellCastingSlotSelect?.value
   );
+  const current = activeSpellCastingSession.getState();
+  const casterElement = E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(current.casterToken?.id || ""))}"]`);
+  const casterPoint = getCastingCasterPoint(casterElement);
+  if (casterPoint && current.instruction.targetType !== "point") {
+    const template = battleMapTemplates.getState();
+    battleMapTemplates.setAnchorPoint(casterPoint, { locked: true, confirm: template.phase === "confirmed" });
+  }
+  battleMapTemplates?.refresh();
   const pending =
     activeSpellCastingSession.confirm(
       selection
@@ -6550,7 +6684,7 @@ function handleConfirmedSpellVfx({
   try {
     const castingState = activeSpellCastingSession?.getState?.() || {};
     const instruction = castingState.instruction;
-    const castingCharacterId = castingState.characterId || "";
+    const castingCharacterId = castingState.characterId || tokenSystem?.getRoomTokens?.().find((token) => token.id === casterToken?.id)?.linkedMonsterId || "";
     const directional = ["cone", "line"].includes(instruction?.templateShape);
     const selectedTarget = instruction?.singleTarget ? target?.affectedTokens?.[0] : null;
     const castEvent = createSpellVfxEvent({
@@ -7240,14 +7374,11 @@ async function applyGameplayEffect(input, context = gameplayEffectContext()) {
   const record = gameplayEffectRuntime.applyEffect(input, context);
   try {
     await gameplayEffectPersistence.save(record);
-    return record;
   } catch (error) {
-    gameplayEffectRuntime.removeEffect(record.id, "save-failed", {
-      visualPhase: true,
-      emitChange: true
-    });
+    gameplayEffectRuntime.removeEffect(record.id, "save-failed", { visualPhase: true, emitChange: true });
     throw error;
   }
+  return record;
 }
 
 async function removeGameplayEffect(record) {
@@ -7398,7 +7529,7 @@ function handleCombatEffectEnded(record, reason) {
   }
 }
 
-function reconcileCombatPresentationEffects({ character = null, characterId = "" } = {}) {
+function reconcileCombatPresentationEffects({ character = null, characterId = "", monster = null, monsterId = "" } = {}) {
   const time = campaignTimeSystem.getState();
   const initiative = initiativeSystem?.getState?.() || {};
   const tokenIds = tokenSystem?.getRoomTokens?.().map((token) => token.id) || [];
@@ -7417,6 +7548,9 @@ function reconcileCombatPresentationEffects({ character = null, characterId = ""
         [linkedToken.id]: character?.combat?.conditions || character?.conditions || []
       };
     }
+  }
+  if (monster && monsterId) {
+    concentrationByActor = { [monsterId]: monster.spellcasting?.concentration?.spellId ? `${monsterId}:${monster.spellcasting.concentration.spellId}` : "" };
   }
   return combatEffectLifecycle.reconcile({
     worldTime: time.worldTime,
@@ -7685,6 +7819,7 @@ async function beginCharacterSpellTargeting({
   casterLevel = null,
   spellcastingStats: providedSpellcastingStats = null,
   skipCastEligibility = false,
+  allowTrackedLongCasting = false,
   slotOptions = [],
   actionKey = "",
   actionAttemptId = "",
@@ -7706,8 +7841,8 @@ async function beginCharacterSpellTargeting({
     throw new Error(castEligibility.reason);
   }
   if (
-    combatActive &&
     getSpellActionKind(spell) === "long-cast" &&
+    allowTrackedLongCasting !== true &&
     allowWithoutRoom !== true
   ) {
     throw new Error(
@@ -7715,7 +7850,7 @@ async function beginCharacterSpellTargeting({
     );
   }
   const baseAvailableSlotOptions = (Array.isArray(slotOptions) ? slotOptions : [])
-    .filter((option) => !combatActive || option.kind !== "ritual");
+    .filter((option) => option.kind !== "ritual" || (!combatActive && allowTrackedLongCasting));
   const defaultSpellcastingStats = providedSpellcastingStats ||
     resolveCharacterSpellcastingStats(character, spell);
   const availableSlotOptions = baseAvailableSlotOptions.map((option) => {
@@ -7854,6 +7989,7 @@ async function beginCharacterSpellTargeting({
       );
   }
 
+  const castingScope = JSON.stringify([currentRoomCode, currentMapId, floorSystem?.getState?.().sceneId, floorSystem?.getState?.().floorId]);
   activeSpellCastingConfirm =
     typeof onConfirmCast === "function"
       ? onConfirmCast
@@ -7861,6 +7997,8 @@ async function beginCharacterSpellTargeting({
   activeSpellCastingSession =
     createSpellCastingSession({
       onConfirm: ({ slot }) => {
+        const latestScope = JSON.stringify([currentRoomCode, currentMapId, floorSystem?.getState?.().sceneId, floorSystem?.getState?.().floorId]);
+        if (latestScope !== castingScope) throw new Error("The map or floor changed while targeting. Cancel and choose targets again.");
         return activeSpellCastingConfirm({
           kind: slot.kind,
           level: slot.level,
@@ -7889,6 +8027,7 @@ async function beginCharacterSpellTargeting({
         )
       },
     slotOptions: availableSlotOptions,
+    sourceFeedback: skipCastEligibility ? [] : getCharacterSpellcastingSourceOptions(character, spell, { includeUnavailable: true }).filter((source) => !source.normal),
     characterLevel: Number.isFinite(Number(casterLevel))
       ? Math.max(1, Math.round(Number(casterLevel)))
       : getCharacterLevel(character),
@@ -10427,6 +10566,11 @@ if (E.centerPuzzleBoardButton) {
 
 if (!tokenSystem) {
   tokenSystem = createTokenSystem({
+    onLinkedActorHpChanged: async ({ roomCode, monsterId, monster, characterId, character }) => {
+      if (currentRoomCode !== roomCode) return;
+      if (character) await tokenSystem?.syncLinkedCharacterTokens?.({ ...character, id: characterId });
+      await reconcileCombatPresentationEffects({ monster, monsterId, character, characterId });
+    },
     db,
     doc,
     collection,
@@ -10834,6 +10978,7 @@ function setBattleGameFeelStatus(message, tone = "") {
 }
 
 async function adjustTokenHpFromContext(token) {
+  const { applyGameplayAction } = await import("./characterSheet/gameplayState.js");
   if (currentIsDM !== true) throw new Error("Only the room DM can adjust token HP from this menu.");
   const operationRoomCode = currentRoomCode;
   const operationUserUid = currentUser?.uid || "";
@@ -10848,25 +10993,29 @@ async function adjustTokenHpFromContext(token) {
   if (currentRoomCode !== operationRoomCode || currentUser?.uid !== operationUserUid) {
     throw new Error("The active room or account changed. HP was not updated.");
   }
+  let concentrationMonster = null;
   let previousHp = current;
   let nextHp = maximum > 0 ? Math.min(maximum, requested) : requested;
   let targetName = token.name || "Token";
   if (token.linkedCharacterId) {
     const result = await commitCombatActionBarMutation({
       token,
+      allowOffTurn: true,
       characterMutator: (remote) => {
         previousHp = Math.max(0, Number(remote.combat?.currentHp ?? remote.currentHp) || 0);
         const remoteMaximum = Math.max(0, Number(remote.combat?.maxHp ?? remote.maxHp) || 0);
         nextHp = remoteMaximum > 0 ? Math.min(remoteMaximum, requested) : requested;
-        return {
-          ...remote,
-          combat: { ...(remote.combat || {}), currentHp: nextHp },
-          currentHp: nextHp
-        };
+        const next = structuredClone(remote);
+        applyGameplayAction(next, { type: "set-current-hp", amount: nextHp });
+        next.currentHp = nextHp;
+        return next;
       }
     });
     targetName = result.token?.name || targetName;
-    if (result.character) await tokenSystem?.syncLinkedCharacterTokens?.(result.character);
+    if (result.character) {
+      await tokenSystem?.syncLinkedCharacterTokens?.(result.character);
+      reconcileCombatPresentationEffects({ character: result.character, characterId: token.linkedCharacterId });
+    }
   } else {
     const roomRef = doc(db, "rooms", operationRoomCode);
     const tokenRef = doc(
@@ -10887,10 +11036,18 @@ async function adjustTokenHpFromContext(token) {
         throw new Error("Only the current room DM can adjust token HP.");
       }
       const latest = tokenSnapshot.data() || {};
+      const monsterId = String(latest.linkedMonsterId || latest.linkedMonster?.id || "").trim();
+      const monsterRef = monsterId ? doc(db, "rooms", operationRoomCode, "monsters", monsterId) : null;
+      const monsterSnapshot = monsterRef ? await transaction.get(monsterRef) : null;
       previousHp = Math.max(0, Number(latest.currentHp ?? latest.hp?.current) || 0);
       const remoteMaximum = Math.max(0, Number(latest.maxHp ?? latest.hp?.maximum) || 0);
       nextHp = remoteMaximum > 0 ? Math.min(remoteMaximum, requested) : requested;
       targetName = latest.name || targetName;
+      if (monsterSnapshot?.exists() && nextHp < previousHp) {
+        const updated = applyMonsterConcentrationEvent(monsterSnapshot.data(), { type: "damage", amount: previousHp - nextHp, currentHp: nextHp });
+        concentrationMonster = { id: monsterId, monster: updated };
+        transaction.update(monsterRef, { spellcasting: updated.spellcasting, revision: Math.max(0, Number(monsterSnapshot.data().revision) || 0) + 1, updatedAtMillis: Date.now(), updatedAt: serverTimestamp() });
+      }
       transaction.update(tokenRef, {
         currentHp: nextHp,
         "hp.current": nextHp,
@@ -10899,6 +11056,8 @@ async function adjustTokenHpFromContext(token) {
       });
     });
   }
+  if (concentrationMonster) reconcileCombatPresentationEffects({ monster: concentrationMonster.monster, monsterId: concentrationMonster.id });
+  if (token.linkedMonsterId && nextHp < previousHp) setBattleGameFeelStatus(`HP updated. If concentrating, resolve the Constitution save from the token menu (DC ${Math.max(10, Math.floor((previousHp - nextHp) / 2))}).`);
   document.dispatchEvent(new CustomEvent("homebrewgod:combat-outcome", {
     detail: {
       id: `hp-adjust:${operationRoomCode}:${token.id}:${Date.now()}`,
@@ -11065,6 +11224,16 @@ async function executeTokenContextCommand(command, { token, context = {} } = {})
     }
     await tokenSystem.updateToken(token.id, draft);
     setBattleGameFeelStatus(`${draft.name} was updated.`);
+    return true;
+  }
+  if (command === "monster-concentration-end" || command === "monster-concentration-save") {
+    if (!currentIsDM) throw new Error("Only the DM can change monster concentration.");
+    const answer = command === "monster-concentration-save" ? globalThis.prompt("Constitution saving throw total (roll with the DM)") : null;
+    if (command === "monster-concentration-save" && answer === null) return false;
+    if (answer !== null && (!answer.trim() || !Number.isFinite(Number(answer)))) throw new Error("Enter a valid save total.");
+    const result = await commitCombatActionBarMutation({ token, monsterMutator: (remote) => applyMonsterConcentrationEvent(remote, { type: command === "monster-concentration-end" ? "end" : "save", total: Number(answer) }) });
+    reconcileCombatPresentationEffects({ monster: result.monster, monsterId: token.linkedMonsterId });
+    setBattleGameFeelStatus(result.monster?.spellcasting?.concentration ? "Concentration maintained." : "Concentration ended.");
     return true;
   }
   if (command === "adjust-hp") return adjustTokenHpFromContext(token);

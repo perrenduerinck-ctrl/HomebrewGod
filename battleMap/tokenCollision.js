@@ -404,7 +404,7 @@ export function tokenIntersectsTemplate(
   }
 
   if (
-    geometry.shape === "cube" &&
+    (geometry.shape === "cube" || geometry.shape === "line") &&
     !elevationInsideVolume(
       geometry,
       footprint.elevation

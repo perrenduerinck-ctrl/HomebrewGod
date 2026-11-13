@@ -88,6 +88,10 @@ export function buildTokenContextActions({
   if (isDm) {
     actions.push(item("edit-token", "Edit Token", { group: "dm" }));
     actions.push(item("adjust-hp", "Adjust HP", { group: "dm" }));
+    if (linkedMonster) {
+      actions.push(item("monster-concentration-save", "Resolve Concentration Save", { group: "dm" }));
+      actions.push(item("monster-concentration-end", "End Concentration", { group: "dm" }));
+    }
     actions.push(item("apply-condition", "Apply / Remove Condition", { group: "dm" }));
     actions.push(item("set-elevation", "Set Elevation", { group: "dm" }));
     actions.push(item("move-floor", "Move to Another Floor", { group: "dm" }));

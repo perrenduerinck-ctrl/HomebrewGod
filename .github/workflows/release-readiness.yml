@@ -36,6 +36,8 @@ jobs:
         run: pnpm test
       - name: Run Firestore security rules tests
         run: pnpm run test:rules
+      - name: Run spell concurrency regressions
+        run: pnpm run test:spell-audit:emulator
 
   browser:
     name: Browser tests (shard ${{ matrix.index }} of 2)
@@ -130,6 +132,36 @@ jobs:
           path: playwright-report/
           if-no-files-found: ignore
 
+  spell-multiplayer:
+    name: Spell casting with real DM and player clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:spell-audit:multiplayer
+      - name: Upload spell playtest report on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spell-multiplayer-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
   deploy:
     name: Deploy tested GitHub Pages artifact
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -138,6 +170,7 @@ jobs:
       - browser
       - movement-browser
       - stage8-browser
+      - spell-multiplayer
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

@@ -13,7 +13,10 @@ export function createEffectPersistence({
   getRoomId = () => "",
   getUserId = () => "",
   getIsDm = () => false,
-  onWarning = () => {}
+  onWarning = () => {},
+  runTransaction = null,
+  prepareTargetMutation = null,
+  onTargetCommitted = null
 } = {}) {
   let unsubscribe = null;
   let listeningRoom = "";
@@ -30,10 +33,16 @@ export function createEffectPersistence({
       updatedAtMillis: Date.now()
     });
     if (!record || !createdByUid) throw new Error("A signed-in DM, room, and target are required.");
-    await setDoc(path(roomCode, record.id), {
-      ...record,
-      updatedAt: serverTimestamp()
-    });
+    const saved = { ...record, updatedAt: serverTimestamp() };
+    if (runTransaction && prepareTargetMutation) {
+      let target;
+      await runTransaction(db, async (transaction) => {
+        target = await prepareTargetMutation(transaction, record, false);
+        transaction.set(path(roomCode, record.id), saved);
+        target?.write?.();
+      });
+      try { await onTargetCommitted?.(target, roomCode); } catch (error) { onWarning(error.message); }
+    } else await setDoc(path(roomCode, record.id), saved);
     return record;
   }
 
@@ -42,7 +51,15 @@ export function createEffectPersistence({
     const roomCode = text(value?.roomCode || getRoomId(), 32).toUpperCase();
     const id = text(value?.id || value, 180);
     if (!roomCode || !id) return false;
-    await deleteDoc(path(roomCode, id));
+    if (runTransaction && prepareTargetMutation && value?.targetTokenId) {
+      let target;
+      await runTransaction(db, async (transaction) => {
+        target = await prepareTargetMutation(transaction, value, true);
+        transaction.delete(path(roomCode, id));
+        target?.write?.();
+      });
+      try { await onTargetCommitted?.(target, roomCode); } catch (error) { onWarning(error.message); }
+    } else await deleteDoc(path(roomCode, id));
     return true;
   }
 
