@@ -978,10 +978,14 @@ function enhanceStickyActions(root) {
     footer.prepend(missing);
   }
 
-  const message =
-    required && !complete
-      ? "Complete the required choices marked on this step to continue."
-      : "";
+  const issues = [...root.querySelectorAll(
+    "[data-cc-completion-guidance] li > span, #characterWizardStepBody .hg-character-warning[role=alert] li > span"
+  )].map((element) => element.textContent.trim()).filter(Boolean);
+  const message = required && !complete
+    ? issues.length
+      ? "Still needed: " + issues[0] + (issues.length > 1 ? ` (${issues.length - 1} more listed above.)` : "")
+      : "Complete the required choices marked on this step to continue."
+    : "";
 
   missing.textContent = message;
   missing.hidden = !message;

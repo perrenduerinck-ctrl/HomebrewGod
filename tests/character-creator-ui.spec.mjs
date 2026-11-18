@@ -656,3 +656,36 @@ test(
       .toBe(false);
   }
 );
+
+
+test("unfinished choices explain what is missing and review links open the right creator field", async ({ page }) => {
+  const errors = []; page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("?smokeTest=1&view=characterCreator");
+  await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 60000 });
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("characterCreator"));
+  await page.locator('[data-cc-action="new-character"]').first().click();
+  const body = page.locator("#characterWizardStepBody");
+  const guidance = body.locator("[data-cc-completion-guidance]");
+  await expect(guidance).toContainText("Character name is missing");
+  await expect(page.locator("[data-hg-step-missing]")).toContainText("Character name is missing");
+  await guidance.getByRole("button", { name: /Show in Character Basics/ }).click();
+  const name = body.locator('[data-draft-path="identity.name"]');
+  await expect(name).toBeFocused();
+  await name.fill("Mira"); await name.press("Tab");
+  await expect(guidance).not.toContainText("Character name is missing");
+  await expect(page.locator("[data-hg-step-missing]")).toBeHidden();
+  await page.locator('.hg-character-step-button[data-step-id="review"]').click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("[data-hg-step-missing]")).toContainText("Still needed:");
+  expect(await page.locator(".hg-character-step-footer").evaluate((footer) => footer.getBoundingClientRect().height)).toBeLessThan(422);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const classIssue = body.locator('[data-cc-issue]').filter({ hasText: /Show in Class/ }).first();
+  await expect(classIssue).toBeVisible(); await classIssue.click();
+  await expect(page.locator("#characterWizardStepTitle")).toHaveText("Class");
+  await expect(guidance).toContainText("Choose a class");
+  await page.locator('.hg-character-step-button[data-step-id="save"]').click();
+  const speciesIssue = body.locator('[data-cc-issue]').filter({ hasText: /Show in Species/ }).first();
+  await expect(speciesIssue).toBeVisible(); await speciesIssue.click();
+  await expect(page.locator("#characterWizardStepTitle")).toHaveText("Species / Race");
+  expect(errors).toEqual([]);
+});

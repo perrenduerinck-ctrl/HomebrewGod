@@ -1,3 +1,4 @@
+import { getCompletionLocation, renderCompletionIssue } from "./completionGuidance.js";
 // =====================================================
 // CHARACTER CREATOR.JS — HOMEBREW GOD CHARACTER CREATOR
 // Batch 1 of 4: permanent foundation sections 1 through 5.
@@ -20170,6 +20171,7 @@ export function createCharacterCreator(options = {}) {
 
     uniqueCleanArray(refreshStepIds)
       .forEach(refreshStepRailState);
+    refreshStepCompletionGuidance();
   }
 
   function renderMissingStep(stepId) {
@@ -20182,6 +20184,42 @@ export function createCharacterCreator(options = {}) {
         <b>${escapeHtml(step.label)}</b>.
       </div>
     `;
+  }
+
+  function renderStepCompletionGuidance(stepId) {
+    const step = getStepById(stepId);
+    if (["review", "save"].includes(step.id)) return "";
+    const modules = { basics: basicsStep, class: classStep, background: backgroundStep, species: speciesStep, abilities: abilitiesStep, equipment: equipmentStep, spells: spellsStep };
+    if (isStepComplete(step.id)) return "";
+    const warnings = modules[step.id]?.validateStep?.(creatorState.draft)?.blockingErrors || [];
+    const issues = warnings.length ? warnings : ["Open the choices in this step and complete the remaining selections."];
+    return `<section class="hg-character-warning" aria-label="Still needed in ${escapeHtml(step.label)}">
+      <strong>Still needed in ${escapeHtml(step.label)}</strong>
+      ${step.required === false ? '<p class="small">This step is optional for finalization.</p>' : ""}
+      <ul>${issues.map((issue) => `<li>${renderCompletionIssue(issue, escapeHtml, step.id)}</li>`).join("")}</ul>
+    </section>`;
+  }
+
+  function refreshStepCompletionGuidance() {
+    const host = W.stepBody?.querySelector("[data-cc-completion-guidance]");
+    if (host) {
+      const html = renderStepCompletionGuidance(creatorState.currentStepId);
+      if (host.innerHTML !== html) host.innerHTML = html;
+    }
+  }
+
+  function focusCompletionIssue(message) {
+    const location = getCompletionLocation(message, creatorState.currentStepId);
+    const body = W.stepBody;
+    if (!body) return;
+    let target = location.selector ? body.querySelector(location.selector) : null;
+    if (!target) target = Array.from(body.querySelectorAll("h2, h3, h4, summary")).find((heading) => heading.textContent.toLowerCase().includes(location.section.toLowerCase()));
+    target ||= Array.from(body.querySelectorAll("input:not([type=hidden]), select, textarea, button")).find((control) => !control.closest("[data-cc-completion-guidance]")) || body;
+    for (let parent = target.closest("details"); parent; parent = parent.parentElement?.closest("details")) parent.open = true;
+    if (!target.matches("input, select, textarea, button, summary, a")) target.setAttribute("tabindex", "-1");
+    target.scrollIntoView({ block: "center" });
+    target.focus({ preventScroll: true });
+    setStatus(message);
   }
 
   function renderStepContent(stepId) {
@@ -20200,9 +20238,7 @@ export function createCharacterCreator(options = {}) {
     }
 
     try {
-      return renderer(
-        creatorState.draft
-      );
+      return `<div data-cc-completion-guidance>${renderStepCompletionGuidance(step.id)}</div>` + renderer(creatorState.draft);
     } catch (error) {
       console.error(
         `Character step renderer failed for "${step.id}":`,
@@ -20666,9 +20702,8 @@ export function createCharacterCreator(options = {}) {
     }
 
     if (action === "go-step") {
-      navigateToStep(
-        button.dataset.stepId
-      );
+      navigateToStep(button.dataset.stepId);
+      if (button.dataset.ccIssue) requestAnimationFrame(() => focusCompletionIssue(button.dataset.ccIssue));
 
       return;
     }
