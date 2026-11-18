@@ -338,3 +338,24 @@ test("Review owns refresh and open-sheet actions through the standard interface"
   assert.equal(step.handleStepChange({}), false);
   assert.equal(Object.isFrozen(step), true);
 });
+
+
+test("completion guidance points missing choices to their creator location and escapes content", async () => {
+  const { getCompletionLocation, renderCompletionIssue } = await import("../characterCreator/completionGuidance.js");
+  for (const [message, step] of [
+    ["Character name is missing.", "basics"], ["Choose a Dragonborn ancestry.", "species"],
+    ["Choose exactly 2 valid class skill proficiencies.", "class"],
+    ["A Wizard class spell is not prepared.", "spells"], ["Choose a background language.", "background"],
+    ["Rolled HP is missing one or more level-up rolls.", "abilities"],
+    ["Choose an ability score improvement at class level 4.", "class"],
+    ["More than 3 items are attuned.", "equipment"],
+    ["Manual HP mode needs a manual HP value.", "abilities"],
+    ["Choose exactly 2 valid Wizard skill proficiencies.", "class"],
+    ["More than one shield is equipped; only one shield can add to armor class.", "equipment"]
+  ]) assert.equal(getCompletionLocation(message).stepId, step, message);
+  const escape = (value) => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
+  const html = renderCompletionIssue('Spell "<script>" is missing.', escape);
+  assert.match(html, /data-step-id="spells"/);
+  assert.match(html, /Show in Spells/);
+  assert.doesNotMatch(html, /<script>/);
+});

@@ -1,3 +1,4 @@
+import { renderCompletionIssue } from "../completionGuidance.js";
 import {
   createDerivedSignature,
   createScopedDerivedCache
@@ -2087,9 +2088,7 @@ export function createReviewStep(dependencies = {}) {
             .map((error) => {
               return `
                 <li>
-                  ${escapeHtml(
-                    error
-                  )}
+                  ${renderCompletionIssue(error, escapeHtml)}
                 </li>
               `;
             })
@@ -2117,7 +2116,7 @@ export function createReviewStep(dependencies = {}) {
             .map((warning) => {
               return `
                 <li>
-                  ${escapeHtml(warning)}
+                  ${renderCompletionIssue(warning, escapeHtml)}
                 </li>
               `;
             })
