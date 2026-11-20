@@ -1300,7 +1300,7 @@ test(
     await expect(shieldCard)
       .toContainText("Ritual");
     await expect(
-      shieldCard.locator("details")
+      shieldCard.locator("[data-character-sheet-spell-description]")
     ).not.toHaveAttribute(
       "open",
       ""
@@ -1310,12 +1310,17 @@ test(
         "[data-spell-description-body]"
       )
     ).toHaveText("");
+    const sourcePanel = shieldCard.locator("[data-spell-provenance]");
+    await sourcePanel.locator("summary").click();
+    await expect(sourcePanel).toHaveAttribute("open", "");
+    await expect(shieldCard.locator("[data-character-sheet-spell-description]")).not.toHaveAttribute("open", "");
+    expect(await sourcePanel.locator("summary").evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     await shieldCard.locator(
-      "details summary"
+      "[data-character-sheet-spell-description] summary"
     ).click();
     await expect(
       shieldCard.locator(
-        "details p"
+        "[data-spell-description-body]"
       )
     ).toBeVisible();
 

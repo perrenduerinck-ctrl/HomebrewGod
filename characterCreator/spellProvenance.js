@@ -44,5 +44,5 @@ export function createSpellOriginIndex(sources = [], classes = []) {
 }
 export function renderSpellOriginDetails(origins = [], escapeHtml, candidateName = "") {
   const entries = origins.length ? origins : [{label: candidateName || "Spell catalogue", explanation: "Available to choose; not currently learned, prepared, or granted by a recorded source.", owned:false}];
-  return `<details class="hg-spell-provenance" data-spell-provenance><summary>${entries.some((entry) => entry.owned) ? "Why do I have this spell?" : "Why is this spell available?"}</summary><ul>${entries.map((entry) => `<li><b>${escapeHtml(entry.label)}:</b> ${escapeHtml(entry.explanation)}</li>`).join("")}</ul></details>`;
+  return `<details class="hg-spell-provenance" data-spell-provenance><summary style="min-height:44px;align-content:center;cursor:pointer">${entries.some((entry) => entry.owned) ? "Why do I have this spell?" : "Why is this spell available?"}</summary><ul>${entries.map((entry) => `<li><b>${escapeHtml(entry.label)}:</b> ${escapeHtml(entry.explanation)}</li>`).join("")}</ul></details>`;
 }
