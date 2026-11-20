@@ -1,3 +1,4 @@
+import { createSpellOriginIndex, renderSpellOriginDetails } from "../characterCreator/spellProvenance.js";
 // =====================================================
 // HOMEBREW GOD - CHARACTER SHEET VIEW
 // Rendering uses a protected snapshot; tracked changes flow through callbacks.
@@ -5167,6 +5168,7 @@ export function collectCharacterSpells(character) {
   const magic = isRecord(character?.magic)
     ? character.magic
     : {};
+  const originIndex = createSpellOriginIndex(getCanonicalSpellSources(character), Object.entries(magic.classSources || {}).map(([id, source]) => ({...source, classEntryId: id})));
   const records = new Map();
   const classSources =
     getBoundedClassSourceEntries(
@@ -5520,6 +5522,7 @@ export function collectCharacterSpells(character) {
 
       return {
         ...spell,
+        origins: originIndex.get(spell.id) || [],
         statuses,
         sources,
         prepared:
@@ -6294,6 +6297,7 @@ function renderSpellCard(
         ${renderSpellStatusBadges(spell)}
       </header>
 
+      ${renderSpellOriginDetails(spell.origins, escapeHtml)}
       <dl class="hg-sheet-spell-facts">
         ${[
           [

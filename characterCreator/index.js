@@ -1,3 +1,5 @@
+import { createSpellOriginIndex, renderSpellOriginDetails } from "./spellProvenance.js";
+import { getManualPreparedSpellIds, getSpellChoiceActions, renderClassSpellChoices } from "./spellSelectionSummary.js";
 import { getCompletionLocation, renderCompletionIssue } from "./completionGuidance.js";
 // =====================================================
 // CHARACTER CREATOR.JS — HOMEBREW GOD CHARACTER CREATOR
@@ -110,7 +112,7 @@ import {
   createCatalogPage,
   CREATOR_CATALOG_BATCH_SIZE
 } from "./catalogPagination.js";
-import { createClassStep } from "./steps/classStep.js?v=class-workflow-20261024";
+import { createClassStep } from "./steps/classStep.js?v=spell-system-20261120";
 import { createMulticlassStep } from "./steps/multiclassStep.js?v=dm-preview-class-state-20260829";
 import { createFeatsStep } from "./steps/featsStep.js?v=dm-preview-class-state-20260829";
 import { createSpeciesStep } from "./steps/speciesStep.js?v=dm-preview-class-state-20260829";
@@ -119,10 +121,10 @@ import { createAbilitiesStep } from "./steps/abilitiesStep.js?v=dm-preview-class
 import { createSkillsStep } from "./steps/skillsStep.js?v=dm-preview-class-state-20260829";
 import { createDescriptionStep } from "./steps/descriptionStep.js?v=dm-preview-class-state-20260829";
 import { createBasicsStep } from "./steps/basicsStep.js?v=dm-preview-class-state-20260829";
-import { createReviewStep } from "./steps/reviewStep.js?v=dm-preview-class-state-20260829";
+import { createReviewStep } from "./steps/reviewStep.js?v=spell-system-20261120";
 import { createFinishStep } from "./steps/finishStep.js?v=dm-preview-class-state-20260829";
 import { createEquipmentStep } from "./steps/equipmentStep.js?v=dm-preview-class-state-20260829";
-import { createSpellsStep } from "./steps/spellsStep.js?v=dm-preview-class-state-20260829";
+import { createSpellsStep } from "./steps/spellsStep.js?v=spell-system-20261120";
 import {
   calculateAbilityModifier,
   calculateAbilityModifiers,
@@ -148,7 +150,7 @@ import {
   SRD_2014_FULL_CASTER_SLOTS,
   SRD_2014_PACT_MAGIC
 } from "./spellcasting.js";
-import { adjustCanonicalSpellResource, clearMagicalSecretsCompatibilitySources, getCanonicalSpellSources, normalizeSpellSources, restoreCanonicalSpellResources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./spellSources.js?v=canonical-spell-sources-20260802";
+import { adjustCanonicalSpellResource, clearMagicalSecretsCompatibilitySources, getCanonicalSpellSources, getSpellSourceCompatibilityAliases, normalizeSpellSources, restoreCanonicalSpellResources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./spellSources.js?v=spell-system-20261120";
 import {
   mergeSubclassFeatureLevels
 } from "./subclassMechanics.js";
@@ -4525,6 +4527,8 @@ export function createCharacterCreator(options = {}) {
     );
 
     synchronizeCanonicalSpellSources(normalized, { fromCompatibility: !(safeNumber(raw.magic?.spellSourceModelVersion, 0) >= SPELL_SOURCE_MODEL_VERSION && Array.isArray(raw.magic?.spellSources)) });
+
+    Object.assign(normalized.magic, getSpellSourceCompatibilityAliases(normalized));
 
     return applyCompatibilityAliases(normalized);
   }
@@ -9935,6 +9939,7 @@ export function createCharacterCreator(options = {}) {
           entry.spellcastingAbility
         ),
         requiresSpellcastingAbility: true,
+        subclassName: cleanString(entry.subclassName),
         preparationMode:
           getSection16PreparationMode(entry),
         maxSpellLevel: Math.max(
@@ -18010,6 +18015,7 @@ export function createCharacterCreator(options = {}) {
       getCharacterClassEntries(creatorState.draft)
     );
     synchronizeCanonicalSpellSources(creatorState.draft, { fromCompatibility: true });
+    Object.assign(creatorState.draft.magic, getSpellSourceCompatibilityAliases(creatorState.draft));
     scheduleDraftPersistence();
 
     if (typeof document !== "undefined") {
@@ -29789,6 +29795,7 @@ export function createCharacterCreator(options = {}) {
     getClassEntryLevel,
     getClassProgressionPendingChoiceWarnings,
     getMulticlassPrerequisiteResults,
+    getMulticlassSummaryEntries,
     getMulticlassPrerequisiteResultForClass,
     getGenericProficiencyBonus,
     getPrimaryClassEntry,
@@ -34188,6 +34195,11 @@ export function createCharacterCreator(options = {}) {
               ...cleanArray(source.cantripIds),
               ...cleanArray(source.knownSpellIds),
               ...cleanArray(source.spellbookSpellIds),
+              // Legacy consumers treat known as spell access, not class learning choices.
+              ...(source.preparationMode === "prepared"
+                ? cleanArray(source.preparedSpellIds)
+                : []),
+              ...cleanArray(source.alwaysPreparedSpellIds),
               ...Object.values(
                 source.mysticArcanumSpellIds ||
                 {}
@@ -34227,7 +34239,7 @@ export function createCharacterCreator(options = {}) {
   function migrateSection16LegacySpellSelections() {
     const magic = creatorState.draft.magic;
 
-    if (magic.spellSourceModelVersion === 2) {
+    if (safeNumber(magic.spellSourceModelVersion, 0) >= 2) {
       return false;
     }
 
@@ -34493,6 +34505,10 @@ export function createCharacterCreator(options = {}) {
       0
     );
 
+    if (spellLevel === 0 && safeNumber(entry.cantripsKnown, 0) <= 0) {
+      return `${entry.className} has no class cantrip choices.`;
+    }
+
     if (
       spellLevel === 0 &&
       safeNumber(entry.cantripsKnown, 0) > 0 &&
@@ -34618,7 +34634,7 @@ export function createCharacterCreator(options = {}) {
 
     if (
       entry.preparedLimit !== null &&
-      source.preparedSpellIds.length >=
+      getManualPreparedSpellIds(source).length >=
         safeNumber(entry.preparedLimit, 0)
     ) {
       return `${entry.className}'s prepared spells are already at the calculated limit.`;
@@ -34991,11 +35007,12 @@ export function createCharacterCreator(options = {}) {
       markDraftChanged();
       return true;
     }
-    const startKnown =
+    const customActions = getSpellChoiceActions(getSection16PreparationMode(selectedEntry), spell.level, selectedEntry?.cantripsKnown);
+    const startKnown = customActions.canLearn &&
       $("ccNewSpellKnown")
         ?.checked === true;
 
-    const startPrepared =
+    const startPrepared = customActions.canPrepare &&
       $("ccNewSpellPrepared")
         ?.checked === true;
 
@@ -35685,6 +35702,7 @@ export function createCharacterCreator(options = {}) {
     }
 
     const selectedSpellIds = getSection16SelectedDefaultSpellIds();
+    const originIndex = createSpellOriginIndex(getCanonicalSpellSources(creatorState.draft), getPerClassSpellSelectionSummary(creatorState.draft));
 
     return `
       <div
@@ -35899,6 +35917,11 @@ export function createCharacterCreator(options = {}) {
                   spell,
                   selectedSource
                 );
+
+            const knownActionWarning = showKnownAction && !known
+              ? getSection16KnownLimitWarning(spell, sourceId) : "";
+            const preparedActionWarning = showPreparedAction && !prepared
+              ? getSection16PreparedLimitWarning(spell, sourceId) : "";
 
             const components =
               formatSection16SpellComponents(
@@ -36136,6 +36159,8 @@ export function createCharacterCreator(options = {}) {
                         }
                       </p>
 
+                      ${renderSpellOriginDetails(originIndex.get(spell.id), escapeHtml, selectedSource?.className)}
+                      <p class="small" data-cc-spell-action-guidance>${escapeHtml([...new Set([knownActionWarning, preparedActionWarning].filter(Boolean))].join(" "))}</p>
                       <div class="hg-character-card-actions">
                         ${
                           showKnownAction &&
@@ -36147,6 +36172,7 @@ export function createCharacterCreator(options = {}) {
                               <button
                                 type="button"
                                 data-cc-action="toggle-spell-known"
+                                ${knownActionWarning ? `disabled title="${escapeHtml(knownActionWarning)}"` : ""}
                                 data-spell-id="${escapeHtml(
                                   spell.id
                                 )}"
@@ -36172,6 +36198,7 @@ export function createCharacterCreator(options = {}) {
                               <button
                                 type="button"
                                 data-cc-action="toggle-spell-prepared"
+                                ${preparedActionWarning ? `disabled title="${escapeHtml(preparedActionWarning)}"` : ""}
                                 data-spell-id="${escapeHtml(
                                   spell.id
                                 )}"
@@ -36256,6 +36283,8 @@ export function createCharacterCreator(options = {}) {
       const next = template.content.querySelector("[data-cc-default-spell-results]");
       if (!next) throw new Error("Spell results could not be rendered.");
       current.replaceWith(next);
+      const choices = C.grid.querySelector("[data-cc-class-spell-choice-summary]");
+      if (choices) choices.innerHTML = renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml);
       const summary = C.grid.querySelector("[data-cc-spell-source-summary]");
       if (summary) summary.innerHTML = renderSection17SpellcastingSummary();
       if (typeof window !== "undefined") window.scrollTo(0, scrollY);
@@ -36265,6 +36294,7 @@ export function createCharacterCreator(options = {}) {
   }
 
   function renderSection16CustomSpells() {
+    const originIndex = createSpellOriginIndex(getCanonicalSpellSources(creatorState.draft), getPerClassSpellSelectionSummary(creatorState.draft));
     const spells = [
       ...getSection16CustomSpells()
     ].sort((a, b) => {
@@ -36584,6 +36614,7 @@ export function createCharacterCreator(options = {}) {
                 : ""
             }
 
+            ${renderSpellOriginDetails(originIndex.get(spell.id), escapeHtml, sourceEntry?.className)}
             <div class="hg-character-card-actions">
               ${
                 showKnownAction

@@ -701,9 +701,10 @@ export function createReviewStep(dependencies = {}) {
             spellId
           )
         ) {
-          warnings.push(
-            "A prepared spell is not marked as known."
-          );
+          const spell = [...DEFAULT_SPELLS, ...(draft.magic.customSpells || [])].find((entry) => entry.id === spellId);
+          const owners = Object.entries(draft.magic.classSources || {}).filter(([, source]) => [...(source.preparedSpellIds || []), ...(source.alwaysPreparedSpellIds || [])].includes(spellId))
+            .map(([id, source]) => source.className || source.classId || id);
+          warnings.push(`${spell?.name || spellId} (${owners.join(", ") || "unassigned class source"}) is prepared without a matching learned spell, spellbook entry, or automatic grant. Check its class source in Spells / Features.`);
         }
       }
     );

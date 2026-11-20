@@ -359,3 +359,15 @@ test("completion guidance points missing choices to their creator location and e
   assert.match(html, /Show in Spells/);
   assert.doesNotMatch(html, /<script>/);
 });
+
+
+test("Review identifies the exact prepared spell and its class source", () => {
+  const {draft,step} = createTestStep();
+  draft.magic.customSpells = [{id:"lost-comet", name:"Lost Comet", level:1}];
+  draft.magic.preparedSpellIds = ["lost-comet"];
+  draft.magic.classSources = {wizard:{className:"Wizard",preparedSpellIds:["lost-comet"]}};
+  const warnings = step.compatibility.getSection17Warnings();
+  const warning = warnings.find((message) => message.includes("is prepared without a matching"));
+  assert.ok(warning.includes("Lost Comet (Wizard)"));
+  assert.ok(warning.includes("Spells / Features"));
+});

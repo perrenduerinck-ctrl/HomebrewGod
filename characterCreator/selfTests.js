@@ -19324,6 +19324,72 @@ export function runCharacterCreatorSelfTests(context) {
       }
     );
 
+    // Prepared-list classes do not learn a separate list of leveled spells.
+    // Compatibility aliases must still represent their available prepared spells.
+    creatorState.draft = createEmptyCharacter();
+    chooseSection12Class("cleric");
+    const lifeSubclass = getSelectedClassTemplate().subclasses.find((entry) => /life/i.test(entry.name));
+    chooseSection12Subclass(lifeSubclass.id);
+    creatorState.draft.magic.spellSourceModelVersion = 2;
+    const preparedClericEntry = getSpellcastingClassOptions(creatorState.draft)[0];
+    const preparedClericSource = getSection16SourceState(preparedClericEntry);
+    preparedClericSource.preparedSpellIds = ["healing-word"];
+    preparedClericSource.knownSpellIds = [];
+    syncSection16LegacySpellAliases();
+    record("Prepared-list spell access reaches legacy aliases without adding learned choices", {
+      accessible: creatorState.draft.magic.knownSpellIds.includes("healing-word"),
+      learned: preparedClericSource.knownSpellIds.includes("healing-word"),
+      alwaysPreparedAccessible: preparedClericSource.alwaysPreparedSpellIds.length > 0 &&
+        preparedClericSource.alwaysPreparedSpellIds.every((id) => creatorState.draft.magic.knownSpellIds.includes(id)),
+      falseWarning: getSection17Warnings().some((warning) => warning.includes("is prepared without a matching"))
+    }, { accessible: true, learned: false, alwaysPreparedAccessible: true, falseWarning: false });
+
+    // Simulate reopening a pre-fix character whose flat aliases were incomplete.
+    creatorState.draft.magic.knownSpellIds = [];
+    creatorState.draft = normalizeCharacter(JSON.parse(JSON.stringify(creatorState.draft)));
+    syncSection16ClassSourceMetadata();
+    record("Reopened prepared-list characters repair spell aliases from class ownership", {
+      accessible: creatorState.draft.magic.knownSpellIds.includes("healing-word"),
+      falseWarning: getSection17Warnings().some((warning) => warning.includes("is prepared without a matching"))
+    }, { accessible: true, falseWarning: false });
+    const restoredClericSource = getSection16SourceState(getSpellcastingClassOptions(creatorState.draft)[0]);
+    const ownedChoicesBefore = JSON.stringify({ known: restoredClericSource.knownSpellIds, prepared: restoredClericSource.preparedSpellIds });
+    migrateSection16LegacySpellSelections();
+    record("Current spell sources are never re-imported from flattened compatibility aliases", {
+      model: creatorState.draft.magic.spellSourceModelVersion,
+      choices: JSON.stringify({ known: restoredClericSource.knownSpellIds, prepared: restoredClericSource.preparedSpellIds })
+    }, { model: 3, choices: ownedChoicesBefore });
+    getSection16SourceState(getSpellcastingClassOptions(creatorState.draft)[0]).preparedSpellIds = [];
+    syncSection16LegacySpellAliases();
+    record("Unpreparing removes prepared-only access from compatibility aliases",
+      creatorState.draft.magic.knownSpellIds.includes("healing-word"), false);
+
+    creatorState.draft = createEmptyCharacter();
+    chooseSection12Class("wizard");
+    creatorState.draft.magic.spellSourceModelVersion = 2;
+    const invalidWizardSource = getSection16SourceState(getSpellcastingClassOptions(creatorState.draft)[0]);
+    invalidWizardSource.preparedSpellIds = ["magic-missile"];
+    invalidWizardSource.spellbookSpellIds = [];
+    invalidWizardSource.knownSpellIds = [];
+    syncSection16LegacySpellAliases();
+    record("Wizard preparation still requires spellbook knowledge",
+      getSection17Warnings().some((warning) => warning.includes("is prepared without a matching")), true);
+
+    creatorState.draft = createEmptyCharacter();
+    chooseSection12Class("wizard");
+    creatorState.draft.magic.spellSourceModelVersion = 2;
+    const savedWizardSource = getSection16SourceState(getSpellcastingClassOptions(creatorState.draft)[0]);
+    savedWizardSource.spellbookSpellIds = ["magic-missile", "shield"];
+    savedWizardSource.preparedSpellIds = ["magic-missile"];
+    syncSection16LegacySpellAliases();
+    creatorState.draft = normalizeCharacter(JSON.parse(JSON.stringify(createCharacterPayload(creatorState.draft))));
+    const reopenedWizard = getSection16SourceState(getSpellcastingClassOptions(creatorState.draft)[0]);
+    record("Saving and reopening preserves Wizard spellbook and preparation independently", {
+      book: reopenedWizard.spellbookSpellIds.slice().sort(),
+      prepared: reopenedWizard.preparedSpellIds.slice().sort(),
+      learned: reopenedWizard.knownSpellIds
+    }, { book: ["magic-missile", "shield"], prepared: ["magic-missile"], learned: [] });
+
     const failed =
       results.filter((result) => {
         return !result.pass;

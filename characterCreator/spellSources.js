@@ -1558,18 +1558,15 @@ function getSourceSpellRecord(source, spellId) {
   };
 }
 
-export function populateSpellSourceCompatibility(
+export function getSpellSourceCompatibilityAliases(
   character,
   sources = getCanonicalSpellSources(character)
 ) {
   if (!isRecord(character)) {
-    return character;
+    return { knownSpellIds: [], preparedSpellIds: [] };
   }
 
-  character.magic = isRecord(character.magic)
-    ? character.magic
-    : {};
-  const magic = character.magic;
+  const magic = isRecord(character.magic) ? character.magic : {};
   const canonicalSources =
     normalizeSpellSources(sources);
   const knownSpellIds = [];
@@ -1584,6 +1581,13 @@ export function populateSpellSourceCompatibility(
 
     if (
       state.known === true ||
+      state.alwaysPrepared === true ||
+      source.alwaysPrepared === true ||
+      (
+        state.prepared === true &&
+        source.sourceType === "class" &&
+        magic.classSources?.[source.classEntryId]?.preparationMode === "prepared"
+      ) ||
       (
         !hasSpellState &&
         source.grantsKnown === true
@@ -1617,12 +1621,21 @@ export function populateSpellSourceCompatibility(
       });
   });
 
-  magic.knownSpellIds = uniqueText(
-    knownSpellIds
-  );
-  magic.preparedSpellIds = uniqueText(
-    preparedSpellIds
-  );
+  return {
+    knownSpellIds: uniqueText(knownSpellIds),
+    preparedSpellIds: uniqueText(preparedSpellIds)
+  };
+}
+
+export function populateSpellSourceCompatibility(
+  character,
+  sources = getCanonicalSpellSources(character)
+) {
+  if (!isRecord(character)) return character;
+  character.magic = isRecord(character.magic) ? character.magic : {};
+  const magic = character.magic;
+  const canonicalSources = normalizeSpellSources(sources);
+  Object.assign(magic, getSpellSourceCompatibilityAliases(character, canonicalSources));
 
   const legacySource = canonicalSources.find(
     (source) => {
@@ -1776,18 +1789,15 @@ export function populateSpellSourceCompatibility(
           return;
         }
 
-        if (state.cantrip === true) {
-          add("cantripIds");
-        } else if (state.spellbook === true) {
-          add("spellbookSpellIds");
-        } else if (state.prepared === true) {
-          add("preparedSpellIds");
-        } else if (
+        // Learning, spellbook membership, and preparation are independent states.
+        if (state.cantrip === true) add("cantripIds");
+        if (state.spellbook === true) add("spellbookSpellIds");
+        if (state.prepared === true) add("preparedSpellIds");
+        if (state.alwaysPrepared === true) add("alwaysPreparedSpellIds");
+        if (!state.cantrip && !state.spellbook && (
           state.known === true ||
-          source.grantsKnown === true
-        ) {
-          add("knownSpellIds");
-        }
+          (!Object.keys(state).length && source.grantsKnown === true)
+        )) add("knownSpellIds");
       });
   });
   magic.classSources = classSources;

@@ -34,6 +34,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run static, data, fixture, and unit gates
         run: pnpm test
+      - name: Run spell-source ownership and validation regressions
+        run: pnpm run test:spell-system
       - name: Run Firestore security rules tests
         run: pnpm run test:rules
       - name: Run spell concurrency regressions
@@ -64,6 +66,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
+      - name: Run spell creation and source explanation regressions
+        if: matrix.index == 1
+        run: pnpm run test:spell-system:browser
       - name: Run browser release shard
         run: pnpm run test:browser --shard=${{ matrix.shard }}
       - name: Upload browser report on failure or cancellation

@@ -1,3 +1,4 @@
+import { getManualPreparedSpellIds } from "./spellSelectionSummary.js";
 // =====================================================
 // OPTIONAL SPELL CHOICES AND FINALIZATION VALIDATION
 // Pure calculations shared by creator review and, later, the playable sheet.
@@ -145,6 +146,7 @@ function addRemaining(result, choice) {
 
 function evaluateClassChoices(result, entry, resolveSpell) {
   const className = cleanText(entry?.className, entry?.classId || "Class");
+  const spellNames = (values) => cleanIds(values).map((id) => cleanText(resolveSpell(id)?.name, id)).join(", ");
   const sourceId = cleanText(entry?.classEntryId, entry?.classId);
   const expandedIds = new Set(cleanIds(entry?.expandedSpellIds));
   const classLists = unique([
@@ -238,7 +240,7 @@ function evaluateClassChoices(result, entry, resolveSpell) {
     "leveled"
   );
   const preparedSelection = validateClassIds(
-    entry?.preparedSpellIds,
+    getManualPreparedSpellIds(entry),
     "prepared spell",
     "leveled"
   );
@@ -259,22 +261,22 @@ function evaluateClassChoices(result, entry, resolveSpell) {
   }
   if (cantripSelection.ids.length > cantripLimit) {
     result.blockingErrors.push(
-      `${className} cantrips exceed the calculated limit.`
+      `${className} cantrips exceed the calculated limit (${cantripSelection.ids.length}/${cantripLimit}): ${spellNames(cantripSelection.ids)}. Remove the extra cantrip choices.`
     );
   }
   if (knownSelection.ids.length > knownLimit) {
     result.blockingErrors.push(
-      `${className} known spells exceed the calculated limit.`
+      `${className} known spells exceed the calculated limit (${knownSelection.ids.length}/${knownLimit}): ${spellNames(knownSelection.ids)}. Remove the extra learned spell choices.`
     );
   }
   if (preparedLimit !== null && preparedSelection.ids.length > preparedLimit) {
     result.blockingErrors.push(
-      `${className} prepared spells exceed the calculated limit.`
+      `${className} prepared spells exceed the calculated limit (${preparedSelection.ids.length}/${preparedLimit}): ${spellNames(preparedSelection.ids)}. Unprepare the extra spells.`
     );
   }
   if (preparedLimit === null && preparedSelection.ids.length) {
     result.blockingErrors.push(
-      `${className} does not have ordinary prepared-spell capacity.`
+      `${className} does not have ordinary prepared-spell capacity: ${spellNames(preparedSelection.ids)}. Use this class’s learning choices instead.`
     );
   }
   if (entry?.preparationMode === "spellbook-prepared") {
