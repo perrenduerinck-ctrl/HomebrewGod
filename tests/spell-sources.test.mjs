@@ -1617,3 +1617,136 @@ test(
     assert.equal(character.magic.slotUsage.pact, 2);
   }
 );
+
+
+test("prepared-list and always-prepared spells keep legacy access across canonical round trips", () => {
+  const character = { magic: { spellSourceModelVersion: 2, classSources: {
+    cleric: { classEntryId: "cleric", classId: "cleric", className: "Cleric", preparationMode: "prepared",
+      knownSpellIds: [], preparedSpellIds: ["healing-word"], alwaysPreparedSpellIds: ["bless"] },
+    wizard: { classEntryId: "wizard", classId: "wizard", className: "Wizard", preparationMode: "spellbook-prepared",
+      knownSpellIds: [], preparedSpellIds: ["magic-missile"], spellbookSpellIds: [] }
+  } } };
+  synchronizeCanonicalSpellSources(character, { fromCompatibility: true });
+  for (const record of [character, JSON.parse(JSON.stringify(character))]) {
+    synchronizeCanonicalSpellSources(record);
+    assert.ok(record.magic.knownSpellIds.includes("healing-word"));
+    assert.ok(record.magic.knownSpellIds.includes("bless"));
+    assert.equal(record.magic.knownSpellIds.includes("magic-missile"), false, "invalid Wizard preparation must not create spellbook knowledge");
+    assert.deepEqual(record.magic.classSources.cleric.knownSpellIds, [], "preparation does not spend learned spell choices");
+    assert.deepEqual(record.magic.classSources.wizard.spellbookSpellIds, []);
+  }
+});
+
+
+test("spellbook and preparation states survive canonical reconstruction independently", () => {
+  const character = { magic: { classSources: { wizard: { preparationMode: "spellbook-prepared" } } } };
+  const sources = [{ sourceId: "class:wizard", sourceType: "class", classEntryId: "wizard", classId: "wizard", grantsKnown: true,
+    selectedSpellIds: ["magic-missile", "shield"], spellStates: {
+      "magic-missile": { known: true, spellbook: true, prepared: true },
+      shield: { known: true, spellbook: true, prepared: false }
+    } }];
+  populateSpellSourceCompatibility(character, sources);
+  assert.deepEqual(character.magic.classSources.wizard.spellbookSpellIds, ["magic-missile", "shield"]);
+  assert.deepEqual(character.magic.classSources.wizard.preparedSpellIds, ["magic-missile"]);
+  assert.deepEqual(character.magic.classSources.wizard.knownSpellIds, []);
+  assert.deepEqual(character.magic.preparedSpellIds, ["magic-missile"]);
+  const reloaded = JSON.parse(JSON.stringify(character));
+  synchronizeCanonicalSpellSources(reloaded, { fromCompatibility: true });
+  synchronizeCanonicalSpellSources(reloaded);
+  assert.deepEqual(reloaded.magic.classSources.wizard.preparedSpellIds, ["magic-missile"]);
+});
+
+
+test("automatic grants do not spend ordinary prepared choices", () => {
+  const result = evaluateSpellChoices({ classSelections: [{
+    classEntryId: "cleric", classId: "cleric", className: "Cleric", preparationMode: "prepared",
+    spellcastingAbility: "wis", maxSpellLevel: 1, cantripsKnownLimit: 0, spellsKnownLimit: 0,
+    preparedLimit: 1, preparedSpellIds: ["bless", "healing-word"], alwaysPreparedSpellIds: ["bless"]
+  }], spellSources: [], resolveSpell: (id) => DEFAULT_SPELLS.find((spell) => spell.id === id) });
+  assert.deepEqual(result.blockingErrors, []);
+  assert.equal(result.remainingChoices.some((choice) => choice.choiceType === "prepared"), false);
+});
+
+test("class-source reconstruction preserves simultaneous states independently for each class", () => {
+  const character = { magic: { classSources: {} } };
+  const sources = ["bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard", "artificer", "fighter", "rogue"].map((classId) => ({
+    sourceId: "class:" + classId, sourceType: "class", classEntryId: classId, classId,
+    selectedSpellIds: ["shared"], spellStates: { shared: classId === "wizard"
+      ? { known: true, spellbook: true, prepared: true } : { known: true, prepared: true } }
+  }));
+  populateSpellSourceCompatibility(character, sources);
+  for (const source of sources) {
+    const entry = character.magic.classSources[source.classEntryId];
+    assert.deepEqual(entry.preparedSpellIds, ["shared"], source.classId);
+    assert.deepEqual(source.classId === "wizard" ? entry.spellbookSpellIds : entry.knownSpellIds, ["shared"], source.classId);
+  }
+  const remaining = sources.filter((source) => source.classId !== "cleric");
+  populateSpellSourceCompatibility(character, remaining);
+  assert.deepEqual(character.magic.classSources.cleric.preparedSpellIds, []);
+  assert.deepEqual(character.magic.classSources.wizard.preparedSpellIds, ["shared"]);
+});
+
+test("class spell summaries distinguish grants, choices, and spellbook preparation", async () => {
+  const { renderClassSpellChoices, getManualPreparedSpellIds } = await import("../characterCreator/spellSelectionSummary.js");
+  const entry = { classEntryId: "cleric", className: "Cleric", subclassName: "Life Domain", preparationMode: "prepared",
+    preparedLimit: 1, preparedSpellIds: ["bless", "healing-word"], alwaysPreparedSpellIds: ["bless"], expandedSpellIds: ["bless", "extra"] };
+  assert.deepEqual(getManualPreparedSpellIds(entry), ["healing-word"]);
+  const escape = (text) => String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', '&quot;');
+  const html = renderClassSpellChoices([entry], (id) => ({name: id}), escape);
+  assert.ok(html.includes("Prepared choices: 1 / 1"));
+  assert.match(html, /Automatically prepared from Life Domain/);
+  assert.match(html, /do not use your prepared choices/);
+  assert.match(html, /extra options/);
+  assert.doesNotMatch(renderClassSpellChoices([{...entry, className: "<script>"}], () => null, escape), /<script>/);
+});
+
+
+test("spell origins distinguish shared class choices, automatic grants, and extra options", async () => {
+  const {createSpellOriginIndex,renderSpellOriginDetails} = await import("../characterCreator/spellProvenance.js");
+  const sources = [
+    {sourceId:"class:cleric",sourceType:"class",classEntryId:"cleric",sourceName:"Cleric",selectedSpellIds:["shared"],spellStates:{shared:{prepared:true}}},
+    {sourceId:"class:wizard",sourceType:"class",classEntryId:"wizard",sourceName:"Wizard",selectedSpellIds:["shared"],spellStates:{shared:{spellbook:true,prepared:false}}},
+    {sourceId:"subclass:life",sourceType:"subclass",sourceName:"Life",fixedSpellIds:["automatic"],alwaysPrepared:true},
+    {sourceId:"feat:gift",sourceType:"feat",sourceName:"A <gift>",fixedSpellIds:["shared"]}
+  ];
+  const origins = createSpellOriginIndex(sources,[{classEntryId:"cleric",className:"Cleric"},{classEntryId:"wizard",className:"Wizard"},{classEntryId:"warlock",className:"Warlock",subclassName:"Fiend",expandedSpellIds:["extra"]}]);
+  assert.equal(origins.get("shared").length,3);
+  assert.match(origins.get("shared")[0].explanation,/Uses one Cleric prepared choice/);
+  assert.match(origins.get("shared")[1].explanation,/Not prepared; uses no prepared choice/);
+  assert.match(origins.get("automatic")[0].explanation,/Does not use a manual/);
+  assert.equal(origins.get("extra")[0].owned,false);
+  assert.match(origins.get("extra")[0].explanation,/not granted automatically/);
+  const html = renderSpellOriginDetails(origins.get("shared"), (text) => String(text).replaceAll("<","&lt;"));
+  assert.match(html,/Why do I have this spell/);assert.doesNotMatch(html,/<gift>/);
+});
+
+test("spell quota errors identify affected spells and the owning class", () => {
+  const result=evaluateSpellChoices({classSelections:[{classEntryId:"cleric",classId:"cleric",className:"Cleric",preparationMode:"prepared",maxSpellLevel:1,cantripsKnownLimit:0,spellsKnownLimit:0,preparedLimit:1,preparedSpellIds:["bless","healing-word"]}],spellSources:[],resolveSpell:(id)=>DEFAULT_SPELLS.find((spell)=>spell.id===id)});
+  const error=result.blockingErrors.find((error)=>error.includes("prepared spells exceed"));
+  assert.ok(error.includes("Cleric"));assert.ok(error.includes("Bless"));assert.ok(error.includes("Healing Word"));assert.ok(error.includes("Unprepare"));
+});
+
+
+test("character sheets explain each source of a shared granted spell", () => {
+  const character = {identity:{name:"Origin Test"},magic:{spellSourceModelVersion:3,classSources:{cleric:{className:"Cleric",preparationMode:"prepared",alwaysPreparedSpellIds:["bless"]}},spellSources:[
+    {sourceId:"class:cleric",sourceType:"class",sourceName:"Cleric",classEntryId:"cleric",selectedSpellIds:["bless"],spellStates:{bless:{prepared:true}}},
+    {sourceId:"subclass:life",sourceType:"subclass",sourceName:"Life",classEntryId:"cleric",fixedSpellIds:["bless"],alwaysPrepared:true}
+  ]}};
+  const spells=collectCharacterSpells(character);
+  assert.equal(spells.filter((spell)=>spell.id==="bless").length,1);
+  assert.equal(spells.find((spell)=>spell.id==="bless").origins.length,2);
+  const html=createCharacterSheetView().renderCharacterSheetHtml(character,{activeTab:"spells"});
+  assert.match(html,/Why do I have this spell/);assert.match(html,/Granted automatically/);assert.match(html,/uses no prepared choice/);
+});
+
+
+test("spell origin explanations use fresh grants and discard replaced subclass grants without mutating data", async () => {
+  const {createSpellOriginIndex}=await import("../characterCreator/spellProvenance.js");
+  const sources=[{sourceId:"subclass:life",sourceType:"subclass",sourceName:"Life",classEntryId:"cleric",fixedSpellIds:["cure-wounds"],alwaysPrepared:true}];
+  const classes=[{classEntryId:"cleric",className:"Cleric",subclassName:"Light",alwaysPreparedSpellIds:["burning-hands"]}];
+  const before=JSON.stringify({sources,classes});const origins=createSpellOriginIndex(sources,classes);
+  assert.equal(origins.has("cure-wounds"),false);
+  assert.equal(origins.get("burning-hands")[0].owned,true);
+  assert.match(origins.get("burning-hands")[0].label,/Light/);
+  assert.equal(JSON.stringify({sources,classes}),before);
+});

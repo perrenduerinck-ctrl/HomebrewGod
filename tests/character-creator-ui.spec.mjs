@@ -562,6 +562,8 @@ test(
       .toBeVisible();
     await heroism.getByRole("button", { name: "Prepare Spell" }).click();
     await expect(heroism).toContainText("Status: Prepared");
+    await page.locator('[data-cc-action="go-step"][data-step-id="review"]').first().click();
+    await expect(page.locator("#characterWizardStepBody")).not.toContainText("is prepared without a matching");
 
     await page.locator('[data-cc-action="go-step"][data-step-id="class"]')
       .first()
@@ -689,3 +691,197 @@ test("unfinished choices explain what is missing and review links open the right
   await expect(page.locator("#characterWizardStepTitle")).toHaveText("Species / Race");
   expect(errors).toEqual([]);
 });
+
+
+for (const [classId, spellId, spellName, level] of [
+  ["cleric", "cure-wounds", "Cure Wounds", 1],
+  ["druid", "cure-wounds", "Cure Wounds", 1],
+  ["paladin", "heroism", "Heroism", 2],
+  ["wizard", "magic-missile", "Magic Missile", 1]
+]) {
+  test(`${classId} prepared spell survives Review and Finish without a false unknown warning`, async ({ page }) => {
+    await page.goto("?smokeTest=1&view=characterCreator");
+    await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 30000 });
+    await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("characterCreator"));
+    await page.locator('[data-cc-action="new-character"]').first().click();
+    await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+    await page.locator("#ccClassBuildTotalLevel").fill(String(level));
+    await page.getByText("2. Build Type", { exact: true }).click();
+    await page.locator(`[data-cc-action="toggle-class-build-class"][data-class-id="${classId}"]`).click();
+    await page.locator('[data-cc-action="confirm-class-build"]').click();
+    await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+    await page.locator("#ccDefaultSpellSearch").fill(spellName);
+    const spell = page.locator(`article[data-spell-id="${spellId}"]`);
+    const choices = page.locator("[data-cc-class-spell-choices]");
+    await expect(choices).toContainText(classId === "wizard" ? "Spells in spellbook:" : "Prepared choices: 0 /");
+    if (classId === "wizard") {
+      await expect(spell.getByRole("button", { name: "Prepare Spell", exact: true })).toBeDisabled();
+      await expect(spell).toContainText("Add that spell to the spellbook before preparing it.");
+      await spell.getByRole("button", { name: /Add to Spellbook/i }).click();
+    }
+    await spell.getByRole("button", { name: "Prepare Spell", exact: true }).click();
+    await expect(spell).toContainText("Status: Prepared");
+    const origin = spell.locator("[data-spell-provenance]");
+    await origin.locator("summary").click();
+    await expect(origin).toContainText(classId.charAt(0).toUpperCase() + classId.slice(1));
+    await expect(origin).toContainText(classId === "wizard" ? "spellbook" : "prepared choice");
+    await expect(choices).toContainText("Prepared choices: 1 /");
+    for (const step of ["review", "save"]) {
+      await page.locator(`.hg-character-step-button[data-step-id="${step}"]`).click();
+      await expect(page.locator("#characterWizardStepBody")).not.toContainText("is prepared without a matching");
+    }
+    await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+    await page.locator("#ccDefaultSpellSearch").fill(spellName);
+    await expect(spell).toContainText("Status: Prepared");
+    await spell.getByRole("button", { name: /Unprepare Spell/i }).click();
+    await expect(spell).not.toContainText("Status: Prepared");
+    if (classId === "paladin") await expect(page.locator("#ccNewSpellKnown")).toBeDisabled();
+    await expect(page.locator("#ccNewSpellPrepared")).toBeDisabled();
+    const customName = "Flow Test " + classId;
+    await page.locator("#ccNewSpellName").fill(customName);
+    await page.locator("#ccNewSpellLevel").selectOption("1");
+    const learn = page.locator("#ccNewSpellKnown");
+    if (classId === "wizard") await expect(learn).toBeEnabled();
+    else { await expect(learn).toBeDisabled(); await expect(learn).not.toBeChecked(); }
+    await page.locator("#ccNewSpellPrepared").check();
+    await page.locator('[data-cc-action="add-custom-spell"]').click();
+    const custom = page.getByRole("heading", {name:customName,exact:true}).locator("..");
+    await expect(custom).toContainText("Prepared");
+    await expect(custom.locator("[data-spell-provenance] summary")).toHaveText("Why do I have this spell?");
+    await page.locator('.hg-character-step-button[data-step-id="review"]').click();
+    await expect(page.locator("#characterWizardStepBody")).not.toContainText("is prepared without a matching");
+    await expect(page.locator("#characterWizardStepBody")).not.toContainText("known spells exceed the calculated limit");
+  });
+}
+
+
+for (const [classId, spellId, spellName] of [
+  ["cleric", "cure-wounds", "Cure Wounds"],
+  ["warlock", "burning-hands", "Burning Hands"]
+]) {
+  test(`${classId} distinguishes subclass grants from additional spell choices`, async ({ page }) => {
+    await page.goto("?smokeTest=1&view=characterCreator");
+    await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 30000 });
+    await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("characterCreator"));
+    await page.locator('[data-cc-action="new-character"]').first().click();
+    await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+    await page.getByText("2. Build Type", { exact: true }).click();
+    await page.locator(`[data-cc-action="toggle-class-build-class"][data-class-id="${classId}"]`).click();
+    await page.locator('[data-cc-action="confirm-class-build"]').click();
+    const subclass = page.locator("#ccClassSubclass-0");
+    await subclass.evaluate((el) => { for (let parent = el.closest("details"); parent; parent = parent.parentElement?.closest("details")) parent.open = true; });
+    const value = await subclass.evaluate((el, classId) => Array.from(el.options).find((option) => (classId === "cleric" ? /^Life(?: Domain)?$/ : /^(?:The )?Fiend$/).test(option.text.trim()))?.value, classId);
+    expect(value).toBeTruthy();
+    await subclass.selectOption(value);
+    await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+    const choices = page.locator("[data-cc-class-spell-choices]");
+    await page.locator("#ccDefaultSpellSearch").fill(spellName);
+    const spell = page.locator(`article[data-spell-id="${spellId}"]`);
+    if (classId === "cleric") {
+      await expect(choices).toContainText("Automatically prepared from");
+      await expect(choices).toContainText("Prepared choices: 0 /");
+      await expect(spell).toContainText("Always Prepared");
+      const origin = spell.locator("[data-spell-provenance]");
+      await origin.locator("summary").click();
+      await expect(origin).toContainText("Granted automatically");
+      await expect(origin).toContainText("Does not use a manual class prepared choice");
+      await expect(spell.getByRole("button", {name: "Prepare Spell", exact:true})).toHaveCount(0);
+      await page.locator("#ccDefaultSpellSearch").fill("Healing Word");
+      await page.locator('article[data-spell-id="healing-word"]').getByRole("button",{name:"Prepare Spell",exact:true}).click();
+      await expect(choices).toContainText("Prepared choices: 1 / 1");
+      await page.locator("#ccDefaultSpellSearch").fill("Guiding Bolt");
+      const bolt = page.locator('article[data-spell-id="guiding-bolt"]');
+      await expect(bolt.getByRole("button",{name:"Prepare Spell",exact:true})).toBeDisabled();
+      await expect(bolt).toContainText("prepared spells are already at the calculated limit");
+      await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+      const light = page.locator("#ccClassSubclass-0");
+      await light.selectOption(await light.evaluate((el) => Array.from(el.options).find((option) => /^Light(?: Domain)?$/.test(option.text.trim()))?.value));
+      await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+      await page.locator("#ccDefaultSpellSearch").fill("Cure Wounds");
+      await expect(spell).not.toContainText("Always Prepared");
+      await page.locator("#ccDefaultSpellSearch").fill("Healing Word");
+      await expect(page.locator('article[data-spell-id="healing-word"]')).toContainText("Status: Prepared");
+      await expect(choices).toContainText("Prepared choices: 1 / 1");
+
+    } else {
+      await expect(choices).toContainText("Additional spells available to choose");
+      await expect(choices).not.toContainText("Automatically prepared from");
+      await expect(spell).not.toContainText("Always Prepared");
+      await expect(spell.getByRole("button", {name:"Learn Spell",exact:true})).toBeEnabled();
+      await spell.getByRole("button", {name:"Learn Spell",exact:true}).click();
+      await expect(choices).toContainText("Spells learned: 1 / 2");
+    }
+    await page.locator('.hg-character-step-button[data-step-id="review"]').click();
+    await expect(page.locator("#characterWizardStepBody")).not.toContainText("is prepared without a matching");
+  });
+}
+
+
+test("a shared spell keeps independent preparation for each multiclass source", async ({ page }) => {
+  await page.goto("?smokeTest=1&view=characterCreator");
+  await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 30000 });
+  await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("characterCreator"));
+  await page.locator('[data-cc-action="new-character"]').first().click();
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await page.locator("#ccClassBuildTotalLevel").fill("2");
+  await page.getByText("2. Build Type", { exact: true }).click();
+  await page.getByRole("button", { name: "Multiclass", exact: true }).click();
+  for (const classId of ["cleric", "druid"]) await page.locator(`[data-cc-action="toggle-class-build-class"][data-class-id="${classId}"]`).click();
+  await page.locator('[data-cc-action="confirm-class-build"]').click();
+  await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+  await page.locator("#ccDefaultSpellSearch").fill("Cure Wounds");
+  const spell = page.locator('article[data-spell-id="cure-wounds"]');
+  const select = spell.locator("[data-cc-spell-source-select]");
+  const sourceIds = await select.evaluate((el) => Object.fromEntries(["Cleric", "Druid"].map((name) => [name, Array.from(el.options).find((option) => option.text.includes(name))?.value])));
+  expect(sourceIds.Cleric).toBeTruthy(); expect(sourceIds.Druid).toBeTruthy();
+  const summary = (name) => page.locator("[data-cc-class-spell-choices]").filter({has:page.getByRole("heading",{name:name+" spell choices",exact:true})});
+  await select.selectOption(sourceIds.Cleric);
+  await spell.getByRole("button",{name:"Prepare Spell",exact:true}).click();
+  await expect(summary("Cleric")).toContainText("Prepared choices: 1 /");
+  await expect(summary("Druid")).toContainText("Prepared choices: 0 /");
+  await select.selectOption(sourceIds.Druid);
+  await expect(spell.getByRole("button",{name:"Prepare Spell",exact:true})).toBeEnabled();
+  await spell.getByRole("button",{name:"Prepare Spell",exact:true}).click();
+  await select.selectOption(sourceIds.Cleric);
+  await spell.getByRole("button",{name:"Unprepare Spell",exact:true}).click();
+  await expect(summary("Cleric")).toContainText("Prepared choices: 0 /");
+  await expect(summary("Druid")).toContainText("Prepared choices: 1 /");
+  await select.selectOption(sourceIds.Druid);
+  await expect(spell).toContainText("Status: Prepared");
+  const origins = spell.locator("[data-spell-provenance]");
+  await origins.locator("summary").click();
+  await expect(origins).toContainText("Druid");
+  await expect(origins).not.toContainText("Uses one Cleric prepared choice");
+});
+
+
+for (const [classId, subclassName, spellId, spellName] of [
+  ["fighter", "Eldritch Knight", "magic-missile", "Magic Missile"],
+  ["rogue", "Arcane Trickster", "charm-person", "Charm Person"]
+]) {
+  test(`${subclassName} unlocks class-owned spell choices without preparation controls`, async ({ page }) => {
+    await page.goto("?smokeTest=1&view=characterCreator");
+    await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", { timeout: 30000 });
+    await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("characterCreator"));
+    await page.locator('[data-cc-action="new-character"]').first().click();
+    await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+    await page.locator("#ccClassBuildTotalLevel").fill("3");
+    await page.getByText("2. Build Type", { exact: true }).click();
+    await page.locator(`[data-cc-action="toggle-class-build-class"][data-class-id="${classId}"]`).click();
+    await page.locator('[data-cc-action="confirm-class-build"]').click();
+    const subclass = page.locator("#ccClassSubclass-0");
+    await subclass.selectOption(await subclass.evaluate((el, name) => Array.from(el.options).find((option) => option.text.trim() === name)?.value, subclassName));
+    await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+    await expect(page.locator("[data-cc-class-spell-choices]")).toContainText("Spells learned: 0 / 3");
+    await page.locator("#ccDefaultSpellSearch").fill(spellName);
+    const spell = page.locator(`article[data-spell-id="${spellId}"]`);
+    await expect(spell.getByRole("button", {name:"Prepare Spell",exact:true})).toHaveCount(0);
+    await spell.getByRole("button", {name:"Learn Spell",exact:true}).click();
+    await expect(page.locator("[data-cc-class-spell-choices]")).toContainText("Spells learned: 1 / 3");
+    await page.locator("#ccNewSpellLevel").selectOption("1");
+    await expect(page.locator("#ccNewSpellKnown")).toBeEnabled();
+    await expect(page.locator("#ccNewSpellPrepared")).toBeDisabled();
+    await page.locator('.hg-character-step-button[data-step-id="review"]').click();
+    await expect(page.locator("#characterWizardStepBody")).not.toContainText("is prepared without a matching");
+  });
+}

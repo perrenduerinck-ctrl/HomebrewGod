@@ -1,3 +1,4 @@
+import { renderClassSpellChoices, getSpellChoiceActions } from "../spellSelectionSummary.js";
 import {
   createCreatorSpellPickerState,
   CREATOR_SPELL_BATCH_SIZE,
@@ -5,10 +6,10 @@ import {
 } from "../spellPicker.js";
 import {
   evaluateSpellChoices
-} from "../spellChoices.js?v=optional-spell-choices-20260803";
+} from "../spellChoices.js?v=spell-system-20261120";
 import {
   SPELL_SOURCE_MODEL_VERSION
-} from "../spellSources.js?v=canonical-spell-sources-20260802";
+} from "../spellSources.js?v=spell-system-20261120";
 import {
   CREATOR_CATALOG_BATCH_SIZE
 } from "../catalogPagination.js";
@@ -99,7 +100,7 @@ export function createSpellsStep(
     new Map();
   let draftAnimations = {}, animationDraftOwner = null, editingSpellId = null, spellFormDraft = null;
   let animationLibrary = getAnimationLibrary?.() || null;
-  const formFields = { ccNewSpellName: "name", ccNewSpellLevel: "level", ccNewSpellClassId: "spellcastingSourceId", ccNewSpellSchool: "school", ccNewSpellCastingTime: "castingTime", ccNewSpellRange: "range", ccNewSpellDuration: "duration", ccNewSpellComponents: "components", ccNewSpellDescription: "description", ccNewSpellRitual: "ritual", ccNewSpellConcentration: "concentration", ccNewSpellManualOverride: "manualOverride" };
+  const formFields = { ccNewSpellKnown: "startKnown", ccNewSpellPrepared: "startPrepared", ccNewSpellName: "name", ccNewSpellLevel: "level", ccNewSpellClassId: "spellcastingSourceId", ccNewSpellSchool: "school", ccNewSpellCastingTime: "castingTime", ccNewSpellRange: "range", ccNewSpellDuration: "duration", ccNewSpellComponents: "components", ccNewSpellDescription: "description", ccNewSpellRitual: "ritual", ccNewSpellConcentration: "concentration", ccNewSpellManualOverride: "manualOverride" };
   function captureSpellForm(target) {
     if (!target?.id || !formFields[target.id]) return false;
     spellFormDraft ||= {};
@@ -137,12 +138,34 @@ export function createSpellsStep(
     return character;
   }
 
+  function customSpellActions(sourceId, level) {
+    const entries = getSpellcastingClassOptions(getCreatorState().draft);
+    const entry = entries.find((entry) => (entry.classEntryId || entry.classId) === sourceId) || (entries.length === 1 ? entries[0] : null);
+    return getSpellChoiceActions(entry?.spellPreparation || "known", level, entry?.cantripsKnown);
+  }
+  function refreshCustomSpellActions() {
+    const known = document.getElementById("ccNewSpellKnown");
+    const prepared = document.getElementById("ccNewSpellPrepared");
+    if (!known || !prepared) return;
+    const rules = customSpellActions(document.getElementById("ccNewSpellClassId")?.value, document.getElementById("ccNewSpellLevel")?.value);
+    known.disabled = Boolean(editingSpellId) || !rules.canLearn;
+    prepared.disabled = Boolean(editingSpellId) || !rules.canPrepare;
+    if (!rules.canLearn) known.checked = false;
+    if (!rules.canPrepare) prepared.checked = false;
+    known.parentElement.querySelector("span").textContent = rules.canLearn ? rules.learnLabel : rules.noLearningLabel;
+    prepared.parentElement.querySelector("span").textContent = rules.canPrepare ? "Prepare after adding" : "No separate preparation step";
+    spellFormDraft ||= {};
+    spellFormDraft.startKnown = known.checked;
+    spellFormDraft.startPrepared = prepared.checked;
+  }
+
   function renderStep() {
     const creatorState = getCreatorState();
     if (animationDraftOwner !== creatorState.draft) { draftAnimations = {}; editingSpellId = null; spellFormDraft = null; animationDraftOwner = creatorState.draft; }
     animationLibrary ||= getAnimationLibrary?.() || null;
     trackAnimationDependencies();
     const formValue = (property, fallback = "") => spellFormDraft?.[property] ?? fallback;
+    const customActions = customSpellActions(formValue("spellcastingSourceId", ""), formValue("level", 0));
     const magic =
       creatorState.draft.magic;
 
@@ -306,6 +329,9 @@ export function createSpellsStep(
       )}
 
       ${renderSection16BeginnerGuide()}
+      <section aria-label="Spell choices by class" data-cc-class-spell-choice-summary>
+        ${renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml)}
+      </section>
 
       ${spellcastingSummary.castingBlocked
         ? `
@@ -743,21 +769,22 @@ export function createSpellsStep(
           <input
             id="ccNewSpellKnown"
             type="checkbox"
-            checked
-            ${editingSpellId ? "disabled" : ""}
+            ${customActions.canLearn && formValue("startKnown", true) ? "checked" : ""}
+            ${editingSpellId || !customActions.canLearn ? "disabled" : ""}
           >
 
-          Start known
+          <span>${customActions.canLearn ? customActions.learnLabel : customActions.noLearningLabel}</span>
         </label>
 
         <label>
           <input
             id="ccNewSpellPrepared"
             type="checkbox"
-            ${editingSpellId ? "disabled" : ""}
+            ${customActions.canPrepare && formValue("startPrepared", false) ? "checked" : ""}
+            ${editingSpellId || !customActions.canPrepare ? "disabled" : ""}
           >
 
-          Start prepared
+          <span>${customActions.canPrepare ? "Prepare after adding" : "No separate preparation step"}</span>
         </label>
 
         <label>
@@ -1510,7 +1537,10 @@ export function createSpellsStep(
   }
 
   function handleStepChange(context) {
-    if (captureSpellForm(context?.target)) return true;
+    if (captureSpellForm(context?.target)) {
+      if (["ccNewSpellLevel", "ccNewSpellClassId"].includes(context?.target?.id)) refreshCustomSpellActions();
+      return true;
+    }
     if (
       handleSection16DefaultSpellSearch(
         context

@@ -66,6 +66,7 @@ export function createClassStep(dependencies = {}) {
     getClassEntryLevel,
     getClassProgressionPendingChoiceWarnings,
     getMulticlassPrerequisiteResults,
+    getMulticlassSummaryEntries,
     getMulticlassPrerequisiteResultForClass,
     getGenericProficiencyBonus,
     getPrimaryClassEntry,
@@ -361,6 +362,22 @@ export function createClassStep(dependencies = {}) {
     `;
   }
 
+  function renderSubclassChoices() {
+    const entries = getMulticlassSummaryEntries?.(creatorState.draft) || [];
+    return entries.length ? `<section aria-label="Subclass choices"><h3>Subclass choices</h3>
+      <p>Choose each class’s domain, patron, or other subclass here. Its spell grants and extra spell choices are shown in Spells / Features.</p>
+      ${entries.map((entry, index) => {
+        const options = entry.template?.subclasses || [];
+        if (!options.length) return "";
+        const label = entry.template?.subclassLabel || "Subclass";
+        const unlocked = entry.classLevel >= entry.subclassLevel;
+        return wizardSelect(`${entry.className} — ${label}`, `ccClassSubclass-${index}`, entry.classEntry?.subclassId || "", [
+          { value: "", label: unlocked ? `Choose ${label}` : `Unlocks at class level ${entry.subclassLevel}` },
+          ...options.map((option) => ({ value: option.id, label: option.name }))
+        ], { extra: `data-multiclass-subclass-index="${index}"${unlocked ? "" : " disabled"}` });
+      }).join("")}</section>` : "";
+  }
+
   function renderStep() {
     const progressionEntries =
       getCharacterClassEntries(
@@ -491,32 +508,7 @@ export function createClassStep(dependencies = {}) {
           </div>
         `}
 
-      ${selectedClass
-        ? `
-          <hr>
-
-          <div class="hg-character-current-choice">
-            <b>${escapeHtml(subclassLabel)}:</b>
-            ${subclassUnlocked
-              ? escapeHtml(
-                  primaryClass?.subclassName ||
-                  "Pending selection"
-                )
-              : `${escapeHtml(
-                  subclassLabel
-                )} unlocks at ${escapeHtml(
-                  selectedClass.name ||
-                  "class"
-                )} level ${subclassUnlockLevel}.`}
-
-            <br>
-
-            <span class="small">
-              Choose or change subclasses in each Class Progression card above.
-            </span>
-          </div>
-        `
-        : ""}
+      ${renderSubclassChoices()}
 
       ${selectedClass
         ? `

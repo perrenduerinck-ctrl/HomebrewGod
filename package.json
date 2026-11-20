@@ -36,7 +36,9 @@
     "test:spell-audit": "node tests/spell-audit-regressions.test.mjs && node tests/combat-action-bar.test.mjs",
     "test:spell-audit:emulator": "firebase emulators:exec --only firestore --project demo-homebrew-god \"node tests/spell-audit-emulator.test.mjs\"",
     "test:spell-audit:browser": "playwright test tests/spell-creator.spec.mjs tests/casting-rules.spec.mjs tests/combat-action-bar.spec.mjs",
-    "test:spell-audit:multiplayer": "firebase emulators:exec --only firestore,auth --project demo-homebrew-god \"playwright test tests/spell-audit-multiplayer.spec.mjs\""
+    "test:spell-audit:multiplayer": "firebase emulators:exec --only firestore,auth --project demo-homebrew-god \"playwright test tests/spell-audit-multiplayer.spec.mjs\"",
+    "test:spell-system": "node --test tests/spell-sources.test.mjs tests/review-step.test.mjs tests/class-spell-reconciliation.test.mjs",
+    "test:spell-system:browser": "playwright test tests/character-creator-ui.spec.mjs --grep \"prepared spell|subclass|shared spell|spell origin|unlocks class-owned\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",
