@@ -2,6 +2,8 @@ import { getStepById } from "./configuration.js";
 
 // Locations describe existing controls; they do not introduce new completion rules.
 const LOCATIONS = [
+  [/archived|unresolved.*source|spell.*ownership/i, "spells", "Spell-source recovery", "[data-cc-spell-source-recovery]"],
+  [/spellbook.*(choice|history)|free spellbook/i, "spells", "Wizard spellbook progression", "[data-cc-spellbook-progress]"],
   [/dragonborn|draconic ancestry/i, "species", "Draconic Ancestry", "#ccDragonbornAncestry"],
   [/subrace/i, "species", "Subrace", '[data-cc-action="choose-subrace"]'],
   [/half-elf.*abilit/i, "species", "Half-Elf Ability Choices", "#ccHalfElfAbilityOne"],

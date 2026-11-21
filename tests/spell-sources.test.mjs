@@ -478,7 +478,7 @@ test(
 );
 
 test(
-  "unused class, feat, Magical Secrets, Mystic Arcanum, and custom choices are reminders",
+  "unused spell choices preserve valid drafts and identify missing readiness choices",
   () => {
     const spells = new Map([
       ["counterspell", { id: "counterspell", name: "Counterspell", level: 3, classes: ["wizard", "sorcerer", "warlock"] }]
@@ -556,7 +556,9 @@ test(
 
     assert.deepEqual(result.blockingErrors, []);
     assert.ok(result.reminders.some((warning) => /3 cantrips/i.test(warning)));
-    assert.ok(result.reminders.some((warning) => /prepare 4 more Wizard spells/i.test(warning)));
+    assert.equal(result.validDraft, true);
+    assert.equal(result.isReady, false);
+    assert.ok(result.readinessIssues.some((warning) => /prepare at least one/i.test(warning)));
     assert.ok(result.reminders.some((warning) => /1 Magical Secrets choice/i.test(warning)));
     assert.ok(result.reminders.some((warning) => /Magic Initiate still has 1 spell choice/i.test(warning)));
     assert.ok(result.reminders.some((warning) => /1 Mystic Arcanum choice/i.test(warning)));

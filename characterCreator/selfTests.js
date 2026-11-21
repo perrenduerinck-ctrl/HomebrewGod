@@ -12685,11 +12685,11 @@ export function runCharacterCreatorSelfTests(context) {
     ];
 
     record(
-      "Spellcaster may leave optional spell choices unused",
+      "Spellcaster remains unfinished until required spell choices are made",
       isSection17SpellsComplete(
         wizardCharacter
       ),
-      true
+      false
     );
 
     creatorState.draft = wizardCharacter;
@@ -12697,12 +12697,12 @@ export function runCharacterCreatorSelfTests(context) {
       getSection17FinalizationValidation();
 
     record(
-      "Unused spell choices are review reminders instead of blockers",
+      "Missing spell choices appear as readiness issues without invalidating the draft",
       {
         reminder:
-          optionalSpellValidation.optionalWarnings
+          optionalSpellValidation.readinessIssues
             .some((warning) => {
-              return /can still learn|may prepare/i
+              return /can still learn|free spellbook|prepare at least/i
                 .test(warning);
             }),
         notBlocking:
@@ -19389,6 +19389,13 @@ export function runCharacterCreatorSelfTests(context) {
       prepared: reopenedWizard.preparedSpellIds.slice().sort(),
       learned: reopenedWizard.knownSpellIds
     }, { book: ["magic-missile", "shield"], prepared: ["magic-missile"], learned: [] });
+
+    reopenedWizard.spellbookAcquisitions = { "magic-missile": {kind:"level",classLevel:1}, shield:{kind:"copied"} };
+    creatorState.draft.builder.archivedClassSpellSources = [{sourceId:"class:former-wizard",sourceType:"class",classEntryId:"former-wizard",classId:"wizard",selectedSpellIds:["alarm"],spellStates:{alarm:{spellbook:true,known:true}}}];
+    syncSection16LegacySpellAliases();
+    creatorState.draft = normalizeCharacter(JSON.parse(JSON.stringify(createCharacterPayload(creatorState.draft))));
+    record("Wizard acquisition history survives save and reopen", getSection16SourceState(getSpellcastingClassOptions(creatorState.draft)[0]).spellbookAcquisitions, {"magic-missile":{kind:"level",classLevel:1},shield:{kind:"copied"}});
+    record("Archived class spell selections survive save and reopen", creatorState.draft.builder.archivedClassSpellSources.map(source=>source.selectedSpellIds), [["alarm"]]);
 
     const failed =
       results.filter((result) => {

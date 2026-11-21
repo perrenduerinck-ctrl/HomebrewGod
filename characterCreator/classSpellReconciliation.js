@@ -26,24 +26,10 @@ function uniqueText(values = []) {
 }
 
 function getClassIdentitySets(classEntries = []) {
-  const entryIds = new Set();
-  const classIds = new Set();
-
-  (Array.isArray(classEntries) ? classEntries : [])
-    .forEach((entry) => {
-      [
-        entry?.entryId,
-        entry?.classEntryId
-      ].map(cleanText).filter(Boolean)
-        .forEach((id) => entryIds.add(id));
-      [
-        entry?.classId,
-        entry?.className
-      ].map(cleanText).filter(Boolean)
-        .forEach((id) => classIds.add(id));
-    });
-
-  return { entryIds, classIds };
+  const entries = (Array.isArray(classEntries) ? classEntries : []).filter(isRecord);
+  const byEntry = new Map();
+  for (const entry of entries) for (const id of uniqueText([entry.entryId, entry.classEntryId])) byEntry.set(id, entry);
+  return { entries, byEntry };
 }
 
 function getSourceSpellIds(source = {}) {
@@ -77,93 +63,57 @@ function getSourceSpellIds(source = {}) {
   ]);
 }
 
-function evaluateClassSource(
-  source,
-  fallbackEntryId,
-  identities
-) {
-  const sourceType = cleanText(
-    source?.sourceType
-  );
-  const classEntryId = cleanText(
-    source?.classEntryId || fallbackEntryId
-  );
-  const classId = cleanText(source?.classId);
-
-  if (
-    sourceType &&
-    !CLASS_OWNED_SOURCE_TYPES.has(sourceType)
-  ) {
-    return { classOwned: false, active: true, uncertain: false };
+function evaluateClassSource(source, fallbackEntryId, identities) {
+  const sourceType = cleanText(source?.sourceType);
+  if (sourceType && !CLASS_OWNED_SOURCE_TYPES.has(sourceType)) return { classOwned: false, active: true, uncertain: false };
+  const entryId = cleanText(source?.classEntryId || fallbackEntryId);
+  const classId = cleanText(source?.classId).toLowerCase();
+  const matchesClass = (entry) => !classId || [entry.classId, entry.className].some((id) => cleanText(id).toLowerCase() === classId);
+  let entry = identities.byEntry.get(entryId);
+  if (entry && !matchesClass(entry)) return { classOwned: true, active: false, uncertain: false, reason: "class-identity-conflict" };
+  if (!entry && entryId) {
+    // Older sources sometimes used the class ID itself as their entry key.
+    if (classId && entryId.toLowerCase() === classId) entry = identities.entries.find(matchesClass);
+    if (!entry) return { classOwned: true, active: false, uncertain: false, reason: "class-removed" };
   }
-
-  if (classEntryId && identities.entryIds.has(classEntryId)) {
-    return { classOwned: true, active: true, uncertain: false };
+  entry ||= classId ? identities.entries.find(matchesClass) : null;
+  if (!entry) return { classOwned: CLASS_OWNED_SOURCE_TYPES.has(sourceType), active: !classId, uncertain: !classId, reason: "unassigned-ownership" };
+  if (sourceType === "subclass") {
+    const subclassId = cleanText(source?.subclassId).toLowerCase();
+    if (subclassId && subclassId !== cleanText(entry.subclassId).toLowerCase()) return { classOwned: true, active: false, uncertain: false, reason: "subclass-identity-conflict" };
+    if (!subclassId) return { classOwned: true, active: true, uncertain: true, reason: "unassigned-subclass" };
   }
-
-  if (classId && identities.classIds.has(classId)) {
-    return { classOwned: true, active: true, uncertain: false };
-  }
-
-  if (classEntryId || classId) {
-    return { classOwned: true, active: false, uncertain: false };
-  }
-
-  return {
-    classOwned: CLASS_OWNED_SOURCE_TYPES.has(sourceType),
-    active: true,
-    uncertain: CLASS_OWNED_SOURCE_TYPES.has(sourceType)
-  };
+  return { classOwned: true, active: true, uncertain: !entryId, reason: !entryId ? "unassigned-entry" : "" };
 }
 
-function archiveRemovedSources(
-  character,
-  removedSources
-) {
+export function getSpellSourceOwnership(source, classEntries = [], fallbackEntryId = "") {
+  return evaluateClassSource(source, fallbackEntryId, getClassIdentitySets(classEntries));
+}
+
+function archiveRemovedSources(character, removedSources) {
+  character.builder = isRecord(character.builder) ? character.builder : {};
+  const previousArchive = Array.isArray(character.builder.archivedClassSpellSources) ? character.builder.archivedClassSpellSources.filter(isRecord).slice(-64) : [];
   if (!removedSources.length) {
+    if (character.builder.archivedClassSpellSources) character.builder.archivedClassSpellSources = previousArchive;
     return;
   }
-
-  character.builder = isRecord(character.builder)
-    ? character.builder
-    : {};
-  const previousArchive = Array.isArray(
-    character.builder.archivedClassSpellSources
-  )
-    ? character.builder.archivedClassSpellSources
-    : [];
-  const byId = new Map(
-    previousArchive.map((source, index) => [
-      cleanText(
-        source?.sourceId ||
-        source?.classEntryId ||
-        `archive-${index}`
-      ),
-      source
-    ])
-  );
-
-  removedSources.forEach((source, index) => {
-    const key = cleanText(
-      source?.sourceId ||
-      source?.classEntryId ||
-      source?.classId ||
-      `removed-${index}`
-    );
-    byId.set(key, {
-      ...source,
-      archivedReason: "class-removed"
-    });
-  });
-
-  character.builder.archivedClassSpellSources = [
-    ...byId.values()
-  ].slice(-64);
+  const archive = new Map();
+  for (const source of [...previousArchive, ...removedSources]) {
+    const type = source.sourceType || "class";
+    const key = [type, source.classEntryId || source.classId || source.sourceId || "unknown", source.subclassId || "", ["class","subclass"].includes(type) ? "" : source.sourceId || ""].join(":");
+    const previous = archive.get(key) || {};
+    const merged = {...previous,...source,archivedReason:source.archivedReason || previous.archivedReason || "class-removed",spellStates:{...(previous.spellStates || {}),...(source.spellStates || {})}};
+    for (const field of ["selectedSpellIds","fixedSpellIds","cantripIds","knownSpellIds","preparedSpellIds","spellbookSpellIds","alwaysPreparedSpellIds"]) if(previous[field] || source[field]) merged[field]=uniqueText([...(previous[field] || []),...(source[field] || [])]);
+    merged.spellbookAcquisitions = {...(previous.spellbookAcquisitions || {}),...(source.spellbookAcquisitions || {})};
+    archive.set(key,merged);
+  }
+  character.builder.archivedClassSpellSources = [...archive.values()].slice(-64);
 }
 
 export function reconcileClassOwnedSpellSources(
   character,
-  classEntries = character?.classProgression?.classes
+  classEntries = character?.classProgression?.classes,
+  { quarantineUncertain = false } = {}
 ) {
   if (!isRecord(character)) {
     return {
@@ -199,8 +149,17 @@ export function reconcileClassOwnedSpellSources(
         identities
       );
 
-      if (result.active) {
-        retainedClassSources[sourceKey] = source;
+      if (result.active && !(quarantineUncertain && result.uncertain)) {
+        let retained = source;
+        const grantOwnership = source.subclassId ? evaluateClassSource({...source,sourceType:"subclass"},sourceKey,identities) : null;
+        if (grantOwnership && !grantOwnership.active) {
+          const grants=uniqueText([...(source.alwaysPreparedSpellIds || []),...(source.subclassSpellIds || [])]);
+          if(grants.length) removedSources.push({...source,sourceType:"subclass",sourceId:"subclass:"+sourceKey+":"+source.subclassId,fixedSpellIds:grants,selectedSpellIds:[],knownSpellIds:[],preparedSpellIds:[],spellbookSpellIds:[],cantripIds:[],alwaysPreparedSpellIds:grants,archivedReason:grantOwnership.reason});
+          const owner=identities.byEntry.get(source.classEntryId || sourceKey);
+          retained={...source,alwaysPreparedSpellIds:[],subclassSpellIds:[],subclassId:owner?.subclassId || "",subclassName:owner?.subclassName || ""};
+          changed=true;
+        }
+        retainedClassSources[sourceKey] = retained;
         if (result.uncertain) {
           reviewWarnings.push(
             `Spell source ${sourceKey} has unknown class ownership and was preserved for review.`
@@ -213,7 +172,8 @@ export function reconcileClassOwnedSpellSources(
           classEntryId: cleanText(
             source.classEntryId || sourceKey
           ),
-          sourceType: "class"
+          sourceType: "class",
+          archivedReason: result.reason || "class-removed"
         });
         changed = true;
       }
@@ -235,7 +195,7 @@ export function reconcileClassOwnedSpellSources(
       identities
     );
 
-    if (result.active) {
+    if (result.active && !(quarantineUncertain && result.uncertain)) {
       retainedCanonicalSources.push(source);
       if (result.uncertain) {
         reviewWarnings.push(
@@ -243,7 +203,7 @@ export function reconcileClassOwnedSpellSources(
         );
       }
     } else {
-      removedSources.push(source);
+      removedSources.push({ ...source, archivedReason: result.reason || "class-removed" });
       changed = true;
     }
   });
@@ -347,8 +307,9 @@ export function reconcileClassOwnedSpellSources(
   )
     ? character.builder.validation
     : {};
-  character.builder.validation.classChangeReviewWarnings =
-    uniqueText(reviewWarnings);
+  const removalWarnings = removedSources.map((source) => `${source.sourceName || source.className || source.classId || "A spell source"} was archived because its class or subclass ownership no longer matches. Review archived spell sources in Spells / Features.`);
+  character.builder.validation.classChangeReviewWarnings = uniqueText([...(character.builder.validation.classChangeReviewWarnings || []), ...reviewWarnings, ...removalWarnings]);
+  character.builder.validation.unresolvedSpellSourceWarnings = uniqueText(reviewWarnings);
 
   return {
     changed,

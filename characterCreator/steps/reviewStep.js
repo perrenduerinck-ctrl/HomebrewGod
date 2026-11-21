@@ -827,23 +827,28 @@ export function createReviewStep(dependencies = {}) {
         );
       });
 
+    const readinessIssues = [...new Set([...(spellChoiceValidation.readinessIssues || []), ...(creatorState.draft.builder?.validation?.unresolvedSpellSourceWarnings || [])])];
     const optionalWarnings = [
       ...new Set([
         ...optionalRuleWarnings,
-        ...spellChoiceValidation.reminders,
+        ...(spellChoiceValidation.reminders || []).filter((message)=>!readinessIssues.includes(message)),
         ...getSection17MigrationWarnings()
       ].filter(Boolean))
     ];
 
     return {
       blockingErrors,
+      validDraft: blockingErrors.length === 0,
+      readinessIssues,
+      isReadyToPlay: blockingErrors.length === 0 && readinessIssues.length === 0,
       optionalWarnings,
       allIssues: [
         ...blockingErrors,
+        ...readinessIssues,
         ...optionalWarnings
       ],
       canFinalize:
-        blockingErrors.length === 0,
+        blockingErrors.length === 0 && readinessIssues.length === 0,
       checkedAtMillis: Date.now()
     };
   }
@@ -2059,8 +2064,10 @@ export function createReviewStep(dependencies = {}) {
     const hasMigrationWarnings =
       migrationWarningCount > 0;
 
+    const readinessIssues = validation?.readinessIssues || [];
+    const readinessHtml = readinessIssues.length ? `<div class="hg-character-warning" data-cc-readiness-issues><b>${blockingErrors.length ? "Readiness choices also remain" : "Valid draft — not ready to play yet"}</b><p>Save Draft keeps your work. Complete these choices before finalizing as ready to play.</p><ul>${readinessIssues.map((issue)=>`<li>${renderCompletionIssue(issue,escapeHtml,"spells")}</li>`).join("")}</ul></div>` : "";
     const readyHtml =
-      !blockingErrors.length
+      !blockingErrors.length && !readinessIssues.length
         ? `
         <div class="hg-character-current-choice">
           <b>Ready to finalize:</b>
@@ -2129,18 +2136,15 @@ export function createReviewStep(dependencies = {}) {
 
     return `
       ${readyHtml}
+      ${readinessHtml}
       ${blockingHtml}
       ${optionalHtml}
     `;
   }
 
   function getSection17MigrationWarnings() {
-    return cleanArray(
-      creatorState.draft
-        ?.builder
-        ?.validation
-        ?.migrationWarnings
-    );
+    const validation = creatorState.draft?.builder?.validation || {};
+    return [...new Set([...cleanArray(validation.migrationWarnings),...cleanArray(validation.classChangeReviewWarnings),...cleanArray(validation.unresolvedSpellSourceWarnings)])];
   }
 
   function renderSection17MigrationWarnings() {

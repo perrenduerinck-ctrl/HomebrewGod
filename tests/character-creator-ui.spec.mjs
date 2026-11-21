@@ -885,3 +885,94 @@ for (const [classId, subclassName, spellId, spellName] of [
     await expect(page.locator("#characterWizardStepBody")).not.toContainText("is prepared without a matching");
   });
 }
+
+
+async function openSpellAuditCharacter(page, classId = "wizard") {
+  page.setDefaultTimeout(15000);
+  page.on("dialog", dialog => dialog.accept());
+  await page.goto("?smokeTest=1&view=characterCreator");
+  await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", {timeout:30000});
+  await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("characterCreator"));
+  await page.locator('[data-cc-action="new-character"]').first().click();
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await page.getByText("2. Build Type",{exact:true}).click();
+  await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="'+classId+'"]').click();
+  await page.locator('[data-cc-action="confirm-class-build"]').click();
+  await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+}
+async function exportSpellAuditCharacter(page) {
+  await page.locator('.hg-character-step-button[data-step-id="save"]').click();
+  const pending=page.waitForEvent("download");
+  await page.getByRole('button',{name:'Export JSON File',exact:true}).click();
+  const stream=await (await pending).createReadStream(); const chunks=[];
+  for await (const chunk of stream) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+async function importSpellAuditCharacter(page, character) {
+  await page.locator('.hg-character-step-button[data-step-id="save"]').click();
+  await page.locator("#ccImportJsonText").fill(JSON.stringify(character));
+  expect(await page.locator("#ccImportJsonText").inputValue()).toBe(JSON.stringify(character));
+  await page.locator('[data-cc-action="import-json-text"]').click();
+  await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+}
+test("spell readiness distinguishes missing Bard choices from invalid spell rules",async({page})=>{
+  await openSpellAuditCharacter(page,"bard");
+  await expect(page.locator('[data-cc-spell-readiness]')).toContainText("Valid draft");
+  await expect(page.locator('[data-hg-step-missing]')).toContainText("Bard");
+  await expect(page.locator('.hg-character-step-button[data-step-id="spells"]')).not.toHaveClass(/\bcomplete\b/);
+  await page.locator('.hg-character-step-button[data-step-id="review"]').click();
+  await expect(page.locator('[data-cc-readiness-issues]')).toContainText("4 Bard");
+  const jump=page.locator('[data-cc-readiness-issues] [data-cc-issue]').first(); await jump.click();
+  await expect(page.locator('#characterWizardStepTitle')).toHaveText("Spells / Features");
+});
+test("Wizard spellbook free choices and copied spells survive export and legacy history review",async({page})=>{
+  await openSpellAuditCharacter(page);
+  for(const [id,name] of [["magic-missile","Magic Missile"],["shield","Shield"],["mage-armor","Mage Armor"],["detect-magic","Detect Magic"],["identify","Identify"],["sleep","Sleep"],["alarm","Alarm"]]) {
+    await page.locator('#ccDefaultSpellSearch').fill(name);
+    const card=page.locator('article[data-spell-id="'+id+'"]');
+    if(id==="alarm") await card.locator('[data-cc-spellbook-acquisition]').selectOption("copied");
+    await card.getByRole("button",{name:/Add to Spellbook/i}).click();
+    if(id==="magic-missile") await card.getByRole("button",{name:"Prepare Spell",exact:true}).click();
+  }
+  await expect(page.locator('[data-cc-spellbook-progress] summary')).toContainText("6 / 6");
+  const character=await exportSpellAuditCharacter(page);
+  const source=Object.values(character.magic.classSources).find(s=>s.classId==="wizard");
+  expect(source.spellbookSpellIds).toHaveLength(7); expect(source.spellbookAcquisitions.alarm.kind).toBe("copied");
+  // Simulate a pre-history save; both canonical and compatibility data must stay intact.
+  delete source.spellbookAcquisitions; for(const s of character.magic.spellSources) delete s.spellbookAcquisitions;
+  await importSpellAuditCharacter(page,character);
+  const progress=page.locator('[data-cc-spellbook-progress]');await progress.locator('summary').click();
+  await expect(progress).toContainText("Unreviewed entries: 7");
+  await expect(progress.locator('[data-cc-spellbook-history-preview]')).toBeVisible();
+  await progress.getByRole("button",{name:"Confirm proposed spellbook history"}).click();
+  await expect(progress.locator('summary')).toContainText("6 / 6");
+  await page.setViewportSize({width:390,height:844});
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
+  const after=await exportSpellAuditCharacter(page);const recovered=Object.values(after.magic.classSources).find(s=>s.classId==="wizard");
+  expect(recovered.spellbookSpellIds.sort()).toEqual(source.spellbookSpellIds.sort());
+  expect(recovered.preparedSpellIds).toEqual(["magic-missile"]);
+  expect(Object.values(recovered.spellbookAcquisitions).filter(a=>a.kind==="copied")).toHaveLength(1);
+});
+test("spell source restoration requires an unchanged reviewed preview",async({page})=>{
+  await openSpellAuditCharacter(page);
+  const character=await exportSpellAuditCharacter(page);const entry=character.classProgression.classes[0];
+  character.builder.archivedClassSpellSources=[{sourceId:"class:old-wizard",sourceType:"class",classEntryId:"old-wizard",classId:"wizard",className:"Archived Wizard",selectedSpellIds:["shield"],spellStates:{shield:{spellbook:true,known:true}},spellbookAcquisitions:{shield:{kind:"level",classLevel:1}}}];
+  character.builder.validation.classChangeReviewWarnings=["Archived Wizard spells need review after a class change."];
+  await importSpellAuditCharacter(page,character);
+  await page.locator('.hg-character-step-button[data-step-id="review"]').click();
+  await expect(page.locator('#characterWizardStepBody')).toContainText("Archived Wizard spells need review");
+  await page.locator('.hg-character-step-button[data-step-id="spells"]').click();
+  const recovery=page.locator('[data-cc-spell-source-recovery]');await recovery.locator('summary').click();
+  await recovery.locator('[data-cc-restore-target]').selectOption(entry.entryId);
+  await recovery.getByRole("button",{name:"Preview restoration"}).click();
+  await expect(recovery.locator('[data-cc-spell-repair-preview]')).toContainText("has not changed the character");
+  await recovery.getByRole("button",{name:"Cancel preview"}).click();
+  if (!(await recovery.evaluate(el=>el.open))) await recovery.locator('summary').click();
+  await expect(recovery.locator('[data-cc-archive-row]')).toHaveCount(1);
+  await recovery.locator('[data-cc-restore-target]').selectOption(entry.entryId);
+  await recovery.getByRole("button",{name:"Preview restoration"}).click();
+  await recovery.getByRole("button",{name:"Apply reviewed spell-source changes"}).click();
+  const after=await exportSpellAuditCharacter(page);
+  expect(after.builder.archivedClassSpellSources).toHaveLength(0);
+  expect(after.magic.classSources[entry.entryId].spellbookSpellIds).toContain("shield");
+});

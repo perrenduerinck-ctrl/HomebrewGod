@@ -1,3 +1,4 @@
+import { CHARACTER_IMPORT_MAX_BYTES } from "../fieldLimits.js?v=creator-fix-pass-20260730";
 const FINISH_STEP_ACTIONS = Object.freeze([
   "save-character",
   "save-copy",
@@ -225,7 +226,7 @@ export function createFinishStep(dependencies = {}) {
 
             ${
               isFinalized
-                ? "Finalized"
+                ? finalizationValidation.canFinalize ? "Finalized — ready to play" : "Finalized — readiness review needed"
                 : "Draft"
             }
 
@@ -235,8 +236,8 @@ export function createFinishStep(dependencies = {}) {
 
             ${
               finalizationValidation.canFinalize
-                ? "Ready"
-                : `${finalizationValidation.blockingErrors.length} blocking rule ${finalizationValidation.blockingErrors.length === 1 ? "error" : "errors"}`
+                ? "Ready to play"
+                : !finalizationValidation.blockingErrors.length ? `Valid draft — ${(finalizationValidation.readinessIssues || []).length} readiness choices remain` : `${finalizationValidation.blockingErrors.length} blocking rule ${finalizationValidation.blockingErrors.length === 1 ? "error" : "errors"}`
             }
 
             <br>
@@ -429,6 +430,7 @@ export function createFinishStep(dependencies = {}) {
           "",
           {
             type: "textarea",
+            maxLength: CHARACTER_IMPORT_MAX_BYTES,
 
             placeholder:
               "Paste a previously exported character here...",

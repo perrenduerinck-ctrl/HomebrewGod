@@ -1,3 +1,4 @@
+import { getSpellbookProgress, chooseSpellbookAcquisition } from "./spellbookProgression.js";
 import { createSpellOriginIndex, renderSpellOriginDetails } from "./spellProvenance.js";
 import { getManualPreparedSpellIds, getSpellChoiceActions, renderClassSpellChoices } from "./spellSelectionSummary.js";
 import { getCompletionLocation, renderCompletionIssue } from "./completionGuidance.js";
@@ -4217,6 +4218,12 @@ export function createCharacterCreator(options = {}) {
           rawBuilder.completedSteps
         ),
 
+        archivedClassSpellSources: cloneData(
+          (Array.isArray(rawBuilder.archivedClassSpellSources) ? rawBuilder.archivedClassSpellSources : [])
+            .filter((source) => source && typeof source === "object" && !Array.isArray(source))
+            .slice(-64)
+        ),
+
         validation: cloneData(
           rawBuilder.validation || {}
         ),
@@ -4526,8 +4533,10 @@ export function createCharacterCreator(options = {}) {
       normalized
     );
 
+    reconcileClassOwnedSpellSources(normalized, getCharacterClassEntries(normalized));
     synchronizeCanonicalSpellSources(normalized, { fromCompatibility: !(safeNumber(raw.magic?.spellSourceModelVersion, 0) >= SPELL_SOURCE_MODEL_VERSION && Array.isArray(raw.magic?.spellSources)) });
 
+    reconcileClassOwnedSpellSources(normalized, getCharacterClassEntries(normalized));
     Object.assign(normalized.magic, getSpellSourceCompatibilityAliases(normalized));
 
     return applyCompatibilityAliases(normalized);
@@ -9940,6 +9949,8 @@ export function createCharacterCreator(options = {}) {
         ),
         requiresSpellcastingAbility: true,
         subclassName: cleanString(entry.subclassName),
+        classLevel: Number(entry.level) || 1,
+        spellbookAcquisitions: source.spellbookAcquisitions || {},
         preparationMode:
           getSection16PreparationMode(entry),
         maxSpellLevel: Math.max(
@@ -20197,11 +20208,12 @@ export function createCharacterCreator(options = {}) {
     if (["review", "save"].includes(step.id)) return "";
     const modules = { basics: basicsStep, class: classStep, background: backgroundStep, species: speciesStep, abilities: abilitiesStep, equipment: equipmentStep, spells: spellsStep };
     if (isStepComplete(step.id)) return "";
-    const warnings = modules[step.id]?.validateStep?.(creatorState.draft)?.blockingErrors || [];
+    const validation = modules[step.id]?.validateStep?.(creatorState.draft) || {};
+    const warnings = [...(validation.blockingErrors || []), ...(validation.readinessIssues || [])];
     const issues = warnings.length ? warnings : ["Open the choices in this step and complete the remaining selections."];
     return `<section class="hg-character-warning" aria-label="Still needed in ${escapeHtml(step.label)}">
       <strong>Still needed in ${escapeHtml(step.label)}</strong>
-      ${step.required === false ? '<p class="small">This step is optional for finalization.</p>' : ""}
+      ${step.required === false && !validation.readinessIssues?.length ? '<p class="small">This step is optional for finalization.</p>' : ""}
       <ul>${issues.map((issue) => `<li>${renderCompletionIssue(issue, escapeHtml, step.id)}</li>`).join("")}</ul>
     </section>`;
   }
@@ -34645,7 +34657,8 @@ export function createCharacterCreator(options = {}) {
 
   function toggleSection16SpellKnown(
     spellId,
-    sourceId = ""
+    sourceId = "",
+    acquisition = null
   ) {
     const spell =
       getSection16SpellById(spellId);
@@ -34696,6 +34709,7 @@ export function createCharacterCreator(options = {}) {
 
     if (index >= 0) {
       source[field].splice(index, 1);
+      if (field === "spellbookSpellIds" && source.spellbookAcquisitions) delete source.spellbookAcquisitions[spellId];
       const preparedIndex =
         source.preparedSpellIds.indexOf(
           spellId
@@ -34719,6 +34733,11 @@ export function createCharacterCreator(options = {}) {
         return false;
       }
 
+      if (field === "spellbookSpellIds") {
+        try {
+          source.spellbookAcquisitions = {...source.spellbookAcquisitions, [spellId]: chooseSpellbookAcquisition({...source,classId:entry.classId,classLevel:entry.level}, spell, acquisition, (id) => getSection16SpellById(id))};
+        } catch (error) { setStatus(error.message); return false; }
+      }
       source[field].push(spellId);
     }
 
@@ -35884,6 +35903,8 @@ export function createCharacterCreator(options = {}) {
                   ? "Remove Known Spell"
                   : "Learn Spell";
 
+            const bookProgress = selectedSource && mode === "spellbook-prepared" && !isCantrip ? getSpellbookProgress({...sourceState,classLevel:selectedSource.level}, (id) => getSection16SpellById(id)) : null;
+
             const statusLabel = alwaysPrepared
               ? "Always Prepared — automatic"
               : mysticArcanumSelected
@@ -36160,6 +36181,7 @@ export function createCharacterCreator(options = {}) {
                       </p>
 
                       ${renderSpellOriginDetails(originIndex.get(spell.id), escapeHtml, selectedSource?.className)}
+                      ${bookProgress && !known && !alwaysPrepared ? `<label class="small">Spellbook acquisition<select data-cc-spellbook-acquisition>${bookProgress.buckets.filter((bucket) => bucket.selected < bucket.maximum && Number(spell.level) <= Math.ceil(bucket.classLevel / 2)).map((bucket) => `<option value="level:${bucket.classLevel}">Wizard level ${bucket.classLevel}: free choice (${bucket.maximum - bucket.selected} left)</option>`).join("")}<option value="copied">Copied / found spell (separate from free choices)</option></select></label>` : ""}
                       <p class="small" data-cc-spell-action-guidance>${escapeHtml([...new Set([knownActionWarning, preparedActionWarning].filter(Boolean))].join(" "))}</p>
                       <div class="hg-character-card-actions">
                         ${
@@ -36283,6 +36305,9 @@ export function createCharacterCreator(options = {}) {
       const next = template.content.querySelector("[data-cc-default-spell-results]");
       if (!next) throw new Error("Spell results could not be rendered.");
       current.replaceWith(next);
+      const readiness = spellsStep.validateStep(creatorState.draft);
+      const readinessNode = C.grid.querySelector("[data-cc-spell-readiness]");
+      if (readinessNode) readinessNode.textContent = readiness.isReady ? "Ready to play: spell choices are complete." : readiness.validDraft ? "Valid draft: spell choices still need attention before this character is ready to play." : "Draft needs spell-rule corrections. Saving a draft is still available.";
       const choices = C.grid.querySelector("[data-cc-class-spell-choice-summary]");
       if (choices) choices.innerHTML = renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml);
       const summary = C.grid.querySelector("[data-cc-spell-source-summary]");
