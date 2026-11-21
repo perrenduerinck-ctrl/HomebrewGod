@@ -1,3 +1,4 @@
+import { normalizeSpellbookAcquisitions } from "./spellbookProgression.js";
 // =====================================================
 // CANONICAL CHARACTER SPELL SOURCES
 // One source-owned record for every way a character gains a spell.
@@ -395,6 +396,7 @@ export function normalizeSpellSource(
     ),
     selectedSpellIds,
     fixedSpellIds,
+    spellbookAcquisitions: normalizeSpellbookAcquisitions(raw.spellbookAcquisitions),
     allowedSpellIds: uniqueText(
       raw.allowedSpellIds
     ),
@@ -551,6 +553,7 @@ function mergeSourceRecords(first, second) {
     sourceFeatureName:
       first.sourceFeatureName ||
       second.sourceFeatureName,
+    spellbookAcquisitions: {...(first.spellbookAcquisitions || {}), ...(second.spellbookAcquisitions || {})},
     choiceCount: Math.max(
       wholeNumber(first.choiceCount, 0),
       wholeNumber(second.choiceCount, 0)
@@ -996,7 +999,8 @@ export function collectLegacySpellSources(character) {
         rulesSource: cleanText(
           source.rulesSource || source.source
         ),
-        spellStates: classSpellStates(source)
+        spellStates: classSpellStates(source),
+        spellbookAcquisitions: source.spellbookAcquisitions
       });
     }
 
@@ -1727,6 +1731,7 @@ export function populateSpellSourceCompatibility(
     if (!compatibilitySource) {
       return;
     }
+    if (source.sourceType === "class" && Object.keys(source.spellbookAcquisitions || {}).length) compatibilitySource.spellbookAcquisitions = {...source.spellbookAcquisitions};
 
     getSourceSpellIds(source)
       .forEach((spellId) => {

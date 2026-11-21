@@ -1,3 +1,4 @@
+import { getSpellbookProgress } from "./spellbookProgression.js";
 import { getManualPreparedSpellIds } from "./spellSelectionSummary.js";
 // =====================================================
 // OPTIONAL SPELL CHOICES AND FINALIZATION VALIDATION
@@ -141,7 +142,8 @@ function addRemaining(result, choice) {
   }
 
   result.remainingChoices.push(choice);
-  result.reminders.push(choice.message);
+  if (choice.requiredForReadiness === true) result.readinessIssues.push(choice.message);
+  if (!choice.suppressReminder) result.reminders.push(choice.message);
 }
 
 function evaluateClassChoices(result, entry, resolveSpell) {
@@ -280,6 +282,10 @@ function evaluateClassChoices(result, entry, resolveSpell) {
     );
   }
   if (entry?.preparationMode === "spellbook-prepared") {
+    const progress = getSpellbookProgress(entry, resolveSpell);
+    result.blockingErrors.push(...progress.errors);
+    if (entry.classId === "wizard" && progress.unclassified.length) result.readinessIssues.push(`${className} has ${progress.unclassified.length} spellbook entries with unreviewed acquisition history. Review the proposed history in Spells / Features.`);
+    if (entry.classId === "wizard") addRemaining(result, { id: `${sourceId}:spellbook`, sourceId, sourceType: "class", sourceName: className, choiceType:"spellbook", requiredForReadiness:true, maximum:6+2*(progress.level-1), selected:6+2*(progress.level-1)-progress.remaining, remaining:progress.remaining, message:`${className} still has ${progress.remaining} free spellbook choices to make across its Wizard levels.` });
     const available = new Set([
       ...spellbook,
       ...cleanIds(entry?.alwaysPreparedSpellIds)
@@ -292,12 +298,15 @@ function evaluateClassChoices(result, entry, resolveSpell) {
       });
   }
 
+  if (entry?.preparationMode !== "known" && preparedLimit > 0 && !prepared.length && !cleanIds(entry?.alwaysPreparedSpellIds).length) result.readinessIssues.push(`${className} has no prepared spells. Prepare at least one spell before marking the character ready.`);
+
   addRemaining(result, {
     id: `${sourceId}:cantrips`,
     sourceId,
     sourceType: "class",
     sourceName: className,
     choiceType: "cantrip",
+    requiredForReadiness: true,
     maximum: cantripLimit,
     selected: Math.min(cantrips.length, cantripLimit),
     remaining: Math.max(0, cantripLimit - cantrips.length),
@@ -309,6 +318,7 @@ function evaluateClassChoices(result, entry, resolveSpell) {
     sourceType: "class",
     sourceName: className,
     choiceType: "known",
+    requiredForReadiness: true,
     maximum: knownLimit,
     selected: Math.min(known.length, knownLimit),
     remaining: Math.max(0, knownLimit - known.length),
@@ -320,6 +330,7 @@ function evaluateClassChoices(result, entry, resolveSpell) {
     sourceType: "class",
     sourceName: className,
     choiceType: "prepared",
+    suppressReminder: !prepared.length && !cleanIds(entry?.alwaysPreparedSpellIds).length,
     maximum: preparedLimit || 0,
     selected: preparedLimit === null ? 0 : Math.min(prepared.length, preparedLimit),
     remaining: preparedLimit === null ? 0 : Math.max(0, preparedLimit - prepared.length),
@@ -368,6 +379,7 @@ function evaluateClassChoices(result, entry, resolveSpell) {
     sourceType: "mystic-arcanum",
     sourceName: "Mystic Arcanum",
     choiceType: "mystic-arcanum",
+    requiredForReadiness: true,
     maximum: arcanumLevels.length,
     selected: unique(selectedArcanum).length,
     remaining: arcanumRemaining,
@@ -489,6 +501,7 @@ function evaluateSourceChoices(result, source, resolveSpell) {
       sourceType: source.sourceType,
       sourceName: label,
       choiceType: source.sourceType,
+      requiredForReadiness: true,
       maximum: limit,
       selected: validCount,
       remaining,
@@ -541,6 +554,7 @@ export function evaluateSpellChoices({
   const result = {
     remainingChoices: [],
     reminders: [],
+    readinessIssues: [],
     blockingErrors: []
   };
 
@@ -555,6 +569,9 @@ export function evaluateSpellChoices({
     });
 
   result.reminders = unique(result.reminders);
+  result.readinessIssues = unique(result.readinessIssues);
+  result.validDraft = result.blockingErrors.length === 0;
+  result.isReady = result.validDraft && result.readinessIssues.length === 0;
   result.blockingErrors = unique(result.blockingErrors);
   return result;
 }

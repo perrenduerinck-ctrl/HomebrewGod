@@ -865,15 +865,20 @@ export function createCharacterPersistence(context) {
         ? validation.blockingErrors
         : [];
 
+    const issues = [...blockingErrors, ...(validation?.readinessIssues || [])];
+
     creatorState.draft.builder.validation = {
       ...(creatorState.draft.builder
         .validation || {}),
       warnings:
         validation?.allIssues ||
-        blockingErrors,
+        issues,
       blockingErrors,
       optionalWarnings:
         validation?.optionalWarnings || [],
+      readinessIssues: validation?.readinessIssues || [],
+      validDraft: validation?.validDraft ?? blockingErrors.length === 0,
+      isReadyToPlay: false,
       canFinalize: false,
       checkedAtMillis:
         validation?.checkedAtMillis ||
@@ -881,7 +886,7 @@ export function createCharacterPersistence(context) {
     };
 
     setStatus(
-      `Character was not finalized: ${blockingErrors.length} blocking rule ${blockingErrors.length === 1 ? "error" : "errors"} must be fixed.`
+      `Character remains a draft: ${issues.length} rule or readiness issues need attention.`
     );
 
     if (
@@ -895,12 +900,12 @@ export function createCharacterPersistence(context) {
 
     if (typeof alert === "function") {
       const shownErrors =
-        blockingErrors.slice(0, 8);
+        issues.slice(0, 8);
 
       const remainingCount =
         Math.max(
           0,
-          blockingErrors.length -
+          issues.length -
             shownErrors.length
         );
 
@@ -1058,6 +1063,9 @@ export function createCharacterPersistence(context) {
           optionalWarnings:
             finalizationValidation
               .optionalWarnings,
+          readinessIssues: finalizationValidation.readinessIssues || [],
+          validDraft: finalizationValidation.validDraft,
+          isReadyToPlay: finalizationValidation.isReadyToPlay,
           canFinalize:
             finalizationValidation
               .canFinalize,

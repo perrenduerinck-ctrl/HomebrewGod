@@ -981,7 +981,7 @@ function enhanceStickyActions(root) {
   const issues = [...root.querySelectorAll(
     "[data-cc-completion-guidance] li > span, #characterWizardStepBody .hg-character-warning[role=alert] li > span"
   )].map((element) => element.textContent.trim()).filter(Boolean);
-  const message = required && !complete
+  const message = !complete && (required || issues.length > 0)
     ? issues.length
       ? "Still needed: " + issues[0] + (issues.length > 1 ? ` (${issues.length - 1} more listed above.)` : "")
       : "Complete the required choices marked on this step to continue."

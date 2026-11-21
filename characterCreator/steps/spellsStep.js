@@ -1,3 +1,5 @@
+import { previewSpellSourceRepair, previewSpellSourceRestore, applySpellRepairPreview } from "../spellRecovery.js";
+import { getSpellbookProgress, chooseSpellbookAcquisition, normalizeSpellbookAcquisitions } from "../spellbookProgression.js";
 import { renderClassSpellChoices, getSpellChoiceActions } from "../spellSelectionSummary.js";
 import {
   createCreatorSpellPickerState,
@@ -19,6 +21,7 @@ import { renderSpellAnimationSection } from "../../vfx/spellAnimationSection.js"
 const FEAT_CATALOG_SEARCH_DEBOUNCE_MS = 250;
 
 const SPELLS_STEP_ACTIONS = Object.freeze([
+  "preview-spell-source-repair", "preview-restore-spell-source", "confirm-spell-source-repair", "cancel-spell-source-repair", "acknowledge-spell-source-notices", "confirm-spellbook-history",
   "edit-spell-animations",
   "edit-builtin-spell-animations",
   "preview-spell-animations",
@@ -98,6 +101,7 @@ export function createSpellsStep(
 
   const section16SelectedSpellSourceIds =
     new Map();
+  let repairPreview = null;
   let draftAnimations = {}, animationDraftOwner = null, editingSpellId = null, spellFormDraft = null;
   let animationLibrary = getAnimationLibrary?.() || null;
   const formFields = { ccNewSpellKnown: "startKnown", ccNewSpellPrepared: "startPrepared", ccNewSpellName: "name", ccNewSpellLevel: "level", ccNewSpellClassId: "spellcastingSourceId", ccNewSpellSchool: "school", ccNewSpellCastingTime: "castingTime", ccNewSpellRange: "range", ccNewSpellDuration: "duration", ccNewSpellComponents: "components", ccNewSpellDescription: "description", ccNewSpellRitual: "ritual", ccNewSpellConcentration: "concentration", ccNewSpellManualOverride: "manualOverride" };
@@ -159,9 +163,51 @@ export function createSpellsStep(
     spellFormDraft.startPrepared = prepared.checked;
   }
 
+  function renderSpellSourceRecovery() {
+    const draft = getCreatorState().draft;
+    const notices = [...new Set([...(draft.builder?.validation?.classChangeReviewWarnings || []),...(draft.builder?.validation?.unresolvedSpellSourceWarnings || [])])];
+    const archive = draft.builder?.archivedClassSpellSources || [];
+    if (!notices.length && !archive.length && !repairPreview) return "";
+    const entries = getSpellcastingClassOptions(draft);
+    return `<details data-cc-spell-source-recovery ${repairPreview ? "open" : ""}><summary>Spell-source review and recovery (${archive.length} archived sources)</summary>
+      <p>Archived sources are kept separately from active spells. Preview a repair or restoration before applying it. Saving a draft remains available.</p>
+      <ul>${notices.map((notice)=>`<li>${escapeHtml(notice)}</li>`).join("")}</ul>
+      ${draft.builder?.validation?.unresolvedSpellSourceWarnings?.length ? '<button type="button" data-cc-action="preview-spell-source-repair">Preview archiving unresolved sources</button>' : ""}
+      ${notices.length ? '<button type="button" data-cc-action="acknowledge-spell-source-notices">Acknowledge class-change notices</button>' : ""}
+      ${archive.map((source,index)=>`<section data-cc-archive-row><h4>${escapeHtml(source.sourceName || source.className || source.classId || "Unassigned spell source")}</h4><p>Reason: ${escapeHtml(source.archivedReason || "class changed")}.</p><p>Spells: ${[...new Set([...(source.selectedSpellIds||[]),...(source.fixedSpellIds||[]),...(source.knownSpellIds||[]),...(source.spellbookSpellIds||[]),...(source.preparedSpellIds||[])])].map((id)=>escapeHtml(getSection16SpellById(id)?.name || id)).join(", ") || "No spell selections recorded"}</p><label>Restore to current class<select data-cc-restore-target><option value="">Choose a class to review</option>${entries.map((entry)=>`<option value="${escapeHtml(entry.classEntryId || entry.classId)}">${escapeHtml(entry.className || entry.classId)}${entry.subclassName ? " — "+escapeHtml(entry.subclassName):""}</option>`).join("")}</select></label><button type="button" data-cc-action="preview-restore-spell-source" data-archive-index="${index}">Preview restoration</button></section>`).join("")}
+      ${repairPreview ? `<section data-cc-spell-repair-preview><h4>${escapeHtml(repairPreview.description)}</h4><p>This preview has not changed the character.</p><p>Selections deactivated: ${repairPreview.removedSpellIds.map((id)=>escapeHtml(getSection16SpellById(id)?.name || id)).join(", ") || "None"}.</p><ul>${repairPreview.errors.map((error)=>`<li>${escapeHtml(error)}</li>`).join("")}</ul><button type="button" data-cc-action="confirm-spell-source-repair" ${repairPreview.allowed ? "" : "disabled"}>Apply reviewed spell-source changes</button><button type="button" data-cc-action="cancel-spell-source-repair">Cancel preview</button></section>` : ""}
+    </details>`;
+  }
+
+  function handleSpellSourceRecovery(action, button) {
+    if (!["preview-spell-source-repair","preview-restore-spell-source","confirm-spell-source-repair","cancel-spell-source-repair","acknowledge-spell-source-notices","confirm-spellbook-history"].includes(action)) return false;
+    const draft = getCreatorState().draft;
+    try {
+      if (action === "confirm-spellbook-history") {
+        const source = draft.magic.classSources?.[button.dataset.classEntryId];
+        const entry = getSpellcastingClassOptions(draft).find((entry)=>(entry.classEntryId || entry.classId)===button.dataset.classEntryId);
+        if (!source || !entry) throw new Error("That Wizard source is no longer active.");
+        const progress = getSpellbookProgress({...source,classId:entry.classId,classLevel:entry.level},(id)=>getSection16SpellById(id));
+        source.spellbookAcquisitions={...normalizeSpellbookAcquisitions(source.spellbookAcquisitions),...progress.proposals};
+        markDraftChanged(); setStatus("Proposed spellbook acquisition history applied. Review remaining free choices above.");
+      } else if (action === "acknowledge-spell-source-notices") {
+        draft.builder.validation.classChangeReviewWarnings=[]; markDraftChanged();
+      } else if (action === "cancel-spell-source-repair") repairPreview=null;
+      else if (action === "confirm-spell-source-repair") {
+        Object.assign(draft,applySpellRepairPreview(draft,repairPreview)); repairPreview=null; markDraftChanged(); setStatus("Reviewed spell-source changes applied to this draft. Save the character to keep them.");
+      } else {
+        repairPreview = action === "preview-spell-source-repair" ? previewSpellSourceRepair(draft) : previewSpellSourceRestore(draft, Number(button.dataset.archiveIndex), button.closest("[data-cc-archive-row]")?.querySelector("[data-cc-restore-target]")?.value);
+        const beforeErrors=validateStep(draft).blockingErrors;
+        const newErrors=validateStep(repairPreview.after).blockingErrors.filter((error)=>!beforeErrors.includes(error));
+        repairPreview.errors.push(...newErrors); repairPreview.allowed &&= newErrors.length===0;
+      }
+    } catch(error) { setStatus(error.message); }
+    renderCreatorView(); return true;
+  }
+
   function renderStep() {
     const creatorState = getCreatorState();
-    if (animationDraftOwner !== creatorState.draft) { draftAnimations = {}; editingSpellId = null; spellFormDraft = null; animationDraftOwner = creatorState.draft; }
+    if (animationDraftOwner !== creatorState.draft) { repairPreview = null; draftAnimations = {}; editingSpellId = null; spellFormDraft = null; animationDraftOwner = creatorState.draft; }
     animationLibrary ||= getAnimationLibrary?.() || null;
     trackAnimationDependencies();
     const formValue = (property, fallback = "") => spellFormDraft?.[property] ?? fallback;
@@ -329,9 +375,11 @@ export function createSpellsStep(
       )}
 
       ${renderSection16BeginnerGuide()}
+      <p data-cc-spell-readiness>${validateStep(creatorState.draft).isReady ? "Ready to play: spell choices are complete." : validateStep(creatorState.draft).validDraft ? "Valid draft: spell choices still need attention before this character is ready to play." : "Draft needs spell-rule corrections. Saving a draft is still available."}</p>
       <section aria-label="Spell choices by class" data-cc-class-spell-choice-summary>
         ${renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml)}
       </section>
+      ${renderSpellSourceRecovery()}
 
       ${spellcastingSummary.castingBlocked
         ? `
@@ -1142,7 +1190,8 @@ export function createSpellsStep(
       changed =
         toggleSection16SpellKnown(
           spellId,
-          sourceId
+          sourceId,
+          button?.closest("article")?.querySelector("[data-cc-spellbook-acquisition]")?.value || null
         );
     }
 
@@ -1397,6 +1446,7 @@ export function createSpellsStep(
   }
 
   async function handleStepClick(context) {
+    if (handleSpellSourceRecovery(cleanString(context?.action), findSection16ActionElement(context))) return true;
     const action =
       cleanString(context?.action);
 
@@ -1537,6 +1587,19 @@ export function createSpellsStep(
   }
 
   function handleStepChange(context) {
+    if (context?.target?.dataset?.ccSpellbookHistory) {
+      const target=context.target, draft=getCreatorState().draft;
+      const source=draft.magic.classSources?.[target.dataset.classEntryId];
+      const entry=getSpellcastingClassOptions(draft).find((entry)=>(entry.classEntryId || entry.classId)===target.dataset.classEntryId);
+      try {
+        if(!source || !entry) throw new Error("That spellbook source is no longer active.");
+        const id=target.dataset.ccSpellbookHistory;
+        const choice=chooseSpellbookAcquisition({...source,classId:entry.classId,classLevel:entry.level,spellbookSpellIds:source.spellbookSpellIds.filter((spellId)=>spellId!==id)},getSection16SpellById(id),target.value,(spellId)=>getSection16SpellById(spellId));
+        source.spellbookAcquisitions={...normalizeSpellbookAcquisitions(source.spellbookAcquisitions),[id]:choice}; markDraftChanged();
+      }catch(error){setStatus(error.message);}
+      renderCreatorView(); return true;
+    }
+
     if (captureSpellForm(context?.target)) {
       if (["ccNewSpellLevel", "ccNewSpellClassId"].includes(context?.target?.id)) refreshCustomSpellActions();
       return true;
@@ -1555,7 +1618,7 @@ export function createSpellsStep(
   }
 
   function validateStep(character) {
-    return evaluateSpellChoices({
+    const result = evaluateSpellChoices({
       classSelections:
         getPerClassSpellSelectionSummary(
           character
@@ -1580,6 +1643,9 @@ export function createSpellsStep(
         );
       }
     });
+    result.readinessIssues = [...new Set([...result.readinessIssues, ...(character?.builder?.validation?.unresolvedSpellSourceWarnings || [])])];
+    result.isReady = result.blockingErrors.length === 0 && result.readinessIssues.length === 0;
+    return result;
   }
 
   function getStepWarnings(character) {
@@ -1593,10 +1659,7 @@ export function createSpellsStep(
   }
 
   function isStepComplete(character) {
-    return (
-      validateStep(character)
-        .blockingErrors.length === 0
-    );
+    return validateStep(character).isReady;
   }
 
   return Object.freeze({
