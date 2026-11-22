@@ -6318,17 +6318,15 @@ function renderSpellCard(
         </div>
       ` : ""}
 
-      ${completeDescription ? `
-        <details
+      <details
           class="hg-sheet-spell-description"
           data-character-sheet-spell-description="${escapeHtml(spell.id)}"
           ${expanded ? "open" : ""}
         >
-          <summary>Full spell description</summary>
+          <summary>${completeDescription ? "Full spell description" : "Spell details"}</summary>
           <p class="hg-sheet-spell-reference"><b>Components:</b> ${escapeHtml(formatSpellComponents(spell.components))}<br><b>Source:</b> ${escapeHtml(firstText(source,"Not recorded"))}<br><b>Concentration:</b> ${spell.concentration ? "Yes" : "No"} · <b>Ritual:</b> ${spell.ritual ? "Yes" : "No"}<br><b>Status:</b> ${escapeHtml(spell.statuses.join(", "))}</p>
           <p data-spell-description-body>${expanded ? escapeHtml(completeDescription) : ""}</p>
-        </details>
-      ` : ""}
+      </details>
     </article>
   `;
 }
