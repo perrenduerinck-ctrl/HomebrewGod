@@ -2258,3 +2258,11 @@ test(
     );
   }
 );
+
+
+test("custom spells without descriptions keep their casting-reference details",()=>{
+ const character={id:"reference-only-character",identity:{name:"Reference Tester"},magic:{knownSpellIds:["reference-only-spell"],customSpells:[{id:"reference-only-spell",name:"Reference Only",level:1,description:"",summary:"",components:"V, S, M (silver wire)",castingTime:"1 action",range:"Touch",duration:"1 minute",known:true,prepared:true,manualOverride:true}]}};
+ const html=createCharacterSheetView().renderCharacterSheetHtml(character,{activeTab:"spells"});
+ assert.match(html,/data-character-sheet-spell-description="reference-only-spell"/);
+ assert.match(html,/silver wire/);
+});

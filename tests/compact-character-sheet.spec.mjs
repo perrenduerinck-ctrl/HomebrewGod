@@ -17,3 +17,15 @@ test('compact character sheet keeps controls, independent spell details, and mob
  await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
  await expect(description.locator('[data-spell-description-body]')).toBeVisible();
 });
+
+
+test('custom spell references and print metadata remain available without a description',async({page})=>{
+ await page.goto('tests/browser-pages/playable-character-sheet.html');await expect(page.locator('body')).toHaveAttribute('data-test-status','pass');
+ await page.evaluate(()=>{const {character,view}=window.__PLAYABLE_SHEET_TEST__;const spell={id:"reference-only-spell",name:"Reference Only",level:1,description:"",summary:"",components:"V, S, M (silver wire)",castingTime:"1 action",range:"Touch",duration:"1 minute",known:true,prepared:true,manualOverride:true};view.open({...character,magic:{...character.magic,knownSpellIds:[...(character.magic.knownSpellIds || []),spell.id],customSpells:[...(character.magic.customSpells || []),spell]}});});
+ await page.locator('[data-character-sheet-tab="spells"]').click();await page.locator('[data-character-sheet-input="spell-search"]').fill('Reference Only');
+ const card=page.locator('.hg-sheet-screen-panel [data-sheet-spell-id="reference-only-spell"]'),details=card.locator('[data-character-sheet-spell-description]');
+ await details.getByText('Spell details',{exact:true}).click();await expect(details.locator('.hg-sheet-spell-reference')).toContainText('silver wire');await details.locator('summary').click();
+ await page.evaluate(()=>window.print=()=>{});await page.locator('.hg-sheet-more-menu > summary').click();await page.getByRole('button',{name:'Print',exact:true}).click();
+ await expect(page.locator('[data-character-sheet-print-area] [data-sheet-spell-id="reference-only-spell"]')).toContainText('silver wire');
+ await page.evaluate(()=>window.dispatchEvent(new Event('afterprint')));await expect(details).not.toHaveAttribute('open','');
+});
