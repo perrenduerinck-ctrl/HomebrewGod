@@ -12795,8 +12795,16 @@ export function createCharacterCreator(options = {}) {
             .pactSources
         : {};
 
+    // Use current class progression before a draft has ever been saved.
+    const spellSummary = getSpellcastingSummary(character);
+    const normalSlots = spellSummary.classes.length
+      ? spellSummary.multiclass?.spellSlots || {}
+      : character.magic.slots || {};
+    const currentPactSources = spellSummary.classes.length
+      ? spellSummary.multiclass?.pactMagic || []
+      : character.magic.pactMagicSources;
     const normal = Object.fromEntries(
-      Object.entries(character.magic.slots || {})
+      Object.entries(normalSlots)
         .filter(([level, maximum]) => {
           return safeNumber(level, 0) > 0 && safeNumber(maximum, 0) > 0;
         })
@@ -12824,14 +12832,8 @@ export function createCharacterCreator(options = {}) {
     );
     const pactSourceRecords =
       (
-        Array.isArray(
-          character.magic
-            .pactMagicSources
-        ) &&
-        character.magic
-          .pactMagicSources.length
-          ? character.magic
-              .pactMagicSources
+        (spellSummary.classes.length || (Array.isArray(currentPactSources) && currentPactSources.length))
+          ? currentPactSources || []
           : [
               {
                 classEntryId:
@@ -26580,6 +26582,7 @@ export function createCharacterCreator(options = {}) {
           })
         : [previousResources[resourceId]].filter(Boolean);
       const previousCurrentUses = previousCandidates
+        .filter((entry) => entry.maximumUses === null || safeNumber(entry.maximumUses, 0) > 0)
         .map((entry) => entry?.currentUses)
         .filter((value) => {
           return value !== null && value !== undefined;

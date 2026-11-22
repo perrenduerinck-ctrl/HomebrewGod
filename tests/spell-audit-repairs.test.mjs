@@ -1,3 +1,4 @@
+import {getDefaultSubclassesForClass} from "../data/defaultSubclasses.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {reconcileClassOwnedSpellSources,getSpellSourceOwnership} from "../characterCreator/classSpellReconciliation.js";
@@ -73,4 +74,10 @@ test("copied books remain uncapped and overspent free choices remain reviewable"
  assert.deepEqual(getSpellbookProgress(e,spell).errors,[]);assert.equal(getSpellbookProgress(e,spell).remaining,6);
  for(const id of e.spellbookSpellIds.slice(0,7))e.spellbookAcquisitions[id]={kind:"level",classLevel:1};
  assert.match(getSpellbookProgress(e,spell).errors.join(" "),/too many free/);assert.equal(e.spellbookSpellIds.length,30);
+});
+
+test("every catalog Paladin Channel Divinity option supplies its shared use budget",()=>{
+ const options=getDefaultSubclassesForClass("paladin").flatMap(subclass=>Object.values(subclass.featuresByLevel || {}).flat()).filter(feature=>/^channel divinity(?:\s*:|$)/i.test(feature.name));
+ assert.ok(options.length>10);
+ for(const option of options)assert.equal(option.resource?.uses,1,option.name);
 });

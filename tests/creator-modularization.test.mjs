@@ -198,7 +198,7 @@ test("characterCreator/index.js remains the browser-facing coordinator", () => {
   );
   assert.match(
     index,
-    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=spell-readiness-20261121"/
+    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=paladin-resources-20261121"/
   );
   const imports = JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports;
   for (const [bare, legacy] of [
