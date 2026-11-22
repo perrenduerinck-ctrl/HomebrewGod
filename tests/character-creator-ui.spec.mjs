@@ -580,6 +580,7 @@ test(
       .first()
       .click();
     await page.locator("#ccDefaultSpellSearch").fill("Heroism");
+    await page.locator("[data-cc-show-unavailable]").check();
     const removedHeroism = page.locator('article[data-spell-id="heroism"]');
     await expect(removedHeroism).toContainText("No valid spellcasting source.");
     await expect(removedHeroism).not.toHaveClass(/selected/);
@@ -738,7 +739,9 @@ for (const [classId, spellId, spellName, level] of [
     if (classId === "paladin") await expect(page.locator("#ccNewSpellKnown")).toBeDisabled();
     await expect(page.locator("#ccNewSpellPrepared")).toBeDisabled();
     const customName = "Flow Test " + classId;
+    if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
     await page.locator("#ccNewSpellName").fill(customName);
+    if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
     await page.locator("#ccNewSpellLevel").selectOption("1");
     const learn = page.locator("#ccNewSpellKnown");
     if (classId === "wizard") await expect(learn).toBeEnabled();
@@ -878,6 +881,7 @@ for (const [classId, subclassName, spellId, spellName] of [
     await expect(spell.getByRole("button", {name:"Prepare Spell",exact:true})).toHaveCount(0);
     await spell.getByRole("button", {name:"Learn Spell",exact:true}).click();
     await expect(page.locator("[data-cc-class-spell-choices]")).toContainText("Spells learned: 1 / 3");
+    await page.locator("#ccCustomSpellsSection > summary").click();
     await page.locator("#ccNewSpellLevel").selectOption("1");
     await expect(page.locator("#ccNewSpellKnown")).toBeEnabled();
     await expect(page.locator("#ccNewSpellPrepared")).toBeDisabled();
@@ -930,7 +934,7 @@ test("Wizard spellbook free choices and copied spells survive export and legacy 
   for(const [id,name] of [["magic-missile","Magic Missile"],["shield","Shield"],["mage-armor","Mage Armor"],["detect-magic","Detect Magic"],["identify","Identify"],["sleep","Sleep"],["alarm","Alarm"]]) {
     await page.locator('#ccDefaultSpellSearch').fill(name);
     const card=page.locator('article[data-spell-id="'+id+'"]');
-    if(id==="alarm") await card.locator('[data-cc-spellbook-acquisition]').selectOption("copied");
+    if(id==="alarm") { await card.getByRole("button",{name:"Show Spell Details",exact:true}).click(); await card.locator('[data-cc-spellbook-acquisition]').selectOption("copied"); }
     await card.getByRole("button",{name:/Add to Spellbook/i}).click();
     if(id==="magic-missile") await card.getByRole("button",{name:"Prepare Spell",exact:true}).click();
   }
@@ -946,6 +950,10 @@ test("Wizard spellbook free choices and copied spells survive export and legacy 
   await expect(progress.locator('[data-cc-spellbook-history-preview]')).toBeVisible();
   await progress.getByRole("button",{name:"Confirm proposed spellbook history"}).click();
   await expect(progress.locator('summary')).toContainText("6 / 6");
+  await expect(progress).toHaveAttribute("open", "");
+  const history = progress.locator('[data-cc-spellbook-history="magic-missile"]');
+  await history.selectOption("copied");await expect(progress).toHaveAttribute("open", "");
+  await history.selectOption("level:1");await expect(history).toBeFocused();
   await page.setViewportSize({width:390,height:844});
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
   const after=await exportSpellAuditCharacter(page);const recovered=Object.values(after.magic.classSources).find(s=>s.classId==="wizard");
@@ -996,4 +1004,34 @@ test("Paladin 19 Druid 1 Review shows Smite slots and repairs Oathbreaker Channe
   const channel=body.locator('article').filter({has:page.getByRole('heading',{name:'Channel Divinity',exact:true})});
   await expect(channel).toContainText('Available: 1 / 1');
   await expect(channel).toContainText('Control Undead');await expect(channel).toContainText('Dreadful Aspect');
+});
+
+
+test("compact spell workspace separates class choices from unavailable catalog spells",async({page})=>{
+  await page.setViewportSize({width:1366,height:900});await openSpellAuditCharacter(page,"druid");
+  await expect(page.locator('#ccSpellSettings')).not.toHaveAttribute('open','');
+  await expect(page.locator('#ccCustomSpellsSection')).not.toHaveAttribute('open','');
+  await page.locator('#ccDefaultSpellSearch').fill('Frostbite');
+  const frost=page.locator('article[data-spell-id="frostbite"]');
+  await expect(frost.getByRole('button',{name:'Learn Cantrip',exact:true})).toBeVisible();
+  expect(await frost.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(210);
+  await expect(frost.locator('[data-cc-action="edit-builtin-spell-animations"]')).toHaveCount(0);
+  await frost.getByRole('button',{name:'Show Spell Details',exact:true}).click();
+  await expect(frost.getByRole('button',{name:'Change animation',exact:true})).toBeVisible();
+  await frost.getByRole('button',{name:'Learn Cantrip',exact:true}).click();
+  await expect(frost.getByRole('button',{name:'Remove Cantrip',exact:true})).toBeVisible();
+  await expect(frost.getByRole('button',{name:'Remove Cantrip',exact:true})).toBeFocused();
+  await frost.getByRole('button',{name:'Hide Spell Details',exact:true}).click();
+  await page.locator('#homebrewGodSmokeResult').evaluate(el=>el.style.display='none');
+  await page.screenshot({path:'output/compact-creator-desktop.png'});
+  await page.locator('#ccDefaultSpellSearch').fill('Fire Bolt');await expect(page.locator('article[data-spell-id="fire-bolt"]')).toHaveCount(0);
+  await page.locator('[data-cc-show-unavailable]').check();
+  const unavailable=page.locator('article[data-spell-id="fire-bolt"]');await expect(unavailable).toContainText('not on the selected class spell list');
+  await expect(unavailable.locator('[data-cc-action="toggle-spell-known"]')).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(391);
+  await page.locator('#ccDefaultSpellSearch').fill('Frostbite');
+  await expect(frost).toBeVisible();await frost.scrollIntoViewIfNeeded();
+  expect(await page.locator('.hg-character-step-footer').evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(160);
+  await page.screenshot({path:'output/compact-creator-phone.png'});
 });

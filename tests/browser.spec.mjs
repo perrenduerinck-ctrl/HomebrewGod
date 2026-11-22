@@ -190,6 +190,8 @@ test(
         "ready"
       );
 
+    await page.locator("#ccFeatureSection > summary").click();
+
     const button =
       page.locator(
         '[data-cc-action="toggle-default-feat"][data-feat-id="lucky"]'
@@ -497,6 +499,8 @@ test(
         "ready"
       );
 
+    await page.locator("#ccFeatureSection > summary").click();
+
     const featCards = page.locator(
       "[data-cc-default-feat-results] .hg-character-choice-card"
     );
@@ -617,7 +621,7 @@ test(
       page.locator(
         ".hg-sheet-screen-panel .hg-sheet-combat-stats .hg-sheet-stat-card--core"
       )
-    ).toHaveCount(3);
+    ).toHaveCount(2);
     await expect(
       page.locator(
         ".hg-sheet-screen-panel .hg-sheet-combat-control-grid > .hg-sheet-survival-card"
@@ -676,7 +680,8 @@ test(
       });
 
     expect(presentation.portraitWidth)
-      .toBeGreaterThanOrEqual(100);
+      .toBeGreaterThanOrEqual(56);
+    expect(presentation.portraitWidth).toBeLessThanOrEqual(80);
     expect(presentation.savedOpacity)
       .toBeLessThan(0.9);
     expect(
@@ -1464,6 +1469,7 @@ test(
       .toContainText(
         "1 / 1 use remaining"
       );
+    await screenPanel.locator('[data-sheet-utility="extra-casting"] > summary').click();
     await featSpellResource
       .getByRole("button", {
         name: "Spend",

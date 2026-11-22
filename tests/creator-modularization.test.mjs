@@ -198,7 +198,7 @@ test("characterCreator/index.js remains the browser-facing coordinator", () => {
   );
   assert.match(
     index,
-    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=paladin-resources-20261121"/
+    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=compact-spell-sheet-20261121"/
   );
   const imports = JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports;
   for (const [bare, legacy] of [
@@ -212,6 +212,6 @@ test("characterCreator/index.js remains the browser-facing coordinator", () => {
     ["./characterCreator/steps/finishStep.js", "./characterCreator/steps/finishStep.js?v=dm-preview-class-state-20260829"]
   ]) {
     assert.equal(imports[bare], imports[legacy], bare + " must load one coordinated release module");
-    assert.ok(imports[bare].endsWith("?v=spell-readiness-20261121"));
+    assert.ok(imports[bare].endsWith(bare.endsWith("spellsStep.js") ? "?v=compact-spell-sheet-20261121" : "?v=spell-readiness-20261121"));
   }
 });

@@ -436,6 +436,9 @@ test(
         creator.navigateToStep(
           "spells"
         );
+        const includeUnavailable = document.querySelector("[data-cc-show-unavailable]");
+        includeUnavailable.checked = true;
+        includeUnavailable.dispatchEvent(new Event("change",{bubbles:true}));
         const spellSearch =
           document.getElementById(
             "ccDefaultSpellSearch"

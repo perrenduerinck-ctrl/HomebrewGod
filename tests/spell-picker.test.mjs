@@ -80,3 +80,11 @@ test("search indexes required spell metadata and uses a 200ms debounce", () => {
   }).flatMap((group) => group.visibleSpells);
   assert.deepEqual(matches.map((entry) => entry.id), ["spell-137"]);
 });
+
+test("availability filtering preserves selected spells and explicitly exposes the full catalog",()=>{
+ const spells=[{id:"available",name:"Available",level:1},{id:"blocked",name:"Blocked",level:1},{id:"retained",name:"Retained",level:1}];
+ const state=createCreatorSpellPickerState();state.openLevels.add(1);
+ const groups=()=>getCreatorSpellPickerGroups({spells,state,isSelected:s=>s.id==="retained",isAvailable:s=>s.id==="available"});
+ assert.deepEqual(groups()[1].visibleSpells.map(s=>s.id),["available","retained"]);
+ state.availableOnly=false;assert.deepEqual(groups()[1].visibleSpells.map(s=>s.id),["available","blocked","retained"]);
+});

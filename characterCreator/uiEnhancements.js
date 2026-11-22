@@ -128,6 +128,7 @@ function addStatusBadge(card) {
 }
 
 function compactCard(card) {
+  if (card.matches("[data-cc-compact-spell]")) return;
   if (
     card.dataset
       .hgCardEnhanced ===
@@ -1064,7 +1065,7 @@ function loadStyles(doc) {
     "characterCreatorUiEnhancements";
   link.rel = "stylesheet";
   link.href = new URL(
-    "./uiEnhancements.css?v=creator-ui-20260729",
+    "./uiEnhancements.css?v=compact-spell-sheet-20261121",
     import.meta.url
   ).href;
   doc.head.append(link);

@@ -34,6 +34,7 @@ test("spell creation uploads an animation in place, stores stage IDs, preserves 
   await page.goto("?smokeTest=1&view=characterCreator");
   await page.waitForFunction(()=>Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
   await page.evaluate(async()=>{const api=window.__HOMEBREW_GOD_RELEASE_TEST__;await api.openScreen("characterCreator");api.prepareCharacterCreatorClassTest({stepId:"spells"});});
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator("#ccNewSpellName").fill("Prismatic test spell");await page.locator("#ccNewSpellRange").fill("30 feet");
   await page.locator('[data-cc-action="edit-spell-animations"]').click();
   const panel=page.getByRole("dialog",{name:"Spell animations",exact:true});await expect(panel).toBeVisible();

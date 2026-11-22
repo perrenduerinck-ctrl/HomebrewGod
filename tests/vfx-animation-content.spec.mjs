@@ -66,6 +66,7 @@ test("Library and Creator expose Family, Style, Tags and Collection while legacy
 test("Gary Fireball normal spell save/reopen restores stages and both directions of editing preserve content", async ({ page }, info) => {
   await page.setViewportSize({ width: 1280, height: 1400 });
   const services = await mockAnimationServices(page, { room: "UXA-123" }); await battle(page); await creator(page);
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator("#ccNewSpellName").fill("Gary Fireball");
   await page.locator("#ccNewSpellRange").fill("120 feet"); await page.locator("#ccNewSpellDescription").fill("Gary mechanics stay intact.");
   const section = page.locator('[data-cc-animation-section=""]');
@@ -89,6 +90,7 @@ test("Gary Fireball normal spell save/reopen restores stages and both directions
   await page.locator('[data-cc-action="library"]').first().click();
   await page.locator(`[data-cc-action="edit-character"][data-character-id="${path.split("/").at(-1)}"]`).click();
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("spells"));
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-custom-spell"]').click();
   await expect(section.locator('[data-content-stage="cast"]')).toContainText("Cold burst");
   await expect(section.locator('[data-content-stage="travel"]')).toContainText("Gary Missile");
@@ -102,6 +104,7 @@ test("Gary Fireball normal spell save/reopen restores stages and both directions
   let current = (await records(page))[path].magic.customSpells[0];
   expect(current.animations).toEqual(original.magic.customSpells[0].animations); expect(current.range).toBe("150 feet");
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("spells"));
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-custom-spell"]').click();
   await choose(page, section.locator('[data-content-stage="impact"]'), "healing_burst_01");
   await expect(section.locator('[data-content-stage="impact"]')).toContainText("Healing burst");
@@ -109,6 +112,7 @@ test("Gary Fireball normal spell save/reopen restores stages and both directions
   current = (await records(page))[path].magic.customSpells[0];
   expect(current.animations.impact.animationId).toBe("healing_burst_01"); expect(current.range).toBe("150 feet"); expect(current.description).toBe("Gary mechanics stay intact.");
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("spells"));
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-custom-spell"]').click();
   await section.scrollIntoViewIfNeeded(); await page.screenshot({ path: info.outputPath("saved-spell-stages.png") });
 });
@@ -140,6 +144,7 @@ test("built-in Fireball appearance saves, reloads, casts, clears and isolates ac
 
 test("temporary remixes cannot become saved spell references and normal character save catches replacements", async ({ page }) => {
   await mockAnimationServices(page, { room: "UXA-123" }); await battle(page); await creator(page);
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator("#ccNewSpellName").fill("Temporary guard spell");
   const section = page.locator('[data-cc-animation-section=""]');
   await choose(page, section.locator('[data-content-stage="impact"]'), "cold_burst_01");
@@ -151,6 +156,7 @@ test("temporary remixes cannot become saved spell references and normal characte
     library.updateAnimation(copy.id, { sprite: "https://res.cloudinary.com/acceptance/image/upload/guard-remix.png" });
     return copy.id;
   });
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-custom-spell"]').click();
   await section.locator('[data-content-stage="impact"] [data-animation-action="choose"]').click();
   const dialog = page.locator("#animationLibraryDialog");
@@ -162,6 +168,7 @@ test("temporary remixes cannot become saved spell references and normal characte
     const { library } = (await import("/vfx/animationWorkspace.js")).getAnimationSession(document);
     library.replaceKnownReferences("cold_burst_01", copyId);
   }, copyId);
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-custom-spell"]').click();
   await page.locator("#ccNewSpellRange").fill("90 feet"); await page.getByRole("button", { name: "Save Spell", exact: true }).click();
   await expect(page.locator("#characterCreatorStatus")).toContainText("temporary");
@@ -171,6 +178,7 @@ test("temporary remixes cannot become saved spell references and normal characte
   expect(Object.keys(await records(page)).some(path => path.includes("/characters/"))).toBe(false);
   // Save the existing hosted sheet; no re-upload is required to promote a remix.
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.setCharacterCreatorTestStep("spells"));
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-custom-spell"]').click();
   await section.locator('[data-content-stage="impact"] [data-animation-action="choose"]').click();
   await dialog.getByRole("tab", { name: "All", exact: true }).click(); await field(dialog, "select").selectOption(copyId);

@@ -64,7 +64,9 @@ test("Gary Missile uploads, saves with a spell, previews and casts after full re
   await expect(field(dialog,'status')).toContainText('personal library');const [gary]=await animationRecords(page);
   await field(dialog,'close').click();
   await page.evaluate(async()=>{const api=window.__HOMEBREW_GOD_RELEASE_TEST__;await api.openScreen('characterCreator');api.prepareCharacterCreatorClassTest({stepId:'spells'});});
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('#ccNewSpellName').fill('Gary Fireball Test');await page.locator('#ccNewSpellRange').fill('120 feet');
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-spell-animations"]').click();const panel=page.getByRole('dialog',{name:'Spell animations',exact:true});
   for(const [slot,id] of [['cast','cold_burst_01'],['travel',gary.id],['impact','fireball_explosion_01']]) {
     await panel.locator(`[data-spell-animation-slot="${slot}"] [data-slot-action="choose"]`).click();
@@ -135,6 +137,7 @@ test("every spell stage supports Choose, Replace, Preview, Clear, Create, Upload
   await page.route(origin+'**',async route=>{const u=new URL(route.request().url());const response=await route.fetch({url:new URL(u.pathname+u.search,process.env.PLAYWRIGHT_BASE_URL||'http://127.0.0.1:4173').href});await route.fulfill({response});});
   await openBattle(page,'',origin);
   await page.evaluate(async()=>{const api=window.__HOMEBREW_GOD_RELEASE_TEST__;await api.openScreen('characterCreator');api.prepareCharacterCreatorClassTest({stepId:'spells'});});
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-spell-animations"]').click();const panel=page.getByRole('dialog',{name:'Spell animations',exact:true}),dialog=page.locator('#animationLibraryDialog');
   for(const slot of ['cast','travel','impact','sustain','end']) {
     const row=panel.locator(`[data-spell-animation-slot="${slot}"]`),action=name=>row.locator(`[data-slot-action="${name}"]`);
@@ -320,7 +323,9 @@ test("spell creator uses the signed-in persistent library and saves all stage ID
   const errors=watchErrors(page);
   const room='ABC-123',services=await mockAnimationServices(page,{room});await openBattle(page,room);
   await page.evaluate(async()=>{const api=window.__HOMEBREW_GOD_RELEASE_TEST__;await api.openScreen('characterCreator');api.prepareCharacterCreatorClassTest({stepId:'spells'});});
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('#ccNewSpellName').fill('Fireball Test');await page.locator('#ccNewSpellRange').fill('120 feet');
+  if (!(await page.locator("#ccCustomSpellsSection").evaluate(el=>el.open))) await page.locator("#ccCustomSpellsSection > summary").click();
   await page.locator('[data-cc-action="edit-spell-animations"]').click();const panel=page.getByRole('dialog',{name:'Spell animations',exact:true});
   await panel.locator('[data-spell-animation-slot="travel"] [data-slot-action="create"]').click();const dialog=page.locator('#animationLibraryDialog');
   await field(dialog,'name').fill('Spell Gary Missile');await field(dialog,'file').setInputFiles({name:'spell-gary.png',mimeType:'image/png',buffer:services.sheet});

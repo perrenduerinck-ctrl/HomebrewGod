@@ -9951,6 +9951,8 @@ export function createCharacterCreator(options = {}) {
         subclassName: cleanString(entry.subclassName),
         classLevel: Number(entry.level) || 1,
         spellbookAcquisitions: source.spellbookAcquisitions || {},
+        spellSaveDc: entry.spellSaveDc,
+        spellAttackBonus: entry.spellAttackBonus,
         preparationMode:
           getSection16PreparationMode(entry),
         maxSpellLevel: Math.max(
@@ -20213,10 +20215,10 @@ export function createCharacterCreator(options = {}) {
     const validation = modules[step.id]?.validateStep?.(creatorState.draft) || {};
     const warnings = [...(validation.blockingErrors || []), ...(validation.readinessIssues || [])];
     const issues = warnings.length ? warnings : ["Open the choices in this step and complete the remaining selections."];
-    return `<section class="hg-character-warning" aria-label="Still needed in ${escapeHtml(step.label)}">
+    return `<section class="hg-character-warning ${step.id === "spells" ? "hg-spell-step-guidance" : ""}" aria-label="Still needed in ${escapeHtml(step.label)}">
       <strong>Still needed in ${escapeHtml(step.label)}</strong>
       ${step.required === false && !validation.readinessIssues?.length ? '<p class="small">This step is optional for finalization.</p>' : ""}
-      <ul>${issues.map((issue) => `<li>${renderCompletionIssue(issue, escapeHtml, step.id)}</li>`).join("")}</ul>
+      <ul>${issues.map((issue) => `<li>${step.id === "spells" ? `<span>${escapeHtml(issue)}</span>` : renderCompletionIssue(issue, escapeHtml, step.id)}</li>`).join("")}</ul>
     </section>`;
   }
 
@@ -35637,6 +35639,9 @@ export function createCharacterCreator(options = {}) {
         if (spellId) selectedIds.add(spellId);
       });
     });
+    for (const source of getCanonicalSpellSources(creatorState.draft)) {
+      for (const id of [...(source.selectedSpellIds || []), ...(source.fixedSpellIds || [])]) selectedIds.add(id);
+    }
     return selectedIds;
   }
 
@@ -35733,28 +35738,30 @@ export function createCharacterCreator(options = {}) {
         data-cc-spell-picker-managed="true"
       >
         <label for="ccDefaultSpellSearch">
-          Search Default Spells
+          Find a spell
         </label>
 
         <input
           id="ccDefaultSpellSearch"
           type="search"
           value="${escapeHtml(pickerState.query)}"
-          placeholder="Search name, level, school, class, casting time, damage, or source..."
+          placeholder="Search by name, effect, school, or class..."
           data-cc-action-input="filter-default-spells"
           autocomplete="off"
         >
 
+        <div class="hg-spell-browser-filters"><label class="hg-ui-check"><input type="checkbox" data-cc-show-unavailable ${pickerState.availableOnly === false ? "checked" : ""}> Show unavailable</label>
         <label class="hg-ui-check">
           <input type="checkbox" data-hg-selected-spells-only ${pickerState.selectedOnly ? "checked" : ""}>
-          Show selected only
-        </label>
+          Selected only
+        </label></div>
 
         <div data-cc-default-spell-results="true">
           ${renderCreatorSpellPickerResults({
             spells,
             state: pickerState,
             isSelected: (spell) => selectedSpellIds.has(spell.id),
+            isAvailable: (spell) => getSection16EligibleSpellcasters(spell).length > 0,
             renderCard: (spell) => {
             const levelLabel =
               formatDefaultSpellLevelLabel(
@@ -35964,324 +35971,42 @@ export function createCharacterCreator(options = {}) {
               getCreatorSpellSearchText(spell);
 
             return `
-              <article
-                class="hg-character-choice-card ${
-                   prepared || known ||
-                   alwaysPrepared ||
-                   mysticArcanumSelected
-                    ? "selected"
-                    : ""
-                }"
-                data-cc-default-spell-option="true"
-                data-spell-id="${escapeHtml(spell.id)}"
-                data-spell-level="${safeNumber(spell.level, 0)}"
-                data-spell-search-text="${escapeHtml(
-                  searchText
-                )}"
-              >
-                <h3>
-                  ${escapeHtml(
-                    spell.name ||
-                    "Unnamed Spell"
-                  )}
-                </h3>
-
-                <p>
-                  <b>${escapeHtml(
-                    levelLabel
-                  )}</b>
-
-                  ${
-                    spell.school
-                      ? `Â· ${escapeHtml(
-                          spell.school
-                        )}`
-                      : ""
-                  }
-
-                  <br>
-
-                  ${escapeHtml(
-                    spell.summary ||
-                    "No summary provided."
-                  )}
-
-                  <br><br>
-
-                  ${renderRulesetMetadata(spell, "spell")}
-                </p>
-
-                <button type="button" data-cc-action="toggle-default-spell-details" data-spell-id="${escapeHtml(spell.id)}">
-                  ${pickerState.expandedSpellIds.has(spell.id) ? "Hide" : "Show"} Spell Details
-                </button>
-                <p class="small">Account animation: ${escapeHtml(spellAnimationSummary(options.getSpellAnimationPresentation?.()?.get(spell.id)?.animations))}</p>
-                <button type="button" data-cc-action="edit-builtin-spell-animations" data-spell-id="${escapeHtml(spell.id)}">Animations · account appearance</button>
-
-                ${pickerState.expandedSpellIds.has(spell.id) ? `<p class="small">
-                  <b>Casting Time:</b>
-                  ${escapeHtml(
-                    spell.castingTime ||
-                    "Not specified"
-                  )}
-
-                  <br>
-
-                  <b>Range:</b>
-                  ${escapeHtml(
-                    spell.range ||
-                    "Not specified"
-                  )}
-
-                  <br>
-
-                  <b>Components:</b>
-                  ${escapeHtml(
-                    components || "None"
-                  )}
-
-                  <br>
-
-                  <b>Duration:</b>
-                  ${escapeHtml(
-                    spell.duration ||
-                    "Not specified"
-                  )}
-
-                  ${
-                    resolution
-                      ? `
-                        <br>
-                        <b>Resolution:</b>
-                        ${escapeHtml(
-                          resolution
-                        )}
-                      `
-                      : ""
-                  }
-
-                  ${
-                    scaling
-                      ? `
-                        <br>
-                        <b>Scaling:</b>
-                        ${escapeHtml(
-                          scaling
-                        )}
-                      `
-                      : ""
-                  }
-
-                  ${
-                    spell.ritual
-                      ? "<br><b>Ritual</b>"
-                      : ""
-                  }
-
-                  ${
-                    spell.concentration
-                      ? "<br><b>Concentration</b>"
-                      : ""
-                  }
-
-                  <br><br>
-
-                  ${escapeHtml(
-                    spell.description ||
-                    "No description provided."
-                  )}
-
-                  ${
-                    spell.higherLevelDescription
-                      ? `
-                        <br><br>
-                        <b>At Higher Levels:</b>
-                        ${escapeHtml(
-                          spell.higherLevelDescription
-                        )}
-                      `
-                      : ""
-                  }
-
-                  <br>
-
-                  <b>Source:</b>
-
-                  ${escapeHtml(
-                    spell.source ||
-                    "default"
-                  )}
-                </p>` : ""}
-
-                ${
-                  sourceCandidates.length > 0
-                    ? `
-                      <label class="small">
-                        Class Source
-
-                        <select
-                          id="ccSpellSource-${escapeHtml(
-                            spell.id
-                          )}"
-                          data-cc-spell-source-select="${escapeHtml(
-                            spell.id
-                          )}"
-                        >
-                          ${sourceCandidates.map((entry) => {
-                            const entrySourceId =
-                              getSection16SourceKey(entry);
-
-                            return `
-                              <option
-                                value="${escapeHtml(
-                                  entrySourceId
-                                )}"
-                                ${
-                                  entrySourceId === sourceId
-                                    ? "selected"
-                                    : ""
-                                }
-                              >
-                                ${escapeHtml(
-                                  `${entry.className || entry.classId} ${entry.level}${
-                                    entry.subclassName
-                                      ? ` — ${entry.subclassName}`
-                                      : ""
-                                  }`
-                                )}
-                              </option>
-                            `;
-                          }).join("")}
-                        </select>
-                      </label>
-
-                      <p class="small">
-                        <b>Status:</b>
-                        ${escapeHtml(statusLabel)}
-
-                        ${
-                          expandedGrant
-                            ? `
-                              <br>
-                              Expanded spell from
-                              ${escapeHtml(
-                                selectedSource?.subclassName ||
-                                "subclass"
-                              )}.
-                            `
-                            : ""
-                        }
-
-                        ${
-                          !sourceCurrentlyEligible &&
-                          !known &&
-                          !prepared
-                            ? `
-                              <br>
-                              ${escapeHtml(availabilityReason)}
-                            `
-                            : ""
-                        }
-                      </p>
-
-                      ${renderSpellOriginDetails(originIndex.get(spell.id), escapeHtml, selectedSource?.className)}
-                      ${bookProgress && !known && !alwaysPrepared ? `<label class="small">Spellbook acquisition<select data-cc-spellbook-acquisition>${bookProgress.buckets.filter((bucket) => bucket.selected < bucket.maximum && Number(spell.level) <= Math.ceil(bucket.classLevel / 2)).map((bucket) => `<option value="level:${bucket.classLevel}">Wizard level ${bucket.classLevel}: free choice (${bucket.maximum - bucket.selected} left)</option>`).join("")}<option value="copied">Copied / found spell (separate from free choices)</option></select></label>` : ""}
-                      <p class="small" data-cc-spell-action-guidance>${escapeHtml([...new Set([knownActionWarning, preparedActionWarning].filter(Boolean))].join(" "))}</p>
-                      <div class="hg-character-card-actions">
-                        ${
-                          showKnownAction &&
-                          (
-                            sourceCurrentlyEligible ||
-                            known
-                          )
-                            ? `
-                              <button
-                                type="button"
-                                data-cc-action="toggle-spell-known"
-                                ${knownActionWarning ? `disabled title="${escapeHtml(knownActionWarning)}"` : ""}
-                                data-spell-id="${escapeHtml(
-                                  spell.id
-                                )}"
-                                data-spell-source-id="${escapeHtml(
-                                  sourceId
-                                )}"
-                              >
-                                ${escapeHtml(
-                                  knownActionLabel
-                                )}
-                              </button>
-                            `
-                            : ""
-                        }
-
-                        ${
-                          showPreparedAction &&
-                          (
-                            sourceCurrentlyEligible ||
-                            prepared
-                          )
-                            ? `
-                              <button
-                                type="button"
-                                data-cc-action="toggle-spell-prepared"
-                                ${preparedActionWarning ? `disabled title="${escapeHtml(preparedActionWarning)}"` : ""}
-                                data-spell-id="${escapeHtml(
-                                  spell.id
-                                )}"
-                                data-spell-source-id="${escapeHtml(
-                                  sourceId
-                                )}"
-                              >
-                                ${
-                                  prepared
-                                    ? "Unprepare Spell"
-                                    : "Prepare Spell"
-                                }
-                              </button>
-                            `
-                            : ""
-                        }
-
-                        ${
-                          isMysticArcanum &&
-                          sourceCurrentlyEligible
-                            ? `
-                              <button
-                                type="button"
-                                data-cc-action="toggle-spell-arcanum"
-                                data-spell-id="${escapeHtml(
-                                  spell.id
-                                )}"
-                                data-spell-source-id="${escapeHtml(
-                                  sourceId
-                                )}"
-                              >
-                                ${
-                                  mysticArcanumSelected
-                                    ? "Remove Mystic Arcanum"
-                                    : sourceState
-                                        ?.mysticArcanumSpellIds?.[
-                                          String(
-                                            safeNumber(
-                                              spell.level,
-                                              0
-                                            )
-                                          )
-                                        ]
-                                      ? "Replace Mystic Arcanum"
-                                      : "Learn Mystic Arcanum"
-                                }
-                              </button>
-                            `
-                            : ""
-                        }
-                      </div>
-                    `
-                    : `
-                      <div class="hg-character-placeholder">
-                        ${escapeHtml(getSection16SpellAvailabilityReason(spell, null))}
-                      </div>
-                    `
-                }
+              <article class="hg-character-choice-card hg-creator-spell-row ${selectedSpellIds.has(spell.id) ? "selected" : ""}"
+                data-cc-default-spell-option="true" data-cc-compact-spell="true" data-spell-id="${escapeHtml(spell.id)}"
+                data-spell-level="${safeNumber(spell.level, 0)}" data-spell-search-text="${escapeHtml(searchText)}">
+                <div class="hg-creator-spell-identity">
+                  <h3>${escapeHtml(spell.name || "Unnamed Spell")}</h3>
+                  <span class="hg-creator-spell-type">${escapeHtml(levelLabel)}${spell.school ? " · " + escapeHtml(spell.school) : ""}${spell.concentration ? " · Concentration" : ""}${spell.ritual ? " · Ritual" : ""}</span>
+                  <p class="hg-creator-spell-summary">${escapeHtml(spell.summary || "No summary provided.")}</p>
+                  <p class="hg-creator-spell-facts">${escapeHtml([spell.castingTime, spell.range, spell.duration].filter(Boolean).join(" · "))}</p>
+                </div>
+                <div class="hg-creator-spell-selection">
+                  ${sourceCandidates.length > 1 ? `<label class="small">Choose for
+                    <select id="ccSpellSource-${escapeHtml(spell.id)}" data-cc-spell-source-select="${escapeHtml(spell.id)}">
+                      ${sourceCandidates.map(entry=>`<option value="${escapeHtml(getSection16SourceKey(entry))}" ${getSection16SourceKey(entry)===sourceId ? "selected" : ""}>${escapeHtml((entry.className || entry.classId)+" "+entry.level)}</option>`).join("")}
+                    </select></label>` : sourceCandidates.length ? `<span class="hg-creator-spell-class">${escapeHtml(selectedSource.className)} ${selectedSource.level}</span>` : ""}
+                  ${!sourceCandidates.length && selectedSpellIds.has(spell.id) ? `<span class="hg-creator-spell-status">Granted by ${escapeHtml((originIndex.get(spell.id) || []).filter(origin=>origin.owned).map(origin=>origin.label).join(", "))}</span>` : ""}
+                  ${sourceCandidates.length ? `<span class="hg-creator-spell-status">Status: ${escapeHtml(statusLabel)}</span>` : ""}
+                  ${bookProgress && !known && !alwaysPrepared ? `<span class="hg-creator-spell-class">${bookProgress.buckets.some(bucket=>bucket.selected<bucket.maximum && Number(spell.level)<=Math.ceil(bucket.classLevel/2)) ? "Free Wizard choice" : "Copied / found"}</span>` : ""}
+                  <div class="hg-character-card-actions">
+                    ${showKnownAction && (sourceCurrentlyEligible || known) ? `<button type="button" data-cc-action="toggle-spell-known" data-spell-id="${escapeHtml(spell.id)}" data-spell-source-id="${escapeHtml(sourceId)}" ${knownActionWarning ? `disabled title="${escapeHtml(knownActionWarning)}"` : ""}>${escapeHtml(isCantrip ? known ? "Remove Cantrip" : "Learn Cantrip" : knownActionLabel)}</button>` : ""}
+                    ${showPreparedAction && (sourceCurrentlyEligible || prepared) ? `<button type="button" data-cc-action="toggle-spell-prepared" data-spell-id="${escapeHtml(spell.id)}" data-spell-source-id="${escapeHtml(sourceId)}" ${preparedActionWarning ? `disabled title="${escapeHtml(preparedActionWarning)}"` : ""}>${prepared ? "Unprepare Spell" : "Prepare Spell"}</button>` : ""}
+                    ${isMysticArcanum && sourceCurrentlyEligible ? `<button type="button" data-cc-action="toggle-spell-arcanum" data-spell-id="${escapeHtml(spell.id)}" data-spell-source-id="${escapeHtml(sourceId)}">${mysticArcanumSelected ? "Remove Mystic Arcanum" : sourceState?.mysticArcanumSpellIds?.[String(safeNumber(spell.level,0))] ? "Replace Mystic Arcanum" : "Learn Mystic Arcanum"}</button>` : ""}
+                  </div>
+                </div>
+                <div class="hg-creator-spell-more">
+                  <button type="button" class="hg-creator-spell-details-toggle" data-cc-action="toggle-default-spell-details" data-spell-id="${escapeHtml(spell.id)}" aria-expanded="${pickerState.expandedSpellIds.has(spell.id)}">${pickerState.expandedSpellIds.has(spell.id) ? "Hide" : "Show"} Spell Details</button>
+                  ${renderSpellOriginDetails(originIndex.get(spell.id), escapeHtml, selectedSource?.className)}
+                  ${[...new Set([!sourceCurrentlyEligible && (!selectedSpellIds.has(spell.id) || sourceCandidates.length) ? availabilityReason : "",knownActionWarning,preparedActionWarning].filter(Boolean))].length ? `<p class="small" data-cc-spell-action-guidance>${escapeHtml([...new Set([!sourceCurrentlyEligible && (!selectedSpellIds.has(spell.id) || sourceCandidates.length) ? availabilityReason : "",knownActionWarning,preparedActionWarning].filter(Boolean))].join(" "))}</p>` : ""}
+                </div>
+                ${pickerState.expandedSpellIds.has(spell.id) ? `<section class="hg-creator-spell-expanded" data-cc-spell-expanded>
+                  ${bookProgress && !known && !alwaysPrepared ? `<label class="small">Add as<select data-cc-spellbook-acquisition>${bookProgress.buckets.filter(bucket=>bucket.selected<bucket.maximum && Number(spell.level)<=Math.ceil(bucket.classLevel/2)).map(bucket=>`<option value="level:${bucket.classLevel}">Wizard ${bucket.classLevel}: free (${bucket.maximum-bucket.selected} left)</option>`).join("")}<option value="copied">Copied / found</option></select></label>` : ""}
+                  <p>${escapeHtml(spell.description || "No description provided.")}</p>
+                  ${spell.higherLevelDescription ? `<p><b>At Higher Levels:</b> ${escapeHtml(spell.higherLevelDescription)}</p>` : ""}
+                  <p class="small"><b>Components:</b> ${escapeHtml(components)}${resolution ? " · "+escapeHtml(resolution) : ""}${scaling ? " · "+escapeHtml(scaling) : ""}</p>
+                  ${renderRulesetMetadata(spell,"spell")}
+                  <div class="hg-creator-spell-animation"><span class="small">Account animation: ${escapeHtml(spellAnimationSummary(options.getSpellAnimationPresentation?.()?.get(spell.id)?.animations))}</span><button type="button" data-cc-action="edit-builtin-spell-animations" data-spell-id="${escapeHtml(spell.id)}">Change animation</button></div>
+                </section>` : ""}
               </article>
             `;
             }
@@ -36299,6 +36024,10 @@ export function createCharacterCreator(options = {}) {
     const current = C.grid?.querySelector("[data-cc-default-spell-results]");
     if (!current) return;
     const scrollY = typeof window === "undefined" ? 0 : window.scrollY;
+    const focused = document.activeElement;
+    const focusSpellId = current.contains(focused) ? focused.closest("article[data-spell-id]")?.dataset.spellId : "";
+    const focusAction = focused?.dataset?.ccAction;
+    const focusSelector = focused?.matches?.("[data-cc-spell-source-select]") ? "[data-cc-spell-source-select]" : focused?.matches?.("[data-cc-spellbook-acquisition]") ? "[data-cc-spellbook-acquisition]" : focusAction ? `[data-cc-action="${CSS.escape(focusAction)}"]` : "";
     try {
       const template = document.createElement("template");
       template.innerHTML = renderSection16DefaultSpellViewer(
@@ -36308,11 +36037,15 @@ export function createCharacterCreator(options = {}) {
       const next = template.content.querySelector("[data-cc-default-spell-results]");
       if (!next) throw new Error("Spell results could not be rendered.");
       current.replaceWith(next);
+      if (focusSpellId && focusSelector) next.querySelector(`article[data-spell-id="${CSS.escape(focusSpellId)}"]`)?.querySelector(focusSelector)?.focus({preventScroll:true});
       const readiness = spellsStep.validateStep(creatorState.draft);
       const readinessNode = C.grid.querySelector("[data-cc-spell-readiness]");
-      if (readinessNode) readinessNode.textContent = readiness.isReady ? "Ready to play: spell choices are complete." : readiness.validDraft ? "Valid draft: spell choices still need attention before this character is ready to play." : "Draft needs spell-rule corrections. Saving a draft is still available.";
+      if (readinessNode) readinessNode.textContent = readiness.isReady ? "Ready to play: spell choices are complete." : readiness.validDraft ? "Valid draft · spell choices remaining." : "Draft needs spell-rule corrections. Saving a draft is still available.";
       const choices = C.grid.querySelector("[data-cc-class-spell-choice-summary]");
-      if (choices) choices.innerHTML = renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml);
+      if (choices) {
+        const openSections = new Set(Array.from(choices.querySelectorAll("details[open][data-cc-spell-summary-section]")).map(section => section.closest("[data-cc-class-spell-choices]").dataset.ccClassSpellChoices + ":" + section.dataset.ccSpellSummarySection));
+        choices.innerHTML = renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml, openSections);
+      }
       const summary = C.grid.querySelector("[data-cc-spell-source-summary]");
       if (summary) summary.innerHTML = renderSection17SpellcastingSummary();
       if (typeof window !== "undefined") window.scrollTo(0, scrollY);
