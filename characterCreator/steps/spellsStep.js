@@ -102,6 +102,8 @@ export function createSpellsStep(
   const section16SelectedSpellSourceIds =
     new Map();
   let repairPreview = null;
+  const openWorkspaceSections = new Set();
+  const openClassSummarySections = new Set();
   let draftAnimations = {}, animationDraftOwner = null, editingSpellId = null, spellFormDraft = null;
   let animationLibrary = getAnimationLibrary?.() || null;
   const formFields = { ccNewSpellKnown: "startKnown", ccNewSpellPrepared: "startPrepared", ccNewSpellName: "name", ccNewSpellLevel: "level", ccNewSpellClassId: "spellcastingSourceId", ccNewSpellSchool: "school", ccNewSpellCastingTime: "castingTime", ccNewSpellRange: "range", ccNewSpellDuration: "duration", ccNewSpellComponents: "components", ccNewSpellDescription: "description", ccNewSpellRitual: "ritual", ccNewSpellConcentration: "concentration", ccNewSpellManualOverride: "manualOverride" };
@@ -207,7 +209,16 @@ export function createSpellsStep(
 
   function renderStep() {
     const creatorState = getCreatorState();
-    if (animationDraftOwner !== creatorState.draft) { repairPreview = null; draftAnimations = {}; editingSpellId = null; spellFormDraft = null; animationDraftOwner = creatorState.draft; }
+    if (animationDraftOwner === creatorState.draft && typeof document !== "undefined") {
+      document.querySelectorAll("[data-cc-class-spell-choices] [data-cc-spell-summary-section]").forEach(section => {
+        const key = section.closest("[data-cc-class-spell-choices]").dataset.ccClassSpellChoices + ":" + section.dataset.ccSpellSummarySection;
+        if(section.open) openClassSummarySections.add(key); else openClassSummarySections.delete(key);
+      });
+      document.querySelectorAll(".hg-spell-workspace-section[id]").forEach(section => {
+        if (section.open) openWorkspaceSections.add(section.id); else openWorkspaceSections.delete(section.id);
+      });
+    }
+    if (animationDraftOwner !== creatorState.draft) { openWorkspaceSections.clear(); openClassSummarySections.clear(); repairPreview = null; draftAnimations = {}; editingSpellId = null; spellFormDraft = null; animationDraftOwner = creatorState.draft; }
     animationLibrary ||= getAnimationLibrary?.() || null;
     trackAnimationDependencies();
     const formValue = (property, fallback = "") => spellFormDraft?.[property] ?? fallback;
@@ -368,16 +379,16 @@ export function createSpellsStep(
             : []
       });
 
-    return `
-      ${beginnerNote(
-        "Spells and Features",
-        "Features are special abilities from your class, species, background, or feats. Spells only appear if your character has spellcasting or magic features."
-      )}
+    const spellValidation = validateStep(creatorState.draft);
+    const needsFeatureChoices = spellValidation.remainingChoices.some(choice => ["feat", "custom-feature"].includes(choice.sourceType));
 
-      ${renderSection16BeginnerGuide()}
-      <p data-cc-spell-readiness>${validateStep(creatorState.draft).isReady ? "Ready to play: spell choices are complete." : validateStep(creatorState.draft).validDraft ? "Valid draft: spell choices still need attention before this character is ready to play." : "Draft needs spell-rule corrections. Saving a draft is still available."}</p>
+    return `
+      <p class="small">Choose spells for each class below. Custom spells, feats, and other features have their own sections.</p>
+
+      <details class="hg-spell-workspace-section" id="ccSpellHelp" ${openWorkspaceSections.has("ccSpellHelp") ? "open" : ""}><summary>How spell choices work</summary>${renderSection16BeginnerGuide()}</details>
+      <p data-cc-spell-readiness role="status" aria-live="polite">${spellValidation.isReady ? "Ready to play: spell choices are complete." : spellValidation.validDraft ? "Valid draft · spell choices remaining." : "Draft needs spell-rule corrections. Saving a draft is still available."}</p>
       <section aria-label="Spell choices by class" data-cc-class-spell-choice-summary>
-        ${renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml)}
+        ${renderClassSpellChoices(getPerClassSpellSelectionSummary(creatorState.draft), (id) => getSection16SpellById(id), escapeHtml, openClassSummarySections)}
       </section>
       ${renderSpellSourceRecovery()}
 
@@ -394,6 +405,23 @@ export function createSpellsStep(
         `
         : ""}
 
+      ${renderSection16MagicalSecrets()}
+
+      <h3>Choose spells</h3>
+
+      <p class="small">
+        Learn class spells, prepare them, or add Wizard spells to a
+        spellbook. Choices are saved to the class that owns them and
+        are limited by that class's current spell level.
+      </p>
+
+      ${renderSection16DefaultSpellViewer(
+        section16SpellPickerState,
+        section16SelectedSpellSourceIds
+      )}
+
+
+      <details class="hg-spell-workspace-section" id="ccSpellSettings" ${openWorkspaceSections.has("ccSpellSettings") ? "open" : ""}><summary>Spellcasting numbers and settings</summary>
       <div class="hg-character-current-choice">
         <b>Spellcasting Ability:</b>
 
@@ -556,7 +584,7 @@ export function createSpellsStep(
       <h3>
         ${
           multiclassSpellcasting
-            ? "Primary / Legacy Spellcasting Fields"
+            ? "Casting settings"
             : "Spellcasting"
         }
       </h3>
@@ -565,10 +593,8 @@ export function createSpellsStep(
         multiclassSpellcasting
           ? `
             <p class="small">
-              The per-class spellcasting cards above are authoritative.
-              These compatibility fields mirror the primary spellcasting
-              class and do not replace each class's own ability, save DC,
-              attack bonus, or spell selections.
+              Each class uses its own casting ability and preparation allowance.
+              The class summaries show the choices for each class.
             </p>
           `
           : ""
@@ -655,41 +681,16 @@ export function createSpellsStep(
         </button>
       </div>
 
-      <hr>
-
       <h3>Spell Slots</h3>
 
       <div class="hg-character-field-grid three">
         ${renderSection16SpellSlots()}
       </div>
 
-      <hr>
+      </details>
+      ${Array.isArray(magic.innateSpells) && magic.innateSpells.length ? `<details class="hg-spell-workspace-section" id="ccSpeciesSpellsSection"><summary>Species spells (${magic.innateSpells.length})</summary><div class="hg-character-choice-grid">${renderSection16InnateSpells()}</div></details>` : ""}
 
-      ${renderSection16MagicalSecrets()}
-
-      <h3>Default Spell List</h3>
-
-      <p class="small">
-        Learn class spells, prepare them, or add Wizard spells to a
-        spellbook. Choices are saved to the class that owns them and
-        are limited by that class's current spell level.
-      </p>
-
-      ${renderSection16DefaultSpellViewer(
-        section16SpellPickerState,
-        section16SelectedSpellSourceIds
-      )}
-
-      <hr>
-
-      <h3>Innate Species Spells</h3>
-
-      <div class="hg-character-choice-grid">
-        ${renderSection16InnateSpells()}
-      </div>
-
-      <hr>
-
+      <details class="hg-spell-workspace-section" id="ccCustomSpellsSection" ${editingSpellId || openWorkspaceSections.has("ccCustomSpellsSection") ? "open" : ""}><summary>Custom spells (${Array.isArray(magic.customSpells) ? magic.customSpells.length : 0})</summary>
       <h3>Custom Spells</h3>
 
       <div class="hg-character-choice-grid">
@@ -855,8 +856,8 @@ export function createSpellsStep(
         <p class="small">Save Spell updates this character draft. Then save the character to persist it to the room.</p>
       </div>
 
-      <hr>
-
+      </details>
+      <details class="hg-spell-workspace-section" id="ccFeatureSection" ${openWorkspaceSections.has("ccFeatureSection") || needsFeatureChoices ? "open" : ""}><summary>Feats and character features</summary>
       <h3>Feats</h3>
 
       <div class="hg-character-current-choice">
@@ -911,8 +912,6 @@ export function createSpellsStep(
         </button>
       </div>
 
-      <hr>
-
       <h3>Class Features</h3>
 
       <div class="hg-character-choice-grid">
@@ -924,8 +923,6 @@ export function createSpellsStep(
           "No class features are currently recorded."
         )}
       </div>
-
-      <hr>
 
       <h3>Species Traits</h3>
 
@@ -939,8 +936,6 @@ export function createSpellsStep(
         )}
       </div>
 
-      <hr>
-
       <h3>Background Features</h3>
 
       <div class="hg-character-choice-grid">
@@ -952,8 +947,6 @@ export function createSpellsStep(
           "No background features are currently recorded."
         )}
       </div>
-
-      <hr>
 
       <h3>Custom Features</h3>
 
@@ -1035,8 +1028,6 @@ export function createSpellsStep(
         </button>
       </div>
 
-      <hr>
-
       <h3>Magic and Feature Notes</h3>
 
       <div class="hg-character-field-grid">
@@ -1080,6 +1071,7 @@ export function createSpellsStep(
           }
         )}
       </div>
+      </details>
     `;
   }
 
@@ -1226,6 +1218,10 @@ export function createSpellsStep(
   ) {
     const isSearch = target?.dataset?.ccActionInput === "filter-default-spells";
     const isSelectedOnly = target?.matches?.("[data-hg-selected-spells-only]");
+    if (target?.matches?.("[data-cc-show-unavailable]")) {
+      if (event?.type === "change") { section16SpellPickerState.availableOnly = !target.checked; refreshSection16SpellPicker(); }
+      return true;
+    }
     if (!isSearch && !isSelectedOnly) return false;
     if (isSelectedOnly && event?.type !== "change") return false;
     if (isSelectedOnly) {
@@ -1597,7 +1593,10 @@ export function createSpellsStep(
         const choice=chooseSpellbookAcquisition({...source,classId:entry.classId,classLevel:entry.level,spellbookSpellIds:source.spellbookSpellIds.filter((spellId)=>spellId!==id)},getSection16SpellById(id),target.value,(spellId)=>getSection16SpellById(spellId));
         source.spellbookAcquisitions={...normalizeSpellbookAcquisitions(source.spellbookAcquisitions),[id]:choice}; markDraftChanged();
       }catch(error){setStatus(error.message);}
-      renderCreatorView(); return true;
+      const focusId = target.id;
+      renderCreatorView();
+      if (focusId && typeof document !== "undefined") document.getElementById(focusId)?.focus({preventScroll:true});
+      return true;
     }
 
     if (captureSpellForm(context?.target)) {

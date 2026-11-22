@@ -4,6 +4,8 @@ import { getStepById } from "./configuration.js";
 const LOCATIONS = [
   [/archived|unresolved.*source|spell.*ownership/i, "spells", "Spell-source recovery", "[data-cc-spell-source-recovery]"],
   [/spellbook.*(choice|history)|free spellbook/i, "spells", "Wizard spellbook progression", "[data-cc-spellbook-progress]"],
+  [/custom spell/i, "spells", "Custom spells", "#ccCustomSpellsSection"],
+  [/magic initiate|fey touched|shadow touched|spell sniper|ritual caster|artificer initiate|divinely favored|aberrant dragonmark|wood elf magic|drow high magic|strixhaven/i, "spells", "Feat spell choices", "#ccFeatureSection"],
   [/dragonborn|draconic ancestry/i, "species", "Draconic Ancestry", "#ccDragonbornAncestry"],
   [/subrace/i, "species", "Subrace", '[data-cc-action="choose-subrace"]'],
   [/half-elf.*abilit/i, "species", "Half-Elf Ability Choices", "#ccHalfElfAbilityOne"],

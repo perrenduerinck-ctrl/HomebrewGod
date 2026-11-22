@@ -1,3 +1,4 @@
+import { COMPACT_SHEET_STYLES } from "./compactStyles.js";
 import { createSpellOriginIndex, renderSpellOriginDetails } from "../characterCreator/spellProvenance.js";
 // =====================================================
 // HOMEBREW GOD - CHARACTER SHEET VIEW
@@ -4330,11 +4331,6 @@ function renderCombatStats(character, summary) {
         <span>Armor Class</span>
         <strong>${armorClass}</strong>
       </article>
-      <article class="hg-sheet-stat-card hg-sheet-stat-card--core hg-sheet-stat-card--hp">
-        <span>Current HP</span>
-        <strong>${currentHp} / ${maxHp}</strong>
-        ${temporaryHp ? `<small>+${temporaryHp} temporary</small>` : ""}
-      </article>
       <article class="hg-sheet-stat-card hg-sheet-stat-card--core hg-sheet-stat-card--initiative">
         <span>Initiative</span>
         <strong>${escapeHtml(formatModifier(initiative))}</strong>
@@ -4364,7 +4360,7 @@ function renderCombatStats(character, summary) {
   `;
 }
 
-function renderHitPointControls(character, canTrack) {
+function renderHitPointControls(character, canTrack, printMode = false) {
   const combat = isRecord(character?.combat)
     ? character.combat
     : {};
@@ -4425,8 +4421,8 @@ function renderHitPointControls(character, canTrack) {
             <button type="button" data-character-sheet-action="set-temp-hp" ${canTrack ? "" : "disabled"}>Set Temp</button>
           </div>
         </div>
-        <div class="hg-sheet-death-saves">
-          <h3>Death Saves</h3>
+        <details class="hg-sheet-death-saves" data-sheet-death-saves data-sheet-utility="death-saves" ${printMode || currentHp<=0 || successes>0 || failures>0 ? "open" : ""}>
+          <summary>Death Saves</summary>
           ${[
             ["success", "Successes", successes],
             ["failure", "Failures", failures]
@@ -4458,7 +4454,7 @@ function renderHitPointControls(character, canTrack) {
             data-character-sheet-action="reset-death-saves"
             ${!canTrack || (!successes && !failures) ? "disabled" : ""}
           >Reset Death Saves</button>
-        </div>
+        </details>
       </div>
     </article>
   `;
@@ -4530,7 +4526,7 @@ function renderActionsPanel(character, summary) {
     <section class="hg-sheet-panel" aria-label="Actions">
       ${renderCombatStats(character, summary)}
       <div class="hg-sheet-combat-control-grid">
-        ${renderHitPointControls(character, summary.canTrack)}
+        ${renderHitPointControls(character, summary.canTrack, summary.printMode)}
         ${renderConditions(character, summary.canTrack)}
       </div>
       <div class="hg-sheet-card-grid">
@@ -6200,7 +6196,7 @@ function renderInnateAndArcanumResources(
               resource.spellName
             )}</strong>
             <span>${escapeHtml(
-              details.join(" Â· ")
+              details.join(" · ")
             )}</span>
             <small>${escapeHtml(
               resource.sourceName
@@ -6299,53 +6295,7 @@ function renderSpellCard(
 
       ${renderSpellOriginDetails(spell.origins, escapeHtml)}
       <dl class="hg-sheet-spell-facts">
-        ${[
-          [
-            "Casting Time",
-            spell.castingTime
-          ],
-          ["Range", spell.range],
-          [
-            "Components",
-            formatSpellComponents(
-              spell.components
-            )
-          ],
-          ["Duration", spell.duration],
-          [
-            "Concentration",
-            spell.concentration
-              ? "Yes"
-              : "No"
-          ],
-          [
-            "Ritual",
-            spell.ritual
-              ? "Yes"
-              : "No"
-          ],
-          [
-            "Source",
-            firstText(
-              source,
-              "Not recorded"
-            )
-          ],
-          [
-            "Status",
-            spell.statuses.join(", ")
-          ]
-        ].map(([label, value]) => `
-          <div>
-            <dt>${escapeHtml(label)}</dt>
-            <dd>${escapeHtml(
-              firstText(
-                value,
-                "Not recorded"
-              )
-            )}</dd>
-          </div>
-        `).join("")}
+        ${[["Casting Time",spell.castingTime],["Range",spell.range],["Duration",spell.duration]].map(([label,value])=>`<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(firstText(value,"Not recorded"))}</dd></div>`).join("")}
       </dl>
 
       ${spell.summary ? `
@@ -6375,6 +6325,7 @@ function renderSpellCard(
           ${expanded ? "open" : ""}
         >
           <summary>Full spell description</summary>
+          <p class="hg-sheet-spell-reference"><b>Components:</b> ${escapeHtml(formatSpellComponents(spell.components))}<br><b>Source:</b> ${escapeHtml(firstText(source,"Not recorded"))}<br><b>Concentration:</b> ${spell.concentration ? "Yes" : "No"} · <b>Ritual:</b> ${spell.ritual ? "Yes" : "No"}<br><b>Status:</b> ${escapeHtml(spell.statuses.join(", "))}</p>
           <p data-spell-description-body>${expanded ? escapeHtml(completeDescription) : ""}</p>
         </details>
       ` : ""}
@@ -6745,7 +6696,7 @@ function renderSpellPanel(
         </div>
       ` : ""}
 
-      <div class="hg-sheet-card-grid">
+      <div class="hg-sheet-card-grid hg-sheet-magic-resources">
         ${classSources.length
           ? classSources.map(([key, source]) => renderSpellSourceSummary(source, key)).join("")
           : `
@@ -6774,7 +6725,7 @@ function renderSpellPanel(
           ${renderSpellSlots(magic)}
         </article>
 
-        <article class="hg-sheet-card">
+        ${pactSources.length ? `<article class="hg-sheet-card">
           <h2>Pact Magic</h2>
           ${pactSources.length ? `
             <div class="hg-sheet-resource-list">
@@ -6809,19 +6760,17 @@ function renderSpellPanel(
               `).join("")}
             </div>
           ` : `<p class="hg-sheet-muted">No Pact Magic slots recorded.</p>`}
-        </article>
+        </article>` : ""}
 
-        <article class="hg-sheet-card">
+        <details class="hg-sheet-card hg-sheet-extra-casting" data-sheet-utility="extra-casting" ${printMode ? "open" : ""}><summary>Other spell uses</summary>
           <h2>Feat Spells</h2>
           ${renderFeatSpellResources(character)}
-        </article>
 
-        <article class="hg-sheet-card">
           <h2>Innate &amp; Mystic Arcanum</h2>
           ${renderInnateAndArcanumResources(
             character
           )}
-        </article>
+        </details>
 
         ${cleanText(magic.notes) ? `
           <article class="hg-sheet-card">
@@ -6871,7 +6820,8 @@ function renderPrintableCharacterSheet(
         safeCharacter,
         proficiencyBonus
       ),
-    canTrack: false
+    canTrack: false,
+    printMode: true
   };
   const spells = spellCache?.spells ||
     [];
@@ -9090,6 +9040,7 @@ function ensureStyles() {
     }
   `;
 
+  style.textContent += COMPACT_SHEET_STYLES;
   document.head.appendChild(style);
 }
 
@@ -9254,6 +9205,7 @@ export function createCharacterSheetView(options = {}) {
     root: null,
     character: {},
     activeTab: "actions",
+    expandedUtilitySections: new Set(),
     inventorySearch: "",
     inventoryFilters: [],
     spellSearch: "",
@@ -9497,7 +9449,7 @@ export function createCharacterSheetView(options = {}) {
     );
 
     return `
-      <div class="hg-character-sheet" data-character-sheet-view="true">
+      <div class="hg-character-sheet" data-sheet-layout="compact" data-character-sheet-view="true">
         <header class="hg-character-sheet-header">
           ${portraitUrl
             ? `<img class="hg-character-sheet-portrait" src="${escapeHtml(portraitUrl)}" alt="${escapeHtml(`${presentation.name} portrait`)}">`
@@ -9641,6 +9593,7 @@ export function createCharacterSheetView(options = {}) {
     });
 
     state.root.innerHTML = html;
+    restoreUtilitySections();
     return html;
   }
 
@@ -9740,6 +9693,12 @@ export function createCharacterSheetView(options = {}) {
     );
   }
 
+  function restoreUtilitySections() {
+    state.root?.querySelectorAll("details[data-sheet-utility]").forEach(details => {
+      if (state.expandedUtilitySections.has(details.dataset.sheetUtility)) details.open = true;
+    });
+  }
+
   function updateActivePanelOnly() {
     const panel =
       state.root?.querySelector(
@@ -9752,6 +9711,7 @@ export function createCharacterSheetView(options = {}) {
 
     panel.innerHTML =
       renderActivePanelHtml();
+    restoreUtilitySections();
 
     state.root.querySelectorAll(
       "[data-character-sheet-tab]"
@@ -10619,6 +10579,13 @@ export function createCharacterSheetView(options = {}) {
 
   function handleToggle(event) {
     const details = event.target;
+    if (details?.closest?.("[data-character-sheet-print-area]")) return;
+    if (details?.matches?.("details[data-sheet-utility]") && state.root?.contains(details)) {
+      const key = details.dataset.sheetUtility;
+      if (details.open) state.expandedUtilitySections.add(key);
+      else state.expandedUtilitySections.delete(key);
+      return;
+    }
 
     if (
       details?.matches?.(
@@ -10715,6 +10682,7 @@ export function createCharacterSheetView(options = {}) {
     // the live Character Creator draft passed by the caller.
     state.character = cloneSnapshot(source);
     state.activeTab = "actions";
+    state.expandedUtilitySections = new Set();
     state.inventorySearch = "";
     state.inventoryFilters = [];
     state.spellSearch = "";

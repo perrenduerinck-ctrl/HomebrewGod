@@ -8,8 +8,10 @@ test("a non-DM can save builtin appearance from Spell Creator; failed save keeps
   await page.evaluate(async () => {
     const api = window.__HOMEBREW_GOD_RELEASE_TEST__; await api.openScreen("characterCreator"); api.setDmRole(false); api.prepareCharacterCreatorClassTest({ stepId: "spells" });
   });
+  await page.locator("[data-cc-show-unavailable]").check();
   await page.locator("#ccDefaultSpellSearch").fill("Acid Splash");
   const card = page.locator('[data-cc-default-spell-option][data-spell-id="acid-splash"]');
+  if (await card.locator('[data-cc-action="toggle-default-spell-details"]').getAttribute("aria-expanded") !== "true") await card.locator('[data-cc-action="toggle-default-spell-details"]').click();
   await card.locator('[data-cc-action="edit-builtin-spell-animations"]').click();
   const panel = page.getByRole("dialog", { name: "Spell animations", exact: true });
   await panel.locator('[data-spell-animation-slot="impact"] [data-slot-action="choose"]').click();

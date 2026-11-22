@@ -56,6 +56,7 @@ export function createCreatorSpellPickerState() {
   return {
     query: "",
     selectedOnly: false,
+    availableOnly: true,
     openLevels: new Set(),
     visibleByLevel: new Map(),
     expandedSpellIds: new Set(),
@@ -165,7 +166,8 @@ function getSpellLevelIndex(records) {
 export function getCreatorSpellPickerGroups({
   spells,
   state,
-  isSelected
+  isSelected,
+  isAvailable
 }) {
   const records = Array.isArray(spells)
     ? spells
@@ -196,7 +198,8 @@ export function getCreatorSpellPickerGroups({
             .includes(query);
 
         return queryMatch &&
-          (!selectedOnly || selected);
+          (!selectedOnly || selected) &&
+          (selected || pickerState.availableOnly === false || !isAvailable || isAvailable(spell));
       });
       const open = query || selectedOnly
         ? matches.length > 0
@@ -247,12 +250,14 @@ export function renderCreatorSpellPickerResults({
   spells,
   state,
   isSelected,
+  isAvailable,
   renderCard
 }) {
   const groups = getCreatorSpellPickerGroups({
     spells,
     state,
-    isSelected
+    isSelected,
+    isAvailable
   });
   const visibleGroups = groups.filter((group) => {
     return !group.hidden &&
