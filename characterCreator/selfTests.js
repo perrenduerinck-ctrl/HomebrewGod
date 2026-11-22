@@ -19397,6 +19397,24 @@ export function runCharacterCreatorSelfTests(context) {
     record("Wizard acquisition history survives save and reopen", getSection16SourceState(getSpellcastingClassOptions(creatorState.draft)[0]).spellbookAcquisitions, {"magic-missile":{kind:"level",classLevel:1},shield:{kind:"copied"}});
     record("Archived class spell selections survive save and reopen", creatorState.draft.builder.archivedClassSpellSources.map(source=>source.selectedSpellIds), [["alarm"]]);
 
+    creatorState.draft = createEmptyCharacter();
+    creatorState.draft.classProgression = {totalLevel:20,classes:[makeInteractionClassEntry("reported-paladin","paladin",19,"oathbreaker","Oathbreaker"),makeInteractionClassEntry("reported-druid","druid",1)],levelOrder:[]};
+    refreshSelectedClassFeatures();
+    creatorState.draft.magic.slots = {};
+    creatorState.draft.magic.slotUsage = {normal:{"1":2},pact:0,pactSources:{}};
+    const reportedSlots = getSection12SpellSlotUsageState();
+    record("Unsaved Paladin 19 Druid 1 Smite reads current multiclass slot capacities", Object.fromEntries(Object.entries(reportedSlots.normal).map(([level,slot])=>[level,slot.maximum])), {"1":4,"2":3,"3":3,"4":3,"5":2});
+    record("Refreshing Smite capacities preserves spent spell slots", reportedSlots.normal["1"]?.remaining, 2);
+    const reportedChannel = creatorState.draft.classMechanics.resources.find(resource=>resource.canonicalId==="channel-divinity");
+    record("Oathbreaker has one shared Channel Divinity use", reportedChannel?.maximumUses, 1);
+    if(reportedChannel){reportedChannel.maximumUses=0;reportedChannel.currentUses=0;}
+    refreshSelectedClassFeatures();
+    record("Previously zero-capacity Channel Divinity repairs on refresh", creatorState.draft.classMechanics.resources.find(resource=>resource.canonicalId==="channel-divinity")?.currentUses, 1);
+    const spentChannel = creatorState.draft.classMechanics.resources.find(resource=>resource.canonicalId==="channel-divinity");
+    if(spentChannel)spentChannel.currentUses=0;
+    refreshSelectedClassFeatures();
+    record("Refreshing a valid Channel Divinity pool preserves spent uses", creatorState.draft.classMechanics.resources.find(resource=>resource.canonicalId==="channel-divinity")?.currentUses, 0);
+
     const failed =
       results.filter((result) => {
         return !result.pass;

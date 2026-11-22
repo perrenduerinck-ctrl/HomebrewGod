@@ -38,7 +38,7 @@
     "test:spell-audit:browser": "playwright test tests/spell-creator.spec.mjs tests/casting-rules.spec.mjs tests/combat-action-bar.spec.mjs",
     "test:spell-audit:multiplayer": "firebase emulators:exec --only firestore,auth --project demo-homebrew-god \"playwright test tests/spell-audit-multiplayer.spec.mjs\"",
     "test:spell-system": "node --test tests/spell-sources.test.mjs tests/review-step.test.mjs tests/class-spell-reconciliation.test.mjs tests/spell-audit-repairs.test.mjs",
-    "test:spell-system:browser": "playwright test tests/character-creator-ui.spec.mjs tests/browser.spec.mjs --grep \"prepared spell|subclass|shared spell|spell origin|unlocks class-owned|playable character sheet prioritizes|spell readiness|Wizard spellbook free|spell source restoration\""
+    "test:spell-system:browser": "playwright test tests/character-creator-ui.spec.mjs tests/browser.spec.mjs --grep \"prepared spell|subclass|shared spell|spell origin|unlocks class-owned|playable character sheet prioritizes|spell readiness|Wizard spellbook free|spell source restoration|Paladin 19 Druid 1 Review\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",

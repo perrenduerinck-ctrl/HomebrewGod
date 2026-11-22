@@ -254,6 +254,9 @@ const getSubclassFeatureResource = (
     return {
       id: "channel-divinity",
       name: "Channel Divinity",
+      ...(classId === "cleric"
+        ? { usesByLevel: { 2: 1, 6: 2, 18: 3 } }
+        : { uses: 1 }),
       recharge: "shortOrLongRest"
     };
   }
@@ -335,13 +338,10 @@ const createCompletedSubclassFeature = ({
       subclassId,
       featureName
     );
-  const resource =
-    existing.resource ||
-    getSubclassFeatureResource(
-      classId,
-      subclassId,
-      featureName
-    );
+  const catalogResource = getSubclassFeatureResource(classId, subclassId, featureName);
+  const resource = existing.resource
+    ? { ...catalogResource, ...existing.resource }
+    : catalogResource;
   const defaultSummary =
     `${featureName} advances ${subclassName}'s ${focus}.`;
   const existingSummary = String(

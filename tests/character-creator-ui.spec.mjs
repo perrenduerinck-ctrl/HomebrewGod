@@ -976,3 +976,24 @@ test("spell source restoration requires an unchanged reviewed preview",async({pa
   expect(after.builder.archivedClassSpellSources).toHaveLength(0);
   expect(after.magic.classSources[entry.entryId].spellbookSpellIds).toContain("shield");
 });
+
+
+test("Paladin 19 Druid 1 Review shows Smite slots and repairs Oathbreaker Channel Divinity",async({page})=>{
+  await openSpellAuditCharacter(page);
+  const character=await exportSpellAuditCharacter(page);
+  character.classProgression={totalLevel:20,classes:[{entryId:"reported-paladin",classId:"paladin",className:"Paladin",source:"template",level:19,subclassId:"oathbreaker",subclassName:"Oathbreaker",choices:{}},{entryId:"reported-druid",classId:"druid",className:"Druid",source:"template",level:1,choices:{}}],levelOrder:[...Array(19).fill("reported-paladin"),"reported-druid"]};
+  character.magic.slots={};character.magic.slotUsage={normal:{"1":2},pact:0,pactSources:{}};
+  character.classMechanics.resources=[{id:"shared:channel-divinity",canonicalId:"channel-divinity",maximumUses:0,currentUses:0}];
+  await importSpellAuditCharacter(page,character);
+  await page.locator('.hg-character-step-button[data-step-id="review"]').click();
+  const body=page.locator('#characterWizardStepBody');
+  await expect(body).toContainText("Divine Smite Slot Usage");
+  await expect(body).not.toContainText("currently has no spell slots");
+  const firstSlot=body.locator('article').filter({has:page.getByRole('heading',{name:'Level 1 slot',exact:true})});
+  await expect(firstSlot).toContainText('Remaining 2 / 4');
+  const fifthSlot=body.locator('article').filter({has:page.getByRole('heading',{name:'Level 5 slot',exact:true})});
+  await expect(fifthSlot).toContainText('Remaining 2 / 2');
+  const channel=body.locator('article').filter({has:page.getByRole('heading',{name:'Channel Divinity',exact:true})});
+  await expect(channel).toContainText('Available: 1 / 1');
+  await expect(channel).toContainText('Control Undead');await expect(channel).toContainText('Dreadful Aspect');
+});
