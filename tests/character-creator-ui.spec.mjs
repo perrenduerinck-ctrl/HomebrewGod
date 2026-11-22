@@ -1035,3 +1035,71 @@ test("compact spell workspace separates class choices from unavailable catalog s
   expect(await page.locator('.hg-character-step-footer').evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(160);
   await page.screenshot({path:'output/compact-creator-phone.png'});
 });
+
+
+test("Bard 10 Cleric 10 class choices finish without advanced tools or multi-select gestures",async({page})=>{
+  await openSpellAuditCharacter(page,"bard");
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await page.locator('#ccClassBuildTotalLevel').fill('20');await page.locator('#ccClassBuildTotalLevel').blur();
+  await page.locator('[data-build-mode="multiclass"]').click();
+  await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="cleric"]').click();
+  for(let i=0;i<9;i++) await page.locator('[data-cc-action="adjust-class-build-level"][data-class-id="cleric"][data-level-delta="1"]').click();
+  await page.locator('[data-cc-action="confirm-class-build"]').click();
+  await expect(page.locator('[data-cc-completion-guidance]')).toContainText('pending Magical Secrets choice (0/2)');
+  await expect(page.locator('[data-cc-action="show-advanced-class-tools"]')).toBeVisible();
+  await page.locator('[data-multiclass-subclass-index="0"]').selectOption({label:'Valor'});
+  await page.locator('[data-multiclass-subclass-index="1"]').selectOption({label:'Life'});
+  const secrets=page.locator('[data-feature-card-id="magical-secrets-10"]');
+  const spell=index=>secrets.locator('[data-choice-index="'+index+'"]');
+  await page.locator('[data-cc-completion-guidance] [data-cc-issue]').filter({hasText:'Show in Class: Class choices'}).first().click();
+  await expect(spell(0)).toBeFocused();
+  await expect(spell(0)).not.toHaveAttribute('multiple');
+  await spell(0).evaluate(element=>element.scrollIntoView({block:'center'}));
+  const spellTop=await spell(0).evaluate(element=>element.getBoundingClientRect().top);
+  await spell(0).selectOption('fireball');await expect(spell(0)).toHaveValue('fireball');
+  await expect.poll(async()=>Math.abs(await spell(0).evaluate(element=>element.getBoundingClientRect().top)-spellTop)).toBeLessThan(5);
+  await expect(spell(0)).toBeFocused();
+  await expect(page.locator('[data-cc-completion-guidance]')).toContainText('pending Magical Secrets choice (1/2)');
+  await spell(1).selectOption('counterspell');await expect(spell(0)).toHaveValue('fireball');await expect(spell(1)).toHaveValue('counterspell');
+  await expect(spell(1).locator('option[value="fireball"]')).toHaveAttribute('disabled','');
+  for(let i=0;i<4;i++){ const pending=page.locator('[data-cc-action="set-asi-mode"][data-mode="asi"]:not(.selected)');if(await pending.count())await pending.first().click(); }
+  await expect(page.locator('[data-cc-action="set-asi-mode"][data-mode="asi"]:not(.selected)')).toHaveCount(0);
+  await expect(page.locator('.hg-character-step-button[data-step-id="class"]')).toHaveClass(/complete/);
+  await page.locator('[data-cc-action="show-advanced-progression-tools"]').click();
+  await expect(page.getByRole('heading',{name:'Level Up Workflow',exact:true})).toHaveCount(0);
+  await expect(page.locator('[data-multiclass-subclass-index]')).toHaveCount(2);
+  const character=await exportSpellAuditCharacter(page);
+  const bard=character.classProgression.classes.find(entry=>entry.classId==='bard');
+  expect(bard.level).toBe(10);expect(character.classProgression.classes.find(entry=>entry.classId==='cleric').level).toBe(10);
+  expect(Object.values(bard.choices.classFeatures).some(values=>values.includes('fireball')&&values.includes('counterspell'))).toBe(true);
+  await importSpellAuditCharacter(page,character);
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await expect(spell(0)).toHaveValue('fireball');await expect(spell(1)).toHaveValue('counterspell');
+  await expect(page.locator('.hg-character-step-button[data-step-id="class"]')).toHaveClass(/complete/);
+});
+
+
+test("Cleric starting class exposes Bard multiclass skill and instrument choices",async({page})=>{
+  await openSpellAuditCharacter(page,"cleric");
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await page.locator('#ccClassBuildTotalLevel').fill('20');await page.locator('#ccClassBuildTotalLevel').blur();
+  await page.locator('[data-build-mode="multiclass"]').click();await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="bard"]').click();
+  for(let i=0;i<9;i++)await page.locator('[data-cc-action="adjust-class-build-level"][data-class-id="bard"][data-level-delta="1"]').click();
+  await page.locator('[data-cc-action="confirm-class-build"]').click();
+  const choices=page.locator('[data-cc-required-multiclass-choices]');
+  await expect(choices).toContainText('Bard Level 10 Choices');
+  await expect(page.locator('[data-cc-completion-guidance]')).toContainText('Bard multiclass skill choice is pending');
+  await expect(page.locator('[data-cc-completion-guidance]')).toContainText('musical instrument');
+  await page.setViewportSize({width:390,height:844});
+  const skill=choices.locator('[data-cc-action="toggle-multiclass-skill"]').first();
+  await skill.evaluate(element=>element.scrollIntoView({block:'center'}));
+  const skillTop=await skill.evaluate(element=>element.getBoundingClientRect().top);
+  await skill.click();
+  await expect.poll(async()=>Math.abs(await skill.evaluate(element=>element.getBoundingClientRect().top)-skillTop)).toBeLessThan(5);
+  await expect(skill).toBeFocused();
+  await choices.locator('[data-cc-action="toggle-multiclass-tool"]').first().click();
+  await expect(page.locator('[data-cc-completion-guidance]')).not.toContainText('Bard multiclass skill choice is pending');
+  await expect(page.locator('[data-cc-completion-guidance]')).not.toContainText('musical instrument');
+  await expect(choices.locator('[data-cc-action="toggle-multiclass-skill"].selected')).toHaveCount(1);
+  await expect(choices.locator('[data-cc-action="toggle-multiclass-tool"].selected')).toHaveCount(1);
+});

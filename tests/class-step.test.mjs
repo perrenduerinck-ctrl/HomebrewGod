@@ -105,3 +105,10 @@ test("class validation and normalization follow the step interface", () => {
   );
   assert.equal(step.normalizeStepData(character), character);
 });
+
+
+test("multiclass validation names the outstanding class choices",()=>{
+  const step=createTestStep();
+  const character={multiclass:true,classes:[{name:"Bard",level:10},{name:"Cleric",level:10}],classProgression:{totalLevel:20},pendingChoices:["Bard class level 10 has a pending Magical Secrets choice (1/2).","Cleric class level 8 has a pending ASI or feat choice."]};
+  assert.deepEqual(step.validateStep(character).blockingErrors,character.pendingChoices);
+});

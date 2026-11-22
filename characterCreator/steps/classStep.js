@@ -77,6 +77,7 @@ export function createClassStep(dependencies = {}) {
     getSection12FeatureChoiceKey,
     getSection12FeatureChoiceOptions,
     getSection12FeatureChooseCount,
+    getSection12FeatureStoredChoices,
     getSection12PrimaryClass,
     getSection12SkillPickerChoices,
     getSection12SubclassTemplates,
@@ -88,6 +89,7 @@ export function createClassStep(dependencies = {}) {
     renderLevelStep,
     renderMulticlassLevelBreakdown,
     renderMulticlassProgressionEditor,
+    renderMulticlassRequiredChoices,
     renderRulesetMetadata,
     renderSection12SelectedClassDetails,
     renderSection14ProficiencyGuide,
@@ -474,7 +476,7 @@ export function createClassStep(dependencies = {}) {
             <summary>Advanced level-by-level progression, HP, AC, movement, and hit dice</summary>
 
             <div class="hg-character-advanced-level-content">
-              ${renderMulticlassProgressionEditor()}
+              ${renderMulticlassProgressionEditor(creatorState.draft, { includeChoices: false })}
               ${hasStartingClass && progressionEntries.length > 1 ? renderMulticlassLevelBreakdown() : ""}
               ${renderLevelStep({
                 hideLevelInput: true,
@@ -509,6 +511,8 @@ export function createClassStep(dependencies = {}) {
         `}
 
       ${renderSubclassChoices()}
+      ${renderMulticlassRequiredChoices()}
+      ${renderSection12SelectedClassDetails({choicesOnly: !showAdvancedClassTools})}
 
       ${selectedClass
         ? `
@@ -524,8 +528,6 @@ export function createClassStep(dependencies = {}) {
 
       ${showAdvancedClassTools
         ? `
-      ${renderSection12SelectedClassDetails()}
-
       <hr>
 
       <h3>Custom Class</h3>
@@ -1177,17 +1179,20 @@ export function createClassStep(dependencies = {}) {
       getSection12FeatureChoiceOptions(feature)
     );
     const limit = getSection12FeatureChooseCount(feature);
-    const selected = Array.from(select.selectedOptions || [])
-      .map((option) => option.value)
-      .filter((value) => allowed.has(value))
-      .slice(0, limit);
+    const index = Number(select.dataset.choiceIndex);
+    const value = select.value;
+    const selected = Array.from({length:limit}, (_,slot) => getSection12FeatureStoredChoices(feature)[slot] || "");
+    if (!Number.isInteger(index) || index < 0 || index >= limit || (value && (!allowed.has(value) || selected.some((other,slot) => slot !== index && other === value)))) return true;
+    selected[index] = value;
 
-    setSection12FeatureStoredChoices(feature, selected);
+    setSection12FeatureStoredChoices(feature, selected.filter(Boolean));
     applySelectedClassFeatureMechanics();
     applyCompatibilityAliases(creatorState.draft);
     markDraftChanged();
     setStatus("Class feature spell choices updated.");
     renderCreatorView();
+    const replacement = Array.from(globalThis.document?.querySelectorAll("select[data-cc-class-feature-select]") || []).find(control => control.dataset.featureKey === featureKey && control.dataset.choiceIndex === String(index));
+    replacement?.focus({preventScroll:true});
 
     return true;
   }
@@ -1533,11 +1538,10 @@ export function createClassStep(dependencies = {}) {
             })
         : [];
 
+    const pendingChoices = isMulticlassDraft(character) ? getClassProgressionPendingChoiceWarnings(character) : [];
     return {
       valid: complete,
-      blockingErrors: complete
-        ? []
-        : ["Choose a class and complete its required progression choices."],
+      blockingErrors: complete ? [] : pendingChoices.length ? pendingChoices : ["Choose a class and confirm levels that add up to the total character level."],
       reminders: prerequisiteReminders
     };
   }

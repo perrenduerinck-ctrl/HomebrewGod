@@ -615,7 +615,8 @@ export function createMulticlassStep(dependencies = {}) {
   }
 
   function renderMulticlassProgressionEditor(
-    character = creatorState.draft
+    character = creatorState.draft,
+    { includeChoices = true } = {}
   ) {
     const entries =
       getMulticlassSummaryEntries(
@@ -945,7 +946,7 @@ export function createMulticlassStep(dependencies = {}) {
               </div>
 
               ${
-                subclassOptions.length
+                includeChoices && subclassOptions.length
                   ? wizardSelect(
                       entry.template?.subclassLabel || "Subclass",
                       `ccMulticlassSubclass-${index}`,
@@ -962,28 +963,28 @@ export function createMulticlassStep(dependencies = {}) {
                           }`
                       }
                     )
-                  : `
+                  : includeChoices ? `
                     <p class="small">
                       This class does not have saved subclass options.
                     </p>
-                      `
+                      ` : ""
               }
 
               ${renderMulticlassStoredChoices(
                 entry.classEntry
               )}
 
-              ${renderMulticlassSkillChoices(
+              ${includeChoices ? renderMulticlassSkillChoices(
                 entry.classEntry,
                 index,
                 character
-              )}
+              ) : ""}
 
-              ${renderMulticlassToolChoices(
+              ${includeChoices ? renderMulticlassToolChoices(
                 entry.classEntry,
                 index,
                 character
-              )}
+              ) : ""}
 
               <div class="hg-character-inline-actions">
                 <button
@@ -1122,7 +1123,7 @@ export function createMulticlassStep(dependencies = {}) {
 
       ${
         entries.length > 1
-          ? `
+          && includeChoices ? `
             <hr>
 
             ${renderLevelUpWorkflow(character)}
@@ -1139,6 +1140,19 @@ export function createMulticlassStep(dependencies = {}) {
           `}
       </div>
     `;
+  }
+
+  function renderMulticlassRequiredChoices(character = creatorState.draft) {
+    const entries = getMulticlassSummaryEntries(character);
+    if (entries.length < 2) return "";
+    const cards = entries.map((entry,index) => {
+      const classEntry = entry.classEntry;
+      const skills = renderMulticlassSkillChoices(classEntry,index,character);
+      const tools = renderMulticlassToolChoices(classEntry,index,character);
+      if (!skills && !tools) return "";
+      return `<article class="hg-character-choice-card" data-cc-required-class-index="${index}"><h4>${escapeHtml(entry.className)} Level ${entry.classLevel} Choices</h4>${skills}${tools}</article>`;
+    }).join("");
+    return cards ? `<section data-cc-required-multiclass-choices><h3>Multiclass Choices</h3><div class="hg-character-choice-grid">${cards}</div></section>` : "";
   }
 
   function renderMulticlassSkillChoices(
@@ -1892,6 +1906,7 @@ export function createMulticlassStep(dependencies = {}) {
       renderMulticlassProgressionEditor,
       renderMulticlassSkillChoices,
       renderMulticlassToolChoices,
+      renderMulticlassRequiredChoices,
       debugSection12MulticlassAdd,
       handleSection12AddMulticlassClass,
       handleSection12AdjustMulticlassLevel,

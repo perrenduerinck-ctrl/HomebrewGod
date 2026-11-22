@@ -1,3 +1,4 @@
+import { captureCreatorViewPosition } from "./viewPosition.js?v=bard-cleric-choices-20261122";
 import { getSpellbookProgress, chooseSpellbookAcquisition } from "./spellbookProgression.js";
 import { createSpellOriginIndex, renderSpellOriginDetails } from "./spellProvenance.js";
 import { getManualPreparedSpellIds, getSpellChoiceActions, renderClassSpellChoices } from "./spellSelectionSummary.js";
@@ -20234,7 +20235,23 @@ export function createCharacterCreator(options = {}) {
     const location = getCompletionLocation(message, creatorState.currentStepId);
     const body = W.stepBody;
     if (!body) return;
-    let target = location.selector ? body.querySelector(location.selector) : null;
+    let target = null;
+    if (creatorState.currentStepId === "class") {
+      const featureIssue = String(message).match(/^(.+?) class level (\d+) has a pending (.+?) choice/i);
+      if (featureIssue) target = Array.from(body.querySelectorAll("[data-feature-card-id]")).find(card => card.dataset.featureCardClassName === featureIssue[1] && card.dataset.featureCardLevel === featureIssue[2] && (/ASI or feat/i.test(featureIssue[3]) ? card.dataset.featureCardId.startsWith("ability-score-improvement") : card.querySelector("h3")?.textContent.trim() === featureIssue[3]));
+      const subclassIssue = String(message).match(/^(.+?) has a pending subclass/i);
+      if (subclassIssue) {
+        const index = getMulticlassSummaryEntries(creatorState.draft).findIndex(entry => entry.className === subclassIssue[1]);
+        target = body.querySelector(`#ccClassSubclass-${index}`);
+      }
+      const proficiencyIssue = String(message).match(/^(.+?) multiclass (skill|proficiency) choice is pending/i);
+      if (proficiencyIssue) {
+        const index = getMulticlassSummaryEntries(creatorState.draft).findIndex(entry => entry.className === proficiencyIssue[1]);
+        target = body.querySelector(`[data-cc-required-class-index="${index}"] [data-cc-action="toggle-multiclass-${proficiencyIssue[2] === "skill" ? "skill" : "tool"}"]`);
+      }
+      if (target?.matches("[data-feature-card-id]")) target = target.querySelector("select, button, input") || target;
+    }
+    target ||= location.selector ? body.querySelector(location.selector) : null;
     if (!target) target = Array.from(body.querySelectorAll("h2, h3, h4, summary")).find((heading) => heading.textContent.toLowerCase().includes(location.section.toLowerCase()));
     target ||= Array.from(body.querySelectorAll("input:not([type=hidden]), select, textarea, button")).find((control) => !control.closest("[data-cc-completion-guidance]")) || body;
     for (let parent = target.closest("details"); parent; parent = parent.parentElement?.closest("details")) parent.open = true;
@@ -20663,6 +20680,9 @@ export function createCharacterCreator(options = {}) {
       return true;
     }
 
+    const restorePosition = captureCreatorViewPosition(W.root, button);
+    const stepId = creatorState.currentStepId;
+    const draftId = creatorState.draft?.id;
     await handler({
       action,
       button,
@@ -20670,6 +20690,10 @@ export function createCharacterCreator(options = {}) {
       state: creatorState,
       draft: creatorState.draft
     });
+    if (creatorState.viewMode === "builder" && creatorState.currentStepId === stepId && creatorState.draft?.id === draftId) {
+      restorePosition?.();
+      requestAnimationFrame(() => { if (creatorState.viewMode === "builder" && creatorState.currentStepId === stepId && creatorState.draft?.id === draftId) restorePosition?.(); });
+    }
 
     return true;
   }
@@ -20760,6 +20784,9 @@ export function createCharacterCreator(options = {}) {
     handlers,
     event
   ) {
+    const restorePosition = captureCreatorViewPosition(W.root, event.target);
+    const stepId = creatorState.currentStepId;
+    const draftId = creatorState.draft?.id;
     for (const handler of handlers) {
       const handled =
         await handler({
@@ -20770,6 +20797,10 @@ export function createCharacterCreator(options = {}) {
         });
 
       if (handled === true) {
+        if (creatorState.viewMode === "builder" && creatorState.currentStepId === stepId && creatorState.draft?.id === draftId) {
+          restorePosition?.();
+          requestAnimationFrame(() => { if (creatorState.viewMode === "builder" && creatorState.currentStepId === stepId && creatorState.draft?.id === draftId) restorePosition?.(); });
+        }
         return true;
       }
     }
@@ -29301,14 +29332,14 @@ export function createCharacterCreator(options = {}) {
     `;
   }
 
-  function renderSection12SelectedClassDetails() {
+  function renderSection12SelectedClassDetails({ choicesOnly = false } = {}) {
     const selectedClass = getSelectedClassTemplate();
 
     if (!selectedClass) {
       return "";
     }
 
-    const features = getSection12ClassFeaturesThroughLevel();
+    const features = getSection12ClassFeaturesThroughLevel().filter((feature) => !choicesOnly || (feature.type === "choice" && feature.optionSource !== "subclasses"));
     const classEntries =
       getClassProgressionEntries(
         creatorState.draft
@@ -29334,12 +29365,10 @@ export function createCharacterCreator(options = {}) {
         getSection12FeatureChoiceKey(feature);
       const featureAsiSlot =
         feature.optionSource === "asiOrFeat"
-          ? getSection12UnlockedAsiSlot(
-              feature.id
-            )
+          ? getUnlockedFeatChoiceSlots(creatorState.draft).find(slot => slot.classIndex === feature.classIndex && slot.classLevel === feature.level)
           : null;
       const isLatestAsiSlot = Boolean(
-        latestAsiSlotId &&
+        !choicesOnly && latestAsiSlotId &&
         cleanString(featureAsiSlot?.id) ===
           latestAsiSlotId
       );
@@ -29350,6 +29379,8 @@ export function createCharacterCreator(options = {}) {
           data-class-entry-id="${escapeHtml(feature.classEntryId || "")}"
           data-feature-card-class-id="${escapeHtml(feature.classId || "")}"
           data-feature-card-id="${escapeHtml(feature.id || "")}"
+          data-feature-card-class-name="${escapeHtml(feature.className || "")}"
+          data-feature-card-level="${escapeHtml(String(feature.level))}"
         >
           <h3>${escapeHtml(feature.name)}</h3>
 
@@ -29390,7 +29421,7 @@ export function createCharacterCreator(options = {}) {
                   Manage this choice in Latest Level Unlock above.
                 </p>
               `
-              : renderSection12AsiChoice(feature)
+              : renderSection12AsiChoice({...feature, id: featureAsiSlot?.id || feature.id})
             : feature.type === "choice"
             ? `
               <p><b>Choose ${chooseCount}:</b></p>
@@ -29399,25 +29430,17 @@ export function createCharacterCreator(options = {}) {
                 ? `
                   ${feature.optionSource === "castableSpellsAllClasses"
                     ? `
-                      <label class="hg-character-field">
-                        <span>Choose ${chooseCount} spell${chooseCount === 1 ? "" : "s"}</span>
-                        <select
-                          multiple
-                          size="8"
-                          data-cc-class-feature-select="true"
-                          data-feature-key="${escapeHtml(choiceKey)}"
-                          data-choice-limit="${chooseCount}"
-                        >
-                          ${choiceOptionRecords.map((optionRecord) => {
-                            return `
-                              <option
-                                value="${escapeHtml(optionRecord.value)}"
-                                ${featureSelections.includes(optionRecord.value) ? "selected" : ""}
-                              >${escapeHtml(optionRecord.label)}</option>
-                            `;
-                          }).join("")}
-                        </select>
-                      </label>
+                      <p class="small">Selected ${featureSelections.filter(value => choiceOptionRecords.some(option => option.value === value)).length} / ${chooseCount}. Choose each spell separately.</p>
+                      ${Array.from({length:chooseCount}, (_,index) => {
+                        const value = featureSelections[index] || "";
+                        return `<label class="hg-character-field">
+                          <span>${escapeHtml(feature.name)} — Spell ${index + 1}</span>
+                          <select data-cc-class-feature-select="true" data-feature-key="${escapeHtml(choiceKey)}" data-choice-index="${index}" data-choice-limit="${chooseCount}" ${index > featureSelections.length ? "disabled" : ""} aria-label="${escapeHtml(feature.name)} — Spell ${index + 1}">
+                            <option value="">Choose a spell</option>
+                            ${choiceOptionRecords.map(option => `<option value="${escapeHtml(option.value)}" ${value === option.value ? "selected" : ""} ${value !== option.value && featureSelections.includes(option.value) ? "disabled" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+                          </select>
+                        </label>`;
+                      }).join("")}
                     `
                     : `
                   <div class="hg-character-inline-actions">
@@ -29645,6 +29668,11 @@ export function createCharacterCreator(options = {}) {
             .join("")
         : "";
 
+    if (choicesOnly) {
+      if (!features.length) return "";
+      return `<section data-cc-required-feature-choices><h3>Class Feature Choices</h3><p class="small">Complete the choices unlocked by each class level.</p>${multiclass ? multiclassFeatureGroups : `<div class="hg-character-choice-grid">${featureCards}</div>`}</section>`;
+    }
+
     return `
       <hr>
 
@@ -29780,6 +29808,7 @@ export function createCharacterCreator(options = {}) {
     renderMulticlassProgressionEditor,
     renderMulticlassSkillChoices,
     renderMulticlassToolChoices,
+    renderMulticlassRequiredChoices,
     debugSection12MulticlassAdd,
     handleSection12AddMulticlassClass,
     handleSection12AdjustMulticlassLevel,
@@ -29823,6 +29852,7 @@ export function createCharacterCreator(options = {}) {
     getSection12FeatureChoiceKey,
     getSection12FeatureChoiceOptions,
     getSection12FeatureChooseCount,
+    getSection12FeatureStoredChoices,
     getSection12PrimaryClass,
     getSection12SkillPickerChoices,
     getSection12SubclassTemplates,
@@ -29836,6 +29866,7 @@ export function createCharacterCreator(options = {}) {
     },
     renderMulticlassLevelBreakdown,
     renderMulticlassProgressionEditor,
+    renderMulticlassRequiredChoices,
     renderRulesetMetadata,
     renderSection12SelectedClassDetails,
     renderSection14ProficiencyGuide: (...args) => {
