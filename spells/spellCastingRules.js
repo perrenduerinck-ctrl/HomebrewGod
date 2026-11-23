@@ -255,6 +255,7 @@ export function resolveCharacterSpellcastingStats(
     sourceId: text(source?.sourceId),
     sourceName: text(source?.sourceName || source?.name || "Spellcasting"),
     ability,
+    spellcastingModifier: modifier,
     characterLevel: level,
     proficiencyBonus,
     spellSaveDc: saveDc,

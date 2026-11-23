@@ -434,3 +434,73 @@ for (const journey of SPELLCASTER_JOURNEYS) test('spellcaster journey: '+journey
   if(journey.upcast)await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal[String(journey.upcast)]).toBe(0);
   await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).combat.concentration ?? null).toBeNull();
 });
+
+
+async function createEffectCaster(page,{primary='bard',primaryLevel=3,secondaryLevel=3,subclass='Light'}={}) {
+  page.setDefaultTimeout(15000);page.on('dialog',dialog=>dialog.accept());
+  await page.route('https://example.test/effects-map.svg',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="1600" height="1000" fill="#334455"/></svg>'}));
+  const uid=await signIn(page,'Effect Tester');await page.locator('#roomNameInput').fill('Spell effects');await page.locator('#createRoomButton').click();
+  await expect(page.locator('#roomCodeText')).toHaveText(/^[A-Z0-9]+-[A-Z0-9]+$/);const roomCode=(await page.locator('#roomCodeText').textContent()).trim();
+  await page.evaluate(async({base,roomCode})=>{const {getFirestore,doc,updateDoc}=await import(base+'firebase-firestore.js');await updateDoc(doc(getFirestore(),'rooms',roomCode),{currentMap:{id:'effects-map',name:'Effects map',url:'https://example.test/effects-map.svg'}});},{base:firebase,roomCode});
+  await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen('characterCreator'));await page.locator('[data-cc-action="new-character"]').first().click();await page.locator('#ccCharacterName').fill('Effect Caster');
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();await page.locator('#ccClassBuildTotalLevel').fill(String(primaryLevel+secondaryLevel));await page.locator('#ccClassBuildTotalLevel').blur();await page.locator('[data-build-mode="multiclass"]').click();
+  for(const id of [primary,'cleric'])await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="'+id+'"]').click();
+  for(let i=1;i<secondaryLevel;i++)await page.locator('[data-cc-action="adjust-class-build-level"][data-class-id="cleric"][data-level-delta="1"]').click();await page.locator('[data-cc-action="confirm-class-build"]').click();
+  await page.locator('[data-multiclass-subclass-index="1"]').selectOption({label:subclass});
+  await page.locator('.hg-character-step-button[data-step-id="abilities"]').click();await page.locator('#ccAbilityMethod').selectOption('manual');
+  for(const [ability,score] of [['int',18],['wis',18],['cha',14]]){await page.locator('#ccAbility-'+ability).fill(String(score));await page.locator('#ccAbility-'+ability).blur();}
+  return {uid,roomCode};
+}
+async function chooseEffectSpell(page,name,caster,{known=false,prepared=false}={}) {
+  await page.locator('.hg-character-step-button[data-step-id="spells"]').click();await page.locator('#ccDefaultSpellSearch').fill(name);
+  const card=page.locator('article[data-cc-default-spell-option]').filter({has:page.getByRole('heading',{name,exact:true})});await expect(card).toBeVisible();const source=card.locator('[data-cc-spell-source-select]');
+  if(await source.count()){const value=await source.locator('option').evaluateAll((options,caster)=>options.find(o=>o.textContent.toLowerCase().startsWith(caster+' '))?.value,caster);expect(value).toBeTruthy();await source.selectOption(value);}
+  if(known)await card.locator('[data-cc-action="toggle-spell-known"]').click();if(prepared)await card.locator('[data-cc-action="toggle-spell-prepared"]').click();
+}
+async function saveEffectCaster(page,context,{area=false}={}) {
+  await page.locator('[data-cc-action="save-character"]').first().click();await expect.poll(async()=>(await savedJourneyCharacters(page,context.roomCode)).filter(c=>c.identity?.name==='Effect Caster').length).toBe(1);
+  const hero=(await savedJourneyCharacters(page,context.roomCode)).find(c=>c.identity?.name==='Effect Caster');
+  await record(page,['rooms',context.roomCode,'tokens','effect-caster'],{id:'effect-caster',name:'Effect Caster',ownerUid:context.uid,linkedCharacterId:hero.id,type:'player',sourceType:'character',visibility:'shared',mapMode:'single',x:area?20:50,y:50,currentHp:20,maxHp:20,movementSpeed:30});
+  return {...context,id:hero.id};
+}
+async function startEffectCast(page,context,spellId,{caster='cleric',level=2,targetId='effect-caster'}={}) {
+  await openJourneySheet(page,context.id);await page.locator('[data-character-sheet-tab="spells"]').click();await page.locator('[data-sheet-spell-id="'+spellId+'"] [data-character-sheet-action="target-spell"]').click();
+  const slots=page.locator('#spellCastingSlotSelect');await expect(slots).toBeVisible();const value=await slots.locator('option').evaluateAll((options,{caster,level})=>options.find(o=>!o.disabled&&o.value.startsWith('normal|'+level+'|')&&o.textContent.toLowerCase().includes(caster))?.value,{caster,level});expect(value).toBeTruthy();await slots.selectOption(value);
+  if(targetId){const target=await page.locator('.hg-token[data-token-id="'+targetId+'"]').boundingBox();await page.mouse.click(target.x+target.width/2,target.y+target.height/2);}
+  await expect(page.locator('#confirmSpellCastButton')).toBeEnabled();
+}
+
+test('spell effects: healing follows the selected Bard or Cleric after upcasting and reopening',async({page})=>{
+  test.setTimeout(180000);const context=await createEffectCaster(page);
+  await chooseEffectSpell(page,'Cure Wounds','bard',{known:true});await chooseEffectSpell(page,'Cure Wounds','cleric',{prepared:true});const saved=await saveEffectCaster(page,context);
+  await startEffectCast(page,saved,'cure-wounds',{caster:'bard'});await expect(page.locator('#spellCastingResolution')).toContainText('2d8 + 2');await page.locator('#cancelSpellCastButton').click();
+  expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2'] || 0).toBe(0);
+  await startEffectCast(page,saved,'cure-wounds');await expect(page.locator('#spellCastingResolution')).toContainText('2d8 + 4');await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
+  expect(await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution.healing)).toEqual(['2d8 + 4']);await page.locator('#cancelSpellCastButton').click();
+  await page.reload();await expect(page.locator('.hg-token[data-token-id="effect-caster"]')).toBeVisible({timeout:60000});
+  await startEffectCast(page,saved,'cure-wounds',{caster:'bard',level:1});await expect(page.locator('#spellCastingResolution')).toContainText('1d8 + 2');await page.locator('#cancelSpellCastButton').click();
+  expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2']).toBe(1);
+});
+
+test('spell effects: subclass-granted Burning Hands keeps Cleric DC and cone targets',async({page})=>{
+  test.setTimeout(180000);const saved=await saveEffectCaster(page,await createEffectCaster(page));
+  for(const [id,x,y] of [['near-one',55,50],['near-two',56,51],['far-away',90,90]])await record(page,['rooms',saved.roomCode,'tokens',id],{id,name:id,ownerUid:saved.uid,type:'enemy',sourceType:'manual',visibility:'shared',mapMode:'single',x,y,currentHp:30,maxHp:30,movementSpeed:30});
+  await startEffectCast(page,saved,'burning-hands',{targetId:'near-one'});await expect(page.locator('#spellCastingResolution')).toContainText('4d6 fire');await expect(page.locator('#spellCastingResolution')).toContainText('15');
+  const targets=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().target.affectedTokens.map(t=>t.id));expect(targets).toEqual(expect.arrayContaining(['near-one','near-two']));expect(targets).not.toContain('far-away');
+  await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');const result=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution);expect(result.save).toMatchObject({ability:'dex',dc:15});expect(result.damage).toEqual(['4d6 fire']);
+  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2']).toBe(1);
+  await page.locator('#cancelSpellCastButton').click();await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen('characterCreator'));
+  const library=page.locator('[data-cc-action="library"]').first();if(await library.isVisible())await library.click();await page.locator('[data-cc-action="edit-character"][data-character-id="'+saved.id+'"]').click();
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();await page.locator('[data-multiclass-subclass-index="1"]').selectOption({label:'Life'});await page.locator('[data-cc-action="save-character"]').first().click();
+  await expect.poll(async()=>Object.values((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.classSources).find(source=>source.classId==='cleric')?.alwaysPreparedSpellIds).toContain('bless');
+  await openJourneySheet(page,saved.id);await page.locator('[data-character-sheet-tab="spells"]').click();await expect(page.locator('[data-sheet-spell-id="bless"]')).toBeVisible();await expect(page.locator('[data-sheet-spell-id="burning-hands"]')).toHaveCount(0);
+});
+
+test('spell effects: upcast Fireball uses its sphere, Wizard DC, and shared fourth-level slot',async({page})=>{
+  test.setTimeout(180000);const context=await createEffectCaster(page,{primary:'wizard',primaryLevel:5,secondaryLevel:3});await chooseEffectSpell(page,'Fireball','wizard',{known:true,prepared:true});const saved=await saveEffectCaster(page,context,{area:true});
+  for(const [id,x,y] of [['near-one',60,50],['near-two',65,50],['far-away',90,90]])await record(page,['rooms',saved.roomCode,'tokens',id],{id,name:id,ownerUid:saved.uid,type:'enemy',sourceType:'manual',visibility:'shared',mapMode:'single',x,y,currentHp:30,maxHp:30,movementSpeed:30});
+  await startEffectCast(page,saved,'fireball',{caster:'wizard',level:4,targetId:'near-one'});await expect(page.locator('#spellCastingResolution')).toContainText('9d6 fire');
+  const state=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState());expect(state.instruction.templateShape).toBe('sphere');expect(state.target.affectedTokens.map(t=>t.id)).toEqual(expect.arrayContaining(['near-one','near-two']));expect(state.target.affectedTokens.map(t=>t.id)).not.toContain('far-away');
+  await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');const result=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution);expect(result.save).toMatchObject({ability:'dex',dc:15});expect(result.damage).toEqual(['9d6 fire']);
+  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['4']).toBe(1);
+});

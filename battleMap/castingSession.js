@@ -33,6 +33,15 @@ function cloneAffectedTokens(tokens) {
     .filter((token) => token.id || token.name);
 }
 
+function optionalInteger(value) {
+  return value === null || value === undefined || String(value).trim() === "" || !Number.isFinite(Number(value)) ? null : Math.round(Number(value));
+}
+
+function resolveCastingModifier(expression, modifier) {
+  const value = optionalInteger(modifier);
+  return value === null ? expression : expression.replace(/\bMOD\b/gi,String(value)).replace(/\+\s*-(\d+)/g,"- $1");
+}
+
 function normalizeSlotOption(option = {}) {
   const kind = cleanText(option.kind, "normal") || "normal";
   const level = finiteInteger(option.level, 0, 0);
@@ -51,6 +60,7 @@ function normalizeSlotOption(option = {}) {
     castingSourceId: cleanText(option.castingSourceId),
     castingSourceName: cleanText(option.castingSourceName),
     spellcastingAbility: cleanText(option.spellcastingAbility).toLowerCase(),
+    spellcastingModifier: optionalInteger(option.spellcastingModifier),
     spellSaveDc: Number.isFinite(Number(option.spellSaveDc))
       ? finiteInteger(option.spellSaveDc, 0, 0)
       : null,
@@ -79,7 +89,7 @@ function tableValueAtLevel(table, level) {
   return eligible[0]?.[1] || "";
 }
 
-function getDamageExpression(damageEntry, slotLevel, characterLevel) {
+function getDamageExpression(damageEntry, slotLevel, characterLevel, scaling = {}) {
   const slotTable = damageEntry?.atSlotLevel;
   const direct = tableValueAtLevel(slotTable, slotLevel);
 
@@ -93,6 +103,8 @@ function getDamageExpression(damageEntry, slotLevel, characterLevel) {
   );
   if (characterScaling) return characterScaling;
 
+  const scaled = tableValueAtLevel(scaling?.atSlotLevel, slotLevel) || tableValueAtLevel(scaling?.atCharacterLevel, characterLevel);
+  if (scaled) return scaled;
   const base = cleanText(
     damageEntry?.dice,
     damageEntry?.amount
@@ -107,6 +119,7 @@ export function createCastResolution({
   affectedTokens = [],
   spellSaveDc = null,
   spellAttackBonus = null,
+  spellcastingModifier = null,
   resourceKind = "",
   castingSourceId = "",
   castingSourceName = "",
@@ -139,10 +152,8 @@ export function createCastResolution({
         }]
       : [];
   const damage = damageEntries
-    .map((entry) => {
-      const expression = getDamageExpression(entry, slotLevel, characterLevel) ||
-        tableValueAtLevel(spell.scaling?.atCharacterLevel, characterLevel) ||
-        tableValueAtLevel(spell.scaling?.atSlotLevel, slotLevel);
+    .map((entry, index) => {
+      const expression = resolveCastingModifier(getDamageExpression(entry, slotLevel, characterLevel, index === 0 ? spell.scaling : {}), spellcastingModifier);
       const damageType = cleanText(
         entry?.damageType,
         entry?.type
@@ -164,7 +175,7 @@ export function createCastResolution({
       tableValueAtLevel(spell.scaling?.healingAtSlotLevel, slotLevel) ||
       cleanText(entry?.dice, entry?.amount)
     ))
-    .filter(Boolean);
+    .filter(Boolean).map(expression => resolveCastingModifier(expression, spellcastingModifier));
   const concentration = (
     spell.concentration === true ||
     spell.targeting?.duration?.concentration === true
@@ -235,6 +246,7 @@ export function createSpellCastingSession({
   let confirmationError = "";
   let spellSaveDc = null;
   let spellAttackBonus = null;
+  let spellcastingModifier = null;
   let characterLevel = 1;
 
   function getState() {
@@ -294,6 +306,7 @@ export function createSpellCastingSession({
       ));
     spellSaveDc = config.spellSaveDc;
     spellAttackBonus = config.spellAttackBonus;
+    spellcastingModifier = optionalInteger(config.spellcastingModifier);
     characterLevel = finiteInteger(config.characterLevel, 1, 1);
     target = null;
     resolution = null;
@@ -397,6 +410,7 @@ export function createSpellCastingSession({
       affectedTokens: target?.affectedTokens || [],
       spellSaveDc: slot.spellSaveDc ?? spellSaveDc,
       spellAttackBonus: slot.spellAttackBonus ?? spellAttackBonus,
+      spellcastingModifier: slot.spellcastingModifier ?? spellcastingModifier,
       resourceKind: slot.kind,
       castingSourceId: slot.castingSourceId,
       castingSourceName: slot.castingSourceName
@@ -454,6 +468,7 @@ export function createSpellCastingSession({
         affectedTokens: target.affectedTokens,
         spellSaveDc: slot.spellSaveDc ?? spellSaveDc,
         spellAttackBonus: slot.spellAttackBonus ?? spellAttackBonus,
+        spellcastingModifier: slot.spellcastingModifier ?? spellcastingModifier,
         resourceKind: slot.kind,
         castingSourceId: slot.castingSourceId,
         castingSourceName: slot.castingSourceName,
@@ -524,6 +539,7 @@ export function createSpellCastingSession({
     confirmationError = "";
     spellSaveDc = null;
     spellAttackBonus = null;
+    spellcastingModifier = null;
     characterLevel = 1;
     return getState();
   }

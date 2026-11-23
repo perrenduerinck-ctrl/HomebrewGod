@@ -1,3 +1,4 @@
+import { synchronizeCanonicalSpellSources } from "./spellSources.js";
 import {
   assertCharacterImportSize,
   assertCharacterSerializedSize
@@ -790,6 +791,8 @@ export function createCharacterPersistence(context) {
       character.magic.spellAttackBonus = null;
     }
 
+    syncSection16ClassSourceMetadata?.(character);
+    synchronizeCanonicalSpellSources(character, {fromCompatibility:true,populateCompatibility:true});
     applyCompatibilityAliases(
       character
     );

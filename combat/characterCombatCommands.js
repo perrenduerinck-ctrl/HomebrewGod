@@ -202,6 +202,7 @@ export function getCharacterSpellcastingSourceOptions(character = {}, spell = {}
       if (!includeUnavailable && !normal && !ritual) return null;
       const stats = resolveCharacterSpellcastingStats(character, spell, { sourceId });
       return {
+        spellcastingModifier: stats.spellcastingModifier,
         spellSaveDc: stats.spellSaveDc,
         spellAttackBonus: stats.spellAttackBonus,
         sourceId,
@@ -240,6 +241,7 @@ function attachCastingSources(character, spell, options) {
       castingSourceId: source.sourceId,
       castingSourceName: source.sourceName,
       spellcastingAbility: source.spellcastingAbility,
+      spellcastingModifier: source.spellcastingModifier,
       spellSaveDc: source.spellSaveDc,
       spellAttackBonus: source.spellAttackBonus,
       label: `${option.label} · Cast via ${source.sourceName}`
