@@ -1103,3 +1103,96 @@ test("Cleric starting class exposes Bard multiclass skill and instrument choices
   await expect(choices.locator('[data-cc-action="toggle-multiclass-skill"].selected')).toHaveCount(1);
   await expect(choices.locator('[data-cc-action="toggle-multiclass-tool"].selected')).toHaveCount(1);
 });
+
+
+async function buildAuditSplit(page, first, second, firstLevel, secondLevel) {
+  await openSpellAuditCharacter(page,first);
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await page.locator('#ccClassBuildTotalLevel').fill(String(firstLevel+secondLevel));await page.locator('#ccClassBuildTotalLevel').blur();
+  await page.locator('[data-build-mode="multiclass"]').click();
+  await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="'+second+'"]').click();
+  for(let i=1;i<secondLevel;i++)await page.locator('[data-cc-action="adjust-class-build-level"][data-class-id="'+second+'"][data-level-delta="1"]').click();
+  await page.locator('[data-cc-action="confirm-class-build"]').click();
+}
+
+test("choice audit: single-class progression cannot look complete with required feature choices missing",async({page})=>{
+  await openSpellAuditCharacter(page,'bard');await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await page.locator('#ccClassBuildTotalLevel').fill('10');await page.locator('#ccClassBuildTotalLevel').blur();await page.locator('[data-cc-action="confirm-class-build"]').click();
+  await expect(page.locator('[data-feature-card-id="magical-secrets-10"]')).toBeVisible();
+  await expect(page.locator('.hg-character-step-button[data-step-id="class"]')).not.toHaveClass(/complete/);
+  await expect(page.locator('[data-cc-completion-guidance]')).toContainText('pending Magical Secrets choice (0/2)');
+  await page.locator('[data-multiclass-subclass-index="0"]').selectOption({label:'Valor'});
+  const secrets=page.locator('[data-feature-card-id="magical-secrets-10"]');
+  await secrets.locator('[data-choice-index="0"]').selectOption('fireball');await secrets.locator('[data-choice-index="1"]').selectOption('counterspell');
+  for(let i=0;i<2;i++)await page.locator('[data-cc-action="set-asi-mode"][data-mode="asi"]:not(.selected)').first().click();
+  await expect(page.locator('.hg-character-step-button[data-step-id="class"]')).toHaveClass(/complete/);
+  const saved=await exportSpellAuditCharacter(page);await importSpellAuditCharacter(page,saved);await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await expect(page.locator('.hg-character-step-button[data-step-id="class"]')).toHaveClass(/complete/);
+});
+
+test("choice audit: Lore and normal Magical Secrets remain independent while editing, clearing and reopening",async({page})=>{
+  await buildAuditSplit(page,'bard','cleric',10,10);
+  await page.locator('[data-multiclass-subclass-index="0"]').selectOption({label:'Lore'});
+  const normal=page.locator('[data-feature-card-id="magical-secrets-10"]');const extra=page.locator('[data-feature-card-id="lore-additional-magical-secrets"]');
+  await normal.locator('[data-choice-index="0"]').selectOption('fireball');await normal.locator('[data-choice-index="1"]').selectOption('counterspell');
+  await extra.locator('[data-choice-index="0"]').selectOption('shield');await extra.locator('[data-choice-index="1"]').selectOption('revivify');
+  await normal.locator('[data-choice-index="0"]').selectOption('');
+  await expect(normal.locator('[data-choice-index="0"]')).toHaveValue('counterspell');
+  await expect(extra.locator('[data-choice-index="0"]')).toHaveValue('shield');await expect(extra.locator('[data-choice-index="1"]')).toHaveValue('revivify');
+  await normal.locator('[data-choice-index="1"]').selectOption('fly');
+  const saved=await exportSpellAuditCharacter(page);await importSpellAuditCharacter(page,saved);await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await expect(normal.locator('[data-choice-index="0"]')).toHaveValue('counterspell');await expect(normal.locator('[data-choice-index="1"]')).toHaveValue('fly');
+  await expect(extra.locator('[data-choice-index="0"]')).toHaveValue('shield');await expect(extra.locator('[data-choice-index="1"]')).toHaveValue('revivify');
+});
+
+test("choice audit: same-level multiclass ability increases update only their owning class",async({page})=>{
+  await buildAuditSplit(page,'bard','cleric',4,4);
+  const bard=page.locator('[data-feature-card-class-id="bard"][data-feature-card-id="ability-score-improvement-4"]');
+  const cleric=page.locator('[data-feature-card-class-id="cleric"][data-feature-card-id="ability-score-improvement-4"]');
+  for(const card of [bard,cleric])await card.locator('[data-cc-action="set-asi-mode"][data-mode="asi"]').click();
+  for(let i=0;i<2;i++)await bard.locator('[data-cc-action="adjust-asi-ability"][data-ability-id="str"][data-delta="1"]').click();
+  for(let i=0;i<2;i++)await cleric.locator('[data-cc-action="adjust-asi-ability"][data-ability-id="wis"][data-delta="1"]').click();
+  await expect(bard).toContainText('Strength +2');await expect(bard).toContainText('Wisdom +0');
+  await expect(cleric).toContainText('Wisdom +2');await expect(cleric).toContainText('Strength +0');
+  const saved=await exportSpellAuditCharacter(page);await importSpellAuditCharacter(page,saved);await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await expect(bard).toContainText('Strength +2');await expect(cleric).toContainText('Wisdom +2');
+});
+
+test("choice audit: sorcerer and warlock feature choices survive each other's redraws",async({page})=>{
+  await buildAuditSplit(page,'sorcerer','warlock',3,2);
+  const meta=page.locator('[data-feature-card-id="metamagic"]');const invocations=page.locator('[data-feature-card-id="eldritch-invocations"]');
+  for(const card of [meta,invocations])for(let i=0;i<2;i++)await card.locator('[data-cc-action="toggle-class-feature-choice"]:not(.selected)').first().click();
+  await expect(meta.locator('[data-cc-action="toggle-class-feature-choice"].selected')).toHaveCount(2);
+  await expect(invocations.locator('[data-cc-action="toggle-class-feature-choice"].selected')).toHaveCount(2);
+  const saved=await exportSpellAuditCharacter(page);await importSpellAuditCharacter(page,saved);await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await expect(meta.locator('[data-cc-action="toggle-class-feature-choice"].selected')).toHaveCount(2);
+  await expect(invocations.locator('[data-cc-action="toggle-class-feature-choice"].selected')).toHaveCount(2);
+});
+
+
+test("choice audit: expanded details stay with their own feature after a selection redraw",async({page})=>{
+  await buildAuditSplit(page,'bard','cleric',10,10);
+  const secrets=page.locator('[data-feature-card-id="magical-secrets-10"]');
+  const details=secrets.locator('details.hg-compact-details');
+  await expect(details).toHaveCount(1);expect(await page.locator('details.hg-compact-details').count()).toBeGreaterThan(1);
+  await details.locator('summary').click();await expect(details).toHaveAttribute('open','');
+  await secrets.locator('[data-choice-index="0"]').selectOption('fireball');
+  await expect(details).toHaveAttribute('open','');
+  await expect(page.locator('[data-feature-card-id]:not([data-feature-card-id="magical-secrets-10"]) details[open]')).toHaveCount(0);
+});
+
+
+test("choice audit: Fighter and Paladin styles do not duplicate or overwrite one another",async({page})=>{
+  await buildAuditSplit(page,'fighter','paladin',2,2);
+  const fighter=page.locator('[data-feature-card-class-id="fighter"][data-feature-card-id="fighting-style-fighter"]');
+  const paladin=page.locator('[data-feature-card-class-id="paladin"][data-feature-card-id="fighting-style-paladin"]');
+  await fighter.locator('[data-cc-action="toggle-class-feature-choice"][data-option="Defense"]').click();
+  await paladin.locator('[data-cc-action="toggle-class-feature-choice"][data-option="Defense"]').click();
+  await expect(paladin.locator('[data-cc-action="toggle-class-feature-choice"].selected')).toHaveCount(0);
+  await expect(fighter.locator('[data-option="Defense"]')).toHaveClass(/selected/);
+  await paladin.locator('[data-cc-action="toggle-class-feature-choice"][data-option="Dueling"]').click();
+  const saved=await exportSpellAuditCharacter(page);await importSpellAuditCharacter(page,saved);await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+  await expect(fighter.locator('[data-option="Defense"]')).toHaveClass(/selected/);
+  await expect(paladin.locator('[data-option="Dueling"]')).toHaveClass(/selected/);
+  await expect(page.locator('.hg-character-step-button[data-step-id="class"]')).toHaveClass(/complete/);
+});

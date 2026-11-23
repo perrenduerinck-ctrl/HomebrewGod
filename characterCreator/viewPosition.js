@@ -6,11 +6,21 @@ export function captureCreatorViewPosition(root, target) {
   const identify = element => {
     if (element.id) return {id:element.id};
     const attributes = Array.from(element.attributes || []).filter(attribute => attribute.name.startsWith("data-") && !attribute.name.startsWith("data-hg-")).map(attribute => [attribute.name,attribute.value]);
-    return attributes.length ? {tag:element.tagName,attributes} : null;
+    if (attributes.length) return {tag:element.tagName,attributes};
+    if (element.tagName === "DETAILS") {
+      const owner = element.parentElement?.closest("[data-feature-card-id], [data-class-profile-entry-id], [data-spell-id], [data-item-instance-id]");
+      if (owner) return {owner:identify(owner),summary:element.querySelector(":scope > summary")?.textContent.trim(),index:Array.from(owner.querySelectorAll("details")).indexOf(element)};
+    }
+    return null;
   };
   const find = identity => {
     if (!identity) return null;
     if (identity.id) { const element=doc.getElementById(identity.id);return root.contains(element) ? element : null; }
+    if (identity.owner) {
+      const owner = find(identity.owner);
+      const details = owner?.querySelectorAll("details")[identity.index];
+      return details?.querySelector(":scope > summary")?.textContent.trim() === identity.summary ? details : null;
+    }
     return Array.from(root.querySelectorAll(identity.tag)).find(element => identity.attributes.every(([name,value]) => element.getAttribute(name) === value)) || null;
   };
   const identity = identify(target);

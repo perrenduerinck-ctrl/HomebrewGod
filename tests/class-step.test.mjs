@@ -112,3 +112,11 @@ test("multiclass validation names the outstanding class choices",()=>{
   const character={multiclass:true,classes:[{name:"Bard",level:10},{name:"Cleric",level:10}],classProgression:{totalLevel:20},pendingChoices:["Bard class level 10 has a pending Magical Secrets choice (1/2).","Cleric class level 8 has a pending ASI or feat choice."]};
   assert.deepEqual(step.validateStep(character).blockingErrors,character.pendingChoices);
 });
+
+
+test("single-class completion and guidance enforce outstanding progression choices",()=>{
+  const step=createTestStep();const character={classes:[{name:"Bard",level:10}],pendingChoices:["Bard class level 10 has a pending Magical Secrets choice (0/2)."]};
+  assert.equal(step.isStepComplete(character),false);
+  assert.deepEqual(step.validateStep(character).blockingErrors,character.pendingChoices);
+  character.pendingChoices=[];assert.equal(step.isStepComplete(character),true);
+});
