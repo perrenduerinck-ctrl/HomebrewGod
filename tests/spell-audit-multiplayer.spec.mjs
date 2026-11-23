@@ -360,6 +360,7 @@ async function openJourneySheet(page,id) {
 const SPELLCASTER_JOURNEYS = [
   {name:'Sorcerer 3 / Warlock 3',classes:[['sorcerer',3],['warlock',3]],caster:'warlock',spellId:'expeditious-retreat',spellName:'Expeditious Retreat',mode:'known',pact:true,secondSlots:2},
   {name:'Bard 3 / Cleric 3',classes:[['bard',3],['cleric',3]],caster:'cleric',spellId:'detect-magic',spellName:'Detect Magic',mode:'prepared',secondSlots:3},
+  {name:'Bard 10 / Cleric 10',classes:[['bard',10],['cleric',10]],caster:'cleric',spellId:'detect-magic',spellName:'Detect Magic',mode:'prepared',secondSlots:3},
   {name:'Paladin 19 / Druid 1',classes:[['paladin',19],['druid',1]],caster:'druid',spellId:'detect-magic',upcast:5,spellName:'Detect Magic',mode:'prepared',secondSlots:3},
   {name:'Wizard 3 / Cleric 1',classes:[['wizard',3],['cleric',1]],caster:'wizard',spellId:'detect-magic',spellName:'Detect Magic',mode:'book',secondSlots:3},
   {name:'Druid 3 / Cleric 1',classes:[['druid',3],['cleric',1]],caster:'druid',spellId:'detect-magic',spellName:'Detect Magic',mode:'prepared',secondSlots:3},
