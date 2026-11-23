@@ -363,6 +363,8 @@ const SPELLCASTER_JOURNEYS = [
   {name:'Paladin 19 / Druid 1',classes:[['paladin',19],['druid',1]],caster:'druid',spellId:'detect-magic',upcast:5,spellName:'Detect Magic',mode:'prepared',secondSlots:3},
   {name:'Wizard 3 / Cleric 1',classes:[['wizard',3],['cleric',1]],caster:'wizard',spellId:'detect-magic',spellName:'Detect Magic',mode:'book',secondSlots:3},
   {name:'Druid 3 / Cleric 1',classes:[['druid',3],['cleric',1]],caster:'druid',spellId:'detect-magic',spellName:'Detect Magic',mode:'prepared',secondSlots:3},
+  {name:'Ranger 3 / Druid 3',classes:[['ranger',3],['druid',3]],caster:'ranger',concentrationSpellId:'guidance',spellId:'speak-with-animals',spellName:'Speak with Animals',mode:'known',secondSlots:3,thirdSlots:0,upcast:2},
+  {name:'Artificer 3 / Wizard 1',classes:[['artificer',3],['wizard',1]],caster:'artificer',spellId:'detect-magic',spellName:'Detect Magic',mode:'prepared',secondSlots:2,thirdSlots:0},
   {name:'Sorcerer 3',classes:[['sorcerer',3]],caster:'sorcerer',spellId:'expeditious-retreat',spellName:'Expeditious Retreat',mode:'known',secondSlots:2}
 ];
 for (const journey of SPELLCASTER_JOURNEYS) test('spellcaster journey: '+journey.name+' creation, casting, reopening and rests',async({page})=>{
@@ -393,7 +395,7 @@ for (const journey of SPELLCASTER_JOURNEYS) test('spellcaster journey: '+journey
   await page.locator('[data-cc-action="save-character"]').first().click();
   await expect.poll(async()=>(await savedJourneyCharacters(page,roomCode)).filter(c=>c.identity?.name===name).length).toBe(1);
   let hero=(await savedJourneyCharacters(page,roomCode)).find(c=>c.identity?.name===name);const id=hero.id;
-  expect(hero.classProgression.classes.map(c=>c.level)).toEqual(journey.classes.map(([,level])=>level));expect(hero.magic.slots['1']).toBe(4);expect(hero.magic.slots['2']).toBe(journey.secondSlots);
+  expect(hero.classProgression.classes.map(c=>c.level)).toEqual(journey.classes.map(([,level])=>level));expect(hero.magic.slots['1']).toBe(4);expect(hero.magic.slots['2']).toBe(journey.secondSlots);if(journey.thirdSlots!==undefined)expect(hero.magic.slots['3'] || 0).toBe(journey.thirdSlots);
   await record(page,['rooms',roomCode,'tokens','journey-caster'],{id:'journey-caster',name,ownerUid:uid,linkedCharacterId:id,type:'player',sourceType:'character',visibility:'shared',mapMode:'single',x:50,y:50,currentHp:20,maxHp:20,movementSpeed:30});
   const cast=async(kind,level,confirm=true,spellId=journey.spellId)=>{
     await openJourneySheet(page,id);await page.locator('[data-character-sheet-tab="spells"]').click();
@@ -401,7 +403,7 @@ for (const journey of SPELLCASTER_JOURNEYS) test('spellcaster journey: '+journey
     const slots=page.locator('#spellCastingSlotSelect');await expect(slots).toBeVisible();const value=await slots.locator('option').evaluateAll((options,{kind,level})=>options.find(o=>!o.disabled&&o.value.startsWith(kind+'|'+level+'|'))?.value,{kind,level});expect(value).toBeTruthy();await slots.selectOption(value);
     if(spellId===journey.spellId){
       const sourceId=decodeURIComponent(value.split('|')[3]);const option=await page.evaluate(({kind,level,sourceId})=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().slotOptions.find(option=>option.kind===kind&&option.level===level&&option.castingSourceId===sourceId),{kind,level,sourceId});
-      const ability=journey.caster==='wizard'?'int':['cleric','druid'].includes(journey.caster)?'wis':'cha';const modifier={int:4,wis:3,cha:2}[ability];const total=journey.classes.reduce((sum,[,level])=>sum+level,0);
+      const ability=['wizard','artificer'].includes(journey.caster)?'int':['cleric','druid','ranger'].includes(journey.caster)?'wis':'cha';const modifier={int:4,wis:3,cha:2}[ability];const total=journey.classes.reduce((sum,[,level])=>sum+level,0);
       expect(option.castingSourceName.toLowerCase()).toContain(journey.caster);expect(option.spellcastingAbility).toBe(ability);expect(option.spellSaveDc).toBe(8+Math.ceil(total/4)+1+modifier);
     }
     if(await page.locator('#confirmSpellCastButton').isDisabled()){const caster=await page.locator('.hg-token[data-token-id="journey-caster"]').boundingBox();await page.mouse.click(caster.x+caster.width/2,caster.y+caster.height/2);}
@@ -410,7 +412,7 @@ for (const journey of SPELLCASTER_JOURNEYS) test('spellcaster journey: '+journey
   await cast('cantrip',0,true,cantripId);expect((await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1'] || 0).toBe(0);
   await cast('normal',1,false);expect((await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1'] || 0).toBe(0);
   await cast('normal',1);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1']).toBe(1);
-  await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).combat.concentration?.spellId).toBe(journey.spellId);
+  await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).combat.concentration?.spellId).toBe(journey.concentrationSpellId || journey.spellId);
   if(journey.pact){
     await cast('pact',2);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.pact).toBe(1);
     await cast('pact',2);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.pact).toBe(2);
