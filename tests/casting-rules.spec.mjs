@@ -4,7 +4,7 @@ async function openCastingFixture(page) {
   await page.goto("?smokeTest=1&release=casting-rules-20261103", {
     waitUntil: "domcontentloaded"
   });
-  await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
+  await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", {timeout:30000});
   await page.evaluate(async () => {
     await window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle");
     const layer = document.getElementById("tokenLayer");
@@ -167,4 +167,14 @@ test("a locked area point stays attached to map coordinates after zoom and pan",
     return { x: state.target.geometry.anchor.x / rect.width, y: state.target.geometry.anchor.y / rect.height, radius: state.target.geometry.sizeFeet };
   });
   expect(after.x).toBeCloseTo(before.x, 3); expect(after.y).toBeCloseTo(before.y, 3); expect(after.radius).toBe(20);
+});
+
+
+test("custom spell upcasting updates the displayed dice and confirmed resolution",async({page})=>{
+  await openCastingFixture(page);await addCastingTarget(page);
+  await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spell:{id:'scaled-ray',name:'Scaled ray',level:1,known:true,castingTime:'1 action',range:'60 feet',damage:[{dice:'1d6',type:'fire'},{dice:'1d4',type:'cold'}],scaling:{atSlotLevel:{1:'1d6',3:'3d6'}}},slotOptions:[{kind:'normal',level:1,remaining:1},{kind:'normal',level:3,remaining:1}]}));
+  const slots=page.locator('#spellCastingSlotSelect');const value=await slots.locator('option').evaluateAll(options=>options.find(option=>option.value.startsWith('normal|3|'))?.value);expect(value).toBeTruthy();await slots.selectOption(value);
+  await expect(page.locator('#spellCastingResolution')).toContainText('3d6 fire');await expect(page.locator('#spellCastingResolution')).toContainText('1d4 cold');
+  await lockCastingTarget(page);await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
+  expect(await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution.damage)).toEqual(['3d6 fire','1d4 cold']);
 });

@@ -7860,6 +7860,7 @@ async function beginCharacterSpellTargeting({
       });
     return {
       ...option,
+      spellcastingModifier: sourceStats.spellcastingModifier,
       spellSaveDc: sourceStats.spellSaveDc,
       spellAttackBonus: sourceStats.spellAttackBonus
     };
@@ -8031,6 +8032,7 @@ async function beginCharacterSpellTargeting({
     characterLevel: Number.isFinite(Number(casterLevel))
       ? Math.max(1, Math.round(Number(casterLevel)))
       : getCharacterLevel(character),
+    spellcastingModifier: defaultSpellcastingStats.spellcastingModifier,
     spellSaveDc: defaultSpellcastingStats.spellSaveDc,
     spellAttackBonus: defaultSpellcastingStats.spellAttackBonus
   });

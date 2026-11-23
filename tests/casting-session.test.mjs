@@ -558,3 +558,26 @@ test("falling unconscious or gaining an incapacitating condition ends concentrat
   assert.equal(condition.concentrationEnded, true);
   assert.match(condition.message, /Concentration on Haste ended/i);
 });
+
+
+test("healing previews use the selected class modifier and keep it through confirmation",async()=>{
+  const session=createSpellCastingSession({onConfirm:()=>true});
+  session.begin({spell:getDefaultSpellById('cure-wounds'),slotOptions:[{kind:'normal',level:2,remaining:1,castingSourceId:'bard',spellcastingModifier:2},{kind:'normal',level:2,remaining:1,castingSourceId:'cleric',spellcastingModifier:4}]});
+  assert.deepEqual(session.preview({kind:'normal',level:2,castingSourceId:'bard'}).healing,['2d8 + 2']);
+  assert.deepEqual(session.preview({kind:'normal',level:2,castingSourceId:'cleric'}).healing,['2d8 + 4']);
+  session.updateTarget({locked:true,validRange:true,affectedTokens:[{id:'ally'}]});
+  const result=await session.confirm({kind:'normal',level:2,castingSourceId:'cleric'});
+  assert.deepEqual(result.resolution.healing,['2d8 + 4']);
+});
+
+test("custom spell scaling overrides base dice without scaling secondary damage twice",()=>{
+  const spell={id:'custom-ray',level:1,damage:[{dice:'1d6',damageType:'fire'},{dice:'1d4',damageType:'cold'}],scaling:{atSlotLevel:{1:'1d6',3:'3d6'}}};
+  assert.deepEqual(createCastResolution({spell,slotLevel:3}).damage,['3d6 fire','1d4 cold']);
+});
+
+
+test("healing modifier resolution keeps zero and negative bonuses distinct from an unknown bonus",()=>{
+  const spell=getDefaultSpellById('healing-word');
+  for(const [modifier,expected] of [[0,'1d4 + 0'],[-2,'1d4 - 2'],[null,'1d4 + MOD']])assert.deepEqual(createCastResolution({spell,slotLevel:1,spellcastingModifier:modifier}).healing,[expected]);
+  assert.deepEqual(createCastResolution({spell:{id:'custom-cantrip',level:0,damage:[{dice:'1d10',type:'fire'}],scaling:{atCharacterLevel:{1:'1d10',17:'4d10'}}},characterLevel:20}).damage,['4d10 fire']);
+});
