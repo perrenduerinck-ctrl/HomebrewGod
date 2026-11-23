@@ -1504,7 +1504,7 @@ export function createClassStep(dependencies = {}) {
     }
 
     if (!isMulticlassDraft(character)) {
-      return true;
+      return getClassProgressionPendingChoiceWarnings(character).length === 0;
     }
 
     const entries = getCharacterClassEntries(character);
@@ -1538,7 +1538,7 @@ export function createClassStep(dependencies = {}) {
             })
         : [];
 
-    const pendingChoices = isMulticlassDraft(character) ? getClassProgressionPendingChoiceWarnings(character) : [];
+    const pendingChoices = getClassProgressionPendingChoiceWarnings(character);
     return {
       valid: complete,
       blockingErrors: complete ? [] : pendingChoices.length ? pendingChoices : ["Choose a class and confirm levels that add up to the total character level."],
