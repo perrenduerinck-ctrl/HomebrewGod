@@ -345,3 +345,89 @@ test("player and DM confirm real spells, synchronize resources and concentration
     expect((await record(player, [...room, "combatTurns", "hero-token"])).revision).toBe(beforeInvalidTargets.revision);
   } finally { await dmContext.close(); await playerContext.close(); }
 });
+
+
+async function savedJourneyCharacters(page,roomCode) {
+  return page.evaluate(async({base,roomCode})=>{const {getFirestore,collection,getDocs}=await import(base+'firebase-firestore.js');return (await getDocs(collection(getFirestore(),'rooms',roomCode,'characters'))).docs.map(doc=>({id:doc.id,...doc.data()}));},{base:firebase,roomCode});
+}
+async function openJourneySheet(page,id) {
+  await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen('characterCreator'));
+  const library=page.locator('[data-cc-action="library"]').first();if(await library.isVisible())await library.click();
+  await page.locator('[data-cc-action="open-character-sheet-from-library"][data-character-id="'+id+'"]').click();
+  await expect(page.locator('.hg-character-sheet-header')).toBeVisible();
+}
+
+const SPELLCASTER_JOURNEYS = [
+  {name:'Sorcerer 3 / Warlock 3',classes:[['sorcerer',3],['warlock',3]],caster:'warlock',spellId:'expeditious-retreat',spellName:'Expeditious Retreat',mode:'known',pact:true,secondSlots:2},
+  {name:'Bard 3 / Cleric 3',classes:[['bard',3],['cleric',3]],caster:'cleric',spellId:'detect-magic',spellName:'Detect Magic',mode:'prepared',secondSlots:3},
+  {name:'Paladin 19 / Druid 1',classes:[['paladin',19],['druid',1]],caster:'druid',spellId:'detect-magic',upcast:5,spellName:'Detect Magic',mode:'prepared',secondSlots:3},
+  {name:'Wizard 3 / Cleric 1',classes:[['wizard',3],['cleric',1]],caster:'wizard',spellId:'detect-magic',spellName:'Detect Magic',mode:'book',secondSlots:3},
+  {name:'Druid 3 / Cleric 1',classes:[['druid',3],['cleric',1]],caster:'druid',spellId:'detect-magic',spellName:'Detect Magic',mode:'prepared',secondSlots:3},
+  {name:'Sorcerer 3',classes:[['sorcerer',3]],caster:'sorcerer',spellId:'expeditious-retreat',spellName:'Expeditious Retreat',mode:'known',secondSlots:2}
+];
+for (const journey of SPELLCASTER_JOURNEYS) test('spellcaster journey: '+journey.name+' creation, casting, reopening and rests',async({page})=>{
+  test.setTimeout(180000);page.setDefaultTimeout(15000);page.on('dialog',dialog=>dialog.accept());
+  await page.route('https://example.test/journey-map.svg',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="1600" height="1000" fill="#334455"/></svg>'}));
+  const uid=await signIn(page,'Journey Tester');await page.locator('#roomNameInput').fill('Spellcaster journey');await page.locator('#createRoomButton').click();
+  await expect(page.locator('#roomCodeText')).toHaveText(/^[A-Z0-9]+-[A-Z0-9]+$/);const roomCode=(await page.locator('#roomCodeText').textContent()).trim();
+  await page.evaluate(async({base,roomCode})=>{const {getFirestore,doc,updateDoc}=await import(base+'firebase-firestore.js');await updateDoc(doc(getFirestore(),'rooms',roomCode),{currentMap:{id:'journey-map',name:'Journey map',url:'https://example.test/journey-map.svg'}});},{base:firebase,roomCode});
+  await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen('characterCreator'));
+  const name='Journey '+journey.name;
+  await page.locator('[data-cc-action="new-character"]').first().click();await page.locator('#ccCharacterName').fill(name);
+  await page.locator('.hg-character-step-button[data-step-id="class"]').click();await page.locator('#ccClassBuildTotalLevel').fill(String(journey.classes.reduce((sum,[,level])=>sum+level,0)));await page.locator('#ccClassBuildTotalLevel').blur();
+  if(journey.classes.length>1)await page.locator('[data-build-mode="multiclass"]').click();
+  for(const [id] of journey.classes)await page.locator('[data-cc-action="toggle-class-build-class"][data-class-id="'+id+'"]').click();
+  if(journey.classes.length>1)for(let i=1;i<journey.classes[1][1];i++)await page.locator('[data-cc-action="adjust-class-build-level"][data-class-id="'+journey.classes[1][0]+'"][data-level-delta="1"]').click();
+  await page.locator('[data-cc-action="confirm-class-build"]').click();
+  await page.locator('.hg-character-step-button[data-step-id="abilities"]').click();await page.locator('#ccAbilityMethod').selectOption('manual');
+  for(const [ability,score] of [['int',18],['wis',16],['cha',14]]){await page.locator('#ccAbility-'+ability).fill(String(score));await page.locator('#ccAbility-'+ability).blur();}
+  await page.locator('.hg-character-step-button[data-step-id="spells"]').click();await page.locator('#ccDefaultSpellSearch').fill(journey.spellName);
+  const card=page.locator('article[data-spell-id="'+journey.spellId+'"]');await expect(card).toBeVisible();const source=card.locator('[data-cc-spell-source-select]');
+  if(await source.count()){const value=await source.locator('option').evaluateAll((options,caster)=>options.find(option=>option.textContent.toLowerCase().startsWith(caster+' '))?.value,journey.caster);expect(value).toBeTruthy();await source.selectOption(value);}
+  if(journey.mode!=='prepared')await card.locator('[data-cc-action="toggle-spell-known"]').click();
+  if(journey.mode!=='known')await card.locator('[data-cc-action="toggle-spell-prepared"]').click();
+  const cantripId=journey.classes.some(([id])=>['bard','sorcerer','warlock','wizard'].includes(id)) ? 'blade-ward' : 'guidance';
+  await page.locator('#ccDefaultSpellSearch').fill(cantripId==='blade-ward' ? 'Blade Ward' : 'Guidance');
+  const cantrip=page.locator('article[data-spell-id="'+cantripId+'"]');await expect(cantrip).toBeVisible();
+  await cantrip.locator('[data-cc-action="toggle-spell-known"]').click();
+  await page.locator('[data-cc-action="save-character"]').first().click();
+  await expect.poll(async()=>(await savedJourneyCharacters(page,roomCode)).filter(c=>c.identity?.name===name).length).toBe(1);
+  let hero=(await savedJourneyCharacters(page,roomCode)).find(c=>c.identity?.name===name);const id=hero.id;
+  expect(hero.classProgression.classes.map(c=>c.level)).toEqual(journey.classes.map(([,level])=>level));expect(hero.magic.slots['1']).toBe(4);expect(hero.magic.slots['2']).toBe(journey.secondSlots);
+  await record(page,['rooms',roomCode,'tokens','journey-caster'],{id:'journey-caster',name,ownerUid:uid,linkedCharacterId:id,type:'player',sourceType:'character',visibility:'shared',mapMode:'single',x:50,y:50,currentHp:20,maxHp:20,movementSpeed:30});
+  const cast=async(kind,level,confirm=true,spellId=journey.spellId)=>{
+    await openJourneySheet(page,id);await page.locator('[data-character-sheet-tab="spells"]').click();
+    await page.locator('[data-sheet-spell-id="'+spellId+'"] [data-character-sheet-action="target-spell"]').click();
+    const slots=page.locator('#spellCastingSlotSelect');await expect(slots).toBeVisible();const value=await slots.locator('option').evaluateAll((options,{kind,level})=>options.find(o=>!o.disabled&&o.value.startsWith(kind+'|'+level+'|'))?.value,{kind,level});expect(value).toBeTruthy();await slots.selectOption(value);
+    if(spellId===journey.spellId){
+      const sourceId=decodeURIComponent(value.split('|')[3]);const option=await page.evaluate(({kind,level,sourceId})=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().slotOptions.find(option=>option.kind===kind&&option.level===level&&option.castingSourceId===sourceId),{kind,level,sourceId});
+      const ability=journey.caster==='wizard'?'int':['cleric','druid'].includes(journey.caster)?'wis':'cha';const modifier={int:4,wis:3,cha:2}[ability];const total=journey.classes.reduce((sum,[,level])=>sum+level,0);
+      expect(option.castingSourceName.toLowerCase()).toContain(journey.caster);expect(option.spellcastingAbility).toBe(ability);expect(option.spellSaveDc).toBe(8+Math.ceil(total/4)+1+modifier);
+    }
+    if(await page.locator('#confirmSpellCastButton').isDisabled()){const caster=await page.locator('.hg-token[data-token-id="journey-caster"]').boundingBox();await page.mouse.click(caster.x+caster.width/2,caster.y+caster.height/2);}
+    await expect(page.locator('#confirmSpellCastButton')).toBeEnabled();if(confirm){await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');}await page.locator('#cancelSpellCastButton').click();
+  };
+  await cast('cantrip',0,true,cantripId);expect((await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1'] || 0).toBe(0);
+  await cast('normal',1,false);expect((await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1'] || 0).toBe(0);
+  await cast('normal',1);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1']).toBe(1);
+  await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).combat.concentration?.spellId).toBe(journey.spellId);
+  if(journey.pact){
+    await cast('pact',2);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.pact).toBe(1);
+    await cast('pact',2);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.pact).toBe(2);
+    await openJourneySheet(page,id);await page.locator('[data-character-sheet-tab="spells"]').click();await page.locator('[data-sheet-spell-id="'+journey.spellId+'"] [data-character-sheet-action="target-spell"]').click();
+    await expect.poll(async()=>page.locator('#spellCastingSlotSelect option').evaluateAll(options=>options.filter(option=>!option.disabled&&option.value.startsWith('pact|')).length)).toBe(0);
+    await page.locator('#cancelSpellCastButton').click();
+  }
+  for(let used=2;used<=4;used++){await cast('normal',1);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1']).toBe(used);}
+  await openJourneySheet(page,id);await page.locator('[data-character-sheet-tab="spells"]').click();await page.locator('[data-sheet-spell-id="'+journey.spellId+'"] [data-character-sheet-action="target-spell"]').click();
+  await expect.poll(async()=>page.locator('#spellCastingSlotSelect option').evaluateAll(options=>options.filter(option=>!option.disabled&&option.value.startsWith('normal|1|')).length)).toBe(0);await page.locator('#cancelSpellCastButton').click();
+  if(journey.upcast){await cast('normal',journey.upcast);await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal[String(journey.upcast)]).toBe(1);}
+  await page.reload();await expect(page.locator('#homebrewGodSmokeResult')).toContainText('SMOKE TEST PASS',{timeout:60000});
+  await expect(page.locator('.hg-token[data-token-id="journey-caster"]')).toBeVisible();
+  await openJourneySheet(page,id);await page.locator('[data-character-sheet-action="short-rest"]').click();
+  if(journey.pact)await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.pact).toBe(0);
+  hero=await record(page,['rooms',roomCode,'characters',id]);expect(hero.magic.slotUsage.normal['1']).toBe(4);if(journey.upcast)expect(hero.magic.slotUsage.normal[String(journey.upcast)]).toBe(1);
+  await page.locator('[data-character-sheet-action="long-rest"]').click();await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal['1']).toBe(0);
+  if(journey.upcast)await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).magic.slotUsage.normal[String(journey.upcast)]).toBe(0);
+  await expect.poll(async()=>(await record(page,['rooms',roomCode,'characters',id])).combat.concentration ?? null).toBeNull();
+});
