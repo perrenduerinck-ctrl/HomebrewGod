@@ -479,6 +479,8 @@ test('spell effects: healing follows the selected Bard or Cleric after upcasting
   expect(await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution.healing)).toEqual(['2d8 + 4']);await page.locator('#cancelSpellCastButton').click();
   // Apply an adjudicated healing roll through the sheet and verify the linked map token stays in sync.
   await openJourneySheet(page,saved.id);await page.locator('[data-character-sheet-tab="actions"]').click();
+  await page.locator('[data-character-sheet-input="hp-amount"]').fill('20');await page.locator('[data-character-sheet-action="set-current-hp"]').click();
+  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat.currentHp).toBe(20);
   const beforeHealing=(await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat;
   expect(beforeHealing.currentHp).toBeGreaterThan(6);
   await page.locator('[data-character-sheet-input="hp-amount"]').fill('6');await page.locator('[data-character-sheet-action="damage"]').click();
@@ -487,6 +489,7 @@ test('spell effects: healing follows the selected Bard or Cleric after upcasting
   const healedHp=Math.min(beforeHealing.maxHp,beforeHealing.currentHp+2);
   await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat.currentHp).toBe(healedHp);
   await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'tokens','effect-caster'])).currentHp).toBe(healedHp);
+  await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen('battle'));
   await page.reload();await expect(page.locator('.hg-token[data-token-id="effect-caster"]')).toBeVisible({timeout:60000});
   expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat.currentHp).toBe(healedHp);
   await startEffectCast(page,saved,'cure-wounds',{caster:'bard',level:1});await expect(page.locator('#spellCastingResolution')).toContainText('1d8 + 2');await page.locator('#cancelSpellCastButton').click();
