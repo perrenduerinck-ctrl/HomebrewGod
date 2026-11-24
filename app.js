@@ -6348,6 +6348,7 @@ function renderSpellProjectileTargets(sessionState, preview) {
     select.value = projectile.targetId;
     select.addEventListener("change", () => {
       activeSpellCastingSession?.setProjectileTargets(Array.from(container.querySelectorAll("select"), (input) => input.value));
+      battleMapTemplates?.refresh();
       renderSpellCastingPanel();
     });
     label.append(select); container.append(label);
@@ -6472,7 +6473,7 @@ function renderSpellCastingPanel() {
   ) {
     text(
       E.spellCastingInstructions,
-      `${sessionState.instruction.manualResolution || ""} Target locked${
+      castPreview?.projectileProfile ? "Targets allocated. Review each projectile and slot, then confirm the cast." : `${sessionState.instruction.manualResolution || ""} Target locked${
         Number.isFinite(
           sessionState.target?.distanceFeet
         )
@@ -6634,6 +6635,18 @@ function syncActiveSpellCastingTarget(
     selectedPoint: geometry?.pointer || null,
     geometry
   });
+  // Projectile choices own their targets after allocation; the initial map point may no longer contain a selected creature.
+  const projectilePreview = activeSpellCastingSession.preview(decodeSpellSlotOption(E.spellCastingSlotSelect?.value));
+  if (projectilePreview?.projectileProfile && geometry && templateState.phase === "confirmed") {
+    const validProjectiles = Boolean(currentCasterPoint) && projectilePreview.projectiles.every((entry) => entry.valid);
+    activeSpellCastingSession.updateTarget({
+      ...activeSpellCastingSession.getState().target,
+      locked: validProjectiles,
+      validRange: validProjectiles,
+      validTarget: validProjectiles,
+      invalidReason: validProjectiles ? "" : "Choose an available creature in range for every projectile."
+    });
+  }
   renderSpellCastingPanel();
 }
 

@@ -211,3 +211,13 @@ test('projectile targeting: high-level casts fit the panel on desktop and mobile
  await expect(page.locator('#spellProjectileTargets select')).toHaveCount(11);
  for(const width of [1280,390]){await page.setViewportSize({width,height:900});const sizes=await page.locator('#spellProjectileTargets').evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth}));expect(sizes.scroll).toBeLessThanOrEqual(sizes.width+1);}
 });
+
+
+test('projectile targeting: an unassigned original target can disappear without blocking valid allocations',async({page})=>{
+ await openCastingFixture(page);await addCastingTarget(page);
+ await page.evaluate(()=>{const t=document.querySelector('[data-token-id="moving-target"]').cloneNode(true);t.dataset.tokenId='second-target';t.dataset.tokenName='Second target';t.style.left='450px';document.getElementById('tokenLayer').append(t);});
+ await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId:'magic-missile'}));await lockCastingTarget(page);
+ for(let i=0;i<3;i++)await page.locator('#spellProjectileTargets select').nth(i).selectOption('second-target');
+ await page.locator('[data-token-id="moving-target"]').evaluate(t=>t.remove());await page.locator('#confirmSpellCastButton').click();
+ await expect(page.locator('body')).toHaveAttribute('data-test-cast-confirmed','1');const resolution=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution);expect(resolution.affectedTokens.map(t=>t.id)).toEqual(['second-target']);
+});
