@@ -6281,6 +6281,11 @@ function formatCastResolution(resolution, { preview = false } = {}) {
     );
   }
 
+  if (resolution.projectileProfile) {
+    parts.push(resolution.projectiles.map((entry) => `${entry.label} ${entry.index + 1} → ${entry.targetName}: ${entry.damage}`).join("; ") || `${resolution.projectileProfile.count} projectiles, ${resolution.projectileProfile.damage} each`);
+    if (resolution.projectileProfile.separateAttacks) parts.push("Roll a separate attack for each projectile");
+  }
+
   if (resolution.healing?.length) {
     parts.push(
       `Healing: ${resolution.healing.join(" + ")}`
@@ -6305,6 +6310,48 @@ function formatCastResolution(resolution, { preview = false } = {}) {
     : preview
       ? "Ready to cast; no automatic roll or damage is configured."
       : "Cast confirmed. Resolve any remaining spell text at the table.";
+}
+
+function collectSpellProjectileCandidates(sessionState) {
+  const caster = E.tokenLayer?.querySelector(`.hg-token[data-token-id="${CSS.escape(String(sessionState.casterToken?.id || ""))}"]`);
+  const origin = getCastingCasterPoint(caster);
+  if (!origin) return [];
+  return collectBattleMapTokenFootprints().filter(({element, footprint}) => {
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || !element.getClientRects().length || footprint.width <= 0 || footprint.height <= 0) return false;
+    const horizontal = Math.hypot(footprint.left + footprint.width / 2 - origin.x, footprint.top + footprint.height / 2 - origin.y) / getBattleMapGridPixelSize() * getRulerFeetPerSquare();
+    return Math.hypot(horizontal, footprint.elevation - normalizeElevation(caster.dataset.tokenElevation)) <= sessionState.instruction.rangeFeet + 0.001;
+  }).map(({footprint}) => ({...footprint, center: {x: footprint.left + footprint.width / 2, y: footprint.top + footprint.height / 2}}));
+}
+
+function renderSpellProjectileTargets(sessionState, preview) {
+  const container = document.getElementById("spellProjectileTargets");
+  if (!container) return;
+  container.classList.toggle("hidden", !preview?.projectileProfile);
+  if (!preview?.projectileProfile) { container.replaceChildren(); delete container.dataset.signature; return; }
+  const candidates = sessionState.target?.availableTokens || [];
+  const signature = JSON.stringify([preview.projectiles, candidates, sessionState.phase]);
+  if (container.dataset.signature === signature) return;
+  container.dataset.signature = signature;
+  container.replaceChildren();
+  const note = document.createElement("p");
+  note.textContent = `Assign ${preview.projectileProfile.count} ${preview.projectileProfile.label.toLowerCase()}${preview.projectileProfile.count === 1 ? "" : "s"}. Multiple projectiles may hit the same creature.`;
+  container.append(note);
+  for (const projectile of preview.projectiles) {
+    const label = document.createElement("label");
+    label.textContent = `${projectile.label} ${projectile.index + 1} · ${projectile.damage} `;
+    const select = document.createElement("select");
+    select.dataset.projectileIndex = String(projectile.index);
+    select.disabled = ["confirming", "confirmed"].includes(sessionState.phase);
+    if (!candidates.some((token) => token.id === projectile.targetId)) select.add(new Option(projectile.targetId ? "Target unavailable — choose again" : "Lock a creature on the map first", projectile.targetId));
+    for (const token of candidates) select.add(new Option(token.name, token.id));
+    select.value = projectile.targetId;
+    select.addEventListener("change", () => {
+      activeSpellCastingSession?.setProjectileTargets(Array.from(container.querySelectorAll("select"), (input) => input.value));
+      renderSpellCastingPanel();
+    });
+    label.append(select); container.append(label);
+  }
 }
 
 function renderSpellCastingPanel() {
@@ -6395,8 +6442,10 @@ function renderSpellCastingPanel() {
     }
   }
 
+  const castPreview = sessionState.resolution || activeSpellCastingSession?.preview?.(decodeSpellSlotOption(E.spellCastingSlotSelect?.value));
+  renderSpellProjectileTargets(sessionState, castPreview);
   const affectedTokens =
-    sessionState.target?.affectedTokens || [];
+    castPreview?.projectileProfile ? castPreview.affectedTokens : sessionState.target?.affectedTokens || [];
   text(
     E.spellCastingAffected,
     formatAffectedTokenStatus(
@@ -6454,7 +6503,7 @@ function renderSpellCastingPanel() {
 
   if (E.confirmSpellCastButton) {
     E.confirmSpellCastButton.disabled =
-      !sessionState.canConfirm ||
+      !sessionState.canConfirm || castPreview?.projectiles?.some((entry) => !entry.valid) ||
       sessionState.phase === "confirming";
     E.confirmSpellCastButton.textContent =
       sessionState.phase === "confirmed"
@@ -6581,6 +6630,7 @@ function syncActiveSpellCastingTarget(
     endElevationFeet:
       targetElevationFeet,
     affectedTokens,
+    availableTokens: collectSpellProjectileCandidates(sessionState),
     selectedPoint: geometry?.pointer || null,
     geometry
   });
@@ -8029,7 +8079,7 @@ async function beginCharacterSpellTargeting({
       },
     slotOptions: availableSlotOptions,
     sourceFeedback: skipCastEligibility ? [] : getCharacterSpellcastingSourceOptions(character, spell, { includeUnavailable: true }).filter((source) => !source.normal),
-    characterLevel: Number.isFinite(Number(casterLevel))
+    characterLevel: casterLevel !== null && casterLevel !== undefined && String(casterLevel).trim() !== "" && Number.isFinite(Number(casterLevel))
       ? Math.max(1, Math.round(Number(casterLevel)))
       : getCharacterLevel(character),
     spellcastingModifier: defaultSpellcastingStats.spellcastingModifier,
@@ -13881,7 +13931,8 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             "release-test-character",
           characterName =
             "Release Test Wizard",
-          slotOptions = null
+          slotOptions = null,
+          characterLevel = 1
         } = {}) {
           const { getDefaultSpellById } =
             await import(
@@ -13900,6 +13951,7 @@ if (window.__HOMEBREW_GOD_SMOKE__) {
             characterId,
             character: {
               id: characterId,
+              level: characterLevel,
               identity: {
                 name: characterName
               },

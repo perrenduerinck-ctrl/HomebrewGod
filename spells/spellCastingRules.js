@@ -87,6 +87,10 @@ export function getSpellCastEligibility(spell = {}) {
   const statuses = normalizedStatusSet(spell);
   const override = spell.manualOverride === true;
 
+  if (spell.requiresSpellDefinition === true) {
+    return Object.freeze({ eligible: false, reason: "This granted spell needs a complete spell definition before casting. Add its casting time, range, and effects in the spell editor.", override, ritualOnly: false });
+  }
+
   if (level === 0) {
     return Object.freeze({ eligible: true, reason: "", override, ritualOnly: false });
   }

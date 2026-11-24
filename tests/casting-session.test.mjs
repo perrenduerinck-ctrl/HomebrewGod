@@ -581,3 +581,30 @@ test("healing modifier resolution keeps zero and negative bonuses distinct from 
   for(const [modifier,expected] of [[0,'1d4 + 0'],[-2,'1d4 - 2'],[null,'1d4 + MOD']])assert.deepEqual(createCastResolution({spell,slotLevel:1,spellcastingModifier:modifier}).healing,[expected]);
   assert.deepEqual(createCastResolution({spell:{id:'custom-cantrip',level:0,damage:[{dice:'1d10',type:'fire'}],scaling:{atCharacterLevel:{1:'1d10',17:'4d10'}}},characterLevel:20}).damage,['4d10 fire']);
 });
+
+
+test("projectile spells retain individual targets and spend once for the whole cast",async()=>{
+ for(const [id,level,characterLevel,count,damage] of [["magic-missile",3,5,5,"1d4 + 1 force"],["eldritch-blast",0,17,4,"1d10 force"],["scorching-ray",4,7,5,"2d6 fire"]]){
+  let spends=0;let savedTarget;const session=createSpellCastingSession({onConfirm:({target})=>{spends++;savedTarget=target;return true;}});
+  session.begin({spell:getDefaultSpellById(id),characterLevel,slotOptions:[{kind:level?'normal':'cantrip',level,remaining:1}]});
+  const tokens=[{id:'a',name:'First'},{id:'b',name:'Second'}];session.updateTarget({locked:true,affectedTokens:[tokens[0]],availableTokens:tokens});
+  session.setProjectileTargets(Array.from({length:count},(_,i)=>i%2?'b':'a'));
+  const preview=session.preview({level});assert.equal(preview.projectiles.length,count);assert.ok(preview.projectiles.every(p=>p.damage===damage));assert.equal(spends,0);
+  const result=await session.confirm({level});assert.equal(result.ok,true);assert.equal(spends,1);assert.equal(savedTarget.projectiles.length,count);assert.deepEqual(result.resolution.affectedTokens.map(t=>t.id),['a','b']);
+  assert.equal((await session.confirm({level})).ok,false);assert.equal(spends,1);
+ }
+});
+
+test("removed secondary projectile targets block the entire cast without spending",async()=>{
+ let spends=0;const session=createSpellCastingSession({onConfirm:()=>{spends++;return true;}});
+ session.begin({spell:getDefaultSpellById('magic-missile'),slotOptions:[{kind:'normal',level:1,remaining:1},{kind:'normal',level:3,remaining:1}]});
+ session.updateTarget({locked:true,affectedTokens:[{id:'a'}],availableTokens:[{id:'a'},{id:'b'}]});
+ session.setProjectileTargets(['a','b','a']);assert.equal(session.preview({level:3}).projectiles.length,5);
+ session.updateTarget({locked:true,affectedTokens:[{id:'a'}],availableTokens:[{id:'a'}]});
+ assert.equal((await session.confirm({level:1})).ok,false);assert.equal(spends,0);
+ session.setProjectileTargets(['a','a','a']);assert.equal((await session.confirm({level:1})).ok,true);assert.equal(spends,1);
+});
+
+test("Eldritch Blast beam counts follow total character level and preserve separate attacks",()=>{
+ for(const [level,count] of [[1,1],[4,1],[5,2],[10,2],[11,3],[16,3],[17,4],[20,4]]){const session=createSpellCastingSession();session.begin({spell:getDefaultSpellById('eldritch-blast'),characterLevel:level});session.updateTarget({locked:true,affectedTokens:[{id:'a'}]});const resolution=session.preview();assert.equal(resolution.projectiles.length,count);assert.equal(resolution.attack.type,'ranged');}
+});

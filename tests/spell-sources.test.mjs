@@ -1752,3 +1752,36 @@ test("spell origin explanations use fresh grants and discard replaced subclass g
   assert.match(origins.get("burning-hands")[0].label,/Light/);
   assert.equal(JSON.stringify({sources,classes}),before);
 });
+
+
+test("subclass reference metadata survives conversion and cannot become a free cantrip", async () => {
+  const {getSpellCastEligibility} = await import("../spells/spellCastingRules.js");
+  const {getCharacterSpellSlotOptions,applyConfirmedSpellCast} = await import("../combat/characterCombatCommands.js");
+  const c={magic:{classSources:{cleric:{classId:"cleric",classEntryId:"cleric",className:"Cleric",subclassId:"death",alwaysPreparedSpellIds:["ray-of-sickness"],subclassSpellRecords:[{id:"ray-of-sickness",name:"Ray of Sickness",level:1,inlineSubclassSpell:true,requiresSpellDefinition:true}]}}}};
+  synchronizeCanonicalSpellSources(c,{fromCompatibility:true,populateCompatibility:true});
+  const [record]=collectCharacterSpells(c);
+  assert.equal(record.level,1);
+  assert.equal(record.requiresSpellDefinition,true);
+  assert.equal(getSpellCastEligibility({...record,manualOverride:true}).eligible,false);
+  assert.deepEqual(getCharacterSpellSlotOptions(c,record),[]);
+  assert.throws(()=>applyConfirmedSpellCast(c,record,{kind:"cantrip"}),/complete spell definition/);
+  synchronizeCanonicalSpellSources(c,{fromCompatibility:true,populateCompatibility:true});
+  assert.equal(collectCharacterSpells(c)[0].level,1);
+});
+
+test("a complete custom definition replaces an inline subclass reference without losing its grant",()=>{
+ const fallback={id:"ray-of-sickness",name:"Ray of Sickness",level:1,requiresSpellDefinition:true};
+ const complete={id:"ray-of-sickness",name:"Ray of Sickness",level:1,castingTime:"1 action",range:"60 feet",damageDice:"2d8",damageType:"poison"};
+ for(const spellSources of [
+ [{sourceId:"grant",sourceType:"subclass",fixedSpellIds:[fallback.id],alwaysPrepared:true,spellRecords:[fallback]},{sourceId:"custom",sourceType:"custom",selectedSpellIds:[complete.id],spellRecords:[complete]}],
+ [{sourceId:"custom",sourceType:"custom",selectedSpellIds:[complete.id],spellRecords:[complete]},{sourceId:"grant",sourceType:"subclass",fixedSpellIds:[fallback.id],alwaysPrepared:true,spellRecords:[fallback]}]
+ ]){const [record]=collectCharacterSpells({magic:{spellSourceModelVersion:SPELL_SOURCE_MODEL_VERSION,spellSources}});assert.notEqual(record.requiresSpellDefinition,true);assert.equal(record.range,"60 feet");assert.equal(record.prepared,true);}
+});
+
+
+test("older saved grants recover reference levels and catalog aliases without editing the character",async()=>{
+ const {getCharacterSpellSlotOptions}=await import("../combat/characterCombatCommands.js");
+ const c={magic:{slots:{2:2},spellSourceModelVersion:SPELL_SOURCE_MODEL_VERSION,spellSources:[{sourceId:'arcana',sourceType:'subclass',classId:'cleric',fixedSpellIds:['magic-aura','ray-of-sickness'],alwaysPrepared:true,grantsPrepared:true,canUseSpellSlots:true}]}};
+ const records=collectCharacterSpells(c);const aura=records.find(s=>s.id==='arcanists-magic-aura');assert.equal(aura.level,2);assert.equal(getCharacterSpellSlotOptions(c,aura).length,1);
+ const ray=records.find(s=>s.id==='ray-of-sickness');assert.equal(ray.level,1);assert.equal(ray.requiresSpellDefinition,true);assert.deepEqual(getCharacterSpellSlotOptions(c,ray),[]);
+});

@@ -178,3 +178,36 @@ test("custom spell upcasting updates the displayed dice and confirmed resolution
   await lockCastingTarget(page);await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
   expect(await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution.damage)).toEqual(['3d6 fire','1d4 cold']);
 });
+
+
+for(const [spellId,characterLevel,count] of [['magic-missile',5,3],['eldritch-blast',17,4],['scorching-ray',5,3]]){
+ test('projectile targeting: '+spellId+' supports split targets and confirms one cast',async({page})=>{
+  await openCastingFixture(page);await addCastingTarget(page);
+  await page.evaluate(()=>{const t=document.querySelector('[data-token-id="moving-target"]').cloneNode(true);t.dataset.tokenId='second-target';t.dataset.tokenName='Second target';t.style.left='450px';document.getElementById('tokenLayer').append(t);});
+  await page.evaluate(({spellId,characterLevel})=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId,characterLevel,slotOptions:[{kind:spellId==='eldritch-blast'?'cantrip':'normal',level:spellId==='eldritch-blast'?0:spellId==='scorching-ray'?2:1,remaining:1}]}),{spellId,characterLevel});
+  await lockCastingTarget(page);
+  const choices=page.locator('#spellProjectileTargets select');await expect(choices).toHaveCount(count);
+  await choices.nth(1).selectOption('second-target');
+  await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
+  const resolution=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution);expect(resolution.projectiles).toHaveLength(count);expect(resolution.projectiles[1].targetId).toBe('second-target');expect(resolution.affectedTokens.map(t=>t.id).sort()).toEqual(['moving-target','second-target']);
+ });
+}
+
+test('projectile targeting: upcasting adds darts and a moved secondary target prevents spending',async({page})=>{
+ await openCastingFixture(page);await addCastingTarget(page);
+ await page.evaluate(()=>{const t=document.querySelector('[data-token-id="moving-target"]').cloneNode(true);t.dataset.tokenId='second-target';t.dataset.tokenName='Second target';t.style.left='450px';document.getElementById('tokenLayer').append(t);});
+ await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId:'magic-missile',slotOptions:[{kind:'normal',level:1,remaining:1},{kind:'normal',level:3,remaining:1}]}));
+ await lockCastingTarget(page);await page.locator('#spellProjectileTargets select').nth(1).selectOption('second-target');
+ const slot=await page.locator('#spellCastingSlotSelect option').evaluateAll(options=>options.find(o=>o.value.startsWith('normal|3|')).value);await page.locator('#spellCastingSlotSelect').selectOption(slot);
+ await expect(page.locator('#spellProjectileTargets select')).toHaveCount(5);await expect(page.locator('#spellProjectileTargets select').nth(1)).toHaveValue('second-target');
+ await page.locator('[data-token-id="second-target"]').evaluate(t=>{t.dataset.tokenElevation='1000';});
+ await page.locator('#confirmSpellCastButton').click();await expect(page.locator('body')).toHaveAttribute('data-test-cast-confirmed','0');await expect(page.locator('#confirmSpellCastButton')).toBeDisabled();
+ await page.locator('#spellProjectileTargets select').nth(1).selectOption('moving-target');await page.locator('#confirmSpellCastButton').click();await expect(page.locator('body')).toHaveAttribute('data-test-cast-confirmed','1');
+});
+
+
+test('projectile targeting: high-level casts fit the panel on desktop and mobile',async({page})=>{
+ await openCastingFixture(page);await addCastingTarget(page);await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId:'magic-missile',slotOptions:[{kind:'normal',level:9,remaining:1}]}));await lockCastingTarget(page);
+ await expect(page.locator('#spellProjectileTargets select')).toHaveCount(11);
+ for(const width of [1280,390]){await page.setViewportSize({width,height:900});const sizes=await page.locator('#spellProjectileTargets').evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth}));expect(sizes.scroll).toBeLessThanOrEqual(sizes.width+1);}
+});

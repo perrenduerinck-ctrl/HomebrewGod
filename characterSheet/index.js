@@ -32,6 +32,7 @@ import {
   createScopedDerivedCache
 } from "../characterCreator/derivedCache.js";
 import {
+  SPELL_REFERENCE_ALIASES, getInlineSubclassSpellReference,
   buildSpellLibraryFromSources,
   getCanonicalSpellSources,
   SPELL_SOURCE_MODEL_VERSION
@@ -4825,16 +4826,6 @@ const SPELL_FILTER_OPTIONS = Object.freeze([
   ["healing", "Healing"]
 ]);
 
-const SPELL_REFERENCE_ALIASES = Object.freeze({
-  "melfs-acid-arrow": "acid-arrow",
-  "melf-s-acid-arrow": "acid-arrow",
-  "leomunds-secret-chest": "secret-chest",
-  "mordenkainens-faithful-hound": "faithful-hound",
-  "mordenkainens-private-sanctum": "private-sanctum",
-  "otilukes-resilient-sphere": "resilient-sphere",
-  "bigbys-hand": "arcane-hand"
-});
-
 function getSpellReferenceId(reference) {
   const rawId = normalizeKey(
     isRecord(reference)
@@ -4942,7 +4933,8 @@ function createSpellCollectionRecord(reference) {
     : {};
   const id = getSpellReferenceId(reference);
   const catalogSpell = getDefaultSpellById(id);
-  const spell = catalogSpell || referenceRecord;
+  const inlineReference = !catalogSpell && !cleanText(referenceRecord.castingTime) ? getInlineSubclassSpellReference(id) : null;
+  const spell = catalogSpell || (inlineReference ? {...inlineReference, ...referenceRecord, requiresSpellDefinition: true} : referenceRecord);
   const level = Math.max(
     0,
     Math.min(
@@ -5036,6 +5028,7 @@ function addSpellReference(
     const merged = createSpellCollectionRecord({
       ...spell,
       ...reference,
+      requiresSpellDefinition: reference.requiresSpellDefinition === true || (spell.requiresSpellDefinition === true && !cleanText(reference.castingTime)),
       statuses: undefined,
       sources: undefined
     });

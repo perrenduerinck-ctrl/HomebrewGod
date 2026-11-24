@@ -152,7 +152,7 @@ import {
   SRD_2014_FULL_CASTER_SLOTS,
   SRD_2014_PACT_MAGIC
 } from "./spellcasting.js";
-import { adjustCanonicalSpellResource, clearMagicalSecretsCompatibilitySources, getCanonicalSpellSources, getSpellSourceCompatibilityAliases, normalizeSpellSources, restoreCanonicalSpellResources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./spellSources.js?v=spell-system-20261120";
+import { SPELL_REFERENCE_ALIASES, adjustCanonicalSpellResource, clearMagicalSecretsCompatibilitySources, getCanonicalSpellSources, getSpellSourceCompatibilityAliases, normalizeSpellSources, restoreCanonicalSpellResources, SPELL_SOURCE_MODEL_VERSION, storeMagicalSecretsCompatibilitySource, synchronizeCanonicalSpellSources } from "./spellSources.js?v=spell-system-20261120";
 import {
   mergeSubclassFeatureLevels
 } from "./subclassMechanics.js";
@@ -33691,7 +33691,8 @@ export function createCharacterCreator(options = {}) {
               sourceLabel:
                 "Legacy 5e subclass spell reference",
               rulesEdition: "2014",
-              inlineSubclassSpell: true
+              inlineSubclassSpell: true,
+              requiresSpellDefinition: true
             }
           : null
       ) ||
@@ -33725,16 +33726,7 @@ export function createCharacterCreator(options = {}) {
     );
   }
 
-  const SECTION16_SPELL_REFERENCE_ALIASES =
-    Object.freeze({
-      "melfs-acid-arrow": "acid-arrow",
-      "melf-s-acid-arrow": "acid-arrow",
-      "leomunds-secret-chest": "secret-chest",
-      "mordenkainens-faithful-hound": "faithful-hound",
-      "mordenkainens-private-sanctum": "private-sanctum",
-      "otilukes-resilient-sphere": "resilient-sphere",
-      "bigbys-hand": "arcane-hand"
-    });
+  const SECTION16_SPELL_REFERENCE_ALIASES = SPELL_REFERENCE_ALIASES;
 
   function getSection16SpellReferenceId(
     spellReference
@@ -33961,6 +33953,10 @@ export function createCharacterCreator(options = {}) {
         source[field]
       );
     });
+
+    source.subclassSpellRecords = getSection16ExpandedSpellGrants(entry)
+      .filter((grant) => grant.alwaysPrepared && grant.spell && !DEFAULT_SPELLS.some((spell) => spell.id === grant.spellId))
+      .map((grant) => grant.spell);
 
     source.alwaysPreparedSpellIds = [
       ...new Set(

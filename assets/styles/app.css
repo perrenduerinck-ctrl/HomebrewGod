@@ -3668,3 +3668,8 @@ a:hover {
   }
 }
 
+
+/* Keep projectile choices compact within the casting panel. */
+#spellProjectileTargets { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px 12px; min-width: 0; }
+#spellProjectileTargets > p { grid-column: 1 / -1; }
+#spellProjectileTargets label, #spellProjectileTargets select { min-width: 0; width: 100%; box-sizing: border-box; }

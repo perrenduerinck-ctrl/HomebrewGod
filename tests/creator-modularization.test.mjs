@@ -198,7 +198,7 @@ test("characterCreator/index.js remains the browser-facing coordinator", () => {
   );
   assert.match(
     index,
-    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=bard-cleric-choices-20261122"/
+    /"\.\/characterCreator\/index\.js": "\.\/characterCreator\/index\.js\?v=spell-targets-and-grants-20261124"/
   );
   const imports = JSON.parse(index.match(/<script type="importmap">([\s\S]*?)<\/script>/)[1]).imports;
   for (const [bare, legacy] of [
@@ -213,6 +213,6 @@ test("characterCreator/index.js remains the browser-facing coordinator", () => {
     ["./characterCreator/steps/finishStep.js", "./characterCreator/steps/finishStep.js?v=dm-preview-class-state-20260829"]
   ]) {
     assert.equal(imports[bare], imports[legacy], bare + " must load one coordinated release module");
-    assert.ok(imports[bare].endsWith(bare.endsWith("persistence.base.js") ? "?v=spell-effect-resolution-20261122" : bare.endsWith("spellsStep.js") ? "?v=compact-spell-sheet-20261121" : bare.endsWith("/classStep.js") ? "?v=creator-choice-audit-20261122" : bare.endsWith("multiclassStep.js") ? "?v=bard-cleric-choices-20261122" : "?v=spell-readiness-20261121"));
+    assert.ok(imports[bare].endsWith(bare.endsWith("spellSources.js") ? "?v=spell-targets-and-grants-20261124" : bare.endsWith("persistence.base.js") ? "?v=spell-effect-resolution-20261122" : bare.endsWith("spellsStep.js") ? "?v=compact-spell-sheet-20261121" : bare.endsWith("/classStep.js") ? "?v=creator-choice-audit-20261122" : bare.endsWith("multiclassStep.js") ? "?v=bard-cleric-choices-20261122" : "?v=spell-readiness-20261121"));
   }
 });

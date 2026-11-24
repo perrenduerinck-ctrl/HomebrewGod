@@ -1,3 +1,4 @@
+import { SUBCLASS_SPELL_CATALOG } from "../data/defaultSubclassCatalog.js";
 import { normalizeSpellbookAcquisitions } from "./spellbookProgression.js";
 // =====================================================
 // CANONICAL CHARACTER SPELL SOURCES
@@ -8,6 +9,20 @@ import {
   createDerivedSignature,
   createScopedDerivedCache
 } from "./derivedCache.js";
+
+export const SPELL_REFERENCE_ALIASES = Object.freeze({
+  "melfs-acid-arrow": "acid-arrow", "melf-s-acid-arrow": "acid-arrow",
+  "leomunds-secret-chest": "secret-chest", "mordenkainens-faithful-hound": "faithful-hound",
+  "mordenkainens-private-sanctum": "private-sanctum", "otilukes-resilient-sphere": "resilient-sphere",
+  "bigbys-hand": "arcane-hand", "magic-aura": "arcanists-magic-aura",
+  "tashas-hideous-laughter": "hideous-laughter", "evards-black-tentacles": "black-tentacles",
+  "rarys-telepathic-bond": "telepathic-bond"
+});
+const subclassSpellReferences = new Map(Object.values(SUBCLASS_SPELL_CATALOG).flatMap((levels) => Object.values(levels).flat()).map((entry) => [entry.id, entry]));
+export function getInlineSubclassSpellReference(id) {
+  const reference = subclassSpellReferences.get(id);
+  return reference ? {...reference, inlineSubclassSpell: true, requiresSpellDefinition: true} : null;
+}
 
 const spellSourceCache = createScopedDerivedCache({
   maximumEntriesPerScope: 96
@@ -120,13 +135,14 @@ function wholeNumber(value, fallback = 0) {
 }
 
 function spellReferenceId(reference) {
-  return cleanText(
+  const id = cleanText(
     isRecord(reference)
       ? reference.spellId ||
         reference.id ||
         reference.name
       : reference
   );
+  return SPELL_REFERENCE_ALIASES[id] || id;
 }
 
 function normalizeSpellRecords(records) {
@@ -160,7 +176,7 @@ function normalizeSpellStates(value) {
     Object.entries(value)
       .slice(0, SPELL_REFERENCE_LIMIT)
       .map(([spellId, state]) => {
-        const cleanId = cleanText(spellId);
+        const cleanId = spellReferenceId(spellId);
 
         if (!cleanId || !isRecord(state)) {
           return null;
@@ -342,12 +358,8 @@ export function normalizeSpellSource(
   const sourceType = normalizeSourceType(
     options.sourceType || raw.sourceType
   );
-  const selectedSpellIds = uniqueText(
-    raw.selectedSpellIds
-  );
-  const fixedSpellIds = uniqueText(
-    raw.fixedSpellIds
-  );
+  const selectedSpellIds = uniqueText(uniqueText(raw.selectedSpellIds).map(spellReferenceId));
+  const fixedSpellIds = uniqueText(uniqueText(raw.fixedSpellIds).map(spellReferenceId));
   const minimumSpellLevel =
     optionalWholeNumber(
       raw.minimumSpellLevel
@@ -1032,6 +1044,7 @@ export function collectLegacySpellSources(character) {
         subclassId: cleanText(source.subclassId),
         selectionMode: "fixed",
         fixedSpellIds: subclassSpellIds,
+        spellRecords: source.subclassSpellRecords,
         spellcastingAbility: cleanText(
           source.spellcastingAbility
         ),
@@ -2283,14 +2296,14 @@ export function buildSpellLibraryFromSources(sources) {
           spellRecords.get(spellId);
         const existing = records.get(spellId) || {
           spellId,
-          spell: sourceRecord || null,
+          spell: sourceRecord || (source.sourceType === "subclass" ? getInlineSubclassSpellReference(spellId) : null),
           sourceIds: [],
           sourceNames: [],
           sourceTypes: [],
           sources: []
         };
 
-        if (!existing.spell) {
+        if (!existing.spell || (existing.spell.requiresSpellDefinition === true && sourceRecord && sourceRecord.requiresSpellDefinition !== true)) {
           existing.spell =
             spellRecords.get(spellId) || null;
         }

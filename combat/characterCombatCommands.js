@@ -249,6 +249,7 @@ function attachCastingSources(character, spell, options) {
 }
 
 export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
+  if (spell.requiresSpellDefinition === true) return [];
   const level = count(spell.level, 0);
   if (level === 0) {
     return attachCastingSources(character, spell, [
@@ -311,6 +312,7 @@ export function getCharacterSpellSlotOptions(character = {}, spell = {}) {
 }
 
 export function applyConfirmedSpellCast(character = {}, spell = {}, selection = {}, { completingTrackedCast = false } = {}) {
+  if (spell.requiresSpellDefinition === true) throw new Error("This granted spell needs a complete spell definition before casting.");
   const next = clone(character);
   const blocked = getSpellcasterBlockReason(next);
   if (blocked) throw new Error(blocked);
