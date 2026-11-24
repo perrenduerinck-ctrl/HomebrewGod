@@ -477,7 +477,18 @@ test('spell effects: healing follows the selected Bard or Cleric after upcasting
   expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2'] || 0).toBe(0);
   await startEffectCast(page,saved,'cure-wounds');await expect(page.locator('#spellCastingResolution')).toContainText('2d8 + 4');await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
   expect(await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution.healing)).toEqual(['2d8 + 4']);await page.locator('#cancelSpellCastButton').click();
+  // Apply an adjudicated healing roll through the sheet and verify the linked map token stays in sync.
+  await openJourneySheet(page,saved.id);await page.locator('[data-character-sheet-tab="actions"]').click();
+  const beforeHealing=(await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat;
+  expect(beforeHealing.currentHp).toBeGreaterThan(6);
+  await page.locator('[data-character-sheet-input="hp-amount"]').fill('6');await page.locator('[data-character-sheet-action="damage"]').click();
+  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat.currentHp).toBe(beforeHealing.currentHp-6);
+  await page.locator('[data-character-sheet-input="hp-amount"]').fill('8');await page.locator('[data-character-sheet-action="heal"]').click();
+  const healedHp=Math.min(beforeHealing.maxHp,beforeHealing.currentHp+2);
+  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat.currentHp).toBe(healedHp);
+  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'tokens','effect-caster'])).currentHp).toBe(healedHp);
   await page.reload();await expect(page.locator('.hg-token[data-token-id="effect-caster"]')).toBeVisible({timeout:60000});
+  expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).combat.currentHp).toBe(healedHp);
   await startEffectCast(page,saved,'cure-wounds',{caster:'bard',level:1});await expect(page.locator('#spellCastingResolution')).toContainText('1d8 + 2');await page.locator('#cancelSpellCastButton').click();
   expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2']).toBe(1);
 });
@@ -503,4 +514,31 @@ test('spell effects: upcast Fireball uses its sphere, Wizard DC, and shared four
   const state=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState());expect(state.instruction.templateShape).toBe('sphere');expect(state.target.affectedTokens.map(t=>t.id)).toEqual(expect.arrayContaining(['near-one','near-two']));expect(state.target.affectedTokens.map(t=>t.id)).not.toContain('far-away');
   await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');const result=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution);expect(result.save).toMatchObject({ability:'dex',dc:15});expect(result.damage).toEqual(['9d6 fire']);
   await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['4']).toBe(1);
+});
+
+
+test('spell effects: split projectiles spend one slot and adjudicated target HP and conditions survive reload',async({page})=>{
+ test.setTimeout(180000);const context=await createEffectCaster(page,{primary:'wizard'});await chooseEffectSpell(page,'Magic Missile','wizard',{known:true,prepared:true});const saved=await saveEffectCaster(page,context,{area:true});
+ for(const [id,x,y] of [['dart-one',55,50],['dart-two',70,65]])await record(page,['rooms',saved.roomCode,'tokens',id],{id,name:id,ownerUid:saved.uid,type:'enemy',sourceType:'manual',visibility:'shared',mapMode:'single',x,y,currentHp:30,maxHp:30,movementSpeed:30});
+ await startEffectCast(page,saved,'magic-missile',{caster:'wizard',level:2,targetId:'dart-one'});
+ const choices=page.locator('#spellProjectileTargets select');await expect(choices).toHaveCount(4);await choices.nth(2).selectOption('dart-two');await choices.nth(3).selectOption('dart-two');
+ await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
+ const resolution=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution);expect(resolution.projectiles.map(p=>p.targetId)).toEqual(['dart-one','dart-one','dart-two','dart-two']);
+ await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2']).toBe(1);
+ await page.locator('#cancelSpellCastButton').click();
+ // Apply explicit DM-adjudicated totals through the real map controls; casting alone does not invent hit/save outcomes.
+ for(const [id,hp] of [['dart-one',24],['dart-two',22]]){
+  await page.locator('.hg-token[data-token-id="'+id+'"]').click({button:'right'});page.removeAllListeners('dialog');page.once('dialog',dialog=>dialog.accept(String(hp)));await page.getByRole('menuitem',{name:'Adjust HP',exact:true}).click();
+  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'tokens',id])).currentHp).toBe(hp);
+ }
+ await page.locator('.hg-token[data-token-id="dart-one"]').click({button:'right'});await page.getByRole('menuitem',{name:'Apply / Remove Condition',exact:true}).click();
+ await page.locator('[data-effect-field="definitionId"]').selectOption('poisoned');await page.locator('[data-effect-field="targetTokenId"]').selectOption('dart-one');await page.getByRole('button',{name:'Apply Effect',exact:true}).click();
+ await expect.poll(async()=>Object.values((await record(page,['rooms',saved.roomCode,'tokens','dart-one'])).effectConditions||{})).toContain('poisoned');
+ expect(Object.values((await record(page,['rooms',saved.roomCode,'tokens','dart-two'])).effectConditions||{})).not.toContain('poisoned');
+ await page.reload();await expect(page.locator('#homebrewGodSmokeResult')).toContainText('SMOKE TEST PASS',{timeout:60000});await expect(page.locator('.hg-token[data-token-id="dart-one"]')).toBeVisible();
+ expect((await record(page,['rooms',saved.roomCode,'tokens','dart-one'])).currentHp).toBe(24);expect((await record(page,['rooms',saved.roomCode,'tokens','dart-two'])).currentHp).toBe(22);
+ await page.locator('.hg-token[data-token-id="dart-one"]').click({button:'right'});await page.getByRole('menuitem',{name:'Apply / Remove Condition',exact:true}).click();
+ await page.locator('.hg-gameplay-effect-card').filter({hasText:'Poisoned'}).getByRole('button',{name:'Remove',exact:true}).click();
+ await expect.poll(async()=>Object.values((await record(page,['rooms',saved.roomCode,'tokens','dart-one'])).effectConditions||{})).toHaveLength(0);
+ expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2']).toBe(1);
 });

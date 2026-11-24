@@ -9,7 +9,7 @@
 
   <title>Homebrew God</title>
 
-  <link rel="stylesheet" href="./assets/styles/app.css?v=foundation-milestone-20260915">
+  <link rel="stylesheet" href="./assets/styles/app.css?v=spell-targets-and-grants-20261124">
   <link rel="stylesheet" href="./assets/styles/tier-vfx.css?v=2d5-vfx-polish-20260902">
   <link id="monsterCreatorModernStyles" rel="stylesheet" href="./monsters/monsterCreator.css?v=ui-polish-20261004">
   <link id="magicItemCreatorStyles" rel="stylesheet" href="./items/magicItemCreator.css?v=ui-polish-20261004">
@@ -1160,6 +1160,7 @@
         <span>Cast using</span>
         <select id="spellCastingSlotSelect"></select>
       </label>
+      <div id="spellProjectileTargets" class="hidden" aria-label="Projectile targets"></div>
       <p id="spellCastingAffected" aria-live="polite">
         Affected tokens: none.
       </p>
@@ -1699,7 +1700,7 @@
         "./shared/securityPersistence.js": "./shared/securityPersistence.js?v=priority10-20260822",
         "./characterCreator/walkingSpeed.js?v=creator-fix-pass-20260730": "./characterCreator/walkingSpeed.js?v=custom-movement-speeds-20260731",
         "./characterCreator/customClassTools.js?v=creator-fix-pass-20260730": "./characterCreator/customClassTools.js?v=custom-movement-speeds-20260731",
-        "./characterSheet/index.js": "./characterSheet/index.js?v=compact-spell-reference-20261122",
+        "./characterSheet/index.js": "./characterSheet/index.js?v=spell-targets-and-grants-20261124",
         "./data/defaultClasses.js": "./data/defaultClasses.js?v=priority10-20260822",
         "./data/defaultClassFeatureCatalog.js": "./data/defaultClassFeatureCatalog.js?v=priority10-20260822",
         "./data/defaultClassFeatureRules.js": "./data/defaultClassFeatureRules.js?v=priority10-20260822",
@@ -1728,12 +1729,12 @@
         "./characterCreator/steps/reviewStep.js": "./characterCreator/steps/reviewStep.js?v=spell-readiness-20261121",
         "./characterCreator/steps/reviewStep.js?v=dm-preview-class-state-20260829": "./characterCreator/steps/reviewStep.js?v=spell-readiness-20261121",
         "./characterCreator/steps/classStep.js": "./characterCreator/steps/classStep.js?v=creator-choice-audit-20261122",
-        "./characterCreator/spellSources.js": "./characterCreator/spellSources.js?v=spell-readiness-20261121",
+        "./characterCreator/spellSources.js": "./characterCreator/spellSources.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/spellChoices.js": "./characterCreator/spellChoices.js?v=spell-readiness-20261121",
         "./characterCreator/steps/classStep.js?v=class-workflow-20261024": "./characterCreator/steps/classStep.js?v=creator-choice-audit-20261122",
-        "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802": "./characterCreator/spellSources.js?v=spell-readiness-20261121",
+        "./characterCreator/spellSources.js?v=canonical-spell-sources-20260802": "./characterCreator/spellSources.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/spellChoices.js?v=optional-spell-choices-20260803": "./characterCreator/spellChoices.js?v=spell-readiness-20261121",
-        "./characterCreator/index.js": "./characterCreator/index.js?v=bard-cleric-choices-20261122",
+        "./characterCreator/index.js": "./characterCreator/index.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/steps/spellsStep.js": "./characterCreator/steps/spellsStep.js?v=compact-spell-sheet-20261121",
         "./characterCreator/steps/spellsStep.js?v=dm-preview-class-state-20260829": "./characterCreator/steps/spellsStep.js?v=compact-spell-sheet-20261121",
         "./vfx/animationDefinition.js": "./vfx/animationDefinition.js?v=animation-content-ux-20260913",
@@ -1763,7 +1764,7 @@
         "./characterCreator/persistence.base.js?source=initiative-reliability-20260905": "./characterCreator/persistence.base.js?v=spell-effect-resolution-20261122",
         "./characterCreator/steps/finishStep.js?v=dm-preview-class-state-20260829": "./characterCreator/steps/finishStep.js?v=spell-readiness-20261121",
         "./characterCreator/persistence.js?v=animation-content-ux-20260913": "./characterCreator/persistence.js?v=spell-readiness-20261121",
-        "./characterCreator/index.js?v=spell-system-20261120": "./characterCreator/index.js?v=bard-cleric-choices-20261122",
+        "./characterCreator/index.js?v=spell-system-20261120": "./characterCreator/index.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/classSpellReconciliation.js?v=spell-system-20261120": "./characterCreator/classSpellReconciliation.js?v=spell-readiness-20261121",
         "./characterCreator/completionGuidance.js?v=spell-system-20261120": "./characterCreator/completionGuidance.js?v=compact-spell-sheet-20261121",
         "./characterCreator/persistence.base.js?v=spell-system-20261120": "./characterCreator/persistence.base.js?v=spell-effect-resolution-20261122",
@@ -1771,20 +1772,20 @@
         "./characterCreator/selfTests.js?v=spell-system-20261120": "./characterCreator/selfTests.js?v=paladin-resources-20261121",
         "./characterCreator/spellChoices.js?v=spell-system-20261120": "./characterCreator/spellChoices.js?v=spell-readiness-20261121",
         "./characterCreator/spellSelectionSummary.js?v=spell-system-20261120": "./characterCreator/spellSelectionSummary.js?v=compact-spell-sheet-20261121",
-        "./characterCreator/spellSources.js?v=spell-system-20261120": "./characterCreator/spellSources.js?v=spell-readiness-20261121",
+        "./characterCreator/spellSources.js?v=spell-system-20261120": "./characterCreator/spellSources.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/steps/finishStep.js?v=spell-system-20261120": "./characterCreator/steps/finishStep.js?v=spell-readiness-20261121",
         "./characterCreator/steps/reviewStep.js?v=spell-system-20261120": "./characterCreator/steps/reviewStep.js?v=spell-readiness-20261121",
         "./characterCreator/steps/spellsStep.js?v=spell-system-20261120": "./characterCreator/steps/spellsStep.js?v=compact-spell-sheet-20261121",
         "./characterCreator/steps/classStep.js?v=spell-system-20261120": "./characterCreator/steps/classStep.js?v=creator-choice-audit-20261122",
         "./characterCreator/spellRecovery.js?v=spell-system-20261120": "./characterCreator/spellRecovery.js?v=spell-readiness-20261121",
         "./characterCreator/spellbookProgression.js?v=spell-system-20261120": "./characterCreator/spellbookProgression.js?v=spell-readiness-20261121",
-        "./characterCreator/index.js?v=spell-readiness-20261121": "./characterCreator/index.js?v=bard-cleric-choices-20261122",
-        "./characterCreator/index.js?v=priority10-20260822": "./characterCreator/index.js?v=bard-cleric-choices-20261122",
+        "./characterCreator/index.js?v=spell-readiness-20261121": "./characterCreator/index.js?v=spell-targets-and-grants-20261124",
+        "./characterCreator/index.js?v=priority10-20260822": "./characterCreator/index.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/selfTests.js?v=spell-readiness-20261121": "./characterCreator/selfTests.js?v=paladin-resources-20261121",
         "./characterCreator/selfTests.js?v=priority10-20260822": "./characterCreator/selfTests.js?v=paladin-resources-20261121",
         "./data/defaultSubclasses.js?v=spell-readiness-20261121": "./data/defaultSubclasses.js?v=paladin-resources-20261121",
         "./data/defaultSubclasses.js?v=priority10-20260822": "./data/defaultSubclasses.js?v=paladin-resources-20261121",
-        "./characterCreator/index.js?v=paladin-resources-20261121": "./characterCreator/index.js?v=bard-cleric-choices-20261122",
+        "./characterCreator/index.js?v=paladin-resources-20261121": "./characterCreator/index.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/steps/spellsStep.js?v=spell-readiness-20261121": "./characterCreator/steps/spellsStep.js?v=compact-spell-sheet-20261121",
         "./characterCreator/steps/spellsStep.js?v=paladin-resources-20261121": "./characterCreator/steps/spellsStep.js?v=compact-spell-sheet-20261121",
         "./characterCreator/spellPicker.js": "./characterCreator/spellPicker.js?v=compact-spell-sheet-20261121",
@@ -1794,17 +1795,17 @@
         "./characterCreator/uiEnhancements.js?v=spell-readiness-20261121": "./characterCreator/uiEnhancements.js?v=compact-spell-sheet-20261121",
         "./characterCreator/uiEnhancements.js?v=paladin-resources-20261121": "./characterCreator/uiEnhancements.js?v=compact-spell-sheet-20261121",
         "./characterCreator/uiEnhancements.js?v=spell-system-20261120": "./characterCreator/uiEnhancements.js?v=compact-spell-sheet-20261121",
-        "./characterSheet/index.js?v=spell-readiness-20261121": "./characterSheet/index.js?v=compact-spell-reference-20261122",
-        "./characterSheet/index.js?v=paladin-resources-20261121": "./characterSheet/index.js?v=compact-spell-reference-20261122",
-        "./characterSheet/index.js?v=spell-system-20261120": "./characterSheet/index.js?v=compact-spell-reference-20261122",
+        "./characterSheet/index.js?v=spell-readiness-20261121": "./characterSheet/index.js?v=spell-targets-and-grants-20261124",
+        "./characterSheet/index.js?v=paladin-resources-20261121": "./characterSheet/index.js?v=spell-targets-and-grants-20261124",
+        "./characterSheet/index.js?v=spell-system-20261120": "./characterSheet/index.js?v=spell-targets-and-grants-20261124",
         "./characterSheet/compactStyles.js": "./characterSheet/compactStyles.js?v=compact-spell-sheet-20261121",
         "./characterSheet/compactStyles.js?v=spell-readiness-20261121": "./characterSheet/compactStyles.js?v=compact-spell-sheet-20261121",
         "./characterSheet/compactStyles.js?v=paladin-resources-20261121": "./characterSheet/compactStyles.js?v=compact-spell-sheet-20261121",
         "./characterSheet/compactStyles.js?v=spell-system-20261120": "./characterSheet/compactStyles.js?v=compact-spell-sheet-20261121",
         "./characterCreator/completionGuidance.js?v=spell-readiness-20261121": "./characterCreator/completionGuidance.js?v=compact-spell-sheet-20261121",
         "./characterCreator/spellSelectionSummary.js?v=spell-readiness-20261121": "./characterCreator/spellSelectionSummary.js?v=compact-spell-sheet-20261121",
-        "./characterSheet/index.js?v=compact-spell-sheet-20261121": "./characterSheet/index.js?v=compact-spell-reference-20261122",
-        "./characterCreator/index.js?v=compact-spell-sheet-20261121": "./characterCreator/index.js?v=bard-cleric-choices-20261122",
+        "./characterSheet/index.js?v=compact-spell-sheet-20261121": "./characterSheet/index.js?v=spell-targets-and-grants-20261124",
+        "./characterCreator/index.js?v=compact-spell-sheet-20261121": "./characterCreator/index.js?v=spell-targets-and-grants-20261124",
         "./characterCreator/steps/classStep.js?v=spell-readiness-20261121": "./characterCreator/steps/classStep.js?v=creator-choice-audit-20261122",
         "./characterCreator/steps/multiclassStep.js?v=spell-readiness-20261121": "./characterCreator/steps/multiclassStep.js?v=bard-cleric-choices-20261122",
         "./characterCreator/steps/multiclassStep.js": "./characterCreator/steps/multiclassStep.js?v=bard-cleric-choices-20261122",
@@ -1812,16 +1813,16 @@
         "./characterCreator/viewPosition.js": "./characterCreator/viewPosition.js?v=creator-choice-audit-20261122",
         "./characterCreator/viewPosition.js?v=bard-cleric-choices-20261122": "./characterCreator/viewPosition.js?v=creator-choice-audit-20261122",
         "./characterCreator/steps/classStep.js?v=bard-cleric-choices-20261122": "./characterCreator/steps/classStep.js?v=creator-choice-audit-20261122",
-        "./battleMap/castingSession.js": "./battleMap/castingSession.js?v=spell-effect-resolution-20261122",
-        "./battleMap/castingSession.js?v=map-single-target-20260829": "./battleMap/castingSession.js?v=spell-effect-resolution-20261122",
-        "./spells/spellCastingRules.js": "./spells/spellCastingRules.js?v=spell-effect-resolution-20261122",
-        "./combat/characterCombatCommands.js": "./combat/characterCombatCommands.js?v=spell-effect-resolution-20261122"
+        "./battleMap/castingSession.js": "./battleMap/castingSession.js?v=spell-targets-and-grants-20261124",
+        "./battleMap/castingSession.js?v=map-single-target-20260829": "./battleMap/castingSession.js?v=spell-targets-and-grants-20261124",
+        "./spells/spellCastingRules.js": "./spells/spellCastingRules.js?v=spell-targets-and-grants-20261124",
+        "./combat/characterCombatCommands.js": "./combat/characterCombatCommands.js?v=spell-targets-and-grants-20261124"
       }
     }
   </script>
   <script
     type="module"
-    src="./app.js?v=spell-effect-resolution-20261122"
+    src="./app.js?v=spell-targets-and-grants-20261124"
     onerror="window.__HOMEBREW_GOD_SMOKE__?.record('app.js or one of its module imports failed to load')"
   ></script>
   <dialog id="animationLibraryDialog" class="hg-animation-library" aria-labelledby="animationLibraryTitle"></dialog>

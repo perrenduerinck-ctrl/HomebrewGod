@@ -1196,3 +1196,22 @@ test("choice audit: Fighter and Paladin styles do not duplicate or overwrite one
   await expect(paladin.locator('[data-option="Dueling"]')).toHaveClass(/selected/);
   await expect(page.locator('.hg-character-step-button[data-step-id="class"]')).toHaveClass(/complete/);
 });
+
+
+test("subclass audit: Arcana grants use catalog aliases and incomplete grants retain their level",async({page})=>{
+ await openSpellAuditCharacter(page,'cleric');
+ await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+ await page.locator('#ccClassBuildTotalLevel').fill('3');await page.locator('#ccClassBuildTotalLevel').blur();await page.locator('[data-cc-action="confirm-class-build"]').click();
+ await page.locator('[data-multiclass-subclass-index="0"]').selectOption({label:'Arcana'});
+ let saved=await exportSpellAuditCharacter(page);
+ expect(saved.magic.spellSources.flatMap(s=>s.fixedSpellIds||[])).toContain('arcanists-magic-aura');
+ expect(saved.magic.spellSources.flatMap(s=>s.fixedSpellIds||[])).not.toContain('magic-aura');
+ await page.locator('.hg-character-step-button[data-step-id="class"]').click();
+ await page.locator('[data-multiclass-subclass-index="0"]').selectOption({label:'Death'});
+ saved=await exportSpellAuditCharacter(page);
+ const record=saved.magic.spellSources.flatMap(s=>s.spellRecords||[]).find(s=>s.id==='ray-of-sickness');
+ expect(record).toMatchObject({level:1,requiresSpellDefinition:true});
+ await importSpellAuditCharacter(page,saved);
+ saved=await exportSpellAuditCharacter(page);
+ expect(saved.magic.spellSources.flatMap(s=>s.spellRecords||[]).find(s=>s.id==='ray-of-sickness')).toMatchObject({level:1,requiresSpellDefinition:true});
+});

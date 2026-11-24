@@ -112,11 +112,21 @@ function getDamageExpression(damageEntry, slotLevel, characterLevel, scaling = {
   return base;
 }
 
+export function getSpellProjectileProfile(spell = {}, slotLevel = 0, characterLevel = 1) {
+  switch (spell.id) {
+    case "eldritch-blast": return Object.freeze({count: characterLevel >= 17 ? 4 : characterLevel >= 11 ? 3 : characterLevel >= 5 ? 2 : 1, label: "Beam", damage: "1d10 force", separateAttacks: true});
+    case "magic-missile": return Object.freeze({count: Math.max(1, Math.min(9, finiteInteger(slotLevel, 1))) + 2, label: "Dart", damage: "1d4 + 1 force", separateAttacks: false});
+    case "scorching-ray": return Object.freeze({count: Math.max(2, Math.min(9, finiteInteger(slotLevel, 2))) + 1, label: "Ray", damage: "2d6 fire", separateAttacks: true});
+    default: return null;
+  }
+}
+
 export function createCastResolution({
   spell = {},
   slotLevel = 0,
   characterLevel = 1,
   affectedTokens = [],
+  projectiles = [],
   spellSaveDc = null,
   spellAttackBonus = null,
   spellcastingModifier = null,
@@ -133,7 +143,8 @@ export function createCastResolution({
         }
       : null
   );
-  const attack = spell.targeting?.attack || spell.attack || (
+  const projectileProfile = getSpellProjectileProfile(spell, slotLevel, characterLevel);
+  const attack = spell.targeting?.attack || spell.attack || (projectileProfile?.separateAttacks ? {type: "ranged"} : null) || (
     cleanText(spell.attackType)
       ? { type: spell.attackType }
       : null
@@ -210,6 +221,8 @@ export function createCastResolution({
     affectedTokens: Object.freeze(
       cloneAffectedTokens(affectedTokens)
     ),
+    projectiles: Object.freeze(projectiles.map((entry) => Object.freeze({...entry}))),
+    projectileProfile,
     save: save
       ? Object.freeze({
           ability: cleanText(save.ability),
@@ -248,6 +261,7 @@ export function createSpellCastingSession({
   let spellAttackBonus = null;
   let spellcastingModifier = null;
   let characterLevel = 1;
+  let projectileTargetIds = [];
 
   function getState() {
     return Object.freeze({
@@ -309,6 +323,7 @@ export function createSpellCastingSession({
     spellcastingModifier = optionalInteger(config.spellcastingModifier);
     characterLevel = finiteInteger(config.characterLevel, 1, 1);
     target = null;
+    projectileTargetIds = [];
     resolution = null;
     confirmationError = "";
     phase = "previewing";
@@ -326,6 +341,7 @@ export function createSpellCastingSession({
     startElevationFeet = 0,
     endElevationFeet = 0,
     affectedTokens = [],
+    availableTokens = null,
     selectedPoint = null,
     geometry = null
   } = {}) {
@@ -361,6 +377,7 @@ export function createSpellCastingSession({
       affectedTokens: Object.freeze(
         cloneAffectedTokens(affectedTokens)
       ),
+      availableTokens: Object.freeze(cloneAffectedTokens(availableTokens || affectedTokens)),
       selectedPoint: Number.isFinite(Number(selectedPoint?.x)) &&
         Number.isFinite(Number(selectedPoint?.y))
         ? Object.freeze({ x: Number(selectedPoint.x), y: Number(selectedPoint.y) })
@@ -400,6 +417,26 @@ export function createSpellCastingSession({
     )) || null;
   }
 
+  function setProjectileTargets(ids = []) {
+    if (["confirming", "confirmed", "cancelled", "idle"].includes(phase)) return getState();
+    projectileTargetIds = ids.map((id) => cleanText(id));
+    confirmationError = "";
+    return getState();
+  }
+
+  function resolvedTarget(slot) {
+    const profile = getSpellProjectileProfile(spell, slot.level, characterLevel);
+    if (!profile) return {...target, projectiles: []};
+    const available = target?.availableTokens || [];
+    const projectiles = Array.from({length: profile.count}, (_, index) => {
+      const targetId = projectileTargetIds[index] ?? target?.affectedTokens?.[0]?.id ?? "";
+      const token = available.find((entry) => entry.id === targetId);
+      return {index, label: profile.label, targetId, targetName: token?.name || "Unavailable target", damage: profile.damage, valid: Boolean(token)};
+    });
+    const ids = new Set(projectiles.map((entry) => entry.targetId));
+    return {...target, projectiles, affectedTokens: available.filter((token) => ids.has(token.id))};
+  }
+
   function preview(selection = {}) {
     const slot = findSlot(selection);
     if (!slot) return null;
@@ -407,7 +444,8 @@ export function createSpellCastingSession({
       spell,
       slotLevel: slot.level,
       characterLevel,
-      affectedTokens: target?.affectedTokens || [],
+      affectedTokens: resolvedTarget(slot).affectedTokens || [],
+      projectiles: resolvedTarget(slot).projectiles,
       spellSaveDc: slot.spellSaveDc ?? spellSaveDc,
       spellAttackBonus: slot.spellAttackBonus ?? spellAttackBonus,
       spellcastingModifier: slot.spellcastingModifier ?? spellcastingModifier,
@@ -438,6 +476,11 @@ export function createSpellCastingSession({
       });
     }
 
+    const castTarget = resolvedTarget(slot);
+    if (castTarget.projectiles.some((entry) => !entry.valid)) {
+      confirmationError = "Choose an available creature in range for every projectile before confirming.";
+      return Object.freeze({ok: false, error: confirmationError, state: getState()});
+    }
     phase = "confirming";
     confirmationError = "";
 
@@ -445,7 +488,7 @@ export function createSpellCastingSession({
       const result = await onConfirm({
         spell,
         slot,
-        target,
+        target: castTarget,
         characterId,
         casterToken
       });
@@ -465,7 +508,8 @@ export function createSpellCastingSession({
         spell,
         slotLevel: slot.level,
         characterLevel,
-        affectedTokens: target.affectedTokens,
+        affectedTokens: castTarget.affectedTokens,
+        projectiles: castTarget.projectiles,
         spellSaveDc: slot.spellSaveDc ?? spellSaveDc,
         spellAttackBonus: slot.spellAttackBonus ?? spellAttackBonus,
         spellcastingModifier: slot.spellcastingModifier ?? spellcastingModifier,
@@ -484,7 +528,7 @@ export function createSpellCastingSession({
         const presentationResult = onConfirmed({
           spell,
           slot,
-          target,
+          target: castTarget,
           characterId,
           casterToken,
           resolution,
@@ -541,6 +585,7 @@ export function createSpellCastingSession({
     spellAttackBonus = null;
     spellcastingModifier = null;
     characterLevel = 1;
+    projectileTargetIds = [];
     return getState();
   }
 
@@ -551,6 +596,7 @@ export function createSpellCastingSession({
     getState,
     preview,
     reset,
+    setProjectileTargets,
     updateTarget
   });
 }
