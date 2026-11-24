@@ -4027,13 +4027,13 @@ export function runCharacterCreatorSelfTests(context) {
           "phase7-cleric"
         );
       });
-    const phase7InlineSpellGrant =
+    const phase7CatalogSpellGrant =
       getSection16ExpandedSpellGrants(
         phase7ArcanaSpellSource
       ).find((grant) => {
         return (
           grant.spellId ===
-          "magic-aura"
+          "arcanists-magic-aura"
         );
       });
 
@@ -4058,18 +4058,18 @@ export function runCharacterCreatorSelfTests(context) {
               );
             }
           ),
-        inlineRuntime: {
+        catalogRuntime: {
           id:
-            phase7InlineSpellGrant
+            phase7CatalogSpellGrant
               ?.spell?.id,
           name:
-            phase7InlineSpellGrant
+            phase7CatalogSpellGrant
               ?.spell?.name,
           level:
-            phase7InlineSpellGrant
+            phase7CatalogSpellGrant
               ?.spell?.level,
           inlineSubclassSpell:
-            phase7InlineSpellGrant
+            phase7CatalogSpellGrant
               ?.spell
               ?.inlineSubclassSpell ===
             true
@@ -4078,14 +4078,35 @@ export function runCharacterCreatorSelfTests(context) {
       {
         total: 421,
         complete: true,
-        inlineRuntime: {
-          id: "magic-aura",
-          name: "Magic Aura",
+        catalogRuntime: {
+          id: "arcanists-magic-aura",
+          name: "Arcanist's Magic Aura",
           level: 2,
-          inlineSubclassSpell: true
+          inlineSubclassSpell: false
         }
       }
     );
+
+    const phase7ArcanaDraft = creatorState.draft;
+    creatorState.draft = createEmptyCharacter();
+    creatorState.draft.classProgression = {
+      totalLevel: 1,
+      classes: [makeInteractionClassEntry("phase7-death", "cleric", 1, "death", "Death")],
+      levelOrder: []
+    };
+    const phase7DeathSource = getSpellcastingClassOptions(creatorState.draft).find((entry) => entry.classEntryId === "phase7-death");
+    const phase7IncompleteGrant = getSection16ExpandedSpellGrants(phase7DeathSource).find((grant) => grant.spellId === "ray-of-sickness");
+    record(
+      "Phase 7: incomplete subclass spell references retain their level and require a definition",
+      {
+        id: phase7IncompleteGrant?.spell?.id,
+        level: phase7IncompleteGrant?.spell?.level,
+        inlineSubclassSpell: phase7IncompleteGrant?.spell?.inlineSubclassSpell === true,
+        requiresSpellDefinition: phase7IncompleteGrant?.spell?.requiresSpellDefinition === true
+      },
+      {id: "ray-of-sickness", level: 1, inlineSubclassSpell: true, requiresSpellDefinition: true}
+    );
+    creatorState.draft = phase7ArcanaDraft;
 
     record(
       "Phase 7: subclass expanded spell lists are attached to eligible subclasses",
