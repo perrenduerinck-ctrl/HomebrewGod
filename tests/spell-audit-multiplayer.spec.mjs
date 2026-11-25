@@ -556,6 +556,6 @@ test('spell effects: Death domain Ray of Sickness works without repairing its de
  await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
  await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['3']).toBe(1);
  await page.reload();await expect(page.locator('#homebrewGodSmokeResult')).toContainText('SMOKE TEST PASS',{timeout:60000});
- await openJourneySheet(page,saved.id);await page.locator('[data-character-sheet-tab="spells"]').click();const row=page.locator('[data-sheet-spell-id="ray-of-sickness"]');await expect(row).toBeVisible();await expect(row.locator('[data-character-sheet-action="target-spell"]')).toBeEnabled();
+ await expect(page.locator('.hg-token[data-token-id="effect-caster"]')).toBeVisible();await openJourneySheet(page,saved.id);await page.locator('[data-character-sheet-tab="spells"]').click();const row=page.locator('[data-sheet-spell-id="ray-of-sickness"]');await expect(row).toBeVisible();await expect(row.locator('[data-character-sheet-action="target-spell"]')).toBeEnabled();
  expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['3']).toBe(1);
 });
