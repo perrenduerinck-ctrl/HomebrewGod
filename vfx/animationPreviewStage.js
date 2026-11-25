@@ -141,6 +141,8 @@ export function createAnimationPreviewStage({
       targetElement: target,
       sourcePoint: state.source,
       targetPoint: state.target,
+      // WORLD effects use the selected impact location, frozen when playback starts.
+      world: { ...state.target },
       grid: { pixelsPerFoot: state.pixelsPerFoot },
       debugPoints,
     };
