@@ -179,9 +179,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      actions: read
       contents: read
       pages: write
       id-token: write
+    env:
+      PAGES_ARTIFACT_NAME: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -201,13 +204,42 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
+          name: ${{ env.PAGES_ARTIFACT_NAME }}
           path: dist
+      - name: Wait for the uploaded Pages artifact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          const {GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_TOKEN, PAGES_ARTIFACT_NAME} = process.env;
+          const url = 'https://api.github.com/repos/' + GITHUB_REPOSITORY + '/actions/runs/' + GITHUB_RUN_ID + '/artifacts?per_page=100';
+          for (let attempt = 0; attempt < 15; attempt++) {
+            const response = await fetch(url, {
+              headers: {Authorization: 'Bearer ' + GITHUB_TOKEN, Accept: 'application/vnd.github+json'},
+              signal: AbortSignal.timeout(10000)
+            });
+            if (!response.ok) throw new Error('Artifact metadata request failed: ' + response.status);
+            const {artifacts = []} = await response.json();
+            const matches = artifacts.filter(artifact => artifact.name === PAGES_ARTIFACT_NAME && !artifact.expired);
+            if (matches.length === 1) {
+              console.log('The Pages artifact is available for deployment.');
+              process.exit(0);
+            }
+            if (matches.length > 1) throw new Error('The Pages artifact name is not unique.');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          throw new Error('The uploaded Pages artifact did not become available in time.');
+          NODE
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}
       - name: Install Chromium for deployed checks
         run: pnpm exec playwright install --with-deps chromium
       - name: Verify the deployed site
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.deployment.outputs.page_url }}
-        run: pnpm run test:deployed
+        run: |
+          export PLAYWRIGHT_BASE_URL="${PLAYWRIGHT_BASE_URL/http:/https:}"
+          pnpm run test:deployed
