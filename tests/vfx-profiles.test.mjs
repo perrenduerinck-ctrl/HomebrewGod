@@ -108,9 +108,9 @@ test("all 45 cantrip DM previews can lock without a character; catalog and real 
 });
 
 test("every level-one spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
-  assert.equal(levelOne.length, 49);
+  assert.equal(levelOne.length, 57);
   assert.equal(SPELL_VFX_PROFILES.filter(profile =>
-    levelOne.some(spell => spell.id === profile.spellId)).length, 49);
+    levelOne.some(spell => spell.id === profile.spellId)).length, 57);
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const options = html.match(/<optgroup label="Level 1">([\s\S]*?)<\/optgroup>/)[1];
   const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
@@ -146,9 +146,9 @@ test("every level-one spell has intentional, valid, asset-safe VFX and a Play Pr
 });
 
 test("every level-two spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
-  assert.equal(levelTwo.length, 54);
+  assert.equal(levelTwo.length, 57);
   assert.equal(SPELL_VFX_PROFILES.filter(profile =>
-    levelTwo.some(spell => spell.id === profile.spellId)).length, 54);
+    levelTwo.some(spell => spell.id === profile.spellId)).length, 57);
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const options = html.match(/<optgroup label="Level 2">([\s\S]*?)<\/optgroup>/)[1];
   const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
@@ -193,9 +193,9 @@ test("every level-two spell has intentional, valid, asset-safe VFX and a Play Pr
 });
 
 test("every level-three spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
-  assert.equal(levelThree.length, 42);
+  assert.equal(levelThree.length, 47);
   assert.equal(SPELL_VFX_PROFILES.filter(profile =>
-    levelThree.some(spell => spell.id === profile.spellId)).length, 41);
+    levelThree.some(spell => spell.id === profile.spellId)).length, 46);
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const options = html.match(/<optgroup label="Level 3">([\s\S]*?)<\/optgroup>/)[1];
   const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
@@ -246,9 +246,9 @@ test("every level-three spell has intentional, valid, asset-safe VFX and a Play 
 });
 
 test("every level-four spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
-  assert.equal(levelFour.length, 31);
+  assert.equal(levelFour.length, 39);
   assert.equal(SPELL_VFX_PROFILES.filter(profile =>
-    levelFour.some(spell => spell.id === profile.spellId)).length, 31);
+    levelFour.some(spell => spell.id === profile.spellId)).length, 39);
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const options = html.match(/<optgroup label="Level 4">([\s\S]*?)<\/optgroup>/)[1];
   const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);
@@ -298,9 +298,9 @@ test("every level-four spell has intentional, valid, asset-safe VFX and a Play P
 });
 
 test("every level-five spell has intentional, valid, asset-safe VFX and a Play Preview option", () => {
-  assert.equal(levelFive.length, 37);
+  assert.equal(levelFive.length, 41);
   assert.equal(SPELL_VFX_PROFILES.filter(profile =>
-    levelFive.some(spell => spell.id === profile.spellId)).length, 37);
+    levelFive.some(spell => spell.id === profile.spellId)).length, 41);
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const options = html.match(/<optgroup label="Level 5">([\s\S]*?)<\/optgroup>/)[1];
   const ids = [...options.matchAll(/value="([^"]+)"/g)].map(match => match[1]);

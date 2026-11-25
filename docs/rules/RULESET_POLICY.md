@@ -28,3 +28,7 @@ The generic non-SRD label records the current provenance boundary without
 claiming that an entry is part of SRD 5.1. Exact publication-level citations
 can be added as the content audit proceeds, but an unlabeled non-SRD entry is
 not permitted in the built-in catalog.
+
+## Explicit Homebrew God spell selections
+
+At the user's request, the additional subclass spell set may select 2014 or 2024 spell mechanics. Each selection carries a separate `mechanicsEdition` and reason, displayed as a homebrew choice. Character progression, eligibility, and multiclass slot calculations continue to use the active 2014 framework. This exception does not import 2024 class features or silently replace existing catalog spells. SRD 5.2.1 adaptations are attributed in `SRD-5.2.1-ATTRIBUTION.txt`.

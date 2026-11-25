@@ -545,3 +545,17 @@ test('spell effects: split projectiles spend one slot and adjudicated target HP 
  await expect.poll(async()=>Object.values((await record(page,['rooms',saved.roomCode,'tokens','dart-one'])).effectConditions||{})).toHaveLength(0);
  expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['2']).toBe(1);
 });
+
+
+test('spell effects: Death domain Ray of Sickness works without repairing its definition and survives reopening',async({page})=>{
+ test.setTimeout(180000);const context=await createEffectCaster(page,{subclass:'Death'});
+ await page.locator('.hg-character-step-button[data-step-id="spells"]').click();await page.locator('#ccDefaultSpellSearch').fill('Ray of Sickness');
+ const card=page.locator('article[data-spell-id="ray-of-sickness"]');await expect(card).toContainText('2024 spell mechanics');await expect(card).not.toContainText('requires a spell definition');
+ const saved=await saveEffectCaster(page,context);
+ await startEffectCast(page,saved,'ray-of-sickness',{level:3});await expect(page.locator('#spellCastingResolution')).toContainText('4d8 poison');await expect(page.locator('#spellCastingResolution')).not.toContainText('CON save');
+ await page.locator('#confirmSpellCastButton').click();await expect(page.locator('#confirmSpellCastButton')).toHaveText('Cast Confirmed');
+ await expect.poll(async()=>(await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['3']).toBe(1);
+ await page.reload();await expect(page.locator('#homebrewGodSmokeResult')).toContainText('SMOKE TEST PASS',{timeout:60000});
+ await expect(page.locator('.hg-token[data-token-id="effect-caster"]')).toBeVisible();await openJourneySheet(page,saved.id);await page.locator('[data-character-sheet-tab="spells"]').click();const row=page.locator('[data-sheet-spell-id="ray-of-sickness"]');await expect(row).toBeVisible();await expect(row.locator('[data-character-sheet-action="target-spell"]')).toBeEnabled();
+ expect((await record(page,['rooms',saved.roomCode,'characters',saved.id])).magic.slotUsage.normal['3']).toBe(1);
+});

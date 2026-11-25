@@ -17806,7 +17806,7 @@ export function createCharacterCreator(options = {}) {
 
     return `
       <span class="small" data-ruleset-id="${escapeHtml(metadata.rulesetId)}">
-        <b>Rules:</b> ${escapeHtml(ACTIVE_RULESET.label)}
+        <b>Rules:</b> ${escapeHtml(record?.mechanicsReason ? `Homebrew selection: ${record.mechanicsEdition} spell mechanics` : ACTIVE_RULESET.label)}
         <br>
         <b>Catalog:</b> ${escapeHtml(metadata.sourceLabel)}
       </span>
@@ -36005,7 +36005,7 @@ export function createCharacterCreator(options = {}) {
                   <h3>${escapeHtml(spell.name || "Unnamed Spell")}</h3>
                   <span class="hg-creator-spell-type">${escapeHtml(levelLabel)}${spell.school ? " · " + escapeHtml(spell.school) : ""}${spell.concentration ? " · Concentration" : ""}${spell.ritual ? " · Ritual" : ""}</span>
                   <p class="hg-creator-spell-summary">${escapeHtml(spell.summary || "No summary provided.")}</p>
-                  <p class="hg-creator-spell-facts">${escapeHtml([spell.castingTime, spell.range, spell.duration].filter(Boolean).join(" · "))}</p>
+                  <p class="hg-creator-spell-facts">${escapeHtml([spell.castingTime, spell.range, spell.duration].filter(Boolean).join(" · "))}${spell.mechanicsReason ? ` · Homebrew: ${escapeHtml(spell.mechanicsEdition)} spell mechanics` : ""}</p>
                 </div>
                 <div class="hg-creator-spell-selection">
                   ${sourceCandidates.length > 1 ? `<label class="small">Choose for

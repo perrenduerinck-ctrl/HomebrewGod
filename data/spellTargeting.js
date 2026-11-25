@@ -362,7 +362,7 @@ export function createSpellTargetingData(rawSpell = {}) {
     rawSpell.areaOfEffect
   );
   const target = Object.freeze({
-    type: inferTargetType({
+    type: SPELL_TARGET_TYPES.includes(rawSpell.targetType) ? rawSpell.targetType : inferTargetType({
       spellId,
       range,
       area

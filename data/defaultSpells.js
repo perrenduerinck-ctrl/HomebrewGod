@@ -1,3 +1,5 @@
+import { ADDITIONAL_SPELL_DETAILS, ADDITIONAL_SPELL_COUNT } from "./additionalSpellDetails.js";
+export { ADDITIONAL_SPELL_COUNT };
 import { SPELL_NAME_LIST } from "./defaultSpellNames.js";
 import { SRD_SPELL_DETAILS } from "./defaultSpellDetails.js";
 import {
@@ -112,7 +114,8 @@ const normalizeSpellComponents = (components = {}) => {
     verbal: raw.verbal === true || letters.includes("V"),
     somatic: raw.somatic === true || letters.includes("S"),
     material: raw.material === true || letters.includes("M"),
-    materialText: String(raw.materialText || raw.material || "").trim()
+    materialText: String(raw.materialText || raw.material || "").trim(),
+    ...(Number(raw.materialCostGp) > 0 ? {materialCostGp: Number(raw.materialCostGp), materialConsumed: raw.materialConsumed === true} : {})
   });
 };
 
@@ -640,13 +643,13 @@ const normalizeDetailedSpell = (rawSpell) => {
     ...(Array.isArray(raw.classes) ? raw.classes : []),
     ...(ARTIFICER_SPELL_IDS.has(id) ? ["artificer"] : [])
   ].map(normalizeSpellId).filter(Boolean))];
-  const damageRecord = raw.damage && typeof raw.damage === "object"
-    ? {
-        damageType: normalizeSpellId(raw.damage.damage_type?.index || raw.damage.damageType),
-        atCharacterLevel: { ...(raw.damage.damage_at_character_level || raw.damage.atCharacterLevel || {}) },
-        atSlotLevel: { ...(raw.damage.damage_at_slot_level || raw.damage.atSlotLevel || {}) }
-      }
-    : null;
+  const damageRecords = (Array.isArray(raw.damage) ? raw.damage : raw.damage && typeof raw.damage === "object" ? [raw.damage] : []).map(entry => ({
+    damageType: entry.damageType || normalizeSpellId(entry.damage_type?.index),
+    atCharacterLevel: {...(entry.damage_at_character_level || entry.atCharacterLevel || {})},
+    atSlotLevel: {...(entry.damage_at_slot_level || entry.atSlotLevel || {})},
+    ...(entry.label ? {label: String(entry.label)} : {})
+  }));
+  const damageRecord = damageRecords[0] || null;
   const healingBySlotLevel = raw.healingBySlotLevel && typeof raw.healingBySlotLevel === "object"
     ? { ...raw.healingBySlotLevel }
     : {};
@@ -655,7 +658,7 @@ const normalizeDetailedSpell = (rawSpell) => {
   const effects = [];
 
   if (damageRecord && (damageRecord.damageType || Object.keys(damageRecord.atCharacterLevel).length || Object.keys(damageRecord.atSlotLevel).length)) {
-    effects.push({ type: "damage", ...damageRecord });
+    damageRecords.forEach(entry => effects.push({ type: "damage", ...entry }));
   }
   if (Object.keys(healingBySlotLevel).length) {
     effects.push({ type: "healing", atSlotLevel: healingBySlotLevel });
@@ -717,6 +720,18 @@ const normalizeDetailedSpell = (rawSpell) => {
     ),
     summary: String(raw.summary || firstSentence(description)).trim(),
     description,
+    mechanicsEdition: raw.mechanicsEdition || "2014",
+    mechanicsReason: raw.mechanicsReason || "",
+    castingTrigger: raw.castingTrigger || "",
+    resolutionNotes: raw.resolutionNotes || "",
+    healingTiming: raw.healingTiming || "",
+    placementOnly: raw.placementOnly === true,
+    excludeCaster: raw.excludeCaster === true,
+    followupSaveAbility: raw.followupSaveAbility || "",
+    followupSaveTiming: raw.followupSaveTiming || "",
+    conditions: freezeRecordArray(raw.conditions),
+    summonForms: Object.freeze([...(raw.summonForms || [])]),
+    temporaryHpBySlotLevel: Object.freeze({...raw.temporaryHpBySlotLevel}),
     higherLevelDescription,
     level,
     levelKey,
@@ -735,7 +750,7 @@ const normalizeDetailedSpell = (rawSpell) => {
       raw.saveSuccess ||
       ""
     ).trim().toLowerCase(),
-    damage: damageRecord ? freezeRecordArray([damageRecord]) : Object.freeze([]),
+    damage: freezeRecordArray(damageRecords),
     healing: Object.keys(healingBySlotLevel).length
       ? freezeRecordArray([{ atSlotLevel: healingBySlotLevel }])
       : Object.freeze([]),
@@ -756,7 +771,7 @@ const normalizeDetailedSpell = (rawSpell) => {
 
 const buildDefaultSpells = () => {
   const detailedById = new Map(
-    [...SRD_SPELL_DETAILS, ...EXTRA_CANTRIP_DETAILS]
+    [...SRD_SPELL_DETAILS, ...EXTRA_CANTRIP_DETAILS, ...ADDITIONAL_SPELL_DETAILS]
       .map((spell) => [normalizeSpellId(spell.id || spell.name), spell])
   );
   const catalog = [];
@@ -950,6 +965,7 @@ function compareCanonicalSpell(
     "saveAbility",
     "saveSuccess",
     "higherLevelDescription",
+    "mechanicsEdition", "mechanicsReason", "castingTrigger", "resolutionNotes", "healingTiming", "placementOnly", "excludeCaster", "followupSaveAbility", "followupSaveTiming",
     "rulesetId",
     "rulesEdition",
     "sourceType",
@@ -966,6 +982,7 @@ function compareCanonicalSpell(
     "subclasses",
     "damage",
     "healing",
+    "conditions", "summonForms", "temporaryHpBySlotLevel",
     "scaling"
   ].forEach((field) => {
     if (
@@ -1185,16 +1202,17 @@ export function validateDefaultSpellCatalog(
   if (
     entries.length !==
     SRD_SPELL_COUNT_2014 +
-      ADDITIONAL_CANTRIP_COUNT_2014
+      ADDITIONAL_CANTRIP_COUNT_2014 + ADDITIONAL_SPELL_COUNT
   ) {
     errors.push(
-      `Expected 340 total spells, found ${entries.length}.`
+      `Expected ${SRD_SPELL_COUNT_2014 + ADDITIONAL_CANTRIP_COUNT_2014 + ADDITIONAL_SPELL_COUNT} total spells, found ${entries.length}.`
     );
   }
 
   [
     ...SRD_SPELL_DETAILS,
-    ...EXTRA_CANTRIP_DETAILS
+    ...EXTRA_CANTRIP_DETAILS,
+    ...ADDITIONAL_SPELL_DETAILS
   ].forEach((rawSpell) => {
     const expected =
       normalizeDetailedSpell(rawSpell);
@@ -1233,6 +1251,7 @@ export function validateDefaultSpellCatalog(
       srd: srdCount,
       additionalCantrips:
         additionalCantripCount,
+      additionalSpells: entries.filter(spell => ADDITIONAL_SPELL_DETAILS.some(extra => extra.id === spell.id)).length,
       total: entries.length,
       references:
         referenceValidation
