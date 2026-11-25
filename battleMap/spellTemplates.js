@@ -78,6 +78,14 @@ export function createSpellTemplateInstruction(spell = {}, { allowTouchPreview =
     return Object.freeze({ supported: false, reason: "This spell has special targeting or range. Resolve its targets manually with the DM." });
   }
 
+  if (spell.placementOnly === true && targetType === "point" && rangeFeet !== null) {
+    return Object.freeze({supported: true, spellId: cleanText(spell.id), spellName: name,
+      sourceShape: "placement", templateShape: "circle", targetType: "point", sourceTargetType: "point",
+      placementMode: "point", sizeFeet: 2.5, widthFeet: 5, heightFeet: 0, rangeType: "distance",
+      rangeFeet, rangeText: cleanText(spell.range), singleTarget: false, placementOnly: true,
+      manualResolution: "Choose a visible, unoccupied space. The marker indicates placement, not a damage area."});
+  }
+
   if (
     targeting &&
     !area &&

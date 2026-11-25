@@ -147,11 +147,10 @@
         ?.additionalCantrips !== 21 ||
       ACTIVE_RULESET
         .spellCatalog
-        ?.totalSpells !== 340 ||
+        ?.totalSpells !== 368 ||
       ACTIVE_RULESET
         .spellCatalog
-        ?.additionalLeveledSpells !==
-        "inline-subclass-fallbacks-only"
+        ?.additionalLeveledSpells !== 28
     ) {
       failures.push(
         "Spell catalog policy is incomplete"

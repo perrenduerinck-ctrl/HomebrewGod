@@ -1,6 +1,7 @@
 // Intentional compositions, not game rules. Adding a spell requires data here,
 // not another animation engine. Fire Bolt/Fireball and the first five sprite
 // cantrips remain higher-priority bespoke overrides in castingSequence.js.
+import { ADDITIONAL_SPELL_PROFILES } from "./additionalSpellProfiles.js";
 import { LIGHTNING_BOLT_SOUND, normalizeSoundCue } from "./spellAudio.js?v=lightning-sound-20260830";
 import { TIER_SPELL_PROFILES } from "./tierSpellProfiles.js?v=complete-spell-vfx-20260903";
 import { LEVEL_ONE_SPELL_PROFILES } from "./levelOneSpellProfiles.js?v=complete-spell-vfx-20260903";
@@ -86,6 +87,7 @@ const melee = { mode: "target", rangeFeet: 5, label: "5-ft weapon preview reach"
 const ground = { mode: "target", rangeFeet: 60, shape: "cube", sizeFeet: 5, label: "60 feet" };
 
 export const SPELL_VFX_PROFILES = Object.freeze([
+  ...ADDITIONAL_SPELL_PROFILES.map(defineSpellVfxProfile),
   ...TIER_SPELL_PROFILES.map(defineSpellVfxProfile),
   ...LEVEL_ONE_SPELL_PROFILES.map(defineSpellVfxProfile),
   ...LEVEL_TWO_SPELL_PROFILES.map(defineSpellVfxProfile),

@@ -171,7 +171,7 @@ export function createCastResolution({
       );
 
       return expression
-        ? `${expression}${damageType ? ` ${damageType}` : ""}`
+        ? `${entry.label ? `${entry.label}: ` : ""}${expression}${damageType ? ` ${damageType}` : ""}`
         : "";
     })
     .filter(Boolean);
@@ -186,7 +186,7 @@ export function createCastResolution({
       tableValueAtLevel(spell.scaling?.healingAtSlotLevel, slotLevel) ||
       cleanText(entry?.dice, entry?.amount)
     ))
-    .filter(Boolean).map(expression => resolveCastingModifier(expression, spellcastingModifier));
+    .filter(Boolean).map(expression => `${spell.healingTiming ? `${spell.healingTiming}: ` : ""}${resolveCastingModifier(expression, spellcastingModifier)}`);
   const concentration = (
     spell.concentration === true ||
     spell.targeting?.duration?.concentration === true
@@ -218,6 +218,9 @@ export function createCastResolution({
     castingSourceName: cleanText(castingSourceName),
     ritual: cleanText(resourceKind) === "ritual",
     concentrationReplaced: cleanText(concentrationReplaced),
+    temporaryHp: tableValueAtLevel(spell.temporaryHpBySlotLevel, slotLevel),
+    resolutionNotes: cleanText(spell.resolutionNotes),
+    followupSave: spell.followupSaveAbility ? Object.freeze({ability: spell.followupSaveAbility, dc: normalizedSaveDc, timing: cleanText(spell.followupSaveTiming)}) : null,
     affectedTokens: Object.freeze(
       cloneAffectedTokens(affectedTokens)
     ),
@@ -375,7 +378,7 @@ export function createSpellCastingSession({
         ? Math.round(Number(endElevationFeet))
         : 0,
       affectedTokens: Object.freeze(
-        cloneAffectedTokens(affectedTokens)
+        cloneAffectedTokens(affectedTokens).filter(token => !spell?.excludeCaster || token.id !== casterToken?.id)
       ),
       availableTokens: Object.freeze(cloneAffectedTokens(availableTokens || affectedTokens)),
       selectedPoint: Number.isFinite(Number(selectedPoint?.x)) &&

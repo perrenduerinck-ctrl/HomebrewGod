@@ -17806,7 +17806,7 @@ export function createCharacterCreator(options = {}) {
 
     return `
       <span class="small" data-ruleset-id="${escapeHtml(metadata.rulesetId)}">
-        <b>Rules:</b> ${escapeHtml(ACTIVE_RULESET.label)}
+        <b>Rules:</b> ${escapeHtml(record?.mechanicsReason ? `Homebrew selection: ${record.mechanicsEdition} spell mechanics` : ACTIVE_RULESET.label)}
         <br>
         <b>Catalog:</b> ${escapeHtml(metadata.sourceLabel)}
       </span>

@@ -2090,7 +2090,7 @@ test(
     expect(result.counts.subclasses)
       .toBe(118);
     expect(result.spellCatalog.total)
-      .toBe(340);
+      .toBe(368);
   }
 );
 
@@ -5534,7 +5534,7 @@ test(
 );
 
 test(
-  "spell stress fixture keeps all 340 catalog spells and stale sources responsive",
+  "spell stress fixture keeps all 368 catalog spells and stale sources responsive",
   async ({ page }) => {
     await page.goto(
       "tests/browser-pages/playable-character-sheet-spell-stress.html?release=spell-performance-final-20260730",
@@ -5566,7 +5566,7 @@ test(
           .totalSpells;
       });
 
-    expect(totalSpells).toBe(340);
+    expect(totalSpells).toBe(368);
     await expect.poll(
       async () => {
         return page.evaluate(() => {

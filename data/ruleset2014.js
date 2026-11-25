@@ -26,9 +26,9 @@ export const ACTIVE_RULESET = Object.freeze({
   spellCatalog: Object.freeze({
     srdSpells: 319,
     additionalCantrips: 21,
-    totalSpells: 340,
-    additionalLeveledSpells:
-      "inline-subclass-fallbacks-only"
+    totalSpells: 368,
+    additionalLeveledSpells: 28,
+    spellMechanics: "explicit-homebrew-selections"
   }),
   futureMode: "dnd5e-2024"
 });
@@ -133,7 +133,7 @@ export function getLegacy2014Metadata(kind, id, record = {}, parentId = "") {
     rulesMode: ACTIVE_RULESET.mode,
     sourceType: isCustom ? "custom" : isSrd ? "srd" : "legacy-non-srd",
     sourceLabel: isCustom
-      ? ACTIVE_RULESET.customLabel
+      ? (record?.mechanicsEdition ? `Homebrew God · ${record.mechanicsEdition} spell mechanics` : ACTIVE_RULESET.customLabel)
       : isSrd
         ? ACTIVE_RULESET.srdLabel
         : ACTIVE_RULESET.nonSrdLabel

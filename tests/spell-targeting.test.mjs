@@ -18,7 +18,7 @@ test("every catalog spell has valid structured targeting data", () => {
 
   assert.equal(validation.valid, true);
   assert.deepEqual(validation.errors, []);
-  assert.equal(DEFAULT_SPELLS.length, 340);
+  assert.equal(DEFAULT_SPELLS.length, 368);
   assert.equal(
     DEFAULT_SPELLS.every((spell) => (
       spell.targeting?.schemaVersion ===

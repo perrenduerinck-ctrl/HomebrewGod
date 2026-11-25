@@ -135,20 +135,20 @@ test("Shocking Grasp supports bounded five-foot casting and DM preview", () => {
 });
 
 test("tier inventory remains accurate and distinguishes dedicated sequences from fallbacks", () => {
-  assert.equal(DEFAULT_SPELLS.length, 340);
+  assert.equal(DEFAULT_SPELLS.length, 368);
   assert.deepEqual(Array.from({ length: 10 }, (_, level) =>
     DEFAULT_SPELLS.filter((spell) => spell.level === level).length),
-    [45,49,54,42,31,37,31,20,16,15]);
+    [45,57,57,47,39,41,31,20,16,15]);
   const registry = createDefaultCastingSequenceRegistry();
   const dedicated = DEFAULT_SPELLS.filter((spell) =>
     registry.resolve(createSpellVfxEvent({ spell }))?.match.spellIds.includes(spell.id));
   assert.equal(dedicated.filter((spell) => spell.level === 0).length, 45);
-  assert.equal(dedicated.filter((spell) => spell.level === 1).length, 49);
-  assert.equal(dedicated.filter((spell) => spell.level === 2).length, 54);
-  assert.equal(dedicated.filter((spell) => spell.level === 3).length, 42);
-  assert.equal(dedicated.filter((spell) => spell.level === 4).length, 31);
-  assert.equal(dedicated.filter((spell) => spell.level === 5).length, 37);
+  assert.equal(dedicated.filter((spell) => spell.level === 1).length, 57);
+  assert.equal(dedicated.filter((spell) => spell.level === 2).length, 57);
+  assert.equal(dedicated.filter((spell) => spell.level === 3).length, 47);
+  assert.equal(dedicated.filter((spell) => spell.level === 4).length, 39);
+  assert.equal(dedicated.filter((spell) => spell.level === 5).length, 41);
   assert.equal(dedicated.filter((spell) => spell.level === 6).length, 31);
-  assert.equal(dedicated.length, 340);
+  assert.equal(dedicated.length, 368);
   assert.deepEqual([7,8,9].map(level => dedicated.filter(s => s.level === level).length), [20,16,15]);
 });

@@ -6100,7 +6100,7 @@ function updateAffectedTokenHighlights(geometry) {
   geometry = prepareSpellTemplateGeometry(geometry, activeSpellTemplateInstruction);
   const tokenEntries =
     collectBattleMapTokenFootprints();
-  const affectedTokens = geometry
+  let affectedTokens = geometry && !activeSpellTemplateInstruction?.placementOnly
     ? findAffectedTokens(
         geometry,
         tokenEntries.map((entry) => (
@@ -6108,6 +6108,8 @@ function updateAffectedTokenHighlights(geometry) {
         ))
       )
     : [];
+  const castingState = activeSpellCastingSession?.getState();
+  if (castingState?.spell?.excludeCaster) affectedTokens = affectedTokens.filter(token => token.id !== castingState.casterToken?.id);
   const affectedIds = new Set(
     affectedTokens.map((token) => token.id)
   );
@@ -6300,6 +6302,9 @@ function formatCastResolution(resolution, { preview = false } = {}) {
     );
   }
 
+  if (resolution.followupSave) parts.push(`${resolution.followupSave.ability.toUpperCase()} save${resolution.followupSave.dc === null ? "" : ` DC ${resolution.followupSave.dc}`} ${resolution.followupSave.timing}`);
+  if (resolution.temporaryHp) parts.push(`Temporary HP: ${resolution.temporaryHp} (does not stack)`);
+  if (resolution.resolutionNotes) parts.push(resolution.resolutionNotes);
   if (resolution.castingSourceName) parts.push(`Source: ${resolution.castingSourceName}`);
   if (resolution.slotLevel > 0) parts.push(`Cast level ${resolution.slotLevel}`);
   parts.push("Manual: resolve rolls, saves, damage/healing, defenses, and continuing spell text with the DM.");
@@ -6565,7 +6570,9 @@ function syncActiveSpellCastingTarget(
   let horizontalFeet = null;
   let verticalFeet = null;
   let validRange = Boolean(currentCasterPoint);
-  const validTarget = sessionState.instruction.singleTarget && ["creature", "object"].includes(sessionState.instruction.sourceTargetType) ? affectedTokens.length === 1 : true;
+  const placementOccupied = sessionState.instruction.placementOnly && geometry && collectBattleMapTokenFootprints().some(({footprint: f}) =>
+    f.width > 0 && f.height > 0 && geometry.anchor.x >= f.left && geometry.anchor.x < f.left + f.width && geometry.anchor.y >= f.top && geometry.anchor.y < f.top + f.height);
+  const validTarget = placementOccupied ? false : sessionState.instruction.singleTarget && ["creature", "object"].includes(sessionState.instruction.sourceTargetType) ? affectedTokens.length === 1 : true;
   const targetElevationFeet = sessionState.instruction.singleTarget && affectedTokens.length === 1
     ? normalizeElevation(affectedTokens[0].elevation ?? affectedTokens[0].elevationFeet)
     : sessionState.instruction.targetType ===
@@ -6622,7 +6629,7 @@ function syncActiveSpellCastingTarget(
       validRange,
     validRange,
     validTarget,
-    invalidReason: validTarget ? "" : `Choose exactly one ${sessionState.instruction.sourceTargetType === "object" ? "object" : "creature"} target. The selected target may have moved; lock its current position again.`,
+    invalidReason: placementOccupied ? "Choose an unoccupied space for this spell." : validTarget ? "" : `Choose exactly one ${sessionState.instruction.sourceTargetType === "object" ? "object" : "creature"} target. The selected target may have moved; lock its current position again.`,
     distanceFeet,
     horizontalFeet,
     verticalFeet,
@@ -6691,10 +6698,10 @@ async function confirmActiveSpellCast() {
   if (!activeSpellCastingSession) return;
 
   const spell = activeSpellCastingSession.getState().spell;
-  if (getSpellActionKind(spell) === "reaction") {
+  if (getSpellActionKind(spell) === "reaction" || spell.castingTrigger) {
     const confirmed = await requestAppConfirmation(
-      `Trigger: ${getSpellReactionTrigger(spell)}. Confirm with the DM that this trigger occurred before spending your reaction.`,
-      { title: "Confirm reaction trigger", confirmLabel: "DM confirmed trigger" }
+      `Trigger: ${spell.castingTrigger || getSpellReactionTrigger(spell)}. Confirm that this occurred before spending the spell resource.`,
+      { title: spell.castingTrigger ? "Confirm spell trigger" : "Confirm reaction trigger", confirmLabel: "DM confirmed trigger" }
     );
     if (!confirmed) return;
   }

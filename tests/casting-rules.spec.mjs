@@ -221,3 +221,38 @@ test('projectile targeting: an unassigned original target can disappear without 
  await page.locator('[data-token-id="moving-target"]').evaluate(t=>t.remove());await page.locator('#confirmSpellCastButton').click();
  await expect(page.locator('body')).toHaveAttribute('data-test-cast-confirmed','1');const resolution=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState().resolution);expect(resolution.affectedTokens.map(t=>t.id)).toEqual(['second-target']);
 });
+
+
+test('homebrew selection: Searing Smite confirms its hit trigger and upcasts without concentration',async({page})=>{
+ await openCastingFixture(page);
+ await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId:'searing-smite',slotOptions:[{kind:'normal',level:3,remaining:1}]}));
+ await expect(page.locator('#spellCastingResolution')).toContainText('3d6 fire');
+ await expect(page.locator('#spellCastingResolution')).toContainText('CON save');
+ await page.locator('#confirmSpellCastButton').click();
+ await expect(page.getByRole('dialog')).toContainText('after you hit');
+ await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
+ await expect(page.locator('body')).not.toHaveAttribute('data-test-cast-confirmed','1');
+ await page.locator('#confirmSpellCastButton').click();await page.getByRole('button',{name:'DM confirmed trigger'}).click();
+ await expect(page.locator('body')).toHaveAttribute('data-test-cast-confirmed','1');
+ const state=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState());expect(state.spell.concentration).toBe(false);expect(state.resolution.damage).toEqual(['3d6 fire']);
+});
+
+test('homebrew selection: summons require empty placement and never highlight creatures as damage targets',async({page})=>{
+ await openCastingFixture(page);await addCastingTarget(page);
+ await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId:'summon-construct',slotOptions:[{kind:'normal',level:4,remaining:1}]}));
+ await lockCastingTarget(page);await expect(page.locator('#confirmSpellCastButton')).toBeDisabled();
+ await expect(page.locator('#spellCastingResolution')).toContainText('unoccupied');
+ const rect=await page.locator('[data-token-id="moving-target"]').boundingBox();await page.mouse.click(rect.x+rect.width+80,rect.y+rect.height+80);
+ await expect(page.locator('#confirmSpellCastButton')).toBeEnabled();
+ const state=await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.getSpellCastState());expect(state.instruction.placementOnly).toBe(true);expect(state.target.affectedTokens).toEqual([]);
+ await page.locator('#confirmSpellCastButton').click();await expect(page.locator('body')).toHaveAttribute('data-test-cast-confirmed','1');
+});
+
+test('homebrew selection: ongoing healing and Hunger of Hadar describe their later timing',async({page})=>{
+ await openCastingFixture(page);
+ await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId:'aura-of-vitality'}));
+ await expect(page.locator('#spellCastingResolution')).toContainText('bonus action');await expect(page.locator('#spellCastingResolution')).toContainText('2d6');
+ await page.evaluate(()=>window.__HOMEBREW_GOD_RELEASE_TEST__.beginSpellCast({spellId:'hunger-of-hadar'}));
+ await expect(page.locator('#spellCastingResolution')).toContainText('Start');await expect(page.locator('#spellCastingResolution')).toContainText('2d6 cold');await expect(page.locator('#spellCastingResolution')).toContainText('2d6 acid');
+ await expect(page.locator('#spellCastingResolution')).toContainText('immediate');
+});

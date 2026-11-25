@@ -4097,14 +4097,14 @@ export function runCharacterCreatorSelfTests(context) {
     const phase7DeathSource = getSpellcastingClassOptions(creatorState.draft).find((entry) => entry.classEntryId === "phase7-death");
     const phase7IncompleteGrant = getSection16ExpandedSpellGrants(phase7DeathSource).find((grant) => grant.spellId === "ray-of-sickness");
     record(
-      "Phase 7: incomplete subclass spell references retain their level and require a definition",
+      "Phase 7: completed subclass spells retain their level and no longer need a definition",
       {
         id: phase7IncompleteGrant?.spell?.id,
         level: phase7IncompleteGrant?.spell?.level,
         inlineSubclassSpell: phase7IncompleteGrant?.spell?.inlineSubclassSpell === true,
         requiresSpellDefinition: phase7IncompleteGrant?.spell?.requiresSpellDefinition === true
       },
-      {id: "ray-of-sickness", level: 1, inlineSubclassSpell: true, requiresSpellDefinition: true}
+      {id: "ray-of-sickness", level: 1, inlineSubclassSpell: false, requiresSpellDefinition: false}
     );
     creatorState.draft = phase7ArcanaDraft;
 
@@ -9075,7 +9075,7 @@ export function runCharacterCreatorSelfTests(context) {
       },
       {
         valid: true,
-        materialSpells: 189
+        materialSpells: 198
       }
     );
 
@@ -9108,7 +9108,7 @@ export function runCharacterCreatorSelfTests(context) {
       },
       {
         valid: true,
-        concentrationSpells: 128
+        concentrationSpells: 149
       }
     );
 
@@ -9129,7 +9129,7 @@ export function runCharacterCreatorSelfTests(context) {
       },
       {
         valid: true,
-        rituals: 29
+        rituals: 30
       }
     );
 
@@ -9164,9 +9164,9 @@ export function runCharacterCreatorSelfTests(context) {
           ).length
       },
       {
-        spellAttacks: 18,
+        spellAttacks: 19,
         weaponAttacks: 2,
-        savingThrows: 103
+        savingThrows: 114
       }
     );
 
@@ -9208,7 +9208,7 @@ export function runCharacterCreatorSelfTests(context) {
           ).length
       },
       {
-        damageSpells: 80,
+        damageSpells: 96,
         scaled: true,
         characterScaling: 24
       }
@@ -9237,7 +9237,7 @@ export function runCharacterCreatorSelfTests(context) {
           )
       },
       {
-        healingSpells: 10,
+        healingSpells: 11,
         scaled: true
       }
     );
@@ -9267,7 +9267,7 @@ export function runCharacterCreatorSelfTests(context) {
           )
       },
       {
-        higherLevelSpells: 90,
+        higherLevelSpells: 103,
         synchronized: true
       }
     );
@@ -9358,7 +9358,7 @@ export function runCharacterCreatorSelfTests(context) {
       {
         catalogValid: true,
         references: 399,
-        inlineFallbacks: 46,
+        inlineFallbacks: 7,
         rejectsBrokenFixture: true
       }
     );

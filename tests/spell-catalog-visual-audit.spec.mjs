@@ -19,7 +19,7 @@ test("every catalog spell resolves and renders travel and impact review frames",
     window.catalogReview = { spells: DEFAULT_SPELLS, registry: createDefaultCastingSequenceRegistry(), effects: createDefaultEffectRegistry(), createEffectRenderer, createEffectEngine, cache: createVfxAssetCache(), createSpellVfxEvent, active: [] };
     return DEFAULT_SPELLS.length;
   });
-  expect(count).toBe(340);
+  expect(count).toBe(368);
   const report = [];
   for (let offset = 0; offset < count; offset += 20) {
     const rows = await page.evaluate(async (offset) => {
