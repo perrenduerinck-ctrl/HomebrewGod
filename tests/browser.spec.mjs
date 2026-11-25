@@ -3045,8 +3045,8 @@ test("all level-one spells are available and representative status and utility p
   const optionIds = await page.locator(
     '#spellTemplateSelect optgroup[label="Level 1"] option'
   ).evaluateAll(options => options.map(option => option.value));
-  expect(optionIds).toHaveLength(49);
-  expect(new Set(optionIds).size).toBe(49);
+  expect(optionIds).toHaveLength(57);
+  expect(new Set(optionIds).size).toBe(57);
 
   async function placeAndPlay(spellId, effectType, screenshotName, targetX = 450) {
     await ui.select(spellId);
@@ -3148,8 +3148,8 @@ test("all level-two spells are available and representative buffs, utility, and 
   const optionIds = await page.locator(
     '#spellTemplateSelect optgroup[label="Level 2"] option'
   ).evaluateAll(options => options.map(option => option.value));
-  expect(optionIds).toHaveLength(54);
-  expect(new Set(optionIds).size).toBe(54);
+  expect(optionIds).toHaveLength(57);
+  expect(new Set(optionIds).size).toBe(57);
 
   async function play(spellId, effectType, screenshotName, targetX = 450) {
     await ui.select(spellId);
@@ -3225,8 +3225,8 @@ test("all level-three spells are available and representative transformations, w
   const optionIds = await page.locator(
     '#spellTemplateSelect optgroup[label="Level 3"] option'
   ).evaluateAll(options => options.map(option => option.value));
-  expect(optionIds).toHaveLength(42);
-  expect(new Set(optionIds).size).toBe(42);
+  expect(optionIds).toHaveLength(47);
+  expect(new Set(optionIds).size).toBe(47);
 
   async function play(spellId, effectType, screenshotName, targetX = 450) {
     await ui.select(spellId);
@@ -3314,8 +3314,8 @@ test("all level-four spells are available and representative summons, transforma
   const optionIds = await page.locator(
     '#spellTemplateSelect optgroup[label="Level 4"] option'
   ).evaluateAll(options => options.map(option => option.value));
-  expect(optionIds).toHaveLength(31);
-  expect(new Set(optionIds).size).toBe(31);
+  expect(optionIds).toHaveLength(39);
+  expect(new Set(optionIds).size).toBe(39);
 
   async function play(spellId, effectType, screenshotName, targetX = 450, captureDelay = 400) {
     await ui.select(spellId);
@@ -3410,8 +3410,8 @@ test("all level-five spells are available and representative control, summoning,
   const optionIds = await page.locator(
     '#spellTemplateSelect optgroup[label="Level 5"] option'
   ).evaluateAll(options => options.map(option => option.value));
-  expect(optionIds).toHaveLength(37);
-  expect(new Set(optionIds).size).toBe(37);
+  expect(optionIds).toHaveLength(41);
+  expect(new Set(optionIds).size).toBe(41);
 
   async function play(spellId, effectType, screenshotName, targetX = 450, captureDelay = 400) {
     await ui.select(spellId);
