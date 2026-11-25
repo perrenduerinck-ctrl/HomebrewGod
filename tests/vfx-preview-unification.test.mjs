@@ -1,4 +1,5 @@
 import test from "node:test";
+import { normalizeAnimationRuntimeContext } from "../vfx/animationRuntime.js";
 import assert from "node:assert/strict";
 import { createAnimationPreviewStage, ANIMATION_PREVIEW_DISTANCES } from "../vfx/animationPreviewStage.js";
 import { buildSpellAnimationPreviewContext, createSpellPreviewSession } from "../battleMap/spellPreview.js";
@@ -225,4 +226,18 @@ test("map resize reprojects selected token centers from stored ratios", () => {
   assert.deepEqual([context.source.point.x, context.source.point.y], [200, 100]);
   assert.deepEqual([context.target.point.x, context.target.point.y], [600, 300]);
   assert.equal(context.target.tokenId, "target");
+});
+
+
+test("world preview placement uses the chosen target and stays fixed during playback", () => {
+  const f = stageFixture();
+  const context = normalizeAnimationRuntimeContext(f.stage.getContext(), {layer:f.surface});
+  assert.deepEqual(context.sample({fixedToMap:true}).map, {x:304,y:88});
+  f.target.fire("pointerdown", {pointerId:1,clientX:210,clientY:160});
+  assert.deepEqual(context.sample({fixedToMap:true}).map, {x:304,y:88});
+  const replay = normalizeAnimationRuntimeContext(f.stage.getContext(), {layer:f.surface});
+  assert.deepEqual(replay.sample({fixedToMap:true}).map, {x:200,y:140});
+  f.surface.clientWidth=800;f.surface.clientHeight=400;
+  assert.deepEqual(replay.sample({fixedToMap:true}).map, {x:400,y:280});
+  f.stage.destroy();
 });

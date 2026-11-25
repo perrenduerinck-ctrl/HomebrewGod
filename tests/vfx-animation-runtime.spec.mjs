@@ -110,3 +110,29 @@ test("real Fireball stages, healing, spear, ground area and beam use the same ru
   expect(result.samples.other.x).toBe(640);expect(result.samples.beam.x).toBeCloseTo(400,1);
   expect(result.samples.ground.x).toBe(320);expect(result.samples.ground.y).toBe(270);expect(result.samples.ground.spriteTransform).toContain("scale(2.5, 2.5)");expect(result.remaining).toBe(0);
 });
+
+
+test("Animation Creator world previews use the target for static, ground and screen effects across families", async ({page}) => {
+  await page.goto("?smokeTest=1");
+  await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS",{timeout:60000});
+  await page.evaluate(async()=>{
+    const {getAnimationSession}=await import("/vfx/animationWorkspace.js");const session=getAnimationSession(document);
+    const c=document.createElement("canvas");c.width=32;c.height=32;c.getContext("2d").fillRect(0,0,32,32);
+    for(const [behavior,family] of [["static","melee"],["ground","magic"],["screen","ranged"]])session.library.registerAnimation({id:"world_preview_"+behavior,name:"World "+behavior,sprite:c.toDataURL(),grid:{columns:1,rows:1},frameCount:1,playback:"loop",loop:true,family,behavior,placement:{mode:"WORLD",fixedToMap:true}});
+  });
+  const dialog=page.locator("#animationLibraryDialog"),stage=dialog.locator("[data-animation-preview]"),target=dialog.locator("[data-animation-target]");
+  const position=()=>stage.evaluate(el=>{const target=el.querySelector('[data-animation-target]').getBoundingClientRect(),overlay=el.querySelector('.hg-map-vfx-layer')||el;const bounds=overlay.getBoundingClientRect();return {x:target.left+target.width/2-bounds.left,y:target.top+target.height/2-bounds.top};});
+  for(const [behavior,family] of [["static","melee"],["ground","magic"],["screen","ranged"]]){
+    await page.evaluate(async({behavior,family})=>{const {getAnimationSession}=await import("/vfx/animationWorkspace.js");void getAnimationSession(document).editor.openForSlot({animationId:"world_preview_"+behavior,family});},{behavior,family});
+    await dialog.locator("[data-animation-edit]").click();await target.press("ArrowLeft");
+    const expected=await position();await dialog.locator("[data-animation-play]").click();
+    const effect=stage.locator(".hg-map-vfx-effect[data-animation-id]").first();await expect(effect).toBeVisible();
+    const read=()=>effect.evaluate(el=>({x:Number(el.dataset.vfxX),y:Number(el.dataset.vfxY)}));
+    await expect.poll(async()=>Math.abs((await read()).x-expected.x)).toBeLessThan(3);
+    await expect.poll(async()=>Math.abs((await read()).y-expected.y)).toBeLessThan(3);
+    await target.press("ArrowRight");expect(Math.abs((await read()).x-expected.x)).toBeLessThan(3);
+    await dialog.locator("[data-animation-replay]").click();const moved=await position();await expect.poll(async()=>Math.abs((await read()).x-moved.x)).toBeLessThan(3);
+    await dialog.locator("[data-animation-stop]").click();await expect(stage.locator(".hg-map-vfx-effect")).toHaveCount(0);
+    await dialog.locator("[data-animation-close]").click();
+  }
+});
