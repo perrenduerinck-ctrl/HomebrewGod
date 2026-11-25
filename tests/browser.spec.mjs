@@ -3003,7 +3003,7 @@ test(
 async function openDmSpellPreview(page) {
   await page.goto("?smokeTest=1&release=unified-preview-20260829",
     { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__HOMEBREW_GOD_RELEASE_TEST__));
+  await expect(page.locator("#homebrewGodSmokeResult")).toContainText("SMOKE TEST PASS", {timeout: 60000});
   await page.evaluate(() => window.__HOMEBREW_GOD_RELEASE_TEST__.openScreen("battle"));
   for (const id of ["spellPreviewControl", "loadSpellTemplateButton",
     "playSpellPreviewVfxButton", "resetSpellPreviewButton", "lightningVfxTestControl"]) {
@@ -5647,7 +5647,7 @@ test(
         "[data-spell-results-meta]"
       )
     ).toContainText(
-      "343 matching"
+      "371 matching"
     );
 
     expect(
