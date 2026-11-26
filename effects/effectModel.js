@@ -122,6 +122,7 @@ export function normalizeEffectDefinition(value = {}) {
 }
 
 export function normalizeEffectInstance(value = {}) {
+  const spell = value.spell || value.timing?.spell;
   const id = identifier(value.id, 180);
   const definitionId = identifier(value.definitionId || "custom", 180);
   const name = text(value.name, 120);
@@ -136,6 +137,14 @@ export function normalizeEffectInstance(value = {}) {
   return Object.freeze({
     id,
     definitionId,
+    ...(spell ? {spell: Object.freeze({
+      id: text(spell.id,180), castId: identifier(spell.castId,180),
+      targetActorKey: text(spell.targetActorKey,240),
+      concentrationActorKey: text(spell.concentrationActorKey,240),
+      concentrationStartedAtMillis: Math.max(0,number(spell.concentrationStartedAtMillis)),
+      repeatSave: text(spell.repeatSave,10), saveDc: spell.saveDc == null ? null : number(spell.saveDc),
+      endsOnDamage: spell.endsOnDamage === true
+    })} : {}),
     name,
     type,
     icon: text(value.icon, 12) || "◆",
@@ -160,4 +169,12 @@ export function normalizeEffectInstance(value = {}) {
     createdAtMillis: Math.max(0, number(value.createdAtMillis, Date.now())),
     updatedAtMillis: Math.max(0, number(value.updatedAtMillis, Date.now()))
   });
+}
+
+
+// Concentration and repeat-save timing travels inside the existing timing map.
+// This keeps saved effects compatible with the deployed room permission rules.
+export function serializeEffectInstance(record) {
+  const {spell,...saved}=record;
+  return spell ? {...saved,timing:{...saved.timing,spell}} : saved;
 }

@@ -1,0 +1,13 @@
+#spellOutcomesPanel { position:fixed;right:14px;bottom:14px;z-index:1400;width:min(500px,calc(100vw - 28px));max-height:44dvh;overflow:auto;overflow-wrap:anywhere;box-sizing:border-box;margin:0;padding:14px;border:1px solid #47476c;border-radius:12px;background:#141a2c;color:#edf0ff; }
+#spellOutcomesPanel[hidden] { display:none; }
+#spellOutcomesPanel h4 { margin:0 0 8px; }
+#spellOutcomesPanel p { margin:6px 0; }
+#spellOutcomesPanel article { border-top:1px solid #3b4260;padding:12px 0; }
+.hg-spell-outcome-row { display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0; }
+.hg-spell-outcome-row strong { min-width:130px; }
+.hg-spell-outcome-row select { max-width:100%;min-height:36px;background:#1c2338;color:#edf0ff;border:1px solid #58617e;border-radius:7px;padding:5px; }
+.hg-spell-outcome-actions { display:flex;flex-wrap:wrap;gap:8px;margin-top:8px; }
+.hg-spell-outcome-actions button { background:#5448b4;color:white;border:1px solid #8c82d6;border-radius:8px;padding:8px 12px; }
+#spellOutcomesPanel [role=status] { overflow-wrap:anywhere; }
+
+#spellOutcomesPanel > summary { cursor:pointer;font-weight:bold; }

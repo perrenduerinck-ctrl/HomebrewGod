@@ -73,6 +73,8 @@ export function normalizeMonsterSpellcasting(value) {
     casterLevel: numberOrBlank(source.casterLevel),
     spellTurnState: source.spellTurnState && typeof source.spellTurnState === "object" ? JSON.parse(JSON.stringify(source.spellTurnState)) : null,
     longCasting: source.longCasting && typeof source.longCasting === "object" ? JSON.parse(JSON.stringify(source.longCasting)) : null,
+    ...(Array.isArray(source.spellOutcomes) ? {spellOutcomes: JSON.parse(JSON.stringify(source.spellOutcomes.slice(-32)))} : {}),
+    ...(source.effectConditions && typeof source.effectConditions === "object" ? {effectConditions: {...source.effectConditions}} : {}),
     slotPools: normalizeMonsterSlotPools(source.slotPools, spells),
     spells,
     pendingConcentrationChecks: readConcentrationChecks(source),

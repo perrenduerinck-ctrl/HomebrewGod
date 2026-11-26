@@ -1,4 +1,4 @@
-import { normalizeEffectInstance } from "./effectModel.js";
+import { normalizeEffectInstance, serializeEffectInstance } from "./effectModel.js";
 
 const text = (value, maximum = 240) => String(value ?? "").trim().slice(0, maximum);
 
@@ -33,7 +33,7 @@ export function createEffectPersistence({
       updatedAtMillis: Date.now()
     });
     if (!record || !createdByUid) throw new Error("A signed-in DM, room, and target are required.");
-    const saved = { ...record, updatedAt: serverTimestamp() };
+    const saved = { ...serializeEffectInstance(record), updatedAt: serverTimestamp() };
     if (runTransaction && prepareTargetMutation) {
       let target;
       await runTransaction(db, async (transaction) => {

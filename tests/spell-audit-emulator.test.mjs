@@ -131,7 +131,7 @@ test("map conditions atomically end character and monster concentration off-turn
     await persistence.remove(effect);
     assert.match(getSpellcasterBlockReason(actor, { token: (await getDoc(doc(db, ...tokenPath))).data(), actorKind: kind }), /incapacitated/i);
     await persistence.remove(second);
-    assert.equal(getSpellcasterBlockReason(actor, { token: (await getDoc(doc(db, ...tokenPath))).data(), actorKind: kind }), "");
+    assert.equal(getSpellcasterBlockReason((await getDoc(doc(db, ...actorPath))).data(), { token: (await getDoc(doc(db, ...tokenPath))).data(), actorKind: kind }), "");
   }
 });
 

@@ -20,6 +20,8 @@ export function createEffectRuntime({
   if (!registry?.get) throw new Error("Effect runtime requires an effect registry.");
   const records = new Map();
   const recordsByTarget = new Map();
+  const recordsByActor = new Map();
+  const actorKey = record => record?.spell?.targetActorKey || (record?.targetCharacterId ? "characters:"+record.targetCharacterId : "");
   const pendingExpirations = new Map();
 
   function indexRecord(record) {
@@ -27,6 +29,7 @@ export function createEffectRuntime({
     if (!targetTokenId || !record?.id) return;
     if (!recordsByTarget.has(targetTokenId)) recordsByTarget.set(targetTokenId, new Set());
     recordsByTarget.get(targetTokenId).add(record.id);
+    const key=actorKey(record);if(key){if(!recordsByActor.has(key))recordsByActor.set(key,new Set());recordsByActor.get(key).add(record.id);}
   }
 
   function unindexRecord(record) {
@@ -34,11 +37,13 @@ export function createEffectRuntime({
     const ids = recordsByTarget.get(targetTokenId);
     if (!ids) return;
     ids.delete(record?.id);
+    const key=actorKey(record),actorIds=recordsByActor.get(key);actorIds?.delete(record?.id);if(actorIds?.size===0)recordsByActor.delete(key);
     if (ids.size === 0) recordsByTarget.delete(targetTokenId);
   }
 
   function rebuildTargetIndex() {
     recordsByTarget.clear();
+    recordsByActor.clear();
     records.forEach(indexRecord);
   }
 
@@ -181,6 +186,9 @@ export function createEffectRuntime({
     reconcile,
     getSnapshot: snapshot,
     getById: (id) => clone(records.get(text(id)) || null),
+    getForActor(key) {
+      return [...(recordsByActor.get(text(key)) || [])].filter(id=>!pendingExpirations.has(id)).map(id=>clone(records.get(id))).filter(Boolean);
+    },
     getForToken(tokenId) {
       const ids = recordsByTarget.get(text(tokenId));
       if (!ids) return [];
