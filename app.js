@@ -1,3 +1,5 @@
+import {createSpellOutcomeRequest,getSpellOutcomeSupport} from "./spells/spellOutcomes.js";
+import {createSpellOutcomePanel} from "./spells/spellOutcomePanel.js";
 import { assertSpellDefinitionRevision } from "./combat/monsterSpellDefinition.js";
 import { getSpellcasterBlockReason } from "./spells/spellCastingRules.js";
 import { applyLongCastingCommand, getLongCastingStatus, getTimedCastingSeconds, supportsTrackedLongCasting } from "./combat/longCasting.js";
@@ -64,7 +66,8 @@ import {
   createMapTemplateEngine
 } from "./battleMap/templateRenderer.js?v=unified-preview-20260829";
 import {
-  findAffectedTokens
+  findAffectedTokens,
+  findSingleTargetAtPoint
 } from "./battleMap/tokenCollision.js?v=stage8-20260826";
 import {
   createSpellTemplateInstruction,
@@ -221,7 +224,8 @@ import {
   applyConfirmedMonsterSpellCast,
   restoreMonsterSpellResources,
   applyMonsterConcentrationEvent,
-  getMonsterSpellAvailability
+  getMonsterSpellAvailability,
+  resolveMonsterSpellcastingStats
 } from "./combat/monsterSpellcasting.js";
 import { createNpcPersistence } from "./npcs/npcPersistence.js";
 import { createNpcRelationshipPersistence } from "./npcs/relationshipPersistence.js";
@@ -719,6 +723,8 @@ combatEffectPersistence = createCombatEffectPersistence({
   getIsDm: () => currentIsDM === true,
   onWarning: (message) => console.warn(message)
 });
+let spellOutcomePanelSystem = null;
+let activeSpellOutcomeRequestId = "";
 let gameplayEffectPersistence = null;
 let latestGameplayEffectRecords = [];
 let gameplayEffectPanelSystem = null;
@@ -2262,7 +2268,7 @@ async function executeLongCastingControl(command, { token, actor, actorKind, att
     characterId: actorKind === "character" ? token.linkedCharacterId : "", casterToken: token, casterTokenId: token.id,
     casterName: actor.identity?.name || actor.name || token.name,
     skipCastEligibility: actorKind === "monster", allowTrackedLongCasting: true,
-    spellcastingStats: actorKind === "monster" ? { spellSaveDc: actor.spellcasting?.saveDc, spellAttackBonus: actor.spellcasting?.attackBonus } : null,
+    spellcastingStats: actorKind === "monster" ? resolveMonsterSpellcastingStats(actor) : null,
     slotOptions: [{ ...current.selection, remaining: 1, label: "Complete casting with the resource chosen at the start" }],
     onConfirmCast: () => commitCombatActionBarMutation({ token,
       spellDefinitionGuard: current.spell.castingDefinition || null,
@@ -2352,10 +2358,7 @@ async function executeCombatActionBarEntry(action, context) {
       casterTokenId: token.id,
       casterName: actor?.name || token.name || "Monster",
       casterLevel: actor?.spellcasting?.casterLevel || 1,
-      spellcastingStats: {
-        spellSaveDc: actor?.spellcasting?.saveDc,
-        spellAttackBonus: actor?.spellcasting?.attackBonus
-      },
+      spellcastingStats: resolveMonsterSpellcastingStats(actor),
       skipCastEligibility: true,
       slotOptions: availability.kind === "slot" ? availability.options.map((option) => ({ ...option, sourceId })) : [{
         kind: "special",
@@ -3917,6 +3920,7 @@ function openRoom(roomCode, screenToShow = "room") {
 
     currentRoomData = room;
     currentIsDM = room.dmUid === currentUser.uid;
+    ensureSpellOutcomePanel()?.connect();
     currentRoomMembershipState = "member";
     const realtimeUserName =
       currentUser.displayName ||
@@ -6108,6 +6112,7 @@ function updateAffectedTokenHighlights(geometry) {
         ))
       )
     : [];
+  if(geometry && activeSpellTemplateInstruction?.singleTarget && ["creature","object"].includes(activeSpellTemplateInstruction.sourceTargetType)) affectedTokens=findSingleTargetAtPoint(geometry.anchor,tokenEntries.map(e=>e.footprint));
   const castingState = activeSpellCastingSession?.getState();
   if (castingState?.spell?.excludeCaster) affectedTokens = affectedTokens.filter(token => token.id !== castingState.casterToken?.id);
   const affectedIds = new Set(
@@ -6539,6 +6544,10 @@ function renderSpellCastingPanel() {
             return summary ? `Preview: ${summary}` : "";
           })())
   );
+  if(sessionState.phase==="confirmed" && currentRoomCode && E.spellCastingResolution) {
+    const needsResults=(sessionState.resolution?.damage?.length || sessionState.resolution?.healing?.length || getSpellOutcomeSupport(sessionState.spell).supported);
+    if(needsResults) E.spellCastingResolution.textContent += activeSpellOutcomeRequestId ? " Results are queued below for the DM." : " Apply this spell's results using the existing game controls.";
+  }
 }
 
 function syncActiveSpellCastingTarget(
@@ -6673,6 +6682,7 @@ function cancelActiveSpellCasting({
     dispatchCombatActionLifecycle(activeSpellActionLifecycle, "cancelled", lifecycleMessage);
   }
 
+  spellOutcomePanelSystem?.collapse();
   activeSpellCastingSession = null;
   activeSpellCastingCasterPoint = null;
   activeSpellCastingCasterElevationFeet = 0;
@@ -6732,6 +6742,7 @@ async function confirmActiveSpellCast() {
     );
     activeSpellInteractionRelease?.();
     activeSpellInteractionRelease = null;
+    spellOutcomePanelSystem?.revealRequest(activeSpellOutcomeRequestId);
     text(
       E.templateStatus,
       `${result.resolution.spellName} cast confirmed. ${formatCastResolution(result.resolution)}`
@@ -7331,8 +7342,27 @@ function restoreCombatEffectController(record) {
   };
 }
 
+function ensureSpellOutcomePanel() {
+  if (spellOutcomePanelSystem) return spellOutcomePanelSystem;
+  const root=document.getElementById("spellOutcomesPanel");if(!root)return null;
+  spellOutcomePanelSystem=createSpellOutcomePanel({root,db,collection,doc,onSnapshot,runTransaction,serverTimestamp,
+    getRoomCode:()=>currentRoomCode,getUserUid:()=>currentUser?.uid,getIsDm:()=>currentIsDM,
+    getContext:gameplayEffectContext,onActorsChanged:()=>reconcileGameplayEffects(),
+    onCommitted:async(result,roomCode)=>{
+      if(currentRoomCode!==roomCode)return;
+      const userUid=currentUser?.uid;
+      for(const actor of result.actors||[]) {
+        if(currentRoomCode!==roomCode || currentUser?.uid!==userUid)return;
+        if(actor.kind==="characters") {await tokenSystem?.syncLinkedCharacterTokens?.({...actor.value,id:actor.id});reconcileCombatPresentationEffects({character:actor.value,characterId:actor.id});}
+        else reconcileCombatPresentationEffects({monster:actor.value,monsterId:actor.id});
+      }
+    }
+  });return spellOutcomePanelSystem;
+}
+
 function gameplayEffectContext() {
   return {
+    ...spellOutcomePanelSystem?.getConcentrationState(),
     worldTime: campaignTimeSystem?.getState?.().worldTime || 0,
     initiative: initiativeSystem?.getState?.() || {}
   };
@@ -7405,6 +7435,7 @@ async function playGameplayEffectVisual(record, phase) {
 }
 
 function clearGameplayEffectsForRoomExit() {
+  spellOutcomePanelSystem?.stop();
   for (const retry of gameplayEffectExpirationRetries.values()) {
     if (retry.timer) clearTimeout(retry.timer);
   }
@@ -7420,8 +7451,10 @@ function clearGameplayEffectsForRoomExit() {
   gameplayEffectPanelSystem?.refresh?.();
 }
 
-function getGameplayEffectsForToken(tokenId) {
-  return gameplayEffectRuntime.getForToken(tokenId);
+function getGameplayEffectsForToken(tokenId, token = null) {
+  const target=token || tokenSystem?.getRoomTokens?.().find(t=>t.id===tokenId);
+  const actorKey=target?.linkedCharacterId ? "characters:"+target.linkedCharacterId : (target?.linkedMonsterId || target?.linkedMonster?.id) ? "monsters:"+(target.linkedMonsterId || target.linkedMonster.id) : "";
+  return [...new Map([...gameplayEffectRuntime.getForToken(tokenId),...gameplayEffectRuntime.getForActor(actorKey)].map(e=>[e.id,e])).values()];
 }
 
 function getEffectiveTokenStats(token = {}) {
@@ -7430,7 +7463,7 @@ function getEffectiveTokenStats(token = {}) {
       ac: Number(token.armorClass) || 0,
       speed: readTokenBaseSpeed(token)
     },
-    effects: getGameplayEffectsForToken(token.id || token.tokenId)
+    effects: getGameplayEffectsForToken(token.id || token.tokenId, token)
   });
   return {
     armorClass: calculated.ac,
@@ -7449,6 +7482,15 @@ async function applyGameplayEffect(input, context = gameplayEffectContext()) {
     throw error;
   }
   return record;
+}
+
+async function resolveSpellConditionSave(record) {
+  if(currentIsDM!==true || record.roomCode!==currentRoomCode)throw new Error("Only the current room DM can resolve this save.");
+  const answer=globalThis.prompt(record.spell.repeatSave.toUpperCase()+" saving throw total (DC "+record.spell.saveDc+")");
+  if(answer===null)return null;
+  if(String(answer).trim()===""||!Number.isFinite(Number(answer)))throw new Error("Enter the saving throw total.");
+  if(Number(answer)<record.spell.saveDc)return false;
+  await removeGameplayEffect(record);return true;
 }
 
 async function removeGameplayEffect(record) {
@@ -8065,12 +8107,26 @@ async function beginCharacterSpellTargeting({
     typeof onConfirmCast === "function"
       ? onConfirmCast
       : () => true;
+  const effectiveCastingLevel = casterLevel !== null && casterLevel !== undefined && String(casterLevel).trim() !== "" && Number.isFinite(Number(casterLevel))
+    ? Math.max(1,Math.round(Number(casterLevel))) : getCharacterLevel(character);
+  const outcomeRequestId = globalThis.crypto.randomUUID();
+  activeSpellOutcomeRequestId = "";
+  spellOutcomePanelSystem?.collapse();
   activeSpellCastingSession =
     createSpellCastingSession({
-      onConfirm: ({ slot }) => {
+      onConfirm: ({ slot, target, casterToken }) => {
         const latestScope = JSON.stringify([currentRoomCode, currentMapId, floorSystem?.getState?.().sceneId, floorSystem?.getState?.().floorId]);
         if (latestScope !== castingScope) throw new Error("The map or floor changed while targeting. Cancel and choose targets again.");
+        const outcomeRequest = currentRoomCode && currentUser?.uid ? createSpellOutcomeRequest({
+          id: outcomeRequestId, spell, slot, target,
+          casterToken: tokenSystem?.getRoomTokens?.().find(t=>t.id===casterToken?.id) || casterToken,
+          tokens: tokenSystem?.getRoomTokens?.() || [],
+          characterLevel: effectiveCastingLevel,
+          ...defaultSpellcastingStats, castingContext: gameplayEffectContext(), mapId: currentMapId
+        }) : null;
+        activeSpellOutcomeRequestId = outcomeRequest?.id || "";
         return activeSpellCastingConfirm({
+          ...(outcomeRequest ? {outcomeRequest} : {}),
           kind: slot.kind,
           level: slot.level,
           sourceId: slot.sourceId,
@@ -8099,9 +8155,7 @@ async function beginCharacterSpellTargeting({
       },
     slotOptions: availableSlotOptions,
     sourceFeedback: skipCastEligibility ? [] : getCharacterSpellcastingSourceOptions(character, spell, { includeUnavailable: true }).filter((source) => !source.normal),
-    characterLevel: casterLevel !== null && casterLevel !== undefined && String(casterLevel).trim() !== "" && Number.isFinite(Number(casterLevel))
-      ? Math.max(1, Math.round(Number(casterLevel)))
-      : getCharacterLevel(character),
+    characterLevel: effectiveCastingLevel,
     spellcastingModifier: defaultSpellcastingStats.spellcastingModifier,
     spellSaveDc: defaultSpellcastingStats.spellSaveDc,
     spellAttackBonus: defaultSpellcastingStats.spellAttackBonus
@@ -11560,7 +11614,8 @@ function initializeApplicationShell() {
     getContext: gameplayEffectContext,
     getAnimationOptions: () => battleMapAnimations?.library?.list?.() || [],
     onApply: applyGameplayEffect,
-    onRemove: removeGameplayEffect
+    onRemove: removeGameplayEffect,
+    onResolveSave: resolveSpellConditionSave
   });
   renderActiveEffectsPanel();
   navigationController = createSidebarNavigation({

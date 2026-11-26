@@ -77,6 +77,12 @@ export function prepareEffectDuration(value, {
 
 export function getEffectExpirationReason(effect = {}, context = {}) {
   const duration = normalizeEffectDuration(effect.duration);
+  const spell = effect.spell || effect.timing?.spell;
+  const concentrationKey = spell?.concentrationActorKey;
+  if (concentrationKey && (Object.hasOwn(context.concentrationByActor || {},concentrationKey) || context.concentrationLoadedKinds?.includes(concentrationKey.split(":")[0]))) {
+    const current=context.concentrationByActor?.[concentrationKey];
+    if (!current || current.spellId !== spell.id || current.startedAtMillis !== spell.concentrationStartedAtMillis) return "concentration-ended";
+  }
   if (["permanent", "until-removed"].includes(duration.mode)) return "";
   if (duration.mode === "world-time") {
     return duration.expiresAtWorldTime != null &&
@@ -85,6 +91,7 @@ export function getEffectExpirationReason(effect = {}, context = {}) {
       : "";
   }
   const state = initiativeSnapshot(context.initiative);
+  if (!state.combatActive && duration.expiresAtWorldTime != null && number(context.worldTime,0) >= duration.expiresAtWorldTime) return "world-time-expired";
   return duration.expiresAtTurnCounter != null &&
     state.turnCounter >= duration.expiresAtTurnCounter
     ? "turn-duration-expired"

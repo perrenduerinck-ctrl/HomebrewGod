@@ -438,3 +438,15 @@ export function findAffectedTokens(
       ))
   );
 }
+
+
+// A targeting marker is not an area of effect. Resolve the chosen point, using
+// the nearest center when footprints overlap and retaining true ties as ambiguous.
+export function findSingleTargetAtPoint(point, tokens = []) {
+  if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) return Object.freeze([]);
+  const candidates=tokens.map(normalizeTokenFootprint).filter(t=>t.width>0&&t.height>0&&pointInsideRectangle(point,t));
+  if(candidates.length<2)return Object.freeze(candidates);
+  const distance=t=>(point.x-t.center.x)**2+(point.y-t.center.y)**2;
+  const nearest=Math.min(...candidates.map(distance));
+  return Object.freeze(candidates.filter(t=>Math.abs(distance(t)-nearest)<=EPSILON));
+}

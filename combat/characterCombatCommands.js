@@ -1,3 +1,4 @@
+import {queueSpellOutcome} from "../spells/spellOutcomes.js";
 import { clearConcentrationChecks, interruptElapsedCasting } from "./concentrationChecks.js";
 import {
   adjustCanonicalSpellResource,
@@ -415,6 +416,7 @@ export function applyConfirmedSpellCast(character = {}, spell = {}, selection = 
         : {})
     };
   }
+  queueSpellOutcome(next, selection.outcomeRequest);
   return next;
 }
 

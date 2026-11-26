@@ -5,6 +5,7 @@ import {
 } from "../battleMap/templateGeometry.js";
 import {
   findAffectedTokens,
+  findSingleTargetAtPoint,
   normalizeTokenFootprint,
   templateGeometryToPolygon,
   tokenIntersectsTemplate
@@ -324,4 +325,14 @@ test("flat templates retain their original 2D collision behavior", () => {
     height: 10,
     elevation: 1000
   }), true);
+});
+
+
+test("single-target markers choose the intended adjacent or overlapping token without becoming an area",()=>{
+  const caster={id:"caster",left:0,top:0,width:64,height:64},adjacent={id:"ally",left:64,top:0,width:64,height:64};
+  assert.deepEqual(findSingleTargetAtPoint({x:96,y:32},[caster,adjacent]).map(t=>t.id),["ally"]);
+  const overlapping={...adjacent,left:32};
+  assert.deepEqual(findSingleTargetAtPoint({x:64,y:32},[caster,overlapping]).map(t=>t.id),["ally"]);
+  assert.equal(findSingleTargetAtPoint({x:32,y:32},[caster,{...caster,id:"stacked"}]).length,2);
+  assert.deepEqual(findSingleTargetAtPoint({x:200,y:32},[caster,adjacent]),[]);
 });

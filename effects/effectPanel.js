@@ -33,7 +33,8 @@ export function createEffectPanel({
   getContext = () => ({}),
   getAnimationOptions = () => [],
   onApply = null,
-  onRemove = null
+  onRemove = null,
+  onResolveSave = null
 } = {}) {
   if (!root || !registry?.list || !runtime?.getSnapshot) {
     throw new Error("Effects panel requires a root, registry, and runtime.");
@@ -212,6 +213,13 @@ export function createEffectPanel({
           setStatus(error?.message || "Effect could not be removed.");
         }
       });
+      if(record.spell?.repeatSave && record.spell.saveDc != null && onResolveSave) {
+        const save=document.createElement("button");save.type="button";
+        save.textContent="Resolve "+record.spell.repeatSave.toUpperCase()+" save (DC "+record.spell.saveDc+")";
+        save.disabled=getIsDm()!==true;
+        save.addEventListener("click",async()=>{try{const passed=await onResolveSave(record);if(passed===null)return;setStatus(passed?record.name+" ended after its save.":record.name+" remains active.");renderActive();}catch(error){setStatus(error.message);}});
+        item.append(save);
+      }
       item.append(remove);
       return item;
     }));

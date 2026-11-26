@@ -1,6 +1,6 @@
 // Shared by availability and final transaction checks; absent HP is not zero HP.
 export function getSpellcasterBlockReason(actor = {}, { token = {}, actorKind = "character" } = {}) {
-  const conditions = [actor.combat?.conditions, actor.conditions, token.conditions, Object.values(token.effectConditions || {})].flatMap((value) => Array.isArray(value) ? value : []);
+  const conditions = [actor.combat?.conditions, actor.conditions, Object.values(actor.combat?.effectConditions || {}), Object.values(actor.spellcasting?.effectConditions || {}), token.conditions, Object.values(token.effectConditions || {})].flatMap((value) => Array.isArray(value) ? value : []);
   const blocked = new Set(["incapacitated", "paralyzed", "petrified", "stunned", "unconscious", "dead"]);
   if (conditions.some((value) => blocked.has(String(value?.id || value?.name || value || "").trim().toLowerCase()))) return "The caster is incapacitated and cannot cast spells.";
   const hp = actorKind === "monster" ? token.currentHp ?? token.hp?.current : actor.combat?.currentHp ?? actor.currentHp ?? token.currentHp ?? token.hp?.current;

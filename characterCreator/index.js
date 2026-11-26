@@ -38102,6 +38102,8 @@ export function createCharacterCreator(options = {}) {
       creatorState.dirty;
     const previousMagic =
       cloneData(creatorState.draft?.magic || {});
+    const previousSpellOutcomes = cloneData(creatorState.draft?.combat?.spellOutcomes || []);
+    const hadSpellOutcomes = Object.hasOwn(creatorState.draft?.combat || {}, "spellOutcomes");
     const previousConcentration =
       cloneData(
         creatorState.draft?.combat
@@ -38115,6 +38117,7 @@ export function createCharacterCreator(options = {}) {
       );
       combat.concentration =
         previousConcentration;
+      if(hadSpellOutcomes) combat.spellOutcomes=previousSpellOutcomes; else delete combat.spellOutcomes;
       creatorState.dirty =
         previousDirty;
       applyCompatibilityAliases(

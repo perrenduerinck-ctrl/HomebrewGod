@@ -1,3 +1,4 @@
+import {queueSpellOutcome} from "../spells/spellOutcomes.js";
 import { getSpellcasterBlockReason } from "../spells/spellCastingRules.js";
 import { enqueueConcentrationCheck, clearConcentrationChecks, resolveConcentrationCheck, interruptElapsedCasting } from "./concentrationChecks.js";
 import { normalizeMonsterSpellcasting, normalizeMonsterSpellReference } from "../monsters/spellcastingEditor.js";
@@ -101,6 +102,7 @@ export function applyConfirmedMonsterSpellCast(monster = {}, reference = {}, spe
   }
 
   next.spellcasting = spellcasting;
+  queueSpellOutcome(next, selection.outcomeRequest, "monsters");
   return next;
 }
 
@@ -139,4 +141,12 @@ export function applyMonsterConcentrationEvent(monster = {}, event = {}) {
     resolveConcentrationCheck(state, Number(event.total) >= state.pendingConcentrationCheck.dc);
   }
   return next;
+}
+
+
+export function resolveMonsterSpellcastingStats(monster = {}) {
+  const casting=monster.spellcasting || {},ability=String(casting.ability || "int").toLowerCase();
+  const score=monster.abilities?.[ability];
+  const modifier=score != null && String(score).trim()!=="" && Number.isFinite(Number(score)) ? Math.floor((Number(score)-10)/2) : null;
+  return {spellcastingModifier:modifier,spellSaveDc:casting.saveDc,spellAttackBonus:casting.attackBonus};
 }
