@@ -72,3 +72,26 @@ test('a monster spell result keeps its completion marker through self damage and
  const result=await apply(client(),{sourceKind:'monsters',sourceActorId:'mage',decisions:{'monster-caster':{outcome:'failed-save'}}});assert.equal(result.alreadyApplied,false);assert.equal((await read(['tokens','monster-caster'])).currentHp,8);let mage=await read(['monsters','mage']);assert.equal(mage.spellcasting.pendingConcentrationCheck.dc,16);assert.equal(mage.spellcasting.spellOutcomes[0].status,'applied');
  const again=await apply(client(),{sourceKind:'monsters',sourceActorId:'mage',decisions:{'monster-caster':{outcome:'failed-save'}}});assert.equal(again.alreadyApplied,true);assert.equal((await read(['tokens','monster-caster'])).currentHp,8);
 });
+
+import {advanceSpellArea} from '../spells/spellAreaPersistence.js';
+async function seedArea(id='moonbeam'){
+ await seed();const db=client();
+ const request=createSpellOutcomeRequest({id:'area-cast',spell:spell(id),slot:{level:3,spellSaveDc:15},target:{geometry:{shape:id==='moonbeam'?'cylinder':'sphere',anchor:{x:500,y:300},sizePixels:50},affectedTokens:[]},areaMetrics:{width:1000,height:600,tokenPixels:50},casterToken:{id:'caster'},tokens:[{id:'caster',linkedCharacterId:'source'}],castingContext:{worldTime:100,initiative:{combatActive:true,turnCounter:1,currentCombatantId:'caster',initiativeOrder:[{tokenId:'caster'},{tokenId:'target'}]}}});request.concentrationStartedAtMillis=1;
+ await updateDoc(doc(db,'rooms',ROOM),{initiativeState:{combatActive:true,turnCounter:1,currentCombatantId:'caster',initiativeOrder:[{tokenId:'caster'},{tokenId:'target'}]}});
+ await updateDoc(doc(db,'rooms',ROOM,'tokens','caster'),{x:10,y:50});await updateDoc(doc(db,'rooms',ROOM,'tokens','target'),{x:50,y:50});
+ const source=await read(['characters','source']);await updateDoc(doc(db,'rooms',ROOM,'characters','source'),{combat:{...source.combat,concentration:{spellId:id,startedAtMillis:1},spellOutcomes:[request]},revision:source.revision+1});
+ await apply(db,{requestId:'area-cast'});
+ const advance=(overrides={})=>advanceSpellArea({db,doc,runTransaction,serverTimestamp,roomCode:ROOM,userUid:'outcome-dm',sourceKind:'characters',sourceActorId:'source',areaId:'area-cast',context:{worldTime:100},random:()=>.5,...overrides});
+ return {db,advance};
+}
+test('real permissions: two DM clients queue one area trigger and the saved damage applies once',async()=>{
+ const {db,advance}=await seedArea();await updateDoc(doc(db,'rooms',ROOM),{'initiativeState.turnCounter':2,'initiativeState.currentCombatantId':'target'});
+ const results=await Promise.allSettled([advance(),advance({db:client()})]);assert.equal(results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value).length,1);
+ const source=await read(['characters','source']),pending=source.combat.spellOutcomes.filter(r=>r.status==='pending');assert.equal(pending.length,1);assert.equal(pending[0].damage[0].total,18);assert.equal((await read(['characters','victim'])).combat.currentHp,40);
+ await apply(db,{requestId:pending[0].id});await apply(db,{requestId:pending[0].id});assert.equal((await read(['characters','victim'])).combat.currentHp,27);assert.deepEqual(await advance(),[]);
+});
+test('real permissions: Hunger of Hadar queues separate turn phases and players cannot trigger or move areas',async()=>{
+ const {db,advance}=await seedArea('hunger-of-hadar');await assert.rejects(advance({db:client('outcome-player'),userUid:'outcome-player'}),/Only the room DM/);
+ await updateDoc(doc(db,'rooms',ROOM),{'initiativeState.turnCounter':2,'initiativeState.currentCombatantId':'target'});const [start]=await advance();let request=(await read(['characters','source'])).combat.spellOutcomes.find(r=>r.id===start);assert.equal(request.save,null);assert.equal(request.damage[0].damageType,'cold');
+ await updateDoc(doc(db,'rooms',ROOM),{'initiativeState.turnCounter':3,'initiativeState.currentCombatantId':'caster'});const [end]=await advance();request=(await read(['characters','source'])).combat.spellOutcomes.find(r=>r.id===end);assert.equal(request.save.ability,'dex');assert.equal(request.damage[0].damageType,'acid');assert.equal((await read(['characters','victim'])).combat.currentHp,40);
+});

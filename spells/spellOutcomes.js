@@ -1,3 +1,4 @@
+import {SPELL_AREA_PROFILES,captureSpellArea,isValidSpellArea} from './spellAreas.js';
 import {createCastResolution} from '../battleMap/castingSession.js';
 import {CORE_CONDITION_DEFINITIONS} from '../effects/effectRegistry.js';
 
@@ -35,13 +36,14 @@ export function getSpellOutcomeSupport(spell={}) {
  const conditions=CONDITIONS[spell.id] || [];
  const removesConditions=spell.id==='lesser-restoration'?['blinded','deafened','paralyzed','poisoned']:spell.id==='heal'?['blinded','deafened']:[];
  const damage=DIRECT_DAMAGE.has(spell.id), healing=DIRECT_HEALING.has(spell.id),temporaryHp=false;
- return {supported:damage||healing||temporaryHp||conditions.length>0||removesConditions.length>0,damage,healing,temporaryHp,conditions,removesConditions};
+ return {supported:Boolean(SPELL_AREA_PROFILES[spell.id])||damage||healing||temporaryHp||conditions.length>0||removesConditions.length>0,damage,healing,temporaryHp,conditions,removesConditions,area:SPELL_AREA_PROFILES[spell.id] || null};
 }
 
-export function createSpellOutcomeRequest({id,spell,slot,target,casterToken,tokens=[],characterLevel=1,spellcastingModifier=null,spellSaveDc=null,spellAttackBonus=null,castingContext={},mapId='',random=Math.random}={}) {
+export function createSpellOutcomeRequest({id,spell,slot,target,casterToken,tokens=[],characterLevel=1,spellcastingModifier=null,spellSaveDc=null,spellAttackBonus=null,castingContext={},mapId='',areaMetrics=null,random=Math.random}={}) {
  const support=getSpellOutcomeSupport(spell);if(!support.supported||casterToken?.visibility==='dm')return null;
  const resolution=createCastResolution({spell,slotLevel:slot.level,characterLevel,spellcastingModifier:slot.spellcastingModifier??spellcastingModifier,spellSaveDc:slot.spellSaveDc??spellSaveDc,spellAttackBonus:slot.spellAttackBonus??spellAttackBonus,affectedTokens:target.affectedTokens,projectiles:target.projectiles||[]});
- const footprints=target.affectedTokens||[];if(!footprints.length)return null;
+ const area=support.area?captureSpellArea(target.geometry,areaMetrics):null;if(support.area&&!area)return null;
+ const footprints=area?[{id:casterToken.id}]:(target.affectedTokens||[]);if(!footprints.length)return null;
  const selected=new Map();const actorKeys=new Set();const projectiles=target.projectiles||[];
  for(const f of footprints){const token=tokens.find(t=>t.id===f.id);if(token?.visibility==='dm')return null;if(!token)throw new Error('A spell target is no longer on this map.');if(!projectiles.length&&actorKeys.has(key(token)))continue;actorKeys.add(key(token));selected.set(f.id,{tokenId:f.id,name:token.name||f.name||'Target',collection:token.visibility==='dm'?'dmTokens':'tokens',characterId:token.linkedCharacterId||'',monsterId:token.linkedMonsterId||token.linkedMonster?.id||'',sceneId:token.sceneId||'',floorId:token.floorId||''});}
  if(selected.size>24)return null;
@@ -51,7 +53,7 @@ export function createSpellOutcomeRequest({id,spell,slot,target,casterToken,toke
  const healing=support.healing?resolution.healing.map(f=>rollSpellDice(f,random)):[];
  let sharedMissileRoll=null;
  const units=projectiles.length?projectiles.filter(p=>selected.has(p.targetId)).map((p,i)=>({id:'projectile-'+i,label:(p.label||'Projectile')+' '+(i+1),targetId:p.targetId,damage:(()=>{const m=String(p.damage).match(/^(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+(\w+)$/);if(!m)throw new Error('Unsupported projectile formula.');if(spell.id==='magic-missile'&&sharedMissileRoll)return [clone(sharedMissileRoll)];const component={...rollSpellDice(m[1],random),criticalBonus:resolution.attack?rollSpellDice(m[1].match(/\d+d\d+/)[0],random).total:0,damageType:m[2]};if(spell.id==='magic-missile')sharedMissileRoll=component;return [component];})()})):[];
- return {schemaVersion:1,id,status:'pending',spellId:spell.id,spellName:spell.name,sourceTokenId:casterToken.id,sourceCollection:casterToken.visibility==='dm'?'dmTokens':'tokens',sceneId:casterToken.sceneId||'',floorId:casterToken.floorId||'',mapId:String(mapId||''),createdAtMillis:Date.now(),slotLevel:slot.level,maxTargets:['mass-cure-wounds','mass-healing-word'].includes(spell.id)?6:24,targets:[...selected.values()],damage,healing,temporaryHp:support.temporaryHp?Number(resolution.temporaryHp)||0:0,conditions:clone(support.conditions),removesConditions:support.removesConditions,chooseRemoval:spell.id==='lesser-restoration',castingContext:{worldTime:Number(castingContext.worldTime)||0,initiative:{combatActive:castingContext.initiative?.combatActive===true,currentCombatantId:castingContext.initiative?.currentCombatantId||'',turnCounter:Number(castingContext.initiative?.turnCounter)||0,initiativeOrder:(castingContext.initiative?.initiativeOrder||[]).map(t=>({tokenId:t.tokenId||t.id||t}))}},save:resolution.save,attack:resolution.attack,units,concentration:resolution.concentration,spellDuration:spell.duration||'',notes:spell.resolutionNotes||''};
+ return {schemaVersion:1,id,status:'pending',spellId:spell.id,spellName:spell.name,sourceTokenId:casterToken.id,sourceCollection:casterToken.visibility==='dm'?'dmTokens':'tokens',sceneId:casterToken.sceneId||'',floorId:casterToken.floorId||'',mapId:String(mapId||''),createdAtMillis:Date.now(),slotLevel:slot.level,maxTargets:['mass-cure-wounds','mass-healing-word'].includes(spell.id)?6:24,targets:[...selected.values()],...(area?{areaPlacement:area}:{}),damage,healing,temporaryHp:support.temporaryHp?Number(resolution.temporaryHp)||0:0,conditions:clone(support.conditions),removesConditions:support.removesConditions,chooseRemoval:spell.id==='lesser-restoration',castingContext:{worldTime:Number(castingContext.worldTime)||0,initiative:{combatActive:castingContext.initiative?.combatActive===true,currentCombatantId:castingContext.initiative?.currentCombatantId||'',turnCounter:Number(castingContext.initiative?.turnCounter)||0,initiativeOrder:(castingContext.initiative?.initiativeOrder||[]).map(t=>({tokenId:t.tokenId||t.id||t}))}},save:area?null:resolution.save,...(area?{areaSaveDc:slot.spellSaveDc??spellSaveDc}:{}),attack:resolution.attack,units,concentration:resolution.concentration,spellDuration:spell.duration||'',notes:spell.resolutionNotes||''};
 }
 
 export function queueSpellOutcome(actor, request, kind='characters') {
@@ -98,7 +100,7 @@ export function getSpellTargetAmounts(request, targetId, decisions={}, actor={},
 
 export function isSpellOutcomeRequest(value) {
  const amount=c=>c&&Number.isSafeInteger(c.total)&&c.total>=0&&c.total<=100000&&typeof c.formula==='string'&&Number.isSafeInteger(c.criticalBonus??0)&&(c.criticalBonus??0)>=0&&(c.criticalBonus??0)<=100000;
- return Boolean(value&&value.schemaVersion===1&&typeof value.id==='string'&&value.id.length>0&&value.id.length<=180&&['pending','applied','dismissed'].includes(value.status)
+ return Boolean(value&&(!value.areaPlacement || Boolean(SPELL_AREA_PROFILES[value.spellId])&&isValidSpellArea(value.areaPlacement))&&value.schemaVersion===1&&typeof value.id==='string'&&value.id.length>0&&value.id.length<=180&&['pending','applied','dismissed'].includes(value.status)
   &&Array.isArray(value.targets)&&value.targets.length>0&&value.targets.length<=24&&value.targets.every(t=>t&&typeof t.tokenId==='string'&&t.tokenId.length>0)
   &&Array.isArray(value.damage)&&value.damage.length<=8&&value.damage.every(c=>amount(c)&&typeof c.damageType==='string')
   &&Array.isArray(value.healing)&&value.healing.length<=4&&value.healing.every(amount)

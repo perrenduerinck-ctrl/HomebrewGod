@@ -7342,12 +7342,38 @@ function restoreCombatEffectController(record) {
   };
 }
 
+function renderSavedSpellAreas() {
+  if(!E.tokenLayer)return;
+  E.tokenLayer.querySelectorAll('[data-saved-spell-area]').forEach(el=>el.remove());
+  const floor=floorSystem?.getState?.()||{};
+  for(const {zone} of spellOutcomePanelSystem?.getAreas()||[]) {
+    if(zone.mapId!==currentMapId||zone.sceneId!==String(floor.sceneId||'')||zone.floorId!==String(floor.floorId||''))continue;
+    const node=document.createElement('div');node.dataset.savedSpellArea=zone.id;node.className='hg-saved-spell-area';
+    node.dataset.spellId=zone.spellId;node.title=zone.spellName;node.setAttribute('aria-label',zone.spellName+' active area');
+    Object.assign(node.style,{position:'absolute',pointerEvents:'none',boxSizing:'border-box',border:'2px solid '+(zone.spellId==='moonbeam'?'#b9e5ff':'#bc8cf5'),borderRadius:'50%',background:zone.spellId==='moonbeam'?'rgba(160,210,255,.15)':'rgba(60,20,100,.28)',left:(zone.area.x-zone.area.radiusX)+'%',top:(zone.area.y-zone.area.radiusY)+'%',width:zone.area.radiusX*2+'%',height:zone.area.radiusY*2+'%'});
+    const label=document.createElement('span');label.textContent=zone.spellName;Object.assign(label.style,{fontSize:'12px',color:'#fff',background:'#151426',padding:'2px 5px',borderRadius:'4px'});node.append(label);E.tokenLayer.prepend(node);
+  }
+}
+function chooseSpellAreaMovePoint() {
+  if(activeMainScreenName!=='battle')throw new Error('Open the battle map before moving the beam.');
+  const layer=E.tokenLayer;if(!layer)throw new Error('Open a map before moving the beam.');
+  text(E.templateStatus,'Click the new beam center (up to 60 feet). Escape cancels. Moving the beam uses an action and deals no immediate damage.');
+  return new Promise(resolve=>{
+    let release=()=>{};const finish=value=>{document.removeEventListener('click',click,true);document.removeEventListener('keydown',key,true);release();resolve(value);};
+    const key=event=>{if(event.key==='Escape')finish(null);};
+    const click=event=>{if(!event.target.closest?.('#battleMapViewport, #battleMapViewer, #tokenLayer'))return;const r=layer.getBoundingClientRect();if(!r.width||!r.height)return;const x=(event.clientX-r.left)/r.width*100,y=(event.clientY-r.top)/r.height*100;if(x<0||x>100||y<0||y>100)return;event.preventDefault();event.stopImmediatePropagation();finish({x,y});};
+    release=mapInteractionController.acquire({id:'spell-area-move',label:'Move Moonbeam',cancel:()=>finish(null)});
+    document.addEventListener('click',click,true);document.addEventListener('keydown',key,true);
+  });
+}
 function ensureSpellOutcomePanel() {
   if (spellOutcomePanelSystem) return spellOutcomePanelSystem;
   const root=document.getElementById("spellOutcomesPanel");if(!root)return null;
   spellOutcomePanelSystem=createSpellOutcomePanel({root,db,collection,doc,onSnapshot,runTransaction,serverTimestamp,
     getRoomCode:()=>currentRoomCode,getUserUid:()=>currentUser?.uid,getIsDm:()=>currentIsDM,
-    getContext:gameplayEffectContext,onActorsChanged:()=>reconcileGameplayEffects(),
+    getContext:gameplayEffectContext,getTokens:()=>tokenSystem?.getRoomTokens?.()||[],
+    getAreaScope:()=>({mapId:currentMapId,sceneId:floorSystem?.getState?.().sceneId||'',floorId:floorSystem?.getState?.().floorId||''}),
+    getAreaMovePoint:chooseSpellAreaMovePoint,onActorsChanged:()=>reconcileGameplayEffects(),
     onCommitted:async(result,roomCode)=>{
       if(currentRoomCode!==roomCode)return;
       const userUid=currentUser?.uid;
@@ -7436,6 +7462,7 @@ async function playGameplayEffectVisual(record, phase) {
 
 function clearGameplayEffectsForRoomExit() {
   spellOutcomePanelSystem?.stop();
+  E.tokenLayer?.querySelectorAll('[data-saved-spell-area]').forEach(el=>el.remove());
   for (const retry of gameplayEffectExpirationRetries.values()) {
     if (retry.timer) clearTimeout(retry.timer);
   }
@@ -7511,6 +7538,8 @@ function synchronizePersistedGameplayEffects(records = latestGameplayEffectRecor
 }
 
 function reconcileGameplayEffects() {
+  spellOutcomePanelSystem?.reconcileAreas();
+  renderSavedSpellAreas();
   return gameplayEffectRuntime.reconcile(gameplayEffectContext(), {
     canExpire: currentIsDM === true
   });
@@ -8122,7 +8151,8 @@ async function beginCharacterSpellTargeting({
           casterToken: tokenSystem?.getRoomTokens?.().find(t=>t.id===casterToken?.id) || casterToken,
           tokens: tokenSystem?.getRoomTokens?.() || [],
           characterLevel: effectiveCastingLevel,
-          ...defaultSpellcastingStats, castingContext: gameplayEffectContext(), mapId: currentMapId
+          ...defaultSpellcastingStats, castingContext: gameplayEffectContext(), mapId: currentMapId,
+          areaMetrics: (()=>{const r=battleMapTemplates?.getOverlayElement()?.getBoundingClientRect();return r?{width:r.width,height:r.height,tokenPixels:Number(currentRoomData?.tokenMediumSize || currentRoomData?.tokenScale?.mediumSize)||64}:null;})()
         }) : null;
         activeSpellOutcomeRequestId = outcomeRequest?.id || "";
         return activeSpellCastingConfirm({
@@ -10770,6 +10800,8 @@ if (!tokenSystem) {
 
     onTokensChanged: function (tokens) {
       visionSystem?.updateTokens(tokens);
+      spellOutcomePanelSystem?.refresh();
+      renderSavedSpellAreas();
     },
 
     removeTokenFromInitiative:

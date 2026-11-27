@@ -30,11 +30,11 @@ test('spell dice accept bounded formulas, preserve rolls, and reject unsupported
 });
 
 test('all supported built-in spells build valid persisted outcomes across slot levels and cantrip tiers',()=>{
- const supported=DEFAULT_SPELLS.filter(s=>getSpellOutcomeSupport(s).supported);assert.equal(supported.length,38);
+ const supported=DEFAULT_SPELLS.filter(s=>getSpellOutcomeSupport(s).supported&&!getSpellOutcomeSupport(s).area);assert.equal(supported.length,38);
  for(const s of supported)for(const level of [Math.max(1,s.level),9])for(const characterLevel of [1,5,11,17]){
   const r=makeRequest(s.id,{slot:{level,spellcastingModifier:-1,spellSaveDc:12,spellAttackBonus:4},characterLevel});assert.ok(r,s.id);assert.doesNotThrow(()=>getSpellTargetAmounts(r,'target',{target:{outcome:r.attack?'hit':r.save?'failed-save':'automatic'}}),s.id);
  }
- assert.equal(getSpellOutcomeSupport(spell('hunger-of-hadar')).supported,false);assert.equal(getSpellOutcomeSupport(spell('mass-heal')).supported,false);
+ assert.equal(Boolean(getSpellOutcomeSupport(spell('hunger-of-hadar')).area),true);assert.equal(getSpellOutcomeSupport(spell('mass-heal')).supported,false);
 });
 
 test('saved casts include their result request and duplicate queueing spends nothing twice',()=>{

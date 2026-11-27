@@ -64,3 +64,29 @@ concurrent DMs, player permissions, atomic casts, full-size areas, monsters, and
 removal after token deletion. Browser room journeys exercise the visible casting
 and results controls, source-specific healing, restoration, concentration cleanup,
 cantrip scaling, reloads, and player-to-DM handoff.
+## Recurring areas — second pass
+
+Moonbeam and Hunger of Hadar now save their placed area, selected slot, and save DC.
+Use **Apply spell results** once to activate the area. Placement deals no damage.
+The area remains visible after closing the targeting tools and reloading.
+
+While a DM client is connected, initiative changes queue the appropriate result:
+Moonbeam at turn start; Hunger of Hadar cold damage at turn start and a separate
+Dexterity save for acid damage at turn end. Saved turn receipts prevent two DM
+tabs, reloads, or repeated clicks from generating duplicate damage. HP still
+changes only when the DM resolves the saved result. Concentration and the one-minute
+duration stop further triggers. Reconnecting after skipped turns queues only the
+current start trigger; it does not invent a backlog of damage for missed turns.
+
+Moonbeam includes a once-per-turn **Resolve entering area** control. The DM
+confirms actual creature entry; casting or moving a beam onto a creature does not
+count as entry. **Move beam (action)** selects a new map point up to 60 feet away
+without spending another slot or dealing immediate damage. The DM accounts for
+that action. The beam retains its elevation when moved.
+
+Areas use saved map-relative coordinates, token footprints, floor, and elevation.
+Private targets retain existing controls. Moonbeam shapechanger rules, Hunger of
+Hadar blindness/difficult terrain, and movement-path entry detection remain manual.
+Shared character areas are visible to players; monster-source areas currently use
+the DM view. Other recurring spells, summons, and special condition triggers remain
+future work.
