@@ -180,3 +180,23 @@ test("spell browsing filters concentration, rituals, secondary damage types and 
   await page.locator('[data-spell-filter="ritual"]').selectOption("true");
   await expect(page.locator('[data-library-spell-id] strong')).toHaveText(["Amber"]);
 });
+
+test('spell presets: catalog categorizes every spell, filters coverage, and pages without losing the draft',async({page})=>{
+ await page.goto('/tests/browser-pages/spell-creator-self-test.html');await page.locator('[data-spell-field="name"]').fill('Keep this draft');
+ const catalog=page.locator('[data-spell-preset-browser]');await catalog.locator(':scope > summary').click();await expect(catalog).toContainText('20 categories');await expect(catalog).toContainText('40 supported result recipes');await expect(catalog.locator('[data-preset-count]')).toContainText('368 matching spells');await expect(catalog.locator('[data-preset-spell]')).toHaveCount(18);await catalog.locator('[data-preset-page="next"]').click();await expect(catalog.locator('[data-preset-count]')).toContainText('19–36');
+ await catalog.locator('[data-preset-family]').selectOption('summon');await expect(catalog.locator('[data-preset-count]')).toContainText('20 matching spells');await catalog.locator('[data-preset-coverage]').selectOption('supported-results');await expect(catalog.locator('[data-preset-count]')).toContainText('No spells match');await expect(page.locator('[data-spell-field="name"]')).toHaveValue('Keep this draft');
+});
+
+test('spell presets: a catalog template saves with independent mechanics and a different ID',async({page})=>{
+ await page.goto('/tests/browser-pages/spell-creator-self-test.html');const catalog=page.locator('[data-spell-preset-browser]');await catalog.locator(':scope > summary').click();await catalog.locator('[data-preset-search]').fill('Fireball');await catalog.locator('[data-preset-spell="fireball"] [data-use-spell-preset]').click();await expect(page.locator('[data-spell-field="name"]')).toHaveValue('Fireball Copy');await page.locator('[data-spell-field="name"]').fill('Cinder Globe');await page.getByRole('button',{name:'Save to My Library',exact:true}).click();await expect(page.locator('[data-spell-status]')).toContainText('saved to My Library');
+ const saved=await page.evaluate(()=>window.spellRecords()[0]);expect(saved.id).not.toBe('fireball');expect(saved.behavior.presets).toEqual(['save-damage']);expect(saved.targeting.area).toMatchObject({shape:'sphere',radius:20});expect(saved.damage[0].atSlotLevel['4']).toBe('9d6');expect(saved.targeting.save.success).toBe('half');
+});
+
+test('spell presets: choosing a behavior enforces required fields and saves a reusable custom recipe',async({page})=>{
+ await page.goto('/tests/browser-pages/spell-creator-self-test.html');await page.locator('[data-spell-field="name"]').fill('Ice Pulse');await page.locator('[data-spell-field="behaviorPreset"]').selectOption('save-damage');await page.locator('[data-spell-field="damageType"]').selectOption('Cold');await page.locator('[data-spell-field="range"]').fill('60 feet');await page.getByRole('button',{name:'Save to My Library',exact:true}).click();await expect(page.locator('[data-spell-status]')).toContainText('saved to My Library');let saved=await page.evaluate(()=>window.spellRecords()[0]);expect(saved.behavior.presets).toEqual(['save-damage']);expect(saved.targeting.save).toMatchObject({ability:'dex',success:'half'});expect(saved.damageDice).toBe('2d6');
+ await page.locator('[data-spell-field="saveAbility"]').selectOption('');await page.getByRole('button',{name:'Save to My Library',exact:true}).click();await expect(page.locator('[data-spell-status]')).toContainText('requires a saving throw ability');saved=await page.evaluate(()=>window.spellRecords()[0]);expect(saved.targeting.save.ability).toBe('dex');
+});
+
+test('spell presets: catalog and behavior controls fit a narrow screen',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/tests/browser-pages/spell-creator-self-test.html');const catalog=page.locator('[data-spell-preset-browser]');await catalog.locator(':scope > summary').click();await catalog.locator('[data-preset-family]').selectOption('recurring-area');await expect(catalog.locator('[data-preset-count]')).toContainText('25 matching spells');expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});

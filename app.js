@@ -1,3 +1,4 @@
+import {getSpellAreaProfile} from './spells/spellAreas.js';
 import {createSpellOutcomeRequest,getSpellOutcomeSupport} from "./spells/spellOutcomes.js";
 import {createSpellOutcomePanel} from "./spells/spellOutcomePanel.js";
 import { assertSpellDefinitionRevision } from "./combat/monsterSpellDefinition.js";
@@ -7354,15 +7355,16 @@ function renderSavedSpellAreas() {
     const label=document.createElement('span');label.textContent=zone.spellName;Object.assign(label.style,{fontSize:'12px',color:'#fff',background:'#151426',padding:'2px 5px',borderRadius:'4px'});node.append(label);E.tokenLayer.prepend(node);
   }
 }
-function chooseSpellAreaMovePoint() {
+function chooseSpellAreaMovePoint(zone) {
+  const profile=getSpellAreaProfile(zone);
   if(activeMainScreenName!=='battle')throw new Error('Open the battle map before moving the beam.');
   const layer=E.tokenLayer;if(!layer)throw new Error('Open a map before moving the beam.');
-  text(E.templateStatus,'Click the new beam center (up to 60 feet). Escape cancels. Moving the beam uses an action and deals no immediate damage.');
+  text(E.templateStatus,'Click the new area center (up to '+profile.moveFeet+' feet). Escape cancels. This move uses '+(profile.moveAction||'an action')+' and deals no immediate damage.');
   return new Promise(resolve=>{
     let release=()=>{};const finish=value=>{document.removeEventListener('click',click,true);document.removeEventListener('keydown',key,true);release();resolve(value);};
     const key=event=>{if(event.key==='Escape')finish(null);};
     const click=event=>{if(!event.target.closest?.('#battleMapViewport, #battleMapViewer, #tokenLayer'))return;const r=layer.getBoundingClientRect();if(!r.width||!r.height)return;const x=(event.clientX-r.left)/r.width*100,y=(event.clientY-r.top)/r.height*100;if(x<0||x>100||y<0||y>100)return;event.preventDefault();event.stopImmediatePropagation();finish({x,y});};
-    release=mapInteractionController.acquire({id:'spell-area-move',label:'Move Moonbeam',cancel:()=>finish(null)});
+    release=mapInteractionController.acquire({id:'spell-area-move',label:'Move '+(zone?.spellName||'spell area'),cancel:()=>finish(null)});
     document.addEventListener('click',click,true);document.addEventListener('keydown',key,true);
   });
 }
@@ -12582,6 +12584,9 @@ async function initSpellCreatorSystem() {
     console.error("Spell Creator module failed to load:", error);
     throw error;
   }
+  // Navigation and release checks may await the same module concurrently.
+  // Only one controller may attach handlers to this screen.
+  if (spellCreatorSystem) return spellCreatorSystem;
   spellCreatorSystem = creatorModule.createSpellCreator({
     screen: E.spellCreatorScreen,
     persistence: getSpellPersistenceSystem(),

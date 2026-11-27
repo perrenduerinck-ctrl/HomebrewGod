@@ -1,5 +1,5 @@
 import {rollSpellDice,queueSpellOutcome} from './spellOutcomes.js';
-import {spellAreaActive,spellAreaTrigger,spellAreaEventKey,tokenInsideSpellArea} from './spellAreas.js';
+import {getSpellAreaProfile,spellAreaActive,spellAreaTrigger,spellAreaEventKey,tokenInsideSpellArea} from './spellAreas.js';
 
 // The source cursor and each queued roll commit together. Two open DM tabs cannot
 // create two results for one turn, and reconnecting does not replay a whole fight.
@@ -21,10 +21,10 @@ export async function advanceSpellArea({db,doc,runTransaction,serverTimestamp,ro
     const sourceLink=sourceKind==='characters'?'linkedCharacterId':'linkedMonsterId';
     if(!caster.exists()||String(caster.data()[sourceLink]||caster.data().linkedMonster?.id||'')!==sourceActorId||String(caster.data().sceneId||'')!==zone.sceneId||String(caster.data().floorId||'')!==zone.floorId){zone.status='ended';persist();return [];}
     if(movePoint) {
-      if(zone.spellId!=='moonbeam')throw new Error('This area cannot be moved.');
+      const profile=getSpellAreaProfile(zone);if(!profile?.moveFeet)throw new Error('This area cannot be moved.');
       if(![movePoint.x,movePoint.y].every(v=>Number.isFinite(v)&&v>=0&&v<=100))throw new Error('Choose a point on the map.');
-      const feet=Math.hypot((movePoint.x-zone.area.x)/zone.area.radiusX*5,(movePoint.y-zone.area.y)/zone.area.radiusY*5);
-      if(feet>60.001)throw new Error('Moonbeam can move up to 60 feet per action.');
+      const feet=Math.hypot((movePoint.x-zone.area.x)/zone.area.radiusX*(zone.radiusFeet||5),(movePoint.y-zone.area.y)/zone.area.radiusY*(zone.radiusFeet||5));
+      if(feet>profile.moveFeet+.001)throw new Error('This spell area can move up to '+profile.moveFeet+' feet per '+(profile.moveAction||'action')+'.');
       zone.area={...zone.area,x:movePoint.x,y:movePoint.y};persist();return [];
     }
     zone.receipts=Array.isArray(zone.receipts)?zone.receipts:[];
@@ -51,7 +51,7 @@ export async function advanceSpellArea({db,doc,runTransaction,serverTimestamp,ro
       const trigger=spellAreaTrigger(zone,event.phase),id=globalThis.crypto.randomUUID();
       const request={schemaVersion:1,id,status:'pending',spellId:zone.spellId,spellName:zone.spellName+' · '+(event.phase==='end'?'end of turn':event.phase==='enter'?'entering area':'start of turn'),sourceTokenId:zone.sourceTokenId,sourceCollection:zone.sourceCollection,sceneId:zone.sceneId,floorId:zone.floorId,mapId:zone.mapId,
         createdAtMillis:Date.now(),slotLevel:zone.slotLevel,maxTargets:1,targets:[{tokenId:token.id,name:token.name||'Target',collection:'tokens',characterId:token.linkedCharacterId||'',monsterId:token.linkedMonsterId||token.linkedMonster?.id||'',sceneId:zone.sceneId,floorId:zone.floorId}],
-        damage:[{...rollSpellDice(trigger.formula,random),damageType:trigger.damageType,criticalBonus:0}],healing:[],temporaryHp:0,conditions:[],removesConditions:[],chooseRemoval:false,castingContext:{worldTime:Number(context.worldTime)||0,initiative},save:trigger.save,attack:null,units:[],concentration:true,concentrationStartedAtMillis:zone.concentrationStartedAtMillis,spellDuration:'Instantaneous',notes:'Saved area trigger. Moonbeam shapechanger rules and Hunger of Hadar blindness/difficult terrain still use the normal condition and movement controls.',areaTrigger:{areaId:zone.id,phase:event.phase,turnCounter:event.counter}};
+        damage:[{...rollSpellDice(trigger.formula,random),damageType:trigger.damageType,criticalBonus:0}],healing:[],temporaryHp:0,conditions:[],removesConditions:[],chooseRemoval:false,castingContext:{worldTime:Number(context.worldTime)||0,initiative},save:trigger.save,attack:null,units:[],concentration:true,concentrationStartedAtMillis:zone.concentrationStartedAtMillis,spellDuration:'Instantaneous',rules:{},notes:getSpellAreaProfile(zone)?.notes||'Saved area trigger.',areaTrigger:{areaId:zone.id,phase:event.phase,turnCounter:event.counter}};
       queueSpellOutcome(actor,request,sourceKind);zone.receipts.push(receipt);queued.push(id);
     }
     zone.receipts=zone.receipts.slice(-128);
