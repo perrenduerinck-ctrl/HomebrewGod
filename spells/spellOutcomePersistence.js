@@ -1,3 +1,4 @@
+import {SPELL_AREA_PROFILES,spellAreaActive} from './spellAreas.js';
 import {applyGameplayAction} from '../characterSheet/gameplayState.js';
 import {applyMonsterConcentrationEvent} from '../combat/monsterSpellcasting.js';
 import {getSpellcasterBlockReason} from './spellCastingRules.js';
@@ -60,9 +61,26 @@ export async function applySpellOutcome({db,doc,runTransaction,serverTimestamp,r
   for(const id of new Set([...effects.values()].map(e=>e.value.targetTokenId).filter(id=>id&&!selectedIds.has(id)))) {
     for(const collection of ['tokens','dmTokens']) {const ref=doc(db,'rooms',roomCode,collection,id),snap=await transaction.get(ref);if(snap.exists())extraTokens.push({ref,token:clone(snap.data()),id});}
   }
+  if(request.areaTrigger && !sourceState.spellAreas?.some(z=>z.id===request.areaTrigger.areaId&&spellAreaActive(z,sourceState,{...context,worldTime:roomSnap.data().worldTime??context.worldTime,initiative:roomSnap.data().initiativeState||context.initiative})))throw new Error('This spell area has ended. Dismiss its pending result.');
+  if(request.areaPlacement) {
+   if(!SPELL_AREA_PROFILES[request.spellId])throw new Error('Unknown spell area.');
+   const initiative=roomSnap.data().initiativeState || {};
+   const existing=Array.isArray(sourceState.spellAreas)?sourceState.spellAreas:[];
+   sourceState.spellAreas=[...existing.filter(z=>z.status==='active'&&z.concentrationStartedAtMillis===sourceState.concentration?.startedAtMillis).slice(-7),{
+    id:request.id,status:'active',spellId:request.spellId,spellName:request.spellName,sourceTokenId:request.sourceTokenId,sourceCollection:request.sourceCollection,
+    sceneId:request.sceneId,floorId:request.floorId,mapId:request.mapId,area:request.areaPlacement,slotLevel:request.slotLevel,
+    saveDc:request.areaSaveDc ?? null,
+    concentrationStartedAtMillis:request.concentrationStartedAtMillis,createdAtMillis:request.createdAtMillis,
+    expiresAtWorldTime:(request.castingContext.worldTime||0)+60,
+    expiresAtTurnCounter:request.castingContext.initiative.combatActive?request.castingContext.initiative.turnCounter+10*Math.max(1,request.castingContext.initiative.initiativeOrder.length):null,
+    cursor:{turnCounter:initiative.turnCounter||0,tokenId:initiative.currentCombatantId||'',combatActive:initiative.combatActive===true},receipts:[]
+   }];
+   if(!spellAreaActive(sourceState.spellAreas.at(-1),sourceState,{...context,worldTime:roomSnap.data().worldTime??context.worldTime,initiative}))throw new Error('This spell area expired before activation. Dismiss its saved placement.');
+  }
   const writes=[],deletes=new Map(),results=[];
   for(const [index,entry] of tokenEntries.entries()){
    const linked=actors.get(actorKey(entry.token)),actor=linked?.value||{},amounts=getSpellTargetAmounts(request,entry.id,decisions,actor,entry.token);
+   if(request.areaPlacement)amounts.notes="Area placed. Damage is queued on its turn triggers; casting deals no immediate damage.";
    const targetConditions={...(entry.token.effectConditions||{})};let actorState=linked?stateFor(actor,linked.kind):null;if(actorState)actorState.effectConditions={...(actorState.effectConditions||{})};
    for(const [id,effect] of effects){if(effect.value.targetTokenId!==entry.id&&effect.value.spell?.targetActorKey!==actorKey(entry.token))continue;
     if(amounts.removesConditions.includes(effect.value.definitionId)||amounts.damage>0&&effect.value.spell?.endsOnDamage){deletes.set(id,effect.ref);delete targetConditions[id];if(actorState)delete actorState.effectConditions[id];}
