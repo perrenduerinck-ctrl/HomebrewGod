@@ -1,5 +1,5 @@
 import {advanceSpellArea} from './spellAreaPersistence.js';
-import {spellAreaActive,tokenInsideSpellArea} from './spellAreas.js';
+import {getSpellAreaProfile,spellAreaActive,tokenInsideSpellArea} from './spellAreas.js';
 import {isSpellOutcomeRequest} from './spellOutcomes.js';
 import {applySpellOutcome} from './spellOutcomePersistence.js';
 const escape = value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -57,7 +57,7 @@ export function createSpellOutcomePanel({root,db,collection,doc,onSnapshot,runTr
   const scope=getAreaScope();const areas=getAreas().filter(e=>e.zone.mapId===scope.mapId&&e.zone.sceneId===(scope.sceneId||'')&&e.zone.floorId===(scope.floorId||''));
   const options=areas.map(e=>getTokens().filter(t=>tokenInsideSpellArea(e.zone,t)).map(t=>[t.id,t.name||'Target']));
   const next=JSON.stringify([areas.map(({source,zone})=>[source.kind,source.id,zone]),options,getIsDm()]);if(next===areaSignature)return;areaSignature=next;
-  root.querySelector('[data-spell-area-list]').innerHTML=areas.map(({source,zone},i)=>`<article data-spell-area="${escape(zone.id)}" data-source-kind="${source.kind}" data-source-id="${escape(source.id)}"><h4>${escape(zone.spellName)} · active area</h4><p>Turn damage is queued automatically while the DM is connected. Saves and HP are resolved in Spell results.</p>${zone.spellId==='moonbeam'&&getIsDm()?`<label>Creature entering the beam<select data-spell-area-target><option value="">Choose a creature</option>${options[i].map(([id,name])=>`<option value="${escape(id)}">${escape(name)}</option>`).join('')}</select></label><button type="button" data-spell-area-enter>Resolve entering area</button><button type="button" data-spell-area-move>Move beam (action)</button><p>Confirm entry when the creature moves into the beam. Moving or casting the beam onto a creature does not cause entry damage.</p>`:zone.spellId==='moonbeam'?'<p>Moonbeam: Constitution save for radiant damage.</p>':'<p>Start: cold damage, no save. End: Dexterity save for acid damage. Blindness and difficult terrain still use the condition and movement controls.</p>'}</article>`).join('');
+  root.querySelector('[data-spell-area-list]').innerHTML=areas.map(({source,zone},i)=>`<article data-spell-area="${escape(zone.id)}" data-source-kind="${source.kind}" data-source-id="${escape(source.id)}"><h4>${escape(zone.spellName)} · active area</h4><p>Turn damage is queued automatically while the DM is connected. Saves and HP are resolved in Spell results.</p>${getSpellAreaProfile(zone)?.triggers?.enter&&getIsDm()?`<label>Creature entering the area<select data-spell-area-target><option value="">Choose a creature</option>${options[i].map(([id,name])=>`<option value="${escape(id)}">${escape(name)}</option>`).join('')}</select></label><button type="button" data-spell-area-enter>Resolve entering area</button>${getSpellAreaProfile(zone)?.moveFeet?`<button type="button" data-spell-area-move>Move area (${escape(getSpellAreaProfile(zone).moveAction||'action')})</button>`:''}<p>Confirm entry when the creature moves into the area. Moving or casting the area onto a creature does not cause entry damage.</p>`:`<p>${escape(getSpellAreaProfile(zone)?.notes||'Resolve the listed area triggers.')}</p>`}</article>`).join('');
  }
  async function reconcileAreas(){
   renderAreas();if(!getIsDm()||!getRoomCode())return;if(areaBusy){areaAgain=true;return;}areaBusy=true;const current=generation;
@@ -69,10 +69,10 @@ export function createSpellOutcomePanel({root,db,collection,doc,onSnapshot,runTr
  root.addEventListener('click',async event=>{
   const button=event.target.closest('[data-spell-area-enter],[data-spell-area-move]'),card=button?.closest('[data-spell-area]');if(!card||!getIsDm())return;
   const operationScope=scope;button.disabled=true;
-  try{const moving=button.hasAttribute('data-spell-area-move');const movePoint=moving?await getAreaMovePoint():null;if(moving&&!movePoint)return;if(scope!==operationScope)return;
+  try{const moving=button.hasAttribute('data-spell-area-move');const zone=getAreas().find(e=>e.zone.id===card.dataset.spellArea&&e.source.id===card.dataset.sourceId)?.zone;const movePoint=moving?await getAreaMovePoint(zone):null;if(moving&&!movePoint)return;if(scope!==operationScope)return;
    const tokenId=card.querySelector('[data-spell-area-target]')?.value;if(!moving&&!tokenId)throw new Error('Choose the creature entering this area.');
    const ids=await advanceSpellArea({db,doc,runTransaction,serverTimestamp,roomCode:getRoomCode(),userUid:getUserUid(),sourceKind:card.dataset.sourceKind,sourceActorId:card.dataset.sourceId,areaId:card.dataset.spellArea,context:getContext(),manualEntryTokenId:moving?'':tokenId,movePoint,getCurrentScope:()=>({roomCode:getRoomCode(),userUid:getUserUid()})});
-   if(scope===operationScope)say(moving?'Moonbeam moved. Use one action for this move.':ids.length?'Entry damage queued.':'That creature was already resolved this turn, or is outside the area.');
+   if(scope===operationScope)say(moving?(zone?.spellName||'Spell area')+' moved. Use the action required by its preset.':ids.length?'Entry damage queued.':'That creature was already resolved this turn, or is outside the area.');
   }catch(error){if(scope===operationScope)say(error.message);}finally{button.disabled=false;}
  });
  function getConcentrationState(){const concentrationByActor={};for(const [key,actor] of actors)concentrationByActor[key]=(actor.kind==='characters'?actor.value.combat:actor.value.spellcasting)?.concentration||null;return {concentrationByActor,concentrationLoadedKinds:[...ready]};}

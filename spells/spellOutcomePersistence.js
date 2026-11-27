@@ -1,4 +1,4 @@
-import {SPELL_AREA_PROFILES,spellAreaActive} from './spellAreas.js';
+import {getSpellAreaProfile,spellAreaActive} from './spellAreas.js';
 import {applyGameplayAction} from '../characterSheet/gameplayState.js';
 import {applyMonsterConcentrationEvent} from '../combat/monsterSpellcasting.js';
 import {getSpellcasterBlockReason} from './spellCastingRules.js';
@@ -63,16 +63,16 @@ export async function applySpellOutcome({db,doc,runTransaction,serverTimestamp,r
   }
   if(request.areaTrigger && !sourceState.spellAreas?.some(z=>z.id===request.areaTrigger.areaId&&spellAreaActive(z,sourceState,{...context,worldTime:roomSnap.data().worldTime??context.worldTime,initiative:roomSnap.data().initiativeState||context.initiative})))throw new Error('This spell area has ended. Dismiss its pending result.');
   if(request.areaPlacement) {
-   if(!SPELL_AREA_PROFILES[request.spellId])throw new Error('Unknown spell area.');
+   const areaBehavior=getSpellAreaProfile(request);if(!areaBehavior)throw new Error('Unknown spell area preset.');
    const initiative=roomSnap.data().initiativeState || {};
    const existing=Array.isArray(sourceState.spellAreas)?sourceState.spellAreas:[];
    sourceState.spellAreas=[...existing.filter(z=>z.status==='active'&&z.concentrationStartedAtMillis===sourceState.concentration?.startedAtMillis).slice(-7),{
     id:request.id,status:'active',spellId:request.spellId,spellName:request.spellName,sourceTokenId:request.sourceTokenId,sourceCollection:request.sourceCollection,
-    sceneId:request.sceneId,floorId:request.floorId,mapId:request.mapId,area:request.areaPlacement,slotLevel:request.slotLevel,
+    sceneId:request.sceneId,floorId:request.floorId,mapId:request.mapId,area:request.areaPlacement,areaBehavior,radiusFeet:request.areaRadiusFeet||5,slotLevel:request.slotLevel,
     saveDc:request.areaSaveDc ?? null,
     concentrationStartedAtMillis:request.concentrationStartedAtMillis,createdAtMillis:request.createdAtMillis,
-    expiresAtWorldTime:(request.castingContext.worldTime||0)+60,
-    expiresAtTurnCounter:request.castingContext.initiative.combatActive?request.castingContext.initiative.turnCounter+10*Math.max(1,request.castingContext.initiative.initiativeOrder.length):null,
+    expiresAtWorldTime:(request.castingContext.worldTime||0)+areaBehavior.durationSeconds,
+    expiresAtTurnCounter:request.castingContext.initiative.combatActive?request.castingContext.initiative.turnCounter+Math.ceil(areaBehavior.durationSeconds/6)*Math.max(1,request.castingContext.initiative.initiativeOrder.length):null,
     cursor:{turnCounter:initiative.turnCounter||0,tokenId:initiative.currentCombatantId||'',combatActive:initiative.combatActive===true},receipts:[]
    }];
    if(!spellAreaActive(sourceState.spellAreas.at(-1),sourceState,{...context,worldTime:roomSnap.data().worldTime??context.worldTime,initiative}))throw new Error('This spell area expired before activation. Dismiss its saved placement.');

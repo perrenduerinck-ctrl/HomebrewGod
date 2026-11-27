@@ -1,3 +1,5 @@
+import {createSpellPresetBrowser} from './spellPresetBrowser.js';
+import {getSpellBehavior,getSpellBehaviorSpec,spellBehaviorDurationSeconds,SPELL_BEHAVIOR_PRESETS,CREATOR_BEHAVIOR_PRESETS} from './spellBehaviorPresets.js';
 import { createSpellComponentEditor } from "./spellComponentEditor.js";
 import {
   SPELL_CLASSES,
@@ -26,7 +28,7 @@ function ensureStyles(document) {
   const link = document.createElement("link");
   link.id = "spellCreatorStyles";
   link.rel = "stylesheet";
-  link.href = new URL("./spellCreator.css", import.meta.url).href;
+  link.href = new URL("./spellCreator.css?v=spell-presets-20261127", import.meta.url).href;
   document.head.append(link);
 }
 
@@ -107,6 +109,7 @@ export function mergeSpellCreatorDraft(base = {}, editable = {}, baseline = {}) 
     }
   }
 
+  if(merged.behavior?.params?.area&&changed(editable,baseline,"duration")){const seconds=spellBehaviorDurationSeconds(merged);if(seconds)merged.behavior.params.area.durationSeconds=seconds;}
   merged.damage = mergeStructuredDamage(preserved.damage, editable, baseline);
   if (changed(editable, baseline, "healingDice")) {
     merged.healing = cloneData(preserved.healing || []);
@@ -143,6 +146,7 @@ export function mergeSpellCreatorDraft(base = {}, editable = {}, baseline = {}) 
     }
   }
   if (changed(editable, baseline, "condition")) {
+    if(merged.behavior?.params?.conditions){const old=merged.behavior.params.conditions;const {choice,...first}=old[0]||{};merged.behavior.params.conditions=editable.condition?[{...first,id:editable.condition},...old.slice(1)]:[];}
     merged.effects = cloneData(preserved.effects || []);
     const index = merged.effects.findIndex((effect) => effect.type === "condition");
     if (editable.condition) {
@@ -161,6 +165,7 @@ export function createIndependentSpellCopy(raw = {}) {
     revision: 0,
     createdAtMillis: 0,
     updatedAtMillis: 0,
+    behavior:getSpellBehaviorSpec(raw),
     name: `${raw.name || "Spell"} Copy`
   };
 }
@@ -199,10 +204,12 @@ export function createSpellCreator({
         </details>
       </div>
       <p class="spell-creator-status" role="status" data-spell-status>Spell Library ready.</p>
+      <div data-spell-preset-catalog></div>
       <div class="spell-creator-workspace">
         <form class="spell-creator-editor" data-spell-form>
           <section class="spell-creator-panel">
             <h3>Spell Identity</h3>
+            <label>Spell behavior<select data-spell-field="behaviorPreset"><option value="keep">Keep saved recipe</option>${CREATOR_BEHAVIOR_PRESETS.map(id=>`<option value="${id}">${escapeHtml(SPELL_BEHAVIOR_PRESETS[id].label)}</option>`).join("")}</select></label><p class="spell-creator-help" data-spell-behavior-help>Choose how this spell resolves. Target shape, amounts, and scaling stay in the fields below.</p>
             <label>Name<input required maxlength="120" data-spell-field="name" placeholder="Cinder Lance"></label>
             <div class="spell-creator-row">
               <label>Level<select data-spell-field="level">${levelOptions()}</select></label>
@@ -241,6 +248,7 @@ export function createSpellCreator({
           <details class="spell-creator-panel">
             <summary>Advanced mechanics</summary>
             <p class="spell-creator-help">These fields describe mechanics; the DM resolves rolls and continuing effects. Unedited advanced data is preserved.</p>
+<label>Successful save<select data-spell-field="saveSuccess"><option value="none">No effect</option><option value="half">Half damage</option></select></label>
             <label>Healing dice<input data-spell-field="healingDice" placeholder="1d8 + MOD"></label>
             <div class="spell-creator-row">
               <label>Material cost (gp)<input data-spell-field="materialCostGp" type="number" min="0" step="0.01"></label>
@@ -359,6 +367,8 @@ export function createSpellCreator({
       damageDice: field("damageDice").value,
       attackType: field("attackType").value,
       saveAbility: field("saveAbility").value,
+      saveSuccess:field("saveSuccess").value,
+      behavior:field("behaviorPreset").value==="keep"?getSpellBehaviorSpec(preservedSpellData):{version:1,presets:[field("behaviorPreset").value],params:{}},
       description: field("description").value,
       higherLevel: field("higherLevel").value,
       healingDice: field("healingDice").value,
@@ -402,6 +412,8 @@ export function createSpellCreator({
       <p><strong>Animations:</strong> ${escapeHtml(spellAnimationSummary(spell.animations))}</p>
       <p class="spell-card-tags">${spell.tags.map((tag) => `#${escapeHtml(tag)}`).join(" ")}</p>
     </article>`;
+    const behavior=getSpellBehavior(spell);
+    screen.querySelector('[data-spell-behavior-help]').textContent=behavior.errors.length?behavior.errors.join(' '):behavior.supported?'Uses '+behavior.presets.map(id=>SPELL_BEHAVIOR_PRESETS[id].label).join(' + ')+'. HP and listed conditions can use Spell results; other special rules remain manual.':'Manual rules: no automated HP or conditions will be applied.';
     animationSummaryRoot.textContent = spellAnimationSummary(spell.animations);
   }
 
@@ -425,6 +437,8 @@ export function createSpellCreator({
     field("damageType").value = SPELL_DAMAGE_TYPES.includes(spell.damageType) ? spell.damageType : "";
     field("damageDice").value = spell.damageDice;
     field("attackType").value = ["melee", "ranged"].includes(spell.attackType) ? spell.attackType : "";
+    field("behaviorPreset").value = "keep";
+    field("saveSuccess").value = spell.saveSuccess || spell.targeting?.save?.success || "none";
     field("saveAbility").value = ["str", "dex", "con", "int", "wis", "cha"].includes(spell.saveAbility) ? spell.saveAbility : "";
     field("description").value = spell.description;
     field("higherLevel").value = spell.higherLevel;
@@ -440,7 +454,7 @@ export function createSpellCreator({
     for (const input of screen.querySelectorAll("[data-spell-healing-scale]")) input.value = (spell.healing?.[0]?.atSlotLevel || spell.scaling?.healingAtSlotLevel)?.[input.dataset.spellHealingScale] || "";
     damageComponents.write(spell.damage.slice(1));
     healingComponents.write(spell.healing.slice(1));
-    field("condition").value = spell.effects?.find((effect) => effect.type === "condition")?.condition || "";
+    field("condition").value = getSpellBehavior(spell).conditions[0]?.id || spell.effects?.find((effect) => effect.type === "condition")?.condition || "";
     for (const input of screen.querySelectorAll("[data-spell-scale]")) input.value = (spell.damage?.[0]?.atSlotLevel || spell.scaling?.atSlotLevel)?.[input.dataset.spellScale] || "";
     animations = structuredClone(spell.animations);
     preservedSpellData = cloneData(spell);
@@ -585,7 +599,24 @@ export function createSpellCreator({
     onStatus: setStatus
   });
 
+  const presetBrowser=createSpellPresetBrowser({root:screen.querySelector('[data-spell-preset-catalog]'),onUse:async spell=>{
+    if(!spell||!await draftLifecycle.confirmReplacement('use a catalog spell template'))return;
+    applySpell(createIndependentSpellCopy(spell));draftLifecycle.markChanged();setStatus('Independent '+spell.name+' template opened. Edit it and save to My Library.');
+  }});
   on(form, "input", renderPreview);
+  on(field('behaviorPreset'),'change',()=>{
+    const id=field('behaviorPreset').value;if(id==='keep')return;
+    if(id!=='manual'&&!field('areaShape').value)field('targetType').value='creature';
+    if(id!=='manual'&&field('range').value.toLowerCase()==='self')field('range').value=id==='healing'?'Touch':'60 feet';
+    if(['attack-damage','save-damage','automatic-damage'].includes(id)){
+      field('attackType').value=id==='attack-damage'?'ranged':'';field('saveAbility').value=id==='save-damage'?'dex':'';
+      field('saveSuccess').value=id==='save-damage'?'half':'none';field('duration').value='Instantaneous';
+      if(!field('damageDice').value)field('damageDice').value='2d6';if(!field('damageType').value)field('damageType').value='Force';
+    }
+    if(id==='healing'){field('attackType').value='';field('saveAbility').value='';field('duration').value='Instantaneous';if(!field('healingDice').value)field('healingDice').value='1d8 + MOD';}
+    if(id.startsWith('condition-')){field('attackType').value='';field('saveAbility').value=id==='condition-on-save'?'wis':'';field('saveSuccess').value='none';if(field('duration').value==='Instantaneous')field('duration').value='1 minute';if(!field('condition').value)field('condition').value='poisoned';}
+    renderPreview();draftLifecycle.markChanged();
+  });
   for (const control of screen.querySelectorAll("[data-spell-filter]")) on(control, "input", renderLibrary);
   on(libraryRoot, "click", async (event) => {
     const button = event.target.closest("[data-library-spell-id]");
@@ -638,6 +669,6 @@ export function createSpellCreator({
     confirmNavigation() {
       return draftLifecycle.confirmReplacement("navigate away", { restoreBaseline: true });
     },
-    destroy() { draftLifecycle.destroy(); listeners.forEach((removeListener) => removeListener()); }
+    destroy() { presetBrowser.destroy();draftLifecycle.destroy(); listeners.forEach((removeListener) => removeListener()); }
   });
 }

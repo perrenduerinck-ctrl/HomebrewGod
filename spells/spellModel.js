@@ -1,3 +1,4 @@
+import {normalizeSpellBehavior,validateSpellBehavior,getSpellBehaviorSpec} from './spellBehaviorPresets.js';
 import { normalizeSpellAnimations } from "../vfx/animationReferences.js";
 import {
   createSpellTargetingData,
@@ -165,6 +166,7 @@ export function normalizeHomebrewSpell(raw = {}, {
     concentration: source.concentration === true,
     ritual: source.ritual === true,
     manualOverride: source.manualOverride === true,
+    ...(source.behavior!=null?{behavior:normalizeSpellBehavior(source.behavior)}:{}),
     mechanicsEdition: clean(source.mechanicsEdition, 40),
     mechanicsReason: clean(source.mechanicsReason, 500),
     castingTrigger: clean(source.castingTrigger, 500),
@@ -288,6 +290,7 @@ export function validateHomebrewSpell(raw = {}) {
   });
   try { normalizeSpellAnimations(raw.animations || {}, { strict: true }); }
   catch (error) { errors.push(error.message); }
+  errors.push(...validateSpellBehavior(normalized));
   return Object.freeze(errors);
 }
 
@@ -302,6 +305,7 @@ export function homebrewSpellToCharacterCopy(raw, {
   const spell = normalizeHomebrewSpell(raw);
   return {
     ...clone(spell),
+    behavior:getSpellBehaviorSpec(spell),
     id: spellId(idFactory(), `custom-spell-${Date.now()}`),
     source: "library",
     sourceLibrarySpellId: spell.id,

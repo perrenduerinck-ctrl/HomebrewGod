@@ -146,7 +146,7 @@ test("game-feel modules are integrated without new Firestore collections or rule
   assert.doesNotMatch(app, /setBattleGameFeelTestContext:[\s\S]{0,450}currentRoomCode\s*=/);
   assert.match(app, /setBattleGameFeelTestContext:[\s\S]{0,450}await ensureCombatActionBar\(\)/);
   assert.match(html, /combatFeedback\.css/);
-  assert.match(html, /app\.js\?v=spell-areas-20261127/);
+  assert.match(html, /app\.js\?v=spell-presets-20261127/);
   assert.doesNotMatch(rules, /combatFeedback|combatLog|actionHistory/);
 });
 

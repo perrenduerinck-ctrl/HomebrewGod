@@ -1,3 +1,4 @@
+import {getPresetProjectileProfile} from '../spells/spellBehaviorPresets.js';
 import {
   createSpellTemplateInstruction
 } from "./spellTemplates.js?v=map-single-target-20260829";
@@ -113,12 +114,7 @@ function getDamageExpression(damageEntry, slotLevel, characterLevel, scaling = {
 }
 
 export function getSpellProjectileProfile(spell = {}, slotLevel = 0, characterLevel = 1) {
-  switch (spell.id) {
-    case "eldritch-blast": return Object.freeze({count: characterLevel >= 17 ? 4 : characterLevel >= 11 ? 3 : characterLevel >= 5 ? 2 : 1, label: "Beam", damage: "1d10 force", separateAttacks: true});
-    case "magic-missile": return Object.freeze({count: Math.max(1, Math.min(9, finiteInteger(slotLevel, 1))) + 2, label: "Dart", damage: "1d4 + 1 force", separateAttacks: false});
-    case "scorching-ray": return Object.freeze({count: Math.max(2, Math.min(9, finiteInteger(slotLevel, 2))) + 1, label: "Ray", damage: "2d6 fire", separateAttacks: true});
-    default: return null;
-  }
+  return getPresetProjectileProfile(spell,slotLevel,characterLevel);
 }
 
 export function createCastResolution({

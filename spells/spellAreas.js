@@ -1,8 +1,5 @@
-// These profiles describe turn damage only; casting an area never deals it immediately.
-export const SPELL_AREA_PROFILES = Object.freeze({
-  moonbeam: { start: true, enter: true, damageType: 'radiant', die: 10, baseDice: 2, baseLevel: 2, save: { ability: 'con', success: 'half' } },
-  'hunger-of-hadar': { start: true, end: true, damageType: 'cold', die: 6, baseDice: 2, baseLevel: 3 }
-});
+import {getSpellBehaviorSpec} from './spellBehaviorPresets.js';
+export function getSpellAreaProfile(value={}) {return value.areaBehavior || getSpellBehaviorSpec({id:value.spellId||value.id}).params?.area || null;}
 
 export function captureSpellArea(geometry, metrics) {
   if (!geometry || !metrics || !['sphere', 'cylinder'].includes(geometry.shape)) return null;
@@ -37,7 +34,7 @@ export function tokenInsideSpellArea(zone, token) {
 }
 
 export function spellAreaActive(zone, state, context) {
-  return Boolean(zone?.status === 'active' && SPELL_AREA_PROFILES[zone.spellId]
+  return Boolean(zone?.status === 'active' && getSpellAreaProfile(zone)
     && isValidSpellArea(zone.area) && state.concentration?.spellId === zone.spellId
     && state.concentration?.startedAtMillis === zone.concentrationStartedAtMillis
     && Number(context.worldTime || 0) < zone.expiresAtWorldTime
@@ -45,16 +42,16 @@ export function spellAreaActive(zone, state, context) {
 }
 
 export function spellAreaTrigger(zone, phase) {
-  const profile = SPELL_AREA_PROFILES[zone.spellId];
-  if (!profile?.[phase]) return null;
-  const hadarEnd = zone.spellId === 'hunger-of-hadar' && phase === 'end';
-  const dice = profile.baseDice + (zone.spellId === 'moonbeam' ? Math.max(0, zone.slotLevel - profile.baseLevel) : 0);
-  return { formula: dice + 'd' + profile.die, damageType: hadarEnd ? 'acid' : profile.damageType,
-    save: hadarEnd ? { ability: 'dex', dc: zone.saveDc, success: 'none' } : profile.save ? { ...profile.save, dc: zone.saveDc } : null };
+  const profile = getSpellAreaProfile(zone);
+  if (!profile?.triggers?.[phase]) return null;
+  const trigger=profile.triggers?.[phase];if(!trigger)return null;
+  const dice=trigger.baseDice+Math.max(0,(Number(zone.slotLevel)||trigger.baseLevel||0)-(trigger.baseLevel||0))*(trigger.dicePerSlot||0);
+  return {formula:dice+'d'+trigger.die,damageType:trigger.damageType,
+    save:trigger.saveAbility?{ability:trigger.saveAbility,dc:zone.saveDc,success:trigger.saveSuccess||'none'}:null};
 }
 
 export function spellAreaEventKey(zone, token, phase, turnCounter) {
   // Moonbeam's entry and start triggers share a per-turn receipt, including aliases.
   const actor = token.linkedCharacterId ? 'c-' + token.linkedCharacterId : (token.linkedMonsterId || token.linkedMonster?.id) ? 'm-' + (token.linkedMonsterId || token.linkedMonster.id) : token.id;
-  return [zone.combatEpoch||0, turnCounter, zone.spellId === 'moonbeam' ? 'turn' : phase, actor].join(':');
+  return [zone.combatEpoch||0, turnCounter, getSpellAreaProfile(zone)?.receiptGroup === 'turn' ? 'turn' : phase, actor].join(':');
 }
